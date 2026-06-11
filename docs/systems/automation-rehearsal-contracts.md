@@ -31,9 +31,9 @@ Each `ReleaseReadinessAutomationRehearsalContract` lane records:
 
 ## Operator review workflow
 
-- Settings > Release readiness shows each rehearsal lane as a local checkbox row.
+- Settings > Release readiness shows each rehearsal lane as a local checkbox row, plus a summary row for reviewed count, operator-review versus approval-required boundaries, and dry-run packet count.
 - `Mark rehearsals` records all rehearsal lanes as reviewed; the reset control clears only this local review state.
-- Saved release-readiness history stores `reviewedAutomationRehearsalIds`, exports each Automation Rehearsal line as checked/open Markdown, and includes the dry-run anchor, evidence packet, comparison target, local diff artifact, rehearsal outcome, and stop condition.
+- Saved release-readiness history stores `reviewedAutomationRehearsalIds`, shows the selected saved rehearsal review summary in the handoff export panel, exports each Automation Rehearsal line as checked/open Markdown, and includes the dry-run anchor, evidence packet, comparison target, local diff artifact, rehearsal outcome, and stop condition.
 - Export readiness remains incomplete until review, handoff capture, alert review, automation rehearsal review, media/runtime triage review, and local evidence export review are all complete.
 
 ## Side-effect boundaries

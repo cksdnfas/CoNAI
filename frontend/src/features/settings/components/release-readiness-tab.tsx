@@ -1043,6 +1043,14 @@ export function ReleaseReadinessTab() {
   const localEvidenceExportState = t({ ko: '{count}개 local bundle', en: '{count} local bundles' }, { count: LOCAL_EVIDENCE_EXPORT_ITEMS.length })
   const localEvidenceExportReviewState = allLocalEvidenceExportsReviewed ? t({ ko: 'bundle 검토 완료', en: 'Bundles reviewed' }) : t({ ko: '{count}/{total} bundle', en: '{count}/{total} bundles' }, { count: reviewedLocalEvidenceExportCount, total: LOCAL_EVIDENCE_EXPORT_ITEMS.length })
   const mediaRuntimeTriageQueueState = allMediaRuntimeTriageReviewed
+    ? t({ ko: 'triage 검토 완료', en: 'Triage reviewed' })
+    : t({ ko: '{count}/{total} triage', en: '{count}/{total} triage' }, { count: reviewedMediaRuntimeTriageCount, total: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length })
+  const automationRehearsalOperatorReviewCount = AUTOMATION_REHEARSAL_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length
+  const automationRehearsalApprovalCount = AUTOMATION_REHEARSAL_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
+  const automationRehearsalStopConditionState = t(
+    { ko: '운영검토 {operator} · 승인필요 {approval} · 외부 실행 0', en: 'operator {operator} · approval {approval} · external actions 0' },
+    { operator: automationRehearsalOperatorReviewCount, approval: automationRehearsalApprovalCount },
+  )
   const mediaRuntimeTriageApprovalCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
   const mediaRuntimeTriageOperatorCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length
   const decisionCockpitState = t({ ko: '{count}개 판단 카드', en: '{count} decision cards' }, { count: DECISION_COCKPIT_ITEMS.length })
@@ -1073,6 +1081,16 @@ export function ReleaseReadinessTab() {
     [selectedReadinessRecord],
   )
   const selectedReadinessIntelligence = selectedReadinessRecord?.readinessIntelligence ?? null
+  const selectedAutomationRehearsalState = selectedReadinessRecord
+    ? t(
+      { ko: '저장 리허설: {reviewed}/{total} 검토 · 승인필요 {approval}', en: 'Saved rehearsals: {reviewed}/{total} reviewed · approval {approval}' },
+      {
+        reviewed: selectedReadinessRecord.reviewedAutomationRehearsalIds.length,
+        total: selectedReadinessRecord.automationRehearsal.length,
+        approval: selectedReadinessRecord.automationRehearsal.filter((item) => item.approvalBoundary === 'approval-required').length,
+      },
+    )
+    : null
   const selectedDecisionCockpitBoundaryState = useMemo(() => {
     if (!selectedReadinessRecord) return null
 
@@ -1477,6 +1495,9 @@ export function ReleaseReadinessTab() {
             <SettingsInsetBlock data-release-readiness-selected-cockpit-boundaries="true" className="font-mono text-xs leading-5 text-foreground/90">
               {selectedDecisionCockpitBoundaryState ?? t({ ko: '저장된 콕핏 경계 요약 없음', en: 'No saved cockpit boundary summary.' })}
             </SettingsInsetBlock>
+            <SettingsInsetBlock data-release-readiness-selected-automation-rehearsal="true" className="font-mono text-xs leading-5 text-foreground/90">
+              {selectedAutomationRehearsalState ?? t({ ko: '저장된 리허설 요약 없음', en: 'No saved rehearsal summary.' })}
+            </SettingsInsetBlock>
             <Textarea
               data-release-readiness-handoff-output="true"
               variant="settings"
@@ -1709,6 +1730,21 @@ export function ReleaseReadinessTab() {
             en: 'Rehearse cleanup, recovery, and release-candidate work with dry-run evidence and local diffs only. This surface does not delete, rerun, push, deploy, restart, or call external services.',
           })}
         </SettingsInsetBlock>
+
+        <div data-release-readiness-automation-rehearsal-summary="true" className="grid gap-3 min-[900px]:grid-cols-3">
+          <SettingsValueTile
+            label={t({ ko: '검토 완료', en: 'Reviewed' })}
+            value={t({ ko: '{count}/{total}개', en: '{count}/{total}' }, { count: reviewedAutomationRehearsalCount, total: AUTOMATION_REHEARSAL_ITEMS.length })}
+          />
+          <SettingsValueTile
+            label={t({ ko: '경계 요약', en: 'Boundary summary' })}
+            value={automationRehearsalStopConditionState}
+          />
+          <SettingsValueTile
+            label={t({ ko: 'dry-run 산출물', en: 'Dry-run artifacts' })}
+            value={t({ ko: '{count}개 packet', en: '{count} packets' }, { count: AUTOMATION_REHEARSAL_ITEMS.length })}
+          />
+        </div>
 
         <div className="grid gap-3 min-[1000px]:grid-cols-3">
           {AUTOMATION_REHEARSAL_ITEMS.map((item) => {
