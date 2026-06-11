@@ -10,11 +10,17 @@ This document records the `M3-local-evidence-export-hardening-CU1-foundation-con
 
 ## Bundles
 
-| Bundle | Source | Export command | Boundary |
-| --- | --- | --- | --- |
-| readiness Markdown bundle | Settings > Release readiness Markdown export | `buildReleaseReadinessHandoffMarkdown(record)` | local evidence |
-| MCP dry-run JSON bundle | `backend/src/mcp/mcpDryRunEvidence.ts` | `npm run export:mcp-dry-run-evidence` | operator review |
-| recovery comparison bundle | Workflow recovery handoff + media/runtime triage queue | local handoff export only | approval required |
+| Bundle | Source | Export command | Boundary | Operator review state |
+| --- | --- | --- | --- | --- |
+| readiness Markdown bundle | Settings > Release readiness Markdown export | `buildReleaseReadinessHandoffMarkdown(record)` | local evidence | `reviewedLocalEvidenceExportIds` marks the bundle checked before export readiness |
+| MCP dry-run JSON bundle | `backend/src/mcp/mcpDryRunEvidence.ts` | `npm run export:mcp-dry-run-evidence` | operator review | `reviewedLocalEvidenceExportIds` records operator review without calling MCP tools |
+| recovery comparison bundle | Workflow recovery handoff + media/runtime triage queue | local handoff export only | approval required | `reviewedLocalEvidenceExportIds` keeps rerun/restart/cleanup decisions approval-gated |
+
+## Operator polish
+
+- Settings > Release readiness exposes a local evidence export hardening summary row with reviewed, operator-review, and approval-needed counts.
+- Each local evidence export bundle is individually checkable, can be marked as reviewed in bulk, and is restored from saved readiness history records.
+- `readyForExport` requires local evidence export bundle review alongside checklist, handoff, alert, automation rehearsal, and media/runtime triage review.
 
 ## Stop conditions
 

@@ -217,6 +217,7 @@ const partialRecord = buildReleaseReadinessHistoryRecord({
   reviewedItemIds: ['completed-work'],
   capturedHandoffItemIds: ['rollback-plan'],
   reviewedAlertIds: ['runtime-retention'],
+  reviewedLocalEvidenceExportIds: ['mcp-dry-run-json-bundle'],
   reviewItems,
   evidenceItems,
   alertReviewItems,
@@ -245,6 +246,9 @@ equal(partialRecord.automationContext[1]?.boundary, 'opt-in-only', 'MCP automati
 equal(partialRecord.evidenceReview.length, 2, 'operator evidence review items should persist with readiness records')
 equal(partialRecord.localEvidenceExports.length, 2, 'local evidence export bundles should persist with readiness records')
 equal(partialRecord.summary.localEvidenceExportCount, 2, 'local evidence export bundle count should persist')
+equal(partialRecord.summary.reviewedLocalEvidenceExportCount, 1, 'reviewed local evidence export count should persist')
+equal(partialRecord.localEvidenceExports.find((item) => item.id === 'mcp-dry-run-json-bundle')?.status, 'reviewed', 'reviewed local evidence export bundle status should persist')
+equal(partialRecord.localEvidenceExports.find((item) => item.id === 'readiness-markdown-bundle')?.status, 'open', 'open local evidence export bundle status should persist')
 equal(partialRecord.evidenceReview[1]?.approvalBoundary, 'approval-required', 'approval-gated evidence review boundaries should persist')
 equal(partialRecord.checklist.find((item) => item.id === 'completed-work')?.status, 'checked', 'checked review status should persist')
 equal(partialRecord.checklist.find((item) => item.id === 'evidence')?.status, 'open', 'open review status should persist')
@@ -265,6 +269,7 @@ const completeRecord = buildReleaseReadinessHistoryRecord({
   reviewedItemIds: reviewItems.map((item) => item.id),
   capturedHandoffItemIds: handoffItems.map((item) => item.id),
   reviewedAlertIds: alertReviewItems.map((item) => item.id),
+  reviewedLocalEvidenceExportIds: localEvidenceExportItems.map((item) => item.id),
   reviewItems,
   evidenceItems,
   alertReviewItems,
@@ -312,6 +317,7 @@ const savedDocument = readReleaseReadinessHistoryFromStorage(storage)
 equal(savedDocument.records.length, 2, 'history document should keep saved records')
 equal(savedDocument.records[0]?.id, 'complete-record', 'newest saved record should be first')
 deepEqual(savedDocument.records[0]?.capturedHandoffItemIds, ['smoke-evidence', 'rollback-plan'], 'handoff item ids should keep contract order')
+deepEqual(savedDocument.records[0]?.reviewedLocalEvidenceExportIds, ['readiness-markdown-bundle', 'mcp-dry-run-json-bundle'], 'local evidence export review ids should keep contract order')
 
 for (let index = 0; index < MAX_RELEASE_READINESS_HISTORY_RECORDS + 3; index += 1) {
   saveReleaseReadinessHistoryRecord(
@@ -322,6 +328,7 @@ for (let index = 0; index < MAX_RELEASE_READINESS_HISTORY_RECORDS + 3; index += 
       reviewedItemIds: [],
       capturedHandoffItemIds: [],
       reviewedAlertIds: [],
+      reviewedLocalEvidenceExportIds: [],
       reviewItems,
       evidenceItems,
       alertReviewItems,
@@ -358,6 +365,9 @@ ok(releaseReadinessTab.includes("'final-verification-trend'"), 'trend evidence s
 ok(releaseReadinessTab.includes('data-release-readiness-automation-context="true"'), 'release readiness UI should expose automation context handoff')
 ok(releaseReadinessTab.includes('data-release-readiness-operator-evidence-console="true"'), 'release readiness UI should expose operator evidence review console')
 ok(releaseReadinessTab.includes('data-local-evidence-export-hardening="true"'), 'release readiness UI should expose local evidence export hardening')
+ok(releaseReadinessTab.includes('data-local-evidence-export-hardening-summary="true"'), 'local evidence export hardening should expose an operator summary row')
+ok(releaseReadinessTab.includes('reviewedLocalEvidenceExportIds'), 'release readiness UI should persist reviewed local evidence export ids')
+ok(releaseReadinessTab.includes('toggleLocalEvidenceExportItem'), 'release readiness UI should let operators review export bundles')
 ok(releaseReadinessTab.includes('OPERATOR_EVIDENCE_REVIEW_ITEMS'), 'release readiness UI should define operator evidence review items')
 ok(releaseReadinessTab.includes('LOCAL_EVIDENCE_EXPORT_ITEMS'), 'release readiness UI should define local evidence export bundles')
 ok(releaseReadinessTab.includes('AUTOMATION_CONTEXT_ITEMS'), 'release readiness UI should define automation context items')
@@ -389,6 +399,7 @@ ok(historyContract.includes('trendEvidence'), 'history contract should persist t
 ok(historyContract.includes('automationContext'), 'history contract should persist automation context items')
 ok(historyContract.includes('evidenceReview'), 'history contract should persist operator evidence review items')
 ok(historyContract.includes('localEvidenceExports'), 'history contract should persist local evidence export bundles')
+ok(historyContract.includes('reviewedLocalEvidenceExportIds'), 'history contract should persist reviewed local evidence export ids')
 ok(historyContract.includes('ReleaseReadinessLocalEvidenceExportContract'), 'history contract should type local evidence export bundles')
 ok(historyContract.includes('ReleaseReadinessTrendEvidenceContract'), 'history contract should type trend evidence records')
 ok(historyContract.includes('ReleaseReadinessAutomationContextContract'), 'history contract should type automation context records')

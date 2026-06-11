@@ -160,6 +160,7 @@ export type ReleaseReadinessHistoryRecord = {
   capturedHandoffItemIds: string[]
   reviewedAlertIds: string[]
   reviewedAutomationRehearsalIds: string[]
+  reviewedLocalEvidenceExportIds: string[]
   summary: {
     reviewedCount: number
     reviewItemCount: number
@@ -173,6 +174,7 @@ export type ReleaseReadinessHistoryRecord = {
     mediaRuntimeTriageQueueCount: number
     reviewedMediaRuntimeTriageCount: number
     localEvidenceExportCount: number
+    reviewedLocalEvidenceExportCount: number
     readyForExport: boolean
   }
   checklist: Array<ReleaseReadinessChecklistItemContract & { status: 'checked' | 'open' }>
@@ -186,7 +188,7 @@ export type ReleaseReadinessHistoryRecord = {
   reviewedMediaRuntimeTriageIds: string[]
   mediaRuntimeTriageQueue: Array<ReleaseReadinessMediaRuntimeTriageQueueContract & { status: 'reviewed' | 'open' }>
   evidenceReview: ReleaseReadinessEvidenceReviewContract[]
-  localEvidenceExports: ReleaseReadinessLocalEvidenceExportContract[]
+  localEvidenceExports: Array<ReleaseReadinessLocalEvidenceExportContract & { status: 'reviewed' | 'open' }>
   handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
   runbookGuardrails: ReleaseReadinessRunbookGuardrailContract[]
   operationSteps: ReleaseReadinessOperationStepContract[]
@@ -207,6 +209,7 @@ export type ReleaseReadinessHistorySnapshotInput = {
   capturedHandoffItemIds: Iterable<string>
   reviewedAlertIds: Iterable<string>
   reviewedAutomationRehearsalIds?: Iterable<string>
+  reviewedLocalEvidenceExportIds?: Iterable<string>
   reviewItems: readonly ReleaseReadinessChecklistItemContract[]
   evidenceItems: readonly ReleaseReadinessEvidenceItemContract[]
   decisionCockpitItems?: readonly ReleaseReadinessDecisionCockpitItemContract[]
@@ -252,11 +255,12 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'reviewedMediaRuntimeTriageIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'mediaRuntimeTriageQueue' | 'evidenceReview' | 'localEvidenceExports' | 'decisionCockpit' | 'summary'> & {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'reviewedMediaRuntimeTriageIds' | 'reviewedLocalEvidenceExportIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'mediaRuntimeTriageQueue' | 'evidenceReview' | 'localEvidenceExports' | 'decisionCockpit' | 'summary'> & {
   operationSteps?: ReleaseReadinessOperationStepContract[]
   reviewedAlertIds?: string[]
   reviewedAutomationRehearsalIds?: string[]
   reviewedMediaRuntimeTriageIds?: string[]
+  reviewedLocalEvidenceExportIds?: string[]
   observabilityAlerts?: Array<ReleaseReadinessAlertReviewItemContract & { status: 'reviewed' | 'open' }>
   decisionCockpit?: ReleaseReadinessDecisionCockpitItemContract[]
   trendEvidence?: ReleaseReadinessTrendEvidenceContract[]
@@ -266,7 +270,7 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
   mediaRuntimeTriageQueue?: ReleaseReadinessMediaRuntimeTriageQueueContract[]
   evidenceReview?: ReleaseReadinessEvidenceReviewContract[]
   localEvidenceExports?: ReleaseReadinessLocalEvidenceExportContract[]
-  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount' | 'readinessIntelligenceSignalCount' | 'reviewedMediaRuntimeTriageCount'> & {
+  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount' | 'readinessIntelligenceSignalCount' | 'reviewedMediaRuntimeTriageCount' | 'reviewedLocalEvidenceExportCount'> & {
     reviewedAlertCount?: number
     alertReviewItemCount?: number
     trendEvidenceCount?: number
@@ -275,6 +279,7 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
     mediaRuntimeTriageQueueCount?: number
     reviewedMediaRuntimeTriageCount?: number
     localEvidenceExportCount?: number
+    reviewedLocalEvidenceExportCount?: number
   }
 }
 
@@ -295,6 +300,7 @@ function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHist
     && (record.reviewedAlertIds === undefined || Array.isArray(record.reviewedAlertIds))
     && (record.reviewedAutomationRehearsalIds === undefined || Array.isArray(record.reviewedAutomationRehearsalIds))
     && (record.reviewedMediaRuntimeTriageIds === undefined || Array.isArray(record.reviewedMediaRuntimeTriageIds))
+    && (record.reviewedLocalEvidenceExportIds === undefined || Array.isArray(record.reviewedLocalEvidenceExportIds))
     && Array.isArray(record.checklist)
     && Array.isArray(record.evidence)
     && (record.observabilityAlerts === undefined || Array.isArray(record.observabilityAlerts))
@@ -320,11 +326,13 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
   const reviewedAlertIds = uniqueIds(input.reviewedAlertIds)
   const reviewedAutomationRehearsalIds = uniqueIds(input.reviewedAutomationRehearsalIds ?? [])
   const reviewedMediaRuntimeTriageIds = uniqueIds(input.reviewedMediaRuntimeTriageIds ?? [])
+  const reviewedLocalEvidenceExportIds = uniqueIds(input.reviewedLocalEvidenceExportIds ?? [])
   const reviewedSet = new Set(reviewedItemIds)
   const capturedSet = new Set(capturedHandoffItemIds)
   const alertReviewSet = new Set(reviewedAlertIds)
   const automationRehearsalSet = new Set(reviewedAutomationRehearsalIds)
   const mediaRuntimeTriageSet = new Set(reviewedMediaRuntimeTriageIds)
+  const localEvidenceExportSet = new Set(reviewedLocalEvidenceExportIds)
   const reviewItemCount = input.reviewItems.length
   const handoffItemCount = input.handoffItems.length
   const alertReviewItemCount = input.alertReviewItems.length
@@ -350,6 +358,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
     reviewedAlertIds,
     reviewedAutomationRehearsalIds,
     reviewedMediaRuntimeTriageIds,
+    reviewedLocalEvidenceExportIds,
     summary: {
       reviewedCount: reviewedItemIds.length,
       reviewItemCount,
@@ -363,6 +372,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       mediaRuntimeTriageQueueCount: mediaRuntimeTriageQueueItems.length,
       reviewedMediaRuntimeTriageCount: reviewedMediaRuntimeTriageIds.length,
       localEvidenceExportCount: localEvidenceExportItems.length,
+      reviewedLocalEvidenceExportCount: reviewedLocalEvidenceExportIds.length,
       readyForExport: reviewItemCount > 0
         && handoffItemCount > 0
         && alertReviewItemCount > 0
@@ -371,7 +381,8 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
         && capturedHandoffItemIds.length === handoffItemCount
         && reviewedAlertIds.length === alertReviewItemCount
         && reviewedAutomationRehearsalIds.length === automationRehearsalItemCount
-        && reviewedMediaRuntimeTriageIds.length === mediaRuntimeTriageQueueItems.length,
+        && reviewedMediaRuntimeTriageIds.length === mediaRuntimeTriageQueueItems.length
+        && reviewedLocalEvidenceExportIds.length === localEvidenceExportItems.length,
     },
     checklist: input.reviewItems.map((item) => ({
       ...item,
@@ -395,7 +406,10 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       status: mediaRuntimeTriageSet.has(item.id) ? 'reviewed' as const : 'open' as const,
     })),
     evidenceReview: input.evidenceReviewItems.map((item) => ({ ...item })),
-    localEvidenceExports: localEvidenceExportItems.map((item) => ({ ...item })),
+    localEvidenceExports: localEvidenceExportItems.map((item) => ({
+      ...item,
+      status: localEvidenceExportSet.has(item.id) ? 'reviewed' as const : 'open' as const,
+    })),
     handoff: input.handoffItems.map((item) => ({
       ...item,
       status: capturedSet.has(item.id) ? 'captured' : 'open',
@@ -436,6 +450,7 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
       ...record,
       reviewedAlertIds: uniqueIds(record.reviewedAlertIds ?? []),
       reviewedAutomationRehearsalIds: uniqueIds(record.reviewedAutomationRehearsalIds ?? []),
+      reviewedLocalEvidenceExportIds: uniqueIds(record.reviewedLocalEvidenceExportIds ?? []),
       summary: {
         ...record.summary,
         reviewedAlertCount: record.summary.reviewedAlertCount ?? uniqueIds(record.reviewedAlertIds ?? []).length,
@@ -446,6 +461,7 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         mediaRuntimeTriageQueueCount: record.summary.mediaRuntimeTriageQueueCount ?? record.mediaRuntimeTriageQueue?.length ?? 0,
         reviewedMediaRuntimeTriageCount: record.summary.reviewedMediaRuntimeTriageCount ?? uniqueIds(record.reviewedMediaRuntimeTriageIds ?? []).length,
         localEvidenceExportCount: record.summary.localEvidenceExportCount ?? record.localEvidenceExports?.length ?? 0,
+        reviewedLocalEvidenceExportCount: record.summary.reviewedLocalEvidenceExportCount ?? uniqueIds(record.reviewedLocalEvidenceExportIds ?? []).length,
       },
       decisionCockpit: Array.isArray(record.decisionCockpit) ? record.decisionCockpit : [],
       observabilityAlerts: Array.isArray(record.observabilityAlerts) ? record.observabilityAlerts : [],
@@ -468,7 +484,12 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         }))
         : [],
       evidenceReview: Array.isArray(record.evidenceReview) ? record.evidenceReview : [],
-      localEvidenceExports: Array.isArray(record.localEvidenceExports) ? record.localEvidenceExports : [],
+      localEvidenceExports: Array.isArray(record.localEvidenceExports)
+        ? record.localEvidenceExports.map((item) => ({
+          ...item,
+          status: uniqueIds(record.reviewedLocalEvidenceExportIds ?? []).includes(item.id) ? 'reviewed' as const : 'open' as const,
+        }))
+        : [],
       operationSteps: Array.isArray(record.operationSteps) ? record.operationSteps : [],
     }))
     .sort((left, right) => Date.parse(right.savedAt) - Date.parse(left.savedAt))
@@ -611,7 +632,7 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '## Local Evidence Export Bundles',
     '',
     ...record.localEvidenceExports.map((item) => (
-      `- ${formatTranslationDictionary(item.bundle)} (${item.sourceSurface} / ${item.exportCommand} / ${item.comparisonAnchor} / ${formatMarkdownStatus(item.approvalBoundary)}): ${formatTranslationDictionary(item.hardeningContract)}`
+      `- [${item.status === 'reviewed' ? 'x' : ' '}] ${formatTranslationDictionary(item.bundle)} (${item.sourceSurface} / ${item.exportCommand} / ${item.comparisonAnchor} / ${formatMarkdownStatus(item.approvalBoundary)}): ${formatTranslationDictionary(item.hardeningContract)}`
     )),
     '',
     '## Captured Handoff Evidence',

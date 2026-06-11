@@ -975,17 +975,20 @@ export function ReleaseReadinessTab() {
   const [reviewedAlerts, setReviewedAlerts] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAlertIds ?? []))
   const [reviewedAutomationRehearsals, setReviewedAutomationRehearsals] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAutomationRehearsalIds ?? []))
   const [reviewedMediaRuntimeTriage, setReviewedMediaRuntimeTriage] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedMediaRuntimeTriageIds ?? []))
+  const [reviewedLocalEvidenceExports, setReviewedLocalEvidenceExports] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedLocalEvidenceExportIds ?? []))
   const reviewedCount = reviewedItems.size
   const capturedHandoffCount = capturedHandoffItems.size
   const reviewedAlertCount = reviewedAlerts.size
   const reviewedAutomationRehearsalCount = reviewedAutomationRehearsals.size
   const reviewedMediaRuntimeTriageCount = reviewedMediaRuntimeTriage.size
+  const reviewedLocalEvidenceExportCount = reviewedLocalEvidenceExports.size
   const allReviewed = reviewedCount === REVIEW_ITEMS.length
   const allHandoffCaptured = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length
   const allAlertsReviewed = reviewedAlertCount === ALERT_REVIEW_ITEMS.length
   const allAutomationRehearsalsReviewed = reviewedAutomationRehearsalCount === AUTOMATION_REHEARSAL_ITEMS.length
   const allMediaRuntimeTriageReviewed = reviewedMediaRuntimeTriageCount === MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length
-  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed && allAutomationRehearsalsReviewed && allMediaRuntimeTriageReviewed
+  const allLocalEvidenceExportsReviewed = reviewedLocalEvidenceExportCount === LOCAL_EVIDENCE_EXPORT_ITEMS.length
+  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed && allAutomationRehearsalsReviewed && allMediaRuntimeTriageReviewed && allLocalEvidenceExportsReviewed
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
   const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
   const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
@@ -994,7 +997,8 @@ export function ReleaseReadinessTab() {
   const readinessIntelligenceState = t({ ko: '{count}개 priority/caveat', en: '{count} priority/caveat signals' }, { count: READINESS_HISTORY_INTELLIGENCE_SIGNALS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
   const localEvidenceExportState = t({ ko: '{count}개 local bundle', en: '{count} local bundles' }, { count: LOCAL_EVIDENCE_EXPORT_ITEMS.length })
-  const mediaRuntimeTriageQueueState = allMediaRuntimeTriageReviewed ? t({ ko: 'triage 검토 완료', en: 'Triage reviewed' }) : t({ ko: '{count}/{total} triage', en: '{count}/{total} triage' }, { count: reviewedMediaRuntimeTriageCount, total: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length })
+  const localEvidenceExportReviewState = allLocalEvidenceExportsReviewed ? t({ ko: 'bundle 검토 완료', en: 'Bundles reviewed' }) : t({ ko: '{count}/{total} bundle', en: '{count}/{total} bundles' }, { count: reviewedLocalEvidenceExportCount, total: LOCAL_EVIDENCE_EXPORT_ITEMS.length })
+  const mediaRuntimeTriageQueueState = allMediaRuntimeTriageReviewed
   const mediaRuntimeTriageApprovalCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
   const mediaRuntimeTriageOperatorCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length
   const decisionCockpitState = t({ ko: '{count}개 판단 카드', en: '{count} decision cards' }, { count: DECISION_COCKPIT_ITEMS.length })
@@ -1094,6 +1098,7 @@ export function ReleaseReadinessTab() {
       reviewedAlertIds: reviewedAlerts,
       reviewedAutomationRehearsalIds: reviewedAutomationRehearsals,
       reviewedMediaRuntimeTriageIds: reviewedMediaRuntimeTriage,
+      reviewedLocalEvidenceExportIds: reviewedLocalEvidenceExports,
       reviewItems: REVIEW_ITEMS,
       evidenceItems: EVIDENCE_ITEMS,
       decisionCockpitItems: DECISION_COCKPIT_ITEMS,
@@ -1123,6 +1128,19 @@ export function ReleaseReadinessTab() {
     setReviewedAlerts(new Set(record.reviewedAlertIds))
     setReviewedAutomationRehearsals(new Set(record.reviewedAutomationRehearsalIds))
     setReviewedMediaRuntimeTriage(new Set(record.reviewedMediaRuntimeTriageIds))
+    setReviewedLocalEvidenceExports(new Set(record.reviewedLocalEvidenceExportIds))
+  }
+
+  const toggleLocalEvidenceExportItem = (id: string, checked: boolean) => {
+    setReviewedLocalEvidenceExports((current) => {
+      const next = new Set(current)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
   }
 
   const copySelectedHandoffOutput = async () => {
@@ -1174,7 +1192,7 @@ export function ReleaseReadinessTab() {
               <Badge data-release-readiness-export-state="true" variant={allEvidenceReadyForExport ? 'default' : 'outline'}>{exportReadinessState}</Badge>
               <Badge variant="outline">{trendEvidenceState}</Badge>
               <Badge data-release-readiness-history-intelligence-badge="true" variant="outline">{readinessIntelligenceState}</Badge>
-              <Badge data-local-evidence-export-hardening-badge="true" variant="outline">{localEvidenceExportState}</Badge>
+              <Badge data-local-evidence-export-hardening-badge="true" variant={allLocalEvidenceExportsReviewed ? 'default' : 'outline'}>{localEvidenceExportReviewState}</Badge>
               <div className="min-w-0 text-sm text-muted-foreground">
                 {t({
                   ko: '완료 작업, 주의 사항, 검증 근거, 사용자 결정을 릴리즈 액션 전에 한곳에서 점검해.',
@@ -1706,7 +1724,19 @@ export function ReleaseReadinessTab() {
       <SettingsSection
         data-local-evidence-export-hardening="true"
         heading={t({ ko: '로컬 근거 export hardening', en: 'Local evidence export hardening' })}
-        actions={<Badge variant="secondary">{localEvidenceExportState}</Badge>}
+        actions={(
+          <>
+            <Badge variant={allLocalEvidenceExportsReviewed ? 'default' : 'secondary'}>{localEvidenceExportReviewState}</Badge>
+            <Badge variant="outline">{localEvidenceExportState}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={() => setReviewedLocalEvidenceExports(new Set(LOCAL_EVIDENCE_EXPORT_ITEMS.map((item) => item.id)))}>
+              <CheckCircle2 className="h-4 w-4" />
+              {t({ ko: 'bundle 검토 표시', en: 'Mark bundles' })}
+            </Button>
+            <Button type="button" size="icon-sm" variant="secondary" onClick={() => setReviewedLocalEvidenceExports(new Set())} aria-label={t({ ko: 'bundle 검토 초기화', en: 'Reset bundle review' })} title={t({ ko: 'bundle 검토 초기화', en: 'Reset bundle review' })}>
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
       >
         <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
           {t({
@@ -1715,26 +1745,53 @@ export function ReleaseReadinessTab() {
           })}
         </SettingsInsetBlock>
 
+        <div data-local-evidence-export-hardening-summary="true" className="grid gap-3 min-[900px]:grid-cols-3">
+          <SettingsValueTile
+            label={t({ ko: '검토 완료', en: 'Reviewed' })}
+            value={t({ ko: '{count}/{total}개', en: '{count}/{total}' }, { count: reviewedLocalEvidenceExportCount, total: LOCAL_EVIDENCE_EXPORT_ITEMS.length })}
+          />
+          <SettingsValueTile
+            label={t({ ko: '운영 검토', en: 'Operator review' })}
+            value={t({ ko: '{count}개 bundle', en: '{count} bundles' }, { count: LOCAL_EVIDENCE_EXPORT_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length })}
+          />
+          <SettingsValueTile
+            label={t({ ko: '승인 필요', en: 'Approval needed' })}
+            value={t({ ko: '{count}개 gate', en: '{count} gates' }, { count: LOCAL_EVIDENCE_EXPORT_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length })}
+          />
+        </div>
+
         <div className="grid gap-3 min-[1000px]:grid-cols-3">
-          {LOCAL_EVIDENCE_EXPORT_ITEMS.map((item) => (
-            <SettingsInsetBlock key={item.id} data-local-evidence-export-bundle={item.id} className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">{t(item.bundle)}</Badge>
-                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
-                  {item.approvalBoundary === 'approval-required'
-                    ? t({ ko: '승인 필요', en: 'Approval needed' })
-                    : item.approvalBoundary === 'operator-review'
-                      ? t({ ko: '운영 검토', en: 'Operator review' })
-                      : t({ ko: '로컬 근거', en: 'Local evidence' })}
-                </Badge>
-              </div>
-              <div className="font-mono text-xs text-foreground/90">{item.exportCommand}</div>
-              <div className="font-mono text-xs text-foreground/90">{item.comparisonAnchor}</div>
-              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
-                {t(item.hardeningContract)}
-              </div>
-            </SettingsInsetBlock>
-          ))}
+          {LOCAL_EVIDENCE_EXPORT_ITEMS.map((item) => {
+            const checked = reviewedLocalEvidenceExports.has(item.id)
+
+            return (
+              <SettingsToggleRow key={item.id} data-local-evidence-export-bundle={item.id} className={cn('items-start space-y-0', checked && 'border-primary/40 bg-primary/10')}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => toggleLocalEvidenceExportItem(item.id, event.target.checked)}
+                  aria-label={t(item.bundle)}
+                />
+                <span className="min-w-0 space-y-3">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">{t(item.bundle)}</Badge>
+                    <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                      {item.approvalBoundary === 'approval-required'
+                        ? t({ ko: '승인 필요', en: 'Approval needed' })
+                        : item.approvalBoundary === 'operator-review'
+                          ? t({ ko: '운영 검토', en: 'Operator review' })
+                          : t({ ko: '로컬 근거', en: 'Local evidence' })}
+                    </Badge>
+                  </span>
+                  <span className="block font-mono text-xs text-foreground/90">{item.exportCommand}</span>
+                  <span className="block font-mono text-xs text-foreground/90">{item.comparisonAnchor}</span>
+                  <span className="block rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                    {t(item.hardeningContract)}
+                  </span>
+                </span>
+              </SettingsToggleRow>
+            )
+          })}
         </div>
       </SettingsSection>
 
