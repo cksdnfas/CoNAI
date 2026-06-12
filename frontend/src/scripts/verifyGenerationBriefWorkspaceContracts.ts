@@ -7,6 +7,7 @@ import {
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefHistoryEvolutionSummary,
   buildGenerationBriefHistoryDiscoveryLabels,
+  buildGenerationBriefHistoryInsightCards,
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshot,
@@ -512,6 +513,27 @@ equal(evolutionSummary.externalActionsExecuted, false, 'history evolution must n
 equal(evolutionSummary.queueMutations, false, 'history evolution must not mutate queues')
 equal(evolutionSummary.fileMutations, false, 'history evolution must not mutate files')
 equal(buildGenerationBriefHistoryEvolutionSummary([evolutionNewestSnapshot]).transitionCount, 0, 'single-snapshot evolution should expose no timeline transitions')
+const historyInsightQueryResult = buildGenerationBriefHistoryQueryResult([
+  evolutionNewestSnapshot,
+  evolutionOldestSnapshot,
+  evolutionMiddleSnapshot,
+], 'target-pivot')
+const historyInsightCards = buildGenerationBriefHistoryInsightCards(historyInsightQueryResult, evolutionSummary, evolutionOldestSnapshot)
+equal(historyInsightCards.length, 4, 'history insight handoff should expose matched history, transition labels, baseline comparison, and boundary cards')
+ok(historyInsightCards.some((card) => card.kind === 'matched-history' && card.evidence.some((item) => item.includes('Matches: 1/3'))), 'history insight cards should carry the active local history filter result')
+ok(historyInsightCards.some((card) => card.kind === 'transition-labels' && card.evidence.some((item) => item.includes('Target pivot'))), 'history insight cards should carry matched transition label evidence')
+ok(historyInsightCards.some((card) => card.kind === 'comparison-baseline' && card.evidence.some((item) => item.includes('Changed fields: 2/5'))), 'history insight cards should carry selected baseline comparison evidence')
+ok(historyInsightCards.some((card) => card.kind === 'boundary' && card.evidence.some((item) => item.includes('Queue mutations: false'))), 'history insight cards should preserve the no-queue-mutation boundary')
+const historyAwareReviewCopy = buildGenerationBriefReviewCopy(readyDraft, { historyInsightCards })
+ok(historyAwareReviewCopy.includes('## Local history insights'), 'review copy should include selected local history insights when available')
+ok(historyAwareReviewCopy.includes('Target pivot'), 'review copy should include transition-label evidence in the handoff text')
+ok(historyAwareReviewCopy.includes('Queue mutations: false'), 'history-aware review copy should preserve the no-queue-mutation boundary')
+const historyAwareReadinessGate = buildGenerationBriefReadinessGate(readyDraft, { historyInsightCards })
+equal(historyAwareReadinessGate.status, 'ready', 'ready drafts should remain ready when selected history insight cards carry no warnings')
+const historyAwareSerializedPayload = serializeGenerationBriefHandoffPayload(readyDraft, exportedAt, { historyInsightCards })
+const historyAwareRawPayload = JSON.parse(historyAwareSerializedPayload) as Record<string, unknown>
+ok(Array.isArray(historyAwareRawPayload.historyInsights), 'handoff JSON should carry selected history insight cards')
+equal((historyAwareRawPayload.historyInsights as unknown[]).length, historyInsightCards.length, 'handoff JSON should preserve the selected history insight card count')
 const removedHistorySnapshotId = historySnapshots[0]?.id ?? ''
 const prunedHistorySnapshots = deleteGenerationBriefHistorySnapshot(removedHistorySnapshotId, storage)
 equal(prunedHistorySnapshots.length, 4, 'deleting a manual history snapshot should remove only the selected snapshot')
@@ -596,6 +618,10 @@ ok(componentSource.includes('data-generation-brief-history-discovery-label'), 'b
 ok(componentSource.includes('historyQueryResult.discoveryLabels'), 'brief UI should render label-aware discovery results from the query contract')
 ok(componentSource.includes('transition.labels'), 'brief UI should render transition label metadata from the evolution contract')
 ok(componentSource.includes('buildGenerationBriefHistoryEvolutionSummary'), 'brief UI should summarize local history evolution through the side-effect-free contract')
+ok(componentSource.includes('buildGenerationBriefHistoryInsightCards'), 'brief UI should build selected history insight cards for review handoff')
+ok(componentSource.includes('data-generation-brief-history-review-handoff="true"'), 'brief UI should expose history-aware review handoff evidence')
+ok(componentSource.includes('data-generation-brief-history-review-handoff-card'), 'brief UI should expose individual history insight handoff cards')
+ok(componentSource.includes('historyInsightCards'), 'brief UI should pass selected history insights into review copy and JSON handoff')
 ok(componentSource.includes('targetChangeCount'), 'brief UI should expose target flow changes across local history evolution')
 ok(componentSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief UI should compare local history snapshots against the active draft before restore')
 ok(componentSource.includes('buildGenerationBriefHistorySnapshotComparison'), 'brief UI should compare local history snapshots against the selected baseline')
@@ -664,6 +690,9 @@ ok(contractSource.includes('buildGenerationBriefHistorySnapshot'), 'brief contra
 ok(contractSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief contract should expose side-effect-free local history discovery')
 ok(contractSource.includes('GenerationBriefHistoryDiscoveryLabel'), 'brief contract should type label-aware local history discovery cues')
 ok(contractSource.includes('buildGenerationBriefHistoryDiscoveryLabels'), 'brief contract should expose label-aware history discovery cues')
+ok(contractSource.includes('buildGenerationBriefHistoryInsightCards'), 'brief contract should expose selected local history insight cards for handoff')
+ok(contractSource.includes('GenerationBriefHistoryInsightCard'), 'brief contract should type local history insight handoff evidence')
+ok(contractSource.includes('historyInsights'), 'brief handoff payload should carry selected local history insights')
 ok(contractSource.includes('matchedLabelCount'), 'brief contract should report matched label-aware discovery cue counts')
 ok(contractSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief contract should expose side-effect-free local history restore comparison')
 ok(contractSource.includes('GenerationBriefHistoryRestoreComparison'), 'brief contract should type local history restore comparison evidence')

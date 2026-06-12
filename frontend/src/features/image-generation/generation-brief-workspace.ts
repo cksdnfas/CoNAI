@@ -36,6 +36,7 @@ export type GenerationBriefHandoffPayload = {
   draft: GenerationBriefDraft
   reviewSummary: GenerationBriefReviewSummary
   readinessGate: GenerationBriefReadinessGate
+  historyInsights: GenerationBriefHistoryInsightCard[]
 }
 
 export type GenerationBriefImportResult =
@@ -238,6 +239,17 @@ export type GenerationBriefHistoryEvolutionSummary = {
   sideEffectBoundary: 'local-draft-only'
 }
 
+export type GenerationBriefHistoryInsightCardStatus = 'ready' | 'warning'
+export type GenerationBriefHistoryInsightCardKind = 'matched-history' | 'transition-labels' | 'comparison-baseline' | 'boundary'
+
+export type GenerationBriefHistoryInsightCard = {
+  kind: GenerationBriefHistoryInsightCardKind
+  title: string
+  summary: string
+  evidence: string[]
+  status: GenerationBriefHistoryInsightCardStatus
+}
+
 export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready' | 'unavailable' | 'error'
 export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
 export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
@@ -313,6 +325,7 @@ export type GenerationBriefReadinessGateContext = {
   naiReuseCards?: GenerationBriefNaiReuseCard[]
   comfyCompatibilityCards?: GenerationBriefComfyCompatibilityCard[]
   iterationHandoffCards?: GenerationBriefIterationHandoffCard[]
+  historyInsightCards?: GenerationBriefHistoryInsightCard[]
 }
 
 export type GenerationBriefNaiReuseSnapshot = {
@@ -1117,6 +1130,119 @@ export function buildGenerationBriefHistoryEvolutionSummary(
   }
 }
 
+function sanitizeGenerationBriefHistoryInsightEvidence(value: string) {
+  return value.replace(/data:[^\s]+/gi, 'data-url-omitted')
+}
+
+function formatGenerationBriefHistoryInsightSnapshot(snapshot: GenerationBriefHistorySnapshot) {
+  return `${snapshot.savedAt} · ${snapshot.draft.target} · ${snapshot.filledFieldCount}/5 · ${snapshot.summary.status}`
+}
+
+function formatGenerationBriefHistoryInsightQuery(query: string) {
+  const trimmedQuery = query.trim()
+  return trimmedQuery || 'all local history'
+}
+
+function buildGenerationBriefHistoryInsightEvidence(items: string[]) {
+  return items.map(sanitizeGenerationBriefHistoryInsightEvidence)
+}
+
+/** Build compact local history insight cards that can travel with the review handoff without storage or provider side effects. */
+export function buildGenerationBriefHistoryInsightCards(
+  queryResult: GenerationBriefHistoryQueryResult,
+  evolutionSummary: GenerationBriefHistoryEvolutionSummary,
+  comparisonBaseSnapshot?: GenerationBriefHistorySnapshot | null,
+): GenerationBriefHistoryInsightCard[] {
+  const cards: GenerationBriefHistoryInsightCard[] = []
+
+  if (queryResult.totalCount > 0) {
+    cards.push({
+      kind: 'matched-history',
+      title: 'Matched local history',
+      summary: queryResult.matchedCount > 0
+        ? `${queryResult.matchedCount}/${queryResult.totalCount} local history snapshot(s) are selected for review context.`
+        : 'No saved local history snapshots match the current review filter.',
+      evidence: buildGenerationBriefHistoryInsightEvidence([
+        `Query: ${formatGenerationBriefHistoryInsightQuery(queryResult.query)}`,
+        `Matches: ${queryResult.matchedCount}/${queryResult.totalCount}`,
+        ...queryResult.snapshots.slice(0, 3).map((snapshot) => `Snapshot: ${formatGenerationBriefHistoryInsightSnapshot(snapshot)}`),
+      ]),
+      status: queryResult.matchedCount > 0 ? 'ready' : 'warning',
+    })
+  }
+
+  if (queryResult.matchedLabelCount > 0 || evolutionSummary.transitionCount > 0) {
+    const visibleLabels = queryResult.discoveryLabels.length > 0
+      ? queryResult.discoveryLabels.slice(0, 4).map((label) => `${label.label}: ${label.summary}`)
+      : evolutionSummary.transitions
+        .slice(-2)
+        .flatMap((transition) => transition.labels.slice(0, 2).map((label) => `${label.label}: ${label.summary}`))
+
+    cards.push({
+      kind: 'transition-labels',
+      title: 'History transition labels',
+      summary: `${evolutionSummary.transitionCount} transition(s), ${evolutionSummary.targetChangeCount} target pivot(s), and ${queryResult.matchedLabelCount} matched label cue(s) are available.`,
+      evidence: buildGenerationBriefHistoryInsightEvidence([
+        `Timeline transitions: ${evolutionSummary.transitionCount}`,
+        `Target pivots: ${evolutionSummary.targetChangeCount}`,
+        `Matched label cues: ${queryResult.matchedLabelCount}`,
+        ...visibleLabels,
+      ]),
+      status: 'ready',
+    })
+  }
+
+  if (comparisonBaseSnapshot) {
+    const comparedSnapshot = queryResult.snapshots.find((snapshot) => snapshot.id !== comparisonBaseSnapshot.id)
+    if (comparedSnapshot) {
+      const comparison = buildGenerationBriefHistorySnapshotComparison(comparisonBaseSnapshot, comparedSnapshot)
+      const changedFields = comparison.fields.filter((field) => field.status !== 'unchanged')
+      cards.push({
+        kind: 'comparison-baseline',
+        title: 'Selected comparison baseline',
+        summary: comparison.wouldChange
+          ? `${comparison.changedCount}/${comparison.fieldCount} field(s) differ from the selected baseline.`
+          : 'The selected comparison baseline matches the visible history snapshot.',
+        evidence: buildGenerationBriefHistoryInsightEvidence([
+          `Baseline: ${formatGenerationBriefHistoryInsightSnapshot(comparisonBaseSnapshot)}`,
+          `Compared snapshot: ${formatGenerationBriefHistoryInsightSnapshot(comparedSnapshot)}`,
+          `Changed fields: ${comparison.changedCount}/${comparison.fieldCount}`,
+          ...changedFields.slice(0, 3).map((field) => `${field.label}: ${field.basePreview} → ${field.snapshotPreview}`),
+        ]),
+        status: comparison.wouldChange ? 'ready' : 'warning',
+      })
+    } else {
+      cards.push({
+        kind: 'comparison-baseline',
+        title: 'Selected comparison baseline',
+        summary: 'A baseline is selected, but no other visible history snapshot is available for comparison.',
+        evidence: buildGenerationBriefHistoryInsightEvidence([
+          `Baseline: ${formatGenerationBriefHistoryInsightSnapshot(comparisonBaseSnapshot)}`,
+          `Visible comparison candidates: ${queryResult.snapshots.length}`,
+        ]),
+        status: 'warning',
+      })
+    }
+  }
+
+  if (cards.length > 0) {
+    cards.push({
+      kind: 'boundary',
+      title: 'Local history boundary',
+      summary: 'History insights are copied from browser-local snapshots and do not start generation.',
+      evidence: [
+        'Boundary: local-draft-only',
+        'External actions executed: false',
+        'Queue mutations: false',
+        'File mutations: false',
+      ],
+      status: 'ready',
+    })
+  }
+
+  return cards
+}
+
 /** Merge only the selected imported brief fields into the current local draft. */
 export function buildGenerationBriefSelectiveImportDraft(
   currentDraft: GenerationBriefDraft,
@@ -1150,6 +1276,7 @@ function collectGenerationBriefReadinessCards(context?: GenerationBriefReadiness
     ...(context?.naiReuseCards ?? []),
     ...(context?.comfyCompatibilityCards ?? []),
     ...(context?.iterationHandoffCards ?? []),
+    ...(context?.historyInsightCards ?? []),
   ]
 }
 
@@ -1610,6 +1737,7 @@ export function buildGenerationBriefReviewCopy(draft: GenerationBriefDraft, cont
   const normalizedDraft = normalizeGenerationBriefDraft(draft)
   const summary = buildGenerationBriefReviewSummary(normalizedDraft)
   const readinessGate = buildGenerationBriefReadinessGate(normalizedDraft, context)
+  const historyInsightCards = context?.historyInsightCards ?? []
   const missingFields = summary.missingFields.length > 0
     ? summary.missingFields.map((field) => GENERATION_BRIEF_FIELD_LABELS[field]).join(', ')
     : 'none'
@@ -1635,6 +1763,17 @@ export function buildGenerationBriefReviewCopy(draft: GenerationBriefDraft, cont
       `- Summary: ${item.summary}`,
       ...item.evidence.map((evidence) => `- ${evidence}`),
     ]),
+    ...(historyInsightCards.length > 0 ? [
+      '',
+      '## Local history insights',
+      ...historyInsightCards.flatMap((card) => [
+        '',
+        `### ${card.title}`,
+        `- Status: ${card.status}`,
+        `- Summary: ${card.summary}`,
+        ...card.evidence.map((evidence) => `- ${evidence}`),
+      ]),
+    ] : []),
     '',
     '## Generation intent',
     normalizedDraft.intent.trim() || '(empty)',
@@ -1662,6 +1801,7 @@ export function buildGenerationBriefHandoffPayload(draft: GenerationBriefDraft, 
     draft: normalizedDraft,
     reviewSummary: buildGenerationBriefReviewSummary(normalizedDraft),
     readinessGate: buildGenerationBriefReadinessGate(normalizedDraft, context),
+    historyInsights: context?.historyInsightCards ?? [],
   }
 }
 

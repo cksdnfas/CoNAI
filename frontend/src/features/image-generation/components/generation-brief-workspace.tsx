@@ -15,6 +15,7 @@ import {
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefHistoryEvolutionSummary,
+  buildGenerationBriefHistoryInsightCards,
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshotComparison,
@@ -46,6 +47,7 @@ import {
   type GenerationBriefComfyCompatibilitySnapshot,
   type GenerationBriefDraft,
   type GenerationBriefHistoryDiscoveryLabel,
+  type GenerationBriefHistoryInsightCardStatus,
   type GenerationBriefHistorySnapshot,
   type GenerationBriefImportDiffFieldStatus,
   type GenerationBriefIterationHandoffCardStatus,
@@ -123,6 +125,16 @@ function getIterationHandoffCardStatusLabel(status: GenerationBriefIterationHand
 }
 
 function getIterationHandoffCardStatusTone(status: GenerationBriefIterationHandoffCardStatus) {
+  if (status === 'ready') return 'secondary'
+  return 'outline'
+}
+
+function getHistoryInsightCardStatusLabel(status: GenerationBriefHistoryInsightCardStatus) {
+  if (status === 'ready') return { ko: '준비됨', en: 'Ready' }
+  return { ko: '확인 필요', en: 'Review' }
+}
+
+function getHistoryInsightCardStatusTone(status: GenerationBriefHistoryInsightCardStatus) {
   if (status === 'ready') return 'secondary'
   return 'outline'
 }
@@ -259,20 +271,31 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const comfyCompatibilityText = useMemo(() => (comfyCompatibilitySnapshot ? buildGenerationBriefComfyCompatibilityText(comfyCompatibilitySnapshot) : ''), [comfyCompatibilitySnapshot])
   const iterationHandoffCards = useMemo(() => (iterationHandoffSnapshot ? buildGenerationBriefIterationHandoffCards(iterationHandoffSnapshot) : []), [iterationHandoffSnapshot])
   const iterationHandoffText = useMemo(() => (iterationHandoffSnapshot ? buildGenerationBriefIterationHandoffText(iterationHandoffSnapshot) : ''), [iterationHandoffSnapshot])
+  const historyQueryResult = useMemo(() => buildGenerationBriefHistoryQueryResult(historySnapshots, historyQuery), [historyQuery, historySnapshots])
+  const historyEvolutionSummary = useMemo(() => buildGenerationBriefHistoryEvolutionSummary(historySnapshots), [historySnapshots])
+  const historyComparisonBaseSnapshot = useMemo(
+    () => historySnapshots.find((snapshot) => snapshot.id === historyComparisonBaseSnapshotId) ?? null,
+    [historyComparisonBaseSnapshotId, historySnapshots],
+  )
+  const historyInsightCards = useMemo(() => buildGenerationBriefHistoryInsightCards(
+    historyQueryResult,
+    historyEvolutionSummary,
+    historyComparisonBaseSnapshot,
+  ), [historyComparisonBaseSnapshot, historyEvolutionSummary, historyQueryResult])
   const readinessGate = useMemo(() => buildGenerationBriefReadinessGate(draft, {
     naiReuseCards,
     comfyCompatibilityCards,
     iterationHandoffCards,
-  }), [comfyCompatibilityCards, draft, iterationHandoffCards, naiReuseCards])
+    historyInsightCards,
+  }), [comfyCompatibilityCards, draft, historyInsightCards, iterationHandoffCards, naiReuseCards])
   const reviewCopy = useMemo(() => buildGenerationBriefReviewCopy(draft, {
     naiReuseCards,
     comfyCompatibilityCards,
     iterationHandoffCards,
-  }), [comfyCompatibilityCards, draft, iterationHandoffCards, naiReuseCards])
+    historyInsightCards,
+  }), [comfyCompatibilityCards, draft, historyInsightCards, iterationHandoffCards, naiReuseCards])
   const showNaiReuseCards = activeTarget === 'novelai' || draft.target === 'novelai'
   const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
-  const historyQueryResult = useMemo(() => buildGenerationBriefHistoryQueryResult(historySnapshots, historyQuery), [historyQuery, historySnapshots])
-  const historyEvolutionSummary = useMemo(() => buildGenerationBriefHistoryEvolutionSummary(historySnapshots), [historySnapshots])
   const historyDiscoveryLabelsBySnapshot = useMemo(
     () => groupHistoryDiscoveryLabelsBySnapshot(historyQueryResult.discoveryLabels),
     [historyQueryResult.discoveryLabels],
@@ -280,10 +303,6 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const historyEvolutionChangedFields = historyEvolutionSummary.fields.filter((field) => field.changedCount > 0)
   const recentHistoryEvolutionTransitions = historyEvolutionSummary.transitions.slice(-3).reverse()
   const filteredHistorySnapshots = historyQueryResult.snapshots
-  const historyComparisonBaseSnapshot = useMemo(
-    () => historySnapshots.find((snapshot) => snapshot.id === historyComparisonBaseSnapshotId) ?? null,
-    [historyComparisonBaseSnapshotId, historySnapshots],
-  )
   useEffect(() => {
     if (historyComparisonBaseSnapshotId && !historyComparisonBaseSnapshot) {
       setHistoryComparisonBaseSnapshotId('')
@@ -404,6 +423,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       naiReuseCards,
       comfyCompatibilityCards,
       iterationHandoffCards,
+      historyInsightCards,
     })
     const blob = new Blob([payload], { type: 'application/json;charset=utf-8' })
     triggerBlobDownload(blob, buildGenerationBriefHandoffFilename(exportedAt))
@@ -1021,6 +1041,32 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 en: 'Copying review text and downloading/importing JSON happen in the browser only. No provider calls, queue enqueueing, or uploads.',
               })}
             </p>
+            {historyInsightCards.length > 0 ? (
+              <div data-generation-brief-history-review-handoff="true" className="space-y-2 rounded-sm border border-border/70 bg-surface-container/35 p-3 text-xs leading-5 text-muted-foreground">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-foreground">{t({ ko: '히스토리 인사이트 포함', en: 'History insights included' })}</span>
+                  <Badge variant="outline" data-generation-brief-history-review-handoff-count="true">
+                    {t({ ko: '{count}개 카드', en: '{count} card(s)' }, { count: historyInsightCards.length })}
+                  </Badge>
+                </div>
+                <div className="grid gap-2">
+                  {historyInsightCards.map((card) => (
+                    <div key={card.kind} data-generation-brief-history-review-handoff-card={card.kind} className="rounded-sm border border-border/50 bg-background/60 p-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium text-foreground">{card.title}</span>
+                        <Badge variant={getHistoryInsightCardStatusTone(card.status)}>{t(getHistoryInsightCardStatusLabel(card.status))}</Badge>
+                      </div>
+                      <p className="mt-1">{card.summary}</p>
+                      <ul className="mt-2 space-y-1">
+                        {card.evidence.slice(0, 3).map((item) => (
+                          <li key={item} className="break-words">• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="secondary" data-generation-brief-copy-review="true" onClick={() => void copyReviewPacket()}>
                 <ClipboardCopy className="h-4 w-4" />
