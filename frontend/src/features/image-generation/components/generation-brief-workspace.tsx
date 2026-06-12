@@ -45,6 +45,7 @@ import {
   type GenerationBriefComfyCompatibilityCardStatus,
   type GenerationBriefComfyCompatibilitySnapshot,
   type GenerationBriefDraft,
+  type GenerationBriefHistoryDiscoveryLabel,
   type GenerationBriefHistorySnapshot,
   type GenerationBriefImportDiffFieldStatus,
   type GenerationBriefIterationHandoffCardStatus,
@@ -191,6 +192,14 @@ function appendGenerationBriefNote(current: string, next: string) {
   return `${currentText}\n\n${nextText}`
 }
 
+function groupHistoryDiscoveryLabelsBySnapshot(discoveryLabels: GenerationBriefHistoryDiscoveryLabel[]) {
+  const labelsBySnapshot = new Map<string, GenerationBriefHistoryDiscoveryLabel[]>()
+  discoveryLabels.forEach((label) => {
+    labelsBySnapshot.set(label.snapshotId, [...(labelsBySnapshot.get(label.snapshotId) ?? []), label])
+  })
+  return labelsBySnapshot
+}
+
 interface GenerationBriefWorkspaceProps {
   activeTab: string
   naiReuseSnapshot?: GenerationBriefNaiReuseSnapshot | null
@@ -264,6 +273,10 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
   const historyQueryResult = useMemo(() => buildGenerationBriefHistoryQueryResult(historySnapshots, historyQuery), [historyQuery, historySnapshots])
   const historyEvolutionSummary = useMemo(() => buildGenerationBriefHistoryEvolutionSummary(historySnapshots), [historySnapshots])
+  const historyDiscoveryLabelsBySnapshot = useMemo(
+    () => groupHistoryDiscoveryLabelsBySnapshot(historyQueryResult.discoveryLabels),
+    [historyQueryResult.discoveryLabels],
+  )
   const historyEvolutionChangedFields = historyEvolutionSummary.fields.filter((field) => field.changedCount > 0)
   const recentHistoryEvolutionTransitions = historyEvolutionSummary.transitions.slice(-3).reverse()
   const filteredHistorySnapshots = historyQueryResult.snapshots
@@ -699,6 +712,9 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 <Badge variant="outline" data-generation-brief-history-filter-count="true">
                   {t({ ko: '일치 {matched}/{total}', en: 'Matches {matched}/{total}' }, { matched: historyQueryResult.matchedCount, total: historyQueryResult.totalCount })}
                 </Badge>
+                <Badge variant="outline" data-generation-brief-history-label-count="true">
+                  {t({ ko: '라벨 {count}개', en: '{count} label cue(s)' }, { count: historyQueryResult.matchedLabelCount })}
+                </Badge>
                 {historySnapshots.length > 0 ? (
                   <Button type="button" size="sm" variant="ghost" data-generation-brief-history-clear="true" onClick={clearHistorySnapshots}>
                     <Trash2 className="h-4 w-4" />
@@ -770,8 +786,11 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                   data-generation-brief-history-filter="true"
                   value={historyQuery}
                   onChange={(event) => setHistoryQuery(event.target.value)}
-                  placeholder={t({ ko: '의도, 대상, 상태, 메모, 저장 시각으로 찾아.', en: 'Search intent, target, status, notes, or saved time.' })}
+                  placeholder={t({ ko: '의도, 대상, 상태, 메모, 전환 라벨(target-pivot, Filled gaps)로 찾아.', en: 'Search intent, target, status, notes, or transition labels like target-pivot and Filled gaps.' })}
                 />
+                <span data-generation-brief-history-filter-help="true" className="block text-xs leading-5 text-muted-foreground">
+                  {t({ ko: '전환 라벨과 decision category도 검색에 포함돼. 예: Target pivot, Filled gaps, multi-field revision.', en: 'Transition labels and decision categories are searchable too: Target pivot, Filled gaps, multi-field revision.' })}
+                </span>
               </label>
             ) : null}
             {historySnapshots.length > 0 ? (
@@ -784,6 +803,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                       ? buildGenerationBriefHistorySnapshotComparison(historyComparisonBaseSnapshot, snapshot)
                       : null
                     const snapshotComparisonChangedFields = snapshotComparison?.fields.filter((field) => field.status !== 'unchanged') ?? []
+                    const discoveryLabels = historyDiscoveryLabelsBySnapshot.get(snapshot.id) ?? []
                     const isComparisonBaseSnapshot = historyComparisonBaseSnapshot?.id === snapshot.id
                     return (
                       <div key={snapshot.id} data-generation-brief-history-snapshot={snapshot.id} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
@@ -835,6 +855,15 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                             </Button>
                           </div>
                         </div>
+                        {discoveryLabels.length > 0 ? (
+                          <div data-generation-brief-history-discovery-labels={snapshot.id} className="mt-3 flex flex-wrap gap-1 text-xs">
+                            {discoveryLabels.slice(0, 5).map((label) => (
+                              <Badge key={`${snapshot.id}:${label.fromSnapshotId}:${label.kind}`} variant="secondary" data-generation-brief-history-discovery-label={label.kind} title={label.summary}>
+                                {label.label}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : null}
                         <div data-generation-brief-history-restore-comparison={snapshot.id} className="mt-3 space-y-2 rounded-sm border border-border/60 bg-background/60 p-2 text-xs leading-5 text-muted-foreground">
                           {restoreComparison.wouldChange ? (
                             <>

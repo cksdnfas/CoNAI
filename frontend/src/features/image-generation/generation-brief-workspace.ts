@@ -90,11 +90,20 @@ export type GenerationBriefHistorySnapshot = {
   sideEffectBoundary: 'local-draft-only'
 }
 
+export type GenerationBriefHistoryDiscoveryLabel = GenerationBriefHistoryEvolutionTransitionLabel & {
+  snapshotId: string
+  fromSnapshotId: string
+  toSnapshotId: string
+  direction: 'incoming-transition'
+}
+
 export type GenerationBriefHistoryQueryResult = {
   query: string
   totalCount: number
   matchedCount: number
+  matchedLabelCount: number
   snapshots: GenerationBriefHistorySnapshot[]
+  discoveryLabels: GenerationBriefHistoryDiscoveryLabel[]
   localOnly: true
   externalActionsExecuted: false
   queueMutations: false
@@ -796,7 +805,10 @@ export function clearGenerationBriefHistorySnapshots(storage: StorageLike | null
   return persistGenerationBriefHistorySnapshots([], storage)
 }
 
-function buildGenerationBriefHistorySearchText(snapshot: GenerationBriefHistorySnapshot) {
+function buildGenerationBriefHistorySearchText(
+  snapshot: GenerationBriefHistorySnapshot,
+  discoveryLabels: GenerationBriefHistoryDiscoveryLabel[],
+) {
   return [
     snapshot.id,
     snapshot.savedAt,
@@ -809,29 +821,61 @@ function buildGenerationBriefHistorySearchText(snapshot: GenerationBriefHistoryS
     snapshot.summary.status,
     `${snapshot.filledFieldCount}/5`,
     snapshot.sideEffectBoundary,
+    ...discoveryLabels.flatMap((label) => [label.kind, label.label, label.summary]),
   ].join(' ').toLocaleLowerCase()
 }
 
-/** Filter parsed local history snapshots without reading or mutating browser storage. */
+/** Build label-aware discovery cues for snapshots reached by local history evolution transitions. */
+export function buildGenerationBriefHistoryDiscoveryLabels(
+  snapshots: GenerationBriefHistorySnapshot[],
+): GenerationBriefHistoryDiscoveryLabel[] {
+  return buildGenerationBriefHistoryEvolutionSummary(snapshots).transitions.flatMap((transition) => (
+    transition.labels.map((label) => ({
+      ...label,
+      snapshotId: transition.toSnapshotId,
+      fromSnapshotId: transition.fromSnapshotId,
+      toSnapshotId: transition.toSnapshotId,
+      direction: 'incoming-transition' as const,
+    }))
+  ))
+}
+
+function groupGenerationBriefHistoryDiscoveryLabelsBySnapshot(
+  discoveryLabels: GenerationBriefHistoryDiscoveryLabel[],
+) {
+  const labelsBySnapshot = new Map<string, GenerationBriefHistoryDiscoveryLabel[]>()
+  discoveryLabels.forEach((label) => {
+    labelsBySnapshot.set(label.snapshotId, [...(labelsBySnapshot.get(label.snapshotId) ?? []), label])
+  })
+  return labelsBySnapshot
+}
+
+/** Filter parsed local history snapshots by draft text, transition labels, and local decision categories without storage side effects. */
 export function buildGenerationBriefHistoryQueryResult(
   snapshots: GenerationBriefHistorySnapshot[],
   query: string,
 ): GenerationBriefHistoryQueryResult {
   const safeSnapshots = normalizeGenerationBriefHistorySnapshots(snapshots)
+  const discoveryLabels = buildGenerationBriefHistoryDiscoveryLabels(safeSnapshots)
+  const labelsBySnapshot = groupGenerationBriefHistoryDiscoveryLabelsBySnapshot(discoveryLabels)
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const terms = normalizedQuery.split(/\s+/).filter(Boolean)
   const matchedSnapshots = terms.length === 0
     ? safeSnapshots
     : safeSnapshots.filter((snapshot) => {
-      const searchText = buildGenerationBriefHistorySearchText(snapshot)
+      const searchText = buildGenerationBriefHistorySearchText(snapshot, labelsBySnapshot.get(snapshot.id) ?? [])
       return terms.every((term) => searchText.includes(term))
     })
+  const matchedSnapshotIds = new Set(matchedSnapshots.map((snapshot) => snapshot.id))
+  const matchedDiscoveryLabels = discoveryLabels.filter((label) => matchedSnapshotIds.has(label.snapshotId))
 
   return {
     query: normalizedQuery,
     totalCount: safeSnapshots.length,
     matchedCount: matchedSnapshots.length,
+    matchedLabelCount: matchedDiscoveryLabels.length,
     snapshots: matchedSnapshots,
+    discoveryLabels: matchedDiscoveryLabels,
     localOnly: true,
     externalActionsExecuted: false,
     queueMutations: false,

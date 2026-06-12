@@ -6,6 +6,7 @@ import {
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefHistoryEvolutionSummary,
+  buildGenerationBriefHistoryDiscoveryLabels,
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshot,
@@ -474,6 +475,31 @@ ok(evolutionSummary.transitions[1]?.labels.some((label) => label.kind === 'sourc
 ok(evolutionSummary.transitions[1]?.labels.some((label) => label.kind === 'review-note-change'), 'history evolution labels should mark review-note revisions')
 ok(evolutionSummary.transitions[1]?.labels.some((label) => label.kind === 'multi-field-revision'), 'history evolution labels should mark broad multi-field revisions')
 ok(evolutionSummary.transitions.every((transition) => transition.labels.every((label) => label.summary.length > 0)), 'history evolution labels should include operator-readable summaries')
+const historyDiscoveryLabels = buildGenerationBriefHistoryDiscoveryLabels([
+  evolutionNewestSnapshot,
+  evolutionOldestSnapshot,
+  evolutionMiddleSnapshot,
+])
+ok(historyDiscoveryLabels.some((label) => label.snapshotId === evolutionMiddleSnapshot.id && label.kind === 'target-pivot'), 'history discovery labels should attach target pivots to the reached snapshot')
+const targetPivotHistoryQueryResult = buildGenerationBriefHistoryQueryResult([
+  evolutionNewestSnapshot,
+  evolutionOldestSnapshot,
+  evolutionMiddleSnapshot,
+], 'target-pivot')
+equal(targetPivotHistoryQueryResult.matchedCount, 1, 'label-aware history discovery should find snapshots by transition label kind')
+equal(targetPivotHistoryQueryResult.snapshots[0]?.id, evolutionMiddleSnapshot.id, 'transition label queries should return the snapshot reached by that transition')
+ok(targetPivotHistoryQueryResult.discoveryLabels.some((label) => label.kind === 'target-pivot'), 'label-aware history discovery should return matched discovery cues')
+equal(targetPivotHistoryQueryResult.matchedLabelCount, targetPivotHistoryQueryResult.discoveryLabels.length, 'history discovery should expose matched label counts')
+equal(buildGenerationBriefHistoryQueryResult([
+  evolutionNewestSnapshot,
+  evolutionOldestSnapshot,
+  evolutionMiddleSnapshot,
+], 'multi-field revision').snapshots[0]?.id, evolutionNewestSnapshot.id, 'history discovery should find operator-readable transition labels with multi-word terms')
+equal(buildGenerationBriefHistoryQueryResult([
+  evolutionNewestSnapshot,
+  evolutionOldestSnapshot,
+  evolutionMiddleSnapshot,
+], 'source-reference-change').snapshots[0]?.id, evolutionNewestSnapshot.id, 'history discovery should find decision categories by label kind')
 equal(evolutionSummary.earliestSavedAt, evolutionOldestSnapshot.savedAt, 'history evolution should expose earliest saved-at evidence')
 equal(evolutionSummary.latestSavedAt, evolutionNewestSnapshot.savedAt, 'history evolution should expose latest saved-at evidence')
 equal(evolutionSummary.transitions[0]?.fromSnapshotId, evolutionOldestSnapshot.id, 'history evolution should start from the oldest snapshot')
@@ -546,6 +572,8 @@ ok(componentSource.includes('data-generation-brief-history-remove'), 'brief UI s
 ok(componentSource.includes('data-generation-brief-history-clear="true"'), 'brief UI should expose a clear local history action')
 ok(componentSource.includes('data-generation-brief-history-filter="true"'), 'brief UI should expose local history filtering')
 ok(componentSource.includes('data-generation-brief-history-filter-count="true"'), 'brief UI should expose local history filter match counts')
+ok(componentSource.includes('data-generation-brief-history-label-count="true"'), 'brief UI should expose label-aware discovery cue counts')
+ok(componentSource.includes('data-generation-brief-history-filter-help="true"'), 'brief UI should explain transition-label history discovery')
 ok(componentSource.includes('data-generation-brief-history-filter-empty="true"'), 'brief UI should expose no-match local history discovery state')
 ok(componentSource.includes('data-generation-brief-history-restore-comparison'), 'brief UI should expose local history restore comparison surface')
 ok(componentSource.includes('data-generation-brief-history-restore-comparison-summary'), 'brief UI should expose history restore comparison counts')
@@ -563,6 +591,9 @@ ok(componentSource.includes('data-generation-brief-history-evolution-summary="tr
 ok(componentSource.includes('data-generation-brief-history-evolution-field'), 'brief UI should expose changed field counts across local history evolution')
 ok(componentSource.includes('data-generation-brief-history-evolution-transition'), 'brief UI should expose recent chronological history transitions')
 ok(componentSource.includes('data-generation-brief-history-evolution-transition-label'), 'brief UI should expose operator-readable history transition labels')
+ok(componentSource.includes('data-generation-brief-history-discovery-labels'), 'brief UI should expose per-snapshot label-aware discovery cues')
+ok(componentSource.includes('data-generation-brief-history-discovery-label'), 'brief UI should expose individual local history discovery label badges')
+ok(componentSource.includes('historyQueryResult.discoveryLabels'), 'brief UI should render label-aware discovery results from the query contract')
 ok(componentSource.includes('transition.labels'), 'brief UI should render transition label metadata from the evolution contract')
 ok(componentSource.includes('buildGenerationBriefHistoryEvolutionSummary'), 'brief UI should summarize local history evolution through the side-effect-free contract')
 ok(componentSource.includes('targetChangeCount'), 'brief UI should expose target flow changes across local history evolution')
@@ -631,6 +662,9 @@ ok(contractSource.includes('GENERATION_BRIEF_RECOVERY_STORAGE_KEY'), 'brief cont
 ok(contractSource.includes('GENERATION_BRIEF_HISTORY_STORAGE_KEY'), 'brief contract should store manual history snapshots separately from active draft state')
 ok(contractSource.includes('buildGenerationBriefHistorySnapshot'), 'brief contract should expose manual history snapshot construction')
 ok(contractSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief contract should expose side-effect-free local history discovery')
+ok(contractSource.includes('GenerationBriefHistoryDiscoveryLabel'), 'brief contract should type label-aware local history discovery cues')
+ok(contractSource.includes('buildGenerationBriefHistoryDiscoveryLabels'), 'brief contract should expose label-aware history discovery cues')
+ok(contractSource.includes('matchedLabelCount'), 'brief contract should report matched label-aware discovery cue counts')
 ok(contractSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief contract should expose side-effect-free local history restore comparison')
 ok(contractSource.includes('GenerationBriefHistoryRestoreComparison'), 'brief contract should type local history restore comparison evidence')
 ok(contractSource.includes('buildGenerationBriefHistorySnapshotComparison'), 'brief contract should expose side-effect-free local history snapshot comparison')
