@@ -179,6 +179,39 @@ export type GenerationBriefHistorySnapshotComparison = {
   sideEffectBoundary: 'local-draft-only'
 }
 
+export type GenerationBriefHistoryEvolutionFieldSummary = {
+  field: keyof GenerationBriefDraft
+  label: string
+  changedCount: number
+}
+
+export type GenerationBriefHistoryEvolutionTransition = {
+  fromSnapshotId: string
+  fromSavedAt: string
+  toSnapshotId: string
+  toSavedAt: string
+  changedCount: number
+  changedFields: Array<keyof GenerationBriefDraft>
+  targetChanged: boolean
+}
+
+export type GenerationBriefHistoryEvolutionSummary = {
+  snapshotCount: number
+  transitionCount: number
+  totalChangedFieldCount: number
+  changedFieldCount: number
+  targetChangeCount: number
+  earliestSavedAt: string | null
+  latestSavedAt: string | null
+  fields: GenerationBriefHistoryEvolutionFieldSummary[]
+  transitions: GenerationBriefHistoryEvolutionTransition[]
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+}
+
 export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready' | 'unavailable' | 'error'
 export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
 export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
@@ -895,6 +928,65 @@ export function buildGenerationBriefHistorySnapshotComparison(
     clearedCount: fields.filter((field) => field.status === 'cleared').length,
     wouldChange: changedCount > 0,
     fields,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+/** Summarize chronological changes across parsed local history snapshots without storage or runtime side effects. */
+export function buildGenerationBriefHistoryEvolutionSummary(
+  snapshots: GenerationBriefHistorySnapshot[],
+): GenerationBriefHistoryEvolutionSummary {
+  const safeSnapshots = normalizeGenerationBriefHistorySnapshots(snapshots)
+  const chronologicalSnapshots = [...safeSnapshots].sort((left, right) => left.savedAt.localeCompare(right.savedAt))
+  const changedFieldCounts = new Map<keyof GenerationBriefDraft, number>(
+    GENERATION_BRIEF_FIELDS.map((field) => [field, 0]),
+  )
+  const transitions: GenerationBriefHistoryEvolutionTransition[] = []
+
+  for (let index = 1; index < chronologicalSnapshots.length; index += 1) {
+    const fromSnapshot = chronologicalSnapshots[index - 1]!
+    const toSnapshot = chronologicalSnapshots[index]!
+    const comparison = buildGenerationBriefHistorySnapshotComparison(fromSnapshot, toSnapshot)
+    const changedFields = comparison.fields
+      .filter((field) => field.status !== 'unchanged')
+      .map((field) => field.field)
+
+    changedFields.forEach((field) => {
+      changedFieldCounts.set(field, (changedFieldCounts.get(field) ?? 0) + 1)
+    })
+
+    transitions.push({
+      fromSnapshotId: fromSnapshot.id,
+      fromSavedAt: fromSnapshot.savedAt,
+      toSnapshotId: toSnapshot.id,
+      toSavedAt: toSnapshot.savedAt,
+      changedCount: comparison.changedCount,
+      changedFields,
+      targetChanged: changedFields.includes('target'),
+    })
+  }
+
+  const fields = GENERATION_BRIEF_FIELDS.map((field) => ({
+    field,
+    label: GENERATION_BRIEF_FIELD_LABELS[field],
+    changedCount: changedFieldCounts.get(field) ?? 0,
+  }))
+  const totalChangedFieldCount = transitions.reduce((total, transition) => total + transition.changedCount, 0)
+
+  return {
+    snapshotCount: chronologicalSnapshots.length,
+    transitionCount: transitions.length,
+    totalChangedFieldCount,
+    changedFieldCount: fields.filter((field) => field.changedCount > 0).length,
+    targetChangeCount: transitions.filter((transition) => transition.targetChanged).length,
+    earliestSavedAt: chronologicalSnapshots[0]?.savedAt ?? null,
+    latestSavedAt: chronologicalSnapshots.at(-1)?.savedAt ?? null,
+    fields,
+    transitions,
     localOnly: true,
     externalActionsExecuted: false,
     queueMutations: false,

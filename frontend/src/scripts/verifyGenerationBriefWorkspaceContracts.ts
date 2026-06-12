@@ -5,6 +5,7 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefHistoryEvolutionSummary,
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshot,
@@ -441,6 +442,43 @@ equal(snapshotComparison.fields.find((field) => field.field === 'reusableAssets'
 equal(snapshotComparison.fields.find((field) => field.field === 'sourceReferences')?.basePreview, 'empty', 'snapshot comparison should expose baseline previews')
 equal(snapshotComparison.fields.find((field) => field.field === 'sourceReferences')?.snapshotPreview, 'new source reference', 'snapshot comparison should expose compared snapshot previews')
 equal(buildGenerationBriefHistorySnapshotComparison(snapshotComparisonBase, snapshotComparisonBase).wouldChange, false, 'snapshot comparison should expose no-op baseline comparisons')
+const evolutionOldestSnapshot = buildGenerationBriefHistorySnapshot(
+  { ...readyDraft, target: 'novelai', sourceReferences: 'reference A', reusableAssets: 'vibe A', reviewNotes: 'review A' },
+  'manual-save',
+  '2026-06-12T04:20:00.000Z',
+)
+const evolutionMiddleSnapshot = buildGenerationBriefHistorySnapshot(
+  { ...readyDraft, target: 'comfyui', sourceReferences: 'reference A', reusableAssets: 'workflow B', reviewNotes: 'review A' },
+  'manual-save',
+  '2026-06-12T04:21:00.000Z',
+)
+const evolutionNewestSnapshot = buildGenerationBriefHistorySnapshot(
+  { ...readyDraft, intent: 'portrait closeup lighting plan', target: 'comfyui', sourceReferences: 'reference C', reusableAssets: 'workflow B', reviewNotes: 'review C' },
+  'manual-save',
+  '2026-06-12T04:22:00.000Z',
+)
+const evolutionSummary = buildGenerationBriefHistoryEvolutionSummary([
+  evolutionNewestSnapshot,
+  evolutionOldestSnapshot,
+  evolutionMiddleSnapshot,
+])
+equal(evolutionSummary.snapshotCount, 3, 'history evolution should normalize and count parsed local history snapshots')
+equal(evolutionSummary.transitionCount, 2, 'history evolution should compare chronological snapshot transitions')
+equal(evolutionSummary.totalChangedFieldCount, 5, 'history evolution should sum field changes across transitions')
+equal(evolutionSummary.changedFieldCount, 5, 'history evolution should count every field that changed during the local timeline')
+equal(evolutionSummary.targetChangeCount, 1, 'history evolution should expose target flow changes')
+equal(evolutionSummary.earliestSavedAt, evolutionOldestSnapshot.savedAt, 'history evolution should expose earliest saved-at evidence')
+equal(evolutionSummary.latestSavedAt, evolutionNewestSnapshot.savedAt, 'history evolution should expose latest saved-at evidence')
+equal(evolutionSummary.transitions[0]?.fromSnapshotId, evolutionOldestSnapshot.id, 'history evolution should start from the oldest snapshot')
+equal(evolutionSummary.transitions[0]?.toSnapshotId, evolutionMiddleSnapshot.id, 'history evolution should compare oldest to next snapshot')
+equal(evolutionSummary.transitions[0]?.changedCount, 2, 'history evolution should count first transition changes')
+equal(evolutionSummary.transitions[1]?.changedCount, 3, 'history evolution should count second transition changes')
+equal(evolutionSummary.fields.find((field) => field.field === 'target')?.changedCount, 1, 'history evolution should count target field changes')
+equal(evolutionSummary.fields.find((field) => field.field === 'sourceReferences')?.changedCount, 1, 'history evolution should count source reference changes')
+equal(evolutionSummary.externalActionsExecuted, false, 'history evolution must not claim provider calls or queue operations')
+equal(evolutionSummary.queueMutations, false, 'history evolution must not mutate queues')
+equal(evolutionSummary.fileMutations, false, 'history evolution must not mutate files')
+equal(buildGenerationBriefHistoryEvolutionSummary([evolutionNewestSnapshot]).transitionCount, 0, 'single-snapshot evolution should expose no timeline transitions')
 const removedHistorySnapshotId = historySnapshots[0]?.id ?? ''
 const prunedHistorySnapshots = deleteGenerationBriefHistorySnapshot(removedHistorySnapshotId, storage)
 equal(prunedHistorySnapshots.length, 4, 'deleting a manual history snapshot should remove only the selected snapshot')
@@ -514,6 +552,11 @@ ok(componentSource.includes('data-generation-brief-history-snapshot-comparison-s
 ok(componentSource.includes('data-generation-brief-history-snapshot-comparison-field'), 'brief UI should expose field-level snapshot comparison differences')
 ok(componentSource.includes('data-generation-brief-history-snapshot-comparison-base-marker="true"'), 'brief UI should mark the selected comparison baseline snapshot')
 ok(componentSource.includes('data-generation-brief-history-snapshot-comparison-noop="true"'), 'brief UI should expose no-op snapshot comparison evidence')
+ok(componentSource.includes('data-generation-brief-history-evolution-summary="true"'), 'brief UI should expose local history evolution summary')
+ok(componentSource.includes('data-generation-brief-history-evolution-field'), 'brief UI should expose changed field counts across local history evolution')
+ok(componentSource.includes('data-generation-brief-history-evolution-transition'), 'brief UI should expose recent chronological history transitions')
+ok(componentSource.includes('buildGenerationBriefHistoryEvolutionSummary'), 'brief UI should summarize local history evolution through the side-effect-free contract')
+ok(componentSource.includes('targetChangeCount'), 'brief UI should expose target flow changes across local history evolution')
 ok(componentSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief UI should compare local history snapshots against the active draft before restore')
 ok(componentSource.includes('buildGenerationBriefHistorySnapshotComparison'), 'brief UI should compare local history snapshots against the selected baseline')
 ok(componentSource.includes('filteredHistorySnapshots.map'), 'brief UI should render restore and remove actions from filtered history snapshots')

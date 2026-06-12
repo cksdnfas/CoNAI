@@ -14,6 +14,7 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefHistoryEvolutionSummary,
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshotComparison,
@@ -262,6 +263,9 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const showNaiReuseCards = activeTarget === 'novelai' || draft.target === 'novelai'
   const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
   const historyQueryResult = useMemo(() => buildGenerationBriefHistoryQueryResult(historySnapshots, historyQuery), [historyQuery, historySnapshots])
+  const historyEvolutionSummary = useMemo(() => buildGenerationBriefHistoryEvolutionSummary(historySnapshots), [historySnapshots])
+  const historyEvolutionChangedFields = historyEvolutionSummary.fields.filter((field) => field.changedCount > 0)
+  const recentHistoryEvolutionTransitions = historyEvolutionSummary.transitions.slice(-3).reverse()
   const filteredHistorySnapshots = historyQueryResult.snapshots
   const historyComparisonBaseSnapshot = useMemo(
     () => historySnapshots.find((snapshot) => snapshot.id === historyComparisonBaseSnapshotId) ?? null,
@@ -711,6 +715,41 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 <Button type="button" size="sm" variant="ghost" data-generation-brief-history-comparison-clear="true" onClick={() => setHistoryComparisonBaseSnapshotId('')}>
                   {t({ ko: '기준 해제', en: 'Clear baseline' })}
                 </Button>
+              </div>
+            ) : null}
+            {historyEvolutionSummary.transitionCount > 0 ? (
+              <div data-generation-brief-history-evolution-summary="true" className="space-y-2 rounded-sm border border-border/70 bg-surface-container/35 p-2 text-xs leading-5 text-muted-foreground">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">{t({ ko: '히스토리 흐름 요약', en: 'History evolution summary' })}</span>
+                  <Badge variant="outline">
+                    {t({ ko: '전환 {count}회', en: '{count} transition(s)' }, { count: historyEvolutionSummary.transitionCount })}
+                  </Badge>
+                </div>
+                <div>
+                  {t(
+                    { ko: '스냅샷 {snapshots}개 · 필드 변경 {changes}건 · 바뀐 필드 {fields}개 · 대상 변경 {targets}회', en: '{snapshots} snapshots · {changes} field change(s) · {fields} changed field(s) · {targets} target change(s)' },
+                    {
+                      snapshots: historyEvolutionSummary.snapshotCount,
+                      changes: historyEvolutionSummary.totalChangedFieldCount,
+                      fields: historyEvolutionSummary.changedFieldCount,
+                      targets: historyEvolutionSummary.targetChangeCount,
+                    },
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {historyEvolutionChangedFields.slice(0, 5).map((field) => (
+                    <Badge key={field.field} variant="secondary" data-generation-brief-history-evolution-field={field.field}>
+                      {field.label}: {field.changedCount}
+                    </Badge>
+                  ))}
+                </div>
+                <div className="grid gap-1">
+                  {recentHistoryEvolutionTransitions.map((transition) => (
+                    <div key={`${transition.fromSnapshotId}:${transition.toSnapshotId}`} data-generation-brief-history-evolution-transition={transition.toSnapshotId} className="rounded-sm border border-border/50 bg-background/60 px-2 py-1">
+                      {transition.fromSavedAt} → {transition.toSavedAt}: {t({ ko: '변경', en: 'changes' })} {transition.changedCount} · {t({ ko: '대상 변경', en: 'target changed' })} {String(transition.targetChanged)}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
             {historySnapshots.length > 0 ? (
