@@ -150,6 +150,35 @@ export type GenerationBriefHistoryRestoreComparison = {
   sideEffectBoundary: 'local-draft-only'
 }
 
+export type GenerationBriefHistorySnapshotComparisonFieldStatus = GenerationBriefImportDiffFieldStatus
+
+export type GenerationBriefHistorySnapshotComparisonField = {
+  field: keyof GenerationBriefDraft
+  label: string
+  status: GenerationBriefHistorySnapshotComparisonFieldStatus
+  basePreview: string
+  snapshotPreview: string
+}
+
+export type GenerationBriefHistorySnapshotComparison = {
+  baseSnapshotId: string
+  baseSavedAt: string
+  snapshotId: string
+  savedAt: string
+  fieldCount: number
+  changedCount: number
+  unchangedCount: number
+  filledCount: number
+  clearedCount: number
+  wouldChange: boolean
+  fields: GenerationBriefHistorySnapshotComparisonField[]
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+}
+
 export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready' | 'unavailable' | 'error'
 export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
 export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
@@ -821,6 +850,42 @@ export function buildGenerationBriefHistoryRestoreComparison(
   const changedCount = fields.filter((field) => field.status !== 'unchanged').length
 
   return {
+    snapshotId: snapshot.id,
+    savedAt: snapshot.savedAt,
+    fieldCount: fields.length,
+    changedCount,
+    unchangedCount: fields.filter((field) => field.status === 'unchanged').length,
+    filledCount: fields.filter((field) => field.status === 'filled').length,
+    clearedCount: fields.filter((field) => field.status === 'cleared').length,
+    wouldChange: changedCount > 0,
+    fields,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+/** Compare two parsed local history snapshots without reading or mutating browser storage. */
+export function buildGenerationBriefHistorySnapshotComparison(
+  baseSnapshot: GenerationBriefHistorySnapshot,
+  snapshot: GenerationBriefHistorySnapshot,
+): GenerationBriefHistorySnapshotComparison {
+  const baseDraft = normalizeGenerationBriefDraft(baseSnapshot.draft)
+  const snapshotDraft = normalizeGenerationBriefDraft(snapshot.draft)
+  const fields = GENERATION_BRIEF_FIELDS.map((field) => ({
+    field,
+    label: GENERATION_BRIEF_FIELD_LABELS[field],
+    status: getGenerationBriefImportDiffStatus(baseDraft, snapshotDraft, field),
+    basePreview: formatGenerationBriefImportDiffPreview(baseDraft, field),
+    snapshotPreview: formatGenerationBriefImportDiffPreview(snapshotDraft, field),
+  }))
+  const changedCount = fields.filter((field) => field.status !== 'unchanged').length
+
+  return {
+    baseSnapshotId: baseSnapshot.id,
+    baseSavedAt: baseSnapshot.savedAt,
     snapshotId: snapshot.id,
     savedAt: snapshot.savedAt,
     fieldCount: fields.length,

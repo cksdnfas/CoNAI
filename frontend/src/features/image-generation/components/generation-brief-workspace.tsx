@@ -16,6 +16,7 @@ import {
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
+  buildGenerationBriefHistorySnapshotComparison,
   buildGenerationBriefImportDiff,
   buildGenerationBriefSelectiveImportDraft,
   countGenerationBriefSelectedImportChanges,
@@ -210,6 +211,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const [saveMetadata, setSaveMetadata] = useState<GenerationBriefSaveMetadata | null>(() => readGenerationBriefSaveMetadata())
   const [historySnapshots, setHistorySnapshots] = useState<GenerationBriefHistorySnapshot[]>(() => readGenerationBriefHistorySnapshots())
   const [historyQuery, setHistoryQuery] = useState('')
+  const [historyComparisonBaseSnapshotId, setHistoryComparisonBaseSnapshotId] = useState('')
   const [importPayload, setImportPayload] = useState('')
   const [selectedImportFields, setSelectedImportFields] = useState<Array<keyof GenerationBriefDraft>>([])
   const importPreview = useMemo(() => {
@@ -261,6 +263,15 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
   const historyQueryResult = useMemo(() => buildGenerationBriefHistoryQueryResult(historySnapshots, historyQuery), [historyQuery, historySnapshots])
   const filteredHistorySnapshots = historyQueryResult.snapshots
+  const historyComparisonBaseSnapshot = useMemo(
+    () => historySnapshots.find((snapshot) => snapshot.id === historyComparisonBaseSnapshotId) ?? null,
+    [historyComparisonBaseSnapshotId, historySnapshots],
+  )
+  useEffect(() => {
+    if (historyComparisonBaseSnapshotId && !historyComparisonBaseSnapshot) {
+      setHistoryComparisonBaseSnapshotId('')
+    }
+  }, [historyComparisonBaseSnapshot, historyComparisonBaseSnapshotId])
 
   const persistGenerationBriefDraft = (nextDraft: GenerationBriefDraft) => {
     const savedDraft = saveGenerationBriefDraft(nextDraft)
@@ -692,6 +703,16 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 ) : null}
               </div>
             </div>
+            {historyComparisonBaseSnapshot ? (
+              <div data-generation-brief-history-comparison-base="true" className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border/70 bg-surface-container/35 p-2 text-xs leading-5 text-muted-foreground">
+                <span>
+                  {t({ ko: '비교 기준', en: 'Comparison baseline' })}: {historyComparisonBaseSnapshot.savedAt} · {historyComparisonBaseSnapshot.draft.target} · {historyComparisonBaseSnapshot.filledFieldCount}/5
+                </span>
+                <Button type="button" size="sm" variant="ghost" data-generation-brief-history-comparison-clear="true" onClick={() => setHistoryComparisonBaseSnapshotId('')}>
+                  {t({ ko: '기준 해제', en: 'Clear baseline' })}
+                </Button>
+              </div>
+            ) : null}
             {historySnapshots.length > 0 ? (
               <label className="block space-y-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t({ ko: '히스토리 찾기', en: 'Find history' })}</span>
@@ -709,6 +730,11 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                   {filteredHistorySnapshots.map((snapshot) => {
                     const restoreComparison = buildGenerationBriefHistoryRestoreComparison(draft, snapshot)
                     const changedFields = restoreComparison.fields.filter((field) => field.status !== 'unchanged')
+                    const snapshotComparison = historyComparisonBaseSnapshot && historyComparisonBaseSnapshot.id !== snapshot.id
+                      ? buildGenerationBriefHistorySnapshotComparison(historyComparisonBaseSnapshot, snapshot)
+                      : null
+                    const snapshotComparisonChangedFields = snapshotComparison?.fields.filter((field) => field.status !== 'unchanged') ?? []
+                    const isComparisonBaseSnapshot = historyComparisonBaseSnapshot?.id === snapshot.id
                     return (
                       <div key={snapshot.id} data-generation-brief-history-snapshot={snapshot.id} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -733,8 +759,24 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                                 },
                               )}
                             </span>
+                            {snapshotComparison ? (
+                              <span data-generation-brief-history-snapshot-comparison-summary={snapshot.id}>
+                                {t(
+                                  { ko: '기준 대비 변경 {changed}/{total} · 추가 {filled} · 비움 {cleared}', en: 'Baseline changes {changed}/{total} · fills {filled} · clears {cleared}' },
+                                  {
+                                    changed: snapshotComparison.changedCount,
+                                    total: snapshotComparison.fieldCount,
+                                    filled: snapshotComparison.filledCount,
+                                    cleared: snapshotComparison.clearedCount,
+                                  },
+                                )}
+                              </span>
+                            ) : null}
                           </div>
                           <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant={isComparisonBaseSnapshot ? 'secondary' : 'outline'} data-generation-brief-history-comparison-select={snapshot.id} onClick={() => setHistoryComparisonBaseSnapshotId(isComparisonBaseSnapshot ? '' : snapshot.id)}>
+                              {isComparisonBaseSnapshot ? t({ ko: '기준 해제', en: 'Clear base' }) : t({ ko: '비교 기준', en: 'Compare base' })}
+                            </Button>
                             <Button type="button" size="sm" variant="outline" data-generation-brief-history-restore={snapshot.id} onClick={() => restoreHistorySnapshot(snapshot)}>
                               {t({ ko: '복원', en: 'Restore' })}
                             </Button>
@@ -771,6 +813,40 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                             </div>
                           )}
                         </div>
+                        {isComparisonBaseSnapshot ? (
+                          <div data-generation-brief-history-snapshot-comparison-base-marker="true" className="mt-3 rounded-sm border border-border/60 bg-background/60 p-2 text-xs leading-5 text-muted-foreground">
+                            {t({ ko: '이 스냅샷이 기준이야. 다른 스냅샷에서 기준 대비 변경점을 볼 수 있어.', en: 'This snapshot is the comparison baseline. Other snapshots show differences against it.' })}
+                          </div>
+                        ) : snapshotComparison ? (
+                          <div data-generation-brief-history-snapshot-comparison={snapshot.id} className="mt-3 space-y-2 rounded-sm border border-border/60 bg-background/60 p-2 text-xs leading-5 text-muted-foreground">
+                            {snapshotComparison.wouldChange ? (
+                              <>
+                                <div className="font-medium text-foreground">{t({ ko: '기준 대비 변경 미리보기', en: 'Baseline difference preview' })}</div>
+                                <div className="grid gap-1">
+                                  {snapshotComparisonChangedFields.slice(0, 3).map((field) => (
+                                    <div key={field.field} data-generation-brief-history-snapshot-comparison-field={field.field} className="rounded-sm border border-border/50 bg-surface-container/25 p-2">
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <span className="font-medium text-foreground">{field.label}</span>
+                                        <Badge variant={getImportDiffStatusTone(field.status)}>{t(getImportDiffStatusLabel(field.status))}</Badge>
+                                      </div>
+                                      <div className="mt-1 grid gap-1">
+                                        <span>{t({ ko: '기준', en: 'Baseline' })}: {field.basePreview}</span>
+                                        <span>{t({ ko: '스냅샷', en: 'Snapshot' })}: {field.snapshotPreview}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                {snapshotComparisonChangedFields.length > 3 ? (
+                                  <div>{t({ ko: '추가 기준 대비 변경 필드 {count}개', en: '{count} more baseline difference field(s)' }, { count: snapshotComparisonChangedFields.length - 3 })}</div>
+                                ) : null}
+                              </>
+                            ) : (
+                              <div data-generation-brief-history-snapshot-comparison-noop="true">
+                                {t({ ko: '비교 기준과 같은 스냅샷이야. 저장된 필드 값 차이는 없어.', en: 'This snapshot matches the comparison baseline. Saved field values do not differ.' })}
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     )
                   })}

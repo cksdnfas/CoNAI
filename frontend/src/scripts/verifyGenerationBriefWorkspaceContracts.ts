@@ -8,6 +8,7 @@ import {
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshot,
+  buildGenerationBriefHistorySnapshotComparison,
   buildGenerationBriefImportDiff,
   buildGenerationBriefRecoveryCheckpoint,
   buildGenerationBriefSelectiveImportDraft,
@@ -414,6 +415,32 @@ const clearingHistoryComparison = buildGenerationBriefHistoryRestoreComparison(
 )
 equal(clearingHistoryComparison.clearedCount, 1, 'history restore comparison should flag current fields that the snapshot would clear')
 equal(buildGenerationBriefHistoryRestoreComparison(historySnapshots[0]!.draft, historySnapshots[0]!).wouldChange, false, 'history restore comparison should expose no-op restores')
+const snapshotComparisonBase = buildGenerationBriefHistorySnapshot(
+  { ...readyDraft, sourceReferences: '', reusableAssets: 'baseline Vibe card', reviewNotes: 'shared review note' },
+  'manual-save',
+  '2026-06-12T04:11:00.000Z',
+)
+const snapshotComparisonCandidate = buildGenerationBriefHistorySnapshot(
+  { ...readyDraft, sourceReferences: 'new source reference', reusableAssets: '', reviewNotes: 'shared review note' },
+  'manual-save',
+  '2026-06-12T04:12:00.000Z',
+)
+const snapshotComparison = buildGenerationBriefHistorySnapshotComparison(snapshotComparisonBase, snapshotComparisonCandidate)
+equal(snapshotComparison.baseSnapshotId, snapshotComparisonBase.id, 'snapshot comparison should preserve the selected baseline snapshot id')
+equal(snapshotComparison.snapshotId, snapshotComparisonCandidate.id, 'snapshot comparison should preserve the compared snapshot id')
+equal(snapshotComparison.fieldCount, 5, 'snapshot comparison should cover every brief field')
+equal(snapshotComparison.changedCount, 2, 'snapshot comparison should count fields changed against the baseline')
+equal(snapshotComparison.filledCount, 1, 'snapshot comparison should distinguish fields filled from the baseline')
+equal(snapshotComparison.clearedCount, 1, 'snapshot comparison should distinguish fields cleared from the baseline')
+equal(snapshotComparison.wouldChange, true, 'snapshot comparison should flag snapshots that differ from the baseline')
+equal(snapshotComparison.externalActionsExecuted, false, 'snapshot comparison must not claim provider calls or queue operations')
+equal(snapshotComparison.queueMutations, false, 'snapshot comparison must not mutate queues')
+equal(snapshotComparison.fileMutations, false, 'snapshot comparison must not mutate files')
+equal(snapshotComparison.fields.find((field) => field.field === 'sourceReferences')?.status, 'filled', 'snapshot comparison should mark baseline-empty fields filled by the compared snapshot')
+equal(snapshotComparison.fields.find((field) => field.field === 'reusableAssets')?.status, 'cleared', 'snapshot comparison should mark baseline assets cleared by the compared snapshot')
+equal(snapshotComparison.fields.find((field) => field.field === 'sourceReferences')?.basePreview, 'empty', 'snapshot comparison should expose baseline previews')
+equal(snapshotComparison.fields.find((field) => field.field === 'sourceReferences')?.snapshotPreview, 'new source reference', 'snapshot comparison should expose compared snapshot previews')
+equal(buildGenerationBriefHistorySnapshotComparison(snapshotComparisonBase, snapshotComparisonBase).wouldChange, false, 'snapshot comparison should expose no-op baseline comparisons')
 const removedHistorySnapshotId = historySnapshots[0]?.id ?? ''
 const prunedHistorySnapshots = deleteGenerationBriefHistorySnapshot(removedHistorySnapshotId, storage)
 equal(prunedHistorySnapshots.length, 4, 'deleting a manual history snapshot should remove only the selected snapshot')
@@ -479,7 +506,16 @@ ok(componentSource.includes('data-generation-brief-history-restore-comparison'),
 ok(componentSource.includes('data-generation-brief-history-restore-comparison-summary'), 'brief UI should expose history restore comparison counts')
 ok(componentSource.includes('data-generation-brief-history-restore-field'), 'brief UI should expose field-level history restore impact')
 ok(componentSource.includes('data-generation-brief-history-restore-noop="true"'), 'brief UI should expose no-op restore impact evidence')
+ok(componentSource.includes('data-generation-brief-history-comparison-base="true"'), 'brief UI should expose the selected snapshot comparison baseline')
+ok(componentSource.includes('data-generation-brief-history-comparison-select'), 'brief UI should expose per-snapshot comparison baseline controls')
+ok(componentSource.includes('data-generation-brief-history-comparison-clear="true"'), 'brief UI should expose comparison baseline clearing')
+ok(componentSource.includes('data-generation-brief-history-snapshot-comparison'), 'brief UI should expose snapshot-to-snapshot comparison results')
+ok(componentSource.includes('data-generation-brief-history-snapshot-comparison-summary'), 'brief UI should expose snapshot comparison counts')
+ok(componentSource.includes('data-generation-brief-history-snapshot-comparison-field'), 'brief UI should expose field-level snapshot comparison differences')
+ok(componentSource.includes('data-generation-brief-history-snapshot-comparison-base-marker="true"'), 'brief UI should mark the selected comparison baseline snapshot')
+ok(componentSource.includes('data-generation-brief-history-snapshot-comparison-noop="true"'), 'brief UI should expose no-op snapshot comparison evidence')
 ok(componentSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief UI should compare local history snapshots against the active draft before restore')
+ok(componentSource.includes('buildGenerationBriefHistorySnapshotComparison'), 'brief UI should compare local history snapshots against the selected baseline')
 ok(componentSource.includes('filteredHistorySnapshots.map'), 'brief UI should render restore and remove actions from filtered history snapshots')
 ok(componentSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief UI should filter local history through the side-effect-free query contract')
 ok(componentSource.includes('deleteGenerationBriefHistorySnapshot'), 'brief UI should prune selected history snapshots through the local-only contract')
@@ -545,6 +581,8 @@ ok(contractSource.includes('buildGenerationBriefHistorySnapshot'), 'brief contra
 ok(contractSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief contract should expose side-effect-free local history discovery')
 ok(contractSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief contract should expose side-effect-free local history restore comparison')
 ok(contractSource.includes('GenerationBriefHistoryRestoreComparison'), 'brief contract should type local history restore comparison evidence')
+ok(contractSource.includes('buildGenerationBriefHistorySnapshotComparison'), 'brief contract should expose side-effect-free local history snapshot comparison')
+ok(contractSource.includes('GenerationBriefHistorySnapshotComparison'), 'brief contract should type local history snapshot comparison evidence')
 ok(contractSource.includes('readGenerationBriefHistorySnapshots'), 'brief contract should expose local history snapshot reading')
 ok(contractSource.includes('saveGenerationBriefHistorySnapshot'), 'brief contract should expose local history snapshot saving')
 ok(contractSource.includes('deleteGenerationBriefHistorySnapshot'), 'brief contract should expose selected local history snapshot deletion')
