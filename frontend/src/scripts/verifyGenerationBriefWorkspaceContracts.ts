@@ -20,8 +20,10 @@ import {
   buildGenerationBriefReviewSummary,
   buildGenerationBriefSaveMetadata,
   clearGenerationBriefDraft,
+  clearGenerationBriefHistorySnapshots,
   clearGenerationBriefRecoveryCheckpoint,
   DEFAULT_GENERATION_BRIEF_DRAFT,
+  deleteGenerationBriefHistorySnapshot,
   GENERATION_BRIEF_HANDOFF_SCHEMA,
   GENERATION_BRIEF_HISTORY_STORAGE_KEY,
   GENERATION_BRIEF_RECOVERY_STORAGE_KEY,
@@ -378,10 +380,23 @@ historySnapshots = readGenerationBriefHistorySnapshots(storage)
 equal(historySnapshots.length, 5, 'history snapshots should stay bounded to the five most recent manual saves')
 equal(historySnapshots[0]?.draft.reviewNotes, 'history note 5', 'history snapshots should read newest manual save first')
 equal(historySnapshots.every((snapshot) => snapshot.localOnly && !snapshot.externalActionsExecuted && !snapshot.queueMutations && !snapshot.fileMutations), true, 'history snapshots should preserve local-only side-effect evidence')
+const removedHistorySnapshotId = historySnapshots[0]?.id ?? ''
+const prunedHistorySnapshots = deleteGenerationBriefHistorySnapshot(removedHistorySnapshotId, storage)
+equal(prunedHistorySnapshots.length, 4, 'deleting a manual history snapshot should remove only the selected snapshot')
+equal(prunedHistorySnapshots.some((snapshot) => snapshot.id === removedHistorySnapshotId), false, 'deleted history snapshots should not be returned')
+equal(readGenerationBriefHistorySnapshots(storage).length, 4, 'history deletion should persist the pruned snapshot list')
+deepEqual(readGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'history deletion should not alter the active local draft')
+historySnapshots = deleteGenerationBriefHistorySnapshot('', storage)
+equal(historySnapshots.length, 4, 'blank history deletion requests should leave local history unchanged')
 const historyBeforeEmptySave = historySnapshots
 saveGenerationBriefHistorySnapshot(DEFAULT_GENERATION_BRIEF_DRAFT, 'manual-save', storage, '2026-06-12T05:00:00.000Z')
 deepEqual(readGenerationBriefHistorySnapshots(storage), historyBeforeEmptySave, 'empty drafts should not create stale history snapshots')
-storage.setItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY, JSON.stringify([{ ...historySnapshots[0], externalActionsExecuted: true }]))
+const clearedHistorySnapshots = clearGenerationBriefHistorySnapshots(storage)
+deepEqual(clearedHistorySnapshots, [], 'clearing local history should return an empty snapshot list')
+deepEqual(readGenerationBriefHistorySnapshots(storage), [], 'clearing local history should persist an empty snapshot list')
+equal(storage.getItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY), null, 'clearing local history should remove the history storage key')
+deepEqual(readGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'history clear should not alter the active local draft')
+storage.setItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY, JSON.stringify([{ ...historyBeforeEmptySave[0], externalActionsExecuted: true }]))
 deepEqual(readGenerationBriefHistorySnapshots(storage), [], 'unsafe history snapshots should fail closed')
 storage.setItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY, '{not-json')
 deepEqual(readGenerationBriefHistorySnapshots(storage), [], 'corrupt history storage should fail closed')
@@ -421,6 +436,10 @@ ok(componentSource.includes('로컬 저장 상태와 히스토리 스냅샷을 �
 ok(componentSource.includes('data-generation-brief-history="true"'), 'brief UI should expose local save history')
 ok(componentSource.includes('data-generation-brief-history-snapshot'), 'brief UI should expose individual history snapshots')
 ok(componentSource.includes('data-generation-brief-history-restore'), 'brief UI should expose history restore actions')
+ok(componentSource.includes('data-generation-brief-history-remove'), 'brief UI should expose per-snapshot history remove actions')
+ok(componentSource.includes('data-generation-brief-history-clear="true"'), 'brief UI should expose a clear local history action')
+ok(componentSource.includes('deleteGenerationBriefHistorySnapshot'), 'brief UI should prune selected history snapshots through the local-only contract')
+ok(componentSource.includes('clearGenerationBriefHistorySnapshots'), 'brief UI should clear manual history through the local-only contract')
 ok(componentSource.includes('readGenerationBriefHistorySnapshots'), 'brief UI should read local history snapshots')
 ok(componentSource.includes('saveGenerationBriefHistorySnapshot'), 'manual save should persist a local history snapshot')
 ok(componentSource.includes("saveGenerationBriefRecoveryCheckpoint(draft, 'history-restore')"), 'history restore should preserve the replaced draft as a recovery checkpoint')
@@ -481,6 +500,9 @@ ok(contractSource.includes('GENERATION_BRIEF_HISTORY_STORAGE_KEY'), 'brief contr
 ok(contractSource.includes('buildGenerationBriefHistorySnapshot'), 'brief contract should expose manual history snapshot construction')
 ok(contractSource.includes('readGenerationBriefHistorySnapshots'), 'brief contract should expose local history snapshot reading')
 ok(contractSource.includes('saveGenerationBriefHistorySnapshot'), 'brief contract should expose local history snapshot saving')
+ok(contractSource.includes('deleteGenerationBriefHistorySnapshot'), 'brief contract should expose selected local history snapshot deletion')
+ok(contractSource.includes('clearGenerationBriefHistorySnapshots'), 'brief contract should expose local history clearing')
+ok(contractSource.includes('persistGenerationBriefHistorySnapshots'), 'brief contract should persist pruned history without touching other local draft stores')
 ok(contractSource.includes('queueMutations: false'), 'brief contract should preserve no-queue-mutation readiness evidence')
 ok(contractSource.includes('fileMutations: false'), 'brief contract should preserve no-file-mutation readiness evidence')
 ok(contractSource.includes('externalActionsExecuted: false'), 'brief contract should preserve the no-external-action boundary')

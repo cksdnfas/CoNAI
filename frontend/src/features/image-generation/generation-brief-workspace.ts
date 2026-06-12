@@ -644,6 +644,40 @@ export function saveGenerationBriefHistorySnapshot(
   return nextSnapshots
 }
 
+function persistGenerationBriefHistorySnapshots(
+  snapshots: GenerationBriefHistorySnapshot[],
+  storage: StorageLike | null,
+) {
+  if (storage) {
+    try {
+      if (snapshots.length > 0) {
+        storage.setItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY, JSON.stringify(snapshots))
+      } else {
+        storage.removeItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY)
+      }
+    } catch {
+      // Storage cleanup can be blocked in private, embedded, or policy-restricted contexts.
+    }
+  }
+
+  return snapshots
+}
+
+export function deleteGenerationBriefHistorySnapshot(
+  snapshotId: string,
+  storage: StorageLike | null = getBrowserStorage(),
+) {
+  const targetId = snapshotId.trim()
+  if (!targetId) return readGenerationBriefHistorySnapshots(storage)
+
+  const nextSnapshots = readGenerationBriefHistorySnapshots(storage).filter((snapshot) => snapshot.id !== targetId)
+  return persistGenerationBriefHistorySnapshots(nextSnapshots, storage)
+}
+
+export function clearGenerationBriefHistorySnapshots(storage: StorageLike | null = getBrowserStorage()) {
+  return persistGenerationBriefHistorySnapshots([], storage)
+}
+
 function getGenerationBriefImportDiffStatus(
   currentDraft: GenerationBriefDraft,
   importedDraft: GenerationBriefDraft,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ClipboardCopy, ClipboardList, Download, FileUp, History, RotateCcw, Save } from 'lucide-react'
+import { ClipboardCopy, ClipboardList, Download, FileUp, History, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,7 +25,9 @@ import {
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
+  clearGenerationBriefHistorySnapshots,
   clearGenerationBriefRecoveryCheckpoint,
+  deleteGenerationBriefHistorySnapshot,
   GENERATION_BRIEF_FIELDS,
   parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
@@ -303,6 +305,16 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
     const restoredDraft = persistGenerationBriefDraft(snapshot.draft)
     setDraft(restoredDraft)
     showSnackbar({ message: t({ ko: '히스토리 스냅샷을 로컬 초안으로 복원했어.', en: 'Restored the history snapshot into the local draft.' }), tone: 'info' })
+  }
+
+  const removeHistorySnapshot = (snapshot: GenerationBriefHistorySnapshot) => {
+    setHistorySnapshots(deleteGenerationBriefHistorySnapshot(snapshot.id))
+    showSnackbar({ message: t({ ko: '선택한 로컬 히스토리 스냅샷을 지웠어.', en: 'Removed the selected local history snapshot.' }), tone: 'info' })
+  }
+
+  const clearHistorySnapshots = () => {
+    setHistorySnapshots(clearGenerationBriefHistorySnapshots())
+    showSnackbar({ message: t({ ko: '로컬 저장 히스토리만 비웠어. 현재 초안과 복구 체크포인트는 유지했어.', en: 'Cleared only the local save history. The current draft and recovery checkpoint were kept.' }), tone: 'info' })
   }
 
   const applyNaiReuseCards = () => {
@@ -660,9 +672,17 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 <History className="h-4 w-4 text-primary" />
                 {t({ ko: '로컬 저장 히스토리', en: 'Local save history' })}
               </div>
-              <Badge variant="outline">
-                {t({ ko: '최근 {count}개', en: '{count} recent' }, { count: historySnapshots.length })}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">
+                  {t({ ko: '최근 {count}개', en: '{count} recent' }, { count: historySnapshots.length })}
+                </Badge>
+                {historySnapshots.length > 0 ? (
+                  <Button type="button" size="sm" variant="ghost" data-generation-brief-history-clear="true" onClick={clearHistorySnapshots}>
+                    <Trash2 className="h-4 w-4" />
+                    {t({ ko: '히스토리 비우기', en: 'Clear history' })}
+                  </Button>
+                ) : null}
+              </div>
             </div>
             {historySnapshots.length > 0 ? (
               <div className="grid gap-2">
@@ -679,9 +699,14 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                         </span>
                         <span>{t({ ko: '경계', en: 'Boundary' })}: {snapshot.sideEffectBoundary} · {t({ ko: '외부 실행', en: 'External actions' })}: {String(snapshot.externalActionsExecuted)}</span>
                       </div>
-                      <Button type="button" size="sm" variant="outline" data-generation-brief-history-restore={snapshot.id} onClick={() => restoreHistorySnapshot(snapshot)}>
-                        {t({ ko: '복원', en: 'Restore' })}
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="outline" data-generation-brief-history-restore={snapshot.id} onClick={() => restoreHistorySnapshot(snapshot)}>
+                          {t({ ko: '복원', en: 'Restore' })}
+                        </Button>
+                        <Button type="button" size="icon-sm" variant="ghost" data-generation-brief-history-remove={snapshot.id} onClick={() => removeHistorySnapshot(snapshot)} aria-label={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })} title={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
