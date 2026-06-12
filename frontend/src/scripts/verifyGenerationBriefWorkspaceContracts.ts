@@ -575,10 +575,36 @@ if (historyAwareImportedPayload.status === 'imported') {
   deepEqual(importedInsightNotes.selectedKeys, ['imported:1:transition-labels:History transition labels', 'imported:3:boundary:Local history boundary'], 'imported insight note extraction should preserve source-order selected keys')
   ok(importedInsightNotes.text.includes('## Imported history insight review notes'), 'imported insight note extraction should build review-note text')
   ok(importedInsightNotes.text.includes('### History transition labels'), 'imported insight note extraction should include selected insight headings')
+  ok(importedInsightNotes.text.includes('Source card key: imported:1:transition-labels:History transition labels'), 'imported insight note extraction should include selected source card keys')
+  ok(importedInsightNotes.text.includes('Duplicate in review notes: false'), 'imported insight note extraction should include duplicate-note state')
   ok(importedInsightNotes.text.includes('Evidence: Timeline transitions'), 'imported insight note extraction should include selected insight evidence')
   ok(importedInsightNotes.text.includes('Queue mutations: false'), 'imported insight note extraction should preserve no-queue-mutation evidence')
   equal(importedInsightNotes.externalActionsExecuted, false, 'imported insight note extraction must not claim provider calls')
   equal(importedInsightNotes.fileMutations, false, 'imported insight note extraction must not mutate files')
+  const existingImportedInsightReviewNotes = [
+    '## Imported history insight review notes',
+    '- Source card key: imported:1:transition-labels:History transition labels',
+  ].join('\n')
+  const dedupedImportedInsightReview = buildGenerationBriefImportedHistoryInsightReview(
+    historyAwareImportedPayload.historyInsights,
+    historyInsightCards.filter((card) => card.kind !== 'transition-labels'),
+    ['imported:1:transition-labels:History transition labels'],
+    'timeline transitions',
+    existingImportedInsightReviewNotes,
+  )
+  equal(dedupedImportedInsightReview.duplicateReviewNoteCount, 1, 'imported insight review should count cards already present in review notes')
+  equal(dedupedImportedInsightReview.cards[0]?.duplicateInReviewNotes, true, 'visible imported insight cards should expose duplicate-note state before insertion')
+  const dedupedImportedInsightNotes = buildGenerationBriefImportedHistoryInsightReviewNotes(
+    historyAwareImportedPayload.historyInsights,
+    ['imported:1:transition-labels:History transition labels', 'imported:3:boundary:Local history boundary'],
+    existingImportedInsightReviewNotes,
+  )
+  equal(dedupedImportedInsightNotes.appendableCount, 1, 'imported insight note extraction should count non-duplicate selected cards')
+  equal(dedupedImportedInsightNotes.duplicateCount, 1, 'imported insight note extraction should count duplicate selected cards')
+  deepEqual(dedupedImportedInsightNotes.duplicateKeys, ['imported:1:transition-labels:History transition labels'], 'imported insight note extraction should expose duplicate source keys')
+  equal(dedupedImportedInsightNotes.cards[0]?.duplicateInReviewNotes, true, 'selected note cards should expose duplicate-note state')
+  ok(!dedupedImportedInsightNotes.text.includes('Source card key: imported:1:transition-labels:History transition labels'), 'duplicate imported insight notes should not be appended again')
+  ok(dedupedImportedInsightNotes.text.includes('Source card key: imported:3:boundary:Local history boundary'), 'non-duplicate imported insight notes should keep source provenance')
   const emptyImportedInsightNotes = buildGenerationBriefImportedHistoryInsightReviewNotes(historyAwareImportedPayload.historyInsights, [])
   equal(emptyImportedInsightNotes.selectedCount, 0, 'empty imported insight note selections should be counted')
   equal(emptyImportedInsightNotes.text, '', 'empty imported insight note selections should not create review-note text')
@@ -729,6 +755,9 @@ ok(componentSource.includes('data-generation-brief-import-history-insight-review
 ok(componentSource.includes('data-generation-brief-import-history-insight-filter="true"'), 'brief UI should expose imported insight filtering')
 ok(componentSource.includes('data-generation-brief-import-history-insight-review-summary="true"'), 'brief UI should compare imported and current local insight cards')
 ok(componentSource.includes('data-generation-brief-import-history-insight-pin'), 'brief UI should expose transient imported insight pin controls')
+ok(componentSource.includes('data-generation-brief-import-history-insight-source-key'), 'brief UI should expose imported insight source card keys before insertion')
+ok(componentSource.includes('data-generation-brief-import-history-insight-note-duplicate'), 'brief UI should expose imported insight duplicate-note state before insertion')
+ok(componentSource.includes('appendableCount'), 'brief UI should summarize non-duplicate imported insight notes before insertion')
 ok(componentSource.includes('data-generation-brief-import-history-insight-notes-summary="true"'), 'brief UI should summarize selected imported insight evidence for review notes')
 ok(componentSource.includes('data-generation-brief-import-history-insight-note-select'), 'brief UI should let operators select imported insight evidence for review notes')
 ok(componentSource.includes('data-generation-brief-import-history-insight-notes-apply="true"'), 'brief UI should append selected imported insight evidence into review notes')

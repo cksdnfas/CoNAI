@@ -257,6 +257,7 @@ export type GenerationBriefImportedHistoryInsightReviewCard = GenerationBriefHis
   pinned: boolean
   matchesFilter: boolean
   currentKindMatch: boolean
+  duplicateInReviewNotes: boolean
 }
 
 export type GenerationBriefImportedHistoryInsightReview = {
@@ -267,6 +268,7 @@ export type GenerationBriefImportedHistoryInsightReview = {
   matchedCurrentKindCount: number
   uniqueImportedKindCount: number
   warningCount: number
+  duplicateReviewNoteCount: number
   activeFilter: string
   localOnly: true
   externalActionsExecuted: false
@@ -279,12 +281,18 @@ export type GenerationBriefImportedHistoryInsightReview = {
 export type GenerationBriefImportedHistoryInsightReviewNoteCard = GenerationBriefHistoryInsightCard & {
   key: string
   index: number
+  sourceKey: string
+  sourceIndex: number
+  duplicateInReviewNotes: boolean
 }
 
 export type GenerationBriefImportedHistoryInsightReviewNotes = {
   importedCount: number
   selectedCount: number
+  appendableCount: number
+  duplicateCount: number
   selectedKeys: string[]
+  duplicateKeys: string[]
   localOnly: true
   externalActionsExecuted: false
   queueMutations: false
@@ -1293,6 +1301,16 @@ function buildGenerationBriefImportedHistoryInsightKey(card: GenerationBriefHist
   return `imported:${index}:${card.kind}:${card.title}`
 }
 
+/** Build the stable provenance marker used to detect imported insight notes already appended to review notes. */
+function buildGenerationBriefImportedHistoryInsightReviewNoteProvenanceMarker(key: string) {
+  return `Source card key: ${key}`
+}
+
+/** Check whether current review notes already contain an imported insight note with the same source key. */
+function hasGenerationBriefImportedHistoryInsightReviewNoteProvenance(reviewNotes: string, key: string) {
+  return reviewNotes.includes(buildGenerationBriefImportedHistoryInsightReviewNoteProvenanceMarker(key))
+}
+
 function buildGenerationBriefImportedHistoryInsightSearchText(card: GenerationBriefHistoryInsightCard) {
   return [
     card.kind,
@@ -1316,6 +1334,7 @@ export function buildGenerationBriefImportedHistoryInsightReview(
   currentCards: GenerationBriefHistoryInsightCard[] = [],
   pinnedKeys: string[] = [],
   filter = '',
+  currentReviewNotes = '',
 ): GenerationBriefImportedHistoryInsightReview {
   const activeFilter = filter.trim().toLocaleLowerCase()
   const pinnedKeySet = new Set(pinnedKeys)
@@ -1324,6 +1343,7 @@ export function buildGenerationBriefImportedHistoryInsightReview(
   const reviewedCards = importedCards.map((card, index): GenerationBriefImportedHistoryInsightReviewCard => {
     const key = buildGenerationBriefImportedHistoryInsightKey(card, index)
     const currentKindMatch = currentKinds.has(card.kind)
+    const duplicateInReviewNotes = hasGenerationBriefImportedHistoryInsightReviewNoteProvenance(currentReviewNotes, key)
 
     return {
       ...card,
@@ -1332,6 +1352,7 @@ export function buildGenerationBriefImportedHistoryInsightReview(
       pinned: pinnedKeySet.has(key),
       matchesFilter: matchesGenerationBriefImportedHistoryInsightFilter(card, activeFilter),
       currentKindMatch,
+      duplicateInReviewNotes,
     }
   })
   const visibleCards = reviewedCards
@@ -1349,6 +1370,7 @@ export function buildGenerationBriefImportedHistoryInsightReview(
     matchedCurrentKindCount: reviewedCards.filter((card) => card.currentKindMatch).length,
     uniqueImportedKindCount: reviewedCards.filter((card) => !card.currentKindMatch).length,
     warningCount: reviewedCards.filter((card) => card.status === 'warning').length,
+    duplicateReviewNoteCount: reviewedCards.filter((card) => card.duplicateInReviewNotes).length,
     activeFilter,
     localOnly: true,
     externalActionsExecuted: false,
@@ -1363,18 +1385,27 @@ export function buildGenerationBriefImportedHistoryInsightReview(
 export function buildGenerationBriefImportedHistoryInsightReviewNotes(
   importedCards: GenerationBriefHistoryInsightCard[],
   selectedKeys: string[] = [],
+  currentReviewNotes = '',
 ): GenerationBriefImportedHistoryInsightReviewNotes {
   const selectedKeySet = new Set(selectedKeys)
   const selectedCards = importedCards
-    .map((card, index): GenerationBriefImportedHistoryInsightReviewNoteCard => ({
-      ...card,
-      key: buildGenerationBriefImportedHistoryInsightKey(card, index),
-      index,
-      evidence: buildGenerationBriefHistoryInsightEvidence(card.evidence.slice(0, GENERATION_BRIEF_IMPORT_HISTORY_INSIGHT_EVIDENCE_LIMIT)),
-    }))
+    .map((card, index): GenerationBriefImportedHistoryInsightReviewNoteCard => {
+      const key = buildGenerationBriefImportedHistoryInsightKey(card, index)
+      return {
+        ...card,
+        key,
+        index,
+        sourceKey: key,
+        sourceIndex: index,
+        duplicateInReviewNotes: hasGenerationBriefImportedHistoryInsightReviewNoteProvenance(currentReviewNotes, key),
+        evidence: buildGenerationBriefHistoryInsightEvidence(card.evidence.slice(0, GENERATION_BRIEF_IMPORT_HISTORY_INSIGHT_EVIDENCE_LIMIT)),
+      }
+    })
     .filter((card) => selectedKeySet.has(card.key))
+  const appendableCards = selectedCards.filter((card) => !card.duplicateInReviewNotes)
+  const duplicateCards = selectedCards.filter((card) => card.duplicateInReviewNotes)
 
-  const text = selectedCards.length > 0
+  const text = appendableCards.length > 0
     ? [
       '## Imported history insight review notes',
       '- Boundary: local-draft-only',
@@ -1383,8 +1414,11 @@ export function buildGenerationBriefImportedHistoryInsightReviewNotes(
       '- Queue mutations: false',
       '- File mutations: false',
       '',
-      ...selectedCards.flatMap((card) => [
+      ...appendableCards.flatMap((card) => [
         `### ${card.title}`,
+        `- ${buildGenerationBriefImportedHistoryInsightReviewNoteProvenanceMarker(card.sourceKey)}`,
+        `- Source card index: ${card.sourceIndex}`,
+        `- Duplicate in review notes: ${String(card.duplicateInReviewNotes)}`,
         `- Kind: ${card.kind}`,
         `- Status: ${card.status}`,
         `- Summary: ${card.summary}`,
@@ -1397,7 +1431,10 @@ export function buildGenerationBriefImportedHistoryInsightReviewNotes(
   return {
     importedCount: importedCards.length,
     selectedCount: selectedCards.length,
+    appendableCount: appendableCards.length,
+    duplicateCount: duplicateCards.length,
     selectedKeys: selectedCards.map((card) => card.key),
+    duplicateKeys: duplicateCards.map((card) => card.key),
     localOnly: true,
     externalActionsExecuted: false,
     queueMutations: false,

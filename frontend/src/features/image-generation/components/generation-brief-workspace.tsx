@@ -297,17 +297,19 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
         historyInsightCards,
         pinnedImportedHistoryInsightKeys,
         importedHistoryInsightFilter,
+        draft.reviewNotes,
       )
       : null
-  ), [historyInsightCards, importPreview, importedHistoryInsightFilter, pinnedImportedHistoryInsightKeys])
+  ), [draft.reviewNotes, historyInsightCards, importPreview, importedHistoryInsightFilter, pinnedImportedHistoryInsightKeys])
   const importPreviewHistoryInsightNotes = useMemo(() => (
     importPreview?.status === 'imported'
       ? buildGenerationBriefImportedHistoryInsightReviewNotes(
         importPreview.historyInsights,
         selectedImportedHistoryInsightNoteKeys,
+        draft.reviewNotes,
       )
       : null
-  ), [importPreview, selectedImportedHistoryInsightNoteKeys])
+  ), [draft.reviewNotes, importPreview, selectedImportedHistoryInsightNoteKeys])
   const canApplyImportedHistoryInsightNotes = Boolean(importPreviewHistoryInsightNotes?.text.trim())
   const readinessGate = useMemo(() => buildGenerationBriefReadinessGate(draft, {
     naiReuseCards,
@@ -1226,10 +1228,12 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                             <div className="space-y-2 rounded-sm border border-border/60 bg-surface-container/25 p-2">
                               <div data-generation-brief-import-history-insight-notes-summary="true" className="text-muted-foreground">
                                 {t(
-                                  { ko: '검토 메모로 보낼 인사이트 {selected}/{available} · 경계 {boundary}', en: 'Insight notes selected {selected}/{available} · boundary {boundary}' },
+                                  { ko: '검토 메모로 보낼 인사이트 {selected}/{available} · 새로 추가 {appendable} · 중복 {duplicates} · 경계 {boundary}', en: 'Insight notes selected {selected}/{available} · appendable {appendable} · duplicates {duplicates} · boundary {boundary}' },
                                   {
                                     selected: importPreviewHistoryInsightNotes.selectedCount,
                                     available: importPreviewHistoryInsightNotes.importedCount,
+                                    appendable: importPreviewHistoryInsightNotes.appendableCount,
+                                    duplicates: importPreviewHistoryInsightNotes.duplicateCount,
                                     boundary: importPreviewHistoryInsightNotes.sideEffectBoundary,
                                   },
                                 )}
@@ -1249,11 +1253,16 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                                   <div className="flex flex-wrap gap-1">
                                     <Badge variant={getHistoryInsightCardStatusTone(card.status)}>{t(getHistoryInsightCardStatusLabel(card.status))}</Badge>
                                     {card.currentKindMatch ? <Badge variant="outline">{t({ ko: '현재와 같은 종류', en: 'current kind' })}</Badge> : <Badge variant="secondary">{t({ ko: '가져오기 전용', en: 'imported-only' })}</Badge>}
+                                    {card.duplicateInReviewNotes ? <Badge variant="outline">{t({ ko: '검토 메모에 있음', en: 'already in notes' })}</Badge> : null}
                                     {card.pinned ? <Badge variant="secondary">{t({ ko: '고정', en: 'Pinned' })}</Badge> : null}
                                     {!card.matchesFilter && card.pinned ? <Badge variant="outline">{t({ ko: '필터 밖', en: 'outside filter' })}</Badge> : null}
                                   </div>
                                 </div>
                                 <p className="mt-1 leading-5 text-muted-foreground">{card.summary}</p>
+                                <div className="mt-2 grid gap-1 text-muted-foreground">
+                                  <span data-generation-brief-import-history-insight-source-key={card.key}>{t({ ko: '소스 카드 키', en: 'Source card key' })}: {card.key}</span>
+                                  <span data-generation-brief-import-history-insight-note-duplicate={card.key}>{t({ ko: '검토 메모 중복', en: 'Duplicate in review notes' })}: {String(card.duplicateInReviewNotes)}</span>
+                                </div>
                                 <ul className="mt-2 space-y-1 leading-5 text-muted-foreground">
                                   {card.evidence.slice(0, 3).map((item) => (
                                     <li key={item} className="break-words">• {item}</li>
