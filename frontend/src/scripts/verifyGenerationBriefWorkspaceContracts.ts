@@ -10,6 +10,7 @@ import {
   buildGenerationBriefIterationHandoffText,
   buildGenerationBriefNaiReusableAssetsText,
   buildGenerationBriefNaiReuseCards,
+  buildGenerationBriefReadinessGate,
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
@@ -56,6 +57,12 @@ equal(emptySummary.localOnly, true, 'brief summary should be explicitly local-on
 equal(emptySummary.externalActionsExecuted, false, 'brief summary must not claim provider calls or queue operations')
 equal(emptySummary.sideEffectBoundary, 'local-draft-only', 'brief boundary should remain a local draft')
 equal(emptySummary.missingFields.length, 5, 'empty brief should report all missing planning fields')
+const emptyReadinessGate = buildGenerationBriefReadinessGate(DEFAULT_GENERATION_BRIEF_DRAFT)
+equal(emptyReadinessGate.status, 'not-ready', 'empty brief readiness gate should not be ready')
+equal(emptyReadinessGate.missingCount, 3, 'empty readiness gate should flag missing intent, target, and evidence')
+equal(emptyReadinessGate.externalActionsExecuted, false, 'readiness gate must not claim external actions')
+equal(emptyReadinessGate.queueMutations, false, 'readiness gate must not mutate queues')
+equal(emptyReadinessGate.fileMutations, false, 'readiness gate must not mutate files')
 
 const unsafeInput = normalizeGenerationBriefDraft({
   intent: '  portrait lighting plan  ',
@@ -77,9 +84,14 @@ const readySummary = buildGenerationBriefReviewSummary(readyDraft)
 equal(readySummary.status, 'review-ready', 'filled brief should be review-ready')
 equal(readySummary.filledFieldCount, 5, 'filled brief should count all planning fields')
 deepEqual(readySummary.missingFields, [], 'filled brief should not report missing fields')
+const readyReadinessGate = buildGenerationBriefReadinessGate(readyDraft)
+equal(readyReadinessGate.status, 'ready', 'filled draft with no warning cards should pass the readiness gate')
+equal(readyReadinessGate.readyCount, 5, 'filled draft should mark every readiness item ready')
 
 const reviewCopy = buildGenerationBriefReviewCopy(readyDraft)
 ok(reviewCopy.includes('# CoNAI generation brief review'), 'review copy should be a plain text handoff')
+ok(reviewCopy.includes('Readiness gate: ready'), 'review copy should include readiness gate status')
+ok(reviewCopy.includes('## Readiness gate'), 'review copy should include the readiness gate section')
 ok(reviewCopy.includes('External actions executed: false'), 'review copy must preserve the no-external-action boundary')
 ok(reviewCopy.includes('portrait lighting plan'), 'review copy should include local intent text')
 
@@ -186,6 +198,15 @@ ok(comfyCompatibilityText.includes('Prompt: textarea · required · masterpiece 
 ok(comfyCompatibilityText.includes('Reference image: image · image: pose-reference.png'), 'Comfy reusable text should include image file-name evidence only')
 ok(comfyCompatibilityText.includes('Queue mutations: false'), 'Comfy reusable text should preserve the no-queue-mutation boundary')
 ok(!comfyCompatibilityText.includes('data:image'), 'Comfy reusable text must not copy image data URLs into the brief')
+const cardAwareReadinessGate = buildGenerationBriefReadinessGate(readyDraft, {
+  naiReuseCards,
+  comfyCompatibilityCards,
+})
+equal(cardAwareReadinessGate.status, 'review-needed', 'readiness gate should require review when local evidence cards carry warnings')
+equal(cardAwareReadinessGate.warningCount, 1, 'readiness gate should count the warning review item')
+ok(cardAwareReadinessGate.items.some((item) => item.kind === 'warning-review' && item.evidence.some((entry) => entry.includes('Warning cards: 1'))), 'readiness gate should summarize local warning cards')
+const cardAwareReviewCopy = buildGenerationBriefReviewCopy(readyDraft, { naiReuseCards, comfyCompatibilityCards })
+ok(cardAwareReviewCopy.includes('Readiness gate: review-needed'), 'review copy should reflect card-aware readiness warnings')
 
 const iterationSnapshot = buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord({
   id: 42,
@@ -230,6 +251,8 @@ equal(rawPayload.schema, GENERATION_BRIEF_HANDOFF_SCHEMA, 'handoff JSON should c
 equal(rawPayload.localOnly, true, 'handoff JSON should stay local-only')
 equal(rawPayload.externalActionsExecuted, false, 'handoff JSON should not claim external actions')
 equal(rawPayload.sideEffectBoundary, 'local-draft-only', 'handoff JSON should preserve local-only boundary')
+ok(typeof rawPayload.readinessGate === 'object' && rawPayload.readinessGate !== null, 'handoff JSON should include readiness gate evidence')
+equal((rawPayload.readinessGate as { status?: unknown }).status, 'ready', 'handoff readiness gate should preserve the local readiness status')
 equal(buildGenerationBriefHandoffFilename(exportedAt), 'conai-generation-brief-2026-06-12-01-02-03.json', 'handoff filename should be timestamped and safe')
 
 const importedPayload = parseGenerationBriefHandoffPayload(serializedPayload)
@@ -262,6 +285,10 @@ ok(componentSource.includes('data-generation-brief-field="reusableAssets"'), 'br
 ok(componentSource.includes('data-generation-brief-field="reviewNotes"'), 'brief UI should expose the review notes field')
 ok(componentSource.includes('data-generation-brief-target-option'), 'brief UI should expose provider/workflow target choices')
 ok(componentSource.includes('data-generation-brief-summary="true"'), 'brief UI should expose local review summary')
+ok(componentSource.includes('data-generation-brief-readiness-gate="true"'), 'brief UI should expose local readiness gate surface')
+ok(componentSource.includes('data-generation-brief-readiness-gate-summary="true"'), 'brief UI should expose readiness gate counts')
+ok(componentSource.includes('data-generation-brief-readiness-gate-item'), 'brief UI should expose individual readiness gate items')
+ok(componentSource.includes('buildGenerationBriefReadinessGate'), 'brief UI should derive readiness gates from local evidence only')
 ok(componentSource.includes('data-generation-brief-handoff="true"'), 'brief UI should expose the local handoff surface')
 ok(componentSource.includes('data-generation-brief-nai-reuse-cards="true"'), 'brief UI should expose NAI reuse card surface')
 ok(componentSource.includes('data-generation-brief-nai-reuse-card'), 'brief UI should expose individual NAI reuse cards')
@@ -286,6 +313,9 @@ ok(componentSource.includes('data-generation-brief-import-apply="true"'), 'brief
 ok(componentSource.includes('copyTextToClipboard'), 'brief handoff should support local copy review')
 ok(componentSource.includes('triggerBlobDownload'), 'brief handoff should support local browser JSON download')
 ok(componentSource.includes('parseGenerationBriefHandoffPayload'), 'brief handoff should parse imports through the safe contract')
+ok(contractSource.includes('buildGenerationBriefReadinessGate'), 'brief contract should expose the local readiness gate builder')
+ok(contractSource.includes('queueMutations: false'), 'brief contract should preserve no-queue-mutation readiness evidence')
+ok(contractSource.includes('fileMutations: false'), 'brief contract should preserve no-file-mutation readiness evidence')
 ok(contractSource.includes('externalActionsExecuted: false'), 'brief contract should preserve the no-external-action boundary')
 ok(contractSource.includes("sideEffectBoundary: 'local-draft-only'"), 'brief contract should preserve local-only side-effect boundary')
 ok(!componentSource.includes('fetch('), 'brief workspace should not call provider or backend endpoints')

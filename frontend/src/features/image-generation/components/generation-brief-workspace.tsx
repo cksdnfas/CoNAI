@@ -18,6 +18,7 @@ import {
   buildGenerationBriefIterationHandoffText,
   buildGenerationBriefNaiReusableAssetsText,
   buildGenerationBriefNaiReuseCards,
+  buildGenerationBriefReadinessGate,
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
@@ -32,6 +33,8 @@ import {
   type GenerationBriefIterationHandoffSnapshot,
   type GenerationBriefNaiReuseCardStatus,
   type GenerationBriefNaiReuseSnapshot,
+  type GenerationBriefReadinessGateItemStatus,
+  type GenerationBriefReadinessGateStatus,
   type GenerationBriefTarget,
 } from '../generation-brief-workspace'
 
@@ -103,6 +106,29 @@ function getIterationHandoffCardStatusTone(status: GenerationBriefIterationHando
   return 'outline'
 }
 
+function getReadinessGateStatusLabel(status: GenerationBriefReadinessGateStatus) {
+  if (status === 'ready') return { ko: '실행 전 검토 준비', en: 'Ready for pre-run review' }
+  if (status === 'review-needed') return { ko: '경고 검토 필요', en: 'Review warnings' }
+  return { ko: '아직 부족함', en: 'Not ready' }
+}
+
+function getReadinessGateStatusTone(status: GenerationBriefReadinessGateStatus) {
+  if (status === 'ready') return 'secondary'
+  if (status === 'review-needed') return 'outline'
+  return 'outline'
+}
+
+function getReadinessGateItemStatusLabel(status: GenerationBriefReadinessGateItemStatus) {
+  if (status === 'ready') return { ko: '준비됨', en: 'Ready' }
+  if (status === 'review') return { ko: '검토 필요', en: 'Review' }
+  return { ko: '누락', en: 'Missing' }
+}
+
+function getReadinessGateItemStatusTone(status: GenerationBriefReadinessGateItemStatus) {
+  if (status === 'ready') return 'secondary'
+  return 'outline'
+}
+
 function appendGenerationBriefNote(current: string, next: string) {
   const currentText = current.trim()
   const nextText = next.trim()
@@ -132,13 +158,22 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   })
   const [importPayload, setImportPayload] = useState('')
   const summary = useMemo(() => buildGenerationBriefReviewSummary(draft), [draft])
-  const reviewCopy = useMemo(() => buildGenerationBriefReviewCopy(draft), [draft])
   const naiReuseCards = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReuseCards(naiReuseSnapshot) : []), [naiReuseSnapshot])
   const naiReuseText = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot) : ''), [naiReuseSnapshot])
   const comfyCompatibilityCards = useMemo(() => (comfyCompatibilitySnapshot ? buildGenerationBriefComfyCompatibilityCards(comfyCompatibilitySnapshot) : []), [comfyCompatibilitySnapshot])
   const comfyCompatibilityText = useMemo(() => (comfyCompatibilitySnapshot ? buildGenerationBriefComfyCompatibilityText(comfyCompatibilitySnapshot) : ''), [comfyCompatibilitySnapshot])
   const iterationHandoffCards = useMemo(() => (iterationHandoffSnapshot ? buildGenerationBriefIterationHandoffCards(iterationHandoffSnapshot) : []), [iterationHandoffSnapshot])
   const iterationHandoffText = useMemo(() => (iterationHandoffSnapshot ? buildGenerationBriefIterationHandoffText(iterationHandoffSnapshot) : ''), [iterationHandoffSnapshot])
+  const readinessGate = useMemo(() => buildGenerationBriefReadinessGate(draft, {
+    naiReuseCards,
+    comfyCompatibilityCards,
+    iterationHandoffCards,
+  }), [comfyCompatibilityCards, draft, iterationHandoffCards, naiReuseCards])
+  const reviewCopy = useMemo(() => buildGenerationBriefReviewCopy(draft, {
+    naiReuseCards,
+    comfyCompatibilityCards,
+    iterationHandoffCards,
+  }), [comfyCompatibilityCards, draft, iterationHandoffCards, naiReuseCards])
   const showNaiReuseCards = activeTarget === 'novelai' || draft.target === 'novelai'
   const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
 
@@ -213,7 +248,11 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
 
   const downloadHandoffPayload = () => {
     const exportedAt = new Date()
-    const payload = serializeGenerationBriefHandoffPayload(draft, exportedAt.toISOString())
+    const payload = serializeGenerationBriefHandoffPayload(draft, exportedAt.toISOString(), {
+      naiReuseCards,
+      comfyCompatibilityCards,
+      iterationHandoffCards,
+    })
     const blob = new Blob([payload], { type: 'application/json;charset=utf-8' })
     triggerBlobDownload(blob, buildGenerationBriefHandoffFilename(exportedAt))
     showSnackbar({ message: t({ ko: '로컬 브리프 JSON을 내려받았어.', en: 'Downloaded the local brief JSON.' }), tone: 'info' })
@@ -460,6 +499,41 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 { ko: '작성 {count}/5 · 누락 {missing} · 경계 {boundary}', en: 'Filled {count}/5 · missing {missing} · boundary {boundary}' },
                 { count: summary.filledFieldCount, missing: summary.missingFields.length, boundary: summary.sideEffectBoundary },
               )}
+            </div>
+          </PageInset>
+
+          <PageInset data-generation-brief-readiness-gate="true" className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">{t({ ko: '준비 게이트', en: 'Readiness gate' })}</span>
+              <Badge variant={getReadinessGateStatusTone(readinessGate.status)}>{t(getReadinessGateStatusLabel(readinessGate.status))}</Badge>
+            </div>
+            <div data-generation-brief-readiness-gate-summary="true" className="text-xs leading-5 text-muted-foreground">
+              {t(
+                { ko: '준비 {ready}/{total} · 누락 {missing} · 검토 {review} · 경계 {boundary}', en: 'Ready {ready}/{total} · missing {missing} · review {review} · boundary {boundary}' },
+                {
+                  ready: readinessGate.readyCount,
+                  total: readinessGate.itemCount,
+                  missing: readinessGate.missingCount,
+                  review: readinessGate.warningCount,
+                  boundary: readinessGate.sideEffectBoundary,
+                },
+              )}
+            </div>
+            <div className="grid gap-2">
+              {readinessGate.items.map((item) => (
+                <div key={item.kind} data-generation-brief-readiness-gate-item={item.kind} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium text-foreground">{item.title}</div>
+                    <Badge variant={getReadinessGateItemStatusTone(item.status)}>{t(getReadinessGateItemStatusLabel(item.status))}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.summary}</p>
+                  <ul className="mt-2 space-y-1 text-xs leading-5 text-muted-foreground">
+                    {item.evidence.slice(0, 2).map((evidence) => (
+                      <li key={evidence} className="break-words">• {evidence}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           </PageInset>
 

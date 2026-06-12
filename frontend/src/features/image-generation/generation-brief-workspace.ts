@@ -35,6 +35,7 @@ export type GenerationBriefHandoffPayload = {
   sideEffectBoundary: 'local-draft-only'
   draft: GenerationBriefDraft
   reviewSummary: GenerationBriefReviewSummary
+  readinessGate: GenerationBriefReadinessGate
 }
 
 export type GenerationBriefImportResult =
@@ -92,6 +93,37 @@ export type GenerationBriefIterationHandoffCard = {
   summary: string
   evidence: string[]
   status: GenerationBriefIterationHandoffCardStatus
+}
+
+export type GenerationBriefReadinessGateItemStatus = 'ready' | 'review' | 'missing'
+export type GenerationBriefReadinessGateStatus = 'ready' | 'review-needed' | 'not-ready'
+
+export type GenerationBriefReadinessGateItem = {
+  kind: 'intent' | 'target' | 'source-evidence' | 'warning-review' | 'boundary'
+  title: string
+  summary: string
+  evidence: string[]
+  status: GenerationBriefReadinessGateItemStatus
+}
+
+export type GenerationBriefReadinessGate = {
+  status: GenerationBriefReadinessGateStatus
+  itemCount: number
+  readyCount: number
+  missingCount: number
+  warningCount: number
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+  items: GenerationBriefReadinessGateItem[]
+}
+
+export type GenerationBriefReadinessGateContext = {
+  naiReuseCards?: GenerationBriefNaiReuseCard[]
+  comfyCompatibilityCards?: GenerationBriefComfyCompatibilityCard[]
+  iterationHandoffCards?: GenerationBriefIterationHandoffCard[]
 }
 
 export type GenerationBriefNaiReuseSnapshot = {
@@ -355,6 +387,118 @@ export function buildGenerationBriefReviewSummary(draft: GenerationBriefDraft): 
     localOnly: true,
     externalActionsExecuted: false,
     sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+function collectGenerationBriefReadinessCards(context?: GenerationBriefReadinessGateContext) {
+  return [
+    ...(context?.naiReuseCards ?? []),
+    ...(context?.comfyCompatibilityCards ?? []),
+    ...(context?.iterationHandoffCards ?? []),
+  ]
+}
+
+function getGenerationBriefReadinessCardCounts(context?: GenerationBriefReadinessGateContext) {
+  const cards = collectGenerationBriefReadinessCards(context)
+
+  return {
+    total: cards.length,
+    ready: cards.filter((card) => card.status === 'ready').length,
+    warning: cards.filter((card) => card.status === 'warning').length,
+    missing: cards.filter((card) => card.status === 'missing').length,
+  }
+}
+
+function getGenerationBriefReadinessStatus(items: GenerationBriefReadinessGateItem[]): GenerationBriefReadinessGateStatus {
+  if (items.some((item) => item.status === 'missing')) return 'not-ready'
+  if (items.some((item) => item.status === 'review')) return 'review-needed'
+  return 'ready'
+}
+
+export function buildGenerationBriefReadinessGate(draft: GenerationBriefDraft, context?: GenerationBriefReadinessGateContext): GenerationBriefReadinessGate {
+  const normalizedDraft = normalizeGenerationBriefDraft(draft)
+  const cardCounts = getGenerationBriefReadinessCardCounts(context)
+  const hasSourceReferenceText = normalizedDraft.sourceReferences.trim().length > 0
+  const hasReusableAssetText = normalizedDraft.reusableAssets.trim().length > 0
+  const hasLocalEvidence = hasSourceReferenceText || hasReusableAssetText || cardCounts.total > 0
+  const localWarningCount = cardCounts.warning + cardCounts.missing
+
+  const items: GenerationBriefReadinessGateItem[] = [
+    {
+      kind: 'intent',
+      title: 'Generation intent',
+      summary: normalizedDraft.intent.trim()
+        ? 'The draft states what the next generation should accomplish.'
+        : 'Add the generation intent before treating this brief as ready.',
+      evidence: [
+        `Intent: ${trimForReuseEvidence(normalizedDraft.intent)}`,
+      ],
+      status: normalizedDraft.intent.trim() ? 'ready' : 'missing',
+    },
+    {
+      kind: 'target',
+      title: 'Target flow',
+      summary: normalizedDraft.target === 'undecided'
+        ? 'Choose NovelAI, ComfyUI, or Codex before using this as a run plan.'
+        : `${normalizedDraft.target} is selected as the next explicit generation flow.`,
+      evidence: [
+        `Target flow: ${normalizedDraft.target}`,
+      ],
+      status: normalizedDraft.target === 'undecided' ? 'missing' : 'ready',
+    },
+    {
+      kind: 'source-evidence',
+      title: 'Source and reusable evidence',
+      summary: hasLocalEvidence
+        ? 'The brief contains local references, reusable assets, or evidence cards for review.'
+        : 'Add source references, reusable assets, or local evidence cards before review.',
+      evidence: [
+        `Source references: ${hasSourceReferenceText ? 'filled' : 'empty'}`,
+        `Reusable assets: ${hasReusableAssetText ? 'filled' : 'empty'}`,
+        `Local evidence cards: ${cardCounts.total}`,
+      ],
+      status: hasLocalEvidence ? 'ready' : 'missing',
+    },
+    {
+      kind: 'warning-review',
+      title: 'Warnings and missing evidence',
+      summary: localWarningCount > 0
+        ? `${localWarningCount} local evidence card(s) still need review before an explicit run.`
+        : 'No local evidence card warnings are currently visible.',
+      evidence: [
+        `Ready cards: ${cardCounts.ready}`,
+        `Warning cards: ${cardCounts.warning}`,
+        `Missing cards: ${cardCounts.missing}`,
+      ],
+      status: localWarningCount > 0 ? 'review' : 'ready',
+    },
+    {
+      kind: 'boundary',
+      title: 'Side-effect boundary',
+      summary: 'This readiness gate is local evidence only and does not start generation.',
+      evidence: [
+        'Boundary: local-draft-only',
+        'External actions executed: false',
+        'Queue mutations: false',
+        'File mutations: false',
+      ],
+      status: 'ready',
+    },
+  ]
+  const gateStatus = getGenerationBriefReadinessStatus(items)
+
+  return {
+    status: gateStatus,
+    itemCount: items.length,
+    readyCount: items.filter((item) => item.status === 'ready').length,
+    missingCount: items.filter((item) => item.status === 'missing').length,
+    warningCount: items.filter((item) => item.status === 'review').length,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+    items,
   }
 }
 
@@ -707,9 +851,10 @@ export function buildGenerationBriefComfyCompatibilityText(snapshot: GenerationB
   ].join('\n')
 }
 
-export function buildGenerationBriefReviewCopy(draft: GenerationBriefDraft) {
+export function buildGenerationBriefReviewCopy(draft: GenerationBriefDraft, context?: GenerationBriefReadinessGateContext) {
   const normalizedDraft = normalizeGenerationBriefDraft(draft)
   const summary = buildGenerationBriefReviewSummary(normalizedDraft)
+  const readinessGate = buildGenerationBriefReadinessGate(normalizedDraft, context)
   const missingFields = summary.missingFields.length > 0
     ? summary.missingFields.map((field) => GENERATION_BRIEF_FIELD_LABELS[field]).join(', ')
     : 'none'
@@ -718,12 +863,23 @@ export function buildGenerationBriefReviewCopy(draft: GenerationBriefDraft) {
     '# CoNAI generation brief review',
     '',
     `- Status: ${summary.status}`,
+    `- Readiness gate: ${readinessGate.status}`,
+    `- Readiness items: ${readinessGate.readyCount}/${readinessGate.itemCount} ready · missing ${readinessGate.missingCount} · review ${readinessGate.warningCount}`,
     `- Target flow: ${normalizedDraft.target}`,
     `- Filled fields: ${summary.filledFieldCount}/${GENERATION_BRIEF_FIELDS.length}`,
     `- Missing fields: ${missingFields}`,
     `- Boundary: ${summary.sideEffectBoundary}`,
     `- Local only: ${summary.localOnly}`,
     `- External actions executed: ${summary.externalActionsExecuted}`,
+    '',
+    '## Readiness gate',
+    ...readinessGate.items.flatMap((item) => [
+      '',
+      `### ${item.title}`,
+      `- Status: ${item.status}`,
+      `- Summary: ${item.summary}`,
+      ...item.evidence.map((evidence) => `- ${evidence}`),
+    ]),
     '',
     '## Generation intent',
     normalizedDraft.intent.trim() || '(empty)',
@@ -739,7 +895,7 @@ export function buildGenerationBriefReviewCopy(draft: GenerationBriefDraft) {
   ].join('\n')
 }
 
-export function buildGenerationBriefHandoffPayload(draft: GenerationBriefDraft, exportedAt = new Date().toISOString()): GenerationBriefHandoffPayload {
+export function buildGenerationBriefHandoffPayload(draft: GenerationBriefDraft, exportedAt = new Date().toISOString(), context?: GenerationBriefReadinessGateContext): GenerationBriefHandoffPayload {
   const normalizedDraft = normalizeGenerationBriefDraft(draft)
 
   return {
@@ -750,11 +906,12 @@ export function buildGenerationBriefHandoffPayload(draft: GenerationBriefDraft, 
     sideEffectBoundary: 'local-draft-only',
     draft: normalizedDraft,
     reviewSummary: buildGenerationBriefReviewSummary(normalizedDraft),
+    readinessGate: buildGenerationBriefReadinessGate(normalizedDraft, context),
   }
 }
 
-export function serializeGenerationBriefHandoffPayload(draft: GenerationBriefDraft, exportedAt = new Date().toISOString()) {
-  return JSON.stringify(buildGenerationBriefHandoffPayload(draft, exportedAt), null, 2)
+export function serializeGenerationBriefHandoffPayload(draft: GenerationBriefDraft, exportedAt = new Date().toISOString(), context?: GenerationBriefReadinessGateContext) {
+  return JSON.stringify(buildGenerationBriefHandoffPayload(draft, exportedAt, context), null, 2)
 }
 
 export function parseGenerationBriefHandoffPayload(value: string): GenerationBriefImportResult {
