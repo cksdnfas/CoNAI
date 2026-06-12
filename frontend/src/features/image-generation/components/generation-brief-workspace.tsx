@@ -746,7 +746,18 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 <div className="grid gap-1">
                   {recentHistoryEvolutionTransitions.map((transition) => (
                     <div key={`${transition.fromSnapshotId}:${transition.toSnapshotId}`} data-generation-brief-history-evolution-transition={transition.toSnapshotId} className="rounded-sm border border-border/50 bg-background/60 px-2 py-1">
-                      {transition.fromSavedAt} → {transition.toSavedAt}: {t({ ko: '변경', en: 'changes' })} {transition.changedCount} · {t({ ko: '대상 변경', en: 'target changed' })} {String(transition.targetChanged)}
+                      <div>
+                        {transition.fromSavedAt} → {transition.toSavedAt}: {t({ ko: '변경', en: 'changes' })} {transition.changedCount} · {t({ ko: '대상 변경', en: 'target changed' })} {String(transition.targetChanged)}
+                      </div>
+                      {transition.labels.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {transition.labels.slice(0, 4).map((label) => (
+                            <Badge key={`${transition.toSnapshotId}:${label.kind}`} variant="secondary" data-generation-brief-history-evolution-transition-label={label.kind} title={label.summary}>
+                              {label.label}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>

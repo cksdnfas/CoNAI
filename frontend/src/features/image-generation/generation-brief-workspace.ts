@@ -185,6 +185,22 @@ export type GenerationBriefHistoryEvolutionFieldSummary = {
   changedCount: number
 }
 
+export type GenerationBriefHistoryEvolutionTransitionLabelKind =
+  | 'target-pivot'
+  | 'intent-change'
+  | 'source-reference-change'
+  | 'asset-change'
+  | 'review-note-change'
+  | 'field-filled'
+  | 'field-cleared'
+  | 'multi-field-revision'
+
+export type GenerationBriefHistoryEvolutionTransitionLabel = {
+  kind: GenerationBriefHistoryEvolutionTransitionLabelKind
+  label: string
+  summary: string
+}
+
 export type GenerationBriefHistoryEvolutionTransition = {
   fromSnapshotId: string
   fromSavedAt: string
@@ -193,6 +209,7 @@ export type GenerationBriefHistoryEvolutionTransition = {
   changedCount: number
   changedFields: Array<keyof GenerationBriefDraft>
   targetChanged: boolean
+  labels: GenerationBriefHistoryEvolutionTransitionLabel[]
 }
 
 export type GenerationBriefHistoryEvolutionSummary = {
@@ -936,6 +953,66 @@ export function buildGenerationBriefHistorySnapshotComparison(
   }
 }
 
+function buildGenerationBriefHistoryEvolutionTransitionLabels(
+  comparison: GenerationBriefHistorySnapshotComparison,
+): GenerationBriefHistoryEvolutionTransitionLabel[] {
+  const changedFields = comparison.fields.filter((field) => field.status !== 'unchanged')
+  const labels: GenerationBriefHistoryEvolutionTransitionLabel[] = []
+
+  if (changedFields.some((field) => field.field === 'target')) {
+    labels.push({
+      kind: 'target-pivot',
+      label: 'Target pivot',
+      summary: 'The target generation flow changed between these local snapshots.',
+    })
+  }
+
+  const filledFields = changedFields.filter((field) => field.status === 'filled')
+  if (filledFields.length > 0) {
+    labels.push({
+      kind: 'field-filled',
+      label: 'Filled gaps',
+      summary: `Filled ${filledFields.map((field) => field.label).join(', ')} from an empty baseline.`,
+    })
+  }
+
+  const clearedFields = changedFields.filter((field) => field.status === 'cleared')
+  if (clearedFields.length > 0) {
+    labels.push({
+      kind: 'field-cleared',
+      label: 'Cleared fields',
+      summary: `Cleared ${clearedFields.map((field) => field.label).join(', ')} compared with the baseline.`,
+    })
+  }
+
+  const fieldLabelKinds: Partial<Record<keyof GenerationBriefDraft, GenerationBriefHistoryEvolutionTransitionLabelKind>> = {
+    intent: 'intent-change',
+    sourceReferences: 'source-reference-change',
+    reusableAssets: 'asset-change',
+    reviewNotes: 'review-note-change',
+  }
+
+  changedFields.forEach((field) => {
+    const kind = fieldLabelKinds[field.field]
+    if (!kind) return
+    labels.push({
+      kind,
+      label: field.label,
+      summary: `${field.label}: ${field.basePreview} → ${field.snapshotPreview}`,
+    })
+  })
+
+  if (changedFields.length >= 3) {
+    labels.push({
+      kind: 'multi-field-revision',
+      label: 'Multi-field revision',
+      summary: `${changedFields.length} brief fields changed in this transition.`,
+    })
+  }
+
+  return labels
+}
+
 /** Summarize chronological changes across parsed local history snapshots without storage or runtime side effects. */
 export function buildGenerationBriefHistoryEvolutionSummary(
   snapshots: GenerationBriefHistorySnapshot[],
@@ -967,6 +1044,7 @@ export function buildGenerationBriefHistoryEvolutionSummary(
       changedCount: comparison.changedCount,
       changedFields,
       targetChanged: changedFields.includes('target'),
+      labels: buildGenerationBriefHistoryEvolutionTransitionLabels(comparison),
     })
   }
 
