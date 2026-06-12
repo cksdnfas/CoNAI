@@ -5,6 +5,7 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistorySnapshot,
   buildGenerationBriefImportDiff,
   buildGenerationBriefRecoveryCheckpoint,
@@ -380,6 +381,17 @@ historySnapshots = readGenerationBriefHistorySnapshots(storage)
 equal(historySnapshots.length, 5, 'history snapshots should stay bounded to the five most recent manual saves')
 equal(historySnapshots[0]?.draft.reviewNotes, 'history note 5', 'history snapshots should read newest manual save first')
 equal(historySnapshots.every((snapshot) => snapshot.localOnly && !snapshot.externalActionsExecuted && !snapshot.queueMutations && !snapshot.fileMutations), true, 'history snapshots should preserve local-only side-effect evidence')
+const allHistoryQueryResult = buildGenerationBriefHistoryQueryResult(historySnapshots, '')
+equal(allHistoryQueryResult.totalCount, 5, 'blank history queries should inspect the parsed local history list')
+equal(allHistoryQueryResult.matchedCount, 5, 'blank history queries should return every safe local history snapshot')
+equal(allHistoryQueryResult.externalActionsExecuted, false, 'history discovery must not claim provider calls or queue operations')
+equal(allHistoryQueryResult.queueMutations, false, 'history discovery must not mutate queues')
+equal(allHistoryQueryResult.fileMutations, false, 'history discovery must not mutate files')
+const noteHistoryQueryResult = buildGenerationBriefHistoryQueryResult(historySnapshots, 'history note 5 04:05:30')
+equal(noteHistoryQueryResult.matchedCount, 1, 'history discovery should match local draft text and saved-at evidence together')
+equal(noteHistoryQueryResult.snapshots[0]?.draft.reviewNotes, 'history note 5', 'history discovery should return the matching local snapshot')
+equal(buildGenerationBriefHistoryQueryResult(historySnapshots, 'novelai review-ready').matchedCount, 5, 'history discovery should match target and status terms')
+equal(buildGenerationBriefHistoryQueryResult(historySnapshots, 'missing-local-history-query').matchedCount, 0, 'history discovery should expose no-match results without mutating history')
 const removedHistorySnapshotId = historySnapshots[0]?.id ?? ''
 const prunedHistorySnapshots = deleteGenerationBriefHistorySnapshot(removedHistorySnapshotId, storage)
 equal(prunedHistorySnapshots.length, 4, 'deleting a manual history snapshot should remove only the selected snapshot')
@@ -438,6 +450,11 @@ ok(componentSource.includes('data-generation-brief-history-snapshot'), 'brief UI
 ok(componentSource.includes('data-generation-brief-history-restore'), 'brief UI should expose history restore actions')
 ok(componentSource.includes('data-generation-brief-history-remove'), 'brief UI should expose per-snapshot history remove actions')
 ok(componentSource.includes('data-generation-brief-history-clear="true"'), 'brief UI should expose a clear local history action')
+ok(componentSource.includes('data-generation-brief-history-filter="true"'), 'brief UI should expose local history filtering')
+ok(componentSource.includes('data-generation-brief-history-filter-count="true"'), 'brief UI should expose local history filter match counts')
+ok(componentSource.includes('data-generation-brief-history-filter-empty="true"'), 'brief UI should expose no-match local history discovery state')
+ok(componentSource.includes('filteredHistorySnapshots.map'), 'brief UI should render restore and remove actions from filtered history snapshots')
+ok(componentSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief UI should filter local history through the side-effect-free query contract')
 ok(componentSource.includes('deleteGenerationBriefHistorySnapshot'), 'brief UI should prune selected history snapshots through the local-only contract')
 ok(componentSource.includes('clearGenerationBriefHistorySnapshots'), 'brief UI should clear manual history through the local-only contract')
 ok(componentSource.includes('readGenerationBriefHistorySnapshots'), 'brief UI should read local history snapshots')
@@ -498,6 +515,7 @@ ok(contractSource.includes('buildGenerationBriefRecoveryCheckpoint'), 'brief con
 ok(contractSource.includes('GENERATION_BRIEF_RECOVERY_STORAGE_KEY'), 'brief contract should store recovery checkpoints separately from the active draft')
 ok(contractSource.includes('GENERATION_BRIEF_HISTORY_STORAGE_KEY'), 'brief contract should store manual history snapshots separately from active draft state')
 ok(contractSource.includes('buildGenerationBriefHistorySnapshot'), 'brief contract should expose manual history snapshot construction')
+ok(contractSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief contract should expose side-effect-free local history discovery')
 ok(contractSource.includes('readGenerationBriefHistorySnapshots'), 'brief contract should expose local history snapshot reading')
 ok(contractSource.includes('saveGenerationBriefHistorySnapshot'), 'brief contract should expose local history snapshot saving')
 ok(contractSource.includes('deleteGenerationBriefHistorySnapshot'), 'brief contract should expose selected local history snapshot deletion')

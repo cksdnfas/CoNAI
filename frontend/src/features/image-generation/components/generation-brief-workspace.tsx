@@ -14,6 +14,7 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefImportDiff,
   buildGenerationBriefSelectiveImportDraft,
   countGenerationBriefSelectedImportChanges,
@@ -207,6 +208,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const [recoveryCheckpoint, setRecoveryCheckpoint] = useState<GenerationBriefRecoveryCheckpoint | null>(() => readGenerationBriefRecoveryCheckpoint())
   const [saveMetadata, setSaveMetadata] = useState<GenerationBriefSaveMetadata | null>(() => readGenerationBriefSaveMetadata())
   const [historySnapshots, setHistorySnapshots] = useState<GenerationBriefHistorySnapshot[]>(() => readGenerationBriefHistorySnapshots())
+  const [historyQuery, setHistoryQuery] = useState('')
   const [importPayload, setImportPayload] = useState('')
   const [selectedImportFields, setSelectedImportFields] = useState<Array<keyof GenerationBriefDraft>>([])
   const importPreview = useMemo(() => {
@@ -256,6 +258,8 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   }), [comfyCompatibilityCards, draft, iterationHandoffCards, naiReuseCards])
   const showNaiReuseCards = activeTarget === 'novelai' || draft.target === 'novelai'
   const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
+  const historyQueryResult = useMemo(() => buildGenerationBriefHistoryQueryResult(historySnapshots, historyQuery), [historyQuery, historySnapshots])
+  const filteredHistorySnapshots = historyQueryResult.snapshots
 
   const persistGenerationBriefDraft = (nextDraft: GenerationBriefDraft) => {
     const savedDraft = saveGenerationBriefDraft(nextDraft)
@@ -676,6 +680,9 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 <Badge variant="outline">
                   {t({ ko: '최근 {count}개', en: '{count} recent' }, { count: historySnapshots.length })}
                 </Badge>
+                <Badge variant="outline" data-generation-brief-history-filter-count="true">
+                  {t({ ko: '일치 {matched}/{total}', en: 'Matches {matched}/{total}' }, { matched: historyQueryResult.matchedCount, total: historyQueryResult.totalCount })}
+                </Badge>
                 {historySnapshots.length > 0 ? (
                   <Button type="button" size="sm" variant="ghost" data-generation-brief-history-clear="true" onClick={clearHistorySnapshots}>
                     <Trash2 className="h-4 w-4" />
@@ -685,32 +692,50 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
               </div>
             </div>
             {historySnapshots.length > 0 ? (
-              <div className="grid gap-2">
-                {historySnapshots.map((snapshot) => (
-                  <div key={snapshot.id} data-generation-brief-history-snapshot={snapshot.id} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="grid gap-1 text-xs leading-5 text-muted-foreground">
-                        <span className="font-medium text-foreground">{t({ ko: '저장 시각', en: 'Saved at' })}: {snapshot.savedAt}</span>
-                        <span>
-                          {t(
-                            { ko: '상태 {status} · 작성 {count}/5', en: 'Status {status} · filled {count}/5' },
-                            { status: t(getSaveMetadataStatusLabel(snapshot.summary.status)), count: snapshot.filledFieldCount },
-                          )}
-                        </span>
-                        <span>{t({ ko: '경계', en: 'Boundary' })}: {snapshot.sideEffectBoundary} · {t({ ko: '외부 실행', en: 'External actions' })}: {String(snapshot.externalActionsExecuted)}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" data-generation-brief-history-restore={snapshot.id} onClick={() => restoreHistorySnapshot(snapshot)}>
-                          {t({ ko: '복원', en: 'Restore' })}
-                        </Button>
-                        <Button type="button" size="icon-sm" variant="ghost" data-generation-brief-history-remove={snapshot.id} onClick={() => removeHistorySnapshot(snapshot)} aria-label={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })} title={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t({ ko: '히스토리 찾기', en: 'Find history' })}</span>
+                <Input
+                  data-generation-brief-history-filter="true"
+                  value={historyQuery}
+                  onChange={(event) => setHistoryQuery(event.target.value)}
+                  placeholder={t({ ko: '의도, 대상, 상태, 메모, 저장 시각으로 찾아.', en: 'Search intent, target, status, notes, or saved time.' })}
+                />
+              </label>
+            ) : null}
+            {historySnapshots.length > 0 ? (
+              filteredHistorySnapshots.length > 0 ? (
+                <div className="grid gap-2">
+                  {filteredHistorySnapshots.map((snapshot) => (
+                    <div key={snapshot.id} data-generation-brief-history-snapshot={snapshot.id} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="grid gap-1 text-xs leading-5 text-muted-foreground">
+                          <span className="font-medium text-foreground">{t({ ko: '저장 시각', en: 'Saved at' })}: {snapshot.savedAt}</span>
+                          <span>
+                            {t(
+                              { ko: '상태 {status} · 작성 {count}/5', en: 'Status {status} · filled {count}/5' },
+                              { status: t(getSaveMetadataStatusLabel(snapshot.summary.status)), count: snapshot.filledFieldCount },
+                            )}
+                          </span>
+                          <span>{t({ ko: '대상', en: 'Target' })}: {snapshot.draft.target}</span>
+                          <span>{t({ ko: '경계', en: 'Boundary' })}: {snapshot.sideEffectBoundary} · {t({ ko: '외부 실행', en: 'External actions' })}: {String(snapshot.externalActionsExecuted)}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" data-generation-brief-history-restore={snapshot.id} onClick={() => restoreHistorySnapshot(snapshot)}>
+                            {t({ ko: '복원', en: 'Restore' })}
+                          </Button>
+                          <Button type="button" size="icon-sm" variant="ghost" data-generation-brief-history-remove={snapshot.id} onClick={() => removeHistorySnapshot(snapshot)} aria-label={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })} title={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p data-generation-brief-history-filter-empty="true" className="text-xs leading-5 text-muted-foreground">
+                  {t({ ko: '일치하는 로컬 히스토리 스냅샷이 없어. 검색어를 줄이면 다시 보여.', en: 'No local history snapshots match. Shorten the query to show them again.' })}
+                </p>
+              )
             ) : (
               <p data-generation-brief-history-empty="true" className="text-xs leading-5 text-muted-foreground">
                 {t({ ko: '아직 수동 저장 스냅샷이 없어. 로컬 저장을 누르면 최근 브리프를 브라우저 안에 보관해.', en: 'No manual save snapshots yet. Press Save local to keep recent briefs inside the browser.' })}

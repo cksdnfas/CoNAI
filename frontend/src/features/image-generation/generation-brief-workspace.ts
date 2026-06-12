@@ -90,6 +90,18 @@ export type GenerationBriefHistorySnapshot = {
   sideEffectBoundary: 'local-draft-only'
 }
 
+export type GenerationBriefHistoryQueryResult = {
+  query: string
+  totalCount: number
+  matchedCount: number
+  snapshots: GenerationBriefHistorySnapshot[]
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+}
+
 export type GenerationBriefImportDiffFieldStatus = 'unchanged' | 'changed' | 'filled' | 'cleared'
 
 export type GenerationBriefImportDiffField = {
@@ -676,6 +688,50 @@ export function deleteGenerationBriefHistorySnapshot(
 
 export function clearGenerationBriefHistorySnapshots(storage: StorageLike | null = getBrowserStorage()) {
   return persistGenerationBriefHistorySnapshots([], storage)
+}
+
+function buildGenerationBriefHistorySearchText(snapshot: GenerationBriefHistorySnapshot) {
+  return [
+    snapshot.id,
+    snapshot.savedAt,
+    snapshot.reason,
+    snapshot.draft.intent,
+    snapshot.draft.target,
+    snapshot.draft.sourceReferences,
+    snapshot.draft.reusableAssets,
+    snapshot.draft.reviewNotes,
+    snapshot.summary.status,
+    `${snapshot.filledFieldCount}/5`,
+    snapshot.sideEffectBoundary,
+  ].join(' ').toLocaleLowerCase()
+}
+
+/** Filter parsed local history snapshots without reading or mutating browser storage. */
+export function buildGenerationBriefHistoryQueryResult(
+  snapshots: GenerationBriefHistorySnapshot[],
+  query: string,
+): GenerationBriefHistoryQueryResult {
+  const safeSnapshots = normalizeGenerationBriefHistorySnapshots(snapshots)
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const terms = normalizedQuery.split(/\s+/).filter(Boolean)
+  const matchedSnapshots = terms.length === 0
+    ? safeSnapshots
+    : safeSnapshots.filter((snapshot) => {
+      const searchText = buildGenerationBriefHistorySearchText(snapshot)
+      return terms.every((term) => searchText.includes(term))
+    })
+
+  return {
+    query: normalizedQuery,
+    totalCount: safeSnapshots.length,
+    matchedCount: matchedSnapshots.length,
+    snapshots: matchedSnapshots,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
 }
 
 function getGenerationBriefImportDiffStatus(
