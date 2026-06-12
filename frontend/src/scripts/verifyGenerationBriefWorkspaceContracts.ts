@@ -6,6 +6,7 @@ import {
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefHistoryQueryResult,
+  buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshot,
   buildGenerationBriefImportDiff,
   buildGenerationBriefRecoveryCheckpoint,
@@ -392,6 +393,27 @@ equal(noteHistoryQueryResult.matchedCount, 1, 'history discovery should match lo
 equal(noteHistoryQueryResult.snapshots[0]?.draft.reviewNotes, 'history note 5', 'history discovery should return the matching local snapshot')
 equal(buildGenerationBriefHistoryQueryResult(historySnapshots, 'novelai review-ready').matchedCount, 5, 'history discovery should match target and status terms')
 equal(buildGenerationBriefHistoryQueryResult(historySnapshots, 'missing-local-history-query').matchedCount, 0, 'history discovery should expose no-match results without mutating history')
+const restoreComparison = buildGenerationBriefHistoryRestoreComparison(
+  { ...readyDraft, intent: 'local intent', sourceReferences: '', reviewNotes: 'history note 5' },
+  historySnapshots[0]!,
+)
+equal(restoreComparison.snapshotId, historySnapshots[0]?.id, 'history restore comparison should preserve the target snapshot id')
+equal(restoreComparison.fieldCount, 5, 'history restore comparison should cover every brief field')
+equal(restoreComparison.changedCount, 2, 'history restore comparison should count changed and filled fields')
+equal(restoreComparison.filledCount, 1, 'history restore comparison should distinguish fields filled by the snapshot')
+equal(restoreComparison.clearedCount, 0, 'history restore comparison should not invent clears when the snapshot has values')
+equal(restoreComparison.wouldChange, true, 'history restore comparison should flag snapshots that would alter the current draft')
+equal(restoreComparison.externalActionsExecuted, false, 'history restore comparison must not claim provider calls or queue operations')
+equal(restoreComparison.queueMutations, false, 'history restore comparison must not mutate queues')
+equal(restoreComparison.fileMutations, false, 'history restore comparison must not mutate files')
+equal(restoreComparison.fields.find((field) => field.field === 'sourceReferences')?.status, 'filled', 'history restore comparison should mark empty current fields filled from snapshots')
+equal(restoreComparison.fields.find((field) => field.field === 'intent')?.snapshotPreview, 'portrait lighting plan', 'history restore comparison should expose snapshot previews')
+const clearingHistoryComparison = buildGenerationBriefHistoryRestoreComparison(
+  readyDraft,
+  buildGenerationBriefHistorySnapshot({ ...readyDraft, sourceReferences: '' }, 'manual-save', '2026-06-12T04:10:00.000Z'),
+)
+equal(clearingHistoryComparison.clearedCount, 1, 'history restore comparison should flag current fields that the snapshot would clear')
+equal(buildGenerationBriefHistoryRestoreComparison(historySnapshots[0]!.draft, historySnapshots[0]!).wouldChange, false, 'history restore comparison should expose no-op restores')
 const removedHistorySnapshotId = historySnapshots[0]?.id ?? ''
 const prunedHistorySnapshots = deleteGenerationBriefHistorySnapshot(removedHistorySnapshotId, storage)
 equal(prunedHistorySnapshots.length, 4, 'deleting a manual history snapshot should remove only the selected snapshot')
@@ -453,6 +475,11 @@ ok(componentSource.includes('data-generation-brief-history-clear="true"'), 'brie
 ok(componentSource.includes('data-generation-brief-history-filter="true"'), 'brief UI should expose local history filtering')
 ok(componentSource.includes('data-generation-brief-history-filter-count="true"'), 'brief UI should expose local history filter match counts')
 ok(componentSource.includes('data-generation-brief-history-filter-empty="true"'), 'brief UI should expose no-match local history discovery state')
+ok(componentSource.includes('data-generation-brief-history-restore-comparison'), 'brief UI should expose local history restore comparison surface')
+ok(componentSource.includes('data-generation-brief-history-restore-comparison-summary'), 'brief UI should expose history restore comparison counts')
+ok(componentSource.includes('data-generation-brief-history-restore-field'), 'brief UI should expose field-level history restore impact')
+ok(componentSource.includes('data-generation-brief-history-restore-noop="true"'), 'brief UI should expose no-op restore impact evidence')
+ok(componentSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief UI should compare local history snapshots against the active draft before restore')
 ok(componentSource.includes('filteredHistorySnapshots.map'), 'brief UI should render restore and remove actions from filtered history snapshots')
 ok(componentSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief UI should filter local history through the side-effect-free query contract')
 ok(componentSource.includes('deleteGenerationBriefHistorySnapshot'), 'brief UI should prune selected history snapshots through the local-only contract')
@@ -516,6 +543,8 @@ ok(contractSource.includes('GENERATION_BRIEF_RECOVERY_STORAGE_KEY'), 'brief cont
 ok(contractSource.includes('GENERATION_BRIEF_HISTORY_STORAGE_KEY'), 'brief contract should store manual history snapshots separately from active draft state')
 ok(contractSource.includes('buildGenerationBriefHistorySnapshot'), 'brief contract should expose manual history snapshot construction')
 ok(contractSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief contract should expose side-effect-free local history discovery')
+ok(contractSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief contract should expose side-effect-free local history restore comparison')
+ok(contractSource.includes('GenerationBriefHistoryRestoreComparison'), 'brief contract should type local history restore comparison evidence')
 ok(contractSource.includes('readGenerationBriefHistorySnapshots'), 'brief contract should expose local history snapshot reading')
 ok(contractSource.includes('saveGenerationBriefHistorySnapshot'), 'brief contract should expose local history snapshot saving')
 ok(contractSource.includes('deleteGenerationBriefHistorySnapshot'), 'brief contract should expose selected local history snapshot deletion')

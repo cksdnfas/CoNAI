@@ -15,6 +15,7 @@ import {
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefHistoryQueryResult,
+  buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefImportDiff,
   buildGenerationBriefSelectiveImportDraft,
   countGenerationBriefSelectedImportChanges,
@@ -705,31 +706,74 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
             {historySnapshots.length > 0 ? (
               filteredHistorySnapshots.length > 0 ? (
                 <div className="grid gap-2">
-                  {filteredHistorySnapshots.map((snapshot) => (
-                    <div key={snapshot.id} data-generation-brief-history-snapshot={snapshot.id} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="grid gap-1 text-xs leading-5 text-muted-foreground">
-                          <span className="font-medium text-foreground">{t({ ko: '저장 시각', en: 'Saved at' })}: {snapshot.savedAt}</span>
-                          <span>
-                            {t(
-                              { ko: '상태 {status} · 작성 {count}/5', en: 'Status {status} · filled {count}/5' },
-                              { status: t(getSaveMetadataStatusLabel(snapshot.summary.status)), count: snapshot.filledFieldCount },
-                            )}
-                          </span>
-                          <span>{t({ ko: '대상', en: 'Target' })}: {snapshot.draft.target}</span>
-                          <span>{t({ ko: '경계', en: 'Boundary' })}: {snapshot.sideEffectBoundary} · {t({ ko: '외부 실행', en: 'External actions' })}: {String(snapshot.externalActionsExecuted)}</span>
+                  {filteredHistorySnapshots.map((snapshot) => {
+                    const restoreComparison = buildGenerationBriefHistoryRestoreComparison(draft, snapshot)
+                    const changedFields = restoreComparison.fields.filter((field) => field.status !== 'unchanged')
+                    return (
+                      <div key={snapshot.id} data-generation-brief-history-snapshot={snapshot.id} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="grid gap-1 text-xs leading-5 text-muted-foreground">
+                            <span className="font-medium text-foreground">{t({ ko: '저장 시각', en: 'Saved at' })}: {snapshot.savedAt}</span>
+                            <span>
+                              {t(
+                                { ko: '상태 {status} · 작성 {count}/5', en: 'Status {status} · filled {count}/5' },
+                                { status: t(getSaveMetadataStatusLabel(snapshot.summary.status)), count: snapshot.filledFieldCount },
+                              )}
+                            </span>
+                            <span>{t({ ko: '대상', en: 'Target' })}: {snapshot.draft.target}</span>
+                            <span>{t({ ko: '경계', en: 'Boundary' })}: {snapshot.sideEffectBoundary} · {t({ ko: '외부 실행', en: 'External actions' })}: {String(snapshot.externalActionsExecuted)}</span>
+                            <span data-generation-brief-history-restore-comparison-summary={snapshot.id}>
+                              {t(
+                                { ko: '복원 변경 {changed}/{total} · 추가 {filled} · 비움 {cleared}', en: 'Restore changes {changed}/{total} · fills {filled} · clears {cleared}' },
+                                {
+                                  changed: restoreComparison.changedCount,
+                                  total: restoreComparison.fieldCount,
+                                  filled: restoreComparison.filledCount,
+                                  cleared: restoreComparison.clearedCount,
+                                },
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant="outline" data-generation-brief-history-restore={snapshot.id} onClick={() => restoreHistorySnapshot(snapshot)}>
+                              {t({ ko: '복원', en: 'Restore' })}
+                            </Button>
+                            <Button type="button" size="icon-sm" variant="ghost" data-generation-brief-history-remove={snapshot.id} onClick={() => removeHistorySnapshot(snapshot)} aria-label={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })} title={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button type="button" size="sm" variant="outline" data-generation-brief-history-restore={snapshot.id} onClick={() => restoreHistorySnapshot(snapshot)}>
-                            {t({ ko: '복원', en: 'Restore' })}
-                          </Button>
-                          <Button type="button" size="icon-sm" variant="ghost" data-generation-brief-history-remove={snapshot.id} onClick={() => removeHistorySnapshot(snapshot)} aria-label={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })} title={t({ ko: '히스토리 스냅샷 삭제', en: 'Remove history snapshot' })}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <div data-generation-brief-history-restore-comparison={snapshot.id} className="mt-3 space-y-2 rounded-sm border border-border/60 bg-background/60 p-2 text-xs leading-5 text-muted-foreground">
+                          {restoreComparison.wouldChange ? (
+                            <>
+                              <div className="font-medium text-foreground">{t({ ko: '복원 영향 미리보기', en: 'Restore impact preview' })}</div>
+                              <div className="grid gap-1">
+                                {changedFields.slice(0, 3).map((field) => (
+                                  <div key={field.field} data-generation-brief-history-restore-field={field.field} className="rounded-sm border border-border/50 bg-surface-container/25 p-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <span className="font-medium text-foreground">{field.label}</span>
+                                      <Badge variant={getImportDiffStatusTone(field.status)}>{t(getImportDiffStatusLabel(field.status))}</Badge>
+                                    </div>
+                                    <div className="mt-1 grid gap-1">
+                                      <span>{t({ ko: '현재', en: 'Current' })}: {field.currentPreview}</span>
+                                      <span>{t({ ko: '스냅샷', en: 'Snapshot' })}: {field.snapshotPreview}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              {changedFields.length > 3 ? (
+                                <div>{t({ ko: '추가 변경 필드 {count}개', en: '{count} more changed field(s)' }, { count: changedFields.length - 3 })}</div>
+                              ) : null}
+                            </>
+                          ) : (
+                            <div data-generation-brief-history-restore-noop="true">
+                              {t({ ko: '현재 초안과 같은 스냅샷이야. 복원해도 필드 값은 바뀌지 않아.', en: 'This snapshot matches the current draft. Restoring it will not change field values.' })}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <p data-generation-brief-history-filter-empty="true" className="text-xs leading-5 text-muted-foreground">
