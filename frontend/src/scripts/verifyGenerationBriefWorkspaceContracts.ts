@@ -8,6 +8,7 @@ import {
   buildGenerationBriefHistoryEvolutionSummary,
   buildGenerationBriefHistoryDiscoveryLabels,
   buildGenerationBriefHistoryInsightCards,
+  buildGenerationBriefImportedHistoryInsightReview,
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshot,
@@ -542,6 +543,28 @@ if (historyAwareImportedPayload.status === 'imported') {
   ok(historyAwareImportedPayload.historyInsights.some((card) => card.kind === 'transition-labels' && card.evidence.some((item) => item.includes('Target pivot'))), 'import preview should expose imported transition label evidence')
   const historyInsightImportReadinessGate = buildGenerationBriefReadinessGate(historyAwareImportedPayload.draft, { historyInsightCards: historyAwareImportedPayload.historyInsights })
   equal(historyInsightImportReadinessGate.status, 'ready', 'import preview readiness should include imported history insights without adding warnings when cards are ready')
+  const importedInsightReview = buildGenerationBriefImportedHistoryInsightReview(
+    historyAwareImportedPayload.historyInsights,
+    historyInsightCards.filter((card) => card.kind !== 'transition-labels'),
+    ['imported:1:transition-labels:History transition labels'],
+    'timeline transitions',
+  )
+  equal(importedInsightReview.importedCount, historyInsightCards.length, 'imported insight review should count all imported cards')
+  equal(importedInsightReview.currentCount, historyInsightCards.length - 1, 'imported insight review should count current local insight cards')
+  equal(importedInsightReview.pinnedCount, 1, 'imported insight review should count transient pinned imported cards')
+  equal(importedInsightReview.visibleCount, 1, 'imported insight review should show pinned filtered cards first')
+  equal(importedInsightReview.matchedCurrentKindCount, historyInsightCards.length - 1, 'imported insight review should count cards whose kind exists in current local insights')
+  equal(importedInsightReview.uniqueImportedKindCount, 1, 'imported insight review should count imported-only card kinds')
+  equal(importedInsightReview.warningCount, 0, 'ready imported insight cards should not add warnings')
+  equal(importedInsightReview.activeFilter, 'timeline transitions', 'imported insight review should normalize filter text')
+  equal(importedInsightReview.localOnly, true, 'imported insight review must stay local-only')
+  equal(importedInsightReview.externalActionsExecuted, false, 'imported insight review must not claim provider calls')
+  equal(importedInsightReview.queueMutations, false, 'imported insight review must not mutate queues')
+  equal(importedInsightReview.fileMutations, false, 'imported insight review must not mutate files')
+  equal(importedInsightReview.cards[0]?.key, 'imported:1:transition-labels:History transition labels', 'pinned imported insight cards should sort first in the visible review list')
+  equal(importedInsightReview.cards[0]?.pinned, true, 'visible imported insight cards should expose pin state')
+  equal(importedInsightReview.cards[0]?.matchesFilter, true, 'visible imported insight cards should expose filter matches')
+  equal(importedInsightReview.cards[0]?.currentKindMatch, false, 'visible imported insight cards should expose current local kind matches')
 }
 const unsafeHistoryInsightPayload = JSON.stringify({
   ...historyAwareRawPayload,
@@ -685,6 +708,11 @@ ok(componentSource.includes('data-generation-brief-import-preview="true"'), 'bri
 ok(componentSource.includes('data-generation-brief-import-preview-summary="true"'), 'brief UI should expose import preview readiness counts')
 ok(componentSource.includes('data-generation-brief-import-history-insight-count="true"'), 'brief UI should expose imported history insight counts before restore')
 ok(componentSource.includes('data-generation-brief-import-history-insights="true"'), 'brief UI should expose imported history insight preview cards before restore')
+ok(componentSource.includes('data-generation-brief-import-history-insight-review="true"'), 'brief UI should expose imported insight review controls before restore')
+ok(componentSource.includes('data-generation-brief-import-history-insight-filter="true"'), 'brief UI should expose imported insight filtering')
+ok(componentSource.includes('data-generation-brief-import-history-insight-review-summary="true"'), 'brief UI should compare imported and current local insight cards')
+ok(componentSource.includes('data-generation-brief-import-history-insight-pin'), 'brief UI should expose transient imported insight pin controls')
+ok(componentSource.includes('data-generation-brief-import-history-insight-empty="true"'), 'brief UI should expose empty filtered imported insight state')
 ok(componentSource.includes('data-generation-brief-import-history-insight-card'), 'brief UI should expose each imported history insight card')
 ok(componentSource.includes('importPreview.historyInsights'), 'brief UI should feed imported history insights into the import readiness preview')
 ok(componentSource.includes('data-generation-brief-import-diff="true"'), 'brief UI should expose the import overwrite diff summary')
@@ -720,6 +748,9 @@ ok(contractSource.includes('buildGenerationBriefHistoryQueryResult'), 'brief con
 ok(contractSource.includes('GenerationBriefHistoryDiscoveryLabel'), 'brief contract should type label-aware local history discovery cues')
 ok(contractSource.includes('buildGenerationBriefHistoryDiscoveryLabels'), 'brief contract should expose label-aware history discovery cues')
 ok(contractSource.includes('buildGenerationBriefHistoryInsightCards'), 'brief contract should expose selected local history insight cards for handoff')
+ok(contractSource.includes('buildGenerationBriefImportedHistoryInsightReview'), 'brief contract should expose side-effect-free imported insight review summaries')
+ok(contractSource.includes('GenerationBriefImportedHistoryInsightReview'), 'brief contract should type imported insight review evidence')
+ok(contractSource.includes('GenerationBriefImportedHistoryInsightReviewCard'), 'brief contract should type visible imported insight review cards')
 ok(contractSource.includes('GenerationBriefHistoryInsightCard'), 'brief contract should type local history insight handoff evidence')
 ok(contractSource.includes('historyInsights'), 'brief handoff payload should carry selected local history insights')
 ok(contractSource.includes('parseGenerationBriefHistoryInsightCards'), 'brief import parser should preserve safe imported history insight cards')

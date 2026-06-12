@@ -19,6 +19,7 @@ import {
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshotComparison,
+  buildGenerationBriefImportedHistoryInsightReview,
   buildGenerationBriefImportDiff,
   buildGenerationBriefSelectiveImportDraft,
   countGenerationBriefSelectedImportChanges,
@@ -235,6 +236,8 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const [historyQuery, setHistoryQuery] = useState('')
   const [historyComparisonBaseSnapshotId, setHistoryComparisonBaseSnapshotId] = useState('')
   const [importPayload, setImportPayload] = useState('')
+  const [importedHistoryInsightFilter, setImportedHistoryInsightFilter] = useState('')
+  const [pinnedImportedHistoryInsightKeys, setPinnedImportedHistoryInsightKeys] = useState<string[]>([])
   const [selectedImportFields, setSelectedImportFields] = useState<Array<keyof GenerationBriefDraft>>([])
   const importPreview = useMemo(() => {
     const trimmedPayload = importPayload.trim()
@@ -242,6 +245,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   }, [importPayload])
   useEffect(() => {
     setSelectedImportFields(importPreview?.status === 'imported' ? [...GENERATION_BRIEF_FIELDS] : [])
+    setPinnedImportedHistoryInsightKeys([])
   }, [importPreview])
   const importPreviewHistoryInsights = importPreview?.status === 'imported' ? importPreview.historyInsights : []
   const importPreviewReadinessGate = useMemo(() => (
@@ -283,6 +287,16 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
     historyEvolutionSummary,
     historyComparisonBaseSnapshot,
   ), [historyComparisonBaseSnapshot, historyEvolutionSummary, historyQueryResult])
+  const importPreviewHistoryInsightReview = useMemo(() => (
+    importPreview?.status === 'imported'
+      ? buildGenerationBriefImportedHistoryInsightReview(
+        importPreview.historyInsights,
+        historyInsightCards,
+        pinnedImportedHistoryInsightKeys,
+        importedHistoryInsightFilter,
+      )
+      : null
+  ), [historyInsightCards, importPreview, importedHistoryInsightFilter, pinnedImportedHistoryInsightKeys])
   const readinessGate = useMemo(() => buildGenerationBriefReadinessGate(draft, {
     naiReuseCards,
     comfyCompatibilityCards,
@@ -441,6 +455,14 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       }
       return GENERATION_BRIEF_FIELDS.filter((candidate) => next.has(candidate))
     })
+  }
+
+  const toggleImportedHistoryInsightPin = (key: string) => {
+    setPinnedImportedHistoryInsightKeys((current) => (
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key]
+    ))
   }
 
   const importHandoffPayload = () => {
@@ -1121,7 +1143,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                         {t({ ko: '가져온 히스토리 인사이트 {count}개', en: 'Imported history insights: {count}' }, { count: importPreviewHistoryInsights.length })}
                       </span>
                     </div>
-                    {importPreviewHistoryInsights.length > 0 ? (
+                    {importPreviewHistoryInsights.length > 0 && importPreviewHistoryInsightReview ? (
                       <div data-generation-brief-import-history-insights="true" className="space-y-2 rounded-sm border border-border/70 bg-surface-container/35 p-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="font-medium text-foreground">{t({ ko: '가져온 히스토리 인사이트', en: 'Imported history insights' })}</span>
@@ -1129,22 +1151,71 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                             {t({ ko: '{count}개 카드', en: '{count} card(s)' }, { count: importPreviewHistoryInsights.length })}
                           </Badge>
                         </div>
-                        <div className="grid gap-2">
-                          {importPreviewHistoryInsights.map((card, index) => (
-                            <div key={`${card.kind}:${card.title}:${index}`} data-generation-brief-import-history-insight-card={card.kind} className="rounded-sm border border-border/60 bg-background/60 p-2">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="font-medium text-foreground">{card.title}</span>
-                                <Badge variant={getHistoryInsightCardStatusTone(card.status)}>{t(getHistoryInsightCardStatusLabel(card.status))}</Badge>
-                              </div>
-                              <p className="mt-1 leading-5 text-muted-foreground">{card.summary}</p>
-                              <ul className="mt-2 space-y-1 leading-5 text-muted-foreground">
-                                {card.evidence.slice(0, 3).map((item) => (
-                                  <li key={item} className="break-words">• {item}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
+                        <div data-generation-brief-import-history-insight-review="true" className="space-y-2 rounded-sm border border-border/60 bg-background/60 p-2">
+                          <div data-generation-brief-import-history-insight-review-summary="true" className="grid gap-1 leading-5 text-muted-foreground">
+                            <span>
+                              {t(
+                                { ko: '표시 {visible}/{imported} · 고정 {pinned} · 현재와 같은 종류 {matched} · 가져오기 전용 {unique}', en: 'Visible {visible}/{imported} · pinned {pinned} · current-kind matches {matched} · imported-only {unique}' },
+                                {
+                                  visible: importPreviewHistoryInsightReview.visibleCount,
+                                  imported: importPreviewHistoryInsightReview.importedCount,
+                                  pinned: importPreviewHistoryInsightReview.pinnedCount,
+                                  matched: importPreviewHistoryInsightReview.matchedCurrentKindCount,
+                                  unique: importPreviewHistoryInsightReview.uniqueImportedKindCount,
+                                },
+                              )}
+                            </span>
+                            <span>
+                              {t(
+                                { ko: '현재 로컬 인사이트 {current}개 · 경고 {warnings}개 · 경계 {boundary}', en: 'Current local insights {current} · warnings {warnings} · boundary {boundary}' },
+                                {
+                                  current: importPreviewHistoryInsightReview.currentCount,
+                                  warnings: importPreviewHistoryInsightReview.warningCount,
+                                  boundary: importPreviewHistoryInsightReview.sideEffectBoundary,
+                                },
+                              )}
+                            </span>
+                          </div>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t({ ko: '가져온 인사이트 필터', en: 'Imported insight filter' })}</span>
+                            <Input
+                              data-generation-brief-import-history-insight-filter="true"
+                              value={importedHistoryInsightFilter}
+                              onChange={(event) => setImportedHistoryInsightFilter(event.target.value)}
+                              placeholder={t({ ko: 'kind, status, 제목, 증거 텍스트로 필터링', en: 'Filter by kind, status, title, or evidence text' })}
+                            />
+                          </label>
                         </div>
+                        {importPreviewHistoryInsightReview.cards.length > 0 ? (
+                          <div className="grid gap-2">
+                            {importPreviewHistoryInsightReview.cards.map((card) => (
+                              <div key={card.key} data-generation-brief-import-history-insight-card={card.kind} className="rounded-sm border border-border/60 bg-background/60 p-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="font-medium text-foreground">{card.title}</span>
+                                  <div className="flex flex-wrap gap-1">
+                                    <Badge variant={getHistoryInsightCardStatusTone(card.status)}>{t(getHistoryInsightCardStatusLabel(card.status))}</Badge>
+                                    {card.currentKindMatch ? <Badge variant="outline">{t({ ko: '현재와 같은 종류', en: 'current kind' })}</Badge> : <Badge variant="secondary">{t({ ko: '가져오기 전용', en: 'imported-only' })}</Badge>}
+                                    {card.pinned ? <Badge variant="secondary">{t({ ko: '고정', en: 'Pinned' })}</Badge> : null}
+                                    {!card.matchesFilter && card.pinned ? <Badge variant="outline">{t({ ko: '필터 밖', en: 'outside filter' })}</Badge> : null}
+                                  </div>
+                                </div>
+                                <p className="mt-1 leading-5 text-muted-foreground">{card.summary}</p>
+                                <ul className="mt-2 space-y-1 leading-5 text-muted-foreground">
+                                  {card.evidence.slice(0, 3).map((item) => (
+                                    <li key={item} className="break-words">• {item}</li>
+                                  ))}
+                                </ul>
+                                <Button type="button" size="sm" variant={card.pinned ? 'secondary' : 'outline'} className="mt-2" data-generation-brief-import-history-insight-pin={card.key} onClick={() => toggleImportedHistoryInsightPin(card.key)}>
+                                  {card.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p data-generation-brief-import-history-insight-empty="true" className="text-xs leading-5 text-muted-foreground">
+                            {t({ ko: '필터에 맞는 가져온 히스토리 인사이트가 없어. 고정한 카드는 필터 밖이어도 위에 남아.', en: 'No imported history insights match the filter. Pinned cards stay visible even outside the filter.' })}
+                          </p>
+                        )}
                       </div>
                     ) : null}
                     <div data-generation-brief-import-diff="true" className="space-y-2 rounded-sm border border-border/70 bg-surface-container/35 p-2">

@@ -251,6 +251,31 @@ export type GenerationBriefHistoryInsightCard = {
   status: GenerationBriefHistoryInsightCardStatus
 }
 
+export type GenerationBriefImportedHistoryInsightReviewCard = GenerationBriefHistoryInsightCard & {
+  key: string
+  index: number
+  pinned: boolean
+  matchesFilter: boolean
+  currentKindMatch: boolean
+}
+
+export type GenerationBriefImportedHistoryInsightReview = {
+  importedCount: number
+  currentCount: number
+  pinnedCount: number
+  visibleCount: number
+  matchedCurrentKindCount: number
+  uniqueImportedKindCount: number
+  warningCount: number
+  activeFilter: string
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+  cards: GenerationBriefImportedHistoryInsightReviewCard[]
+}
+
 export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready' | 'unavailable' | 'error'
 export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
 export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
@@ -1244,6 +1269,76 @@ export function buildGenerationBriefHistoryInsightCards(
   }
 
   return cards
+}
+
+function buildGenerationBriefImportedHistoryInsightKey(card: GenerationBriefHistoryInsightCard, index: number) {
+  return `imported:${index}:${card.kind}:${card.title}`
+}
+
+function buildGenerationBriefImportedHistoryInsightSearchText(card: GenerationBriefHistoryInsightCard) {
+  return [
+    card.kind,
+    card.status,
+    card.title,
+    card.summary,
+    ...card.evidence,
+  ].join(' ').toLocaleLowerCase()
+}
+
+function matchesGenerationBriefImportedHistoryInsightFilter(card: GenerationBriefHistoryInsightCard, activeFilter: string) {
+  const terms = activeFilter.split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return true
+  const searchText = buildGenerationBriefImportedHistoryInsightSearchText(card)
+  return terms.every((term) => searchText.includes(term))
+}
+
+/** Summarize imported history insight cards against the current local insight context without storage or runtime side effects. */
+export function buildGenerationBriefImportedHistoryInsightReview(
+  importedCards: GenerationBriefHistoryInsightCard[],
+  currentCards: GenerationBriefHistoryInsightCard[] = [],
+  pinnedKeys: string[] = [],
+  filter = '',
+): GenerationBriefImportedHistoryInsightReview {
+  const activeFilter = filter.trim().toLocaleLowerCase()
+  const pinnedKeySet = new Set(pinnedKeys)
+  const currentKinds = new Set(currentCards.map((card) => card.kind))
+
+  const reviewedCards = importedCards.map((card, index): GenerationBriefImportedHistoryInsightReviewCard => {
+    const key = buildGenerationBriefImportedHistoryInsightKey(card, index)
+    const currentKindMatch = currentKinds.has(card.kind)
+
+    return {
+      ...card,
+      key,
+      index,
+      pinned: pinnedKeySet.has(key),
+      matchesFilter: matchesGenerationBriefImportedHistoryInsightFilter(card, activeFilter),
+      currentKindMatch,
+    }
+  })
+  const visibleCards = reviewedCards
+    .filter((card) => card.pinned || card.matchesFilter)
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1
+      return left.index - right.index
+    })
+
+  return {
+    importedCount: importedCards.length,
+    currentCount: currentCards.length,
+    pinnedCount: reviewedCards.filter((card) => card.pinned).length,
+    visibleCount: visibleCards.length,
+    matchedCurrentKindCount: reviewedCards.filter((card) => card.currentKindMatch).length,
+    uniqueImportedKindCount: reviewedCards.filter((card) => !card.currentKindMatch).length,
+    warningCount: reviewedCards.filter((card) => card.status === 'warning').length,
+    activeFilter,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+    cards: visibleCards,
+  }
 }
 
 /** Merge only the selected imported brief fields into the current local draft. */
