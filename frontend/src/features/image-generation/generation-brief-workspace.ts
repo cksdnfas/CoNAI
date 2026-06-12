@@ -1,3 +1,5 @@
+import { NAI_MODEL_OPTIONS, type NAIFormDraft } from './image-generation-shared'
+
 export type GenerationBriefTarget = 'undecided' | 'novelai' | 'comfyui' | 'codex'
 
 export type GenerationBriefDraft = {
@@ -38,6 +40,29 @@ export type GenerationBriefImportResult =
     reason: 'empty' | 'invalid-json' | 'invalid-schema' | 'unsafe-boundary'
   }
 
+export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready' | 'unavailable' | 'error'
+export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
+export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
+
+export type GenerationBriefNaiReuseSnapshot = {
+  form: NAIFormDraft
+  connectionStatus: GenerationBriefNaiReuseConnectionStatus
+  tierName?: string
+  anlasBalance?: number
+  costStatus: GenerationBriefNaiReuseCostStatus
+  estimatedCost?: number
+  isOpusFree?: boolean
+  costErrorMessage?: string | null
+}
+
+export type GenerationBriefNaiReuseCard = {
+  kind: 'prompt' | 'model' | 'characters' | 'character-references' | 'vibes' | 'source-image' | 'cost-status'
+  title: string
+  summary: string
+  evidence: string[]
+  status: GenerationBriefNaiReuseCardStatus
+}
+
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 export const GENERATION_BRIEF_STORAGE_KEY = 'conai:image-generation:generation-brief-workspace:v1'
@@ -67,8 +92,42 @@ const GENERATION_BRIEF_FIELD_LABELS: Record<keyof GenerationBriefDraft, string> 
   reviewNotes: 'Review notes',
 }
 
+const NAI_REUSE_TEXT_LIMIT = 160
+
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value : ''
+}
+
+function trimForReuseEvidence(value: string, fallback = 'not set') {
+  const normalizedValue = value.trim()
+  if (normalizedValue.length === 0) return fallback
+  if (normalizedValue.length <= NAI_REUSE_TEXT_LIMIT) return normalizedValue
+  return `${normalizedValue.slice(0, NAI_REUSE_TEXT_LIMIT - 1).trimEnd()}…`
+}
+
+function resolveNaiModelLabel(model: string) {
+  return NAI_MODEL_OPTIONS.find((option) => option.value === model)?.label ?? model
+}
+
+function hasReusableText(value: string) {
+  return value.trim().length > 0
+}
+
+function getImageFileEvidence(label: string, fileName?: string) {
+  return `${label}: ${fileName?.trim() || 'not selected'}`
+}
+
+function getNaiCostEvidence(snapshot: GenerationBriefNaiReuseSnapshot) {
+  if (snapshot.costStatus === 'ready') {
+    if (snapshot.isOpusFree) return 'Cost: Opus free generation'
+    if (typeof snapshot.estimatedCost === 'number') return `Cost: ${snapshot.estimatedCost} Anlas`
+    return 'Cost: ready'
+  }
+
+  if (snapshot.costStatus === 'calculating') return 'Cost: calculating from current local settings'
+  if (snapshot.costStatus === 'error') return `Cost: ${snapshot.costErrorMessage || 'estimate unavailable'}`
+  if (snapshot.costStatus === 'unavailable') return 'Cost: unavailable until NovelAI is connected'
+  return 'Cost: idle'
 }
 
 function normalizeTarget(value: unknown): GenerationBriefTarget {
@@ -115,6 +174,112 @@ export function buildGenerationBriefReviewSummary(draft: GenerationBriefDraft): 
     externalActionsExecuted: false,
     sideEffectBoundary: 'local-draft-only',
   }
+}
+
+export function buildGenerationBriefNaiReuseCards(snapshot: GenerationBriefNaiReuseSnapshot): GenerationBriefNaiReuseCard[] {
+  const { form } = snapshot
+  const promptReady = hasReusableText(form.prompt) || hasReusableText(form.negativePrompt)
+  const characterPromptCount = form.characters.filter((character) => hasReusableText(character.prompt) || hasReusableText(character.uc)).length
+  const characterReferenceCount = form.characterReferences.length
+  const vibeCount = form.vibes.length
+  const hasSourceImageContext = form.action !== 'generate' || Boolean(form.sourceImage) || Boolean(form.maskImage)
+  const connectionEvidence = snapshot.connectionStatus === 'connected'
+    ? `NovelAI status: connected${snapshot.tierName ? ` · ${snapshot.tierName}` : ''}${typeof snapshot.anlasBalance === 'number' ? ` · Anlas ${snapshot.anlasBalance}` : ''}`
+    : snapshot.connectionStatus === 'disconnected'
+      ? 'NovelAI status: disconnected'
+      : 'NovelAI status: unknown'
+
+  return [
+    {
+      kind: 'prompt',
+      title: 'NAI prompt context',
+      summary: promptReady ? 'Prompt text is ready to reuse in the brief.' : 'No prompt text is available yet.',
+      evidence: [
+        `Positive prompt: ${trimForReuseEvidence(form.prompt)}`,
+        `Negative prompt: ${trimForReuseEvidence(form.negativePrompt)}`,
+      ],
+      status: promptReady ? 'ready' : 'missing',
+    },
+    {
+      kind: 'model',
+      title: 'Model and run settings',
+      summary: `${resolveNaiModelLabel(form.model)} · ${form.action} · ${form.width}×${form.height}`,
+      evidence: [
+        `Sampler: ${form.sampler} · scheduler: ${form.scheduler}`,
+        `Steps: ${form.steps} · scale: ${form.scale} · samples: ${form.samples}`,
+        `Seed: ${trimForReuseEvidence(form.seed, 'random')}`,
+      ],
+      status: 'ready',
+    },
+    {
+      kind: 'characters',
+      title: 'Character prompts',
+      summary: characterPromptCount > 0 ? `${characterPromptCount} character prompt row(s) contain reusable text.` : 'No character prompt rows contain text yet.',
+      evidence: form.characters.length > 0
+        ? form.characters.map((character, index) => `Character ${index + 1}: prompt ${trimForReuseEvidence(character.prompt)} · UC ${trimForReuseEvidence(character.uc)} · position ${character.centerX},${character.centerY}`)
+        : ['No character prompts selected.'],
+      status: characterPromptCount > 0 ? 'ready' : 'missing',
+    },
+    {
+      kind: 'character-references',
+      title: 'Character references',
+      summary: characterReferenceCount > 0 ? `${characterReferenceCount} character/style reference row(s) are available.` : 'No character reference rows are selected.',
+      evidence: form.characterReferences.length > 0
+        ? form.characterReferences.map((reference, index) => `Reference ${index + 1}: ${reference.type} · strength ${reference.strength} · fidelity ${reference.fidelity} · ${getImageFileEvidence('image', reference.image?.fileName)}`)
+        : ['No character reference images selected.'],
+      status: characterReferenceCount > 0 ? 'ready' : 'missing',
+    },
+    {
+      kind: 'vibes',
+      title: 'Vibe references',
+      summary: vibeCount > 0 ? `${vibeCount} Vibe row(s) are available for reuse planning.` : 'No Vibe rows are selected.',
+      evidence: form.vibes.length > 0
+        ? form.vibes.map((vibe, index) => `Vibe ${index + 1}: strength ${vibe.strength} · information ${vibe.informationExtracted} · ${vibe.encoded.trim() ? 'encoded ready' : 'encoded missing'} · ${getImageFileEvidence('image', vibe.image?.fileName)}`)
+        : ['No Vibe images selected.'],
+      status: vibeCount > 0 ? 'ready' : 'missing',
+    },
+    {
+      kind: 'source-image',
+      title: 'Source image context',
+      summary: hasSourceImageContext ? `${form.action} source context is visible for review.` : 'Text-to-image mode has no source image requirement.',
+      evidence: [
+        `Action: ${form.action}`,
+        getImageFileEvidence('Source image', form.sourceImage?.fileName),
+        getImageFileEvidence('Mask image', form.maskImage?.fileName),
+        `Strength: ${form.strength} · noise: ${form.noise} · add original image: ${form.addOriginalImage}`,
+      ],
+      status: hasSourceImageContext ? 'ready' : 'warning',
+    },
+    {
+      kind: 'cost-status',
+      title: 'Cost and connection status',
+      summary: `${connectionEvidence}; ${getNaiCostEvidence(snapshot)}`,
+      evidence: [
+        connectionEvidence,
+        getNaiCostEvidence(snapshot),
+        'Boundary: local brief card only; no provider call or queue mutation is performed here.',
+      ],
+      status: snapshot.connectionStatus === 'connected' && snapshot.costStatus !== 'error' ? 'ready' : 'warning',
+    },
+  ]
+}
+
+export function buildGenerationBriefNaiReusableAssetsText(snapshot: GenerationBriefNaiReuseSnapshot) {
+  const cards = buildGenerationBriefNaiReuseCards(snapshot)
+
+  return [
+    '## NAI reusable brief cards',
+    '- Boundary: local-draft-only',
+    '- Local only: true',
+    '- External actions executed: false',
+    ...cards.flatMap((card) => [
+      '',
+      `### ${card.title}`,
+      `- Status: ${card.status}`,
+      `- Summary: ${card.summary}`,
+      ...card.evidence.map((item) => `- ${item}`),
+    ]),
+  ].join('\n')
 }
 
 export function buildGenerationBriefReviewCopy(draft: GenerationBriefDraft) {

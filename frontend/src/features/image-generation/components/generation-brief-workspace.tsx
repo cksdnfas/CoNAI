@@ -12,6 +12,8 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefNaiReusableAssetsText,
+  buildGenerationBriefNaiReuseCards,
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
@@ -20,6 +22,8 @@ import {
   saveGenerationBriefDraft,
   serializeGenerationBriefHandoffPayload,
   type GenerationBriefDraft,
+  type GenerationBriefNaiReuseCardStatus,
+  type GenerationBriefNaiReuseSnapshot,
   type GenerationBriefTarget,
 } from '../generation-brief-workspace'
 
@@ -59,11 +63,33 @@ function getSummaryStatusTone(status: ReturnType<typeof buildGenerationBriefRevi
   return 'outline'
 }
 
-interface GenerationBriefWorkspaceProps {
-  activeTab: string
+function getNaiReuseCardStatusLabel(status: GenerationBriefNaiReuseCardStatus) {
+  if (status === 'ready') return { ko: '준비됨', en: 'Ready' }
+  if (status === 'warning') return { ko: '확인 필요', en: 'Review' }
+  return { ko: '비어 있음', en: 'Missing' }
 }
 
-export function GenerationBriefWorkspace({ activeTab }: GenerationBriefWorkspaceProps) {
+function getNaiReuseCardStatusTone(status: GenerationBriefNaiReuseCardStatus) {
+  if (status === 'ready') return 'secondary'
+  return 'outline'
+}
+
+function appendGenerationBriefNote(current: string, next: string) {
+  const currentText = current.trim()
+  const nextText = next.trim()
+
+  if (!nextText) return currentText
+  if (!currentText) return nextText
+  if (currentText.includes(nextText)) return currentText
+  return `${currentText}\n\n${nextText}`
+}
+
+interface GenerationBriefWorkspaceProps {
+  activeTab: string
+  naiReuseSnapshot?: GenerationBriefNaiReuseSnapshot | null
+}
+
+export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null }: GenerationBriefWorkspaceProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const activeTarget = getTargetFromActiveTab(activeTab)
@@ -76,6 +102,9 @@ export function GenerationBriefWorkspace({ activeTab }: GenerationBriefWorkspace
   const [importPayload, setImportPayload] = useState('')
   const summary = useMemo(() => buildGenerationBriefReviewSummary(draft), [draft])
   const reviewCopy = useMemo(() => buildGenerationBriefReviewCopy(draft), [draft])
+  const naiReuseCards = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReuseCards(naiReuseSnapshot) : []), [naiReuseSnapshot])
+  const naiReuseText = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot) : ''), [naiReuseSnapshot])
+  const showNaiReuseCards = activeTarget === 'novelai' || draft.target === 'novelai'
 
   const updateDraft = (patch: Partial<GenerationBriefDraft>) => {
     setDraft((current) => {
@@ -87,6 +116,22 @@ export function GenerationBriefWorkspace({ activeTab }: GenerationBriefWorkspace
 
   const resetDraft = () => {
     setDraft(clearGenerationBriefDraft())
+  }
+
+  const applyNaiReuseCards = () => {
+    if (!naiReuseText.trim()) {
+      return
+    }
+
+    setDraft((current) => {
+      const next = saveGenerationBriefDraft({
+        ...current,
+        target: 'novelai',
+        reusableAssets: appendGenerationBriefNote(current.reusableAssets, naiReuseText),
+      })
+      return next
+    })
+    showSnackbar({ message: t({ ko: 'NAI 재사용 카드를 브리프에 추가했어.', en: 'Added NAI reuse cards to the brief.' }), tone: 'info' })
   }
 
   const copyReviewPacket = async () => {
@@ -214,6 +259,45 @@ export function GenerationBriefWorkspace({ activeTab }: GenerationBriefWorkspace
               })}
             </div>
           </PageInset>
+
+          {showNaiReuseCards ? (
+            <PageInset data-generation-brief-nai-reuse-cards="true" className="space-y-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-semibold text-foreground">
+                  <ClipboardList className="h-4 w-4 text-primary" />
+                  {t({ ko: 'NAI 재사용 카드', en: 'NAI reuse cards' })}
+                </div>
+                <Badge variant="outline">{t({ ko: 'local evidence', en: 'local evidence' })}</Badge>
+              </div>
+              {naiReuseCards.length > 0 ? (
+                <>
+                  <div className="grid gap-2">
+                    {naiReuseCards.map((card) => (
+                      <div key={card.kind} data-generation-brief-nai-reuse-card={card.kind} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-medium text-foreground">{card.title}</div>
+                          <Badge variant={getNaiReuseCardStatusTone(card.status)}>{t(getNaiReuseCardStatusLabel(card.status))}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{card.summary}</p>
+                        <ul className="mt-2 space-y-1 text-xs leading-5 text-muted-foreground">
+                          {card.evidence.slice(0, 3).map((item) => (
+                            <li key={item} className="break-words">• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  <Button type="button" size="sm" variant="outline" data-generation-brief-nai-reuse-apply="true" onClick={applyNaiReuseCards}>
+                    {t({ ko: '브리프에 추가', en: 'Add to brief' })}
+                  </Button>
+                </>
+              ) : (
+                <p data-generation-brief-nai-reuse-empty="true" className="text-xs leading-5 text-muted-foreground">
+                  {t({ ko: 'NAI 편집기에서 현재 초안을 읽으면 프롬프트, 캐릭터 Reference, Vibe, 소스 이미지, 모델, 비용/상태 카드가 여기에 나타나.', en: 'When the NAI editor provides its current draft, prompt, character reference, Vibe, source image, model, and cost/status cards appear here.' })}
+                </p>
+              )}
+            </PageInset>
+          ) : null}
 
           <label className="block space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t({ ko: '재사용 자산', en: 'Reusable assets' })}</span>

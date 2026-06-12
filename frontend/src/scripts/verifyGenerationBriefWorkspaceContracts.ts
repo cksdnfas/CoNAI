@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefNaiReusableAssetsText,
+  buildGenerationBriefNaiReuseCards,
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
@@ -15,11 +17,14 @@ import {
   saveGenerationBriefDraft,
   serializeGenerationBriefHandoffPayload,
   type GenerationBriefDraft,
+  type GenerationBriefNaiReuseSnapshot,
 } from '../features/image-generation/generation-brief-workspace'
+import { DEFAULT_NAI_FORM } from '../features/image-generation/image-generation-shared'
 
 const root = process.cwd()
 const pageSource = readFileSync(join(root, 'src/features/image-generation/image-generation-page.tsx'), 'utf8')
 const componentSource = readFileSync(join(root, 'src/features/image-generation/components/generation-brief-workspace.tsx'), 'utf8')
+const panelSource = readFileSync(join(root, 'src/features/image-generation/components/nai-generation-panel.tsx'), 'utf8')
 const contractSource = readFileSync(join(root, 'src/features/image-generation/generation-brief-workspace.ts'), 'utf8')
 
 class MemoryStorage {
@@ -71,6 +76,37 @@ ok(reviewCopy.includes('# CoNAI generation brief review'), 'review copy should b
 ok(reviewCopy.includes('External actions executed: false'), 'review copy must preserve the no-external-action boundary')
 ok(reviewCopy.includes('portrait lighting plan'), 'review copy should include local intent text')
 
+const naiReuseSnapshot: GenerationBriefNaiReuseSnapshot = {
+  form: {
+    ...DEFAULT_NAI_FORM,
+    prompt: 'masterpiece portrait, black background',
+    negativePrompt: 'low quality, blurry',
+    model: 'nai-diffusion-4-5-curated',
+    action: 'img2img',
+    sourceImage: { fileName: 'source-reference.png', dataUrl: 'data:image/png;base64,SECRET' },
+    characters: [{ prompt: 'blue hair heroine', uc: 'extra arms', centerX: '0.5', centerY: '0.3' }],
+    vibes: [{ image: { fileName: 'vibe.png', dataUrl: 'data:image/png;base64,VIBE' }, encoded: 'encoded-payload', strength: '0.7', informationExtracted: '1' }],
+    characterReferences: [{ image: { fileName: 'character-ref.png', dataUrl: 'data:image/png;base64,REF' }, type: 'character&style', strength: '0.6', fidelity: '0.8' }],
+  },
+  connectionStatus: 'connected',
+  tierName: 'Opus',
+  anlasBalance: 321,
+  costStatus: 'ready',
+  estimatedCost: 5,
+  isOpusFree: false,
+}
+const naiReuseCards = buildGenerationBriefNaiReuseCards(naiReuseSnapshot)
+equal(naiReuseCards.length, 7, 'NAI reuse card builder should expose every planned context category')
+ok(naiReuseCards.some((card) => card.kind === 'prompt' && card.evidence.some((item) => item.includes('masterpiece portrait'))), 'NAI cards should include prompt evidence')
+ok(naiReuseCards.some((card) => card.kind === 'character-references' && card.evidence.some((item) => item.includes('character-ref.png'))), 'NAI cards should include character reference evidence')
+ok(naiReuseCards.some((card) => card.kind === 'vibes' && card.evidence.some((item) => item.includes('encoded ready'))), 'NAI cards should include Vibe readiness evidence')
+ok(naiReuseCards.some((card) => card.kind === 'source-image' && card.evidence.some((item) => item.includes('source-reference.png'))), 'NAI cards should include source image context')
+ok(naiReuseCards.some((card) => card.kind === 'cost-status' && card.evidence.some((item) => item.includes('5 Anlas'))), 'NAI cards should include cost/status context')
+const naiReusableAssetsText = buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot)
+ok(naiReusableAssetsText.includes('External actions executed: false'), 'NAI reusable text should preserve the no-external-action boundary')
+ok(naiReusableAssetsText.includes('NAI Diffusion 4.5 Curated'), 'NAI reusable text should include readable model context')
+ok(!naiReusableAssetsText.includes('data:image'), 'NAI reusable text must not copy image data URLs into the brief')
+
 const exportedAt = '2026-06-12T01:02:03.000Z'
 const serializedPayload = serializeGenerationBriefHandoffPayload(readyDraft, exportedAt)
 const rawPayload = JSON.parse(serializedPayload) as Record<string, unknown>
@@ -111,6 +147,11 @@ ok(componentSource.includes('data-generation-brief-field="reviewNotes"'), 'brief
 ok(componentSource.includes('data-generation-brief-target-option'), 'brief UI should expose provider/workflow target choices')
 ok(componentSource.includes('data-generation-brief-summary="true"'), 'brief UI should expose local review summary')
 ok(componentSource.includes('data-generation-brief-handoff="true"'), 'brief UI should expose the local handoff surface')
+ok(componentSource.includes('data-generation-brief-nai-reuse-cards="true"'), 'brief UI should expose NAI reuse card surface')
+ok(componentSource.includes('data-generation-brief-nai-reuse-card'), 'brief UI should expose individual NAI reuse cards')
+ok(componentSource.includes('data-generation-brief-nai-reuse-apply="true"'), 'brief UI should allow copying NAI reuse evidence into the local brief')
+ok(pageSource.includes('naiReuseSnapshot'), 'image generation page should pass NAI reuse context into the brief workspace')
+ok(panelSource.includes('onReuseSnapshotChange'), 'NAI panel should publish its local reuse snapshot without queueing generation')
 ok(componentSource.includes('data-generation-brief-copy-review="true"'), 'brief UI should expose copy-review affordance')
 ok(componentSource.includes('data-generation-brief-export-json="true"'), 'brief UI should expose JSON download affordance')
 ok(componentSource.includes('data-generation-brief-import-payload="true"'), 'brief UI should expose JSON import input')

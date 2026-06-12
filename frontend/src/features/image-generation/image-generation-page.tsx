@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
 import { GenerationBriefWorkspace } from './components/generation-brief-workspace'
+import type { GenerationBriefNaiReuseSnapshot } from './generation-brief-workspace'
 import { getImageGenerationTabLabel, getImageGenerationTabs, parseImageGenerationTab, type ImageGenerationTab } from './image-generation-tabs'
 
 const NaiGenerationPanelLazy = lazy(async () => {
@@ -55,6 +56,7 @@ export function ImageGenerationPage() {
   const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
+  const [naiReuseSnapshot, setNaiReuseSnapshot] = useState<GenerationBriefNaiReuseSnapshot | null>(null)
   const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(null)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const isWideLayout = useDesktopPageLayout()
@@ -144,6 +146,7 @@ export function ImageGenerationPage() {
         compactActionBar={useCompactNaiActionBar}
         headerPortalTargetId={naiDrawerHeaderContentId}
         compactActionBarContentTargetId={activeTab === 'nai' ? compactActionBarContentId : undefined}
+        onReuseSnapshotChange={setNaiReuseSnapshot}
       />
     )
     : activeTab === 'codex'
@@ -192,7 +195,7 @@ export function ImageGenerationPage() {
           onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
         />
 
-        <GenerationBriefWorkspace activeTab={activeTab} />
+        <GenerationBriefWorkspace activeTab={activeTab} naiReuseSnapshot={activeTab === 'nai' ? naiReuseSnapshot : null} />
       </div>
 
       {activeTab === 'workflows' ? (

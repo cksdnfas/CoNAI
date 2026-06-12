@@ -13,6 +13,7 @@ import {
   getErrorMessage,
   parseNumberInput,
 } from '../image-generation-shared'
+import type { GenerationBriefNaiReuseSnapshot } from '../generation-brief-workspace'
 import { NaiAuthModal } from './nai-auth-modal'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiGenerationEditorSections } from './nai-generation-editor-sections'
@@ -32,6 +33,7 @@ type NaiGenerationPanelProps = {
   compactActionBar?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
+  onReuseSnapshotChange?: (snapshot: GenerationBriefNaiReuseSnapshot) => void
 }
 
 /** Render the NAI login, generation, and image-editing workflow. */
@@ -42,6 +44,7 @@ export function NaiGenerationPanel({
   compactActionBar = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
+  onReuseSnapshotChange,
 }: NaiGenerationPanelProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -186,6 +189,39 @@ export function NaiGenerationPanel({
       naiCostInputs.n_samples > 0,
   })
 
+  const naiCostErrorMessage = naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost')) : null
+  const naiReuseSnapshot = useMemo<GenerationBriefNaiReuseSnapshot>(() => ({
+    form: naiForm,
+    connectionStatus: naiUserQuery.isSuccess ? (connected ? 'connected' : 'disconnected') : naiUserQuery.isError ? 'disconnected' : 'unknown',
+    tierName: connected ? naiUserQuery.data?.subscription.tierName : undefined,
+    anlasBalance: connected ? naiUserQuery.data?.anlasBalance : undefined,
+    costStatus: !connected
+      ? 'unavailable'
+      : naiCostQuery.isPending
+        ? 'calculating'
+        : naiCostQuery.isError
+          ? 'error'
+          : naiCostQuery.isSuccess
+            ? 'ready'
+            : 'idle',
+    estimatedCost: naiCostQuery.data?.estimatedCost,
+    isOpusFree: naiCostQuery.data?.isOpusFree,
+    costErrorMessage: naiCostErrorMessage,
+  }), [
+    connected,
+    naiCostErrorMessage,
+    naiCostQuery.data?.estimatedCost,
+    naiCostQuery.data?.isOpusFree,
+    naiCostQuery.isError,
+    naiCostQuery.isPending,
+    naiCostQuery.isSuccess,
+    naiForm,
+    naiUserQuery.data?.anlasBalance,
+    naiUserQuery.data?.subscription.tierName,
+    naiUserQuery.isError,
+    naiUserQuery.isSuccess,
+  ])
+
   const generationImageSaveOptions = useMemo(() => ({
     format: generationSaveSettings.defaultFormat,
     quality: generationSaveSettings.quality,
@@ -235,6 +271,10 @@ export function NaiGenerationPanel({
     void refetchNaiUserData()
   }, [refreshNonce, refetchNaiUserData])
 
+  useEffect(() => {
+    onReuseSnapshotChange?.(naiReuseSnapshot)
+  }, [naiReuseSnapshot, onReuseSnapshotChange])
+
   const naiGenerateButtonLabel = isNaiGenerating
     ? t('image-generation.components.nai.generation.panel.submitting.generation')
     : !connected
@@ -274,7 +314,7 @@ export function NaiGenerationPanel({
     isGenerating: isNaiGenerating,
     canGenerate: naiForm.prompt.trim().length > 0,
     generateButtonLabel: naiGenerateButtonLabel,
-    costErrorMessage: naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost')) : null,
+    costErrorMessage: naiCostErrorMessage,
     onUpscale: handleUpscale,
     onReset: resetNaiForm,
     onGenerate: handleNaiGenerate,
