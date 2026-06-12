@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +38,10 @@ import {
   resolveHistoryImageSource,
 } from '../image-generation-shared'
 import { getGenerationHistoryFeedProgressSummary } from '../generation-history-feed-progress'
+import {
+  buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord,
+  type GenerationBriefIterationHandoffSnapshot,
+} from '../generation-brief-workspace'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 
 type GenerationHistoryPanelProps = {
@@ -47,6 +51,7 @@ type GenerationHistoryPanelProps = {
   publicWorkflowSlug?: string | null
   splitPaneScroll?: boolean
   onBack?: () => void
+  onIterationHandoffChange?: (snapshot: GenerationBriefIterationHandoffSnapshot) => void
 }
 
 const GENERATION_HISTORY_PAGE_SIZE = 40
@@ -196,7 +201,7 @@ function getHistoryRecoveryDetail(record: GenerationHistoryRecord, t: ReturnType
 }
 
 /** Render generation history using the shared image-list surface instead of per-record cards. */
-export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
+export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, onIterationHandoffChange }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
   const queryClient = useQueryClient()
@@ -360,6 +365,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
     [historyRecordMap, selectedHistoryIds],
   )
+  const selectedIterationHandoffRecord = selectedHistoryRecords.length === 1 ? selectedHistoryRecords[0] : null
   const downloadableHistoryIds = useMemo(
     () => selectedHistoryRecords
       .filter(isHistoryRecordDownloadReady)
@@ -428,6 +434,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const handleClearSelectedHistory = useCallback(() => {
     setSelectedHistoryIds([])
   }, [])
+
+  const handleCreateIterationHandoff = useCallback(() => {
+    if (!onIterationHandoffChange || !selectedIterationHandoffRecord) {
+      return
+    }
+
+    onIterationHandoffChange(buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord(selectedIterationHandoffRecord))
+    showSnackbar({ message: t({ ko: '선택한 기록을 반복 핸드오프 패킷으로 보냈어.', en: 'Sent the selected history record as an iteration handoff packet.' }), tone: 'info' })
+  }, [onIterationHandoffChange, selectedIterationHandoffRecord, showSnackbar, t])
 
   const handleDeleteSelected = useCallback(async () => {
     if (!isAdmin) {
@@ -746,6 +761,19 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         statusText={downloadableHistoryIds.length > 0
           ? t('image-generation.components.generation.history.panel.valuedownloadable', { count: formatNumber(downloadableHistoryIds.length) })
           : t('image-generation.components.generation.history.panel.no.downloadable.results')}
+        extraActions={onIterationHandoffChange ? (
+          <Button
+            size="icon-sm"
+            onClick={handleCreateIterationHandoff}
+            disabled={!selectedIterationHandoffRecord}
+            title={selectedIterationHandoffRecord ? t({ ko: '반복 핸드오프 패킷 만들기', en: 'Create iteration handoff packet' }) : t({ ko: '기록 하나를 선택해 핸드오프 패킷을 만들어.', en: 'Select one history record to create a handoff packet.' })}
+            aria-label={t({ ko: '반복 핸드오프 패킷 만들기', en: 'Create iteration handoff packet' })}
+            data-generation-history-iteration-handoff="true"
+            data-no-select-drag="true"
+          >
+            <ClipboardList className="h-4 w-4" />
+          </Button>
+        ) : undefined}
         trailingActions={!isPublicView && isAdmin ? (
           <Button
             size="icon-sm"

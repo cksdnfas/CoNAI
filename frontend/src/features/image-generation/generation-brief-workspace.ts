@@ -1,4 +1,4 @@
-import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import type { ComfyUIServer, GenerationHistoryRecord, GenerationServiceType, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import {
   hasWorkflowFieldValue,
   joinWorkflowPromptSegments,
@@ -52,6 +52,47 @@ export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready'
 export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
 export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
 export type GenerationBriefComfyCompatibilityCardStatus = 'ready' | 'missing' | 'warning'
+export type GenerationBriefIterationHandoffCardStatus = 'ready' | 'warning'
+export type GenerationBriefIterationHandoffNextAction = 'review-and-adjust'
+
+export type GenerationBriefIterationHandoffSnapshot = {
+  source: 'generation-history'
+  sourceId: string
+  historyId: number
+  serviceType: GenerationServiceType
+  target: GenerationBriefTarget
+  generationStatus: GenerationHistoryRecord['generation_status']
+  queueStatus?: GenerationHistoryRecord['queue_status']
+  resultHash?: string | null
+  resultFileStatus?: GenerationHistoryRecord['result_file_status']
+  width?: number | null
+  height?: number | null
+  workflowName?: string | null
+  requestedServerName?: string | null
+  assignedServerName?: string | null
+  modelLabel?: string | null
+  sampler?: string | null
+  seed?: number | null
+  steps?: number | null
+  scale?: number | null
+  positivePrompt?: string | null
+  negativePrompt?: string | null
+  createdAt?: string | null
+  intendedNextAction: GenerationBriefIterationHandoffNextAction
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+}
+
+export type GenerationBriefIterationHandoffCard = {
+  kind: 'source-artifact' | 'generation-evidence' | 'next-action' | 'boundary'
+  title: string
+  summary: string
+  evidence: string[]
+  status: GenerationBriefIterationHandoffCardStatus
+}
 
 export type GenerationBriefNaiReuseSnapshot = {
   form: NAIFormDraft
@@ -315,6 +356,158 @@ export function buildGenerationBriefReviewSummary(draft: GenerationBriefDraft): 
     externalActionsExecuted: false,
     sideEffectBoundary: 'local-draft-only',
   }
+}
+
+function getGenerationBriefTargetForService(serviceType: GenerationServiceType): GenerationBriefTarget {
+  if (serviceType === 'novelai') return 'novelai'
+  if (serviceType === 'comfyui') return 'comfyui'
+  if (serviceType === 'codex') return 'codex'
+  return 'undecided'
+}
+
+function formatHistoryEvidenceValue(value: string | number | null | undefined, fallback = 'not set') {
+  if (typeof value === 'number') return String(value)
+  return trimForReuseEvidence(value ?? '', fallback)
+}
+
+function formatHistoryDimensions(width?: number | null, height?: number | null) {
+  if (typeof width === 'number' && typeof height === 'number') {
+    return `${width}×${height}`
+  }
+
+  return 'not available'
+}
+
+function getHistoryResultHash(record: GenerationHistoryRecord) {
+  return record.actual_composite_hash ?? record.composite_hash ?? null
+}
+
+function getHistoryModelLabel(record: GenerationHistoryRecord) {
+  if (record.service_type === 'novelai' && record.nai_model) {
+    return resolveNaiModelLabel(record.nai_model)
+  }
+
+  return record.workflow_name ?? record.nai_model ?? null
+}
+
+/** Build a local-only iteration snapshot from a selected generation history row. */
+export function buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord(
+  record: GenerationHistoryRecord,
+  intendedNextAction: GenerationBriefIterationHandoffNextAction = 'review-and-adjust',
+): GenerationBriefIterationHandoffSnapshot {
+  return {
+    source: 'generation-history',
+    sourceId: `history:${record.id}`,
+    historyId: record.id,
+    serviceType: record.service_type,
+    target: getGenerationBriefTargetForService(record.service_type),
+    generationStatus: record.generation_status,
+    queueStatus: record.queue_status ?? undefined,
+    resultHash: getHistoryResultHash(record),
+    resultFileStatus: record.result_file_status ?? null,
+    width: record.actual_width ?? record.width ?? null,
+    height: record.actual_height ?? record.height ?? null,
+    workflowName: record.workflow_name ?? null,
+    requestedServerName: record.requested_server_name ?? null,
+    assignedServerName: record.assigned_server_name ?? null,
+    modelLabel: getHistoryModelLabel(record),
+    sampler: record.nai_sampler ?? null,
+    seed: record.nai_seed ?? null,
+    steps: record.nai_steps ?? null,
+    scale: record.nai_scale ?? null,
+    positivePrompt: record.positive_prompt ?? null,
+    negativePrompt: record.negative_prompt ?? null,
+    createdAt: record.created_at ?? null,
+    intendedNextAction,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+/** Build review cards for a local artifact iteration handoff packet. */
+export function buildGenerationBriefIterationHandoffCards(snapshot: GenerationBriefIterationHandoffSnapshot): GenerationBriefIterationHandoffCard[] {
+  const hasResultEvidence = Boolean(snapshot.resultHash) && snapshot.resultFileStatus !== 'missing' && snapshot.resultFileStatus !== 'deleted'
+  const promptEvidenceReady = Boolean(snapshot.positivePrompt?.trim() || snapshot.negativePrompt?.trim() || snapshot.modelLabel?.trim() || snapshot.workflowName?.trim())
+
+  return [
+    {
+      kind: 'source-artifact',
+      title: 'Source artifact',
+      summary: `History #${snapshot.historyId} · ${snapshot.serviceType} · ${snapshot.generationStatus}`,
+      evidence: [
+        `History record: #${snapshot.historyId}`,
+        `Result hash: ${formatHistoryEvidenceValue(snapshot.resultHash)}`,
+        `Result file status: ${formatHistoryEvidenceValue(snapshot.resultFileStatus)}`,
+        `Dimensions: ${formatHistoryDimensions(snapshot.width, snapshot.height)}`,
+        `Created at: ${formatHistoryEvidenceValue(snapshot.createdAt)}`,
+      ],
+      status: hasResultEvidence ? 'ready' : 'warning',
+    },
+    {
+      kind: 'generation-evidence',
+      title: 'Generation evidence',
+      summary: promptEvidenceReady ? 'Prompt, model, workflow, or run settings are available for review.' : 'No prompt or model evidence is available in this history row.',
+      evidence: [
+        `Target flow: ${snapshot.target}`,
+        `Model/workflow: ${formatHistoryEvidenceValue(snapshot.modelLabel ?? snapshot.workflowName)}`,
+        `Positive prompt: ${formatHistoryEvidenceValue(snapshot.positivePrompt)}`,
+        `Negative prompt: ${formatHistoryEvidenceValue(snapshot.negativePrompt)}`,
+        `Sampler/seed/steps/scale: ${formatHistoryEvidenceValue(snapshot.sampler)} · ${formatHistoryEvidenceValue(snapshot.seed, 'random')} · ${formatHistoryEvidenceValue(snapshot.steps)} · ${formatHistoryEvidenceValue(snapshot.scale)}`,
+        `Server: ${formatHistoryEvidenceValue(snapshot.assignedServerName ?? snapshot.requestedServerName)}`,
+      ],
+      status: promptEvidenceReady ? 'ready' : 'warning',
+    },
+    {
+      kind: 'next-action',
+      title: 'Intended next action',
+      summary: 'Review the source artifact and adjust prompt, references, or target settings before an explicit next run.',
+      evidence: [
+        `Intended next action: ${snapshot.intendedNextAction}`,
+        `Next target flow: ${snapshot.target}`,
+        'Operator action required before generation: press the existing generate/queue control explicitly.',
+      ],
+      status: 'ready',
+    },
+    {
+      kind: 'boundary',
+      title: 'Local iteration boundary',
+      summary: 'This packet is a browser-local planning handoff, not a generation replay.',
+      evidence: [
+        `Boundary: ${snapshot.sideEffectBoundary}`,
+        `Local only: ${snapshot.localOnly}`,
+        `External actions executed: ${snapshot.externalActionsExecuted}`,
+        `Queue mutations: ${snapshot.queueMutations}`,
+        `File mutations: ${snapshot.fileMutations}`,
+      ],
+      status: 'ready',
+    },
+  ]
+}
+
+export function buildGenerationBriefIterationHandoffText(snapshot: GenerationBriefIterationHandoffSnapshot) {
+  const cards = buildGenerationBriefIterationHandoffCards(snapshot)
+
+  return [
+    '## Artifact iteration handoff packet',
+    '- Boundary: local-draft-only',
+    '- Local only: true',
+    '- External actions executed: false',
+    '- Queue mutations: false',
+    '- File mutations: false',
+    `- Source: ${snapshot.source}`,
+    `- Source ID: ${snapshot.sourceId}`,
+    `- Intended next action: ${snapshot.intendedNextAction}`,
+    ...cards.flatMap((card) => [
+      '',
+      `### ${card.title}`,
+      `- Status: ${card.status}`,
+      `- Summary: ${card.summary}`,
+      ...card.evidence.map((item) => `- ${item}`),
+    ]),
+  ].join('\n')
 }
 
 export function buildGenerationBriefNaiReuseCards(snapshot: GenerationBriefNaiReuseSnapshot): GenerationBriefNaiReuseCard[] {

@@ -14,6 +14,8 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefIterationHandoffCards,
+  buildGenerationBriefIterationHandoffText,
   buildGenerationBriefNaiReusableAssetsText,
   buildGenerationBriefNaiReuseCards,
   buildGenerationBriefReviewCopy,
@@ -26,6 +28,8 @@ import {
   type GenerationBriefComfyCompatibilityCardStatus,
   type GenerationBriefComfyCompatibilitySnapshot,
   type GenerationBriefDraft,
+  type GenerationBriefIterationHandoffCardStatus,
+  type GenerationBriefIterationHandoffSnapshot,
   type GenerationBriefNaiReuseCardStatus,
   type GenerationBriefNaiReuseSnapshot,
   type GenerationBriefTarget,
@@ -89,6 +93,16 @@ function getComfyCompatibilityCardStatusTone(status: GenerationBriefComfyCompati
   return 'outline'
 }
 
+function getIterationHandoffCardStatusLabel(status: GenerationBriefIterationHandoffCardStatus) {
+  if (status === 'ready') return { ko: '준비됨', en: 'Ready' }
+  return { ko: '확인 필요', en: 'Review' }
+}
+
+function getIterationHandoffCardStatusTone(status: GenerationBriefIterationHandoffCardStatus) {
+  if (status === 'ready') return 'secondary'
+  return 'outline'
+}
+
 function appendGenerationBriefNote(current: string, next: string) {
   const currentText = current.trim()
   const nextText = next.trim()
@@ -103,9 +117,10 @@ interface GenerationBriefWorkspaceProps {
   activeTab: string
   naiReuseSnapshot?: GenerationBriefNaiReuseSnapshot | null
   comfyCompatibilitySnapshot?: GenerationBriefComfyCompatibilitySnapshot | null
+  iterationHandoffSnapshot?: GenerationBriefIterationHandoffSnapshot | null
 }
 
-export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, comfyCompatibilitySnapshot = null }: GenerationBriefWorkspaceProps) {
+export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, comfyCompatibilitySnapshot = null, iterationHandoffSnapshot = null }: GenerationBriefWorkspaceProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const activeTarget = getTargetFromActiveTab(activeTab)
@@ -122,6 +137,8 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const naiReuseText = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot) : ''), [naiReuseSnapshot])
   const comfyCompatibilityCards = useMemo(() => (comfyCompatibilitySnapshot ? buildGenerationBriefComfyCompatibilityCards(comfyCompatibilitySnapshot) : []), [comfyCompatibilitySnapshot])
   const comfyCompatibilityText = useMemo(() => (comfyCompatibilitySnapshot ? buildGenerationBriefComfyCompatibilityText(comfyCompatibilitySnapshot) : ''), [comfyCompatibilitySnapshot])
+  const iterationHandoffCards = useMemo(() => (iterationHandoffSnapshot ? buildGenerationBriefIterationHandoffCards(iterationHandoffSnapshot) : []), [iterationHandoffSnapshot])
+  const iterationHandoffText = useMemo(() => (iterationHandoffSnapshot ? buildGenerationBriefIterationHandoffText(iterationHandoffSnapshot) : ''), [iterationHandoffSnapshot])
   const showNaiReuseCards = activeTarget === 'novelai' || draft.target === 'novelai'
   const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
 
@@ -167,6 +184,22 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       return next
     })
     showSnackbar({ message: t({ ko: 'Comfy 호환성 요약을 브리프에 추가했어.', en: 'Added the Comfy compatibility summary to the brief.' }), tone: 'info' })
+  }
+
+  const applyIterationHandoffPacket = () => {
+    if (!iterationHandoffSnapshot || !iterationHandoffText.trim()) {
+      return
+    }
+
+    setDraft((current) => {
+      const next = saveGenerationBriefDraft({
+        ...current,
+        target: iterationHandoffSnapshot.target,
+        sourceReferences: appendGenerationBriefNote(current.sourceReferences, iterationHandoffText),
+      })
+      return next
+    })
+    showSnackbar({ message: t({ ko: '반복 핸드오프 패킷을 브리프에 추가했어.', en: 'Added the iteration handoff packet to the brief.' }), tone: 'info' })
   }
 
   const copyReviewPacket = async () => {
@@ -370,6 +403,37 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                   {t({ ko: 'Comfy 워크플로우를 선택하면 저장된 marked field, 선택 타겟, 서버 준비 상태, 누락 입력 경고가 provider 실행 없이 여기에 나타나.', en: 'Select a Comfy workflow to show saved marked fields, target choice, server readiness, and missing-input warnings here without executing a provider.' })}
                 </p>
               )}
+            </PageInset>
+          ) : null}
+
+          {iterationHandoffSnapshot ? (
+            <PageInset data-generation-brief-iteration-handoff="true" className="space-y-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-semibold text-foreground">
+                  <ClipboardList className="h-4 w-4 text-primary" />
+                  {t({ ko: '반복 핸드오프 패킷', en: 'Iteration handoff packet' })}
+                </div>
+                <Badge variant="outline">{t({ ko: 'local packet', en: 'local packet' })}</Badge>
+              </div>
+              <div className="grid gap-2">
+                {iterationHandoffCards.map((card) => (
+                  <div key={card.kind} data-generation-brief-iteration-handoff-card={card.kind} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium text-foreground">{card.title}</div>
+                      <Badge variant={getIterationHandoffCardStatusTone(card.status)}>{t(getIterationHandoffCardStatusLabel(card.status))}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{card.summary}</p>
+                    <ul className="mt-2 space-y-1 text-xs leading-5 text-muted-foreground">
+                      {card.evidence.slice(0, 3).map((item) => (
+                        <li key={item} className="break-words">• {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <Button type="button" size="sm" variant="outline" data-generation-brief-iteration-handoff-apply="true" onClick={applyIterationHandoffPacket}>
+                {t({ ko: '브리프에 추가', en: 'Add to brief' })}
+              </Button>
             </PageInset>
           ) : null}
 

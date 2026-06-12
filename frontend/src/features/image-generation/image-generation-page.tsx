@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
 import { GenerationBriefWorkspace } from './components/generation-brief-workspace'
-import type { GenerationBriefComfyCompatibilitySnapshot, GenerationBriefNaiReuseSnapshot } from './generation-brief-workspace'
+import type { GenerationBriefComfyCompatibilitySnapshot, GenerationBriefIterationHandoffSnapshot, GenerationBriefNaiReuseSnapshot } from './generation-brief-workspace'
 import { getImageGenerationTabLabel, getImageGenerationTabs, parseImageGenerationTab, type ImageGenerationTab } from './image-generation-tabs'
 
 const NaiGenerationPanelLazy = lazy(async () => {
@@ -58,6 +58,7 @@ export function ImageGenerationPage() {
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [naiReuseSnapshot, setNaiReuseSnapshot] = useState<GenerationBriefNaiReuseSnapshot | null>(null)
   const [comfyCompatibilitySnapshot, setComfyCompatibilitySnapshot] = useState<GenerationBriefComfyCompatibilitySnapshot | null>(null)
+  const [iterationHandoffSnapshot, setIterationHandoffSnapshot] = useState<GenerationBriefIterationHandoffSnapshot | null>(null)
   const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(null)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const isWideLayout = useDesktopPageLayout()
@@ -205,6 +206,7 @@ export function ImageGenerationPage() {
           activeTab={activeTab}
           naiReuseSnapshot={activeTab === 'nai' ? naiReuseSnapshot : null}
           comfyCompatibilitySnapshot={activeTab === 'comfyui' ? comfyCompatibilitySnapshot : null}
+          iterationHandoffSnapshot={iterationHandoffSnapshot}
         />
       </div>
 
@@ -249,6 +251,7 @@ export function ImageGenerationPage() {
                       serviceType={historyServiceType}
                       workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
                       splitPaneScroll={useWideSplitPaneScroll}
+                      onIterationHandoffChange={setIterationHandoffSnapshot}
                     />
                   )}
                 </Suspense>
@@ -271,6 +274,7 @@ export function ImageGenerationPage() {
                     serviceType={historyServiceType}
                     workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
                     onBack={activeTab === 'comfyui' ? () => setSelectedComfyWorkflowId(null) : undefined}
+                    onIterationHandoffChange={setIterationHandoffSnapshot}
                   />
                 )}
               </Suspense>
@@ -320,6 +324,7 @@ export function ImageGenerationPage() {
                     refreshNonce={historyRefreshNonce}
                     serviceType="comfyui"
                     workflowId={selectedComfyWorkflowId}
+                    onIterationHandoffChange={setIterationHandoffSnapshot}
                   />
                 )}
               </Suspense>

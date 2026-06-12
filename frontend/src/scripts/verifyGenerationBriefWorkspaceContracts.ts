@@ -5,6 +5,9 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefIterationHandoffCards,
+  buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord,
+  buildGenerationBriefIterationHandoffText,
   buildGenerationBriefNaiReusableAssetsText,
   buildGenerationBriefNaiReuseCards,
   buildGenerationBriefReviewCopy,
@@ -184,6 +187,42 @@ ok(comfyCompatibilityText.includes('Reference image: image · image: pose-refere
 ok(comfyCompatibilityText.includes('Queue mutations: false'), 'Comfy reusable text should preserve the no-queue-mutation boundary')
 ok(!comfyCompatibilityText.includes('data:image'), 'Comfy reusable text must not copy image data URLs into the brief')
 
+const iterationSnapshot = buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord({
+  id: 42,
+  service_type: 'novelai',
+  generation_status: 'completed',
+  queue_status: 'completed',
+  actual_composite_hash: 'abc123hash',
+  result_file_status: 'active',
+  actual_width: 1024,
+  actual_height: 1536,
+  nai_model: 'nai-diffusion-4-5-curated',
+  nai_sampler: 'k_euler',
+  nai_seed: 123456,
+  nai_steps: 28,
+  nai_scale: 5,
+  positive_prompt: 'masterpiece portrait with rim light',
+  negative_prompt: 'low quality, blurry',
+  created_at: '2026-06-12T01:00:00.000Z',
+})
+equal(iterationSnapshot.source, 'generation-history', 'iteration packet should identify generation history as the source')
+equal(iterationSnapshot.sourceId, 'history:42', 'iteration packet should preserve a stable source id')
+equal(iterationSnapshot.target, 'novelai', 'history packet should map service type to a brief target')
+equal(iterationSnapshot.externalActionsExecuted, false, 'iteration packet must not claim provider calls or queue operations')
+equal(iterationSnapshot.queueMutations, false, 'iteration packet must not mutate queues')
+equal(iterationSnapshot.fileMutations, false, 'iteration packet must not mutate files')
+const iterationCards = buildGenerationBriefIterationHandoffCards(iterationSnapshot)
+equal(iterationCards.length, 4, 'iteration packet should expose source, evidence, next action, and boundary cards')
+ok(iterationCards.some((card) => card.kind === 'source-artifact' && card.evidence.some((item) => item.includes('abc123hash'))), 'iteration packet should include source artifact evidence')
+ok(iterationCards.some((card) => card.kind === 'generation-evidence' && card.evidence.some((item) => item.includes('masterpiece portrait'))), 'iteration packet should include prompt evidence')
+const iterationText = buildGenerationBriefIterationHandoffText(iterationSnapshot)
+ok(iterationText.includes('Artifact iteration handoff packet'), 'iteration handoff text should have a clear packet heading')
+ok(iterationText.includes('History record: #42'), 'iteration handoff text should include the selected history record id')
+ok(iterationText.includes('NAI Diffusion 4.5 Curated'), 'iteration handoff text should include readable model evidence')
+ok(iterationText.includes('Queue mutations: false'), 'iteration handoff text should preserve the no-queue-mutation boundary')
+ok(iterationText.includes('File mutations: false'), 'iteration handoff text should preserve the no-file-mutation boundary')
+ok(!iterationText.includes('data:image'), 'iteration handoff text must not copy image data URLs into the brief')
+
 const exportedAt = '2026-06-12T01:02:03.000Z'
 const serializedPayload = serializeGenerationBriefHandoffPayload(readyDraft, exportedAt)
 const rawPayload = JSON.parse(serializedPayload) as Record<string, unknown>
@@ -230,8 +269,14 @@ ok(componentSource.includes('data-generation-brief-nai-reuse-apply="true"'), 'br
 ok(componentSource.includes('data-generation-brief-comfy-compatibility-summary="true"'), 'brief UI should expose Comfy compatibility summary surface')
 ok(componentSource.includes('data-generation-brief-comfy-compatibility-card'), 'brief UI should expose individual Comfy compatibility cards')
 ok(componentSource.includes('data-generation-brief-comfy-compatibility-apply="true"'), 'brief UI should allow copying Comfy compatibility evidence into the local brief')
+ok(componentSource.includes('data-generation-brief-iteration-handoff="true"'), 'brief UI should expose artifact iteration handoff packet surface')
+ok(componentSource.includes('data-generation-brief-iteration-handoff-card'), 'brief UI should expose individual iteration handoff cards')
+ok(componentSource.includes('data-generation-brief-iteration-handoff-apply="true"'), 'brief UI should allow copying iteration packet evidence into the local brief')
 ok(pageSource.includes('naiReuseSnapshot'), 'image generation page should pass NAI reuse context into the brief workspace')
 ok(pageSource.includes('comfyCompatibilitySnapshot'), 'image generation page should pass Comfy compatibility context into the brief workspace')
+ok(pageSource.includes('iterationHandoffSnapshot'), 'image generation page should pass selected history iteration context into the brief workspace')
+ok(readFileSync(join(root, 'src/features/image-generation/components/generation-history-panel.tsx'), 'utf8').includes('onIterationHandoffChange'), 'history panel should publish selected local iteration packets without queueing generation')
+ok(readFileSync(join(root, 'src/features/image-generation/components/generation-history-panel.tsx'), 'utf8').includes('data-generation-history-iteration-handoff="true"'), 'history selection bar should expose iteration handoff action')
 ok(panelSource.includes('onReuseSnapshotChange'), 'NAI panel should publish its local reuse snapshot without queueing generation')
 ok(readFileSync(join(root, 'src/features/image-generation/components/comfy-generation-panel.tsx'), 'utf8').includes('onCompatibilitySnapshotChange'), 'Comfy panel should publish local compatibility snapshots without queueing generation')
 ok(componentSource.includes('data-generation-brief-copy-review="true"'), 'brief UI should expose copy-review affordance')
