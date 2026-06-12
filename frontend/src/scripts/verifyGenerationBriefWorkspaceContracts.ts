@@ -8,6 +8,7 @@ import {
   buildGenerationBriefImportDiff,
   buildGenerationBriefRecoveryCheckpoint,
   buildGenerationBriefSelectiveImportDraft,
+  countGenerationBriefSelectedImportChanges,
   buildGenerationBriefIterationHandoffCards,
   buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord,
   buildGenerationBriefIterationHandoffText,
@@ -282,6 +283,15 @@ equal(importDiff.sideEffectBoundary, 'local-draft-only', 'import diff should kee
 const clearingImportDiff = buildGenerationBriefImportDiff(readyDraft, { ...readyDraft, reusableAssets: '', reviewNotes: '' })
 equal(clearingImportDiff.clearedCount, 2, 'import diff should flag current populated fields that the import would clear')
 equal(clearingImportDiff.fields.find((field) => field.field === 'reusableAssets')?.status, 'cleared', 'import diff should mark reusable asset replacement as a clear')
+equal(
+  countGenerationBriefSelectedImportChanges(importDiff, ['intent', 'target', 'sourceReferences', 'reusableAssets', 'reviewNotes']),
+  5,
+  'selected import change count should count every selected field that would alter the draft',
+)
+equal(countGenerationBriefSelectedImportChanges(importDiff, []), 0, 'selected import change count should be zero when no field is selected')
+const singleChangedImportDiff = buildGenerationBriefImportDiff({ ...readyDraft, reviewNotes: 'keep local note' }, { ...readyDraft, reviewNotes: 'incoming review note' })
+equal(countGenerationBriefSelectedImportChanges(singleChangedImportDiff, ['intent']), 0, 'selected import change count should ignore selected unchanged fields')
+equal(countGenerationBriefSelectedImportChanges(singleChangedImportDiff, ['reviewNotes']), 1, 'selected import change count should count selected changed fields')
 
 const selectiveImportDraft = buildGenerationBriefSelectiveImportDraft(
   { ...readyDraft, intent: 'keep local intent', reviewNotes: 'keep local review note' },
@@ -371,6 +381,11 @@ ok(componentSource.includes('data-generation-brief-import-diff="true"'), 'brief 
 ok(componentSource.includes('data-generation-brief-import-diff-field'), 'brief UI should expose field-level import overwrite changes')
 ok(componentSource.includes('data-generation-brief-import-field-selection="true"'), 'brief UI should expose field-level import restore selection controls')
 ok(componentSource.includes('data-generation-brief-import-field-select'), 'brief UI should expose per-field import restore toggles')
+ok(componentSource.includes('data-generation-brief-import-selected-change-count="true"'), 'brief UI should expose selected import change evidence')
+ok(componentSource.includes('data-generation-brief-import-noop-guard="true"'), 'brief UI should explain no-op import restore guards')
+ok(componentSource.includes('countGenerationBriefSelectedImportChanges'), 'brief UI should count selected changed fields before restore')
+ok(componentSource.includes('selectedChangedImportFieldCount === 0'), 'brief UI should fail closed when no selected import field changes the draft')
+ok(componentSource.includes('disabled={!canApplyImport}'), 'brief UI should disable restore until the pasted handoff is safe and at least one selected field changes')
 ok(componentSource.includes('data-generation-brief-recovery-checkpoint="true"'), 'brief UI should expose local recovery checkpoint state')
 ok(componentSource.includes('data-generation-brief-recovery-checkpoint-summary="true"'), 'brief UI should summarize the last replaced local draft')
 ok(componentSource.includes('data-generation-brief-recovery-restore="true"'), 'brief UI should expose a recovery restore action')
@@ -381,7 +396,7 @@ ok(componentSource.includes('selectedImportFieldSet.has(field.field)'), 'brief U
 ok(componentSource.includes('buildGenerationBriefSelectiveImportDraft'), 'brief UI should merge imports through the selective restore contract')
 ok(componentSource.includes('buildGenerationBriefImportDiff'), 'brief UI should compare incoming handoffs against the current local draft')
 ok(componentSource.includes('data-generation-brief-import-preview-error="true"'), 'brief UI should show unsafe or invalid import reasons without applying drafts')
-ok(componentSource.includes('disabled={importPreview?.status !== \'imported\'}'), 'brief UI should disable restore until the pasted handoff parses as safe')
+ok(contractSource.includes('countGenerationBriefSelectedImportChanges'), 'brief contract should expose selected import change counting')
 ok(componentSource.includes('data-generation-brief-import-apply="true"'), 'brief UI should expose import apply action')
 ok(componentSource.includes('copyTextToClipboard'), 'brief handoff should support local copy review')
 ok(componentSource.includes('triggerBlobDownload'), 'brief handoff should support local browser JSON download')

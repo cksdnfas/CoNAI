@@ -492,6 +492,15 @@ export function buildGenerationBriefSelectiveImportDraft(
   }
 }
 
+/** Count selected import fields that would actually change the current local draft. */
+export function countGenerationBriefSelectedImportChanges(
+  diff: GenerationBriefImportDiff,
+  selectedFields: Array<keyof GenerationBriefDraft>,
+) {
+  const selected = new Set(selectedFields)
+  return diff.fields.filter((field) => selected.has(field.field) && field.status !== 'unchanged').length
+}
+
 function collectGenerationBriefReadinessCards(context?: GenerationBriefReadinessGateContext) {
   return [
     ...(context?.naiReuseCards ?? []),

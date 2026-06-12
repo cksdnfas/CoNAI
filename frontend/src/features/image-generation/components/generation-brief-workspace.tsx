@@ -16,6 +16,7 @@ import {
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefImportDiff,
   buildGenerationBriefSelectiveImportDraft,
+  countGenerationBriefSelectedImportChanges,
   buildGenerationBriefIterationHandoffCards,
   buildGenerationBriefIterationHandoffText,
   buildGenerationBriefNaiReusableAssetsText,
@@ -216,6 +217,10 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const selectedImportFieldCount = importPreviewDiff
     ? importPreviewDiff.fields.filter((field) => selectedImportFieldSet.has(field.field)).length
     : 0
+  const selectedChangedImportFieldCount = importPreviewDiff
+    ? countGenerationBriefSelectedImportChanges(importPreviewDiff, selectedImportFields)
+    : 0
+  const canApplyImport = importPreview?.status === 'imported' && selectedChangedImportFieldCount > 0
   const summary = useMemo(() => buildGenerationBriefReviewSummary(draft), [draft])
   const naiReuseCards = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReuseCards(naiReuseSnapshot) : []), [naiReuseSnapshot])
   const naiReuseText = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot) : ''), [naiReuseSnapshot])
@@ -344,10 +349,18 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   }
 
   const importHandoffPayload = () => {
-    if (importPreview?.status !== 'imported') {
+    if (importPreview?.status !== 'imported' || !importPreviewDiff) {
       showSnackbar({
         message: t({ ko: '브리프 JSON을 가져오지 못했어. 스키마와 local-only 경계를 확인해줘.', en: 'Could not import the brief JSON. Check its schema and local-only boundary.' }),
         tone: 'error',
+      })
+      return
+    }
+
+    if (selectedChangedImportFieldCount === 0) {
+      showSnackbar({
+        message: t({ ko: '선택한 변경 필드가 없어 로컬 초안을 바꾸지 않았어.', en: 'No selected changed fields, so the local draft was not changed.' }),
+        tone: 'info',
       })
       return
     }
@@ -749,6 +762,17 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                             { selected: selectedImportFieldCount, total: importPreviewDiff.fields.length },
                           )}
                         </div>
+                        <div data-generation-brief-import-selected-change-count="true" className="text-muted-foreground">
+                          {t(
+                            { ko: '실제 적용 변경 {selectedChanged}/{changed}', en: 'Selected changes {selectedChanged}/{changed}' },
+                            { selectedChanged: selectedChangedImportFieldCount, changed: importPreviewDiff.changedCount },
+                          )}
+                        </div>
+                        {selectedChangedImportFieldCount === 0 ? (
+                          <div data-generation-brief-import-noop-guard="true" className="text-muted-foreground">
+                            {t({ ko: '변경되는 필드를 하나 이상 선택해야 로컬 초안을 복원해.', en: 'Select at least one changed field before restoring the local draft.' })}
+                          </div>
+                        ) : null}
                         <div className="grid gap-2 sm:grid-cols-2">
                           {importPreviewDiff.fields.map((field) => (
                             <label key={field.field} className="flex items-start gap-2 rounded-sm border border-border/50 bg-surface-container/25 p-2 text-muted-foreground">
@@ -787,7 +811,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 )}
               </PageInset>
             ) : null}
-            <Button type="button" size="sm" variant="outline" data-generation-brief-import-apply="true" disabled={importPreview?.status !== 'imported'} onClick={importHandoffPayload}>
+            <Button type="button" size="sm" variant="outline" data-generation-brief-import-apply="true" disabled={!canApplyImport} onClick={importHandoffPayload}>
               {t({ ko: '로컬 초안으로 복원', en: 'Restore as local draft' })}
             </Button>
           </PageInset>
