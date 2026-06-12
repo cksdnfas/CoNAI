@@ -17,16 +17,19 @@ import {
   buildGenerationBriefReadinessGate,
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
+  buildGenerationBriefSaveMetadata,
   clearGenerationBriefDraft,
   clearGenerationBriefRecoveryCheckpoint,
   DEFAULT_GENERATION_BRIEF_DRAFT,
   GENERATION_BRIEF_HANDOFF_SCHEMA,
   GENERATION_BRIEF_RECOVERY_STORAGE_KEY,
+  GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY,
   GENERATION_BRIEF_STORAGE_KEY,
   normalizeGenerationBriefDraft,
   parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
   readGenerationBriefRecoveryCheckpoint,
+  readGenerationBriefSaveMetadata,
   saveGenerationBriefDraft,
   saveGenerationBriefRecoveryCheckpoint,
   serializeGenerationBriefHandoffPayload,
@@ -318,11 +321,32 @@ equal(parseGenerationBriefHandoffPayload(JSON.stringify({ schema: 'other', draft
 equal(parseGenerationBriefHandoffPayload(JSON.stringify({ ...rawPayload, externalActionsExecuted: true })).status, 'rejected', 'unsafe external-action handoffs should be rejected')
 
 const storage = new MemoryStorage()
-saveGenerationBriefDraft(readyDraft, storage)
+const builtSaveMetadata = buildGenerationBriefSaveMetadata(readyDraft, '2026-06-12T03:00:00.000Z')
+equal(builtSaveMetadata.savedAt, '2026-06-12T03:00:00.000Z', 'save metadata should preserve a stable saved-at timestamp')
+equal(builtSaveMetadata.summary.status, 'review-ready', 'save metadata should carry the draft review status')
+equal(builtSaveMetadata.filledFieldCount, 5, 'save metadata should carry compact filled-field evidence')
+equal(builtSaveMetadata.localOnly, true, 'save metadata should be explicitly browser-local')
+equal(builtSaveMetadata.externalActionsExecuted, false, 'save metadata must not claim provider calls or queue operations')
+equal(builtSaveMetadata.queueMutations, false, 'save metadata must not mutate queues')
+equal(builtSaveMetadata.fileMutations, false, 'save metadata must not mutate files')
+equal(builtSaveMetadata.sideEffectBoundary, 'local-draft-only', 'save metadata should preserve the local draft boundary')
+saveGenerationBriefDraft(readyDraft, storage, '2026-06-12T03:01:00.000Z')
 deepEqual(readGenerationBriefDraft(storage), readyDraft, 'brief drafts should round-trip through local storage')
 equal(storage.getItem(GENERATION_BRIEF_STORAGE_KEY)?.includes('portrait lighting plan'), true, 'stored brief should preserve local intent text')
+const storedSaveMetadata = readGenerationBriefSaveMetadata(storage)
+equal(storedSaveMetadata?.savedAt, '2026-06-12T03:01:00.000Z', 'saving a draft should persist local save metadata')
+equal(storedSaveMetadata?.summary.status, 'review-ready', 'stored save metadata should summarize the saved draft')
+equal(storedSaveMetadata?.filledFieldCount, 5, 'stored save metadata should preserve filled-field evidence')
+equal(storedSaveMetadata?.externalActionsExecuted, false, 'stored save metadata should preserve no-external-action evidence')
+equal(storage.getItem(GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY)?.includes('2026-06-12T03:01:00.000Z'), true, 'save metadata storage should contain the saved timestamp')
+storage.setItem(GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY, JSON.stringify({ ...storedSaveMetadata, externalActionsExecuted: true }))
+equal(readGenerationBriefSaveMetadata(storage), null, 'unsafe save metadata should fail closed')
+storage.setItem(GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY, '{not-json')
+equal(readGenerationBriefSaveMetadata(storage), null, 'corrupt save metadata should fail closed')
+saveGenerationBriefDraft(readyDraft, storage, '2026-06-12T03:02:00.000Z')
 deepEqual(clearGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'clear should return the default brief')
 deepEqual(readGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'clear should remove persisted brief data')
+equal(readGenerationBriefSaveMetadata(storage), null, 'clearing the draft should remove stale local save metadata')
 const recoveryCheckpoint = buildGenerationBriefRecoveryCheckpoint(readyDraft, 'reset', '2026-06-12T02:00:00.000Z')
 equal(recoveryCheckpoint.reason, 'reset', 'recovery checkpoint should preserve the replacement reason')
 equal(recoveryCheckpoint.summary.status, 'review-ready', 'recovery checkpoint should summarize the preserved draft')
@@ -351,6 +375,11 @@ ok(componentSource.includes('data-generation-brief-field="reusableAssets"'), 'br
 ok(componentSource.includes('data-generation-brief-field="reviewNotes"'), 'brief UI should expose the review notes field')
 ok(componentSource.includes('data-generation-brief-target-option'), 'brief UI should expose provider/workflow target choices')
 ok(componentSource.includes('data-generation-brief-summary="true"'), 'brief UI should expose local review summary')
+ok(componentSource.includes('data-generation-brief-save-status="true"'), 'brief UI should expose local save status evidence')
+ok(componentSource.includes('readGenerationBriefSaveMetadata'), 'brief UI should read local save metadata')
+ok(componentSource.includes('data-generation-brief-saved-at="true"'), 'brief UI should expose saved-at evidence')
+ok(componentSource.includes('data-generation-brief-save-boundary="true"'), 'brief UI should expose local save side-effect boundary')
+ok(componentSource.includes('로컬 저장 상태를 갱신했어'), 'manual save should give operator feedback')
 ok(componentSource.includes('data-generation-brief-readiness-gate="true"'), 'brief UI should expose local readiness gate surface')
 ok(componentSource.includes('data-generation-brief-readiness-gate-summary="true"'), 'brief UI should expose readiness gate counts')
 ok(componentSource.includes('data-generation-brief-readiness-gate-item'), 'brief UI should expose individual readiness gate items')

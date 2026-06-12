@@ -63,6 +63,17 @@ export type GenerationBriefRecoveryCheckpoint = {
   sideEffectBoundary: 'local-draft-only'
 }
 
+export type GenerationBriefSaveMetadata = {
+  savedAt: string
+  summary: GenerationBriefReviewSummary
+  filledFieldCount: number
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+}
+
 export type GenerationBriefImportDiffFieldStatus = 'unchanged' | 'changed' | 'filled' | 'cleared'
 
 export type GenerationBriefImportDiffField = {
@@ -203,6 +214,7 @@ type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 export const GENERATION_BRIEF_STORAGE_KEY = 'conai:image-generation:generation-brief-workspace:v1'
 export const GENERATION_BRIEF_RECOVERY_STORAGE_KEY = 'conai:image-generation:generation-brief-recovery:v1'
+export const GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY = 'conai:image-generation:generation-brief-save-metadata:v1'
 export const GENERATION_BRIEF_HANDOFF_SCHEMA = 'conai.generation-brief.handoff.v1'
 
 export const DEFAULT_GENERATION_BRIEF_DRAFT: GenerationBriefDraft = {
@@ -427,6 +439,74 @@ export function buildGenerationBriefReviewSummary(draft: GenerationBriefDraft): 
     localOnly: true,
     externalActionsExecuted: false,
     sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+function isGenerationBriefDraftField(value: unknown): value is keyof GenerationBriefDraft {
+  return typeof value === 'string' && (GENERATION_BRIEF_FIELDS as string[]).includes(value)
+}
+
+function isGenerationBriefReviewSummaryStatus(value: unknown): value is GenerationBriefReviewSummary['status'] {
+  return value === 'empty' || value === 'drafting' || value === 'review-ready'
+}
+
+function parseGenerationBriefReviewSummary(value: unknown): GenerationBriefReviewSummary | null {
+  if (!isRecord(value) || !isGenerationBriefReviewSummaryStatus(value.status)) return null
+  if (typeof value.filledFieldCount !== 'number' || !Number.isInteger(value.filledFieldCount) || value.filledFieldCount < 0 || value.filledFieldCount > GENERATION_BRIEF_FIELDS.length) return null
+  if (!Array.isArray(value.missingFields) || !value.missingFields.every(isGenerationBriefDraftField)) return null
+  if (value.localOnly !== true || value.externalActionsExecuted !== false || value.sideEffectBoundary !== 'local-draft-only') return null
+
+  return {
+    status: value.status,
+    filledFieldCount: value.filledFieldCount,
+    missingFields: value.missingFields,
+    localOnly: true,
+    externalActionsExecuted: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+export function buildGenerationBriefSaveMetadata(draft: GenerationBriefDraft, savedAt = new Date().toISOString()): GenerationBriefSaveMetadata {
+  const normalizedDraft = normalizeGenerationBriefDraft(draft)
+  const summary = buildGenerationBriefReviewSummary(normalizedDraft)
+
+  return {
+    savedAt,
+    summary,
+    filledFieldCount: summary.filledFieldCount,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+export function readGenerationBriefSaveMetadata(storage: StorageLike | null = getBrowserStorage()): GenerationBriefSaveMetadata | null {
+  if (!storage) return null
+
+  try {
+    const rawValue = storage.getItem(GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY)
+    if (!rawValue) return null
+    const parsed = JSON.parse(rawValue) as unknown
+    if (!isRecord(parsed) || typeof parsed.savedAt !== 'string') return null
+    if (parsed.localOnly !== true || parsed.externalActionsExecuted !== false || parsed.queueMutations !== false || parsed.fileMutations !== false || parsed.sideEffectBoundary !== 'local-draft-only') return null
+    if (typeof parsed.filledFieldCount !== 'number' || !Number.isInteger(parsed.filledFieldCount) || parsed.filledFieldCount < 0 || parsed.filledFieldCount > GENERATION_BRIEF_FIELDS.length) return null
+    const summary = parseGenerationBriefReviewSummary(parsed.summary)
+    if (!summary || summary.filledFieldCount !== parsed.filledFieldCount) return null
+
+    return {
+      savedAt: parsed.savedAt,
+      summary,
+      filledFieldCount: parsed.filledFieldCount,
+      localOnly: true,
+      externalActionsExecuted: false,
+      queueMutations: false,
+      fileMutations: false,
+      sideEffectBoundary: 'local-draft-only',
+    }
+  } catch {
+    return null
   }
 }
 
@@ -1163,12 +1243,17 @@ export function readGenerationBriefDraft(storage: StorageLike | null = getBrowse
   }
 }
 
-export function saveGenerationBriefDraft(draft: GenerationBriefDraft, storage: StorageLike | null = getBrowserStorage()) {
+export function saveGenerationBriefDraft(
+  draft: GenerationBriefDraft,
+  storage: StorageLike | null = getBrowserStorage(),
+  savedAt = new Date().toISOString(),
+) {
   const normalizedDraft = normalizeGenerationBriefDraft(draft)
 
   if (storage) {
     try {
       storage.setItem(GENERATION_BRIEF_STORAGE_KEY, JSON.stringify(normalizedDraft))
+      storage.setItem(GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY, JSON.stringify(buildGenerationBriefSaveMetadata(normalizedDraft, savedAt)))
     } catch {
       // Storage can be blocked in private, embedded, or policy-restricted contexts.
     }
@@ -1181,6 +1266,7 @@ export function clearGenerationBriefDraft(storage: StorageLike | null = getBrows
   if (storage) {
     try {
       storage.removeItem(GENERATION_BRIEF_STORAGE_KEY)
+      storage.removeItem(GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY)
     } catch {
       // Storage cleanup can be blocked in private, embedded, or policy-restricted contexts.
     }

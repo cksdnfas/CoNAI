@@ -30,6 +30,7 @@ import {
   parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
   readGenerationBriefRecoveryCheckpoint,
+  readGenerationBriefSaveMetadata,
   saveGenerationBriefDraft,
   saveGenerationBriefRecoveryCheckpoint,
   serializeGenerationBriefHandoffPayload,
@@ -44,6 +45,7 @@ import {
   type GenerationBriefReadinessGateItemStatus,
   type GenerationBriefReadinessGateStatus,
   type GenerationBriefRecoveryCheckpoint,
+  type GenerationBriefSaveMetadata,
   type GenerationBriefTarget,
 } from '../generation-brief-workspace'
 
@@ -163,6 +165,12 @@ function getRecoveryCheckpointReasonLabel(reason: GenerationBriefRecoveryCheckpo
   return { ko: '초기화 전 초안', en: 'Before reset' }
 }
 
+function getSaveMetadataStatusLabel(status: GenerationBriefSaveMetadata['summary']['status']) {
+  if (status === 'review-ready') return { ko: '검토 준비', en: 'Review ready' }
+  if (status === 'drafting') return { ko: '작성 중', en: 'Drafting' }
+  return { ko: '빈 브리프', en: 'Empty brief' }
+}
+
 function appendGenerationBriefNote(current: string, next: string) {
   const currentText = current.trim()
   const nextText = next.trim()
@@ -191,6 +199,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       : storedDraft
   })
   const [recoveryCheckpoint, setRecoveryCheckpoint] = useState<GenerationBriefRecoveryCheckpoint | null>(() => readGenerationBriefRecoveryCheckpoint())
+  const [saveMetadata, setSaveMetadata] = useState<GenerationBriefSaveMetadata | null>(() => readGenerationBriefSaveMetadata())
   const [importPayload, setImportPayload] = useState('')
   const [selectedImportFields, setSelectedImportFields] = useState<Array<keyof GenerationBriefDraft>>([])
   const importPreview = useMemo(() => {
@@ -241,17 +250,25 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const showNaiReuseCards = activeTarget === 'novelai' || draft.target === 'novelai'
   const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
 
+  const persistGenerationBriefDraft = (nextDraft: GenerationBriefDraft) => {
+    const savedDraft = saveGenerationBriefDraft(nextDraft)
+    setSaveMetadata(readGenerationBriefSaveMetadata())
+    return savedDraft
+  }
+
   const updateDraft = (patch: Partial<GenerationBriefDraft>) => {
-    setDraft((current) => {
-      const next = { ...current, ...patch }
-      saveGenerationBriefDraft(next)
-      return next
-    })
+    setDraft(persistGenerationBriefDraft({ ...draft, ...patch }))
+  }
+
+  const saveCurrentDraft = () => {
+    setDraft(persistGenerationBriefDraft(draft))
+    showSnackbar({ message: t({ ko: '로컬 저장 상태를 갱신했어.', en: 'Updated the local save status.' }), tone: 'info' })
   }
 
   const resetDraft = () => {
     setRecoveryCheckpoint(saveGenerationBriefRecoveryCheckpoint(draft, 'reset'))
     setDraft(clearGenerationBriefDraft())
+    setSaveMetadata(readGenerationBriefSaveMetadata())
     showSnackbar({ message: t({ ko: '이전 초안을 복구 체크포인트로 남기고 브리프를 초기화했어.', en: 'Reset the brief after saving the previous draft as a recovery checkpoint.' }), tone: 'info' })
   }
 
@@ -260,7 +277,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       return
     }
 
-    const restoredDraft = saveGenerationBriefDraft(recoveryCheckpoint.draft)
+    const restoredDraft = persistGenerationBriefDraft(recoveryCheckpoint.draft)
     clearGenerationBriefRecoveryCheckpoint()
     setRecoveryCheckpoint(null)
     setDraft(restoredDraft)
@@ -272,14 +289,11 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       return
     }
 
-    setDraft((current) => {
-      const next = saveGenerationBriefDraft({
-        ...current,
-        target: 'novelai',
-        reusableAssets: appendGenerationBriefNote(current.reusableAssets, naiReuseText),
-      })
-      return next
-    })
+    setDraft(persistGenerationBriefDraft({
+      ...draft,
+      target: 'novelai',
+      reusableAssets: appendGenerationBriefNote(draft.reusableAssets, naiReuseText),
+    }))
     showSnackbar({ message: t({ ko: 'NAI 재사용 카드를 브리프에 추가했어.', en: 'Added NAI reuse cards to the brief.' }), tone: 'info' })
   }
 
@@ -288,14 +302,11 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       return
     }
 
-    setDraft((current) => {
-      const next = saveGenerationBriefDraft({
-        ...current,
-        target: 'comfyui',
-        reusableAssets: appendGenerationBriefNote(current.reusableAssets, comfyCompatibilityText),
-      })
-      return next
-    })
+    setDraft(persistGenerationBriefDraft({
+      ...draft,
+      target: 'comfyui',
+      reusableAssets: appendGenerationBriefNote(draft.reusableAssets, comfyCompatibilityText),
+    }))
     showSnackbar({ message: t({ ko: 'Comfy 호환성 요약을 브리프에 추가했어.', en: 'Added the Comfy compatibility summary to the brief.' }), tone: 'info' })
   }
 
@@ -304,14 +315,11 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       return
     }
 
-    setDraft((current) => {
-      const next = saveGenerationBriefDraft({
-        ...current,
-        target: iterationHandoffSnapshot.target,
-        sourceReferences: appendGenerationBriefNote(current.sourceReferences, iterationHandoffText),
-      })
-      return next
-    })
+    setDraft(persistGenerationBriefDraft({
+      ...draft,
+      target: iterationHandoffSnapshot.target,
+      sourceReferences: appendGenerationBriefNote(draft.sourceReferences, iterationHandoffText),
+    }))
     showSnackbar({ message: t({ ko: '반복 핸드오프 패킷을 브리프에 추가했어.', en: 'Added the iteration handoff packet to the brief.' }), tone: 'info' })
   }
 
@@ -367,7 +375,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
 
     const nextDraft = buildGenerationBriefSelectiveImportDraft(draft, importPreview.draft, selectedImportFields)
     setRecoveryCheckpoint(saveGenerationBriefRecoveryCheckpoint(draft, 'import-restore'))
-    const importedDraft = saveGenerationBriefDraft(nextDraft)
+    const importedDraft = persistGenerationBriefDraft(nextDraft)
     setDraft(importedDraft)
     setImportPayload('')
     showSnackbar({ message: t({ ko: '선택한 필드만 로컬 초안으로 복원했어.', en: 'Restored the selected fields into the local draft.' }), tone: 'info' })
@@ -392,7 +400,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
         <>
           <Badge variant={getSummaryStatusTone(summary.status)}>{statusLabel}</Badge>
           <Badge variant="outline">{t({ ko: 'local draft only', en: 'local draft only' })}</Badge>
-          <Button type="button" size="sm" variant="secondary" onClick={() => saveGenerationBriefDraft(draft)}>
+          <Button type="button" size="sm" variant="secondary" onClick={saveCurrentDraft}>
             <Save className="h-4 w-4" />
             {t({ ko: '로컬 저장', en: 'Save local' })}
           </Button>
@@ -598,6 +606,31 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 { count: summary.filledFieldCount, missing: summary.missingFields.length, boundary: summary.sideEffectBoundary },
               )}
             </div>
+          </PageInset>
+
+          <PageInset data-generation-brief-save-status="true" className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">{t({ ko: '로컬 저장 상태', en: 'Local save status' })}</span>
+              <Badge variant="outline">{t({ ko: 'browser storage', en: 'browser storage' })}</Badge>
+            </div>
+            {saveMetadata ? (
+              <div className="grid gap-1 text-xs leading-5 text-muted-foreground">
+                <span data-generation-brief-saved-at="true">{t({ ko: '저장 시각', en: 'Saved at' })}: {saveMetadata.savedAt}</span>
+                <span>
+                  {t(
+                    { ko: '저장된 상태 {status} · 작성 {count}/5', en: 'Saved status {status} · filled {count}/5' },
+                    { status: t(getSaveMetadataStatusLabel(saveMetadata.summary.status)), count: saveMetadata.filledFieldCount },
+                  )}
+                </span>
+                <span data-generation-brief-save-boundary="true">
+                  {t({ ko: '경계', en: 'Boundary' })}: {saveMetadata.sideEffectBoundary} · {t({ ko: '외부 실행', en: 'External actions' })}: {String(saveMetadata.externalActionsExecuted)}
+                </span>
+              </div>
+            ) : (
+              <p data-generation-brief-save-empty="true" className="text-xs leading-5 text-muted-foreground">
+                {t({ ko: '아직 로컬 저장 증거가 없어. 입력하거나 로컬 저장을 누르면 브라우저 안에 저장 시각과 local-only 경계를 남겨.', en: 'No local save evidence yet. Editing or pressing Save local records the saved time and local-only boundary in the browser.' })}
+              </p>
+            )}
           </PageInset>
 
           <PageInset data-generation-brief-recovery-checkpoint="true" className="space-y-3 text-sm">
