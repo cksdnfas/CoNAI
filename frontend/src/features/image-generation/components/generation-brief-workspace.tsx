@@ -14,6 +14,7 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefImportDiff,
   buildGenerationBriefIterationHandoffCards,
   buildGenerationBriefIterationHandoffText,
   buildGenerationBriefNaiReusableAssetsText,
@@ -29,6 +30,7 @@ import {
   type GenerationBriefComfyCompatibilityCardStatus,
   type GenerationBriefComfyCompatibilitySnapshot,
   type GenerationBriefDraft,
+  type GenerationBriefImportDiffFieldStatus,
   type GenerationBriefIterationHandoffCardStatus,
   type GenerationBriefIterationHandoffSnapshot,
   type GenerationBriefNaiReuseCardStatus,
@@ -136,6 +138,19 @@ function getImportRejectionLabel(reason: 'empty' | 'invalid-json' | 'invalid-sch
   return { ko: '비어 있음', en: 'Empty' }
 }
 
+function getImportDiffStatusLabel(status: GenerationBriefImportDiffFieldStatus) {
+  if (status === 'filled') return { ko: '추가', en: 'Fills empty' }
+  if (status === 'cleared') return { ko: '비움', en: 'Clears current' }
+  if (status === 'changed') return { ko: '변경', en: 'Changes' }
+  return { ko: '유지', en: 'Unchanged' }
+}
+
+function getImportDiffStatusTone(status: GenerationBriefImportDiffFieldStatus) {
+  if (status === 'unchanged') return 'outline'
+  if (status === 'cleared') return 'outline'
+  return 'secondary'
+}
+
 function appendGenerationBriefNote(current: string, next: string) {
   const currentText = current.trim()
   const nextText = next.trim()
@@ -176,6 +191,11 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const importPreviewTargetLabel = importPreview?.status === 'imported'
     ? TARGET_OPTIONS.find((option) => option.value === importPreview.draft.target)?.label ?? { ko: importPreview.draft.target, en: importPreview.draft.target }
     : null
+  const importPreviewDiff = useMemo(() => (
+    importPreview?.status === 'imported'
+      ? buildGenerationBriefImportDiff(draft, importPreview.draft)
+      : null
+  ), [draft, importPreview])
   const summary = useMemo(() => buildGenerationBriefReviewSummary(draft), [draft])
   const naiReuseCards = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReuseCards(naiReuseSnapshot) : []), [naiReuseSnapshot])
   const naiReuseText = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot) : ''), [naiReuseSnapshot])
@@ -587,7 +607,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
             </label>
             {importPayload.trim() ? (
               <PageInset data-generation-brief-import-preview="true" className="space-y-2 border-dashed text-xs">
-                {importPreview?.status === 'imported' && importPreviewReadinessGate && importPreviewTargetLabel ? (
+                {importPreview?.status === 'imported' && importPreviewReadinessGate && importPreviewTargetLabel && importPreviewDiff ? (
                   <>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-semibold text-foreground">{t({ ko: '가져오기 미리보기', en: 'Import preview' })}</span>
@@ -614,6 +634,38 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                         )}
                       </span>
                       <span>{t({ ko: '경계', en: 'Boundary' })}: {importPreview.summary.sideEffectBoundary}</span>
+                    </div>
+                    <div data-generation-brief-import-diff="true" className="space-y-2 rounded-sm border border-border/70 bg-surface-container/35 p-2">
+                      <div className="font-medium text-foreground">
+                        {t(
+                          { ko: '덮어쓰기 변경 {changed}/5 · 유지 {unchanged} · 추가 {filled} · 비움 {cleared}', en: 'Overwrite changes {changed}/5 · unchanged {unchanged} · fills {filled} · clears {cleared}' },
+                          {
+                            changed: importPreviewDiff.changedCount,
+                            unchanged: importPreviewDiff.unchangedCount,
+                            filled: importPreviewDiff.filledCount,
+                            cleared: importPreviewDiff.clearedCount,
+                          },
+                        )}
+                      </div>
+                      <div className="grid gap-1">
+                        {importPreviewDiff.fields.filter((field) => field.status !== 'unchanged').map((field) => (
+                          <div key={field.field} data-generation-brief-import-diff-field={field.field} className="rounded-sm border border-border/60 bg-background/60 p-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-medium text-foreground">{field.label}</span>
+                              <Badge variant={getImportDiffStatusTone(field.status)}>{t(getImportDiffStatusLabel(field.status))}</Badge>
+                            </div>
+                            <div className="mt-1 grid gap-1 text-muted-foreground">
+                              <span>{t({ ko: '현재', en: 'Current' })}: {field.currentPreview}</span>
+                              <span>{t({ ko: '가져올 값', en: 'Incoming' })}: {field.importedPreview}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {importPreviewDiff.changedCount === 0 ? (
+                        <div data-generation-brief-import-diff-empty="true" className="text-muted-foreground">
+                          {t({ ko: '현재 초안과 같은 내용이야. 복원해도 필드 값은 바뀌지 않아.', en: 'This matches the current draft. Restoring will not change field values.' })}
+                        </div>
+                      ) : null}
                     </div>
                   </>
                 ) : (

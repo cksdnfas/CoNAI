@@ -49,6 +49,27 @@ export type GenerationBriefImportResult =
     reason: 'empty' | 'invalid-json' | 'invalid-schema' | 'unsafe-boundary'
   }
 
+export type GenerationBriefImportDiffFieldStatus = 'unchanged' | 'changed' | 'filled' | 'cleared'
+
+export type GenerationBriefImportDiffField = {
+  field: keyof GenerationBriefDraft
+  label: string
+  status: GenerationBriefImportDiffFieldStatus
+  currentPreview: string
+  importedPreview: string
+}
+
+export type GenerationBriefImportDiff = {
+  changedCount: number
+  unchangedCount: number
+  filledCount: number
+  clearedCount: number
+  fields: GenerationBriefImportDiffField[]
+  localOnly: true
+  externalActionsExecuted: false
+  sideEffectBoundary: 'local-draft-only'
+}
+
 export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready' | 'unavailable' | 'error'
 export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
 export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
@@ -384,6 +405,49 @@ export function buildGenerationBriefReviewSummary(draft: GenerationBriefDraft): 
     status,
     filledFieldCount,
     missingFields,
+    localOnly: true,
+    externalActionsExecuted: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+function getGenerationBriefImportDiffStatus(
+  currentDraft: GenerationBriefDraft,
+  importedDraft: GenerationBriefDraft,
+  field: keyof GenerationBriefDraft,
+): GenerationBriefImportDiffFieldStatus {
+  const currentValue = currentDraft[field]
+  const importedValue = importedDraft[field]
+
+  if (currentValue === importedValue) return 'unchanged'
+  if (!hasUsefulDraftValue(currentDraft, field) && hasUsefulDraftValue(importedDraft, field)) return 'filled'
+  if (hasUsefulDraftValue(currentDraft, field) && !hasUsefulDraftValue(importedDraft, field)) return 'cleared'
+  return 'changed'
+}
+
+function formatGenerationBriefImportDiffPreview(draft: GenerationBriefDraft, field: keyof GenerationBriefDraft) {
+  if (field === 'target') return draft.target
+  return trimForReuseEvidence(draft[field], 'empty')
+}
+
+/** Compare the current local brief against an imported handoff before replacing local draft state. */
+export function buildGenerationBriefImportDiff(currentDraft: GenerationBriefDraft, importedDraft: GenerationBriefDraft): GenerationBriefImportDiff {
+  const current = normalizeGenerationBriefDraft(currentDraft)
+  const imported = normalizeGenerationBriefDraft(importedDraft)
+  const fields = GENERATION_BRIEF_FIELDS.map((field) => ({
+    field,
+    label: GENERATION_BRIEF_FIELD_LABELS[field],
+    status: getGenerationBriefImportDiffStatus(current, imported, field),
+    currentPreview: formatGenerationBriefImportDiffPreview(current, field),
+    importedPreview: formatGenerationBriefImportDiffPreview(imported, field),
+  }))
+
+  return {
+    changedCount: fields.filter((field) => field.status !== 'unchanged').length,
+    unchangedCount: fields.filter((field) => field.status === 'unchanged').length,
+    filledCount: fields.filter((field) => field.status === 'filled').length,
+    clearedCount: fields.filter((field) => field.status === 'cleared').length,
+    fields,
     localOnly: true,
     externalActionsExecuted: false,
     sideEffectBoundary: 'local-draft-only',

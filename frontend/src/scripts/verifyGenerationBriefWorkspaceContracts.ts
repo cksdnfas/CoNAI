@@ -5,6 +5,7 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefImportDiff,
   buildGenerationBriefIterationHandoffCards,
   buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord,
   buildGenerationBriefIterationHandoffText,
@@ -265,6 +266,17 @@ if (importedPayload.status === 'imported') {
   equal(importedReadinessGate.sideEffectBoundary, 'local-draft-only', 'import preview should preserve the local-only boundary')
 }
 
+const importDiff = buildGenerationBriefImportDiff({ ...DEFAULT_GENERATION_BRIEF_DRAFT, reviewNotes: 'keep this local note' }, readyDraft)
+equal(importDiff.changedCount, 5, 'import diff should count every field that would be overwritten')
+equal(importDiff.filledCount, 4, 'import diff should distinguish fields filled from empty current values')
+equal(importDiff.clearedCount, 0, 'import diff should not report clears for a fully populated incoming draft')
+equal(importDiff.fields.find((field) => field.field === 'reviewNotes')?.status, 'changed', 'import diff should flag useful current notes that would change')
+equal(importDiff.sideEffectBoundary, 'local-draft-only', 'import diff should keep the local-only boundary')
+
+const clearingImportDiff = buildGenerationBriefImportDiff(readyDraft, { ...readyDraft, reusableAssets: '', reviewNotes: '' })
+equal(clearingImportDiff.clearedCount, 2, 'import diff should flag current populated fields that the import would clear')
+equal(clearingImportDiff.fields.find((field) => field.field === 'reusableAssets')?.status, 'cleared', 'import diff should mark reusable asset replacement as a clear')
+
 equal(parseGenerationBriefHandoffPayload('').status, 'rejected', 'empty imports should be rejected')
 equal(parseGenerationBriefHandoffPayload('{not-json').status, 'rejected', 'invalid JSON imports should be rejected')
 equal(parseGenerationBriefHandoffPayload(JSON.stringify({ schema: 'other', draft: readyDraft })).status, 'rejected', 'unknown handoff schemas should be rejected')
@@ -314,6 +326,9 @@ ok(componentSource.includes('data-generation-brief-export-json="true"'), 'brief 
 ok(componentSource.includes('data-generation-brief-import-payload="true"'), 'brief UI should expose JSON import input')
 ok(componentSource.includes('data-generation-brief-import-preview="true"'), 'brief UI should preview valid imports before restoring the draft')
 ok(componentSource.includes('data-generation-brief-import-preview-summary="true"'), 'brief UI should expose import preview readiness counts')
+ok(componentSource.includes('data-generation-brief-import-diff="true"'), 'brief UI should expose the import overwrite diff summary')
+ok(componentSource.includes('data-generation-brief-import-diff-field'), 'brief UI should expose field-level import overwrite changes')
+ok(componentSource.includes('buildGenerationBriefImportDiff'), 'brief UI should compare incoming handoffs against the current local draft')
 ok(componentSource.includes('data-generation-brief-import-preview-error="true"'), 'brief UI should show unsafe or invalid import reasons without applying drafts')
 ok(componentSource.includes('disabled={importPreview?.status !== \'imported\'}'), 'brief UI should disable restore until the pasted handoff parses as safe')
 ok(componentSource.includes('data-generation-brief-import-apply="true"'), 'brief UI should expose import apply action')
