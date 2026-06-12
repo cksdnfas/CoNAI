@@ -2,6 +2,8 @@ import { deepEqual, equal, ok } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  buildGenerationBriefComfyCompatibilityCards,
+  buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefNaiReusableAssetsText,
   buildGenerationBriefNaiReuseCards,
@@ -16,10 +18,12 @@ import {
   readGenerationBriefDraft,
   saveGenerationBriefDraft,
   serializeGenerationBriefHandoffPayload,
+  type GenerationBriefComfyCompatibilitySnapshot,
   type GenerationBriefDraft,
   type GenerationBriefNaiReuseSnapshot,
 } from '../features/image-generation/generation-brief-workspace'
 import { DEFAULT_NAI_FORM } from '../features/image-generation/image-generation-shared'
+import type { ComfyUIServer, WorkflowMarkedField } from '../lib/api-image-generation-types'
 
 const root = process.cwd()
 const pageSource = readFileSync(join(root, 'src/features/image-generation/image-generation-page.tsx'), 'utf8')
@@ -107,6 +111,79 @@ ok(naiReusableAssetsText.includes('External actions executed: false'), 'NAI reus
 ok(naiReusableAssetsText.includes('NAI Diffusion 4.5 Curated'), 'NAI reusable text should include readable model context')
 ok(!naiReusableAssetsText.includes('data:image'), 'NAI reusable text must not copy image data URLs into the brief')
 
+const comfyWorkflowFields: WorkflowMarkedField[] = [
+  {
+    id: 'prompt',
+    label: 'Prompt',
+    jsonPath: '$.6.inputs.text',
+    type: 'textarea',
+    required: true,
+  },
+  {
+    id: 'seed',
+    label: 'Seed',
+    jsonPath: '$.3.inputs.seed',
+    type: 'number',
+    required: true,
+  },
+  {
+    id: 'reference_image',
+    label: 'Reference image',
+    jsonPath: '$.12.inputs.image',
+    type: 'image',
+  },
+]
+const comfyServers: ComfyUIServer[] = [
+  {
+    id: 2,
+    name: 'Studio GPU',
+    endpoint: 'http://127.0.0.1:8188',
+    backend_type: 'comfyui',
+    capacity: 1,
+    routing_tags: ['portrait', 'render'],
+    is_active: true,
+    is_default: true,
+  },
+]
+const comfyCompatibilitySnapshot: GenerationBriefComfyCompatibilitySnapshot = {
+  workflowId: 7,
+  workflowName: 'Studio portrait workflow',
+  workflowDescription: 'Portrait workflow with prompt, seed, and optional reference image.',
+  workflowFields: comfyWorkflowFields,
+  workflowDraft: {
+    prompt: ['masterpiece portrait', 'rim light'],
+    seed: '',
+    reference_image: { fileName: 'pose-reference.png', dataUrl: 'data:image/png;base64,COMFYSECRET' },
+  },
+  selectedTarget: 'server:2',
+  servers: comfyServers,
+  serverTests: {
+    2: {
+      isLoading: false,
+      status: {
+        server_id: 2,
+        server_name: 'Studio GPU',
+        endpoint: 'http://127.0.0.1:8188',
+        is_connected: true,
+        is_idle: true,
+      },
+    },
+  },
+}
+const comfyCompatibilityCards = buildGenerationBriefComfyCompatibilityCards(comfyCompatibilitySnapshot)
+equal(comfyCompatibilityCards.length, 5, 'Comfy compatibility builder should expose every planned context category')
+ok(comfyCompatibilityCards.some((card) => card.kind === 'workflow' && card.evidence.some((item) => item.includes('Workflow ID: 7'))), 'Comfy cards should include workflow identity evidence')
+ok(comfyCompatibilityCards.some((card) => card.kind === 'target' && card.summary.includes('Studio GPU')), 'Comfy cards should include selected server context')
+ok(comfyCompatibilityCards.some((card) => card.kind === 'expected-inputs' && card.evidence.some((item) => item.includes('Prompt: textarea'))), 'Comfy cards should include marked-field input context')
+ok(comfyCompatibilityCards.some((card) => card.kind === 'missing-data' && card.evidence.some((item) => item.includes('Missing required inputs: Seed'))), 'Comfy cards should warn about missing required draft values')
+const comfyCompatibilityText = buildGenerationBriefComfyCompatibilityText(comfyCompatibilitySnapshot)
+ok(comfyCompatibilityText.includes('Comfy workflow compatibility summary'), 'Comfy reusable text should have a clear summary heading')
+ok(comfyCompatibilityText.includes('Studio portrait workflow'), 'Comfy reusable text should include selected workflow context')
+ok(comfyCompatibilityText.includes('Prompt: textarea · required · masterpiece portrait, rim light'), 'Comfy reusable text should include joined textarea draft evidence')
+ok(comfyCompatibilityText.includes('Reference image: image · image: pose-reference.png'), 'Comfy reusable text should include image file-name evidence only')
+ok(comfyCompatibilityText.includes('Queue mutations: false'), 'Comfy reusable text should preserve the no-queue-mutation boundary')
+ok(!comfyCompatibilityText.includes('data:image'), 'Comfy reusable text must not copy image data URLs into the brief')
+
 const exportedAt = '2026-06-12T01:02:03.000Z'
 const serializedPayload = serializeGenerationBriefHandoffPayload(readyDraft, exportedAt)
 const rawPayload = JSON.parse(serializedPayload) as Record<string, unknown>
@@ -150,8 +227,13 @@ ok(componentSource.includes('data-generation-brief-handoff="true"'), 'brief UI s
 ok(componentSource.includes('data-generation-brief-nai-reuse-cards="true"'), 'brief UI should expose NAI reuse card surface')
 ok(componentSource.includes('data-generation-brief-nai-reuse-card'), 'brief UI should expose individual NAI reuse cards')
 ok(componentSource.includes('data-generation-brief-nai-reuse-apply="true"'), 'brief UI should allow copying NAI reuse evidence into the local brief')
+ok(componentSource.includes('data-generation-brief-comfy-compatibility-summary="true"'), 'brief UI should expose Comfy compatibility summary surface')
+ok(componentSource.includes('data-generation-brief-comfy-compatibility-card'), 'brief UI should expose individual Comfy compatibility cards')
+ok(componentSource.includes('data-generation-brief-comfy-compatibility-apply="true"'), 'brief UI should allow copying Comfy compatibility evidence into the local brief')
 ok(pageSource.includes('naiReuseSnapshot'), 'image generation page should pass NAI reuse context into the brief workspace')
+ok(pageSource.includes('comfyCompatibilitySnapshot'), 'image generation page should pass Comfy compatibility context into the brief workspace')
 ok(panelSource.includes('onReuseSnapshotChange'), 'NAI panel should publish its local reuse snapshot without queueing generation')
+ok(readFileSync(join(root, 'src/features/image-generation/components/comfy-generation-panel.tsx'), 'utf8').includes('onCompatibilitySnapshotChange'), 'Comfy panel should publish local compatibility snapshots without queueing generation')
 ok(componentSource.includes('data-generation-brief-copy-review="true"'), 'brief UI should expose copy-review affordance')
 ok(componentSource.includes('data-generation-brief-export-json="true"'), 'brief UI should expose JSON download affordance')
 ok(componentSource.includes('data-generation-brief-import-payload="true"'), 'brief UI should expose JSON import input')

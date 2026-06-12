@@ -11,6 +11,8 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
+  buildGenerationBriefComfyCompatibilityCards,
+  buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefNaiReusableAssetsText,
   buildGenerationBriefNaiReuseCards,
@@ -21,6 +23,8 @@ import {
   readGenerationBriefDraft,
   saveGenerationBriefDraft,
   serializeGenerationBriefHandoffPayload,
+  type GenerationBriefComfyCompatibilityCardStatus,
+  type GenerationBriefComfyCompatibilitySnapshot,
   type GenerationBriefDraft,
   type GenerationBriefNaiReuseCardStatus,
   type GenerationBriefNaiReuseSnapshot,
@@ -74,6 +78,17 @@ function getNaiReuseCardStatusTone(status: GenerationBriefNaiReuseCardStatus) {
   return 'outline'
 }
 
+function getComfyCompatibilityCardStatusLabel(status: GenerationBriefComfyCompatibilityCardStatus) {
+  if (status === 'ready') return { ko: '준비됨', en: 'Ready' }
+  if (status === 'warning') return { ko: '확인 필요', en: 'Review' }
+  return { ko: '비어 있음', en: 'Missing' }
+}
+
+function getComfyCompatibilityCardStatusTone(status: GenerationBriefComfyCompatibilityCardStatus) {
+  if (status === 'ready') return 'secondary'
+  return 'outline'
+}
+
 function appendGenerationBriefNote(current: string, next: string) {
   const currentText = current.trim()
   const nextText = next.trim()
@@ -87,9 +102,10 @@ function appendGenerationBriefNote(current: string, next: string) {
 interface GenerationBriefWorkspaceProps {
   activeTab: string
   naiReuseSnapshot?: GenerationBriefNaiReuseSnapshot | null
+  comfyCompatibilitySnapshot?: GenerationBriefComfyCompatibilitySnapshot | null
 }
 
-export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null }: GenerationBriefWorkspaceProps) {
+export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, comfyCompatibilitySnapshot = null }: GenerationBriefWorkspaceProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const activeTarget = getTargetFromActiveTab(activeTab)
@@ -104,7 +120,10 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null }:
   const reviewCopy = useMemo(() => buildGenerationBriefReviewCopy(draft), [draft])
   const naiReuseCards = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReuseCards(naiReuseSnapshot) : []), [naiReuseSnapshot])
   const naiReuseText = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot) : ''), [naiReuseSnapshot])
+  const comfyCompatibilityCards = useMemo(() => (comfyCompatibilitySnapshot ? buildGenerationBriefComfyCompatibilityCards(comfyCompatibilitySnapshot) : []), [comfyCompatibilitySnapshot])
+  const comfyCompatibilityText = useMemo(() => (comfyCompatibilitySnapshot ? buildGenerationBriefComfyCompatibilityText(comfyCompatibilitySnapshot) : ''), [comfyCompatibilitySnapshot])
   const showNaiReuseCards = activeTarget === 'novelai' || draft.target === 'novelai'
+  const showComfyCompatibilityCards = activeTarget === 'comfyui' || draft.target === 'comfyui'
 
   const updateDraft = (patch: Partial<GenerationBriefDraft>) => {
     setDraft((current) => {
@@ -132,6 +151,22 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null }:
       return next
     })
     showSnackbar({ message: t({ ko: 'NAI 재사용 카드를 브리프에 추가했어.', en: 'Added NAI reuse cards to the brief.' }), tone: 'info' })
+  }
+
+  const applyComfyCompatibilitySummary = () => {
+    if (!comfyCompatibilityText.trim()) {
+      return
+    }
+
+    setDraft((current) => {
+      const next = saveGenerationBriefDraft({
+        ...current,
+        target: 'comfyui',
+        reusableAssets: appendGenerationBriefNote(current.reusableAssets, comfyCompatibilityText),
+      })
+      return next
+    })
+    showSnackbar({ message: t({ ko: 'Comfy 호환성 요약을 브리프에 추가했어.', en: 'Added the Comfy compatibility summary to the brief.' }), tone: 'info' })
   }
 
   const copyReviewPacket = async () => {
@@ -294,6 +329,45 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null }:
               ) : (
                 <p data-generation-brief-nai-reuse-empty="true" className="text-xs leading-5 text-muted-foreground">
                   {t({ ko: 'NAI 편집기에서 현재 초안을 읽으면 프롬프트, 캐릭터 Reference, Vibe, 소스 이미지, 모델, 비용/상태 카드가 여기에 나타나.', en: 'When the NAI editor provides its current draft, prompt, character reference, Vibe, source image, model, and cost/status cards appear here.' })}
+                </p>
+              )}
+            </PageInset>
+          ) : null}
+
+          {showComfyCompatibilityCards ? (
+            <PageInset data-generation-brief-comfy-compatibility-summary="true" className="space-y-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-semibold text-foreground">
+                  <ClipboardList className="h-4 w-4 text-primary" />
+                  {t({ ko: 'Comfy 호환성 요약', en: 'Comfy compatibility summary' })}
+                </div>
+                <Badge variant="outline">{t({ ko: 'no execution', en: 'no execution' })}</Badge>
+              </div>
+              {comfyCompatibilityCards.length > 0 ? (
+                <>
+                  <div className="grid gap-2">
+                    {comfyCompatibilityCards.map((card) => (
+                      <div key={card.kind} data-generation-brief-comfy-compatibility-card={card.kind} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-medium text-foreground">{card.title}</div>
+                          <Badge variant={getComfyCompatibilityCardStatusTone(card.status)}>{t(getComfyCompatibilityCardStatusLabel(card.status))}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{card.summary}</p>
+                        <ul className="mt-2 space-y-1 text-xs leading-5 text-muted-foreground">
+                          {card.evidence.slice(0, 3).map((item) => (
+                            <li key={item} className="break-words">• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  <Button type="button" size="sm" variant="outline" data-generation-brief-comfy-compatibility-apply="true" onClick={applyComfyCompatibilitySummary}>
+                    {t({ ko: '브리프에 추가', en: 'Add to brief' })}
+                  </Button>
+                </>
+              ) : (
+                <p data-generation-brief-comfy-compatibility-empty="true" className="text-xs leading-5 text-muted-foreground">
+                  {t({ ko: 'Comfy 워크플로우를 선택하면 저장된 marked field, 선택 타겟, 서버 준비 상태, 누락 입력 경고가 provider 실행 없이 여기에 나타나.', en: 'Select a Comfy workflow to show saved marked fields, target choice, server readiness, and missing-input warnings here without executing a provider.' })}
                 </p>
               )}
             </PageInset>

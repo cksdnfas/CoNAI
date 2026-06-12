@@ -1,4 +1,12 @@
-import { NAI_MODEL_OPTIONS, type NAIFormDraft } from './image-generation-shared'
+import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import {
+  hasWorkflowFieldValue,
+  joinWorkflowPromptSegments,
+  NAI_MODEL_OPTIONS,
+  type ComfyUIServerTestState,
+  type NAIFormDraft,
+  type WorkflowFieldDraftValue,
+} from './image-generation-shared'
 
 export type GenerationBriefTarget = 'undecided' | 'novelai' | 'comfyui' | 'codex'
 
@@ -43,6 +51,7 @@ export type GenerationBriefImportResult =
 export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready' | 'unavailable' | 'error'
 export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
 export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
+export type GenerationBriefComfyCompatibilityCardStatus = 'ready' | 'missing' | 'warning'
 
 export type GenerationBriefNaiReuseSnapshot = {
   form: NAIFormDraft
@@ -61,6 +70,25 @@ export type GenerationBriefNaiReuseCard = {
   summary: string
   evidence: string[]
   status: GenerationBriefNaiReuseCardStatus
+}
+
+export type GenerationBriefComfyCompatibilitySnapshot = {
+  workflowId: number
+  workflowName: string
+  workflowDescription?: string | null
+  workflowFields: WorkflowMarkedField[]
+  workflowDraft: Record<string, WorkflowFieldDraftValue>
+  selectedTarget: string
+  servers: ComfyUIServer[]
+  serverTests: Record<number, ComfyUIServerTestState>
+}
+
+export type GenerationBriefComfyCompatibilityCard = {
+  kind: 'workflow' | 'target' | 'expected-inputs' | 'missing-data' | 'boundary'
+  title: string
+  summary: string
+  evidence: string[]
+  status: GenerationBriefComfyCompatibilityCardStatus
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
@@ -115,6 +143,119 @@ function hasReusableText(value: string) {
 
 function getImageFileEvidence(label: string, fileName?: string) {
   return `${label}: ${fileName?.trim() || 'not selected'}`
+}
+
+function isComfyWorkflowModalServer(server: ComfyUIServer, testState?: ComfyUIServerTestState) {
+  return server.backend_type === 'modal' || testState?.status?.backend_type === 'modal'
+}
+
+function isComfyWorkflowServerConnected(testState?: ComfyUIServerTestState) {
+  return testState?.status?.is_connected === true
+}
+
+function isComfyWorkflowServerRoutable(server: ComfyUIServer, testState?: ComfyUIServerTestState) {
+  return server.is_active !== false && (isComfyWorkflowModalServer(server, testState) || isComfyWorkflowServerConnected(testState))
+}
+
+function getComfyFieldTypeLabel(field: WorkflowMarkedField) {
+  return field.type === 'node' ? 'JSON node' : field.type
+}
+
+function formatComfyDraftValueForEvidence(field: WorkflowMarkedField, value: WorkflowFieldDraftValue | undefined) {
+  if (!hasWorkflowFieldValue(value)) {
+    if (field.default_value !== undefined && field.default_value !== null && String(field.default_value).trim().length > 0) {
+      return `default ${trimForReuseEvidence(String(field.default_value))}`
+    }
+    return 'not filled'
+  }
+
+  if (Array.isArray(value)) {
+    return trimForReuseEvidence(joinWorkflowPromptSegments(value))
+  }
+
+  if (typeof value === 'string') {
+    return trimForReuseEvidence(value)
+  }
+
+  if (!value) {
+    return 'not filled'
+  }
+
+  if ('fileName' in value && typeof value.fileName === 'string') {
+    return getImageFileEvidence('image', value.fileName)
+  }
+
+  const keys = Object.keys(value)
+  return keys.length > 0 ? `JSON object with ${keys.length} key(s)` : 'empty JSON object'
+}
+
+function describeComfyServerStatus(server: ComfyUIServer, testState?: ComfyUIServerTestState) {
+  if (isComfyWorkflowModalServer(server, testState)) return 'Modal backend; called only when generation is explicitly queued'
+  if (testState?.status?.is_connected === true) {
+    const running = testState.status.running_count ?? 0
+    const pending = testState.status.pending_count ?? 0
+    return testState.status.is_idle ? 'connected and idle' : `connected; running ${running}, pending ${pending}`
+  }
+  if (testState?.status) return `not connected${testState.status.error_message ? `: ${testState.status.error_message}` : ''}`
+  return 'not tested in this local session'
+}
+
+function describeComfyTarget(snapshot: GenerationBriefComfyCompatibilitySnapshot) {
+  const { selectedTarget, servers, serverTests } = snapshot
+  const activeServers = servers.filter((server) => server.is_active !== false)
+  const routableServers = activeServers.filter((server) => isComfyWorkflowServerRoutable(server, serverTests[server.id]))
+
+  if (selectedTarget === 'auto') {
+    const connectedRegularServers = activeServers.filter((server) => !isComfyWorkflowModalServer(server, serverTests[server.id]) && isComfyWorkflowServerConnected(serverTests[server.id]))
+    return {
+      label: 'Auto routing',
+      summary: connectedRegularServers.length > 0
+        ? `${connectedRegularServers.length} connected regular server(s) can receive an explicit queue request later.`
+        : 'Auto routing has no connected regular server in the current local evidence.',
+      warning: connectedRegularServers.length === 0,
+    }
+  }
+
+  if (selectedTarget.startsWith('tag:')) {
+    const tag = selectedTarget.slice('tag:'.length)
+    const taggedServers = activeServers.filter((server) => server.routing_tags?.includes(tag))
+    const taggedRoutableServers = taggedServers.filter((server) => isComfyWorkflowServerRoutable(server, serverTests[server.id]))
+    return {
+      label: `Tag #${tag}`,
+      summary: taggedRoutableServers.length > 0
+        ? `${taggedRoutableServers.length}/${taggedServers.length} tagged server(s) look routable for a later explicit run.`
+        : `No routable server is available for #${tag} in the current local evidence.`,
+      warning: taggedRoutableServers.length === 0,
+    }
+  }
+
+  if (selectedTarget.startsWith('server:')) {
+    const serverId = Number(selectedTarget.slice('server:'.length))
+    const server = activeServers.find((item) => item.id === serverId)
+    if (!server) {
+      return {
+        label: `Server ${serverId}`,
+        summary: 'The selected server is not present in the active saved server list.',
+        warning: true,
+      }
+    }
+
+    const testState = serverTests[server.id]
+    const routable = isComfyWorkflowServerRoutable(server, testState)
+    return {
+      label: server.name,
+      summary: `${server.backend_type}; ${describeComfyServerStatus(server, testState)}`,
+      warning: !routable,
+    }
+  }
+
+  return {
+    label: selectedTarget || 'No target selected',
+    summary: routableServers.length > 0
+      ? `${routableServers.length} saved server(s) look routable, but the selected target is not recognized.`
+      : 'No saved server looks routable and the selected target is not recognized.',
+    warning: true,
+  }
 }
 
 function getNaiCostEvidence(snapshot: GenerationBriefNaiReuseSnapshot) {
@@ -272,6 +413,97 @@ export function buildGenerationBriefNaiReusableAssetsText(snapshot: GenerationBr
     '- Boundary: local-draft-only',
     '- Local only: true',
     '- External actions executed: false',
+    ...cards.flatMap((card) => [
+      '',
+      `### ${card.title}`,
+      `- Status: ${card.status}`,
+      `- Summary: ${card.summary}`,
+      ...card.evidence.map((item) => `- ${item}`),
+    ]),
+  ].join('\n')
+}
+
+export function buildGenerationBriefComfyCompatibilityCards(snapshot: GenerationBriefComfyCompatibilitySnapshot): GenerationBriefComfyCompatibilityCard[] {
+  const fields = snapshot.workflowFields
+  const requiredFields = fields.filter((field) => field.required === true)
+  const missingRequiredFields = requiredFields.filter((field) => !hasWorkflowFieldValue(snapshot.workflowDraft[field.id]))
+  const targetContext = describeComfyTarget(snapshot)
+  const fieldEvidence = fields.length > 0
+    ? fields.slice(0, 8).map((field) => `${field.label || field.id}: ${getComfyFieldTypeLabel(field)}${field.required ? ' · required' : ''} · ${formatComfyDraftValueForEvidence(field, snapshot.workflowDraft[field.id])}`)
+    : ['No marked fields are saved for this workflow.']
+  const extraFieldCount = Math.max(0, fields.length - 8)
+  const missingEvidence = [
+    fields.length === 0 ? 'Workflow exposes no marked input fields.' : `Marked fields: ${fields.length}; required: ${requiredFields.length}; missing required: ${missingRequiredFields.length}`,
+    missingRequiredFields.length > 0
+      ? `Missing required inputs: ${missingRequiredFields.map((field) => field.label || field.id).join(', ')}`
+      : 'Required inputs are filled in the local draft evidence.',
+    targetContext.warning ? `Target warning: ${targetContext.summary}` : 'Target evidence has no local compatibility warning.',
+  ]
+
+  return [
+    {
+      kind: 'workflow',
+      title: 'Comfy workflow context',
+      summary: `${snapshot.workflowName} · ${fields.length} marked field(s) saved for review.`,
+      evidence: [
+        `Workflow ID: ${snapshot.workflowId}`,
+        `Description: ${trimForReuseEvidence(snapshot.workflowDescription ?? '', 'not set')}`,
+        `Marked fields: ${fields.length}`,
+      ],
+      status: fields.length > 0 ? 'ready' : 'missing',
+    },
+    {
+      kind: 'target',
+      title: 'Selected Comfy target',
+      summary: `${targetContext.label} · ${targetContext.summary}`,
+      evidence: [
+        `Selected target: ${snapshot.selectedTarget || 'not selected'}`,
+        `Saved active servers in view: ${snapshot.servers.filter((server) => server.is_active !== false).length}`,
+        targetContext.summary,
+      ],
+      status: targetContext.warning ? 'warning' : 'ready',
+    },
+    {
+      kind: 'expected-inputs',
+      title: 'Expected workflow inputs',
+      summary: fields.length > 0
+        ? `${fields.length} marked input(s) can be checked before a future run.`
+        : 'No marked workflow inputs are available to review.',
+      evidence: extraFieldCount > 0 ? [...fieldEvidence, `${extraFieldCount} more field(s) omitted from this compact card.`] : fieldEvidence,
+      status: fields.length > 0 ? 'ready' : 'missing',
+    },
+    {
+      kind: 'missing-data',
+      title: 'Missing data warnings',
+      summary: missingRequiredFields.length > 0 || targetContext.warning
+        ? 'Review required inputs or target readiness before queueing later.'
+        : 'The local draft has no required-input or target warning.',
+      evidence: missingEvidence,
+      status: missingRequiredFields.length > 0 || targetContext.warning ? 'warning' : 'ready',
+    },
+    {
+      kind: 'boundary',
+      title: 'Local compatibility boundary',
+      summary: 'This summary only reads local UI state and saved workflow/server context.',
+      evidence: [
+        'Boundary: local brief card only; no workflow execution is performed here.',
+        'External actions executed: false',
+        'Queue mutations: false',
+      ],
+      status: 'ready',
+    },
+  ]
+}
+
+export function buildGenerationBriefComfyCompatibilityText(snapshot: GenerationBriefComfyCompatibilitySnapshot) {
+  const cards = buildGenerationBriefComfyCompatibilityCards(snapshot)
+
+  return [
+    '## Comfy workflow compatibility summary',
+    '- Boundary: local-draft-only',
+    '- Local only: true',
+    '- External actions executed: false',
+    '- Queue mutations: false',
     ...cards.flatMap((card) => [
       '',
       `### ${card.title}`,
