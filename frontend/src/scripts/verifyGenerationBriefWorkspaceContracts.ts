@@ -260,6 +260,9 @@ equal(importedPayload.status, 'imported', 'valid handoff JSON should import')
 if (importedPayload.status === 'imported') {
   deepEqual(importedPayload.draft, readyDraft, 'valid handoff JSON should round-trip the normalized draft')
   equal(importedPayload.summary.status, 'review-ready', 'import should rebuild review summary locally')
+  const importedReadinessGate = buildGenerationBriefReadinessGate(importedPayload.draft)
+  equal(importedReadinessGate.status, 'ready', 'import preview should rebuild readiness status locally before restore')
+  equal(importedReadinessGate.sideEffectBoundary, 'local-draft-only', 'import preview should preserve the local-only boundary')
 }
 
 equal(parseGenerationBriefHandoffPayload('').status, 'rejected', 'empty imports should be rejected')
@@ -309,6 +312,10 @@ ok(readFileSync(join(root, 'src/features/image-generation/components/comfy-gener
 ok(componentSource.includes('data-generation-brief-copy-review="true"'), 'brief UI should expose copy-review affordance')
 ok(componentSource.includes('data-generation-brief-export-json="true"'), 'brief UI should expose JSON download affordance')
 ok(componentSource.includes('data-generation-brief-import-payload="true"'), 'brief UI should expose JSON import input')
+ok(componentSource.includes('data-generation-brief-import-preview="true"'), 'brief UI should preview valid imports before restoring the draft')
+ok(componentSource.includes('data-generation-brief-import-preview-summary="true"'), 'brief UI should expose import preview readiness counts')
+ok(componentSource.includes('data-generation-brief-import-preview-error="true"'), 'brief UI should show unsafe or invalid import reasons without applying drafts')
+ok(componentSource.includes('disabled={importPreview?.status !== \'imported\'}'), 'brief UI should disable restore until the pasted handoff parses as safe')
 ok(componentSource.includes('data-generation-brief-import-apply="true"'), 'brief UI should expose import apply action')
 ok(componentSource.includes('copyTextToClipboard'), 'brief handoff should support local copy review')
 ok(componentSource.includes('triggerBlobDownload'), 'brief handoff should support local browser JSON download')

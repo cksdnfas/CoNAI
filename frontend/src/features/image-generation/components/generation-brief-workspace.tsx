@@ -129,6 +129,13 @@ function getReadinessGateItemStatusTone(status: GenerationBriefReadinessGateItem
   return 'outline'
 }
 
+function getImportRejectionLabel(reason: 'empty' | 'invalid-json' | 'invalid-schema' | 'unsafe-boundary') {
+  if (reason === 'invalid-json') return { ko: 'JSON 형식 오류', en: 'Invalid JSON' }
+  if (reason === 'invalid-schema') return { ko: '지원하지 않는 스키마', en: 'Unsupported schema' }
+  if (reason === 'unsafe-boundary') return { ko: 'local-only 경계 불일치', en: 'Unsafe boundary' }
+  return { ko: '비어 있음', en: 'Empty' }
+}
+
 function appendGenerationBriefNote(current: string, next: string) {
   const currentText = current.trim()
   const nextText = next.trim()
@@ -157,6 +164,18 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       : storedDraft
   })
   const [importPayload, setImportPayload] = useState('')
+  const importPreview = useMemo(() => {
+    const trimmedPayload = importPayload.trim()
+    return trimmedPayload ? parseGenerationBriefHandoffPayload(trimmedPayload) : null
+  }, [importPayload])
+  const importPreviewReadinessGate = useMemo(() => (
+    importPreview?.status === 'imported'
+      ? buildGenerationBriefReadinessGate(importPreview.draft)
+      : null
+  ), [importPreview])
+  const importPreviewTargetLabel = importPreview?.status === 'imported'
+    ? TARGET_OPTIONS.find((option) => option.value === importPreview.draft.target)?.label ?? { ko: importPreview.draft.target, en: importPreview.draft.target }
+    : null
   const summary = useMemo(() => buildGenerationBriefReviewSummary(draft), [draft])
   const naiReuseCards = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReuseCards(naiReuseSnapshot) : []), [naiReuseSnapshot])
   const naiReuseText = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot) : ''), [naiReuseSnapshot])
@@ -259,9 +278,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   }
 
   const importHandoffPayload = () => {
-    const parsed = parseGenerationBriefHandoffPayload(importPayload)
-
-    if (parsed.status === 'rejected') {
+    if (importPreview?.status !== 'imported') {
       showSnackbar({
         message: t({ ko: '브리프 JSON을 가져오지 못했어. 스키마와 local-only 경계를 확인해줘.', en: 'Could not import the brief JSON. Check its schema and local-only boundary.' }),
         tone: 'error',
@@ -269,7 +286,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       return
     }
 
-    const importedDraft = saveGenerationBriefDraft(parsed.draft)
+    const importedDraft = saveGenerationBriefDraft(importPreview.draft)
     setDraft(importedDraft)
     setImportPayload('')
     showSnackbar({ message: t({ ko: '브리프를 로컬 초안으로 복원했어.', en: 'Restored the brief as a local draft.' }), tone: 'info' })
@@ -568,7 +585,51 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 placeholder={t({ ko: '내려받은 conai-generation-brief-*.json 내용을 붙여넣어.', en: 'Paste the downloaded conai-generation-brief-*.json contents.' })}
               />
             </label>
-            <Button type="button" size="sm" variant="outline" data-generation-brief-import-apply="true" disabled={!importPayload.trim()} onClick={importHandoffPayload}>
+            {importPayload.trim() ? (
+              <PageInset data-generation-brief-import-preview="true" className="space-y-2 border-dashed text-xs">
+                {importPreview?.status === 'imported' && importPreviewReadinessGate && importPreviewTargetLabel ? (
+                  <>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-foreground">{t({ ko: '가져오기 미리보기', en: 'Import preview' })}</span>
+                      <Badge variant={getSummaryStatusTone(importPreview.summary.status)}>
+                        {importPreview.summary.status === 'review-ready'
+                          ? t({ ko: '검토 준비', en: 'Review ready' })
+                          : importPreview.summary.status === 'drafting'
+                            ? t({ ko: '작성 중', en: 'Drafting' })
+                            : t({ ko: '빈 브리프', en: 'Empty brief' })}
+                      </Badge>
+                    </div>
+                    <div data-generation-brief-import-preview-summary="true" className="grid gap-1 leading-5 text-muted-foreground">
+                      <span>{t({ ko: '대상', en: 'Target' })}: {t(importPreviewTargetLabel)}</span>
+                      <span>{t({ ko: '준비 게이트', en: 'Readiness gate' })}: {t(getReadinessGateStatusLabel(importPreviewReadinessGate.status))}</span>
+                      <span>
+                        {t(
+                          { ko: '준비 {ready}/{total} · 누락 {missing} · 검토 {review}', en: 'Ready {ready}/{total} · missing {missing} · review {review}' },
+                          {
+                            ready: importPreviewReadinessGate.readyCount,
+                            total: importPreviewReadinessGate.itemCount,
+                            missing: importPreviewReadinessGate.missingCount,
+                            review: importPreviewReadinessGate.warningCount,
+                          },
+                        )}
+                      </span>
+                      <span>{t({ ko: '경계', en: 'Boundary' })}: {importPreview.summary.sideEffectBoundary}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div data-generation-brief-import-preview-error="true" className="space-y-1 text-muted-foreground">
+                    <div className="font-semibold text-foreground">{t({ ko: '가져오기 전 확인 필요', en: 'Import needs review' })}</div>
+                    <div>
+                      {t({ ko: '사유', en: 'Reason' })}: {importPreview?.status === 'rejected'
+                        ? t(getImportRejectionLabel(importPreview.reason))
+                        : t(getImportRejectionLabel('empty'))}
+                    </div>
+                    <div>{t({ ko: '현재 로컬 초안은 바꾸지 않았어.', en: 'The current local draft was not changed.' })}</div>
+                  </div>
+                )}
+              </PageInset>
+            ) : null}
+            <Button type="button" size="sm" variant="outline" data-generation-brief-import-apply="true" disabled={importPreview?.status !== 'imported'} onClick={importHandoffPayload}>
               {t({ ko: '로컬 초안으로 복원', en: 'Restore as local draft' })}
             </Button>
           </PageInset>
