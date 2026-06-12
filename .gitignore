@@ -152,3 +152,14 @@ shared/tsconfig.tsbuildinfo
 # Generated verification reports
 /docs/i18n-gap-report.json
 /docs/i18n-gap-report.md
+
+# Hermes Steward generated/tool artifacts
+# Keep analysis dumps and local Steward scratch out of commits.
+graphify-out/
+.graphify/
+.graphify_*.json
+.graphify*.json
+.hermes/tmp/
+coordinator/prompts/
+coordinator/worker-logs/
+worker-results/
