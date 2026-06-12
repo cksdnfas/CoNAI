@@ -49,7 +49,7 @@ export type GenerationBriefImportResult =
     reason: 'empty' | 'invalid-json' | 'invalid-schema' | 'unsafe-boundary'
   }
 
-export type GenerationBriefRecoveryReason = 'reset' | 'import-restore'
+export type GenerationBriefRecoveryReason = 'reset' | 'import-restore' | 'history-restore'
 
 export type GenerationBriefRecoveryCheckpoint = {
   createdAt: string
@@ -65,6 +65,22 @@ export type GenerationBriefRecoveryCheckpoint = {
 
 export type GenerationBriefSaveMetadata = {
   savedAt: string
+  summary: GenerationBriefReviewSummary
+  filledFieldCount: number
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+}
+
+export type GenerationBriefHistorySnapshotReason = 'manual-save'
+
+export type GenerationBriefHistorySnapshot = {
+  id: string
+  savedAt: string
+  reason: GenerationBriefHistorySnapshotReason
+  draft: GenerationBriefDraft
   summary: GenerationBriefReviewSummary
   filledFieldCount: number
   localOnly: true
@@ -215,6 +231,8 @@ type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 export const GENERATION_BRIEF_STORAGE_KEY = 'conai:image-generation:generation-brief-workspace:v1'
 export const GENERATION_BRIEF_RECOVERY_STORAGE_KEY = 'conai:image-generation:generation-brief-recovery:v1'
 export const GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY = 'conai:image-generation:generation-brief-save-metadata:v1'
+export const GENERATION_BRIEF_HISTORY_STORAGE_KEY = 'conai:image-generation:generation-brief-history:v1'
+export const GENERATION_BRIEF_HISTORY_LIMIT = 5
 export const GENERATION_BRIEF_HANDOFF_SCHEMA = 'conai.generation-brief.handoff.v1'
 
 export const DEFAULT_GENERATION_BRIEF_DRAFT: GenerationBriefDraft = {
@@ -508,6 +526,122 @@ export function readGenerationBriefSaveMetadata(storage: StorageLike | null = ge
   } catch {
     return null
   }
+}
+
+function isGenerationBriefHistorySnapshotReason(value: unknown): value is GenerationBriefHistorySnapshotReason {
+  return value === 'manual-save'
+}
+
+function buildGenerationBriefHistorySnapshotId(reason: GenerationBriefHistorySnapshotReason, savedAt: string) {
+  const safeTimestamp = savedAt.trim().replace(/[^0-9A-Za-z_.:-]/g, '-')
+  return `${reason}:${safeTimestamp || 'local'}`
+}
+
+export function buildGenerationBriefHistorySnapshot(
+  draft: GenerationBriefDraft,
+  reason: GenerationBriefHistorySnapshotReason = 'manual-save',
+  savedAt = new Date().toISOString(),
+): GenerationBriefHistorySnapshot {
+  const normalizedDraft = normalizeGenerationBriefDraft(draft)
+  const summary = buildGenerationBriefReviewSummary(normalizedDraft)
+
+  return {
+    id: buildGenerationBriefHistorySnapshotId(reason, savedAt),
+    savedAt,
+    reason,
+    draft: normalizedDraft,
+    summary,
+    filledFieldCount: summary.filledFieldCount,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+function parseGenerationBriefHistorySnapshot(value: unknown): GenerationBriefHistorySnapshot | null {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id.trim()) return null
+  if (typeof value.savedAt !== 'string' || !isGenerationBriefHistorySnapshotReason(value.reason)) return null
+  if (!isRecord(value.draft)) return null
+  if (value.localOnly !== true || value.externalActionsExecuted !== false || value.queueMutations !== false || value.fileMutations !== false || value.sideEffectBoundary !== 'local-draft-only') return null
+  if (typeof value.filledFieldCount !== 'number' || !Number.isInteger(value.filledFieldCount) || value.filledFieldCount < 0 || value.filledFieldCount > GENERATION_BRIEF_FIELDS.length) return null
+
+  const draft = normalizeGenerationBriefDraft(value.draft)
+  if (!hasAnyUsefulGenerationBriefDraftValue(draft)) return null
+  const parsedSummary = parseGenerationBriefReviewSummary(value.summary)
+  if (!parsedSummary || parsedSummary.filledFieldCount !== value.filledFieldCount) return null
+  const expectedSummary = buildGenerationBriefReviewSummary(draft)
+  if (parsedSummary.status !== expectedSummary.status || parsedSummary.filledFieldCount !== expectedSummary.filledFieldCount || parsedSummary.missingFields.length !== expectedSummary.missingFields.length) return null
+
+  return {
+    id: value.id,
+    savedAt: value.savedAt,
+    reason: value.reason,
+    draft,
+    summary: expectedSummary,
+    filledFieldCount: expectedSummary.filledFieldCount,
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+function normalizeGenerationBriefHistorySnapshots(value: unknown) {
+  if (!Array.isArray(value)) return []
+
+  const seen = new Set<string>()
+  return value
+    .map(parseGenerationBriefHistorySnapshot)
+    .filter((snapshot): snapshot is GenerationBriefHistorySnapshot => Boolean(snapshot))
+    .sort((left, right) => right.savedAt.localeCompare(left.savedAt))
+    .filter((snapshot) => {
+      if (seen.has(snapshot.id)) return false
+      seen.add(snapshot.id)
+      return true
+    })
+    .slice(0, GENERATION_BRIEF_HISTORY_LIMIT)
+}
+
+export function readGenerationBriefHistorySnapshots(storage: StorageLike | null = getBrowserStorage()): GenerationBriefHistorySnapshot[] {
+  if (!storage) return []
+
+  try {
+    const rawValue = storage.getItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY)
+    if (!rawValue) return []
+    return normalizeGenerationBriefHistorySnapshots(JSON.parse(rawValue) as unknown)
+  } catch {
+    return []
+  }
+}
+
+export function saveGenerationBriefHistorySnapshot(
+  draft: GenerationBriefDraft,
+  reason: GenerationBriefHistorySnapshotReason = 'manual-save',
+  storage: StorageLike | null = getBrowserStorage(),
+  savedAt = new Date().toISOString(),
+) {
+  const normalizedDraft = normalizeGenerationBriefDraft(draft)
+  const currentSnapshots = readGenerationBriefHistorySnapshots(storage)
+  if (!hasAnyUsefulGenerationBriefDraftValue(normalizedDraft)) return currentSnapshots
+
+  const snapshot = buildGenerationBriefHistorySnapshot(normalizedDraft, reason, savedAt)
+  const nextSnapshots = normalizeGenerationBriefHistorySnapshots([
+    snapshot,
+    ...currentSnapshots.filter((item) => item.id !== snapshot.id),
+  ])
+
+  if (storage) {
+    try {
+      storage.setItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY, JSON.stringify(nextSnapshots))
+    } catch {
+      // Storage can be blocked in private, embedded, or policy-restricted contexts.
+    }
+  }
+
+  return nextSnapshots
 }
 
 function getGenerationBriefImportDiffStatus(
@@ -1151,7 +1285,7 @@ function getBrowserStorage(): StorageLike | null {
 }
 
 function isGenerationBriefRecoveryReason(value: unknown): value is GenerationBriefRecoveryReason {
-  return value === 'reset' || value === 'import-restore'
+  return value === 'reset' || value === 'import-restore' || value === 'history-restore'
 }
 
 export function buildGenerationBriefRecoveryCheckpoint(

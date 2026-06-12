@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ClipboardCopy, ClipboardList, Download, FileUp, RotateCcw, Save } from 'lucide-react'
+import { ClipboardCopy, ClipboardList, Download, FileUp, History, RotateCcw, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,14 +29,17 @@ import {
   GENERATION_BRIEF_FIELDS,
   parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
+  readGenerationBriefHistorySnapshots,
   readGenerationBriefRecoveryCheckpoint,
   readGenerationBriefSaveMetadata,
   saveGenerationBriefDraft,
+  saveGenerationBriefHistorySnapshot,
   saveGenerationBriefRecoveryCheckpoint,
   serializeGenerationBriefHandoffPayload,
   type GenerationBriefComfyCompatibilityCardStatus,
   type GenerationBriefComfyCompatibilitySnapshot,
   type GenerationBriefDraft,
+  type GenerationBriefHistorySnapshot,
   type GenerationBriefImportDiffFieldStatus,
   type GenerationBriefIterationHandoffCardStatus,
   type GenerationBriefIterationHandoffSnapshot,
@@ -161,6 +164,7 @@ function getImportDiffStatusTone(status: GenerationBriefImportDiffFieldStatus) {
 }
 
 function getRecoveryCheckpointReasonLabel(reason: GenerationBriefRecoveryCheckpoint['reason']) {
+  if (reason === 'history-restore') return { ko: '히스토리 복원 전 초안', en: 'Before history restore' }
   if (reason === 'import-restore') return { ko: '가져오기 전 초안', en: 'Before import restore' }
   return { ko: '초기화 전 초안', en: 'Before reset' }
 }
@@ -200,6 +204,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   })
   const [recoveryCheckpoint, setRecoveryCheckpoint] = useState<GenerationBriefRecoveryCheckpoint | null>(() => readGenerationBriefRecoveryCheckpoint())
   const [saveMetadata, setSaveMetadata] = useState<GenerationBriefSaveMetadata | null>(() => readGenerationBriefSaveMetadata())
+  const [historySnapshots, setHistorySnapshots] = useState<GenerationBriefHistorySnapshot[]>(() => readGenerationBriefHistorySnapshots())
   const [importPayload, setImportPayload] = useState('')
   const [selectedImportFields, setSelectedImportFields] = useState<Array<keyof GenerationBriefDraft>>([])
   const importPreview = useMemo(() => {
@@ -261,8 +266,17 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   }
 
   const saveCurrentDraft = () => {
-    setDraft(persistGenerationBriefDraft(draft))
-    showSnackbar({ message: t({ ko: '로컬 저장 상태를 갱신했어.', en: 'Updated the local save status.' }), tone: 'info' })
+    const savedDraft = persistGenerationBriefDraft(draft)
+    const nextHistorySnapshots = saveGenerationBriefHistorySnapshot(savedDraft, 'manual-save')
+    const savedSummary = buildGenerationBriefReviewSummary(savedDraft)
+    setDraft(savedDraft)
+    setHistorySnapshots(nextHistorySnapshots)
+    showSnackbar({
+      message: t(savedSummary.status === 'empty'
+        ? { ko: '로컬 저장 상태만 갱신했어. 빈 브리프는 히스토리에 추가하지 않아.', en: 'Updated the local save status only. Empty briefs are not added to history.' }
+        : { ko: '로컬 저장 상태와 히스토리 스냅샷을 갱신했어.', en: 'Updated the local save status and history snapshot.' }),
+      tone: 'info',
+    })
   }
 
   const resetDraft = () => {
@@ -282,6 +296,13 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
     setRecoveryCheckpoint(null)
     setDraft(restoredDraft)
     showSnackbar({ message: t({ ko: '복구 체크포인트를 로컬 초안으로 되돌렸어.', en: 'Restored the recovery checkpoint into the local draft.' }), tone: 'info' })
+  }
+
+  const restoreHistorySnapshot = (snapshot: GenerationBriefHistorySnapshot) => {
+    setRecoveryCheckpoint(saveGenerationBriefRecoveryCheckpoint(draft, 'history-restore'))
+    const restoredDraft = persistGenerationBriefDraft(snapshot.draft)
+    setDraft(restoredDraft)
+    showSnackbar({ message: t({ ko: '히스토리 스냅샷을 로컬 초안으로 복원했어.', en: 'Restored the history snapshot into the local draft.' }), tone: 'info' })
   }
 
   const applyNaiReuseCards = () => {
@@ -629,6 +650,45 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
             ) : (
               <p data-generation-brief-save-empty="true" className="text-xs leading-5 text-muted-foreground">
                 {t({ ko: '아직 로컬 저장 증거가 없어. 입력하거나 로컬 저장을 누르면 브라우저 안에 저장 시각과 local-only 경계를 남겨.', en: 'No local save evidence yet. Editing or pressing Save local records the saved time and local-only boundary in the browser.' })}
+              </p>
+            )}
+          </PageInset>
+
+          <PageInset data-generation-brief-history="true" className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-semibold text-foreground">
+                <History className="h-4 w-4 text-primary" />
+                {t({ ko: '로컬 저장 히스토리', en: 'Local save history' })}
+              </div>
+              <Badge variant="outline">
+                {t({ ko: '최근 {count}개', en: '{count} recent' }, { count: historySnapshots.length })}
+              </Badge>
+            </div>
+            {historySnapshots.length > 0 ? (
+              <div className="grid gap-2">
+                {historySnapshots.map((snapshot) => (
+                  <div key={snapshot.id} data-generation-brief-history-snapshot={snapshot.id} className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="grid gap-1 text-xs leading-5 text-muted-foreground">
+                        <span className="font-medium text-foreground">{t({ ko: '저장 시각', en: 'Saved at' })}: {snapshot.savedAt}</span>
+                        <span>
+                          {t(
+                            { ko: '상태 {status} · 작성 {count}/5', en: 'Status {status} · filled {count}/5' },
+                            { status: t(getSaveMetadataStatusLabel(snapshot.summary.status)), count: snapshot.filledFieldCount },
+                          )}
+                        </span>
+                        <span>{t({ ko: '경계', en: 'Boundary' })}: {snapshot.sideEffectBoundary} · {t({ ko: '외부 실행', en: 'External actions' })}: {String(snapshot.externalActionsExecuted)}</span>
+                      </div>
+                      <Button type="button" size="sm" variant="outline" data-generation-brief-history-restore={snapshot.id} onClick={() => restoreHistorySnapshot(snapshot)}>
+                        {t({ ko: '복원', en: 'Restore' })}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p data-generation-brief-history-empty="true" className="text-xs leading-5 text-muted-foreground">
+                {t({ ko: '아직 수동 저장 스냅샷이 없어. 로컬 저장을 누르면 최근 브리프를 브라우저 안에 보관해.', en: 'No manual save snapshots yet. Press Save local to keep recent briefs inside the browser.' })}
               </p>
             )}
           </PageInset>

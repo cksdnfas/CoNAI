@@ -5,6 +5,7 @@ import {
   buildGenerationBriefComfyCompatibilityCards,
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
+  buildGenerationBriefHistorySnapshot,
   buildGenerationBriefImportDiff,
   buildGenerationBriefRecoveryCheckpoint,
   buildGenerationBriefSelectiveImportDraft,
@@ -22,15 +23,18 @@ import {
   clearGenerationBriefRecoveryCheckpoint,
   DEFAULT_GENERATION_BRIEF_DRAFT,
   GENERATION_BRIEF_HANDOFF_SCHEMA,
+  GENERATION_BRIEF_HISTORY_STORAGE_KEY,
   GENERATION_BRIEF_RECOVERY_STORAGE_KEY,
   GENERATION_BRIEF_SAVE_METADATA_STORAGE_KEY,
   GENERATION_BRIEF_STORAGE_KEY,
   normalizeGenerationBriefDraft,
   parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
+  readGenerationBriefHistorySnapshots,
   readGenerationBriefRecoveryCheckpoint,
   readGenerationBriefSaveMetadata,
   saveGenerationBriefDraft,
+  saveGenerationBriefHistorySnapshot,
   saveGenerationBriefRecoveryCheckpoint,
   serializeGenerationBriefHandoffPayload,
   type GenerationBriefComfyCompatibilitySnapshot,
@@ -347,6 +351,40 @@ saveGenerationBriefDraft(readyDraft, storage, '2026-06-12T03:02:00.000Z')
 deepEqual(clearGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'clear should return the default brief')
 deepEqual(readGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'clear should remove persisted brief data')
 equal(readGenerationBriefSaveMetadata(storage), null, 'clearing the draft should remove stale local save metadata')
+const builtHistorySnapshot = buildGenerationBriefHistorySnapshot(readyDraft, 'manual-save', '2026-06-12T04:00:00.000Z')
+equal(builtHistorySnapshot.reason, 'manual-save', 'history snapshot should preserve the manual save reason')
+equal(builtHistorySnapshot.savedAt, '2026-06-12T04:00:00.000Z', 'history snapshot should preserve saved-at evidence')
+deepEqual(builtHistorySnapshot.draft, readyDraft, 'history snapshot should preserve the normalized draft')
+equal(builtHistorySnapshot.filledFieldCount, 5, 'history snapshot should carry compact filled-field evidence')
+equal(builtHistorySnapshot.externalActionsExecuted, false, 'history snapshot must not claim provider calls or queue operations')
+equal(builtHistorySnapshot.queueMutations, false, 'history snapshot must not mutate queues')
+equal(builtHistorySnapshot.fileMutations, false, 'history snapshot must not mutate files')
+equal(builtHistorySnapshot.sideEffectBoundary, 'local-draft-only', 'history snapshot should preserve the local draft boundary')
+saveGenerationBriefHistorySnapshot(readyDraft, 'manual-save', storage, '2026-06-12T04:01:00.000Z')
+let historySnapshots = readGenerationBriefHistorySnapshots(storage)
+equal(historySnapshots.length, 1, 'manual save should persist one local history snapshot')
+equal(historySnapshots[0]?.savedAt, '2026-06-12T04:01:00.000Z', 'stored history should expose saved-at evidence')
+deepEqual(historySnapshots[0]?.draft, readyDraft, 'stored history should round-trip the manual snapshot draft')
+equal(storage.getItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY)?.includes('manual-save'), true, 'history storage should contain the manual save reason')
+for (let index = 0; index < 6; index += 1) {
+  saveGenerationBriefHistorySnapshot(
+    { ...readyDraft, reviewNotes: `history note ${index}` },
+    'manual-save',
+    storage,
+    `2026-06-12T04:0${index}:30.000Z`,
+  )
+}
+historySnapshots = readGenerationBriefHistorySnapshots(storage)
+equal(historySnapshots.length, 5, 'history snapshots should stay bounded to the five most recent manual saves')
+equal(historySnapshots[0]?.draft.reviewNotes, 'history note 5', 'history snapshots should read newest manual save first')
+equal(historySnapshots.every((snapshot) => snapshot.localOnly && !snapshot.externalActionsExecuted && !snapshot.queueMutations && !snapshot.fileMutations), true, 'history snapshots should preserve local-only side-effect evidence')
+const historyBeforeEmptySave = historySnapshots
+saveGenerationBriefHistorySnapshot(DEFAULT_GENERATION_BRIEF_DRAFT, 'manual-save', storage, '2026-06-12T05:00:00.000Z')
+deepEqual(readGenerationBriefHistorySnapshots(storage), historyBeforeEmptySave, 'empty drafts should not create stale history snapshots')
+storage.setItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY, JSON.stringify([{ ...historySnapshots[0], externalActionsExecuted: true }]))
+deepEqual(readGenerationBriefHistorySnapshots(storage), [], 'unsafe history snapshots should fail closed')
+storage.setItem(GENERATION_BRIEF_HISTORY_STORAGE_KEY, '{not-json')
+deepEqual(readGenerationBriefHistorySnapshots(storage), [], 'corrupt history storage should fail closed')
 const recoveryCheckpoint = buildGenerationBriefRecoveryCheckpoint(readyDraft, 'reset', '2026-06-12T02:00:00.000Z')
 equal(recoveryCheckpoint.reason, 'reset', 'recovery checkpoint should preserve the replacement reason')
 equal(recoveryCheckpoint.summary.status, 'review-ready', 'recovery checkpoint should summarize the preserved draft')
@@ -379,7 +417,13 @@ ok(componentSource.includes('data-generation-brief-save-status="true"'), 'brief 
 ok(componentSource.includes('readGenerationBriefSaveMetadata'), 'brief UI should read local save metadata')
 ok(componentSource.includes('data-generation-brief-saved-at="true"'), 'brief UI should expose saved-at evidence')
 ok(componentSource.includes('data-generation-brief-save-boundary="true"'), 'brief UI should expose local save side-effect boundary')
-ok(componentSource.includes('로컬 저장 상태를 갱신했어'), 'manual save should give operator feedback')
+ok(componentSource.includes('로컬 저장 상태와 히스토리 스냅샷을 갱신했어'), 'manual save should give operator feedback')
+ok(componentSource.includes('data-generation-brief-history="true"'), 'brief UI should expose local save history')
+ok(componentSource.includes('data-generation-brief-history-snapshot'), 'brief UI should expose individual history snapshots')
+ok(componentSource.includes('data-generation-brief-history-restore'), 'brief UI should expose history restore actions')
+ok(componentSource.includes('readGenerationBriefHistorySnapshots'), 'brief UI should read local history snapshots')
+ok(componentSource.includes('saveGenerationBriefHistorySnapshot'), 'manual save should persist a local history snapshot')
+ok(componentSource.includes("saveGenerationBriefRecoveryCheckpoint(draft, 'history-restore')"), 'history restore should preserve the replaced draft as a recovery checkpoint')
 ok(componentSource.includes('data-generation-brief-readiness-gate="true"'), 'brief UI should expose local readiness gate surface')
 ok(componentSource.includes('data-generation-brief-readiness-gate-summary="true"'), 'brief UI should expose readiness gate counts')
 ok(componentSource.includes('data-generation-brief-readiness-gate-item'), 'brief UI should expose individual readiness gate items')
@@ -433,6 +477,10 @@ ok(componentSource.includes('parseGenerationBriefHandoffPayload'), 'brief handof
 ok(contractSource.includes('buildGenerationBriefReadinessGate'), 'brief contract should expose the local readiness gate builder')
 ok(contractSource.includes('buildGenerationBriefRecoveryCheckpoint'), 'brief contract should expose local recovery checkpoint construction')
 ok(contractSource.includes('GENERATION_BRIEF_RECOVERY_STORAGE_KEY'), 'brief contract should store recovery checkpoints separately from the active draft')
+ok(contractSource.includes('GENERATION_BRIEF_HISTORY_STORAGE_KEY'), 'brief contract should store manual history snapshots separately from active draft state')
+ok(contractSource.includes('buildGenerationBriefHistorySnapshot'), 'brief contract should expose manual history snapshot construction')
+ok(contractSource.includes('readGenerationBriefHistorySnapshots'), 'brief contract should expose local history snapshot reading')
+ok(contractSource.includes('saveGenerationBriefHistorySnapshot'), 'brief contract should expose local history snapshot saving')
 ok(contractSource.includes('queueMutations: false'), 'brief contract should preserve no-queue-mutation readiness evidence')
 ok(contractSource.includes('fileMutations: false'), 'brief contract should preserve no-file-mutation readiness evidence')
 ok(contractSource.includes('externalActionsExecuted: false'), 'brief contract should preserve the no-external-action boundary')
