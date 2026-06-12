@@ -9,6 +9,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
+import { GenerationBriefWorkspace } from './components/generation-brief-workspace'
 import { getImageGenerationTabLabel, getImageGenerationTabs, parseImageGenerationTab, type ImageGenerationTab } from './image-generation-tabs'
 
 const NaiGenerationPanelLazy = lazy(async () => {
@@ -190,6 +191,8 @@ export function ImageGenerationPage() {
           items={visibleTabs}
           onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
         />
+
+        <GenerationBriefWorkspace activeTab={activeTab} />
       </div>
 
       {activeTab === 'workflows' ? (
