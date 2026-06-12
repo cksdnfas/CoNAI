@@ -9,6 +9,7 @@ import {
   buildGenerationBriefHistoryDiscoveryLabels,
   buildGenerationBriefHistoryInsightCards,
   buildGenerationBriefImportedHistoryInsightReview,
+  buildGenerationBriefImportedHistoryInsightReviewNotes,
   buildGenerationBriefHistoryQueryResult,
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshot,
@@ -565,6 +566,22 @@ if (historyAwareImportedPayload.status === 'imported') {
   equal(importedInsightReview.cards[0]?.pinned, true, 'visible imported insight cards should expose pin state')
   equal(importedInsightReview.cards[0]?.matchesFilter, true, 'visible imported insight cards should expose filter matches')
   equal(importedInsightReview.cards[0]?.currentKindMatch, false, 'visible imported insight cards should expose current local kind matches')
+  const importedInsightNotes = buildGenerationBriefImportedHistoryInsightReviewNotes(
+    historyAwareImportedPayload.historyInsights,
+    ['imported:1:transition-labels:History transition labels', 'imported:3:boundary:Local history boundary'],
+  )
+  equal(importedInsightNotes.importedCount, historyInsightCards.length, 'imported insight note extraction should count all imported cards')
+  equal(importedInsightNotes.selectedCount, 2, 'imported insight note extraction should count explicitly selected cards')
+  deepEqual(importedInsightNotes.selectedKeys, ['imported:1:transition-labels:History transition labels', 'imported:3:boundary:Local history boundary'], 'imported insight note extraction should preserve source-order selected keys')
+  ok(importedInsightNotes.text.includes('## Imported history insight review notes'), 'imported insight note extraction should build review-note text')
+  ok(importedInsightNotes.text.includes('### History transition labels'), 'imported insight note extraction should include selected insight headings')
+  ok(importedInsightNotes.text.includes('Evidence: Timeline transitions'), 'imported insight note extraction should include selected insight evidence')
+  ok(importedInsightNotes.text.includes('Queue mutations: false'), 'imported insight note extraction should preserve no-queue-mutation evidence')
+  equal(importedInsightNotes.externalActionsExecuted, false, 'imported insight note extraction must not claim provider calls')
+  equal(importedInsightNotes.fileMutations, false, 'imported insight note extraction must not mutate files')
+  const emptyImportedInsightNotes = buildGenerationBriefImportedHistoryInsightReviewNotes(historyAwareImportedPayload.historyInsights, [])
+  equal(emptyImportedInsightNotes.selectedCount, 0, 'empty imported insight note selections should be counted')
+  equal(emptyImportedInsightNotes.text, '', 'empty imported insight note selections should not create review-note text')
 }
 const unsafeHistoryInsightPayload = JSON.stringify({
   ...historyAwareRawPayload,
@@ -712,6 +729,10 @@ ok(componentSource.includes('data-generation-brief-import-history-insight-review
 ok(componentSource.includes('data-generation-brief-import-history-insight-filter="true"'), 'brief UI should expose imported insight filtering')
 ok(componentSource.includes('data-generation-brief-import-history-insight-review-summary="true"'), 'brief UI should compare imported and current local insight cards')
 ok(componentSource.includes('data-generation-brief-import-history-insight-pin'), 'brief UI should expose transient imported insight pin controls')
+ok(componentSource.includes('data-generation-brief-import-history-insight-notes-summary="true"'), 'brief UI should summarize selected imported insight evidence for review notes')
+ok(componentSource.includes('data-generation-brief-import-history-insight-note-select'), 'brief UI should let operators select imported insight evidence for review notes')
+ok(componentSource.includes('data-generation-brief-import-history-insight-notes-apply="true"'), 'brief UI should append selected imported insight evidence into review notes')
+ok(componentSource.includes('applyImportedHistoryInsightNotes'), 'brief UI should apply imported insight evidence through a local draft update only')
 ok(componentSource.includes('data-generation-brief-import-history-insight-empty="true"'), 'brief UI should expose empty filtered imported insight state')
 ok(componentSource.includes('data-generation-brief-import-history-insight-card'), 'brief UI should expose each imported history insight card')
 ok(componentSource.includes('importPreview.historyInsights'), 'brief UI should feed imported history insights into the import readiness preview')
@@ -749,7 +770,9 @@ ok(contractSource.includes('GenerationBriefHistoryDiscoveryLabel'), 'brief contr
 ok(contractSource.includes('buildGenerationBriefHistoryDiscoveryLabels'), 'brief contract should expose label-aware history discovery cues')
 ok(contractSource.includes('buildGenerationBriefHistoryInsightCards'), 'brief contract should expose selected local history insight cards for handoff')
 ok(contractSource.includes('buildGenerationBriefImportedHistoryInsightReview'), 'brief contract should expose side-effect-free imported insight review summaries')
+ok(contractSource.includes('buildGenerationBriefImportedHistoryInsightReviewNotes'), 'brief contract should extract selected imported insight evidence into review-note text')
 ok(contractSource.includes('GenerationBriefImportedHistoryInsightReview'), 'brief contract should type imported insight review evidence')
+ok(contractSource.includes('GenerationBriefImportedHistoryInsightReviewNotes'), 'brief contract should type imported insight review-note evidence')
 ok(contractSource.includes('GenerationBriefImportedHistoryInsightReviewCard'), 'brief contract should type visible imported insight review cards')
 ok(contractSource.includes('GenerationBriefHistoryInsightCard'), 'brief contract should type local history insight handoff evidence')
 ok(contractSource.includes('historyInsights'), 'brief handoff payload should carry selected local history insights')

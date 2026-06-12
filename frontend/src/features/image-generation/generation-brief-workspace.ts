@@ -276,6 +276,24 @@ export type GenerationBriefImportedHistoryInsightReview = {
   cards: GenerationBriefImportedHistoryInsightReviewCard[]
 }
 
+export type GenerationBriefImportedHistoryInsightReviewNoteCard = GenerationBriefHistoryInsightCard & {
+  key: string
+  index: number
+}
+
+export type GenerationBriefImportedHistoryInsightReviewNotes = {
+  importedCount: number
+  selectedCount: number
+  selectedKeys: string[]
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+  cards: GenerationBriefImportedHistoryInsightReviewNoteCard[]
+  text: string
+}
+
 export type GenerationBriefNaiReuseCostStatus = 'idle' | 'calculating' | 'ready' | 'unavailable' | 'error'
 export type GenerationBriefNaiReuseConnectionStatus = 'connected' | 'disconnected' | 'unknown'
 export type GenerationBriefNaiReuseCardStatus = 'ready' | 'missing' | 'warning'
@@ -1338,6 +1356,55 @@ export function buildGenerationBriefImportedHistoryInsightReview(
     fileMutations: false,
     sideEffectBoundary: 'local-draft-only',
     cards: visibleCards,
+  }
+}
+
+/** Build review-note text from explicitly selected imported history insight evidence without provider, queue, or file side effects. */
+export function buildGenerationBriefImportedHistoryInsightReviewNotes(
+  importedCards: GenerationBriefHistoryInsightCard[],
+  selectedKeys: string[] = [],
+): GenerationBriefImportedHistoryInsightReviewNotes {
+  const selectedKeySet = new Set(selectedKeys)
+  const selectedCards = importedCards
+    .map((card, index): GenerationBriefImportedHistoryInsightReviewNoteCard => ({
+      ...card,
+      key: buildGenerationBriefImportedHistoryInsightKey(card, index),
+      index,
+      evidence: buildGenerationBriefHistoryInsightEvidence(card.evidence.slice(0, GENERATION_BRIEF_IMPORT_HISTORY_INSIGHT_EVIDENCE_LIMIT)),
+    }))
+    .filter((card) => selectedKeySet.has(card.key))
+
+  const text = selectedCards.length > 0
+    ? [
+      '## Imported history insight review notes',
+      '- Boundary: local-draft-only',
+      '- Local only: true',
+      '- External actions executed: false',
+      '- Queue mutations: false',
+      '- File mutations: false',
+      '',
+      ...selectedCards.flatMap((card) => [
+        `### ${card.title}`,
+        `- Kind: ${card.kind}`,
+        `- Status: ${card.status}`,
+        `- Summary: ${card.summary}`,
+        ...card.evidence.map((item) => `- Evidence: ${item}`),
+        '',
+      ]),
+    ].join('\n').trimEnd()
+    : ''
+
+  return {
+    importedCount: importedCards.length,
+    selectedCount: selectedCards.length,
+    selectedKeys: selectedCards.map((card) => card.key),
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+    cards: selectedCards,
+    text,
   }
 }
 

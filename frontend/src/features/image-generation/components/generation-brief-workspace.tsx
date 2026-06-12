@@ -20,6 +20,7 @@ import {
   buildGenerationBriefHistoryRestoreComparison,
   buildGenerationBriefHistorySnapshotComparison,
   buildGenerationBriefImportedHistoryInsightReview,
+  buildGenerationBriefImportedHistoryInsightReviewNotes,
   buildGenerationBriefImportDiff,
   buildGenerationBriefSelectiveImportDraft,
   countGenerationBriefSelectedImportChanges,
@@ -238,6 +239,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   const [importPayload, setImportPayload] = useState('')
   const [importedHistoryInsightFilter, setImportedHistoryInsightFilter] = useState('')
   const [pinnedImportedHistoryInsightKeys, setPinnedImportedHistoryInsightKeys] = useState<string[]>([])
+  const [selectedImportedHistoryInsightNoteKeys, setSelectedImportedHistoryInsightNoteKeys] = useState<string[]>([])
   const [selectedImportFields, setSelectedImportFields] = useState<Array<keyof GenerationBriefDraft>>([])
   const importPreview = useMemo(() => {
     const trimmedPayload = importPayload.trim()
@@ -246,6 +248,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   useEffect(() => {
     setSelectedImportFields(importPreview?.status === 'imported' ? [...GENERATION_BRIEF_FIELDS] : [])
     setPinnedImportedHistoryInsightKeys([])
+    setSelectedImportedHistoryInsightNoteKeys([])
   }, [importPreview])
   const importPreviewHistoryInsights = importPreview?.status === 'imported' ? importPreview.historyInsights : []
   const importPreviewReadinessGate = useMemo(() => (
@@ -297,6 +300,15 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       )
       : null
   ), [historyInsightCards, importPreview, importedHistoryInsightFilter, pinnedImportedHistoryInsightKeys])
+  const importPreviewHistoryInsightNotes = useMemo(() => (
+    importPreview?.status === 'imported'
+      ? buildGenerationBriefImportedHistoryInsightReviewNotes(
+        importPreview.historyInsights,
+        selectedImportedHistoryInsightNoteKeys,
+      )
+      : null
+  ), [importPreview, selectedImportedHistoryInsightNoteKeys])
+  const canApplyImportedHistoryInsightNotes = Boolean(importPreviewHistoryInsightNotes?.text.trim())
   const readinessGate = useMemo(() => buildGenerationBriefReadinessGate(draft, {
     naiReuseCards,
     comfyCompatibilityCards,
@@ -463,6 +475,31 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
         ? current.filter((item) => item !== key)
         : [...current, key]
     ))
+  }
+
+  const toggleImportedHistoryInsightNoteSelection = (key: string, selected: boolean) => {
+    setSelectedImportedHistoryInsightNoteKeys((current) => {
+      const next = new Set(current)
+      if (selected) {
+        next.add(key)
+      } else {
+        next.delete(key)
+      }
+      return Array.from(next)
+    })
+  }
+
+  const applyImportedHistoryInsightNotes = () => {
+    if (!importPreviewHistoryInsightNotes?.text.trim()) {
+      return
+    }
+
+    setDraft(persistGenerationBriefDraft({
+      ...draft,
+      reviewNotes: appendGenerationBriefNote(draft.reviewNotes, importPreviewHistoryInsightNotes.text),
+    }))
+    setSelectedImportedHistoryInsightNoteKeys([])
+    showSnackbar({ message: t({ ko: '선택한 가져온 인사이트 증거를 검토 메모에 추가했어.', en: 'Added selected imported insight evidence to review notes.' }), tone: 'info' })
   }
 
   const importHandoffPayload = () => {
@@ -1185,6 +1222,23 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                               placeholder={t({ ko: 'kind, status, 제목, 증거 텍스트로 필터링', en: 'Filter by kind, status, title, or evidence text' })}
                             />
                           </label>
+                          {importPreviewHistoryInsightNotes ? (
+                            <div className="space-y-2 rounded-sm border border-border/60 bg-surface-container/25 p-2">
+                              <div data-generation-brief-import-history-insight-notes-summary="true" className="text-muted-foreground">
+                                {t(
+                                  { ko: '검토 메모로 보낼 인사이트 {selected}/{available} · 경계 {boundary}', en: 'Insight notes selected {selected}/{available} · boundary {boundary}' },
+                                  {
+                                    selected: importPreviewHistoryInsightNotes.selectedCount,
+                                    available: importPreviewHistoryInsightNotes.importedCount,
+                                    boundary: importPreviewHistoryInsightNotes.sideEffectBoundary,
+                                  },
+                                )}
+                              </div>
+                              <Button type="button" size="sm" variant="outline" data-generation-brief-import-history-insight-notes-apply="true" disabled={!canApplyImportedHistoryInsightNotes} onClick={applyImportedHistoryInsightNotes}>
+                                {t({ ko: '선택 증거를 검토 메모에 추가', en: 'Add selected evidence to review notes' })}
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
                         {importPreviewHistoryInsightReview.cards.length > 0 ? (
                           <div className="grid gap-2">
@@ -1205,9 +1259,20 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                                     <li key={item} className="break-words">• {item}</li>
                                   ))}
                                 </ul>
-                                <Button type="button" size="sm" variant={card.pinned ? 'secondary' : 'outline'} className="mt-2" data-generation-brief-import-history-insight-pin={card.key} onClick={() => toggleImportedHistoryInsightPin(card.key)}>
-                                  {card.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
-                                </Button>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <Button type="button" size="sm" variant={card.pinned ? 'secondary' : 'outline'} data-generation-brief-import-history-insight-pin={card.key} onClick={() => toggleImportedHistoryInsightPin(card.key)}>
+                                    {card.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
+                                  </Button>
+                                  <label className="flex items-center gap-2 rounded-sm border border-border/50 bg-surface-container/25 px-2 py-1 text-xs text-muted-foreground">
+                                    <input
+                                      type="checkbox"
+                                      data-generation-brief-import-history-insight-note-select={card.key}
+                                      checked={selectedImportedHistoryInsightNoteKeys.includes(card.key)}
+                                      onChange={(event) => toggleImportedHistoryInsightNoteSelection(card.key, event.target.checked)}
+                                    />
+                                    <span>{t({ ko: '검토 메모에 포함', en: 'Include in review notes' })}</span>
+                                  </label>
+                                </div>
                               </div>
                             ))}
                           </div>
