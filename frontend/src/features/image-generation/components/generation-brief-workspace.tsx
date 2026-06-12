@@ -1,17 +1,24 @@
 import { useMemo, useState } from 'react'
-import { ClipboardList, RotateCcw, Save } from 'lucide-react'
+import { ClipboardCopy, ClipboardList, Download, FileUp, RotateCcw, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageInset, PageSection } from '@/components/common/page-surface'
+import { triggerBlobDownload } from '@/lib/api-client'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
+  buildGenerationBriefHandoffFilename,
+  buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
+  parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
   saveGenerationBriefDraft,
+  serializeGenerationBriefHandoffPayload,
   type GenerationBriefDraft,
   type GenerationBriefTarget,
 } from '../generation-brief-workspace'
@@ -58,6 +65,7 @@ interface GenerationBriefWorkspaceProps {
 
 export function GenerationBriefWorkspace({ activeTab }: GenerationBriefWorkspaceProps) {
   const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
   const activeTarget = getTargetFromActiveTab(activeTab)
   const [draft, setDraft] = useState<GenerationBriefDraft>(() => {
     const storedDraft = readGenerationBriefDraft()
@@ -65,7 +73,9 @@ export function GenerationBriefWorkspace({ activeTab }: GenerationBriefWorkspace
       ? { ...storedDraft, target: activeTarget }
       : storedDraft
   })
+  const [importPayload, setImportPayload] = useState('')
   const summary = useMemo(() => buildGenerationBriefReviewSummary(draft), [draft])
+  const reviewCopy = useMemo(() => buildGenerationBriefReviewCopy(draft), [draft])
 
   const updateDraft = (patch: Partial<GenerationBriefDraft>) => {
     setDraft((current) => {
@@ -77,6 +87,40 @@ export function GenerationBriefWorkspace({ activeTab }: GenerationBriefWorkspace
 
   const resetDraft = () => {
     setDraft(clearGenerationBriefDraft())
+  }
+
+  const copyReviewPacket = async () => {
+    try {
+      await copyTextToClipboard(reviewCopy)
+      showSnackbar({ message: t({ ko: '브리프 검토문을 복사했어.', en: 'Copied the brief review packet.' }), tone: 'info' })
+    } catch {
+      showSnackbar({ message: t({ ko: '브리프 검토문 복사에 실패했어.', en: 'Failed to copy the brief review packet.' }), tone: 'error' })
+    }
+  }
+
+  const downloadHandoffPayload = () => {
+    const exportedAt = new Date()
+    const payload = serializeGenerationBriefHandoffPayload(draft, exportedAt.toISOString())
+    const blob = new Blob([payload], { type: 'application/json;charset=utf-8' })
+    triggerBlobDownload(blob, buildGenerationBriefHandoffFilename(exportedAt))
+    showSnackbar({ message: t({ ko: '로컬 브리프 JSON을 내려받았어.', en: 'Downloaded the local brief JSON.' }), tone: 'info' })
+  }
+
+  const importHandoffPayload = () => {
+    const parsed = parseGenerationBriefHandoffPayload(importPayload)
+
+    if (parsed.status === 'rejected') {
+      showSnackbar({
+        message: t({ ko: '브리프 JSON을 가져오지 못했어. 스키마와 local-only 경계를 확인해줘.', en: 'Could not import the brief JSON. Check its schema and local-only boundary.' }),
+        tone: 'error',
+      })
+      return
+    }
+
+    const importedDraft = saveGenerationBriefDraft(parsed.draft)
+    setDraft(importedDraft)
+    setImportPayload('')
+    showSnackbar({ message: t({ ko: '브리프를 로컬 초안으로 복원했어.', en: 'Restored the brief as a local draft.' }), tone: 'info' })
   }
 
   const statusLabel = summary.status === 'review-ready'
@@ -195,6 +239,42 @@ export function GenerationBriefWorkspace({ activeTab }: GenerationBriefWorkspace
                 { count: summary.filledFieldCount, missing: summary.missingFields.length, boundary: summary.sideEffectBoundary },
               )}
             </div>
+          </PageInset>
+
+          <PageInset data-generation-brief-handoff="true" className="space-y-3 text-sm">
+            <div className="flex items-center gap-2 font-semibold text-foreground">
+              <FileUp className="h-4 w-4 text-primary" />
+              {t({ ko: '검토 핸드오프', en: 'Review handoff' })}
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {t({
+                ko: '검토문 복사와 JSON 내려받기/가져오기는 브라우저 안에서만 처리해. provider 호출, queue 등록, 업로드는 없어.',
+                en: 'Copying review text and downloading/importing JSON happen in the browser only. No provider calls, queue enqueueing, or uploads.',
+              })}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="secondary" data-generation-brief-copy-review="true" onClick={() => void copyReviewPacket()}>
+                <ClipboardCopy className="h-4 w-4" />
+                {t({ ko: '검토문 복사', en: 'Copy review' })}
+              </Button>
+              <Button type="button" size="sm" variant="outline" data-generation-brief-export-json="true" onClick={downloadHandoffPayload}>
+                <Download className="h-4 w-4" />
+                {t({ ko: 'JSON 내려받기', en: 'Download JSON' })}
+              </Button>
+            </div>
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t({ ko: 'JSON 가져오기', en: 'Import JSON' })}</span>
+              <Textarea
+                data-generation-brief-import-payload="true"
+                className="min-h-20 resize-y font-mono text-xs"
+                value={importPayload}
+                onChange={(event) => setImportPayload(event.target.value)}
+                placeholder={t({ ko: '내려받은 conai-generation-brief-*.json 내용을 붙여넣어.', en: 'Paste the downloaded conai-generation-brief-*.json contents.' })}
+              />
+            </label>
+            <Button type="button" size="sm" variant="outline" data-generation-brief-import-apply="true" disabled={!importPayload.trim()} onClick={importHandoffPayload}>
+              {t({ ko: '로컬 초안으로 복원', en: 'Restore as local draft' })}
+            </Button>
           </PageInset>
         </div>
       </div>
