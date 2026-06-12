@@ -24,10 +24,13 @@ import {
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
+  clearGenerationBriefRecoveryCheckpoint,
   GENERATION_BRIEF_FIELDS,
   parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
+  readGenerationBriefRecoveryCheckpoint,
   saveGenerationBriefDraft,
+  saveGenerationBriefRecoveryCheckpoint,
   serializeGenerationBriefHandoffPayload,
   type GenerationBriefComfyCompatibilityCardStatus,
   type GenerationBriefComfyCompatibilitySnapshot,
@@ -39,6 +42,7 @@ import {
   type GenerationBriefNaiReuseSnapshot,
   type GenerationBriefReadinessGateItemStatus,
   type GenerationBriefReadinessGateStatus,
+  type GenerationBriefRecoveryCheckpoint,
   type GenerationBriefTarget,
 } from '../generation-brief-workspace'
 
@@ -153,6 +157,11 @@ function getImportDiffStatusTone(status: GenerationBriefImportDiffFieldStatus) {
   return 'secondary'
 }
 
+function getRecoveryCheckpointReasonLabel(reason: GenerationBriefRecoveryCheckpoint['reason']) {
+  if (reason === 'import-restore') return { ko: '가져오기 전 초안', en: 'Before import restore' }
+  return { ko: '초기화 전 초안', en: 'Before reset' }
+}
+
 function appendGenerationBriefNote(current: string, next: string) {
   const currentText = current.trim()
   const nextText = next.trim()
@@ -180,6 +189,7 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       ? { ...storedDraft, target: activeTarget }
       : storedDraft
   })
+  const [recoveryCheckpoint, setRecoveryCheckpoint] = useState<GenerationBriefRecoveryCheckpoint | null>(() => readGenerationBriefRecoveryCheckpoint())
   const [importPayload, setImportPayload] = useState('')
   const [selectedImportFields, setSelectedImportFields] = useState<Array<keyof GenerationBriefDraft>>([])
   const importPreview = useMemo(() => {
@@ -235,7 +245,21 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   }
 
   const resetDraft = () => {
+    setRecoveryCheckpoint(saveGenerationBriefRecoveryCheckpoint(draft, 'reset'))
     setDraft(clearGenerationBriefDraft())
+    showSnackbar({ message: t({ ko: '이전 초안을 복구 체크포인트로 남기고 브리프를 초기화했어.', en: 'Reset the brief after saving the previous draft as a recovery checkpoint.' }), tone: 'info' })
+  }
+
+  const restoreRecoveryCheckpoint = () => {
+    if (!recoveryCheckpoint) {
+      return
+    }
+
+    const restoredDraft = saveGenerationBriefDraft(recoveryCheckpoint.draft)
+    clearGenerationBriefRecoveryCheckpoint()
+    setRecoveryCheckpoint(null)
+    setDraft(restoredDraft)
+    showSnackbar({ message: t({ ko: '복구 체크포인트를 로컬 초안으로 되돌렸어.', en: 'Restored the recovery checkpoint into the local draft.' }), tone: 'info' })
   }
 
   const applyNaiReuseCards = () => {
@@ -328,7 +352,9 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       return
     }
 
-    const importedDraft = saveGenerationBriefDraft(buildGenerationBriefSelectiveImportDraft(draft, importPreview.draft, selectedImportFields))
+    const nextDraft = buildGenerationBriefSelectiveImportDraft(draft, importPreview.draft, selectedImportFields)
+    setRecoveryCheckpoint(saveGenerationBriefRecoveryCheckpoint(draft, 'import-restore'))
+    const importedDraft = saveGenerationBriefDraft(nextDraft)
     setDraft(importedDraft)
     setImportPayload('')
     showSnackbar({ message: t({ ko: '선택한 필드만 로컬 초안으로 복원했어.', en: 'Restored the selected fields into the local draft.' }), tone: 'info' })
@@ -559,6 +585,39 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                 { count: summary.filledFieldCount, missing: summary.missingFields.length, boundary: summary.sideEffectBoundary },
               )}
             </div>
+          </PageInset>
+
+          <PageInset data-generation-brief-recovery-checkpoint="true" className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">{t({ ko: '복구 체크포인트', en: 'Recovery checkpoint' })}</span>
+              <Badge variant="outline">{t({ ko: 'local only', en: 'local only' })}</Badge>
+            </div>
+            {recoveryCheckpoint ? (
+              <>
+                <div data-generation-brief-recovery-checkpoint-summary="true" className="grid gap-1 text-xs leading-5 text-muted-foreground">
+                  <span>{t({ ko: '저장 사유', en: 'Saved reason' })}: {t(getRecoveryCheckpointReasonLabel(recoveryCheckpoint.reason))}</span>
+                  <span>{t({ ko: '저장 시각', en: 'Saved at' })}: {recoveryCheckpoint.createdAt}</span>
+                  <span>
+                    {t(
+                      { ko: '작성 {count}/5 · 상태 {status} · 경계 {boundary}', en: 'Filled {count}/5 · status {status} · boundary {boundary}' },
+                      {
+                        count: recoveryCheckpoint.summary.filledFieldCount,
+                        status: recoveryCheckpoint.summary.status,
+                        boundary: recoveryCheckpoint.sideEffectBoundary,
+                      },
+                    )}
+                  </span>
+                  <span>{t({ ko: '외부 실행', en: 'External actions' })}: {String(recoveryCheckpoint.externalActionsExecuted)}</span>
+                </div>
+                <Button type="button" size="sm" variant="outline" data-generation-brief-recovery-restore="true" onClick={restoreRecoveryCheckpoint}>
+                  {t({ ko: '체크포인트 복원', en: 'Restore checkpoint' })}
+                </Button>
+              </>
+            ) : (
+              <p data-generation-brief-recovery-empty="true" className="text-xs leading-5 text-muted-foreground">
+                {t({ ko: '초기화나 JSON 가져오기 전에 이전 로컬 초안이 있으면 여기에 한 번만 보관해. provider 호출이나 queue 등록은 없어.', en: 'When reset or JSON import replaces a non-empty local draft, the previous draft is kept here once. No provider calls or queue enqueueing.' })}
+              </p>
+            )}
           </PageInset>
 
           <PageInset data-generation-brief-readiness-gate="true" className="space-y-3 text-sm">

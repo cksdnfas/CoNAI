@@ -6,6 +6,7 @@ import {
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefImportDiff,
+  buildGenerationBriefRecoveryCheckpoint,
   buildGenerationBriefSelectiveImportDraft,
   buildGenerationBriefIterationHandoffCards,
   buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord,
@@ -16,13 +17,17 @@ import {
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
+  clearGenerationBriefRecoveryCheckpoint,
   DEFAULT_GENERATION_BRIEF_DRAFT,
   GENERATION_BRIEF_HANDOFF_SCHEMA,
+  GENERATION_BRIEF_RECOVERY_STORAGE_KEY,
   GENERATION_BRIEF_STORAGE_KEY,
   normalizeGenerationBriefDraft,
   parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
+  readGenerationBriefRecoveryCheckpoint,
   saveGenerationBriefDraft,
+  saveGenerationBriefRecoveryCheckpoint,
   serializeGenerationBriefHandoffPayload,
   type GenerationBriefComfyCompatibilitySnapshot,
   type GenerationBriefDraft,
@@ -308,6 +313,22 @@ deepEqual(readGenerationBriefDraft(storage), readyDraft, 'brief drafts should ro
 equal(storage.getItem(GENERATION_BRIEF_STORAGE_KEY)?.includes('portrait lighting plan'), true, 'stored brief should preserve local intent text')
 deepEqual(clearGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'clear should return the default brief')
 deepEqual(readGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'clear should remove persisted brief data')
+const recoveryCheckpoint = buildGenerationBriefRecoveryCheckpoint(readyDraft, 'reset', '2026-06-12T02:00:00.000Z')
+equal(recoveryCheckpoint.reason, 'reset', 'recovery checkpoint should preserve the replacement reason')
+equal(recoveryCheckpoint.summary.status, 'review-ready', 'recovery checkpoint should summarize the preserved draft')
+equal(recoveryCheckpoint.queueMutations, false, 'recovery checkpoint must not mutate queues')
+equal(recoveryCheckpoint.fileMutations, false, 'recovery checkpoint must not mutate files')
+saveGenerationBriefRecoveryCheckpoint(readyDraft, 'import-restore', storage, '2026-06-12T02:03:00.000Z')
+equal(storage.getItem(GENERATION_BRIEF_RECOVERY_STORAGE_KEY)?.includes('import-restore'), true, 'recovery checkpoint should persist as a single local slot')
+const storedRecoveryCheckpoint = readGenerationBriefRecoveryCheckpoint(storage)
+equal(storedRecoveryCheckpoint?.reason, 'import-restore', 'recovery checkpoint should round-trip the import reason')
+deepEqual(storedRecoveryCheckpoint?.draft, readyDraft, 'recovery checkpoint should preserve the previous local draft')
+equal(clearGenerationBriefRecoveryCheckpoint(storage), null, 'clearing recovery checkpoint should return null')
+equal(readGenerationBriefRecoveryCheckpoint(storage), null, 'clearing recovery checkpoint should remove persisted recovery state')
+saveGenerationBriefRecoveryCheckpoint(DEFAULT_GENERATION_BRIEF_DRAFT, 'reset', storage, '2026-06-12T02:04:00.000Z')
+equal(storage.getItem(GENERATION_BRIEF_RECOVERY_STORAGE_KEY), null, 'empty drafts should not create stale recovery checkpoints')
+storage.setItem(GENERATION_BRIEF_RECOVERY_STORAGE_KEY, '{not-json')
+equal(readGenerationBriefRecoveryCheckpoint(storage), null, 'corrupt recovery checkpoint storage should fail closed')
 storage.setItem(GENERATION_BRIEF_STORAGE_KEY, '{not-json')
 deepEqual(readGenerationBriefDraft(storage), DEFAULT_GENERATION_BRIEF_DRAFT, 'corrupt brief storage should fail closed')
 
@@ -350,6 +371,12 @@ ok(componentSource.includes('data-generation-brief-import-diff="true"'), 'brief 
 ok(componentSource.includes('data-generation-brief-import-diff-field'), 'brief UI should expose field-level import overwrite changes')
 ok(componentSource.includes('data-generation-brief-import-field-selection="true"'), 'brief UI should expose field-level import restore selection controls')
 ok(componentSource.includes('data-generation-brief-import-field-select'), 'brief UI should expose per-field import restore toggles')
+ok(componentSource.includes('data-generation-brief-recovery-checkpoint="true"'), 'brief UI should expose local recovery checkpoint state')
+ok(componentSource.includes('data-generation-brief-recovery-checkpoint-summary="true"'), 'brief UI should summarize the last replaced local draft')
+ok(componentSource.includes('data-generation-brief-recovery-restore="true"'), 'brief UI should expose a recovery restore action')
+ok(componentSource.includes('saveGenerationBriefRecoveryCheckpoint'), 'brief UI should save a local recovery checkpoint before replacement actions')
+ok(componentSource.includes('readGenerationBriefRecoveryCheckpoint'), 'brief UI should read existing local recovery checkpoints')
+ok(componentSource.includes('clearGenerationBriefRecoveryCheckpoint'), 'brief UI should clear recovery state after restoring it')
 ok(componentSource.includes('selectedImportFieldSet.has(field.field)'), 'brief UI should keep field restore selection state')
 ok(componentSource.includes('buildGenerationBriefSelectiveImportDraft'), 'brief UI should merge imports through the selective restore contract')
 ok(componentSource.includes('buildGenerationBriefImportDiff'), 'brief UI should compare incoming handoffs against the current local draft')
@@ -360,6 +387,8 @@ ok(componentSource.includes('copyTextToClipboard'), 'brief handoff should suppor
 ok(componentSource.includes('triggerBlobDownload'), 'brief handoff should support local browser JSON download')
 ok(componentSource.includes('parseGenerationBriefHandoffPayload'), 'brief handoff should parse imports through the safe contract')
 ok(contractSource.includes('buildGenerationBriefReadinessGate'), 'brief contract should expose the local readiness gate builder')
+ok(contractSource.includes('buildGenerationBriefRecoveryCheckpoint'), 'brief contract should expose local recovery checkpoint construction')
+ok(contractSource.includes('GENERATION_BRIEF_RECOVERY_STORAGE_KEY'), 'brief contract should store recovery checkpoints separately from the active draft')
 ok(contractSource.includes('queueMutations: false'), 'brief contract should preserve no-queue-mutation readiness evidence')
 ok(contractSource.includes('fileMutations: false'), 'brief contract should preserve no-file-mutation readiness evidence')
 ok(contractSource.includes('externalActionsExecuted: false'), 'brief contract should preserve the no-external-action boundary')

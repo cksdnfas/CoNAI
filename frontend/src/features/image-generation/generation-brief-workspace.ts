@@ -49,6 +49,20 @@ export type GenerationBriefImportResult =
     reason: 'empty' | 'invalid-json' | 'invalid-schema' | 'unsafe-boundary'
   }
 
+export type GenerationBriefRecoveryReason = 'reset' | 'import-restore'
+
+export type GenerationBriefRecoveryCheckpoint = {
+  createdAt: string
+  reason: GenerationBriefRecoveryReason
+  draft: GenerationBriefDraft
+  summary: GenerationBriefReviewSummary
+  localOnly: true
+  externalActionsExecuted: false
+  queueMutations: false
+  fileMutations: false
+  sideEffectBoundary: 'local-draft-only'
+}
+
 export type GenerationBriefImportDiffFieldStatus = 'unchanged' | 'changed' | 'filled' | 'cleared'
 
 export type GenerationBriefImportDiffField = {
@@ -188,6 +202,7 @@ export type GenerationBriefComfyCompatibilityCard = {
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 export const GENERATION_BRIEF_STORAGE_KEY = 'conai:image-generation:generation-brief-workspace:v1'
+export const GENERATION_BRIEF_RECOVERY_STORAGE_KEY = 'conai:image-generation:generation-brief-recovery:v1'
 export const GENERATION_BRIEF_HANDOFF_SCHEMA = 'conai.generation-brief.handoff.v1'
 
 export const DEFAULT_GENERATION_BRIEF_DRAFT: GenerationBriefDraft = {
@@ -390,6 +405,10 @@ export function normalizeGenerationBriefDraft(value: Partial<GenerationBriefDraf
 function hasUsefulDraftValue(draft: GenerationBriefDraft, field: keyof GenerationBriefDraft) {
   if (field === 'target') return draft.target !== 'undecided'
   return draft[field].trim().length > 0
+}
+
+function hasAnyUsefulGenerationBriefDraftValue(draft: GenerationBriefDraft) {
+  return GENERATION_BRIEF_FIELDS.some((field) => hasUsefulDraftValue(draft, field))
 }
 
 export function buildGenerationBriefReviewSummary(draft: GenerationBriefDraft): GenerationBriefReviewSummary {
@@ -1040,6 +1059,87 @@ function getBrowserStorage(): StorageLike | null {
   } catch {
     return null
   }
+}
+
+function isGenerationBriefRecoveryReason(value: unknown): value is GenerationBriefRecoveryReason {
+  return value === 'reset' || value === 'import-restore'
+}
+
+export function buildGenerationBriefRecoveryCheckpoint(
+  draft: GenerationBriefDraft,
+  reason: GenerationBriefRecoveryReason,
+  createdAt = new Date().toISOString(),
+): GenerationBriefRecoveryCheckpoint {
+  const normalizedDraft = normalizeGenerationBriefDraft(draft)
+
+  return {
+    createdAt,
+    reason,
+    draft: normalizedDraft,
+    summary: buildGenerationBriefReviewSummary(normalizedDraft),
+    localOnly: true,
+    externalActionsExecuted: false,
+    queueMutations: false,
+    fileMutations: false,
+    sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+export function readGenerationBriefRecoveryCheckpoint(storage: StorageLike | null = getBrowserStorage()): GenerationBriefRecoveryCheckpoint | null {
+  if (!storage) return null
+
+  try {
+    const rawValue = storage.getItem(GENERATION_BRIEF_RECOVERY_STORAGE_KEY)
+    if (!rawValue) return null
+    const parsed = JSON.parse(rawValue) as unknown
+    if (!isRecord(parsed) || !isRecord(parsed.draft) || !isGenerationBriefRecoveryReason(parsed.reason) || typeof parsed.createdAt !== 'string') {
+      return null
+    }
+    if (parsed.localOnly !== true || parsed.externalActionsExecuted !== false || parsed.queueMutations !== false || parsed.fileMutations !== false || parsed.sideEffectBoundary !== 'local-draft-only') {
+      return null
+    }
+
+    const draft = normalizeGenerationBriefDraft(parsed.draft)
+    if (!hasAnyUsefulGenerationBriefDraftValue(draft)) return null
+    return buildGenerationBriefRecoveryCheckpoint(draft, parsed.reason, parsed.createdAt)
+  } catch {
+    return null
+  }
+}
+
+export function clearGenerationBriefRecoveryCheckpoint(storage: StorageLike | null = getBrowserStorage()) {
+  if (storage) {
+    try {
+      storage.removeItem(GENERATION_BRIEF_RECOVERY_STORAGE_KEY)
+    } catch {
+      // Storage cleanup can be blocked in private, embedded, or policy-restricted contexts.
+    }
+  }
+
+  return null
+}
+
+export function saveGenerationBriefRecoveryCheckpoint(
+  draft: GenerationBriefDraft,
+  reason: GenerationBriefRecoveryReason,
+  storage: StorageLike | null = getBrowserStorage(),
+  createdAt = new Date().toISOString(),
+) {
+  const normalizedDraft = normalizeGenerationBriefDraft(draft)
+  if (!hasAnyUsefulGenerationBriefDraftValue(normalizedDraft)) {
+    return clearGenerationBriefRecoveryCheckpoint(storage)
+  }
+
+  const checkpoint = buildGenerationBriefRecoveryCheckpoint(normalizedDraft, reason, createdAt)
+  if (storage) {
+    try {
+      storage.setItem(GENERATION_BRIEF_RECOVERY_STORAGE_KEY, JSON.stringify(checkpoint))
+    } catch {
+      // Storage can be blocked in private, embedded, or policy-restricted contexts.
+    }
+  }
+
+  return checkpoint
 }
 
 export function readGenerationBriefDraft(storage: StorageLike | null = getBrowserStorage()): GenerationBriefDraft {
