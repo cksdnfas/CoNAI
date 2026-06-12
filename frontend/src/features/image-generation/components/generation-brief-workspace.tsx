@@ -243,9 +243,10 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
   useEffect(() => {
     setSelectedImportFields(importPreview?.status === 'imported' ? [...GENERATION_BRIEF_FIELDS] : [])
   }, [importPreview])
+  const importPreviewHistoryInsights = importPreview?.status === 'imported' ? importPreview.historyInsights : []
   const importPreviewReadinessGate = useMemo(() => (
     importPreview?.status === 'imported'
-      ? buildGenerationBriefReadinessGate(importPreview.draft)
+      ? buildGenerationBriefReadinessGate(importPreview.draft, { historyInsightCards: importPreview.historyInsights })
       : null
   ), [importPreview])
   const importPreviewTargetLabel = importPreview?.status === 'imported'
@@ -1116,7 +1117,36 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                         )}
                       </span>
                       <span>{t({ ko: '경계', en: 'Boundary' })}: {importPreview.summary.sideEffectBoundary}</span>
+                      <span data-generation-brief-import-history-insight-count="true">
+                        {t({ ko: '가져온 히스토리 인사이트 {count}개', en: 'Imported history insights: {count}' }, { count: importPreviewHistoryInsights.length })}
+                      </span>
                     </div>
+                    {importPreviewHistoryInsights.length > 0 ? (
+                      <div data-generation-brief-import-history-insights="true" className="space-y-2 rounded-sm border border-border/70 bg-surface-container/35 p-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium text-foreground">{t({ ko: '가져온 히스토리 인사이트', en: 'Imported history insights' })}</span>
+                          <Badge variant="outline">
+                            {t({ ko: '{count}개 카드', en: '{count} card(s)' }, { count: importPreviewHistoryInsights.length })}
+                          </Badge>
+                        </div>
+                        <div className="grid gap-2">
+                          {importPreviewHistoryInsights.map((card, index) => (
+                            <div key={`${card.kind}:${card.title}:${index}`} data-generation-brief-import-history-insight-card={card.kind} className="rounded-sm border border-border/60 bg-background/60 p-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-medium text-foreground">{card.title}</span>
+                                <Badge variant={getHistoryInsightCardStatusTone(card.status)}>{t(getHistoryInsightCardStatusLabel(card.status))}</Badge>
+                              </div>
+                              <p className="mt-1 leading-5 text-muted-foreground">{card.summary}</p>
+                              <ul className="mt-2 space-y-1 leading-5 text-muted-foreground">
+                                {card.evidence.slice(0, 3).map((item) => (
+                                  <li key={item} className="break-words">• {item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <div data-generation-brief-import-diff="true" className="space-y-2 rounded-sm border border-border/70 bg-surface-container/35 p-2">
                       <div className="font-medium text-foreground">
                         {t(

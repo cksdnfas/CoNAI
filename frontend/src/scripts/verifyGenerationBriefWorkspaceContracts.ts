@@ -283,6 +283,7 @@ equal(importedPayload.status, 'imported', 'valid handoff JSON should import')
 if (importedPayload.status === 'imported') {
   deepEqual(importedPayload.draft, readyDraft, 'valid handoff JSON should round-trip the normalized draft')
   equal(importedPayload.summary.status, 'review-ready', 'import should rebuild review summary locally')
+  equal(importedPayload.historyInsights.length, 0, 'imports without history insight cards should remain backward compatible')
   const importedReadinessGate = buildGenerationBriefReadinessGate(importedPayload.draft)
   equal(importedReadinessGate.status, 'ready', 'import preview should rebuild readiness status locally before restore')
   equal(importedReadinessGate.sideEffectBoundary, 'local-draft-only', 'import preview should preserve the local-only boundary')
@@ -534,6 +535,30 @@ const historyAwareSerializedPayload = serializeGenerationBriefHandoffPayload(rea
 const historyAwareRawPayload = JSON.parse(historyAwareSerializedPayload) as Record<string, unknown>
 ok(Array.isArray(historyAwareRawPayload.historyInsights), 'handoff JSON should carry selected history insight cards')
 equal((historyAwareRawPayload.historyInsights as unknown[]).length, historyInsightCards.length, 'handoff JSON should preserve the selected history insight card count')
+const historyAwareImportedPayload = parseGenerationBriefHandoffPayload(historyAwareSerializedPayload)
+equal(historyAwareImportedPayload.status, 'imported', 'history-aware handoff JSON should import')
+if (historyAwareImportedPayload.status === 'imported') {
+  equal(historyAwareImportedPayload.historyInsights.length, historyInsightCards.length, 'import parsing should preserve safe history insight cards for preview')
+  ok(historyAwareImportedPayload.historyInsights.some((card) => card.kind === 'transition-labels' && card.evidence.some((item) => item.includes('Target pivot'))), 'import preview should expose imported transition label evidence')
+  const historyInsightImportReadinessGate = buildGenerationBriefReadinessGate(historyAwareImportedPayload.draft, { historyInsightCards: historyAwareImportedPayload.historyInsights })
+  equal(historyInsightImportReadinessGate.status, 'ready', 'import preview readiness should include imported history insights without adding warnings when cards are ready')
+}
+const unsafeHistoryInsightPayload = JSON.stringify({
+  ...historyAwareRawPayload,
+  historyInsights: [{
+    kind: 'matched-history',
+    title: 'Imported screenshot insight',
+    summary: 'Preview should omit inline image data.',
+    evidence: ['Preview: data:image/png;base64,SECRET'],
+    status: 'ready',
+  }],
+})
+const unsafeHistoryInsightImport = parseGenerationBriefHandoffPayload(unsafeHistoryInsightPayload)
+equal(unsafeHistoryInsightImport.status, 'imported', 'history insight imports with safe schema should import')
+if (unsafeHistoryInsightImport.status === 'imported') {
+  equal(unsafeHistoryInsightImport.historyInsights[0]?.evidence[0]?.includes('data:image'), false, 'imported history insight evidence should omit inline data URLs')
+  ok(unsafeHistoryInsightImport.historyInsights[0]?.evidence[0]?.includes('data-url-omitted'), 'imported history insight evidence should mark omitted data URLs')
+}
 const removedHistorySnapshotId = historySnapshots[0]?.id ?? ''
 const prunedHistorySnapshots = deleteGenerationBriefHistorySnapshot(removedHistorySnapshotId, storage)
 equal(prunedHistorySnapshots.length, 4, 'deleting a manual history snapshot should remove only the selected snapshot')
@@ -658,6 +683,10 @@ ok(componentSource.includes('data-generation-brief-export-json="true"'), 'brief 
 ok(componentSource.includes('data-generation-brief-import-payload="true"'), 'brief UI should expose JSON import input')
 ok(componentSource.includes('data-generation-brief-import-preview="true"'), 'brief UI should preview valid imports before restoring the draft')
 ok(componentSource.includes('data-generation-brief-import-preview-summary="true"'), 'brief UI should expose import preview readiness counts')
+ok(componentSource.includes('data-generation-brief-import-history-insight-count="true"'), 'brief UI should expose imported history insight counts before restore')
+ok(componentSource.includes('data-generation-brief-import-history-insights="true"'), 'brief UI should expose imported history insight preview cards before restore')
+ok(componentSource.includes('data-generation-brief-import-history-insight-card'), 'brief UI should expose each imported history insight card')
+ok(componentSource.includes('importPreview.historyInsights'), 'brief UI should feed imported history insights into the import readiness preview')
 ok(componentSource.includes('data-generation-brief-import-diff="true"'), 'brief UI should expose the import overwrite diff summary')
 ok(componentSource.includes('data-generation-brief-import-diff-field'), 'brief UI should expose field-level import overwrite changes')
 ok(componentSource.includes('data-generation-brief-import-field-selection="true"'), 'brief UI should expose field-level import restore selection controls')
@@ -693,6 +722,9 @@ ok(contractSource.includes('buildGenerationBriefHistoryDiscoveryLabels'), 'brief
 ok(contractSource.includes('buildGenerationBriefHistoryInsightCards'), 'brief contract should expose selected local history insight cards for handoff')
 ok(contractSource.includes('GenerationBriefHistoryInsightCard'), 'brief contract should type local history insight handoff evidence')
 ok(contractSource.includes('historyInsights'), 'brief handoff payload should carry selected local history insights')
+ok(contractSource.includes('parseGenerationBriefHistoryInsightCards'), 'brief import parser should preserve safe imported history insight cards')
+ok(contractSource.includes('GENERATION_BRIEF_IMPORT_HISTORY_INSIGHT_CARD_LIMIT'), 'brief import parser should bound imported history insight cards')
+ok(contractSource.includes('sanitizeGenerationBriefHistoryInsightEvidence'), 'brief import parser should sanitize imported history insight evidence')
 ok(contractSource.includes('matchedLabelCount'), 'brief contract should report matched label-aware discovery cue counts')
 ok(contractSource.includes('buildGenerationBriefHistoryRestoreComparison'), 'brief contract should expose side-effect-free local history restore comparison')
 ok(contractSource.includes('GenerationBriefHistoryRestoreComparison'), 'brief contract should type local history restore comparison evidence')

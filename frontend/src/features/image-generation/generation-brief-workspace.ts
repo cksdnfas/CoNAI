@@ -44,6 +44,7 @@ export type GenerationBriefImportResult =
     status: 'imported'
     draft: GenerationBriefDraft
     summary: GenerationBriefReviewSummary
+    historyInsights: GenerationBriefHistoryInsightCard[]
   }
   | {
     status: 'rejected'
@@ -400,6 +401,8 @@ const GENERATION_BRIEF_FIELD_LABELS: Record<keyof GenerationBriefDraft, string> 
 }
 
 const NAI_REUSE_TEXT_LIMIT = 160
+const GENERATION_BRIEF_IMPORT_HISTORY_INSIGHT_CARD_LIMIT = 8
+const GENERATION_BRIEF_IMPORT_HISTORY_INSIGHT_EVIDENCE_LIMIT = 5
 
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value : ''
@@ -1835,7 +1838,50 @@ export function parseGenerationBriefHandoffPayload(value: string): GenerationBri
     status: 'imported',
     draft,
     summary: buildGenerationBriefReviewSummary(draft),
+    historyInsights: parseGenerationBriefHistoryInsightCards(parsed.historyInsights),
   }
+}
+
+function isGenerationBriefHistoryInsightCardKind(value: unknown): value is GenerationBriefHistoryInsightCardKind {
+  return value === 'matched-history'
+    || value === 'transition-labels'
+    || value === 'comparison-baseline'
+    || value === 'boundary'
+}
+
+function isGenerationBriefHistoryInsightCardStatus(value: unknown): value is GenerationBriefHistoryInsightCardStatus {
+  return value === 'ready' || value === 'warning'
+}
+
+function normalizeImportedGenerationBriefHistoryInsightText(value: unknown, fallback: string) {
+  return trimForReuseEvidence(normalizeText(value), fallback)
+}
+
+function parseGenerationBriefHistoryInsightCards(value: unknown): GenerationBriefHistoryInsightCard[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .slice(0, GENERATION_BRIEF_IMPORT_HISTORY_INSIGHT_CARD_LIMIT)
+    .flatMap((item): GenerationBriefHistoryInsightCard[] => {
+      if (!isRecord(item) || !isGenerationBriefHistoryInsightCardKind(item.kind) || !isGenerationBriefHistoryInsightCardStatus(item.status)) {
+        return []
+      }
+
+      const evidence = Array.isArray(item.evidence)
+        ? item.evidence
+          .filter((evidenceItem): evidenceItem is string => typeof evidenceItem === 'string')
+          .slice(0, GENERATION_BRIEF_IMPORT_HISTORY_INSIGHT_EVIDENCE_LIMIT)
+          .map((evidenceItem) => sanitizeGenerationBriefHistoryInsightEvidence(trimForReuseEvidence(evidenceItem, 'empty')))
+        : []
+
+      return [{
+        kind: item.kind,
+        title: normalizeImportedGenerationBriefHistoryInsightText(item.title, 'Imported history insight'),
+        summary: normalizeImportedGenerationBriefHistoryInsightText(item.summary, 'No summary provided.'),
+        evidence,
+        status: item.status,
+      }]
+    })
 }
 
 export function buildGenerationBriefHandoffFilename(exportedAt: Date | string = new Date()) {
