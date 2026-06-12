@@ -6,6 +6,7 @@ import {
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefImportDiff,
+  buildGenerationBriefSelectiveImportDraft,
   buildGenerationBriefIterationHandoffCards,
   buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord,
   buildGenerationBriefIterationHandoffText,
@@ -277,6 +278,25 @@ const clearingImportDiff = buildGenerationBriefImportDiff(readyDraft, { ...ready
 equal(clearingImportDiff.clearedCount, 2, 'import diff should flag current populated fields that the import would clear')
 equal(clearingImportDiff.fields.find((field) => field.field === 'reusableAssets')?.status, 'cleared', 'import diff should mark reusable asset replacement as a clear')
 
+const selectiveImportDraft = buildGenerationBriefSelectiveImportDraft(
+  { ...readyDraft, intent: 'keep local intent', reviewNotes: 'keep local review note' },
+  { ...readyDraft, intent: 'incoming intent', reusableAssets: '', reviewNotes: 'incoming review note' },
+  ['intent', 'reusableAssets'],
+)
+deepEqual(
+  selectiveImportDraft,
+  {
+    ...readyDraft,
+    intent: 'incoming intent',
+    reusableAssets: '',
+    reviewNotes: 'keep local review note',
+  },
+  'selective import restore should apply only selected incoming fields and preserve unselected current draft fields',
+)
+
+const noFieldImportDraft = buildGenerationBriefSelectiveImportDraft(readyDraft, { ...readyDraft, intent: 'ignored incoming intent' }, [])
+deepEqual(noFieldImportDraft, readyDraft, 'selective import restore should keep the current draft when no fields are selected')
+
 equal(parseGenerationBriefHandoffPayload('').status, 'rejected', 'empty imports should be rejected')
 equal(parseGenerationBriefHandoffPayload('{not-json').status, 'rejected', 'invalid JSON imports should be rejected')
 equal(parseGenerationBriefHandoffPayload(JSON.stringify({ schema: 'other', draft: readyDraft })).status, 'rejected', 'unknown handoff schemas should be rejected')
@@ -328,6 +348,10 @@ ok(componentSource.includes('data-generation-brief-import-preview="true"'), 'bri
 ok(componentSource.includes('data-generation-brief-import-preview-summary="true"'), 'brief UI should expose import preview readiness counts')
 ok(componentSource.includes('data-generation-brief-import-diff="true"'), 'brief UI should expose the import overwrite diff summary')
 ok(componentSource.includes('data-generation-brief-import-diff-field'), 'brief UI should expose field-level import overwrite changes')
+ok(componentSource.includes('data-generation-brief-import-field-selection="true"'), 'brief UI should expose field-level import restore selection controls')
+ok(componentSource.includes('data-generation-brief-import-field-select'), 'brief UI should expose per-field import restore toggles')
+ok(componentSource.includes('selectedImportFieldSet.has(field.field)'), 'brief UI should keep field restore selection state')
+ok(componentSource.includes('buildGenerationBriefSelectiveImportDraft'), 'brief UI should merge imports through the selective restore contract')
 ok(componentSource.includes('buildGenerationBriefImportDiff'), 'brief UI should compare incoming handoffs against the current local draft')
 ok(componentSource.includes('data-generation-brief-import-preview-error="true"'), 'brief UI should show unsafe or invalid import reasons without applying drafts')
 ok(componentSource.includes('disabled={importPreview?.status !== \'imported\'}'), 'brief UI should disable restore until the pasted handoff parses as safe')

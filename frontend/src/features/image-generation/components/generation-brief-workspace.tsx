@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ClipboardCopy, ClipboardList, Download, FileUp, RotateCcw, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
   buildGenerationBriefComfyCompatibilityText,
   buildGenerationBriefHandoffFilename,
   buildGenerationBriefImportDiff,
+  buildGenerationBriefSelectiveImportDraft,
   buildGenerationBriefIterationHandoffCards,
   buildGenerationBriefIterationHandoffText,
   buildGenerationBriefNaiReusableAssetsText,
@@ -23,6 +24,7 @@ import {
   buildGenerationBriefReviewCopy,
   buildGenerationBriefReviewSummary,
   clearGenerationBriefDraft,
+  GENERATION_BRIEF_FIELDS,
   parseGenerationBriefHandoffPayload,
   readGenerationBriefDraft,
   saveGenerationBriefDraft,
@@ -179,10 +181,14 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       : storedDraft
   })
   const [importPayload, setImportPayload] = useState('')
+  const [selectedImportFields, setSelectedImportFields] = useState<Array<keyof GenerationBriefDraft>>([])
   const importPreview = useMemo(() => {
     const trimmedPayload = importPayload.trim()
     return trimmedPayload ? parseGenerationBriefHandoffPayload(trimmedPayload) : null
   }, [importPayload])
+  useEffect(() => {
+    setSelectedImportFields(importPreview?.status === 'imported' ? [...GENERATION_BRIEF_FIELDS] : [])
+  }, [importPreview])
   const importPreviewReadinessGate = useMemo(() => (
     importPreview?.status === 'imported'
       ? buildGenerationBriefReadinessGate(importPreview.draft)
@@ -196,6 +202,10 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       ? buildGenerationBriefImportDiff(draft, importPreview.draft)
       : null
   ), [draft, importPreview])
+  const selectedImportFieldSet = useMemo(() => new Set(selectedImportFields), [selectedImportFields])
+  const selectedImportFieldCount = importPreviewDiff
+    ? importPreviewDiff.fields.filter((field) => selectedImportFieldSet.has(field.field)).length
+    : 0
   const summary = useMemo(() => buildGenerationBriefReviewSummary(draft), [draft])
   const naiReuseCards = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReuseCards(naiReuseSnapshot) : []), [naiReuseSnapshot])
   const naiReuseText = useMemo(() => (naiReuseSnapshot ? buildGenerationBriefNaiReusableAssetsText(naiReuseSnapshot) : ''), [naiReuseSnapshot])
@@ -297,6 +307,18 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
     showSnackbar({ message: t({ ko: '로컬 브리프 JSON을 내려받았어.', en: 'Downloaded the local brief JSON.' }), tone: 'info' })
   }
 
+  const toggleImportFieldSelection = (field: keyof GenerationBriefDraft, selected: boolean) => {
+    setSelectedImportFields((current) => {
+      const next = new Set(current)
+      if (selected) {
+        next.add(field)
+      } else {
+        next.delete(field)
+      }
+      return GENERATION_BRIEF_FIELDS.filter((candidate) => next.has(candidate))
+    })
+  }
+
   const importHandoffPayload = () => {
     if (importPreview?.status !== 'imported') {
       showSnackbar({
@@ -306,10 +328,10 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
       return
     }
 
-    const importedDraft = saveGenerationBriefDraft(importPreview.draft)
+    const importedDraft = saveGenerationBriefDraft(buildGenerationBriefSelectiveImportDraft(draft, importPreview.draft, selectedImportFields))
     setDraft(importedDraft)
     setImportPayload('')
-    showSnackbar({ message: t({ ko: '브리프를 로컬 초안으로 복원했어.', en: 'Restored the brief as a local draft.' }), tone: 'info' })
+    showSnackbar({ message: t({ ko: '선택한 필드만 로컬 초안으로 복원했어.', en: 'Restored the selected fields into the local draft.' }), tone: 'info' })
   }
 
   const statusLabel = summary.status === 'review-ready'
@@ -660,6 +682,31 @@ export function GenerationBriefWorkspace({ activeTab, naiReuseSnapshot = null, c
                             </div>
                           </div>
                         ))}
+                      </div>
+                      <div data-generation-brief-import-field-selection="true" className="space-y-2 rounded-sm border border-border/60 bg-background/60 p-2">
+                        <div className="font-medium text-foreground">
+                          {t(
+                            { ko: '복원할 필드 {selected}/{total}', en: 'Fields to restore {selected}/{total}' },
+                            { selected: selectedImportFieldCount, total: importPreviewDiff.fields.length },
+                          )}
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {importPreviewDiff.fields.map((field) => (
+                            <label key={field.field} className="flex items-start gap-2 rounded-sm border border-border/50 bg-surface-container/25 p-2 text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                data-generation-brief-import-field-select={field.field}
+                                className="mt-0.5"
+                                checked={selectedImportFieldSet.has(field.field)}
+                                onChange={(event) => toggleImportFieldSelection(field.field, event.target.checked)}
+                              />
+                              <span className="grid gap-1">
+                                <span className="font-medium text-foreground">{field.label}</span>
+                                <span>{t(getImportDiffStatusLabel(field.status))}: {field.importedPreview}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
                       {importPreviewDiff.changedCount === 0 ? (
                         <div data-generation-brief-import-diff-empty="true" className="text-muted-foreground">

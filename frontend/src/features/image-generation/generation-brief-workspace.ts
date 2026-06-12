@@ -198,7 +198,7 @@ export const DEFAULT_GENERATION_BRIEF_DRAFT: GenerationBriefDraft = {
   reviewNotes: '',
 }
 
-const GENERATION_BRIEF_FIELDS: Array<keyof GenerationBriefDraft> = [
+export const GENERATION_BRIEF_FIELDS: Array<keyof GenerationBriefDraft> = [
   'intent',
   'target',
   'sourceReferences',
@@ -451,6 +451,25 @@ export function buildGenerationBriefImportDiff(currentDraft: GenerationBriefDraf
     localOnly: true,
     externalActionsExecuted: false,
     sideEffectBoundary: 'local-draft-only',
+  }
+}
+
+/** Merge only the selected imported brief fields into the current local draft. */
+export function buildGenerationBriefSelectiveImportDraft(
+  currentDraft: GenerationBriefDraft,
+  importedDraft: GenerationBriefDraft,
+  selectedFields: Array<keyof GenerationBriefDraft>,
+): GenerationBriefDraft {
+  const current = normalizeGenerationBriefDraft(currentDraft)
+  const imported = normalizeGenerationBriefDraft(importedDraft)
+  const selected = new Set(selectedFields)
+
+  return {
+    intent: selected.has('intent') ? imported.intent : current.intent,
+    target: selected.has('target') ? imported.target : current.target,
+    sourceReferences: selected.has('sourceReferences') ? imported.sourceReferences : current.sourceReferences,
+    reusableAssets: selected.has('reusableAssets') ? imported.reusableAssets : current.reusableAssets,
+    reviewNotes: selected.has('reviewNotes') ? imported.reviewNotes : current.reviewNotes,
   }
 }
 
