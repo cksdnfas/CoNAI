@@ -202,6 +202,12 @@ route 파일이 route 이상의 일을 하고 있다. API 진입점이 schema bu
 - `moduleDefinitionPersistenceService.ts`
 - route 파일은 request parsing과 response만 담당
 
+진행 상태:
+
+- 2026-06-15 1차 정리 일부 완료.
+- module label/name localization table과 helper를 `backend/src/services/moduleDefinitions/labels.ts`로 분리했다.
+- route 파일은 localized label/name helper를 import해서 사용한다.
+
 ## 다음 후보
 
 ### `backend/src/services/generationQueueService.ts`
