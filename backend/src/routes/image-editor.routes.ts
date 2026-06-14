@@ -3,15 +3,12 @@ import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ImageEditorService } from '../services/imageEditorService';
 import type { EditOptions } from '../services/tempImageService';
-import { runtimePaths } from '../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
-import sharp from 'sharp';
 import { WebPConversionService } from '../services/webpConversionService';
 import { buildImageEditorResultData, listSaveBrowserImages } from './imageEditorRouteHelpers';
 import { sendRouteBadRequest } from './routeValidation';
 import {
-  getCanvasFilePathOrBlock,
   requireAccessibleImageEditorRequest,
   requireImageData,
 } from './imageEditorAccessHelpers';
@@ -21,6 +18,12 @@ import {
   handleTempImageList,
   handleTempMaskFile,
 } from './imageEditorTempHandlers';
+import {
+  handleCanvasWebp,
+  handleDeleteCanvasImage,
+  handleListCanvasImages,
+  handleSaveCanvasWebp,
+} from './imageEditorCanvasHandlers';
 
 const router = Router();
 
@@ -314,38 +317,7 @@ router.post('/mask/blank', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/canvas/:filename/webp', asyncHandler(async (req: Request, res: Response) => {
   const filename = routeParam(req.params.filename);
-
-  try {
-    const filePath = getCanvasFilePathOrBlock(filename, res);
-    if (!filePath) {
-      return;
-    }
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        error: 'File not found'
-      });
-    }
-
-    const conversion = await WebPConversionService.convertFileToWebPBuffer(filePath, {
-      quality: 100,
-      lossless: false,
-      sourcePathForMetadata: filePath,
-      originalFileName: path.basename(filePath),
-      mimeType: 'image/webp',
-    });
-
-    res.set('Content-Type', 'image/webp');
-    res.set('Cache-Control', 'private, max-age=300');
-    return res.send(conversion.buffer);
-  } catch (error) {
-    console.error('Error converting canvas image to WebP:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to convert image'
-    });
-  }
+  return handleCanvasWebp(filename, res);
 }));
 
 /**
@@ -355,68 +327,7 @@ router.get('/canvas/:filename/webp', asyncHandler(async (req: Request, res: Resp
  */
 router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res: Response) => {
   const filename = routeParam(req.params.filename);
-  const { imageData, quality = 90, createNew = false } = req.body;
-
-  if (!requireImageData(res, imageData)) {
-    return;
-  }
-
-  try {
-    const canvasDir = runtimePaths.canvasDir;
-
-    // Ensure canvas directory exists
-    await fs.promises.mkdir(canvasDir, { recursive: true });
-
-    // Convert base64 to Buffer
-    const base64Data = imageData.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '');
-    const imageBuffer = Buffer.from(base64Data, 'base64');
-
-    // Determine filename
-    let newFileName: string;
-    if (createNew) {
-      // Create new file with timestamp
-      const baseName = path.basename(filename, path.extname(filename));
-      const timestamp = Date.now();
-      newFileName = `${baseName}_${timestamp}.webp`;
-    } else {
-      // Overwrite existing file
-      newFileName = filename;
-    }
-
-    const filePath = getCanvasFilePathOrBlock(newFileName, res);
-    if (!filePath) {
-      return;
-    }
-
-    const metadataSourcePath = fs.existsSync(filePath) ? filePath : undefined;
-
-    const conversion = await WebPConversionService.convertBufferToWebPBuffer(imageBuffer, {
-      quality,
-      sourcePathForMetadata: metadataSourcePath,
-      originalFileName: newFileName,
-      mimeType: 'image/webp',
-    });
-
-    await fs.promises.writeFile(filePath, conversion.buffer);
-
-    return res.json({
-      success: true,
-      data: {
-        filename: newFileName,
-        filePath,
-        url: `/save/canvas/${newFileName}`,
-        width: conversion.info.width || 0,
-        height: conversion.info.height || 0,
-        fileSize: conversion.buffer.length
-      }
-    });
-  } catch (error) {
-    console.error('Error saving canvas image:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to save canvas image'
-    });
-  }
+  return handleSaveCanvasWebp(req, res, filename);
 }));
 
 /**
@@ -425,74 +336,7 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
  * Returns list of images in temp/canvas directory, sorted by modification time (newest first)
  */
 router.get('/canvas', asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const canvasDir = runtimePaths.canvasDir;
-
-    // Ensure canvas directory exists
-    if (!fs.existsSync(canvasDir)) {
-      return res.json({
-        success: true,
-        data: {
-          images: [],
-          total: 0
-        }
-      });
-    }
-
-    // Read directory and get file stats
-    const files = await fs.promises.readdir(canvasDir);
-    const imageExtensions = ['.webp', '.png', '.jpg', '.jpeg'];
-
-    const imageFiles = await Promise.all(
-      files
-        .filter(file => imageExtensions.some(ext => file.toLowerCase().endsWith(ext)))
-        .map(async (file) => {
-          const filePath = path.join(canvasDir, file);
-          const stats = await fs.promises.stat(filePath);
-
-          // Try to get image dimensions
-          let width = 0;
-          let height = 0;
-          try {
-            const metadata = await sharp(filePath).metadata();
-            width = metadata.width || 0;
-            height = metadata.height || 0;
-          } catch (e) {
-            // Ignore metadata errors
-          }
-
-          return {
-            filename: file,
-            path: filePath,
-            url: `/save/canvas/${file}`,
-            size: stats.size,
-            width,
-            height,
-            createdAt: stats.birthtime.toISOString(),
-            modifiedAt: stats.mtime.toISOString()
-          };
-        })
-    );
-
-    // Sort by modification time (newest first)
-    imageFiles.sort((a, b) =>
-      new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime()
-    );
-
-    return res.json({
-      success: true,
-      data: {
-        images: imageFiles,
-        total: imageFiles.length
-      }
-    });
-  } catch (error) {
-    console.error('Error listing canvas images:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to list canvas images'
-    });
-  }
+  return handleListCanvasImages(res);
 }));
 
 /**
@@ -501,33 +345,7 @@ router.get('/canvas', asyncHandler(async (req: Request, res: Response) => {
  */
 router.delete('/canvas/:filename', asyncHandler(async (req: Request, res: Response) => {
   const filename = routeParam(req.params.filename);
-
-  try {
-    const filePath = getCanvasFilePathOrBlock(filename, res);
-    if (!filePath) {
-      return;
-    }
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        error: 'File not found'
-      });
-    }
-
-    await fs.promises.unlink(filePath);
-
-    return res.json({
-      success: true,
-      message: 'Canvas image deleted successfully'
-    });
-  } catch (error) {
-    console.error('Error deleting canvas image:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete canvas image'
-    });
-  }
+  return handleDeleteCanvasImage(filename, res);
 }));
 
 export default router;
