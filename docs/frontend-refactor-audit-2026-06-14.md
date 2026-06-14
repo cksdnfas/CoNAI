@@ -21,6 +21,14 @@
 4. `api-module-graph.ts` 타입과 API client 분리
 5. 큰 UI 패널 파일을 기능 단위로 나누기
 
+## 진행 현황
+
+- 2026-06-15: 1번 완료. `module-graph-shared.tsx`에서 core type/helper, artifact helper, evaluator 성격 helper를 분리했고 실제 source import 기준 `module-graph-shared -> workflow-inputs -> validation -> shared` cycle을 끊었다.
+- 2026-06-15: 2번 완료. `module-graph-node-card-layouts.tsx`를 compatibility barrel로 줄이고 API request, random text choice, text node layouts, artifact outputs, inline workflow input editor를 하위 파일로 분리했다.
+- 2026-06-15: 3번 주요 범위 완료. `image-generation-shared.tsx`에서 localStorage draft/workflow draft helper와 generation history status/recovery helper를 분리했다. NAI module snapshot/field option helper는 476줄 안에 남겼지만 현재 파일을 한 번에 분석 가능한 크기로 낮췄다.
+- 2026-06-15: 4번 타입 분리 완료. `api-module-graph.ts`에서 공개 API 타입을 `api-module-graph-types.ts`로 분리하고 기존 import 경로는 re-export로 유지했다.
+- 2026-06-15: build 경고 중 `module-graph` ineffective dynamic import 경고를 정리했다. 남은 chunk-size 경고는 앱 공통/vendor 크기 성격이어서 별도 성능 작업으로 본다.
+
 ## 최우선 후보
 
 ### `frontend/src/features/module-graph/module-graph-shared.tsx`
