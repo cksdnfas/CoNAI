@@ -2,23 +2,22 @@ import axios, { AxiosInstance } from 'axios';
 import * as path from 'path';
 import * as fs from 'fs';
 import FormData from 'form-data';
-import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse, ComfyUIOutputFile } from '../types/workflow';
+import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse } from '../types/workflow';
 import type { ComfyUIBackendType, ComfyUIQueueState, ComfyUIServerRecord, ComfyUIServerRuntimeStatus } from '../types/comfyuiServer';
 import { runtimePaths } from '../config/runtimePaths';
-
-type ComfyUIQueueResponse = {
-  queue_running?: unknown;
-  queue_pending?: unknown;
-};
-
-type ComfyOutputKind = 'image' | 'animated' | 'video';
+import { resolveAxiosErrorMessage } from './comfyui/errors';
+import {
+  buildComfyUIQueueState,
+  type ComfyUIQueueResponse,
+} from './comfyui/queueState';
+import {
+  extractComfyOutputInfo,
+  writeModalOutputToTemp,
+  type CollectedComfyOutput,
+  type ModalComfyGenerateResponse,
+} from './comfyui/outputCollector';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
-
-type CollectedComfyOutput = ComfyUIOutputFile & {
-  nodeId: string;
-  kind: ComfyOutputKind;
-};
 
 type WaitForCompletionOptions = {
   shouldCancel?: () => boolean | Promise<boolean>;
@@ -30,21 +29,6 @@ type ComfyUIServiceOptions = {
   capacity?: number;
 };
 
-type ModalComfyFile = {
-  node_id?: string;
-  filename?: string;
-  subfolder?: string;
-  type?: string;
-  data_base64?: string;
-  format?: string;
-};
-
-type ModalComfyGenerateResponse = {
-  images?: ModalComfyFile[];
-  videos?: ModalComfyFile[];
-  error?: string;
-};
-
 export type ComfyUICancelPromptResult = {
   promptId: string;
   matchedRunning: boolean;
@@ -52,84 +36,6 @@ export type ComfyUICancelPromptResult = {
   interrupted: boolean;
   deleted: boolean;
 };
-
-function normalizeQueueEntries(value: unknown): unknown[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>);
-  }
-
-  return [];
-}
-
-function extractPromptIdFromQueueEntry(entry: unknown): string | null {
-  if (Array.isArray(entry)) {
-    if (typeof entry[1] === 'string' && entry[1].trim().length > 0) {
-      return entry[1].trim();
-    }
-
-    for (const item of entry) {
-      const nested = extractPromptIdFromQueueEntry(item);
-      if (nested) {
-        return nested;
-      }
-    }
-    return null;
-  }
-
-  if (entry && typeof entry === 'object') {
-    const record = entry as Record<string, unknown>;
-    if (typeof record.prompt_id === 'string' && record.prompt_id.trim().length > 0) {
-      return record.prompt_id.trim();
-    }
-    if (typeof record.id === 'string' && record.id.trim().length > 0) {
-      return record.id.trim();
-    }
-
-    for (const value of Object.values(record)) {
-      const nested = extractPromptIdFromQueueEntry(value);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-
-  return null;
-}
-
-function collectPromptIds(entries: unknown[]) {
-  const promptIds = new Set<string>();
-  for (const entry of entries) {
-    const promptId = extractPromptIdFromQueueEntry(entry);
-    if (promptId) {
-      promptIds.add(promptId);
-    }
-  }
-  return [...promptIds];
-}
-
-function resolveAxiosErrorMessage(error: unknown) {
-  if (axios.isAxiosError(error)) {
-    const responseData = error.response?.data;
-    if (typeof responseData === 'string' && responseData.trim().length > 0) {
-      return `${error.message} | ${responseData.trim()}`;
-    }
-
-    if (responseData && typeof responseData === 'object') {
-      try {
-        return `${error.message} | ${JSON.stringify(responseData)}`;
-      } catch {
-        // fall through to the base axios message
-      }
-    }
-
-    return error.message;
-  }
-  return error instanceof Error ? error.message : 'Unknown error';
-}
 
 /**
  * ComfyUI API 서비스
@@ -374,83 +280,12 @@ export class ComfyUIService {
     }
   }
 
-  private resolveOutputKind(bucket: 'images' | 'gifs' | 'videos' | 'files', file: ComfyUIOutputFile): ComfyOutputKind {
-    if (bucket === 'videos') {
-      return 'video';
-    }
-
-    const normalizedFormat = (file.format || '').toLowerCase();
-    const extension = path.extname(file.filename).toLowerCase();
-
-    if (normalizedFormat.startsWith('video/') || ['.mp4', '.webm', '.mov', '.mkv', '.avi'].includes(extension)) {
-      return 'video';
-    }
-
-    if (bucket === 'gifs' || ['.gif', '.webp'].includes(extension)) {
-      return 'animated';
-    }
-
-    return 'image';
-  }
-
-  private parseNodeOrder(nodeId: string): number {
-    const match = nodeId.match(/^\d+/);
-    return match ? Number(match[0]) : -1;
-  }
-
-  /**
-   * 히스토리에서 생성된 최종 출력 정보를 추출한다.
-   */
-  extractOutputInfo(
-    history: ComfyUIHistoryResponse,
-    promptId: string,
-    onlyFinalOutput: boolean = true
-  ): CollectedComfyOutput[] {
-    const item = history[promptId];
-    if (!item || !item.outputs) {
-      return [];
-    }
-
-    const allOutputs: CollectedComfyOutput[] = [];
-
-    for (const nodeId in item.outputs) {
-      const output = item.outputs[nodeId];
-      const buckets: Array<'images' | 'gifs' | 'videos' | 'files'> = ['images', 'gifs', 'videos', 'files'];
-
-      for (const bucket of buckets) {
-        const files = output[bucket];
-        if (!Array.isArray(files)) {
-          continue;
-        }
-
-        files.forEach((file) => {
-          allOutputs.push({
-            ...file,
-            nodeId,
-            kind: this.resolveOutputKind(bucket, file),
-          });
-        });
-      }
-    }
-
-    if (onlyFinalOutput && allOutputs.length > 0) {
-      const maxNodeOrder = Math.max(...allOutputs.map((file) => this.parseNodeOrder(file.nodeId)));
-      const finalOutputs = allOutputs.filter((file) => this.parseNodeOrder(file.nodeId) === maxNodeOrder);
-
-      console.log(`📦 Found ${allOutputs.length} outputs, returning ${finalOutputs.length} final output(s) from node #${maxNodeOrder}`);
-      return finalOutputs;
-    }
-
-    console.log(`📦 Found ${allOutputs.length} outputs, returning all`);
-    return allOutputs;
-  }
-
   /**
    * Wait for one submitted ComfyUI prompt and download its generated outputs.
    */
   async collectGeneratedOutputs(promptId: string, options?: WaitForCompletionOptions & { onlyFinalOutput?: boolean }): Promise<Array<CollectedComfyOutput & { tempPath: string }>> {
     const history = await this.waitForCompletion(promptId, 1800, 2000, options);
-    const outputInfos = this.extractOutputInfo(history, promptId, options?.onlyFinalOutput ?? true);
+    const outputInfos = extractComfyOutputInfo(history, promptId, options?.onlyFinalOutput ?? true);
 
     if (outputInfos.length === 0) {
       throw new Error('No outputs generated by ComfyUI');
@@ -470,33 +305,6 @@ export class ComfyUIService {
     }
 
     return tempFiles;
-  }
-
-  private writeModalOutputToTemp(file: ModalComfyFile, fallbackName: string, kind: ComfyOutputKind): CollectedComfyOutput & { tempPath: string } {
-    const encoded = typeof file.data_base64 === 'string' ? file.data_base64 : '';
-    if (!encoded) {
-      throw new Error(`Modal ComfyUI output ${file.filename ?? fallbackName} did not include data_base64`);
-    }
-
-    const filename = path.basename(file.filename || fallbackName);
-    const tempDir = runtimePaths.tempDir;
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-
-    const ext = path.extname(filename) || (kind === 'video' ? '.mp4' : '.png');
-    const tempFilePath = path.join(tempDir, `modal_comfyui_${Date.now()}_${Math.random().toString(36).slice(2, 9)}${ext}`);
-    fs.writeFileSync(tempFilePath, Buffer.from(encoded, 'base64'));
-
-    return {
-      filename,
-      subfolder: typeof file.subfolder === 'string' ? file.subfolder : '',
-      type: typeof file.type === 'string' && file.type.trim().length > 0 ? file.type : 'output',
-      format: file.format,
-      nodeId: String(file.node_id ?? 'modal'),
-      kind,
-      tempPath: tempFilePath,
-    };
   }
 
   /**
@@ -537,8 +345,8 @@ export class ComfyUIService {
     const imageOutputs = Array.isArray(response.data?.images) ? response.data.images : [];
     const videoOutputs = Array.isArray(response.data?.videos) ? response.data.videos : [];
     const outputs = [
-      ...imageOutputs.map((file, index) => this.writeModalOutputToTemp(file, `modal_image_${index}.png`, 'image')),
-      ...videoOutputs.map((file, index) => this.writeModalOutputToTemp(file, `modal_video_${index}.mp4`, 'video')),
+      ...imageOutputs.map((file, index) => writeModalOutputToTemp(file, `modal_image_${index}.png`, 'image')),
+      ...videoOutputs.map((file, index) => writeModalOutputToTemp(file, `modal_video_${index}.mp4`, 'video')),
     ];
 
     if (outputs.length === 0) {
@@ -666,16 +474,7 @@ export class ComfyUIService {
   async getQueueState(timeout: number = 5000): Promise<ComfyUIQueueState> {
     try {
       const response = await this.axiosInstance.get<ComfyUIQueueResponse>('/queue', { timeout });
-      const runningEntries = normalizeQueueEntries(response.data?.queue_running);
-      const pendingEntries = normalizeQueueEntries(response.data?.queue_pending);
-
-      return {
-        pending_count: pendingEntries.length,
-        running_count: runningEntries.length,
-        pending_prompt_ids: collectPromptIds(pendingEntries),
-        running_prompt_ids: collectPromptIds(runningEntries),
-        is_idle: pendingEntries.length === 0 && runningEntries.length === 0,
-      };
+      return buildComfyUIQueueState(response.data);
     } catch (error) {
       throw new Error(`ComfyUI queue API error: ${resolveAxiosErrorMessage(error)}`);
     }

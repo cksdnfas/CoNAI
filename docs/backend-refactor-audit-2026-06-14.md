@@ -155,6 +155,14 @@ Prompt Group 자체 책임과 Danbooru taxonomy grouping 책임이 섞여 있다
 
 외부 API 호출 wrapper부터 분리하면 테스트와 실패 처리 정리가 쉬워진다.
 
+진행 상태:
+
+- 2026-06-14 1차 정리 일부 완료.
+- ComfyUI queue 응답 정규화와 prompt id 추출을 `backend/src/services/comfyui/queueState.ts`로 분리했다.
+- history output 분류, final output 선택, Modal base64 output temp 파일 저장을 `backend/src/services/comfyui/outputCollector.ts`로 분리했다.
+- axios error message formatter를 `backend/src/services/comfyui/errors.ts`로 분리해 client/runtime/cancel 경로에서 공유한다.
+- 확인: `npm run build:backend`, `npm run verify:graph-artifact-runtime`, `npm run verify:comfy-server-default-contracts`, `npm run verify:graph-final-result-promotion-contracts`.
+
 ### `backend/src/routes/moduleDefinitions.ts`
 
 - 크기: 925 lines
