@@ -15,8 +15,6 @@ import { getModuleNodeDisplayLabel, isFinalResultModule, type ModuleGraphEdge, t
 import { countGraphWorkflowFinalResultNodes, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 export { ModuleGraphWorkflowListSidebar } from './module-graph-workflow-list-sidebar'
-export { ModuleGraphWorkflowBrowseContent, ModuleGraphWorkflowEditorContent } from './module-graph-workflow-content'
-export { ModuleGraphWorkspaceModals } from './module-graph-workspace-modals'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 
