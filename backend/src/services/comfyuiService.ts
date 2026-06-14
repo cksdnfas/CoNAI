@@ -14,7 +14,17 @@ import {
   type CollectedComfyOutput,
   type ModalComfyGenerateResponse,
 } from './comfyui/outputCollector';
+import {
+  buildModalRuntimeStatus,
+  buildQueueRuntimeStatus,
+  buildRuntimeStatusError,
+  buildUnprobedModalRuntimeStatus,
+  normalizeComfyCapacity,
+  type ComfyRuntimeStatusMeta,
+} from './comfyui/runtimeStatus';
 import { substituteComfyPromptData } from './comfyui/workflowSubstitution';
+
+export { buildUnprobedModalRuntimeStatus } from './comfyui/runtimeStatus';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
 
@@ -394,82 +404,47 @@ export class ComfyUIService {
   /**
    * Combine reachability and queue occupancy into one runtime status payload.
    */
-  async getRuntimeStatus(serverMeta?: Pick<ComfyUIServerRecord, 'id' | 'name' | 'endpoint' | 'backend_type' | 'capacity'>): Promise<ComfyUIServerRuntimeStatus> {
+  async getRuntimeStatus(serverMeta?: ComfyRuntimeStatusMeta): Promise<ComfyUIServerRuntimeStatus> {
     const startedAt = Date.now();
     const observedAt = new Date().toISOString();
     const backendType = serverMeta?.backend_type ?? this.backendType;
-    const capacity = Math.max(1, Math.floor(serverMeta?.capacity ?? this.capacity));
+    const capacity = normalizeComfyCapacity(serverMeta?.capacity, this.capacity);
+    const runtimeStatusInput = {
+      serverMeta,
+      apiEndpoint: this.apiEndpoint,
+      backendType,
+      capacity,
+      startedAt,
+      observedAt,
+    };
 
     if (backendType === 'modal') {
       try {
         const isConnected = await this.testConnection();
-        return {
-          server_id: serverMeta?.id ?? 0,
-          server_name: serverMeta?.name ?? '',
-          endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
-          backend_type: backendType,
-          capacity,
-          available_count: isConnected ? capacity : 0,
-          is_connected: isConnected,
-          response_time: Date.now() - startedAt,
-          error_message: undefined,
-          is_idle: isConnected,
-          pending_count: 0,
-          running_count: 0,
-          observed_at: observedAt,
-        };
+        return buildModalRuntimeStatus({
+          ...runtimeStatusInput,
+          isConnected,
+        });
       } catch (error) {
-        return {
-          server_id: serverMeta?.id ?? 0,
-          server_name: serverMeta?.name ?? '',
-          endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
-          backend_type: backendType,
-          capacity,
-          available_count: 0,
-          is_connected: false,
-          response_time: Date.now() - startedAt,
-          error_message: resolveAxiosErrorMessage(error),
-          is_idle: false,
-          pending_count: 0,
-          running_count: 0,
-          observed_at: observedAt,
-        };
+        return buildRuntimeStatusError({
+          ...runtimeStatusInput,
+          errorMessage: resolveAxiosErrorMessage(error),
+          includeZeroQueueCounts: true,
+        });
       }
     }
 
     try {
       const queueState = await this.getQueueState();
-      return {
-        server_id: serverMeta?.id ?? 0,
-        server_name: serverMeta?.name ?? '',
-        endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
-        backend_type: backendType,
-        capacity,
-        available_count: queueState.is_idle ? 1 : 0,
-        is_connected: true,
-        response_time: Date.now() - startedAt,
-        error_message: undefined,
-        is_idle: queueState.is_idle,
-        pending_count: queueState.pending_count,
-        running_count: queueState.running_count,
-        observed_at: observedAt,
-      };
+      return buildQueueRuntimeStatus({
+        ...runtimeStatusInput,
+        queueState,
+      });
     } catch (error) {
-      return {
-        server_id: serverMeta?.id ?? 0,
-        server_name: serverMeta?.name ?? '',
-        endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
-        backend_type: backendType,
-        capacity,
-        available_count: 0,
-        is_connected: false,
-        response_time: Date.now() - startedAt,
-        error_message: resolveAxiosErrorMessage(error),
-        is_idle: false,
-        pending_count: undefined,
-        running_count: undefined,
-        observed_at: observedAt,
-      };
+      return buildRuntimeStatusError({
+        ...runtimeStatusInput,
+        errorMessage: resolveAxiosErrorMessage(error),
+      });
     }
   }
 
@@ -503,28 +478,6 @@ export function createComfyUIService(apiEndpoint: string, server?: Pick<ComfyUIS
     backendType: server?.backend_type ?? 'comfyui',
     capacity: server?.capacity,
   });
-}
-
-/**
- * Collect runtime occupancy status for multiple ComfyUI servers in parallel.
- */
-export function buildUnprobedModalRuntimeStatus(server: ComfyUIServerRecord): ComfyUIServerRuntimeStatus {
-  const capacity = Math.max(1, Math.floor(server.capacity ?? 10));
-  return {
-    server_id: server.id,
-    server_name: server.name,
-    endpoint: server.endpoint,
-    backend_type: 'modal',
-    capacity,
-    available_count: capacity,
-    is_connected: true,
-    response_time: undefined,
-    error_message: undefined,
-    is_idle: true,
-    pending_count: undefined,
-    running_count: undefined,
-    observed_at: new Date().toISOString(),
-  };
 }
 
 export async function getComfyUIServerRuntimeStatuses(servers: ComfyUIServerRecord[]): Promise<ComfyUIServerRuntimeStatus[]> {
