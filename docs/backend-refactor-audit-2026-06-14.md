@@ -207,6 +207,9 @@ route 파일이 route 이상의 일을 하고 있다. API 진입점이 schema bu
 - 2026-06-15 1차 정리 일부 완료.
 - module label/name localization table과 helper를 `backend/src/services/moduleDefinitions/labels.ts`로 분리했다.
 - route 파일은 localized label/name helper를 import해서 사용한다.
+- 2026-06-15 2차 정리 일부 완료.
+- target module id parsing/validation과 module definition upsert persistence를 `backend/src/services/moduleDefinitions/upsert.ts`로 분리했다.
+- route 파일은 response shaping만 유지하고 target 검증과 create/update 실행은 helper에 위임한다.
 
 ## 다음 후보
 

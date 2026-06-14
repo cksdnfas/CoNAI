@@ -11,11 +11,10 @@ import {
   ModulePortDefinition,
   ModuleUiFieldDefinition,
   ModulePortDataType,
-  ModuleEngineType,
-  ModuleAuthoringSource,
 } from '../types/moduleGraph'
 import { asyncHandler } from '../middleware/errorHandler'
 import { inferPortLabel as inferModuleDefinitionPortLabel, localizeDisplayLabel, localizeModuleName } from '../services/moduleDefinitions/labels'
+import { parseOptionalTargetModuleId, persistModuleDefinitionUpsert, resolveTargetModule } from '../services/moduleDefinitions/upsert'
 
 const router = Router()
 
@@ -212,86 +211,8 @@ function buildUiSchemaFromPorts(ports: ModulePortDefinition[]): ModuleUiFieldDef
   })) as ModuleUiFieldDefinition[]
 }
 
-type TargetModuleValidation = {
-  engineType: ModuleEngineType
-  authoringSource: ModuleAuthoringSource
-  invalidTypeError: string
-  sourceWorkflowId?: number
-}
-
-type TargetModuleResolution =
-  | { targetModule: ModuleDefinitionRecord | null }
-  | { status: number; error: string }
-
-function parseOptionalTargetModuleId(value: unknown): number | null {
-  return value !== undefined && value !== null ? Number(value) : null
-}
-
-function resolveTargetModule(
-  targetModuleId: number | null,
-  validation: TargetModuleValidation,
-): TargetModuleResolution {
-  const targetModule = targetModuleId ? ModuleDefinitionModel.findById(targetModuleId) : null
-  if (targetModuleId && !targetModule) {
-    return { status: 404, error: 'Target module definition not found' }
-  }
-
-  if (targetModule && (
-    targetModule.engine_type !== validation.engineType
-    || targetModule.authoring_source !== validation.authoringSource
-  )) {
-    return { status: 400, error: validation.invalidTypeError }
-  }
-
-  if (
-    targetModule
-    && validation.sourceWorkflowId !== undefined
-    && targetModule.source_workflow_id !== validation.sourceWorkflowId
-  ) {
-    return { status: 400, error: 'Target module belongs to a different ComfyUI workflow' }
-  }
-
-  return { targetModule }
-}
-
 function sendModuleGraphError(res: Response, status: number, error: string) {
   return res.status(status).json({ success: false, error } as ModuleGraphResponse)
-}
-
-function persistModuleDefinitionUpsert(
-  targetModule: ModuleDefinitionRecord | null,
-  createData: ModuleDefinitionCreateData,
-  messages: { created: string; updated: string; noChanges: string },
-) {
-  if (targetModule) {
-    const updated = ModuleDefinitionModel.update(targetModule.id, {
-      ...createData,
-      version: (targetModule.version ?? 1) + 1,
-    })
-
-    return {
-      status: 200,
-      body: {
-        success: updated,
-        data: {
-          id: targetModule.id,
-          message: updated ? messages.updated : messages.noChanges,
-        },
-      } as ModuleGraphResponse,
-    }
-  }
-
-  const id = ModuleDefinitionModel.create(createData)
-  return {
-    status: 201,
-    body: {
-      success: true,
-      data: {
-        id,
-        message: messages.created,
-      },
-    } as ModuleGraphResponse,
-  }
 }
 
 function sendModuleDefinitionUpsert(
