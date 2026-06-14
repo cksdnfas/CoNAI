@@ -18,13 +18,10 @@ import {
   buildModalRuntimeStatus,
   buildQueueRuntimeStatus,
   buildRuntimeStatusError,
-  buildUnprobedModalRuntimeStatus,
   normalizeComfyCapacity,
   type ComfyRuntimeStatusMeta,
 } from './comfyui/runtimeStatus';
 import { substituteComfyPromptData } from './comfyui/workflowSubstitution';
-
-export { buildUnprobedModalRuntimeStatus } from './comfyui/runtimeStatus';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
 
@@ -477,44 +474,5 @@ export function createComfyUIService(apiEndpoint: string, server?: Pick<ComfyUIS
   return new ComfyUIService(apiEndpoint, {
     backendType: server?.backend_type ?? 'comfyui',
     capacity: server?.capacity,
-  });
-}
-
-export async function getComfyUIServerRuntimeStatuses(servers: ComfyUIServerRecord[]): Promise<ComfyUIServerRuntimeStatus[]> {
-  const results = await Promise.allSettled(
-    servers.map(async (server) => {
-      if (server.backend_type === 'modal') {
-        return buildUnprobedModalRuntimeStatus(server);
-      }
-
-      const comfyService = new ComfyUIService(server.endpoint, {
-        backendType: server.backend_type,
-        capacity: server.capacity,
-      });
-      return comfyService.getRuntimeStatus(server);
-    })
-  );
-
-  return results.map((result, index) => {
-    const server = servers[index];
-    if (result.status === 'fulfilled') {
-      return result.value;
-    }
-
-    return {
-      server_id: server.id,
-      server_name: server.name,
-      endpoint: server.endpoint,
-      backend_type: server.backend_type,
-      capacity: server.capacity,
-      available_count: 0,
-      is_connected: false,
-      response_time: undefined,
-      error_message: resolveAxiosErrorMessage(result.reason),
-      is_idle: false,
-      pending_count: undefined,
-      running_count: undefined,
-      observed_at: new Date().toISOString(),
-    };
   });
 }

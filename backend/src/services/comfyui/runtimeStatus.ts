@@ -7,7 +7,7 @@ type RuntimeStatusBaseInput = {
   apiEndpoint: string;
   backendType: ComfyUIBackendType;
   capacity: number;
-  startedAt: number;
+  startedAt?: number;
   observedAt: string;
 };
 
@@ -18,7 +18,7 @@ function buildRuntimeStatusBase(input: RuntimeStatusBaseInput) {
     endpoint: input.serverMeta?.endpoint ?? input.apiEndpoint,
     backend_type: input.backendType,
     capacity: input.capacity,
-    response_time: Date.now() - input.startedAt,
+    response_time: input.startedAt === undefined ? undefined : Date.now() - input.startedAt,
     observed_at: input.observedAt,
   };
 }

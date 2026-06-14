@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer';
-import { buildUnprobedModalRuntimeStatus, createComfyUIService, getComfyUIServerRuntimeStatuses } from '../services/comfyuiService';
+import { createComfyUIService } from '../services/comfyuiService';
 import { ParallelGenerationService } from '../services/comfyui/parallelGenerationService';
+import { buildUnprobedModalRuntimeStatus } from '../services/comfyui/runtimeStatus';
+import { getComfyUIServerRuntimeStatuses } from '../services/comfyui/runtimeStatusService';
 import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData, type ComfyUIBackendType } from '../types/comfyuiServer';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendRouteBadRequest } from './routeValidation';
