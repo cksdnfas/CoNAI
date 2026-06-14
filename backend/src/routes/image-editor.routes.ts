@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ImageEditorService } from '../services/imageEditorService';
-import { TempImageService, EditOptions } from '../services/tempImageService';
+import type { EditOptions } from '../services/tempImageService';
 import { runtimePaths } from '../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
@@ -15,6 +15,12 @@ import {
   requireAccessibleImageEditorRequest,
   requireImageData,
 } from './imageEditorAccessHelpers';
+import {
+  handleDeleteTempImage,
+  handleTempImageFile,
+  handleTempImageList,
+  handleTempMaskFile,
+} from './imageEditorTempHandlers';
 
 const router = Router();
 
@@ -239,21 +245,7 @@ router.post('/:id/save-webp', asyncHandler(async (req: Request, res: Response) =
  */
 router.delete('/temp/:tempId', asyncHandler(async (req: Request, res: Response) => {
   const tempId = routeParam(req.params.tempId);
-
-  try {
-    await TempImageService.deleteTempFile(tempId);
-
-    return res.json({
-      success: true,
-      message: 'Temporary file deleted successfully'
-    });
-  } catch (error) {
-    console.error('Error deleting temp file:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete temporary file'
-    });
-  }
+  return handleDeleteTempImage(tempId, res);
 }));
 
 /**
@@ -262,35 +254,7 @@ router.delete('/temp/:tempId', asyncHandler(async (req: Request, res: Response) 
  */
 router.get('/temp/:tempId/image', asyncHandler(async (req: Request, res: Response) => {
   const tempId = routeParam(req.params.tempId);
-
-  const tempInfo = TempImageService.getTempFileInfo(tempId);
-
-  if (!tempInfo) {
-    return res.status(404).json({
-      success: false,
-      error: 'Temporary file not found'
-    });
-  }
-
-  // Check if file exists
-  if (!fs.existsSync(tempInfo.tempPath)) {
-    return res.status(404).json({
-      success: false,
-      error: 'Temporary file no longer exists'
-    });
-  }
-
-  // Check if expired
-  if (new Date() > tempInfo.expiresAt) {
-    await TempImageService.deleteTempFile(tempId);
-    return res.status(410).json({
-      success: false,
-      error: 'Temporary file has expired'
-    });
-  }
-
-  // Serve the file
-  return res.sendFile(tempInfo.tempPath);
+  return handleTempImageFile(tempId, res);
 }));
 
 /**
@@ -299,35 +263,7 @@ router.get('/temp/:tempId/image', asyncHandler(async (req: Request, res: Respons
  */
 router.get('/temp/:tempId/mask', asyncHandler(async (req: Request, res: Response) => {
   const tempId = routeParam(req.params.tempId);
-
-  const tempInfo = TempImageService.getTempFileInfo(tempId);
-
-  if (!tempInfo || !tempInfo.tempMaskPath) {
-    return res.status(404).json({
-      success: false,
-      error: 'Temporary mask file not found'
-    });
-  }
-
-  // Check if file exists
-  if (!fs.existsSync(tempInfo.tempMaskPath)) {
-    return res.status(404).json({
-      success: false,
-      error: 'Temporary mask file no longer exists'
-    });
-  }
-
-  // Check if expired
-  if (new Date() > tempInfo.expiresAt) {
-    await TempImageService.deleteTempFile(tempId);
-    return res.status(410).json({
-      success: false,
-      error: 'Temporary file has expired'
-    });
-  }
-
-  // Serve the mask file
-  return res.sendFile(tempInfo.tempMaskPath);
+  return handleTempMaskFile(tempId, res);
 }));
 
 /**
@@ -335,16 +271,7 @@ router.get('/temp/:tempId/mask', asyncHandler(async (req: Request, res: Response
  * GET /api/image-editor/temp
  */
 router.get('/temp', asyncHandler(async (req: Request, res: Response) => {
-  const tempFiles = TempImageService.getAllTempFiles();
-  const stats = TempImageService.getStats();
-
-  return res.json({
-    success: true,
-    data: {
-      stats,
-      files: tempFiles
-    }
-  });
+  return handleTempImageList(res);
 }));
 
 /**
