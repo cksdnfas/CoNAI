@@ -7,6 +7,7 @@ function source(relativePath: string) {
 }
 
 const danbooruBrowserServiceSource = source('services/danbooruBrowserService.ts');
+const promptGroupSyntaxSource = source('services/danbooruBrowser/promptGroupSyntax.ts');
 const wildcardServiceSource = source('services/wildcardService.ts');
 
 equal(
@@ -20,12 +21,12 @@ equal(
   '__Group__ syntax should be parsed by a dedicated group token pattern',
 );
 equal(
-  danbooruBrowserServiceSource.includes('parseCompactCount(usageMatch[1])'),
+  promptGroupSyntaxSource.includes('parseCompactCount(usageMatch[1])'),
   true,
   'usage filters like <1k> and <-100> must use compact count parsing',
 );
 equal(
-  danbooruBrowserServiceSource.includes('pickRange = {'),
+  promptGroupSyntaxSource.includes('pickRange = {'),
   true,
   'prompt group syntax must parse exact and ranged pick counts',
 );
