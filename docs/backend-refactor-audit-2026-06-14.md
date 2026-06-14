@@ -125,6 +125,10 @@ Prompt Group 자체 책임과 Danbooru taxonomy grouping 책임이 섞여 있다
 - Danbooru grouping option/type/tree/title/summary helper를 `backend/src/services/promptGroups/danbooruGroupingHelpers.ts`로 분리했다.
 - Danbooru managed root group 조회, managed group id 수집, assignment filter를 `backend/src/services/promptGroups/danbooruManagedGroups.ts`로 분리했다.
 - 확인: `npm run build:backend`, `npm run verify:danbooru-browser-locale-contracts`.
+- 2026-06-14 4차 정리 일부 완료.
+- Danbooru grouping DB attach, taxonomy row 조회, prompt match SQL, preview count query를 `backend/src/services/promptGroups/danbooruGroupingQueries.ts`로 분리했다.
+- `promptGroupService.ts`는 grouping query를 직접 조립하지 않고 preview/apply orchestration만 유지하도록 줄였다.
+- 확인: `npm run build:backend`, `npm run verify:danbooru-browser-locale-contracts`, `npm run verify:danbooru-prompt-group-contracts`.
 
 ### `backend/src/services/comfyuiService.ts`
 
