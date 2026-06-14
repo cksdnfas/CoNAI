@@ -210,6 +210,9 @@ route 파일이 route 이상의 일을 하고 있다. API 진입점이 schema bu
 - 2026-06-15 2차 정리 일부 완료.
 - target module id parsing/validation과 module definition upsert persistence를 `backend/src/services/moduleDefinitions/upsert.ts`로 분리했다.
 - route 파일은 response shaping만 유지하고 target 검증과 create/update 실행은 helper에 위임한다.
+- 2026-06-15 3차 정리 일부 완료.
+- NAI/Comfy input port 변환, default output port 생성, UI schema 생성, Power Lora config-only field 판별을 `backend/src/services/moduleDefinitions/schemaBuilder.ts`로 분리했다.
+- route 파일은 snapshot/workflow request를 조립하고 schema 계산은 helper에 위임한다.
 
 ## 다음 후보
 
