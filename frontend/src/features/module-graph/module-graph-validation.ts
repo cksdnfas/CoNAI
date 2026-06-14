@@ -6,7 +6,7 @@ import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
 import { hasMeaningfulValue } from './components/module-graph-field-shared'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
-import { isFinalResultModule } from './module-graph-shared'
+import { isFinalResultModule } from './module-graph-module-helpers'
 
 export type ValidationNodeRecord = {
   id: string
