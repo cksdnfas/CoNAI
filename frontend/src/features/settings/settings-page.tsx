@@ -38,11 +38,6 @@ const GeneralTabLazy = lazy(async () => {
   return { default: module.GeneralTab }
 })
 
-const ReleaseReadinessTabLazy = lazy(async () => {
-  const module = await import('./components/release-readiness-tab')
-  return { default: module.ReleaseReadinessTab }
-})
-
 const FoldersTabLazy = lazy(async () => {
   const module = await import('./components/folders-tab')
   return { default: module.FoldersTab }
@@ -354,8 +349,6 @@ export function SettingsPage() {
                 hasChanges={isGeneralDraftDirty}
               />
             ) : null}
-
-            {activeTab === 'release-readiness' ? <ReleaseReadinessTabLazy /> : null}
 
             {activeTab === 'folders' ? <FoldersTabLazy {...foldersTabProps} /> : null}
 

@@ -540,27 +540,6 @@ function assertExecutionPanelLookupPolicy() {
     'workflow runner should warn when the latest run used an older saved workflow version',
   )
   assert(
-    apiModuleGraphSource.includes('export interface GraphWorkflowRuntimeHealthRecord')
-      && apiModuleGraphSource.includes('export async function getGraphWorkflowRuntimeHealth')
-      && apiModuleGraphSource.includes('/api/graph-workflows/${workflowId}/runtime-health'),
-    'module graph API client should expose workflow runtime health summaries',
-  )
-  assert(
-    workflowRunnerSource.includes('function WorkflowRuntimeHealthBlock')
-      && workflowRunnerSource.includes("queryKey: ['module-graph-workflow-runtime-health', selectedGraph?.id ?? null]")
-      && workflowRunnerSource.includes('getGraphWorkflowRuntimeHealth(selectedGraph?.id as number)')
-      && workflowRunnerSource.includes('runtimeHealth.queue.queued_count > 0 || runtimeHealth.queue.running_count > 0 || runtimeHealth.retention.pending_prune'),
-    'workflow runner should query runtime health and poll while queue or retention work is active',
-  )
-  assert(
-    workflowRunnerSource.includes('runtimeHealth.queue.retry_timer_pending')
-      && workflowRunnerSource.includes('runtimeHealth.queue.queue_recheck_interval_ms')
-      && workflowRunnerSource.includes('runtimeHealth.retry_policy.stop_on_failure_count')
-      && workflowRunnerSource.includes('runtimeHealth.retention.output_retention_limit')
-      && workflowRunnerSource.includes('runtimeHealth.recovery.running_not_in_process_count'),
-    'workflow runtime health block should surface queue retry, retry policy, retention, and recovery telemetry',
-  )
-  assert(
     pageViewModelSource.includes('const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])'),
     'module graph page view model should build one node-id map per node snapshot',
   )

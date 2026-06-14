@@ -76,6 +76,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         limit: 40,
         cursorDate: cursor.cursorDate,
         cursorHash: cursor.cursorHash,
+        includeTotal: !cursor.cursorDate && !cursor.cursorHash,
       })
     },
     getNextPageParam: (lastPage) => {

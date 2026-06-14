@@ -9,7 +9,6 @@ const routeModuleLoaders = {
   'access-overview': () => import('@/features/auth/access-overview-page'),
   'group-page': () => import('@/features/groups/group-page'),
   'home-page': () => import('@/features/home/home-page'),
-  'media-review-page': () => import('@/features/media-review/media-review-page'),
   'image-generation-page': () => import('@/features/image-generation/image-generation-page'),
   'public-comfy-workflow-page': () => import('@/features/image-generation/public-comfy-workflow-page'),
   'wildcard-page': () => import('@/features/image-generation/wildcard-page'),
@@ -77,10 +76,6 @@ function getRouteModuleLoader(to: string): RouteModuleLoader | null {
 
   if (pathname === '/') {
     return routeModuleLoaders['home-page']
-  }
-
-  if (pathname === '/review') {
-    return routeModuleLoaders['media-review-page']
   }
 
   if (pathname === '/groups' || pathname.startsWith('/groups/')) {
@@ -161,11 +156,6 @@ const HomePageLazy = lazy(async () => {
   return { default: module.HomePage }
 })
 
-const MediaReviewPageLazy = lazy(async () => {
-  const module = await loadLazyRoute('media-review-page', routeModuleLoaders['media-review-page'])
-  return { default: module.MediaReviewPage }
-})
-
 const ImageGenerationPageLazy = lazy(async () => {
   const module = await loadLazyRoute('image-generation-page', routeModuleLoaders['image-generation-page'])
   return { default: module.ImageGenerationPage }
@@ -243,10 +233,6 @@ export function GroupRoute() {
 
 export function HomeRoute() {
   return withSuspense(<HomePageLazy />)
-}
-
-export function MediaReviewRoute() {
-  return withSuspense(<MediaReviewPageLazy />)
 }
 
 export function ImageGenerationRoute() {

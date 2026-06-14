@@ -16,8 +16,6 @@ const imageFeedSafetySource = source('features/images/components/image-list/use-
 const homePageDataSource = source('features/home/use-home-page-data.ts')
 const groupPageQueriesSource = source('features/groups/use-group-page-queries.ts')
 const imageAttachmentPickerSource = source('features/image-generation/components/image-attachment-picker.tsx')
-const mediaReviewPageSource = source('features/media-review/media-review-page.tsx')
-const mediaReviewUtilsSource = source('features/media-review/media-review-utils.ts')
 const apiImagesSource = source('lib/api-images.ts')
 
 assert.match(
@@ -204,64 +202,9 @@ assert.doesNotMatch(
 )
 
 assert.match(
-  mediaReviewPageSource,
-  /const selectedIdSet = useMemo\(\(\) => new Set\(selectedIds\), \[selectedIds\]\)/,
-  'Media review should memoize selected ids before deriving batch actions',
-)
-assert.match(
-  mediaReviewPageSource,
-  /const reviewedIdSet = useMemo\(\(\) => new Set\(reviewedIds\), \[reviewedIds\]\)/,
-  'Media review should memoize reviewed ids before filtering review queues',
-)
-assert.match(
-  mediaReviewPageSource,
-  /filterMediaReviewImages\(loadedImages, activeQueue, similarHashSet, reviewedIdSet\)/,
-  'Media review queues should include session review state without schema changes',
-)
-assert.match(
-  mediaReviewPageSource,
-  /<BatchReviewPreview[\s\S]*selectedCompositeCount=\{selectedCompositeHashes\.length\}/,
-  'Media review batch actions should render a selection preview before mutation actions',
-)
-assert.match(
-  mediaReviewPageSource,
-  /const selectedActionableImages = useMemo\([\s\S]*?image\.file_status !== 'missing' && image\.file_status !== 'deleted'/,
-  'Media review batch mutations should filter missing/deleted records out of active actions',
-)
-assert.match(
-  mediaReviewPageSource,
-  /data-media-review-cleanup-guardrail="true"/,
-  'Media review should render an explicit non-destructive cleanup guardrail',
-)
-assert.match(
-  mediaReviewPageSource,
-  /<ImageSelectionBar[\s\S]*showDownloadAction=\{false\}[\s\S]*삭제\/정리 없음[\s\S]*handleOpenAssignModal[\s\S]*handleBatchTagSelected[\s\S]*handleMarkReviewed/,
-  'Media review selection bar should expose non-destructive group, tag/rating, and reviewed-state batch actions',
-)
-assert.doesNotMatch(
-  mediaReviewPageSource,
-  /deleteImagesBulk|Trash2|\/api\/images\/bulk/,
-  'Media review selection actions must not wire destructive image deletion',
-)
-assert.match(
-  mediaReviewUtilsSource,
-  /export type MediaReviewQueueKey = [^\n]*'recoverable'/,
-  'Media review queues should include a recoverable review lane',
-)
-assert.match(
-  mediaReviewUtilsSource,
-  /recoverableCount: number/,
-  'Media review summaries should count missing/deleted records separately',
-)
-assert.match(
-  mediaReviewUtilsSource,
-  /if \(queue === 'recoverable'\) \{[\s\S]*?signals\.recoverabilityState !== 'active'/,
-  'Media review recoverable queue should be derived from file recoverability state',
-)
-assert.match(
   apiImagesSource,
   /export async function batchTagImages\(compositeHashes: string\[\]\)[\s\S]*\/api\/images\/batch-tag[\s\S]*image_ids: compositeHashes/,
-  'Media review tag/rating batch action should reuse the existing batch-tag API',
+  'Batch tag action should reuse the existing batch-tag API',
 )
 
 console.log('Image list selection contracts verified.')

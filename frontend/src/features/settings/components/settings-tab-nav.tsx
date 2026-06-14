@@ -11,7 +11,6 @@ interface SettingsTabNavProps {
 
 const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
   general: { ko: '일반', en: 'General' },
-  'release-readiness': { ko: '릴리즈 준비', en: 'Release readiness' },
   folders: { ko: '감시 폴더', en: 'Watched folders' },
   appearance: { ko: '외형', en: 'Appearance' },
   security: { ko: '보안', en: 'Security' },

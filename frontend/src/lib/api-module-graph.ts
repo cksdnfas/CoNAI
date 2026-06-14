@@ -142,52 +142,6 @@ export interface GraphWorkflowVersionSummaryRecord {
   exposed_input_delta: number
 }
 
-export interface GraphWorkflowRuntimeHealthRecord {
-  workflow_id: number
-  queue: {
-    queued_count: number
-    running_count: number
-    manual_queued_count: number
-    manual_running_count: number
-    schedule_queued_count: number
-    schedule_running_count: number
-    in_process_running_count: number
-    oldest_queued_at?: string | null
-    retry_timer_pending: boolean
-    queue_recheck_interval_ms: number
-    schedule_concurrency_limit: number
-    cancellation_requested_count: number
-  }
-  retry_policy: {
-    schedule_count: number
-    active_schedule_count: number
-    stop_on_failure_count: number
-    continue_on_failure_count: number
-    paused_for_review_count: number
-    stopped_after_error_count: number
-    overlap_stopped_count: number
-  }
-  retention: {
-    output_retention_limit: number
-    pending_prune: boolean
-    pending_prune_count: number
-  }
-  recovery: {
-    last_startup_recovery_at?: string | null
-    startup_queued_backlog: number
-    startup_failed_running: number
-    running_not_in_process_count: number
-  }
-  telemetry: {
-    completed_count: number
-    failed_count: number
-    cancelled_count: number
-    latest_completed_at?: string | null
-    latest_failed_at?: string | null
-    latest_error_message?: string | null
-  }
-}
-
 export interface GraphWorkflowFolderRecord {
   id: number
   name: string
@@ -583,12 +537,6 @@ export async function updateGraphWorkflow(workflowId: number, payload: {
 export async function getGraphWorkflowVersionSummaries(workflowId: number, limit = 12) {
   const searchParams = new URLSearchParams({ limit: String(limit) })
   const response = await requestJson<ApiEnvelope<GraphWorkflowVersionSummaryRecord[]>>(`/api/graph-workflows/${workflowId}/versions?${searchParams.toString()}`)
-  return response.data
-}
-
-/** Read queue health, retry policy, retention, and recovery telemetry for one workflow. */
-export async function getGraphWorkflowRuntimeHealth(workflowId: number) {
-  const response = await requestJson<ApiEnvelope<GraphWorkflowRuntimeHealthRecord>>(`/api/graph-workflows/${workflowId}/runtime-health`)
   return response.data
 }
 

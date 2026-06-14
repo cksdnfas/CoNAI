@@ -33,7 +33,6 @@ import {
 } from '../image-generation-shared'
 import { ComfyDropdownListsSection, ComfyServerListSection, ComfyWorkflowListSection } from './comfy-home-sections'
 import { useI18n } from '@/i18n'
-import type { GenerationBriefComfyCompatibilitySnapshot } from '../generation-brief-workspace'
 import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
@@ -47,7 +46,6 @@ type ComfyGenerationPanelProps = {
   onHistoryRefresh: () => void
   selectedWorkflowId: number | null
   onSelectedWorkflowChange: (workflowId: number | null) => void
-  onCompatibilitySnapshotChange?: (snapshot: GenerationBriefComfyCompatibilitySnapshot | null) => void
   splitPaneScroll?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
@@ -75,7 +73,6 @@ export function ComfyGenerationPanel({
   onHistoryRefresh,
   selectedWorkflowId,
   onSelectedWorkflowChange,
-  onCompatibilitySnapshotChange,
   splitPaneScroll = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
@@ -285,28 +282,6 @@ export function ComfyGenerationPanel({
       ...filteredPersistedDraft,
     })
   }, [selectedWorkflow, selectedWorkflowFields])
-
-  useEffect(() => {
-    if (!onCompatibilitySnapshotChange) {
-      return
-    }
-
-    if (!selectedWorkflow) {
-      onCompatibilitySnapshotChange(null)
-      return
-    }
-
-    onCompatibilitySnapshotChange({
-      workflowId: selectedWorkflow.id,
-      workflowName: selectedWorkflow.name,
-      workflowDescription: selectedWorkflow.description ?? null,
-      workflowFields: selectedWorkflowFields,
-      workflowDraft,
-      selectedTarget,
-      servers: activeServers,
-      serverTests: comfyServerTests,
-    })
-  }, [activeServers, comfyServerTests, onCompatibilitySnapshotChange, selectedTarget, selectedWorkflow, selectedWorkflowFields, workflowDraft])
 
   useEffect(() => {
     if (!moduleSaveWorkflow) {

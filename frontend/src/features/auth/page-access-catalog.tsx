@@ -1,4 +1,4 @@
-import { FolderTree, Image as ImageIcon, Images, LayoutGrid, ListFilter, MessageSquareText, Settings2, Sparkles, Upload, WandSparkles, type LucideIcon } from 'lucide-react'
+import { FolderTree, Image as ImageIcon, Images, LayoutGrid, MessageSquareText, Settings2, Sparkles, Upload, WandSparkles, type LucideIcon } from 'lucide-react'
 import { hasAuthPermission } from './auth-permissions'
 
 export interface PageAccessCatalogItem {
@@ -26,14 +26,6 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     permissionKey: 'page.groups.view',
     icon: FolderTree,
     category: 'primary',
-  },
-  {
-    path: '/review',
-    labelKey: 'pageAccessCatalog.review',
-    descriptionKey: 'pageAccessCatalog.mediaReview',
-    permissionKey: 'page.home.view',
-    icon: ListFilter,
-    category: 'derived',
   },
   {
     path: '/prompts',

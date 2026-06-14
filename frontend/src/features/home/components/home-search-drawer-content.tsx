@@ -320,11 +320,11 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                     >
                       <div className="flex flex-wrap gap-2">
                         {entry.chips.map((chip) => (
-                          <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-foreground">
-                            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getSearchScopeStyle(chip.scope)}>
+                          <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-sm border border-border bg-background px-2.5 py-1.5 text-xs text-foreground">
+                            <span className="rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getSearchScopeStyle(chip.scope)}>
                               {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
                             </span>
-                            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">
+                            <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">
                               {chip.operator}
                             </span>
                             <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>

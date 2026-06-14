@@ -24,6 +24,7 @@ export async function getImages(params?: {
   pagination?: 'offset' | 'cursor'
   cursorDate?: string | null
   cursorHash?: string | null
+  includeTotal?: boolean
 }) {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
@@ -32,7 +33,7 @@ export async function getImages(params?: {
   searchParams.set('sortOrder', 'DESC')
   if (params?.pagination === 'cursor') {
     searchParams.set('pagination', 'cursor')
-    searchParams.set('include_total', 'false')
+    searchParams.set('include_total', params.includeTotal ? 'true' : 'false')
     if (params.cursorDate) {
       searchParams.set('cursor_date', params.cursorDate)
     }

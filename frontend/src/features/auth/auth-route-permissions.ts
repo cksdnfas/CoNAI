@@ -4,10 +4,6 @@ export function resolveRoutePermissionKey(pathname: string) {
     return 'page.home.view'
   }
 
-  if (pathname === '/review') {
-    return 'page.home.view'
-  }
-
   if (pathname === '/groups' || pathname.startsWith('/groups/')) {
     return 'page.groups.view'
   }

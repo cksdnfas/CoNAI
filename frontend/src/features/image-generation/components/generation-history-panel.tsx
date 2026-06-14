@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ClipboardList, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -38,10 +38,6 @@ import {
   resolveHistoryImageSource,
 } from '../image-generation-shared'
 import { getGenerationHistoryFeedProgressSummary } from '../generation-history-feed-progress'
-import {
-  buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord,
-  type GenerationBriefIterationHandoffSnapshot,
-} from '../generation-brief-workspace'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 
 type GenerationHistoryPanelProps = {
@@ -51,13 +47,13 @@ type GenerationHistoryPanelProps = {
   publicWorkflowSlug?: string | null
   splitPaneScroll?: boolean
   onBack?: () => void
-  onIterationHandoffChange?: (snapshot: GenerationBriefIterationHandoffSnapshot) => void
 }
 
 const GENERATION_HISTORY_PAGE_SIZE = 40
 const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 1_500
 const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000
 const GENERATION_HISTORY_REFRESH_WATCH_MS = 30_000
+const GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX = 'conai:image-generation:history-recovery-ack:'
 
 function hasActiveGenerationHistory(records: GenerationHistoryResponse['records']) {
   return records.some((record) => {
@@ -88,6 +84,40 @@ function dedupeHistoryRecords(records: GenerationHistoryResponse['records']) {
     seenIds.add(record.id)
     return true
   })
+}
+
+function readAcknowledgedRecoveryIds(storageKey: string) {
+  if (typeof window === 'undefined') {
+    return new Set<number>()
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(storageKey)
+    if (!raw) {
+      return new Set<number>()
+    }
+
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return new Set<number>()
+    }
+
+    return new Set(parsed.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)))
+  } catch {
+    return new Set<number>()
+  }
+}
+
+function writeAcknowledgedRecoveryIds(storageKey: string, ids: ReadonlySet<number>) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify([...ids]))
+  } catch {
+    // Session-only hint; failure should not block history recovery actions.
+  }
 }
 
 type HistoryRecordStatusSummary = {
@@ -201,7 +231,7 @@ function getHistoryRecoveryDetail(record: GenerationHistoryRecord, t: ReturnType
 }
 
 /** Render generation history using the shared image-list surface instead of per-record cards. */
-export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, onIterationHandoffChange }: GenerationHistoryPanelProps) {
+export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
   const queryClient = useQueryClient()
@@ -234,6 +264,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     requesterAccountId,
     requesterAccountType,
   ] as const, [historyScope, publicWorkflowSlug, requesterAccountId, requesterAccountType, serviceType, workflowId])
+  const recoveryAckStorageKey = useMemo(
+    () => `${GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX}${historyQueryKey.join(':')}`,
+    [historyQueryKey],
+  )
+  const [acknowledgedRecoveryIds, setAcknowledgedRecoveryIds] = useState<Set<number>>(() => readAcknowledgedRecoveryIds(recoveryAckStorageKey))
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     initialPageParam: 0,
@@ -284,6 +319,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   }, [refetchHistory])
 
   useEffect(() => {
+    setAcknowledgedRecoveryIds(readAcknowledgedRecoveryIds(recoveryAckStorageKey))
+  }, [recoveryAckStorageKey])
+
+  useEffect(() => {
     if (refreshNonce === 0) {
       return
     }
@@ -299,21 +338,22 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const {
     inFlight: inFlightHistoryCount,
     completed: completedHistoryCount,
-    failed: failedHistoryCount,
     cleanupFailed: cleanupFailedHistoryCount,
     cancellation: cancellationHistoryCount,
   } = useMemo(() => getHistoryRecordStatusSummary(historyRecords), [historyRecords])
-  const retryableHistoryRecords = useMemo(
-    () => historyRecords.filter(canRetryHistoryQueueJob),
-    [historyRecords],
-  )
+  const retryableHistoryRecords = useMemo(() => {
+    const retryableRecords: GenerationHistoryRecord[] = []
+    for (const record of historyRecords) {
+      if (canRetryHistoryQueueJob(record)) {
+        retryableRecords.push(record)
+      }
+    }
+
+    return retryableRecords
+  }, [historyRecords])
   const visibleRetryableHistoryRecords = useMemo(
-    () => retryableHistoryRecords.slice(0, 4),
-    [retryableHistoryRecords],
-  )
-  const manualCheckFailureCount = useMemo(
-    () => historyRecords.filter((record) => getHistoryRunRecoveryState(record) === 'failed-no-retry').length,
-    [historyRecords],
+    () => retryableHistoryRecords.filter((record) => !acknowledgedRecoveryIds.has(record.id)).slice(0, 4),
+    [acknowledgedRecoveryIds, retryableHistoryRecords],
   )
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyTotalCount = historyQuery.data?.pages[0]?.total
@@ -365,7 +405,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
     [historyRecordMap, selectedHistoryIds],
   )
-  const selectedIterationHandoffRecord = selectedHistoryRecords.length === 1 ? selectedHistoryRecords[0] : null
   const downloadableHistoryIds = useMemo(
     () => selectedHistoryRecords
       .filter(isHistoryRecordDownloadReady)
@@ -435,15 +474,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     setSelectedHistoryIds([])
   }, [])
 
-  const handleCreateIterationHandoff = useCallback(() => {
-    if (!onIterationHandoffChange || !selectedIterationHandoffRecord) {
-      return
-    }
-
-    onIterationHandoffChange(buildGenerationBriefIterationHandoffSnapshotFromHistoryRecord(selectedIterationHandoffRecord))
-    showSnackbar({ message: t({ ko: '선택한 기록을 반복 핸드오프 패킷으로 보냈어.', en: 'Sent the selected history record as an iteration handoff packet.' }), tone: 'info' })
-  }, [onIterationHandoffChange, selectedIterationHandoffRecord, showSnackbar, t])
-
   const handleDeleteSelected = useCallback(async () => {
     if (!isAdmin) {
       showSnackbar({ message: t('image-generation.components.generation.history.panel.only.admin.accounts.can.delete'), tone: 'error' })
@@ -493,6 +523,25 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     }
   }, [isCleaningFailed, isPublicView, publicWorkflowSlug, refreshHistory, showSnackbar, t])
 
+  const acknowledgeRecoveryRecords = useCallback((records: GenerationHistoryRecord[]) => {
+    if (records.length === 0) {
+      return
+    }
+
+    setAcknowledgedRecoveryIds((current) => {
+      const next = new Set(current)
+      for (const record of records) {
+        next.add(record.id)
+      }
+      writeAcknowledgedRecoveryIds(recoveryAckStorageKey, next)
+      return next
+    })
+  }, [recoveryAckStorageKey])
+
+  const handleAcknowledgeRunRecovery = useCallback(() => {
+    acknowledgeRecoveryRecords(visibleRetryableHistoryRecords)
+  }, [acknowledgeRecoveryRecords, visibleRetryableHistoryRecords])
+
   const handleRetryHistoryRecord = useCallback(async (record: GenerationHistoryRecord) => {
     const queueJobId = record.queue_job_id
     if (!canRetryHistoryQueueJob(record) || typeof queueJobId !== 'number' || retryingQueueJobId !== null) {
@@ -501,7 +550,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
     try {
       setRetryingQueueJobId(queueJobId)
-      await runGenerationQueueMutation({
+      const retryQueued = await runGenerationQueueMutation({
         execute: () => retryGenerationQueueJob(queueJobId),
         refresh: async () => {
           await Promise.all([
@@ -514,10 +563,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         successMessage: t({ ko: '큐 재실행 작업을 등록했어.', en: 'Added the retry job to the queue.' }),
         failureMessage: t({ ko: '큐 재실행 등록에 실패했어.', en: 'Failed to add the retry job.' }),
       })
+      if (retryQueued) {
+        acknowledgeRecoveryRecords([record])
+      }
     } finally {
       setRetryingQueueJobId(null)
     }
-  }, [queryClient, refreshHistory, retryingQueueJobId, showSnackbar, t])
+  }, [acknowledgeRecoveryRecords, queryClient, refreshHistory, retryingQueueJobId, showSnackbar, t])
 
   const handleDownloadSelected = useCallback(async (type: 'thumbnail' | 'original') => {
     if (downloadableHistoryIds.length === 0 || isDownloadingSelection) {
@@ -587,70 +639,61 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
       {isHistoryLoading ? <div className="text-sm text-muted-foreground">{t('image-generation.components.generation.history.panel.loading.history')}</div> : null}
 
-      {!isHistoryLoading && historyRecords.length > 0 ? (
+      {!isHistoryLoading && visibleRetryableHistoryRecords.length > 0 ? (
         <PageInset className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-foreground">{t({ ko: '실행 복구', en: 'Run recovery' })}</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {retryableHistoryRecords.length > 0
-                  ? t({ ko: '재실행 가능한 실패/취소 큐 {count}개', en: '{count} failed or canceled queue records are rerun-ready' }, { count: formatNumber(retryableHistoryRecords.length) })
-                  : t({ ko: '재실행 가능한 실패/취소 큐 없음', en: 'No failed or canceled queue records are rerun-ready' })}
+                {t({ ko: '재실행 가능한 실패/취소 큐 {count}개', en: '{count} failed or canceled queue records are rerun-ready' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <Badge variant={retryableHistoryRecords.length > 0 ? 'secondary' : 'outline'}>{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(retryableHistoryRecords.length) })}</Badge>
-              <Badge variant="outline">{t({ ko: '완료 {count}', en: 'Complete {count}' }, { count: formatNumber(completedHistoryCount) })}</Badge>
-              {manualCheckFailureCount > 0 ? <Badge variant="outline">{t({ ko: '수동 확인 {count}', en: 'Manual check {count}' }, { count: formatNumber(manualCheckFailureCount) })}</Badge> : null}
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Badge variant="secondary">{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}</Badge>
+              <Button type="button" size="sm" variant="outline" onClick={handleAcknowledgeRunRecovery}>
+                {t({ ko: '확인', en: 'Dismiss' })}
+              </Button>
             </div>
           </div>
 
-          {visibleRetryableHistoryRecords.length > 0 ? (
-            <div className="divide-y divide-border/70">
-              {visibleRetryableHistoryRecords.map((record) => {
-                const queueJobId = record.queue_job_id
-                const isRetrying = typeof queueJobId === 'number' && retryingQueueJobId === queueJobId
-                const workflowLabel = record.workflow_name?.trim() || (
-                  record.service_type === 'comfyui'
-                    ? t({ ko: 'ComfyUI 실행 #{id}', en: 'ComfyUI run #{id}' }, { id: record.id })
-                    : record.service_type === 'codex'
-                      ? t({ ko: 'Codex 실행 #{id}', en: 'Codex run #{id}' }, { id: record.id })
-                      : t({ ko: 'NAI 실행 #{id}', en: 'NAI run #{id}' }, { id: record.id })
-                )
+          <div className="divide-y divide-border/70">
+            {visibleRetryableHistoryRecords.map((record) => {
+              const queueJobId = record.queue_job_id
+              const isRetrying = typeof queueJobId === 'number' && retryingQueueJobId === queueJobId
+              const workflowLabel = record.workflow_name?.trim() || (
+                record.service_type === 'comfyui'
+                  ? t({ ko: 'ComfyUI 실행 #{id}', en: 'ComfyUI run #{id}' }, { id: record.id })
+                  : record.service_type === 'codex'
+                    ? t({ ko: 'Codex 실행 #{id}', en: 'Codex run #{id}' }, { id: record.id })
+                    : t({ ko: 'NAI 실행 #{id}', en: 'NAI run #{id}' }, { id: record.id })
+              )
 
-                return (
-                  <div key={record.id} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <Badge variant="outline">{getHistoryRecoveryLabel(record, t)}</Badge>
-                        <span className="truncate text-sm font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
-                        {typeof queueJobId === 'number' ? <span className="text-xs text-muted-foreground">#{queueJobId}</span> : null}
-                      </div>
-                      <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{getHistoryRecoveryDetail(record, t)}</div>
+              return (
+                <div key={record.id} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <Badge variant="outline">{getHistoryRecoveryLabel(record, t)}</Badge>
+                      <span className="truncate text-sm font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
+                      {typeof queueJobId === 'number' ? <span className="text-xs text-muted-foreground">#{queueJobId}</span> : null}
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0"
-                      onClick={() => void handleRetryHistoryRecord(record)}
-                      disabled={retryingQueueJobId !== null}
-                      data-no-select-drag="true"
-                    >
-                      <RotateCcw className={cn('h-4 w-4', isRetrying && 'animate-spin')} />
-                      {isRetrying ? t({ ko: '등록 중', en: 'Queueing' }) : t({ ko: '재실행', en: 'Rerun' })}
-                    </Button>
+                    <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{getHistoryRecoveryDetail(record, t)}</div>
                   </div>
-                )
-              })}
-            </div>
-          ) : failedHistoryCount > 0 || completedHistoryCount > 0 ? (
-            <div className="text-xs text-muted-foreground">
-              {completedHistoryCount > 0
-                ? t({ ko: '완료 기록은 결과 확인 상태야.', en: 'Completed records are ready for result review.' })
-                : t({ ko: '실패 기록은 있지만 연결된 큐 재실행 정보가 없어.', en: 'Failed records exist without linked queue replay data.' })}
-            </div>
-          ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => void handleRetryHistoryRecord(record)}
+                    disabled={retryingQueueJobId !== null}
+                    data-no-select-drag="true"
+                  >
+                    <RotateCcw className={cn('h-4 w-4', isRetrying && 'animate-spin')} />
+                    {isRetrying ? t({ ko: '등록 중', en: 'Queueing' }) : t({ ko: '재실행', en: 'Rerun' })}
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
         </PageInset>
       ) : null}
 
@@ -661,7 +704,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
         {!isHistoryLoading && historyImages.length > 0 ? (
           <>
-            <PageInset className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
+            <PageInset className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span>
                   {t(
@@ -761,19 +804,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         statusText={downloadableHistoryIds.length > 0
           ? t('image-generation.components.generation.history.panel.valuedownloadable', { count: formatNumber(downloadableHistoryIds.length) })
           : t('image-generation.components.generation.history.panel.no.downloadable.results')}
-        extraActions={onIterationHandoffChange ? (
-          <Button
-            size="icon-sm"
-            onClick={handleCreateIterationHandoff}
-            disabled={!selectedIterationHandoffRecord}
-            title={selectedIterationHandoffRecord ? t({ ko: '반복 핸드오프 패킷 만들기', en: 'Create iteration handoff packet' }) : t({ ko: '기록 하나를 선택해 핸드오프 패킷을 만들어.', en: 'Select one history record to create a handoff packet.' })}
-            aria-label={t({ ko: '반복 핸드오프 패킷 만들기', en: 'Create iteration handoff packet' })}
-            data-generation-history-iteration-handoff="true"
-            data-no-select-drag="true"
-          >
-            <ClipboardList className="h-4 w-4" />
-          </Button>
-        ) : undefined}
         trailingActions={!isPublicView && isAdmin ? (
           <Button
             size="icon-sm"
