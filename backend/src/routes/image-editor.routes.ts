@@ -3,111 +3,20 @@ import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ImageEditorService } from '../services/imageEditorService';
 import { TempImageService, EditOptions } from '../services/tempImageService';
-import { ImageFileModel } from '../models/Image/ImageFileModel';
-import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
-import { ImageSafetyService } from '../services/imageSafetyService';
-import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import { runtimePaths } from '../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
 import { WebPConversionService } from '../services/webpConversionService';
-import { buildImageEditorResultData, listSaveBrowserImages, resolveCanvasFilePath } from './imageEditorRouteHelpers';
-import { parseRouteIntegerParam, sendRouteBadRequest } from './routeValidation';
+import { buildImageEditorResultData, listSaveBrowserImages } from './imageEditorRouteHelpers';
+import { sendRouteBadRequest } from './routeValidation';
+import {
+  getCanvasFilePathOrBlock,
+  requireAccessibleImageEditorRequest,
+  requireImageData,
+} from './imageEditorAccessHelpers';
 
 const router = Router();
-const INVALID_IMAGE_ID_ERROR = 'Invalid image ID';
-const IMAGE_DATA_REQUIRED_ERROR = 'Image data is required';
-
-/** Parse one image-editor route id and keep the legacy numeric behavior. */
-function parseImageEditorRouteId(value: string | string[] | undefined) {
-  return parseRouteIntegerParam(value);
-}
-
-/** Require one valid image-editor route id before continuing with the handler. */
-function requireImageEditorRouteId(req: Request, res: Response) {
-  const imageId = parseImageEditorRouteId(req.params.id);
-  if (Number.isNaN(imageId)) {
-    sendRouteBadRequest(res, INVALID_IMAGE_ID_ERROR);
-    return null;
-  }
-
-  return imageId;
-}
-
-/** Require one image payload before continuing with save handlers. */
-function requireImageData(res: Response, imageData: unknown) {
-  if (!imageData) {
-    return sendRouteBadRequest(res, IMAGE_DATA_REQUIRED_ERROR);
-  }
-
-  return true;
-}
-
-/** Resolve one canvas file path and block traversal attempts with the legacy payload. */
-function getCanvasFilePathOrBlock(filename: string, res: Response) {
-  const filePath = resolveCanvasFilePath(filename);
-
-  if (!filePath) {
-    res.status(403).json({
-      success: false,
-      error: 'Access denied'
-    });
-    return null;
-  }
-
-  return filePath;
-}
-
-async function getAccessibleImageFileOrBlock(imageId: number, res: Response) {
-  const imageFile = ImageFileModel.findById(imageId);
-  if (!imageFile) {
-    res.status(404).json({
-      success: false,
-      error: 'Image file not found'
-    });
-    return null;
-  }
-
-  if (imageFile.composite_hash) {
-    const metadata = await MediaMetadataModel.findByHash(imageFile.composite_hash);
-    if (metadata && !MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
-      res.status(404).json({
-        success: false,
-        error: 'Image file not found'
-      });
-      return null;
-    }
-
-    if (metadata && ImageSafetyService.isHidden(metadata.rating_score)) {
-      res.status(403).json({
-        success: false,
-        error: 'This image is hidden by the current safety policy'
-      });
-      return null;
-    }
-  }
-
-  return imageFile;
-}
-
-/** Require a valid image id and a non-hidden source file before continuing. */
-async function requireAccessibleImageEditorRequest(req: Request, res: Response) {
-  const imageId = requireImageEditorRouteId(req, res);
-  if (imageId === null) {
-    return null;
-  }
-
-  const imageFile = await getAccessibleImageFileOrBlock(imageId, res);
-  if (!imageFile) {
-    return null;
-  }
-
-  return {
-    imageId,
-    imageFile,
-  };
-}
 
 /**
  * List save-folder images for attachment picker UIs.
