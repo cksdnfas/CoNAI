@@ -18,21 +18,23 @@ import {
   ApiRequestNodeLayout,
   IfBranchNodeLayout,
   InlineWorkflowInputEditor,
-  InputPortCell,
-  MODULE_GRAPH_INLINE_CONTROL_CLASS,
   NodeArtifactOutputs,
-  PortCell,
   RandomTextChoiceNodeLayout,
-  SourceNodeOutputPorts,
   TextMergeNodeLayout,
   TextTransformNodeLayout,
-  buildModuleUiFieldMap,
   getApiRequestDynamicInputPortKeys,
-  getInputPortState,
   getRandomTextChoiceDynamicInputPortKeys,
+} from './module-graph-node-card-layouts'
+import {
+  InputPortCell,
+  MODULE_GRAPH_INLINE_CONTROL_CLASS,
+  PortCell,
+  SourceNodeOutputPorts,
+  buildModuleUiFieldMap,
+  getInputPortState,
   stopNodeActionEvent,
   stopNodeInteraction,
-} from './module-graph-node-card-layouts'
+} from './module-graph-port-cells'
 import {
   getModuleBaseDisplayName,
   getModuleColor,

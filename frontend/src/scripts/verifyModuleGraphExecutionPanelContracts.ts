@@ -40,6 +40,7 @@ function assertExecutionPanelLookupPolicy() {
   const canvasSource = source('features/module-graph/components/module-graph-canvas.tsx')
   const nodeCardSource = source('features/module-graph/components/module-graph-node-card.tsx')
   const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
+  const nodeCardPortCellsSource = source('features/module-graph/components/module-graph-port-cells.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const nodeInspectorHelpersSource = source('features/module-graph/components/node-inspector-panel-helpers.tsx')
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
@@ -164,8 +165,8 @@ function assertExecutionPanelLookupPolicy() {
     'node card artifact outputs should build one expanded-output key Set per state snapshot',
   )
   assert(
-    nodeCardLayoutsSource.includes('export function buildModuleUiFieldMap'),
-    'node card layouts should expose a reusable UI-field map builder',
+    nodeCardPortCellsSource.includes('export function buildModuleUiFieldMap'),
+    'node card port cells should expose a reusable UI-field map builder',
   )
   assert(
     nodeCardSource.includes('const uiFieldByKey = useMemo(() => buildModuleUiFieldMap(module.ui_schema), [module.ui_schema])'),
