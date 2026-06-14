@@ -28,6 +28,7 @@
 - 2026-06-15: 3번 주요 범위 완료. `image-generation-shared.tsx`에서 localStorage draft/workflow draft helper와 generation history status/recovery helper를 분리했다. NAI module snapshot/field option helper는 476줄 안에 남겼지만 현재 파일을 한 번에 분석 가능한 크기로 낮췄다.
 - 2026-06-15: 4번 타입 분리 완료. `api-module-graph.ts`에서 공개 API 타입을 `api-module-graph-types.ts`로 분리하고 기존 import 경로는 re-export로 유지했다.
 - 2026-06-15: build 경고 중 `module-graph` ineffective dynamic import 경고를 정리했다. 남은 chunk-size 경고는 앱 공통/vendor 크기 성격이어서 별도 성능 작업으로 본다.
+- 2026-06-15: 5번 일부 완료. `generation-history-panel.tsx`의 record/status/storage helper와 `graph-execution-panel.tsx`의 output/comparison section을 분리했다. `wildcard-inline-picker-field.tsx`, `image-detail-media.tsx`는 아직 큰 편이지만 각각 단일 UI 흐름을 유지하고 있어 다음 wave 후보로 남긴다.
 
 ## 최우선 후보
 
