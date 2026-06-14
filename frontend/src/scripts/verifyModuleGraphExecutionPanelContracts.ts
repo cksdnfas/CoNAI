@@ -43,6 +43,7 @@ function assertExecutionPanelLookupPolicy() {
   const nodeCardPortCellsSource = source('features/module-graph/components/module-graph-port-cells.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const nodeInspectorHelpersSource = source('features/module-graph/components/node-inspector-panel-helpers.tsx')
+  const artifactSource = source('features/module-graph/module-graph-artifacts.ts')
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const finalResultsSource = source('features/module-graph/components/workflow-final-results-section.tsx')
   const executionLogAlertsSource = source('features/module-graph/components/workflow-execution-log-alerts.ts')
@@ -61,12 +62,12 @@ function assertExecutionPanelLookupPolicy() {
   const buildFinalResultPreviewArtifactSource = extractFunction(finalResultsSource, 'buildFinalResultPreviewArtifact')
   const resolveFinalResultMetadataRecordSource = extractFunction(finalResultsSource, 'resolveFinalResultMetadataRecord')
   const buildFinalResultImageRecordSource = extractFunction(finalResultsSource, 'buildFinalResultImageRecord')
-  const resolveGraphArtifactPreviewMetadataSource = extractFunction(sharedSource, 'resolveGraphArtifactPreviewMetadata')
-  const getArtifactPreviewUrlSource = extractFunction(sharedSource, 'getArtifactPreviewUrl')
-  const resolveGraphArtifactMimeTypeSource = extractFunction(sharedSource, 'resolveGraphArtifactMimeType')
-  const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
-  const buildNodeArtifactGroupsSource = extractFunction(sharedSource, 'buildNodeArtifactGroups')
-  const compareGraphArtifactsNewestFirstSource = extractFunction(sharedSource, 'compareGraphArtifactsNewestFirst')
+  const resolveGraphArtifactPreviewMetadataSource = extractFunction(artifactSource, 'resolveGraphArtifactPreviewMetadata')
+  const getArtifactPreviewUrlSource = extractFunction(artifactSource, 'getArtifactPreviewUrl')
+  const resolveGraphArtifactMimeTypeSource = extractFunction(artifactSource, 'resolveGraphArtifactMimeType')
+  const buildNodeArtifactPreviewSource = extractFunction(artifactSource, 'buildNodeArtifactPreview')
+  const buildNodeArtifactGroupsSource = extractFunction(artifactSource, 'buildNodeArtifactGroups')
+  const compareGraphArtifactsNewestFirstSource = extractFunction(artifactSource, 'compareGraphArtifactsNewestFirst')
   const buildFinalResultLifecycleWarningSourceLabelSource = extractFunction(executionLogAlertsSource, 'buildFinalResultLifecycleWarningSourceLabel')
   const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
   const actionMenuLookupCount = canvasSource.match(/const targetNode = nodeById\.get\(actionMenuState\.nodeId\)/g)?.length ?? 0
@@ -297,7 +298,7 @@ function assertExecutionPanelLookupPolicy() {
   )
   assert(
     resolveGraphArtifactPreviewMetadataSource.includes('return { ...sourceMetadata, ...artifactMetadata }')
-      && sharedSource.includes('const metadata = resolveGraphArtifactPreviewMetadata(artifact)'),
+      && artifactSource.includes('const metadata = resolveGraphArtifactPreviewMetadata(artifact)'),
     'artifact previews should merge source metadata as fallback while preserving artifact metadata precedence',
   )
   assert(
@@ -312,8 +313,8 @@ function assertExecutionPanelLookupPolicy() {
   )
   assert(
     buildFinalResultImageRecordSource.includes("composite_hash: readMetadataString(metadata, ['actualCompositeHash', 'actual_composite_hash', 'compositeHash', 'composite_hash'])")
-      && sharedSource.includes('metadata?.actualCompositeHash')
-      && sharedSource.includes('metadata?.actual_composite_hash'),
+      && artifactSource.includes('metadata?.actualCompositeHash')
+      && artifactSource.includes('metadata?.actual_composite_hash'),
     'final result image records and preview URLs should preserve actual/composite hashes for uploaded media',
   )
   assert(
@@ -325,7 +326,7 @@ function assertExecutionPanelLookupPolicy() {
     'final result image records should preserve filename and path aliases before source fallbacks for display names',
   )
   assert(
-    sharedSource.includes("['storagePath', 'storage_path', 'outputPath', 'output_path', 'originalFilePath', 'original_file_path', 'filePath', 'file_path']")
+    artifactSource.includes("['storagePath', 'storage_path', 'outputPath', 'output_path', 'originalFilePath', 'original_file_path', 'filePath', 'file_path']")
       && getArtifactPreviewUrlSource.includes('resolveGraphArtifactStoragePath(artifact, metadata)')
       && resolveGraphArtifactMimeTypeSource.includes("['mimeType', 'mime_type', 'outputMimeType', 'output_mime_type', 'contentType', 'content_type']"),
     'final result previews should preserve camelCase output path and MIME aliases before extension fallback',
