@@ -1,11 +1,9 @@
 import axios, { AxiosInstance } from 'axios';
-import * as path from 'path';
 import * as fs from 'fs';
-import FormData from 'form-data';
 import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse } from '../types/workflow';
 import type { ComfyUIBackendType, ComfyUIQueueState, ComfyUIServerRecord, ComfyUIServerRuntimeStatus } from '../types/comfyuiServer';
-import { runtimePaths } from '../config/runtimePaths';
 import { resolveAxiosErrorMessage } from './comfyui/errors';
+import { downloadComfyOutputFile, uploadComfyInputImage } from './comfyui/fileTransfer';
 import {
   buildComfyUIQueueState,
   type ComfyUIQueueResponse,
@@ -16,6 +14,7 @@ import {
   type CollectedComfyOutput,
   type ModalComfyGenerateResponse,
 } from './comfyui/outputCollector';
+import { substituteComfyPromptData } from './comfyui/workflowSubstitution';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
 
@@ -89,27 +88,6 @@ export class ComfyUIService {
   }
 
   /**
-   * 워크플로우 JSON의 특정 경로에 값 설정
-   * @param obj 대상 객체
-   * @param path 경로 (예: "6.inputs.text")
-   * @param value 설정할 값
-   */
-  private setValueByPath(obj: any, path: string, value: any): void {
-    const keys = path.split('.');
-    let current = obj;
-
-    for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
-      if (!(key in current)) {
-        current[key] = {};
-      }
-      current = current[key];
-    }
-
-    current[keys[keys.length - 1]] = value;
-  }
-
-  /**
    * 워크플로우 JSON에 프롬프트 데이터 치환
    * @param workflowJson 원본 워크플로우 JSON 문자열
    * @param markedFields 마킹된 필드 배열
@@ -121,20 +99,7 @@ export class ComfyUIService {
     markedFields: MarkedField[],
     promptData: Record<string, any>
   ): any {
-    const workflow = JSON.parse(workflowJson);
-
-    // 각 마킹된 필드에 대해 값 치환
-    for (const field of markedFields) {
-      const value = promptData[field.id];
-      if (value !== undefined && value !== null) {
-        this.setValueByPath(workflow, field.jsonPath, value);
-      } else if (field.default_value !== undefined) {
-        // 사용자 입력이 없으면 기본값 사용
-        this.setValueByPath(workflow, field.jsonPath, field.default_value);
-      }
-    }
-
-    return workflow;
+    return substituteComfyPromptData(workflowJson, markedFields, promptData);
   }
 
   /**
@@ -243,41 +208,7 @@ export class ComfyUIService {
    * @returns 다운로드된 임시 파일의 절대 경로
    */
   async downloadOutputFile(filename: string, subfolder: string = '', type: string = 'output'): Promise<string> {
-    try {
-      // 다운로드 URL 구성
-      const params = new URLSearchParams({
-        filename,
-        subfolder,
-        type
-      });
-      const url = `/view?${params.toString()}`;
-
-      // 출력 파일 다운로드
-      const response = await this.axiosInstance.get(url, {
-        responseType: 'arraybuffer'
-      });
-
-      // temp 폴더가 없으면 생성
-      const tempDir = runtimePaths.tempDir;
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-
-      // 고유한 임시 파일명 생성
-      const ext = path.extname(filename);
-      const uniqueFilename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-      const tempFilePath = path.join(tempDir, uniqueFilename);
-
-      // temp 폴더에 파일 저장
-      fs.writeFileSync(tempFilePath, Buffer.from(response.data));
-
-      return tempFilePath; // 절대 경로 반환
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`ComfyUI output download error: ${error.message}`);
-      }
-      throw error;
-    }
+    return downloadComfyOutputFile(this.axiosInstance, filename, subfolder, type);
   }
 
   /**
@@ -445,27 +376,7 @@ export class ComfyUIService {
    * Upload an input image to the target ComfyUI server and return the stored filename.
    */
   async uploadInputImage(fileName: string, imageInput: Buffer | fs.ReadStream, options?: { contentType?: string }): Promise<string> {
-    try {
-      const formData = new FormData();
-      formData.append('image', imageInput, {
-        filename: fileName,
-        contentType: options?.contentType || 'image/png'
-      });
-      formData.append('type', 'input');
-      formData.append('overwrite', 'false');
-
-      const response = await this.axiosInstance.post('/upload/image', formData, {
-        headers: formData.getHeaders(),
-        maxBodyLength: Infinity,
-      });
-
-      return response.data?.name || fileName;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`ComfyUI image upload error: ${error.message}`);
-      }
-      throw error;
-    }
+    return uploadComfyInputImage(this.axiosInstance, fileName, imageInput, options);
   }
 
   /**

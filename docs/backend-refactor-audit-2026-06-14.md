@@ -162,6 +162,10 @@ Prompt Group 자체 책임과 Danbooru taxonomy grouping 책임이 섞여 있다
 - history output 분류, final output 선택, Modal base64 output temp 파일 저장을 `backend/src/services/comfyui/outputCollector.ts`로 분리했다.
 - axios error message formatter를 `backend/src/services/comfyui/errors.ts`로 분리해 client/runtime/cancel 경로에서 공유한다.
 - 확인: `npm run build:backend`, `npm run verify:graph-artifact-runtime`, `npm run verify:comfy-server-default-contracts`, `npm run verify:graph-final-result-promotion-contracts`.
+- 2026-06-15 2차 정리 일부 완료.
+- ComfyUI output download와 input image upload를 `backend/src/services/comfyui/fileTransfer.ts`로 분리했다.
+- workflow JSON prompt 치환과 path assignment를 `backend/src/services/comfyui/workflowSubstitution.ts`로 분리했다.
+- `comfyuiService.ts`의 공개 method는 유지하고 내부 구현만 helper에 위임했다.
 
 ### `backend/src/routes/moduleDefinitions.ts`
 
