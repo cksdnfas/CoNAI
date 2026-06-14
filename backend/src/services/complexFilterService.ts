@@ -10,6 +10,7 @@ import { ImageSafetyService } from './imageSafetyService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { buildComplexFilterAutoTagCondition } from './complexFilter/complexFilterAutoTagSql';
 import { matchesComplexFilterImage } from './complexFilter/complexFilterEvaluator';
+import { validateComplexFilter } from './complexFilter/complexFilterValidator';
 import { ImageMetadataRecord } from '../types/image';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
 
@@ -537,97 +538,7 @@ export class ComplexFilterService {
    * Validate complex filter
    */
   static validateFilter(filter: ComplexFilter): FilterValidationResult {
-    const errors: string[] = [];
-
-    // Validate each group
-    if (filter.exclude_group) {
-      const groupErrors = this.validateConditions(filter.exclude_group, 'Exclude');
-      errors.push(...groupErrors);
-    }
-    if (filter.or_group) {
-      const groupErrors = this.validateConditions(filter.or_group, 'OR');
-      errors.push(...groupErrors);
-    }
-    if (filter.and_group) {
-      const groupErrors = this.validateConditions(filter.and_group, 'AND');
-      errors.push(...groupErrors);
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
-  }
-
-  /**
-   * Validate conditions in a group
-   */
-  private static validateConditions(conditions: FilterCondition[], groupName: string): string[] {
-    const errors: string[] = [];
-
-    conditions.forEach((condition, index) => {
-      // Check required fields
-      if (!condition.category) {
-        errors.push(`${groupName} group, condition ${index + 1}: category is required`);
-      }
-      if (!condition.type) {
-        errors.push(`${groupName} group, condition ${index + 1}: type is required`);
-      }
-
-      // Type-specific value validation
-      if (condition.type === 'auto_tag_exists' || condition.type === 'auto_tag_has_character') {
-        // Boolean types: value must be boolean
-        if (typeof condition.value !== 'boolean') {
-          errors.push(`${groupName} group, condition ${index + 1}: value must be boolean for ${condition.type}`);
-        }
-      } else if (condition.type === 'auto_tag_general' || condition.type === 'auto_tag_character' ||
-        condition.type === 'prompt_contains' || condition.type === 'prompt_regex' ||
-        condition.type === 'negative_prompt_contains' || condition.type === 'negative_prompt_regex' ||
-        condition.type === 'ai_tool' || condition.type === 'ai_tool_group' || condition.type === 'model_name' || condition.type === 'lora_model' ||
-        condition.type === 'auto_tag_model' || condition.type === 'auto_tag_any') {
-        // String types: value must be non-empty string
-        if (typeof condition.value !== 'string' || condition.value.trim() === '') {
-          errors.push(`${groupName} group, condition ${index + 1}: value must be a non-empty string for ${condition.type}`);
-        }
-      } else if (condition.type === 'auto_tag_rating' || condition.type === 'auto_tag_rating_score') {
-        // Rating types: at least one of min_score or max_score must be set
-        if (condition.min_score === undefined && condition.max_score === undefined) {
-          errors.push(`${groupName} group, condition ${index + 1}: at least one of min_score or max_score is required for ${condition.type}`);
-        }
-      } else {
-        // Default validation: value is required
-        if (condition.value === undefined || condition.value === null) {
-          errors.push(`${groupName} group, condition ${index + 1}: value is required`);
-        }
-      }
-
-      // Validate score ranges
-      if (condition.type !== 'auto_tag_rating_score') {
-        if (condition.min_score !== undefined) {
-          if (condition.min_score < 0 || condition.min_score > 1) {
-            errors.push(`${groupName} group, condition ${index + 1}: min_score must be between 0 and 1`);
-          }
-        }
-        if (condition.max_score !== undefined) {
-          if (condition.max_score < 0 || condition.max_score > 1) {
-            errors.push(`${groupName} group, condition ${index + 1}: max_score must be between 0 and 1`);
-          }
-        }
-      }
-
-      if (condition.min_score !== undefined && condition.max_score !== undefined) {
-        if (condition.min_score > condition.max_score) {
-          errors.push(`${groupName} group, condition ${index + 1}: min_score cannot be greater than max_score`);
-        }
-      }
-
-      // Validate rating type
-      if (condition.type === 'auto_tag_rating' && !condition.rating_type) {
-        errors.push(`${groupName} group, condition ${index + 1}: rating_type is required for auto_tag_rating`);
-      }
-    });
-
-    return errors;
+    return validateComplexFilter(filter);
   }
 
   /**
