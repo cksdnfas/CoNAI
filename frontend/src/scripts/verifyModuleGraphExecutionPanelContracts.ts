@@ -56,6 +56,7 @@ function assertExecutionPanelLookupPolicy() {
   const pageViewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
   const pageQueriesSource = source('features/module-graph/use-module-graph-page-queries.ts')
   const apiModuleGraphSource = source('lib/api-module-graph.ts')
+  const apiModuleGraphTypesSource = source('lib/api-module-graph-types.ts')
   const indexCssSource = source('index.css')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
@@ -521,7 +522,7 @@ function assertExecutionPanelLookupPolicy() {
     'workflow execution list should poll while the selected workflow has queued/running executions so latest-result status can reach terminal detail loading',
   )
   assert(
-    apiModuleGraphSource.includes('export interface GraphWorkflowVersionSummaryRecord')
+    apiModuleGraphTypesSource.includes('export interface GraphWorkflowVersionSummaryRecord')
       && apiModuleGraphSource.includes('export async function getGraphWorkflowVersionSummaries')
       && apiModuleGraphSource.includes('/api/graph-workflows/${workflowId}/versions?${searchParams.toString()}'),
     'module graph API client should expose compact saved workflow version summaries',
