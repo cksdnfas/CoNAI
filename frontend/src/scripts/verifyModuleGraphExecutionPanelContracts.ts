@@ -40,6 +40,9 @@ function assertExecutionPanelLookupPolicy() {
   const canvasSource = source('features/module-graph/components/module-graph-canvas.tsx')
   const nodeCardSource = source('features/module-graph/components/module-graph-node-card.tsx')
   const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
+  const nodeCardArtifactOutputsSource = source('features/module-graph/components/module-graph-node-card-layouts/node-artifact-outputs.tsx')
+  const nodeCardRandomTextChoiceSource = source('features/module-graph/components/module-graph-node-card-layouts/random-text-choice-node-layout.tsx')
+  const nodeCardTextLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts/text-node-layouts.tsx')
   const nodeCardPortCellsSource = source('features/module-graph/components/module-graph-port-cells.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const nodeInspectorHelpersSource = source('features/module-graph/components/node-inspector-panel-helpers.tsx')
@@ -162,7 +165,7 @@ function assertExecutionPanelLookupPolicy() {
     'node artifact grouping must not allocate a filtered artifact list before grouping',
   )
   assert(
-    nodeCardLayoutsSource.includes('const expandedOutputGroupKeySet = useMemo(() => new Set(expandedOutputGroupKeys), [expandedOutputGroupKeys])'),
+    nodeCardArtifactOutputsSource.includes('const expandedOutputGroupKeySet = useMemo(() => new Set(expandedOutputGroupKeys), [expandedOutputGroupKeys])'),
     'node card artifact outputs should build one expanded-output key Set per state snapshot',
   )
   assert(
@@ -186,19 +189,19 @@ function assertExecutionPanelLookupPolicy() {
     'random text choice node should refresh React Flow internals when dynamic candidate inputs change',
   )
   assert(
-    nodeCardLayoutsSource.includes('export function RandomTextChoiceNodeLayout'),
+    nodeCardRandomTextChoiceSource.includes('export function RandomTextChoiceNodeLayout'),
     'random text choice node should expose a dedicated API-style card layout',
   )
   assert(
-    nodeCardLayoutsSource.includes('const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey'),
+    nodeCardTextLayoutsSource.includes('const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey'),
     'specialized node card layouts should reuse the supplied UI-field map with a local fallback',
   )
   assert(
-    nodeCardLayoutsSource.includes('expandedOutputGroupKeySet.has(group.portKey)'),
+    nodeCardArtifactOutputsSource.includes('expandedOutputGroupKeySet.has(group.portKey)'),
     'node card artifact outputs should use Set.has while rendering output groups',
   )
   assert(
-    !nodeCardLayoutsSource.includes('const isExpanded = expandedOutputGroupKeys.includes(group.portKey)'),
+    !nodeCardArtifactOutputsSource.includes('const isExpanded = expandedOutputGroupKeys.includes(group.portKey)'),
     'node card artifact outputs must not scan expanded output keys for every rendered group',
   )
   assert(
