@@ -16,7 +16,7 @@ import {
   getPromptCollectionTableName as getPromptTableName,
   getPromptGroupTableName as getTableName,
 } from '../utils/promptTables';
-import { resolveDanbooruDbInfo } from './danbooruBrowserService';
+import { resolveDanbooruDbInfo } from './danbooruBrowser/dbResolver';
 
 type PromptCollectionType = 'positive' | 'negative' | 'auto';
 

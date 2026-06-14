@@ -1,7 +1,12 @@
 import Database from 'better-sqlite3';
-import fs from 'fs';
-import path from 'path';
-import { runtimePaths } from '../config/runtimePaths';
+import {
+  DanbooruCharacterImageStore,
+  type DanbooruBrowserCharacterImageRecord,
+} from './danbooruBrowser/characterImages';
+import {
+  resolveDanbooruDbInfo,
+  type DanbooruBrowserDatabaseInfo,
+} from './danbooruBrowser/dbResolver';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -10,12 +15,6 @@ const DEFAULT_RELATED_TAG_LIMIT_PER_CHARACTER = 100;
 const MAX_RELATED_TAG_LIMIT_PER_CHARACTER = 500;
 const MAX_PROMPT_GROUP_PICK_COUNT = 50;
 const RELATED_TAG_CATEGORY_NAMES = ['general', 'artist', 'copyright', 'character', 'meta'] as const;
-const DANBOORU_DB_DOWNLOAD_URL = 'https://github.com/cksdnfas/danbooru-db-viewer';
-const DANBOORU_DB_FILE_PATTERNS = ['danbooru.sqlite', '*danbooru*.sqlite', '*danbooru*.sqlite3', '*danbooru*.db'];
-const DANBOORU_DB_EXTENSIONS = new Set(['.sqlite', '.sqlite3', '.db']);
-const CHARACTER_IMAGE_DIRECTORY_NAME = 'character-images';
-const CHARACTER_IMAGE_EXTENSIONS = new Set(['.webp', '.png', '.jpg', '.jpeg', '.gif']);
-const CHARACTER_IMAGE_CACHE_TTL_MS = 60_000;
 
 type RelatedTagCategoryName = typeof RELATED_TAG_CATEGORY_NAMES[number];
 
@@ -87,20 +86,7 @@ export interface DanbooruBrowserCopyrightRecord {
   isPrimary: boolean;
 }
 
-export interface DanbooruBrowserCharacterImageRecord {
-  fileName: string;
-  url: string;
-}
-
-interface CharacterImageDirectoryCacheEntry {
-  expiresAt: number;
-  directory: string | null;
-}
-
-interface CharacterImageRecordsCacheEntry {
-  expiresAt: number;
-  records: DanbooruBrowserCharacterImageRecord[];
-}
+export type { DanbooruBrowserCharacterImageRecord, DanbooruBrowserDatabaseInfo };
 
 export interface DanbooruBrowserCharacterRecord {
   tagId: number;
@@ -113,16 +99,6 @@ export interface DanbooruBrowserCharacterRecord {
   relatedTags: DanbooruBrowserRelatedTagRecord[];
   images: DanbooruBrowserCharacterImageRecord[];
   danbooruUrl: string;
-}
-
-export interface DanbooruBrowserDatabaseInfo {
-  available: boolean;
-  path: string;
-  expectedPath: string;
-  expectedDirectory: string;
-  downloadUrl: string;
-  filePatterns: string[];
-  matchedBy: 'configured' | 'default' | 'discovered' | 'missing';
 }
 
 interface CountRow {
@@ -216,110 +192,8 @@ interface PromptGroupSyntax {
   usageFilter: PromptGroupUsageFilter;
 }
 
-function isDanbooruDbCandidate(fileName: string): boolean {
-  const lowerFileName = fileName.toLowerCase();
-  const extension = path.extname(lowerFileName);
-  return lowerFileName.includes('danbooru')
-    && DANBOORU_DB_EXTENSIONS.has(extension)
-    && !lowerFileName.endsWith('-wal')
-    && !lowerFileName.endsWith('-shm')
-    && !lowerFileName.endsWith('-journal');
-}
+export { resolveDanbooruDbInfo };
 
-function compareDanbooruDbCandidates(left: string, right: string): number {
-  const scoreCandidate = (filePath: string) => {
-    const fileName = path.basename(filePath).toLowerCase();
-    const extension = path.extname(fileName);
-    const baseName = fileName.slice(0, fileName.length - extension.length);
-    const stat = fs.statSync(filePath);
-
-    return {
-      exact: fileName === 'danbooru.sqlite' ? 0 : 1,
-      startsWith: baseName.startsWith('danbooru') ? 0 : 1,
-      extension: extension === '.sqlite' ? 0 : extension === '.sqlite3' ? 1 : 2,
-      length: fileName.length,
-      newest: -stat.mtimeMs,
-      fileName,
-    };
-  };
-
-  const leftScore = scoreCandidate(left);
-  const rightScore = scoreCandidate(right);
-  return leftScore.exact - rightScore.exact
-    || leftScore.startsWith - rightScore.startsWith
-    || leftScore.extension - rightScore.extension
-    || leftScore.length - rightScore.length
-    || leftScore.newest - rightScore.newest
-    || leftScore.fileName.localeCompare(rightScore.fileName);
-}
-
-function findDanbooruDbCandidate(directory: string): string | null {
-  if (!fs.existsSync(directory)) {
-    return null;
-  }
-
-  const candidates = fs.readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && isDanbooruDbCandidate(entry.name))
-    .map((entry) => path.join(directory, entry.name))
-    .sort(compareDanbooruDbCandidates);
-
-  return candidates[0] ?? null;
-}
-
-export function resolveDanbooruDbInfo(): DanbooruBrowserDatabaseInfo {
-  const expectedDirectory = runtimePaths.databaseDir;
-  const expectedPath = path.join(expectedDirectory, 'danbooru.sqlite');
-  const configuredPath = process.env.DANBOORU_SQLITE_PATH?.trim();
-
-  if (configuredPath) {
-    const resolvedConfiguredPath = path.resolve(configuredPath);
-    const exists = fs.existsSync(resolvedConfiguredPath);
-    return {
-      available: exists,
-      path: resolvedConfiguredPath,
-      expectedPath: resolvedConfiguredPath,
-      expectedDirectory: path.dirname(resolvedConfiguredPath),
-      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
-      filePatterns: DANBOORU_DB_FILE_PATTERNS,
-      matchedBy: exists ? 'configured' : 'missing',
-    };
-  }
-
-  if (fs.existsSync(expectedPath)) {
-    return {
-      available: true,
-      path: expectedPath,
-      expectedPath,
-      expectedDirectory,
-      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
-      filePatterns: DANBOORU_DB_FILE_PATTERNS,
-      matchedBy: 'default',
-    };
-  }
-
-  const discoveredPath = findDanbooruDbCandidate(expectedDirectory);
-  if (discoveredPath) {
-    return {
-      available: true,
-      path: discoveredPath,
-      expectedPath,
-      expectedDirectory,
-      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
-      filePatterns: DANBOORU_DB_FILE_PATTERNS,
-      matchedBy: 'discovered',
-    };
-  }
-
-  return {
-    available: false,
-    path: expectedPath,
-    expectedPath,
-    expectedDirectory,
-    downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
-    filePatterns: DANBOORU_DB_FILE_PATTERNS,
-    matchedBy: 'missing',
-  };
-}
 
 function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = Number(value);
@@ -461,21 +335,6 @@ function buildEmptyListPayload<T>(page: number, limit: number): { items: T[]; pa
   };
 }
 
-function sanitizeCharacterImageDirectoryName(name: string): string {
-  const sanitized = name
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-    .replace(/[.\s]+$/g, '');
-  return sanitized || 'character';
-}
-
-function isCharacterImageFile(fileName: string): boolean {
-  return CHARACTER_IMAGE_EXTENSIONS.has(path.extname(fileName).toLowerCase());
-}
-
-function buildCharacterImageUrl(tagId: number, fileName: string): string {
-  return `/api/danbooru-browser/character-images/${tagId}/${encodeURIComponent(fileName)}`;
-}
-
 function resolveTaxonomyParentKeyFromNodeKey(nodeKey: string, nodeKeySet: Set<string>): string | null {
   const parts = nodeKey.split('__');
 
@@ -564,15 +423,13 @@ function buildTaxonomyParentKeyByKey(rows: TaxonomyNodeRow[]): Map<string, strin
 class DanbooruBrowserService {
   private db: Database.Database | null = null;
   private taxonomyDescendantIdsById: Map<number, number[]> | null = null;
-  private characterImageDirectoryByTagId = new Map<number, CharacterImageDirectoryCacheEntry>();
-  private characterImageRecordsByTagId = new Map<number, CharacterImageRecordsCacheEntry>();
+  private characterImages = new DanbooruCharacterImageStore();
 
   close(): void {
     this.db?.close();
     this.db = null;
     this.taxonomyDescendantIdsById = null;
-    this.characterImageDirectoryByTagId.clear();
-    this.characterImageRecordsByTagId.clear();
+    this.characterImages.clear();
   }
 
   private hasAvailableDb(): boolean {
@@ -595,81 +452,6 @@ class DanbooruBrowserService {
     return nextDb;
   }
 
-  private getCharacterImageRootDirectory(): string {
-    return path.join(runtimePaths.databaseDir, CHARACTER_IMAGE_DIRECTORY_NAME);
-  }
-
-  private resolveCharacterImageDirectory(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): string | null {
-    const rootDirectory = this.getCharacterImageRootDirectory();
-    if (!fs.existsSync(rootDirectory)) {
-      return null;
-    }
-
-    const candidates = Array.from(new Set([
-      row.name,
-      row.normalized_name,
-      sanitizeCharacterImageDirectoryName(row.name),
-      sanitizeCharacterImageDirectoryName(row.normalized_name),
-      `${sanitizeCharacterImageDirectoryName(row.name)}__${row.tag_id}`,
-      `${sanitizeCharacterImageDirectoryName(row.normalized_name)}__${row.tag_id}`,
-    ].filter(Boolean)));
-
-    for (const candidate of candidates) {
-      const candidatePath = path.join(rootDirectory, candidate);
-      if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isDirectory()) {
-        return candidatePath;
-      }
-    }
-
-    return null;
-  }
-
-  private getCharacterImageDirectory(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): string | null {
-    const now = Date.now();
-    const cached = this.characterImageDirectoryByTagId.get(row.tag_id);
-    if (cached && cached.expiresAt > now) {
-      return cached.directory;
-    }
-
-    const directory = this.resolveCharacterImageDirectory(row);
-    this.characterImageDirectoryByTagId.set(row.tag_id, {
-      directory,
-      expiresAt: now + CHARACTER_IMAGE_CACHE_TTL_MS,
-    });
-    return directory;
-  }
-
-  private getCharacterImageRecords(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): DanbooruBrowserCharacterImageRecord[] {
-    const now = Date.now();
-    const cached = this.characterImageRecordsByTagId.get(row.tag_id);
-    if (cached && cached.expiresAt > now) {
-      return cached.records;
-    }
-
-    const directory = this.getCharacterImageDirectory(row);
-    if (!directory) {
-      this.characterImageRecordsByTagId.set(row.tag_id, {
-        records: [],
-        expiresAt: now + CHARACTER_IMAGE_CACHE_TTL_MS,
-      });
-      return [];
-    }
-
-    const records = fs.readdirSync(directory, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && isCharacterImageFile(entry.name))
-      .map((entry) => entry.name)
-      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }))
-      .map((fileName) => ({
-        fileName,
-        url: buildCharacterImageUrl(row.tag_id, fileName),
-      }));
-    this.characterImageRecordsByTagId.set(row.tag_id, {
-      records,
-      expiresAt: now + CHARACTER_IMAGE_CACHE_TTL_MS,
-    });
-    return records;
-  }
-
   getCharacterImageFilePath(tagId: unknown, fileName: string): string | null {
     const parsedTagId = Number(tagId);
     if (!Number.isFinite(parsedTagId) || !fileName || fileName.includes('/') || fileName.includes('\\')) {
@@ -688,17 +470,7 @@ class DanbooruBrowserService {
       return null;
     }
 
-    const directory = this.getCharacterImageDirectory(row);
-    if (!directory) {
-      return null;
-    }
-
-    const filePath = path.join(directory, fileName);
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile() || !isCharacterImageFile(fileName)) {
-      return null;
-    }
-
-    return filePath;
+    return this.characterImages.getFilePath(row, fileName);
   }
 
   getSummary() {
@@ -1072,7 +844,7 @@ class DanbooruBrowserService {
         worksCount: row.post_count,
         copyrights: copyrightsByCharacter.get(row.tag_id) ?? [],
         relatedTags: relatedTagsByCharacter.get(row.tag_id) ?? [],
-        images: this.getCharacterImageRecords(row),
+        images: this.characterImages.getRecords(row),
         danbooruUrl: buildDanbooruPostsUrl(row.name),
       })),
       pagination: this.buildPagination(page, limit, total),

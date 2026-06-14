@@ -1,7 +1,5 @@
 import * as cron from 'node-cron';
 import { FolderScanService } from './folderScan';
-import { WatchedFolderService } from './watchedFolderService';
-import { FileWatcherService } from './fileWatcherService';
 import { BackgroundProcessorService } from './backgroundProcessorService';
 import { SystemSettingsService } from './systemSettingsService';
 import { FileVerificationService } from './fileVerificationService';
