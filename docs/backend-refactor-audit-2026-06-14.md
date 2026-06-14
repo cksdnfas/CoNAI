@@ -169,6 +169,9 @@ Prompt Group 자체 책임과 Danbooru taxonomy grouping 책임이 섞여 있다
 - 2026-06-15 3차 정리 일부 완료.
 - runtime status payload builder와 unprobed Modal status builder를 `backend/src/services/comfyui/runtimeStatus.ts`로 분리했다.
 - `getRuntimeStatus`는 queue/probe orchestration만 유지하고 status object 조립은 helper에 위임했다.
+- 2026-06-15 4차 정리 일부 완료.
+- multi-server generation/submit/connection test orchestration을 `backend/src/services/comfyui/parallelGenerationService.ts`로 분리했다.
+- `mcp/tools/generationTools.ts`와 `routes/comfyuiServers.ts`는 병렬 생성 서비스를 새 모듈에서 직접 import한다.
 
 ### `backend/src/routes/moduleDefinitions.ts`
 
