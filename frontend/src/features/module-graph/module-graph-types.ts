@@ -21,6 +21,8 @@ export type ModuleGraphNodeData = {
   label?: string
   disabled?: boolean
   inputValues: Record<string, unknown>
+  plannedExecutionOrder?: number | null
+  activationHint?: 'conditional-input' | null
   executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
   executionArtifactCount?: number
   executionReuseState?: 'reused' | null

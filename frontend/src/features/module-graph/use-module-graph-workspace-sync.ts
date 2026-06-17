@@ -10,6 +10,8 @@ import {
   buildNodeArtifactGroups,
   buildNodeArtifactPreview,
   buildNodeOrderIndex,
+  buildPlannedNodeExecutionOrder,
+  getModuleOperationKey,
   getNodeExecutionStatus,
   parseHandleId,
   type ModuleGraphEdge,
@@ -131,10 +133,16 @@ export function useModuleGraphWorkspaceSync({
   useEffect(() => {
     const connectedInputMap = new Map<string, Set<string>>()
     const connectedOutputMap = new Map<string, Set<string>>()
+    const conditionalInputNodeIds = new Set<string>()
+    const nodeById = new Map(nodes.map((node) => [node.id, node]))
 
     for (const edge of edges) {
       const sourceHandle = parseHandleId(edge.sourceHandle)
       const targetHandle = parseHandleId(edge.targetHandle)
+      const sourceNode = nodeById.get(edge.source)
+      if (sourceNode && getModuleOperationKey(sourceNode.data.module) === 'system.logic_if_branch') {
+        conditionalInputNodeIds.add(edge.target)
+      }
 
       if (sourceHandle?.portKey) {
         const current = connectedOutputMap.get(edge.source) ?? new Set<string>()
@@ -153,25 +161,33 @@ export function useModuleGraphWorkspaceSync({
       .sort(([leftNodeId], [rightNodeId]) => leftNodeId.localeCompare(rightNodeId))
       .map(([nodeId, preview]) => `${nodeId}:${preview.executionArtifactCount}:${preview.latestArtifactLabel ?? ''}:${preview.latestArtifactPreviewUrl ?? ''}:${preview.latestArtifactTextPreview ?? ''}:${preview.latestArtifactTextValue ?? ''}:${preview.executionOutputGroups.map((group) => `${group.portKey}:${group.artifactCount}:${group.latestArtifactLabel ?? ''}:${group.latestArtifactPreviewUrl ?? ''}:${group.latestArtifactTextPreview ?? ''}:${group.latestArtifactTextValue ?? ''}`).join(',')}`)
       .join('|')
+    const nodeStructureSignature = nodes
+      .map((node) => `${node.id}:${node.data.module.id}:${node.data.disabled === true ? 'disabled' : 'enabled'}`)
+      .join('|')
     const edgeSignature = edges
       .map((edge) => `${edge.id}:${edge.source}:${edge.sourceHandle ?? ''}:${edge.target}:${edge.targetHandle ?? ''}`)
       .join('|')
 
     if (!executionDetail) {
-      const syncSignature = `no-execution|${edgeSignature}|${fallbackPreviewSignature}`
+      const syncSignature = `no-execution|${nodeStructureSignature}|${edgeSignature}|${fallbackPreviewSignature}`
       if (lastNodePreviewSyncSignatureRef.current === syncSignature) {
         return
       }
 
       lastNodePreviewSyncSignatureRef.current = syncSignature
-      setNodes((currentNodes) =>
-        currentNodes.map((node) => {
+      setNodes((currentNodes) => {
+        const plannedOrderedNodeIds = buildPlannedNodeExecutionOrder(currentNodes, edges)
+        const plannedOrderIndex = buildNodeOrderIndex(plannedOrderedNodeIds)
+
+        return currentNodes.map((node) => {
           const fallbackPreview = latestArtifactPreviewByNode.get(node.id)
 
           return {
             ...node,
             data: {
               ...node.data,
+              plannedExecutionOrder: (plannedOrderIndex.get(node.id) ?? -1) + 1 || null,
+              activationHint: conditionalInputNodeIds.has(node.id) ? 'conditional-input' : null,
               executionStatus: fallbackPreview ? 'completed' : 'idle',
               executionArtifactCount: fallbackPreview?.executionArtifactCount ?? 0,
               latestArtifactLabel: fallbackPreview?.latestArtifactLabel ?? null,
@@ -183,8 +199,8 @@ export function useModuleGraphWorkspaceSync({
               connectedOutputKeys: Array.from(connectedOutputMap.get(node.id) ?? []),
             },
           }
-        }),
-      )
+        })
+      })
       return
     }
 
@@ -209,7 +225,7 @@ export function useModuleGraphWorkspaceSync({
       .map((artifact) => `${artifact.id}:${artifact.node_id}:${artifact.port_key}:${artifact.artifact_type}:${artifact.storage_path ?? ''}:${artifact.created_date}`)
       .join('|')
     const executionPlanSignature = `${executionDetail.execution.id}:${executionDetail.execution.status}:${executionDetail.execution.failed_node_id ?? ''}:${executionDetail.execution.updated_date}:${orderedNodeIds.join(',')}:${Array.from(reusedNodeIds).join(',')}`
-    const syncSignature = `${executionPlanSignature}|${executionArtifactSignature}|${edgeSignature}|${fallbackPreviewSignature}`
+    const syncSignature = `${executionPlanSignature}|${executionArtifactSignature}|${nodeStructureSignature}|${edgeSignature}|${fallbackPreviewSignature}`
     if (lastNodePreviewSyncSignatureRef.current === syncSignature) {
       return
     }
@@ -250,6 +266,8 @@ export function useModuleGraphWorkspaceSync({
           ...node,
           data: {
             ...node.data,
+            plannedExecutionOrder: (nodeOrderIndex.get(node.id) ?? -1) + 1 || null,
+            activationHint: conditionalInputNodeIds.has(node.id) ? 'conditional-input' : null,
             executionStatus,
             executionArtifactCount: nodeArtifacts.length > 0 ? nodeArtifacts.length : (fallbackPreview?.executionArtifactCount ?? 0),
             latestArtifactLabel: artifactPreview.latestArtifactLabel,
@@ -264,5 +282,5 @@ export function useModuleGraphWorkspaceSync({
         }
       }),
     )
-  }, [edges, executionDetail, latestArtifactPreviewByNode, setNodes])
+  }, [edges, executionDetail, latestArtifactPreviewByNode, nodes, setNodes])
 }

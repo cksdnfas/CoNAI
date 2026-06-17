@@ -186,6 +186,26 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           : missingRequiredInputCount > 0
             ? missingStatusLabel
             : null
+  const activationLabel =
+    data.disabled === true
+      ? t({ ko: '비활성', en: 'Disabled' })
+      : executionStatus === 'failed'
+        ? t({ ko: '실패 지점', en: 'Failed node' })
+        : executionStatus === 'blocked'
+          ? t({ ko: '이후 차단', en: 'Blocked downstream' })
+          : missingRequiredInputCount > 0
+            ? t({ ko: '입력 {count}개 필요', en: '{count} inputs needed' }, { count: missingRequiredInputCount })
+            : data.activationHint === 'conditional-input'
+              ? t({ ko: '조건 입력', en: 'Conditional input' })
+              : t({ ko: '실행 가능', en: 'Runnable' })
+  const activationTitle =
+    data.disabled === true
+      ? t({ ko: '이 노드는 실행 중 건너뛰고 출력도 비활성 처리돼.', en: 'This node is skipped during execution and its outputs are disabled.' })
+      : missingRequiredInputCount > 0
+        ? t({ ko: '필수 입력이 비어 있거나 연결되지 않아 실행 전 확인이 필요해.', en: 'One or more required inputs are empty or unconnected and need review before execution.' })
+        : data.activationHint === 'conditional-input'
+          ? t({ ko: 'IF 분기 출력이 연결되어 실행 때 조건 결과에 따라 건너뛸 수 있어.', en: 'An IF branch output feeds this node, so execution may skip it depending on the branch result.' })
+          : t({ ko: '현재 연결과 값 기준으로 실행 경로에 들어갈 수 있어.', en: 'Current wiring and values allow this node to enter the execution path.' })
 
   const statusBorderColor =
     data.disabled === true
@@ -448,10 +468,12 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          {data.plannedExecutionOrder ? <Badge variant="outline" title={t({ ko: '계획 실행 순서', en: 'Planned execution order' })}>#{data.plannedExecutionOrder}</Badge> : null}
+          <Badge variant="outline" title={activationTitle}>{activationLabel}</Badge>
           {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
           {data.executionReuseState === 'reused' ? <Badge variant="outline">{t({ ko: '캐시', en: 'Cache' })}</Badge> : null}
           {data.executionArtifactCount ? <Badge variant="outline">A {data.executionArtifactCount}</Badge> : null}
-          {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
+          {statusLabel && statusLabel !== activationLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>
       </div>
 

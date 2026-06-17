@@ -405,6 +405,46 @@ export function buildNodeOrderIndex(orderedNodeIds: string[]): ReadonlyMap<strin
   return new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index]))
 }
 
+/** Resolve the planned node order from current graph wiring, preserving canvas node order for ties. */
+export function buildPlannedNodeExecutionOrder(nodes: ModuleGraphNode[], edges: ModuleGraphEdge[]) {
+  const nodeIds = nodes.map((node) => node.id)
+  const knownNodeIds = new Set(nodeIds)
+  const inDegree = new Map<string, number>()
+  const adjacency = new Map<string, string[]>()
+
+  for (const nodeId of nodeIds) {
+    inDegree.set(nodeId, 0)
+    adjacency.set(nodeId, [])
+  }
+
+  for (const edge of edges) {
+    if (!knownNodeIds.has(edge.source) || !knownNodeIds.has(edge.target)) {
+      continue
+    }
+
+    adjacency.get(edge.source)?.push(edge.target)
+    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1)
+  }
+
+  const queue = nodeIds.filter((nodeId) => (inDegree.get(nodeId) ?? 0) === 0)
+  const orderedNodeIds: string[] = []
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift() as string
+    orderedNodeIds.push(nodeId)
+
+    for (const nextId of adjacency.get(nodeId) ?? []) {
+      const nextDegree = (inDegree.get(nextId) ?? 0) - 1
+      inDegree.set(nextId, nextDegree)
+      if (nextDegree === 0) {
+        queue.push(nextId)
+      }
+    }
+  }
+
+  return orderedNodeIds.length === nodes.length ? orderedNodeIds : nodeIds
+}
+
 /** Resolve a compact node execution status from the selected execution detail. */
 export function getNodeExecutionStatus(params: {
   nodeId: string
