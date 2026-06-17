@@ -94,6 +94,7 @@
     "verify:module-library-grouping": "cd frontend && npm run verify:module-library-grouping",
     "verify:module-graph-execution-status-contracts": "cd frontend && npm run verify:module-graph-execution-status-contracts",
     "verify:module-graph-execution-panel-contracts": "cd frontend && npm run verify:module-graph-execution-panel-contracts",
+    "verify:module-graph-workflow-stability-contracts": "cd frontend && npm run verify:module-graph-workflow-stability-contracts",
     "verify:wallpaper-layout-contracts": "cd frontend && npm run verify:wallpaper-layout-contracts",
     "verify:wallpaper-queue-status-contracts": "cd frontend && npm run verify:wallpaper-queue-status-contracts",
     "verify:watched-folder-route-contracts": "cd backend && npm run verify:watched-folder-route-contracts",
