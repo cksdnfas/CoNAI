@@ -7,12 +7,16 @@ const generationHistoryPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel.tsx'),
   'utf8',
 )
-const imageGenerationSharedSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/image-generation-shared.tsx'),
+const generationHistoryPanelHelpersSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel-helpers.ts'),
   'utf8',
 )
-const generationHistoryRouteSource = readFileSync(
-  resolve(process.cwd(), '../backend/src/routes/generation-history.routes.ts'),
+const generationHistoryStatusSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/generation-history-status.ts'),
+  'utf8',
+)
+const generationHistoryRouteHelpersSource = readFileSync(
+  resolve(process.cwd(), '../backend/src/routes/generation-history/historyRouteHelpers.ts'),
   'utf8',
 )
 const generationHistoryModelSource = readFileSync(
@@ -70,7 +74,7 @@ function assertCountNormalization() {
 
 function assertStatusSummarySourcePolicy() {
   match(
-    generationHistoryPanelSource,
+    generationHistoryPanelHelpersSource,
     /function getHistoryRecordStatusSummary\(records: GenerationHistoryResponse\['records'\]\): HistoryRecordStatusSummary \{[\s\S]*?for \(const record of records\)[\s\S]*?summary\.inFlight \+= 1[\s\S]*?summary\.completed \+= 1[\s\S]*?summary\.failed \+= 1[\s\S]*?summary\.cancellation \+= 1/,
     'generation history panel should aggregate status badge counts in one pass',
   )
@@ -80,7 +84,7 @@ function assertStatusSummarySourcePolicy() {
     'generation history panel should memoize one status summary for badge counts',
   )
   match(
-    generationHistoryPanelSource,
+    generationHistoryPanelHelpersSource,
     /if \(record\.generation_status === 'failed'\) \{[\s\S]*?summary\.cleanupFailed \+= 1/,
     'generation history cleanup should only enable from raw failed history rows that the cleanup endpoint removes',
   )
@@ -98,17 +102,17 @@ function assertStatusSummarySourcePolicy() {
 
 function assertRefreshPolicySource() {
   match(
-    generationHistoryPanelSource,
+    generationHistoryPanelHelpersSource,
     /const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 1_500[\s\S]*?const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000/,
     'generation history should use separate refresh cadences for active generation and postprocess-only waits',
   )
   match(
-    generationHistoryPanelSource,
+    generationHistoryPanelHelpersSource,
     /function hasActiveGenerationHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?const displayStatus = resolveHistoryDisplayStatus\(record\)[\s\S]*?displayStatus === 'failed' \|\| isHistoryPostprocessPending\(record\)[\s\S]*?return displayStatus === 'pending' \|\| displayStatus === 'processing'/,
     'generation history fast polling should be driven by effective active display status and skip terminal/postprocess rows',
   )
   match(
-    generationHistoryPanelSource,
+    generationHistoryPanelHelpersSource,
     /function hasPostprocessPendingHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?return records\.some\(isHistoryPostprocessPending\)/,
     'completed rows waiting only on postprocess visibility should use the slower refresh path',
   )
@@ -149,7 +153,7 @@ function assertImageListCallbackSourcePolicy() {
 
 function assertDownloadReadinessSourcePolicy() {
   match(
-    generationHistoryPanelSource,
+    generationHistoryPanelHelpersSource,
     /function isHistoryRecordDownloadReady\(record: GenerationHistoryResponse\['records'\]\[number\]\) \{[\s\S]*?resolveHistoryDisplayStatus\(record\) === 'completed'[\s\S]*?Boolean\(record\.actual_composite_hash\)/,
     'generation history downloads should require a completed display status and resolved main-image metadata',
   )
@@ -164,17 +168,17 @@ function assertDownloadReadinessSourcePolicy() {
     'postprocess-pending history rows must not be counted as downloadable from legacy composite_hash alone',
   )
   match(
-    imageGenerationSharedSource,
+    generationHistoryStatusSource,
     /function resolveHistoryImageSource\(record: GenerationHistoryRecord\) \{[\s\S]*?const compositeHash = record\.actual_composite_hash \|\| null/,
     'history image source URLs should require resolved main-image metadata',
   )
   match(
-    imageGenerationSharedSource,
+    generationHistoryStatusSource,
     /function isHistoryPostprocessPending\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?Boolean\(record\.composite_hash\)[\s\S]*?record\.result_file_status === 'active'[\s\S]*?!record\.actual_composite_hash/,
     'history postprocess waits should require a completed row with an active result file and no ready main-image metadata',
   )
   match(
-    imageGenerationSharedSource,
+    generationHistoryStatusSource,
     /function isHistoryMissingLinkedResult\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?!record\.actual_composite_hash[\s\S]*?!record\.composite_hash \|\| record\.result_file_status !== 'active'/,
     'completed history rows without any active ready result file should be classified as missing linked results',
   )
@@ -189,22 +193,22 @@ function assertDownloadReadinessSourcePolicy() {
     'generation history should return backing file state for display classification',
   )
   match(
-    imageGenerationSharedSource,
+    generationHistoryStatusSource,
     /if \(isHistoryMissingLinkedResult\(record\)\) \{[\s\S]*?return 'failed'[\s\S]*?\}[\s\S]*?return isHistoryPostprocessPending\(record\) \? 'processing' : 'completed'/,
     'completed history rows without a result hash must not stay stuck as display-only processing',
   )
   match(
-    imageGenerationSharedSource,
+    generationHistoryStatusSource,
     /if \(record && isHistoryMissingLinkedResult\(record\)\) return '결과 없음'[\s\S]*?if \(record && isHistoryPostprocessPending\(record\)\) return '후처리 중'/,
     'history status labels should distinguish missing results from postprocess waits',
   )
   match(
-    generationHistoryRouteSource,
-    /function getHistoryCompositeHash\(record: \{ actual_composite_hash\?: string \| null \}\) \{[\s\S]*?return record\.actual_composite_hash \|\| null/,
+    generationHistoryRouteHelpersSource,
+    /function getHistoryCompositeHash\(record: \{ actual_composite_hash\?: string \| null \}\) \{[\s\S]*?return record\.actual_composite_hash \|\| null;/,
     'direct generation-history media routes should require resolved main-image metadata',
   )
   doesNotMatch(
-    imageGenerationSharedSource,
+    generationHistoryStatusSource,
     /record\.actual_composite_hash \|\| record\.composite_hash/,
     'history image sources must not fall back to legacy hashes before postprocess visibility is ready',
   )

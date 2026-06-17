@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { TranslationInput, TranslationParams } from '../i18n'
 import type { GenerationHistoryRecord, GenerationQueueJobRecord } from '../lib/api-image-generation-types'
-import { canRetryHistoryQueueJob, getHistoryRunRecoveryState } from '../features/image-generation/image-generation-shared'
+import { canRetryHistoryQueueJob, getHistoryRunRecoveryState, getRetryableHistoryQueueJobId } from '../features/image-generation/image-generation-shared'
 import {
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
@@ -379,6 +379,7 @@ function assertHistoryRecoveryState() {
     actual_composite_hash: null,
   })
   assertEqual(canRetryHistoryQueueJob(failedRetryable), true, 'failed queue-linked history should be retryable')
+  assertEqual(getRetryableHistoryQueueJobId(failedRetryable), 44, 'failed queue-linked history should expose the retryable queue job id')
   assertEqual(getHistoryRunRecoveryState(failedRetryable), 'retryable-failed', 'failed queue-linked history should use failed retry state')
 
   const cancelledRetryable = makeHistoryRecord({
@@ -388,9 +389,11 @@ function assertHistoryRecoveryState() {
     actual_composite_hash: null,
   })
   assertEqual(canRetryHistoryQueueJob(cancelledRetryable), true, 'cancelled queue-linked history should be retryable')
+  assertEqual(getRetryableHistoryQueueJobId(cancelledRetryable), 45, 'cancelled queue-linked history should expose the retryable queue job id')
   assertEqual(getHistoryRunRecoveryState(cancelledRetryable), 'retryable-cancelled', 'cancelled queue-linked history should use cancelled retry state')
 
   assertEqual(getHistoryRunRecoveryState(makeHistoryRecord()), 'completed', 'completed history should route to result inspection')
+  assertEqual(getRetryableHistoryQueueJobId(makeHistoryRecord()), null, 'completed queue-linked history should not expose retry')
   assertEqual(
     getHistoryRunRecoveryState(makeHistoryRecord({ generation_status: 'failed', queue_job_id: null, queue_status: null, actual_composite_hash: null })),
     'failed-no-retry',

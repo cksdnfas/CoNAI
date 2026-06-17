@@ -31,6 +31,7 @@ import {
   getErrorMessage,
   getHistoryCancellationBadgeLabel,
   getHistoryCancellationDetail,
+  getRetryableHistoryQueueJobId,
   getHistoryStatusLabel,
   resolveHistoryDisplayStatus,
 } from '../image-generation-shared'
@@ -83,7 +84,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isDownloadingSelection, setIsDownloadingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
-  const [retryingQueueJobId, setRetryingQueueJobId] = useState<number | null>(null)
+  const [retryingQueueJobIds, setRetryingQueueJobIds] = useState<Set<number>>(() => new Set())
   const [historyRefreshWatchUntil, setHistoryRefreshWatchUntil] = useState(0)
   const isAdmin = authStatusQuery.data?.isAdmin === true
   const requesterAccountId = authStatusQuery.data?.accountId ?? null
@@ -190,6 +191,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => retryableHistoryRecords.filter((record) => !acknowledgedRecoveryIds.has(record.id)).slice(0, 4),
     [acknowledgedRecoveryIds, retryableHistoryRecords],
   )
+  const isRetryingRunRecovery = retryingQueueJobIds.size > 0
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyTotalCount = historyQuery.data?.pages[0]?.total
 
@@ -378,13 +380,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   }, [acknowledgeRecoveryRecords, visibleRetryableHistoryRecords])
 
   const handleRetryHistoryRecord = useCallback(async (record: GenerationHistoryRecord) => {
-    const queueJobId = record.queue_job_id
-    if (!canRetryHistoryQueueJob(record) || typeof queueJobId !== 'number' || retryingQueueJobId !== null) {
+    const queueJobId = getRetryableHistoryQueueJobId(record)
+    if (queueJobId === null || isRetryingRunRecovery) {
       return
     }
 
     try {
-      setRetryingQueueJobId(queueJobId)
+      setRetryingQueueJobIds(new Set([queueJobId]))
       const retryQueued = await runGenerationQueueMutation({
         execute: () => retryGenerationQueueJob(queueJobId),
         refresh: async () => {
@@ -402,9 +404,56 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         acknowledgeRecoveryRecords([record])
       }
     } finally {
-      setRetryingQueueJobId(null)
+      setRetryingQueueJobIds(new Set())
     }
-  }, [acknowledgeRecoveryRecords, queryClient, refreshHistory, retryingQueueJobId, showSnackbar, t])
+  }, [acknowledgeRecoveryRecords, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar, t])
+
+  const handleRetryVisibleRecoveryRecords = useCallback(async () => {
+    if (visibleRetryableHistoryRecords.length === 0 || isRetryingRunRecovery) {
+      return
+    }
+
+    const queueJobIds = visibleRetryableHistoryRecords
+      .map(getRetryableHistoryQueueJobId)
+      .filter((queueJobId): queueJobId is number => queueJobId !== null)
+
+    if (queueJobIds.length === 0) {
+      return
+    }
+
+    try {
+      setRetryingQueueJobIds(new Set(queueJobIds))
+      const retryQueued = await runGenerationQueueMutation({
+        execute: async () => {
+          await Promise.all(queueJobIds.map((queueJobId) => retryGenerationQueueJob(queueJobId)))
+          return {
+            message: t(
+              { ko: '재실행 작업 {count}개를 큐에 등록했어.', en: 'Added {count} retry jobs to the queue.' },
+              { count: formatNumber(queueJobIds.length) },
+            ),
+          }
+        },
+        refresh: async () => {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
+            queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
+            refreshHistory({ watchForNewRows: true }),
+          ])
+        },
+        showSnackbar,
+        successMessage: t(
+          { ko: '재실행 작업 {count}개를 큐에 등록했어.', en: 'Added {count} retry jobs to the queue.' },
+          { count: formatNumber(queueJobIds.length) },
+        ),
+        failureMessage: t({ ko: '일괄 재실행 등록에 실패했어.', en: 'Failed to add retry jobs.' }),
+      })
+      if (retryQueued) {
+        acknowledgeRecoveryRecords(visibleRetryableHistoryRecords)
+      }
+    } finally {
+      setRetryingQueueJobIds(new Set())
+    }
+  }, [acknowledgeRecoveryRecords, formatNumber, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar, t, visibleRetryableHistoryRecords])
 
   const handleDownloadSelected = useCallback(async (type: 'thumbnail' | 'original') => {
     if (downloadableHistoryIds.length === 0 || isDownloadingSelection) {
@@ -485,6 +534,18 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Badge variant="secondary">{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}</Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void handleRetryVisibleRecoveryRecords()}
+                disabled={isRetryingRunRecovery}
+              >
+                <RotateCcw className={cn('h-4 w-4', isRetryingRunRecovery && 'animate-spin')} />
+                {isRetryingRunRecovery
+                  ? t({ ko: '등록 중', en: 'Queueing' })
+                  : t({ ko: '모두 재실행', en: 'Rerun all' })}
+              </Button>
               <Button type="button" size="sm" variant="outline" onClick={handleAcknowledgeRunRecovery}>
                 {t({ ko: '확인', en: 'Dismiss' })}
               </Button>
@@ -493,8 +554,8 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
           <div className="divide-y divide-border/70">
             {visibleRetryableHistoryRecords.map((record) => {
-              const queueJobId = record.queue_job_id
-              const isRetrying = typeof queueJobId === 'number' && retryingQueueJobId === queueJobId
+              const queueJobId = getRetryableHistoryQueueJobId(record)
+              const isRetrying = queueJobId !== null && retryingQueueJobIds.has(queueJobId)
               const workflowLabel = record.workflow_name?.trim() || (
                 record.service_type === 'comfyui'
                   ? t({ ko: 'ComfyUI 실행 #{id}', en: 'ComfyUI run #{id}' }, { id: record.id })
@@ -519,7 +580,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                     variant="outline"
                     className="shrink-0"
                     onClick={() => void handleRetryHistoryRecord(record)}
-                    disabled={retryingQueueJobId !== null}
+                    disabled={isRetryingRunRecovery}
                     data-no-select-drag="true"
                   >
                     <RotateCcw className={cn('h-4 w-4', isRetrying && 'animate-spin')} />

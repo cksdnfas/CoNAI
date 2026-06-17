@@ -96,10 +96,16 @@ export function getHistoryCancellationDetail(record: GenerationHistoryRecord) {
 export type HistoryRunRecoveryState = 'active' | 'completed' | 'retryable-failed' | 'retryable-cancelled' | 'failed-no-retry'
 
 /** Queue replay is only exposed when the backend has a failed/cancelled queue job id to clone. */
-export function canRetryHistoryQueueJob(record: GenerationHistoryRecord) {
+export function getRetryableHistoryQueueJobId(record: GenerationHistoryRecord) {
   return typeof record.queue_job_id === 'number'
     && record.queue_job_id > 0
     && (record.queue_status === 'failed' || record.queue_status === 'cancelled')
+    ? record.queue_job_id
+    : null
+}
+
+export function canRetryHistoryQueueJob(record: GenerationHistoryRecord) {
+  return getRetryableHistoryQueueJobId(record) !== null
 }
 
 /** Classify the next operator action for a history row without inventing unsupported replay paths. */
