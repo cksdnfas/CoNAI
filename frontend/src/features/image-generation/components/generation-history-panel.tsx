@@ -46,6 +46,7 @@ import {
   dedupeHistoryRecords,
   getGenerationHistorySelectionId,
   getHistoryMediaVersion,
+  getHistoryMediaReviewBadges,
   getHistoryRecordStatusSummary,
   getHistoryRecoveryDetail,
   getHistoryRecoveryLabel,
@@ -216,13 +217,19 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     const record = historyRecordMap.get(String(image?.id ?? ''))
     const safetyOverlay = renderSafetyPersistentOverlay(image)
     const cancellationLabel = record ? getHistoryCancellationBadgeLabel(record) : null
+    const mediaReviewBadges = record ? getHistoryMediaReviewBadges(record, formatNumber, t) : []
 
-    if (!safetyOverlay && !cancellationLabel) {
+    if (!safetyOverlay && !cancellationLabel && mediaReviewBadges.length === 0) {
       return null
     }
 
     return (
       <div className="flex flex-wrap items-end gap-2">
+        {mediaReviewBadges.map((badge) => (
+          <Badge key={badge.key} variant="outline" className="max-w-[9rem] truncate bg-background/85" title={badge.title}>
+            {badge.label}
+          </Badge>
+        ))}
         {cancellationLabel ? (
           <Badge variant="outline" className="border-amber-500/40 bg-background/85 text-amber-700 dark:text-amber-300" title={record ? (getHistoryCancellationDetail(record) ?? cancellationLabel) : cancellationLabel}>
             {cancellationLabel}
@@ -231,7 +238,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         {safetyOverlay}
       </div>
     )
-  }, [historyRecordMap, renderSafetyPersistentOverlay])
+  }, [formatNumber, historyRecordMap, renderSafetyPersistentOverlay, t])
   const selectedHistoryRecords = useMemo(
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
     [historyRecordMap, selectedHistoryIds],

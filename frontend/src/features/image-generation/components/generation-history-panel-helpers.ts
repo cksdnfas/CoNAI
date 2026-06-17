@@ -131,6 +131,75 @@ export function getHistoryMediaVersion(record: GenerationHistoryResponse['record
   ].join(':')
 }
 
+type HistoryMediaReviewBadge = {
+  key: string
+  label: string
+  title: string
+}
+
+function normalizeHistoryDimension(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null
+  }
+
+  return Math.trunc(value)
+}
+
+function formatHistoryMimeLabel(mimeType: string | null | undefined) {
+  const normalized = mimeType?.trim().toLowerCase()
+  if (!normalized?.startsWith('image/')) {
+    return null
+  }
+
+  const subtype = normalized.slice('image/'.length).split(';')[0]?.trim()
+  if (!subtype) {
+    return null
+  }
+
+  if (subtype === 'jpeg') {
+    return 'JPG'
+  }
+
+  return subtype.toUpperCase()
+}
+
+export function getHistoryMediaReviewBadges(
+  record: GenerationHistoryRecord,
+  formatNumber: ReturnType<typeof useI18n>['formatNumber'],
+  t: ReturnType<typeof useI18n>['t'],
+): HistoryMediaReviewBadge[] {
+  const badges: HistoryMediaReviewBadge[] = []
+  const width = normalizeHistoryDimension(record.actual_width ?? record.width)
+  const height = normalizeHistoryDimension(record.actual_height ?? record.height)
+  if (width !== null && height !== null) {
+    badges.push({
+      key: 'dimensions',
+      label: `${formatNumber(width)}x${formatNumber(height)}`,
+      title: t({ ko: '결과 해상도', en: 'Result dimensions' }),
+    })
+  }
+
+  const mimeLabel = formatHistoryMimeLabel(record.actual_mime_type)
+  if (mimeLabel) {
+    badges.push({
+      key: 'mime',
+      label: mimeLabel,
+      title: t({ ko: '결과 파일 형식', en: 'Result file type' }),
+    })
+  }
+
+  const modelLabel = record.nai_model?.trim()
+  if (modelLabel) {
+    badges.push({
+      key: 'model',
+      label: modelLabel,
+      title: t({ ko: '생성 모델', en: 'Generation model' }),
+    })
+  }
+
+  return badges.slice(0, 3)
+}
+
 export function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
   const imageSource = resolveHistoryImageSource(record)
   const displayStatus = resolveHistoryDisplayStatus(record)

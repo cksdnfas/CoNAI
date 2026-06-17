@@ -141,8 +141,8 @@ function assertImageListCallbackSourcePolicy() {
   )
   match(
     generationHistoryPanelSource,
-    /const renderHistoryPersistentOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?renderSafetyPersistentOverlay\(image\)[\s\S]*?\}, \[historyRecordMap, renderSafetyPersistentOverlay\]\)/,
-    'generation history persistent overlay should keep a stable callback when history records are unchanged',
+    /const renderHistoryPersistentOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?renderSafetyPersistentOverlay\(image\)[\s\S]*?getHistoryMediaReviewBadges\(record, formatNumber, t\)[\s\S]*?\}, \[formatNumber, historyRecordMap, renderSafetyPersistentOverlay, t\]\)/,
+    'generation history persistent overlay should keep a stable callback for safety, cancellation, and review metadata',
   )
   doesNotMatch(
     generationHistoryPanelSource,
@@ -242,6 +242,19 @@ function assertSelectionRecoverySourcePolicy() {
   )
 }
 
+function assertMediaReviewBadgeSourcePolicy() {
+  match(
+    generationHistoryPanelHelpersSource,
+    /function getHistoryMediaReviewBadges\([\s\S]*?record: GenerationHistoryRecord,[\s\S]*?formatNumber: ReturnType<typeof useI18n>\['formatNumber'\],[\s\S]*?t: ReturnType<typeof useI18n>\['t'\],[\s\S]*?\): HistoryMediaReviewBadge\[\] \{[\s\S]*?record\.actual_width \?\? record\.width[\s\S]*?record\.actual_height \?\? record\.height[\s\S]*?formatHistoryMimeLabel\(record\.actual_mime_type\)[\s\S]*?record\.nai_model\?\.trim\(\)[\s\S]*?return badges\.slice\(0, 3\)/,
+    'generation history cards should expose compact media review metadata from resolved result fields',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const mediaReviewBadges = record \? getHistoryMediaReviewBadges\(record, formatNumber, t\) : \[\][\s\S]*?!safetyOverlay && !cancellationLabel && mediaReviewBadges\.length === 0[\s\S]*?mediaReviewBadges\.map\(\(badge\) => \([\s\S]*?max-w-\[9rem\] truncate bg-background\/85[\s\S]*?title=\{badge\.title\}/,
+    'generation history persistent overlays should render review metadata without replacing safety/cancellation badges',
+  )
+}
+
 assertEmptySummary()
 assertPagedSummary()
 assertFilteredSummary()
@@ -252,5 +265,6 @@ assertRefreshPolicySource()
 assertImageListCallbackSourcePolicy()
 assertDownloadReadinessSourcePolicy()
 assertSelectionRecoverySourcePolicy()
+assertMediaReviewBadgeSourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')
