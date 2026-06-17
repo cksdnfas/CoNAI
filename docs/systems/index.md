@@ -16,17 +16,18 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 9. [agent MCP local evidence export](/systems/agent-mcp-local-evidence-export)
 10. [local evidence export hardening contracts](/systems/local-evidence-export-hardening-contracts)
 11. [local automation context operations map](/systems/local-automation-context-operations-map)
-12. [26.6.9 alpha release handoff packet](/systems/26.6.9-alpha-release-handoff)
-13. [26.6.9 demo operation readiness checklist](/systems/26.6.9-demo-operation-readiness)
-14. [workflow recovery runbook evidence](/systems/workflow-recovery-runbook-evidence)
-15. [26.6.9 final readiness trend evidence](/systems/26.6.9-final-readiness-trend-evidence)
-16. [operator evidence review console](/systems/operator-evidence-review-console)
-17. [automation rehearsal contracts](/systems/automation-rehearsal-contracts)
-18. [media/runtime release risk dashboard contracts](/systems/media-runtime-release-risk-dashboard-contracts)
-19. [local automation context completion evidence](/systems/local-automation-context-completion-evidence)
-20. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
-21. [26.6.8 dependency hardening plan](/systems/26.6.8-dependency-hardening-plan)
-22. [26.6.8 hardening-evidence-observability readiness](/systems/26.6.8-hardening-evidence-observability-readiness)
+12. [26.6.17 generation history follow-up readiness](/systems/26.6.17-generation-history-followup-readiness)
+13. [26.6.9 alpha release handoff packet](/systems/26.6.9-alpha-release-handoff)
+14. [26.6.9 demo operation readiness checklist](/systems/26.6.9-demo-operation-readiness)
+15. [workflow recovery runbook evidence](/systems/workflow-recovery-runbook-evidence)
+16. [26.6.9 final readiness trend evidence](/systems/26.6.9-final-readiness-trend-evidence)
+17. [operator evidence review console](/systems/operator-evidence-review-console)
+18. [automation rehearsal contracts](/systems/automation-rehearsal-contracts)
+19. [media/runtime release risk dashboard contracts](/systems/media-runtime-release-risk-dashboard-contracts)
+20. [local automation context completion evidence](/systems/local-automation-context-completion-evidence)
+21. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
+22. [26.6.8 dependency hardening plan](/systems/26.6.8-dependency-hardening-plan)
+23. [26.6.8 hardening-evidence-observability readiness](/systems/26.6.8-hardening-evidence-observability-readiness)
 
 ## 왜 이 순서인가
 
@@ -74,42 +75,46 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 - 릴리즈 준비, 워크플로우 런타임, 미디어 리뷰, MCP 자동화 표면을 다음 로컬 작업 단위로 묶는 기준입니다.
 - push, deploy, restart, package version bump 없이 agent/operator가 먼저 확인할 context map을 제공합니다.
 
-### 12) 26.6.9 alpha release handoff packet
+### 12) 26.6.17 generation history follow-up readiness
+- 생성 이력 재실행과 미디어 badge 확인을 로컬 검토 가능한 운영 메모로 묶습니다.
+- push, deploy, restart, package version bump 없이 retry 경계와 검증 기준만 정리합니다.
+
+### 13) 26.6.9 alpha release handoff packet
 - `alphatest` 로컬 커밋 범위, 로컬 검증, live smoke 계획, 롤백 경계를 M2-CU1 기준으로 묶습니다.
 - push, deploy, restart, protected service `3999` 조작 없이 승인 검토용 handoff packet을 제공합니다.
 
-### 13) 26.6.9 demo operation readiness checklist
+### 14) 26.6.9 demo operation readiness checklist
 - alpha push, demo host update, configured demo service restart, live target `2999` smoke, rollback handoff의 승인 후 순서를 고정합니다.
 - 실행 명령, 대상, 확인 기준, 중단 조건을 분리해 사용자 승인 전 외부 작업이 일어나지 않게 합니다.
 
-### 14) workflow recovery runbook evidence
+### 15) workflow recovery runbook evidence
 - 워크플로우 런타임 화면에 재실행, 롤백 인계, 중단 조건 evidence card를 추가한 로컬 runbook 기준입니다.
 - queue/retry/recovery/terminal/retention 신호를 기존 health data에서 읽고, rollback/restart/destructive cleanup은 승인 경계로 유지합니다.
 
-### 15) 26.6.9 final readiness trend evidence
+### 16) 26.6.9 final readiness trend evidence
 - dependency/security 결과, release handoff, media/runtime observability, final local verification을 하나의 exportable trend evidence로 묶습니다.
 - package version bump, push, deploy, restart, protected service `3999`, destructive cleanup은 사용자 승인 결정으로 분리합니다.
 
-### 16) operator evidence review console
+### 17) operator evidence review console
 - Settings > Release readiness의 MCP dry-run, workflow recovery handoff, media approval packet 비교 콘솔 기준입니다.
 - local storage snapshot과 Markdown export까지만 허용하고 MCP 호출, cleanup, rerun, push/deploy/restart는 승인 경계로 둡니다.
 
-### 17) automation rehearsal contracts
+### 18) automation rehearsal contracts
 - cleanup staging, workflow recovery replay, release-candidate command plan을 dry-run/local diff 리허설로 묶습니다.
 - deletion, rerun, push/deploy/restart, external service 호출은 실행하지 않고 승인 경계로 유지합니다.
 
-### 18) local automation context completion evidence
+### 19) local automation context completion evidence
 - automation context handoff, workflow recovery, media review continuity 로드맵의 최종 로컬 evidence packet입니다.
 - push, deploy, restart, package version bump, auth/security/data/public API 변경, destructive cleanup, external side effect 없이 완료된 범위와 남은 승인 결정을 분리합니다.
 
-### 19) 26.6.8 workflow-media-operations
+### 20) 26.6.8 workflow-media-operations
 - 워크플로우·미디어 운영 업그레이드를 로컬 검토 전에 어떤 순서로 검증할지 정리합니다.
 - push, deploy, restart, protected service 조작 없이 확인 가능한 로컬 준비 경계입니다.
 
-### 20) 26.6.8 dependency hardening plan
+### 21) 26.6.8 dependency hardening plan
 - `npm audit` 결과를 backend runtime, frontend routing, docs/build tooling 표면으로 분리합니다.
 - 안전하게 적용할 수 있는 dependency update lane과 approval-needed 후보를 구분합니다.
 
-### 21) 26.6.8 hardening-evidence-observability readiness
+### 22) 26.6.8 hardening-evidence-observability readiness
 - dependency hardening, readiness evidence, media/runtime observability 로드맵의 최종 로컬 준비 경계를 정리합니다.
 - 남은 `better-queue -> uuid`, `vitepress -> vite -> esbuild`, retention/destructive cleanup 승인 결정을 분리합니다.
