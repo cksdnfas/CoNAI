@@ -13,7 +13,7 @@ import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOpt
 import type { ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import type { ComfyUIServer } from '@/lib/api-image-generation-types'
-import { isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
+import { WORKFLOW_INPUT_ENABLED_KEY, isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
 import {
   ApiRequestNodeLayout,
   IfBranchNodeLayout,
@@ -109,6 +109,20 @@ function getSelectOptionValue(option: ModuleGraphSelectOption) {
   return typeof option === 'string' ? option : option.value
 }
 
+function normalizeBooleanFlag(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase()
+    if (normalizedValue === 'true') return true
+    if (normalizedValue === 'false') return false
+  }
+
+  return false
+}
+
 function normalizeSelectOptions(options: ModuleGraphSelectOption[] | null | undefined) {
   return Array.isArray(options)
     ? options.filter((option) => getSelectOptionValue(option).trim().length > 0)
@@ -153,6 +167,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const connectedInputKeys = new Set(data.connectedInputKeys ?? [])
   const connectedOutputKeys = new Set(data.connectedOutputKeys ?? [])
   const isWorkflowInputSource = isWorkflowInputSourceModule(module)
+  const isWorkflowInputWaiting = isWorkflowInputSource
+    && normalizeBooleanFlag(data.inputValues?.[WORKFLOW_INPUT_ENABLED_KEY])
+    && inputPorts.some((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing)
   const sourceOutputPorts = isWorkflowInputSource ? outputPorts : []
   const missingRequiredInputCount = inputPorts.filter((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing).length
 
@@ -161,7 +178,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const usesCustomNodeLabel = hasCustomModuleNodeLabel(data)
   const [isEditingLabel, setIsEditingLabel] = useState(false)
   const [labelDraft, setLabelDraft] = useState(data.label ?? '')
-  const missingStatusLabel = isWorkflowInputSource ? t({ ko: '값 필요', en: 'Value required' }) : t({ ko: '입력 필요', en: 'Input required' })
+  const missingStatusLabel = isWorkflowInputWaiting
+    ? t({ ko: '실행 입력 대기', en: 'Runtime input waiting' })
+    : isWorkflowInputSource ? t({ ko: '값 필요', en: 'Value required' }) : t({ ko: '입력 필요', en: 'Input required' })
   useEffect(() => {
     if (!isEditingLabel) {
       setLabelDraft(data.label ?? '')
@@ -193,7 +212,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         ? t({ ko: '실패 지점', en: 'Failed node' })
         : executionStatus === 'blocked'
           ? t({ ko: '이후 차단', en: 'Blocked downstream' })
-          : missingRequiredInputCount > 0
+          : isWorkflowInputWaiting
+            ? t({ ko: '실행 입력 대기', en: 'Runtime input waiting' })
+            : missingRequiredInputCount > 0
             ? t({ ko: '입력 {count}개 필요', en: '{count} inputs needed' }, { count: missingRequiredInputCount })
             : data.activationHint === 'conditional-input'
               ? t({ ko: '조건 입력', en: 'Conditional input' })
@@ -201,7 +222,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const activationTitle =
     data.disabled === true
       ? t({ ko: '이 노드는 실행 중 건너뛰고 출력도 비활성 처리돼.', en: 'This node is skipped during execution and its outputs are disabled.' })
-      : missingRequiredInputCount > 0
+      : isWorkflowInputWaiting
+        ? t({ ko: '저장된 워크플로우 실행 때 이 값을 입력받도록 노출돼 있어. 실행 전 입력값을 확인해야 해.', en: 'This value is exposed for saved-workflow runs. Confirm the runtime input before execution.' })
+        : missingRequiredInputCount > 0
         ? t({ ko: '필수 입력이 비어 있거나 연결되지 않아 실행 전 확인이 필요해.', en: 'One or more required inputs are empty or unconnected and need review before execution.' })
         : data.activationHint === 'conditional-input'
           ? t({ ko: 'IF 분기 출력이 연결되어 실행 때 조건 결과에 따라 건너뛸 수 있어.', en: 'An IF branch output feeds this node, so execution may skip it depending on the branch result.' })
