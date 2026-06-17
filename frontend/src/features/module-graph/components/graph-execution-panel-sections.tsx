@@ -14,6 +14,7 @@ import {
   pickPrimaryExecutionArtifact,
   type ExecutionComparisonRow,
   type ExecutionComparisonSummary,
+  type ExecutionPathDiagnosticRow,
 } from './graph-execution-panel-helpers'
 
 export function ExecutionOutputGroupCard({
@@ -159,6 +160,54 @@ export function ExecutionComparisonContextBlock({
           ) : null}
         </div>
       )}
+    </div>
+  )
+}
+
+export function ExecutionPathDiagnosticsBlock({
+  rows,
+  compact = false,
+}: {
+  rows: ExecutionPathDiagnosticRow[]
+  compact?: boolean
+}) {
+  const { t, formatNumber } = useI18n()
+  const visibleRows = compact ? rows.slice(0, 4) : rows
+  const hiddenRowCount = Math.max(0, rows.length - visibleRows.length)
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <span>{t({ ko: '경로 진단', en: 'Path diagnostics' })}</span>
+        <Badge variant="outline">{formatNumber(rows.length)}</Badge>
+      </div>
+      <div className="space-y-1.5">
+        {visibleRows.map((row) => (
+          <div key={row.id} className="rounded-sm border border-border bg-background/45 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant={row.tone === 'failed' ? 'destructive' : row.tone === 'blocked' ? 'outline' : 'secondary'}>
+                {row.tone === 'failed'
+                  ? t({ ko: '실패', en: 'Failed' })
+                  : row.tone === 'blocked'
+                    ? t({ ko: '차단', en: 'Blocked' })
+                    : t({ ko: '건너뜀', en: 'Skipped' })}
+              </Badge>
+              <span className="min-w-0 truncate text-sm font-medium text-foreground">{row.nodeLabel}</span>
+              <Badge variant="outline">{row.reasonLabel}</Badge>
+            </div>
+            {row.sourceLabel ? <div className="mt-1.5 break-all text-xs text-muted-foreground">{t({ ko: '원인 {value}', en: 'Cause {value}' }, { value: row.sourceLabel })}</div> : null}
+          </div>
+        ))}
+      </div>
+      {hiddenRowCount > 0 ? (
+        <div className="text-xs text-muted-foreground">
+          {t({ ko: '추가 경로 진단 {count}개는 상세에서 확인 가능', en: '{count} more path diagnostics available in details' }, { count: formatNumber(hiddenRowCount) })}
+        </div>
+      ) : null}
     </div>
   )
 }

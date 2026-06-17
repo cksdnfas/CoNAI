@@ -3,6 +3,7 @@ import type {
   GraphExecutionFinalResultRecord,
   GraphExecutionLogRecord,
   GraphExecutionNodeIoRecord,
+  GraphExecutionRecord,
   GraphWorkflowExposedInput,
   GraphWorkflowRecord,
 } from '@/lib/api-module-graph'
@@ -57,6 +58,14 @@ export type ExecutionComparisonRow = {
   artifactType: string | null
   refLabel: string | null
   summaryText: string | null
+}
+
+export type ExecutionPathDiagnosticRow = {
+  id: string
+  tone: 'failed' | 'blocked' | 'skipped'
+  nodeLabel: string
+  reasonLabel: string
+  sourceLabel: string | null
 }
 
 const COMPACT_HIDDEN_ARTIFACT_PORT_KEYS = new Set(['image_ref', 'metadata'])
@@ -128,6 +137,21 @@ function compactComparisonText(value: string, maxLength = 72) {
 }
 
 function parseNodeIoSummary(value?: string | null) {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function parseLogDetails(value?: string | null) {
   if (!value) {
     return null
   }
@@ -351,6 +375,123 @@ export function buildExecutionComparisonRows(
       summaryText: summarizeNodeIoSummary(record.summary),
     }
   })
+}
+
+function readSkipReasonLabel(details: Record<string, unknown> | null) {
+  const disabledInputs = Array.isArray(details?.disabledInputs) ? details.disabledInputs : []
+  const inputReasons = disabledInputs
+    .filter((input): input is Record<string, unknown> => Boolean(input) && typeof input === 'object' && !Array.isArray(input))
+    .map((input) => input.reason)
+
+  if (inputReasons.includes('source_node_skipped')) {
+    return '상위 노드가 먼저 건너뜀'
+  }
+
+  if (inputReasons.includes('source_output_disabled')) {
+    return '상위 출력이 비활성'
+  }
+
+  if (inputReasons.includes('inactive_if_branch')) {
+    return 'IF 분기 비활성 경로'
+  }
+
+  return '건너뛴 경로'
+}
+
+function readFirstDisabledInputSource(details: Record<string, unknown> | null, nodeLabelMap: ReadonlyMap<string, string>, nodeLabelOverrides?: Record<string, string> | null) {
+  const disabledInputs = Array.isArray(details?.disabledInputs) ? details.disabledInputs : []
+  const sourceInput = disabledInputs.find((input): input is Record<string, unknown> => Boolean(input) && typeof input === 'object' && !Array.isArray(input))
+  const sourceNodeId = typeof sourceInput?.sourceNodeId === 'string' ? sourceInput.sourceNodeId : null
+  const sourcePortKey = typeof sourceInput?.sourcePortKey === 'string' ? sourceInput.sourcePortKey : null
+  if (!sourceNodeId) {
+    return null
+  }
+
+  return [getNodeDisplayLabelFromMap(nodeLabelMap, sourceNodeId, nodeLabelOverrides), sourcePortKey].filter(Boolean).join(' · ')
+}
+
+/** Build readable skipped/failed/blocked path diagnostics for execution summary surfaces. */
+export function buildExecutionPathDiagnosticRows({
+  execution,
+  logs,
+  plan,
+  selectedGraph,
+  nodeLabelOverrides,
+}: {
+  execution: GraphExecutionRecord
+  logs: GraphExecutionLogRecord[]
+  plan: ParsedExecutionPlan | null
+  selectedGraph?: GraphWorkflowRecord | null
+  nodeLabelOverrides?: Record<string, string> | null
+}): ExecutionPathDiagnosticRow[] {
+  const nodeLabelMap = buildNodeDisplayLabelMap(selectedGraph)
+  const rows: ExecutionPathDiagnosticRow[] = []
+  const seenNodeDiagnostics = new Set<string>()
+
+  for (const log of logs) {
+    if (!log.node_id) {
+      continue
+    }
+
+    if (log.event_type === 'node_skipped_disabled') {
+      const key = `skipped:${log.node_id}`
+      if (!seenNodeDiagnostics.has(key)) {
+        seenNodeDiagnostics.add(key)
+        rows.push({
+          id: key,
+          tone: 'skipped',
+          nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, log.node_id, nodeLabelOverrides),
+          reasonLabel: '비활성 노드',
+          sourceLabel: null,
+        })
+      }
+      continue
+    }
+
+    if (log.event_type === 'node_skipped_inactive_branch') {
+      const details = parseLogDetails(log.details)
+      const key = `skipped:${log.node_id}`
+      if (!seenNodeDiagnostics.has(key)) {
+        seenNodeDiagnostics.add(key)
+        rows.push({
+          id: key,
+          tone: 'skipped',
+          nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, log.node_id, nodeLabelOverrides),
+          reasonLabel: readSkipReasonLabel(details),
+          sourceLabel: readFirstDisabledInputSource(details, nodeLabelMap, nodeLabelOverrides),
+        })
+      }
+    }
+  }
+
+  if (execution.status === 'failed') {
+    const failedNodeId = execution.failed_node_id ?? logs.filter((log) => log.node_id).at(-1)?.node_id ?? null
+    if (failedNodeId) {
+      rows.push({
+        id: `failed:${failedNodeId}`,
+        tone: 'failed',
+        nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, failedNodeId, nodeLabelOverrides),
+        reasonLabel: '실패 지점',
+        sourceLabel: execution.error_message ?? null,
+      })
+
+      const orderedNodeIds = plan?.orderedNodeIds ?? []
+      const failedIndex = orderedNodeIds.indexOf(failedNodeId)
+      if (failedIndex !== -1) {
+        for (const blockedNodeId of orderedNodeIds.slice(failedIndex + 1)) {
+          rows.push({
+            id: `blocked:${blockedNodeId}`,
+            tone: 'blocked',
+            nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, blockedNodeId, nodeLabelOverrides),
+            reasonLabel: '실패 이후 미실행',
+            sourceLabel: getNodeDisplayLabelFromMap(nodeLabelMap, failedNodeId, nodeLabelOverrides),
+          })
+        }
+      }
+    }
+  }
+
+  return rows
 }
 
 /** Build a reusable node-label lookup map for execution summary surfaces. */

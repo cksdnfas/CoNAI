@@ -41,6 +41,7 @@ function assertExecutionStatusLookupPolicy() {
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
   const statusSource = extractFunction(sharedSource, 'getNodeExecutionStatus')
   const branchOutputStateSource = extractFunction(syncSource, 'buildConditionalOutputStates')
+  const skippedNodeReasonSource = extractFunction(syncSource, 'buildSkippedNodeReasonMap')
   const buildFlowFromGraphRecordSource = extractFunction(sharedSource, 'buildFlowFromGraphRecord')
 
   assert(
@@ -73,6 +74,12 @@ function assertExecutionStatusLookupPolicy() {
     'module graph nodes should carry conditional output state for post-run branch diagnostics',
   )
   assert(
+    typesSource.includes("export type ModuleGraphExecutionStatus = 'idle' | 'completed' | 'failed' | 'blocked' | 'skipped'")
+      && typesSource.includes("export type ModuleGraphExecutionSkipReason = 'disabled' | 'inactive-branch' | 'source-node-skipped' | 'source-output-disabled' | 'unknown'")
+      && typesSource.includes('executionSkipReason?: ModuleGraphExecutionSkipReason | null'),
+    'module graph nodes should carry skipped execution status and reasons',
+  )
+  assert(
     branchOutputStateSource.includes("metadata?.operationKey !== 'system.logic_if_branch'")
       && branchOutputStateSource.includes("writeConditionalOutputState(outputStatesByNode, artifact.node_id, activePort, 'active')")
       && branchOutputStateSource.includes("writeConditionalOutputState(outputStatesByNode, artifact.node_id, inactivePort, 'inactive')"),
@@ -87,6 +94,20 @@ function assertExecutionStatusLookupPolicy() {
     syncSource.includes('conditionalOutputStateSignature')
       && syncSource.includes('conditionalOutputStates: conditionalOutputStatesByNode[node.id] ?? null'),
     'workspace sync should include branch output states in node sync and signature calculation',
+  )
+  assert(
+    skippedNodeReasonSource.includes("log.event_type === 'node_skipped_disabled'")
+      && skippedNodeReasonSource.includes("log.event_type === 'node_skipped_inactive_branch'")
+      && skippedNodeReasonSource.includes("skippedNodeReasons.set(log.node_id, 'disabled')")
+      && syncSource.includes('skippedNodeReasonSignature')
+      && syncSource.includes('executionSkipReason: skippedNodeReasons.get(node.id) ?? null'),
+    'workspace sync should derive skipped-node reasons from execution logs and sync them to node cards',
+  )
+  assert(
+    statusSource.includes('skippedNodeReasons?: ReadonlyMap<string, ModuleGraphExecutionSkipReason>')
+      && sharedSource.includes("if (skippedNodeReasons?.has(nodeId))")
+      && sharedSource.includes("return 'skipped'"),
+    'execution status resolver should expose skipped nodes before failed-run fallback states',
   )
   assert(
     portCellsSource.includes('outputState?: ModuleGraphConditionalOutputState | null')

@@ -17,6 +17,8 @@ export type NodeArtifactGroupPreview = {
 }
 
 export type ModuleGraphConditionalOutputState = 'active' | 'inactive'
+export type ModuleGraphExecutionStatus = 'idle' | 'completed' | 'failed' | 'blocked' | 'skipped'
+export type ModuleGraphExecutionSkipReason = 'disabled' | 'inactive-branch' | 'source-node-skipped' | 'source-output-disabled' | 'unknown'
 
 export type ModuleGraphNodeData = {
   module: ModuleDefinitionRecord
@@ -25,7 +27,8 @@ export type ModuleGraphNodeData = {
   inputValues: Record<string, unknown>
   plannedExecutionOrder?: number | null
   activationHint?: 'conditional-input' | null
-  executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
+  executionStatus?: ModuleGraphExecutionStatus
+  executionSkipReason?: ModuleGraphExecutionSkipReason | null
   executionArtifactCount?: number
   executionReuseState?: 'reused' | null
   conditionalOutputStates?: Record<string, ModuleGraphConditionalOutputState> | null

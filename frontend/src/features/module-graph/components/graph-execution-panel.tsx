@@ -27,6 +27,7 @@ import {
   buildArtifactGroupModalText,
   buildExecutionComparisonRows,
   buildExecutionComparisonSummary,
+  buildExecutionPathDiagnosticRows,
   buildNodeDisplayLabelMap,
   type ExecutionComparisonRow,
   type ExecutionComparisonSummary,
@@ -41,7 +42,7 @@ import {
   pickPrimaryExecutionArtifact,
   type ParsedExecutionPlan,
 } from './graph-execution-panel-helpers'
-import { ExecutionComparisonContextBlock, ExecutionOutputGroupCard } from './graph-execution-panel-sections'
+import { ExecutionComparisonContextBlock, ExecutionOutputGroupCard, ExecutionPathDiagnosticsBlock } from './graph-execution-panel-sections'
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 import { buildFinalResultLifecycleWarningSourceLabel, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
@@ -98,6 +99,13 @@ function SelectedExecutionSummary({
     selectedGraph,
     nodeLabelOverrides,
   ), [executionDetail.node_io, nodeLabelOverrides, selectedGraph])
+  const executionPathDiagnosticRows = useMemo(() => buildExecutionPathDiagnosticRows({
+    execution: executionDetail.execution,
+    logs: executionDetail.logs,
+    plan: selectedExecutionPlan,
+    selectedGraph,
+    nodeLabelOverrides,
+  }), [executionDetail.execution, executionDetail.logs, nodeLabelOverrides, selectedExecutionPlan, selectedGraph])
 
   return (
     <div className="space-y-4 rounded-sm border border-border bg-surface-low p-3">
@@ -153,6 +161,7 @@ function SelectedExecutionSummary({
         rows={executionComparisonRows}
         compact
       />
+      <ExecutionPathDiagnosticsBlock rows={executionPathDiagnosticRows} compact />
 
       {executionInputEntries.length > 0 ? (
         <div className="space-y-2.5">
@@ -528,6 +537,15 @@ export function GraphExecutionPanel({
                   selectedGraph,
                   nodeLabelOverrides,
                 )}
+              />
+              <ExecutionPathDiagnosticsBlock
+                rows={buildExecutionPathDiagnosticRows({
+                  execution: executionDetail.execution,
+                  logs: executionDetail.logs,
+                  plan: selectedExecutionPlan,
+                  selectedGraph,
+                  nodeLabelOverrides,
+                })}
               />
             </div>
 

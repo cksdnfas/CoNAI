@@ -11,6 +11,8 @@ import type {
   ModuleGraphClipboardNode,
   ModuleGraphClipboardPayload,
   ModuleGraphEdge,
+  ModuleGraphExecutionSkipReason,
+  ModuleGraphExecutionStatus,
   ModuleGraphNode,
   ModuleGraphNodeData,
 } from './module-graph-types'
@@ -57,6 +59,8 @@ export type {
   ModuleGraphClipboardPayload,
   ModuleGraphConditionalOutputState,
   ModuleGraphEdge,
+  ModuleGraphExecutionSkipReason,
+  ModuleGraphExecutionStatus,
   ModuleGraphNode,
   ModuleGraphNodeData,
   NodeArtifactGroupPreview,
@@ -452,13 +456,18 @@ export function getNodeExecutionStatus(params: {
   orderedNodeIds: string[]
   nodeOrderIndex: ReadonlyMap<string, number>
   artifactNodeIds: Set<string>
+  skippedNodeReasons?: ReadonlyMap<string, ModuleGraphExecutionSkipReason>
   executionStatus: GraphExecutionStatus
   failedNodeId?: string | null
-}): 'idle' | 'completed' | 'failed' | 'blocked' {
-  const { nodeId, orderedNodeIds, nodeOrderIndex, artifactNodeIds, executionStatus, failedNodeId } = params
+}): ModuleGraphExecutionStatus {
+  const { nodeId, orderedNodeIds, nodeOrderIndex, artifactNodeIds, skippedNodeReasons, executionStatus, failedNodeId } = params
 
   if (artifactNodeIds.has(nodeId)) {
     return 'completed'
+  }
+
+  if (skippedNodeReasons?.has(nodeId)) {
+    return 'skipped'
   }
 
   if (executionStatus !== 'failed') {

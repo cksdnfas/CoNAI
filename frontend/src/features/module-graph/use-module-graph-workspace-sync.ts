@@ -17,6 +17,7 @@ import {
   parseHandleId,
   type ModuleGraphConditionalOutputState,
   type ModuleGraphEdge,
+  type ModuleGraphExecutionSkipReason,
   type ModuleGraphNode,
 } from './module-graph-shared'
 import { buildWorkflowRunInputDefaults, deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
@@ -60,6 +61,52 @@ function writeConditionalOutputState(
   if (state === 'active' || outputStatesByNode[nodeId][portKey] !== 'active') {
     outputStatesByNode[nodeId][portKey] = state
   }
+}
+
+function readSkippedNodeReason(details: Record<string, unknown> | null): ModuleGraphExecutionSkipReason {
+  const disabledInputs = Array.isArray(details?.disabledInputs) ? details.disabledInputs : []
+  const inputReasons = disabledInputs
+    .filter((input): input is Record<string, unknown> => Boolean(input) && typeof input === 'object' && !Array.isArray(input))
+    .map((input) => input.reason)
+
+  if (inputReasons.includes('source_node_skipped')) {
+    return 'source-node-skipped'
+  }
+
+  if (inputReasons.includes('source_output_disabled')) {
+    return 'source-output-disabled'
+  }
+
+  if (inputReasons.includes('inactive_if_branch')) {
+    return 'inactive-branch'
+  }
+
+  return 'unknown'
+}
+
+/** Derive skipped-node reasons from execution logs so graph cards can explain non-running paths. */
+export function buildSkippedNodeReasonMap(executionDetail: GraphExecutionDetailRecord | undefined) {
+  const skippedNodeReasons = new Map<string, ModuleGraphExecutionSkipReason>()
+  if (!executionDetail) {
+    return skippedNodeReasons
+  }
+
+  for (const log of executionDetail.logs ?? []) {
+    if (!log.node_id) {
+      continue
+    }
+
+    if (log.event_type === 'node_skipped_disabled') {
+      skippedNodeReasons.set(log.node_id, 'disabled')
+      continue
+    }
+
+    if (log.event_type === 'node_skipped_inactive_branch') {
+      skippedNodeReasons.set(log.node_id, readSkippedNodeReason(parseRecord(log.details)))
+    }
+  }
+
+  return skippedNodeReasons
 }
 
 /** Derive post-run conditional output states from IF branch artifacts and skip logs. */
@@ -268,6 +315,7 @@ export function useModuleGraphWorkspaceSync({
               plannedExecutionOrder: (plannedOrderIndex.get(node.id) ?? -1) + 1 || null,
               activationHint: conditionalInputNodeIds.has(node.id) ? 'conditional-input' : null,
               executionStatus: fallbackPreview ? 'completed' : 'idle',
+              executionSkipReason: null,
               conditionalOutputStates: null,
               executionArtifactCount: fallbackPreview?.executionArtifactCount ?? 0,
               latestArtifactLabel: fallbackPreview?.latestArtifactLabel ?? null,
@@ -292,6 +340,7 @@ export function useModuleGraphWorkspaceSync({
     const nodeOrderIndex = buildNodeOrderIndex(orderedNodeIds)
     const orderedNodeIdSet = new Set(orderedNodeIds)
     const reusedNodeIds = new Set(executionPlan.reusedNodeIds ?? [])
+    const skippedNodeReasons = buildSkippedNodeReasonMap(executionDetail)
     const conditionalOutputStatesByNode = buildConditionalOutputStates(executionDetail)
     const artifactsByNode = executionDetail.artifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
       if (!acc[artifact.node_id]) {
@@ -310,7 +359,11 @@ export function useModuleGraphWorkspaceSync({
       .sort(([leftNodeId], [rightNodeId]) => leftNodeId.localeCompare(rightNodeId))
       .map(([nodeId, stateByPort]) => `${nodeId}:${Object.entries(stateByPort).sort(([leftPort], [rightPort]) => leftPort.localeCompare(rightPort)).map(([portKey, state]) => `${portKey}:${state}`).join(',')}`)
       .join('|')
-    const syncSignature = `${executionPlanSignature}|${executionArtifactSignature}|${conditionalOutputStateSignature}|${nodeStructureSignature}|${edgeSignature}|${fallbackPreviewSignature}`
+    const skippedNodeReasonSignature = Array.from(skippedNodeReasons.entries())
+      .sort(([leftNodeId], [rightNodeId]) => leftNodeId.localeCompare(rightNodeId))
+      .map(([nodeId, reason]) => `${nodeId}:${reason}`)
+      .join('|')
+    const syncSignature = `${executionPlanSignature}|${executionArtifactSignature}|${conditionalOutputStateSignature}|${skippedNodeReasonSignature}|${nodeStructureSignature}|${edgeSignature}|${fallbackPreviewSignature}`
     if (lastNodePreviewSyncSignatureRef.current === syncSignature) {
       return
     }
@@ -334,6 +387,7 @@ export function useModuleGraphWorkspaceSync({
           orderedNodeIds,
           nodeOrderIndex,
           artifactNodeIds,
+          skippedNodeReasons,
           executionStatus: executionDetail.execution.status,
           failedNodeId: executionDetail.execution.failed_node_id,
         })
@@ -354,6 +408,7 @@ export function useModuleGraphWorkspaceSync({
             plannedExecutionOrder: (nodeOrderIndex.get(node.id) ?? -1) + 1 || null,
             activationHint: conditionalInputNodeIds.has(node.id) ? 'conditional-input' : null,
             executionStatus,
+            executionSkipReason: skippedNodeReasons.get(node.id) ?? null,
             conditionalOutputStates: conditionalOutputStatesByNode[node.id] ?? null,
             executionArtifactCount: nodeArtifacts.length > 0 ? nodeArtifacts.length : (fallbackPreview?.executionArtifactCount ?? 0),
             latestArtifactLabel: artifactPreview.latestArtifactLabel,

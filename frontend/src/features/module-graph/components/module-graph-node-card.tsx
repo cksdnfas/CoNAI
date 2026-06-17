@@ -202,9 +202,21 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         ? t({ ko: '실패', en: 'Failed' })
         : executionStatus === 'blocked'
           ? t({ ko: '차단됨', en: 'Blocked' })
+          : executionStatus === 'skipped'
+            ? t({ ko: '건너뜀', en: 'Skipped' })
           : missingRequiredInputCount > 0
             ? missingStatusLabel
             : null
+  const skippedReasonLabel =
+    data.executionSkipReason === 'disabled'
+      ? t({ ko: '비활성 건너뜀', en: 'Disabled skip' })
+      : data.executionSkipReason === 'source-node-skipped'
+        ? t({ ko: '상위 건너뜀', en: 'Upstream skipped' })
+        : data.executionSkipReason === 'source-output-disabled'
+          ? t({ ko: '출력 차단', en: 'Output blocked' })
+          : data.executionSkipReason === 'inactive-branch'
+            ? t({ ko: '비활성 분기', en: 'Inactive branch' })
+            : t({ ko: '건너뜀', en: 'Skipped' })
   const activationLabel =
     data.disabled === true
       ? t({ ko: '비활성', en: 'Disabled' })
@@ -212,6 +224,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         ? t({ ko: '실패 지점', en: 'Failed node' })
         : executionStatus === 'blocked'
           ? t({ ko: '이후 차단', en: 'Blocked downstream' })
+          : executionStatus === 'skipped'
+            ? skippedReasonLabel
           : isWorkflowInputWaiting
             ? t({ ko: '실행 입력 대기', en: 'Runtime input waiting' })
             : missingRequiredInputCount > 0
@@ -226,6 +240,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         ? t({ ko: '저장된 워크플로우 실행 때 이 값을 입력받도록 노출돼 있어. 실행 전 입력값을 확인해야 해.', en: 'This value is exposed for saved-workflow runs. Confirm the runtime input before execution.' })
         : missingRequiredInputCount > 0
         ? t({ ko: '필수 입력이 비어 있거나 연결되지 않아 실행 전 확인이 필요해.', en: 'One or more required inputs are empty or unconnected and need review before execution.' })
+        : executionStatus === 'skipped'
+          ? data.executionSkipReason === 'disabled'
+            ? t({ ko: '이전 실행에서 이 노드는 비활성 상태라 실행하지 않고 모든 출력을 비활성 처리했어.', en: 'In the selected run this node was disabled, so execution skipped it and disabled all outputs.' })
+            : data.executionSkipReason === 'source-node-skipped'
+              ? t({ ko: '이전 실행에서 상위 노드가 먼저 건너뛰어져 이 노드도 실행되지 않았어.', en: 'In the selected run an upstream node was skipped first, so this node did not run.' })
+              : data.executionSkipReason === 'source-output-disabled'
+                ? t({ ko: '이전 실행에서 연결된 상위 출력이 비활성 처리되어 이 노드가 실행되지 않았어.', en: 'In the selected run a connected upstream output was disabled, so this node did not run.' })
+                : t({ ko: '이전 실행에서 IF 분기 결과가 이 노드로 이어지지 않아 건너뛰었어.', en: 'In the selected run the IF branch result did not lead to this node, so it was skipped.' })
         : data.activationHint === 'conditional-input'
           ? t({ ko: 'IF 분기 출력이 연결되어 실행 때 조건 결과에 따라 건너뛸 수 있어.', en: 'An IF branch output feeds this node, so execution may skip it depending on the branch result.' })
           : t({ ko: '현재 연결과 값 기준으로 실행 경로에 들어갈 수 있어.', en: 'Current wiring and values allow this node to enter the execution path.' })
@@ -239,6 +261,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         ? '#ff8a80'
         : executionStatus === 'blocked'
           ? '#ffd180'
+          : executionStatus === 'skipped'
+            ? '#94a3b8'
           : missingRequiredInputCount > 0
             ? '#f59e0b'
             : `${accentColor}66`

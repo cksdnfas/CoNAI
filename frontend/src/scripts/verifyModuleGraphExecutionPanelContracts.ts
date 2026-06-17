@@ -52,6 +52,7 @@ function assertExecutionPanelLookupPolicy() {
   const executionLogAlertsSource = source('features/module-graph/components/workflow-execution-log-alerts.ts')
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
   const executionPanelSource = source('features/module-graph/components/graph-execution-panel.tsx')
+  const executionPanelSectionsSource = source('features/module-graph/components/graph-execution-panel-sections.tsx')
   const pageSectionsSource = source('features/module-graph/components/module-graph-page-sections.tsx')
   const pageViewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
   const pageQueriesSource = source('features/module-graph/use-module-graph-page-queries.ts')
@@ -434,6 +435,25 @@ function assertExecutionPanelLookupPolicy() {
       && buildFinalResultLifecycleWarningSourceLabelSource.includes('const portLabel = warning.sourcePortKey?.trim() || null')
       && buildFinalResultLifecycleWarningSourceLabelSource.includes("[nodeLabel, portLabel].filter(Boolean).join(' · ')"),
     'final-result warning source labels should combine source node and output port context',
+  )
+  assert(
+    helpersSource.includes("log.event_type === 'node_skipped_disabled'")
+      && helpersSource.includes("log.event_type === 'node_skipped_inactive_branch'")
+      && helpersSource.includes("execution.status === 'failed'")
+      && helpersSource.includes("id: `blocked:${blockedNodeId}`"),
+    'execution panel should derive skipped, failed, and downstream blocked path diagnostics',
+  )
+  assert(
+    executionPanelSource.includes('buildExecutionPathDiagnosticRows')
+      && executionPanelSource.includes('ExecutionPathDiagnosticsBlock rows={executionPathDiagnosticRows} compact')
+      && executionPanelSectionsSource.includes("t({ ko: '경로 진단', en: 'Path diagnostics' })"),
+    'execution panel should render compact Korean path diagnostics near selected execution details',
+  )
+  assert(
+    executionPanelSectionsSource.includes("row.tone === 'failed'")
+      && executionPanelSectionsSource.includes("row.tone === 'blocked'")
+      && executionPanelSectionsSource.includes("t({ ko: '원인 {value}', en: 'Cause {value}' }"),
+    'execution path diagnostics should label failed, blocked, skipped, and cause context rows',
   )
   assert(
     workflowRunnerSource.includes('latestExecutionLogs?: GraphExecutionLogRecord[] | null')
