@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { TranslationInput, TranslationParams } from '../i18n'
 import type { GenerationHistoryRecord, GenerationQueueJobRecord } from '../lib/api-image-generation-types'
 import { canRetryHistoryQueueJob, getHistoryRunRecoveryState, getRetryableHistoryQueueJobId } from '../features/image-generation/image-generation-shared'
+import { getUniqueRetryableHistoryQueueJobIds } from '../features/image-generation/components/generation-history-retry-actions'
 import {
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
@@ -399,6 +400,29 @@ function assertHistoryRecoveryState() {
     'failed-no-retry',
     'failed history without a failed/cancelled queue job should not expose replay',
   )
+
+  const duplicatedRetryIds = getUniqueRetryableHistoryQueueJobIds([
+    failedRetryable,
+    makeHistoryRecord({ id: 202, generation_status: 'failed', queue_status: 'failed', queue_job_id: 44, actual_composite_hash: null }),
+    cancelledRetryable,
+  ])
+  assertEqual(JSON.stringify(duplicatedRetryIds), JSON.stringify([44, 45]), 'history retry actions should dedupe queue ids before crossing the queue API boundary')
+}
+
+function assertHistoryRetryBoundary() {
+  const historyPanelSource = readFileSync(join(process.cwd(), 'src', 'features', 'image-generation', 'components', 'generation-history-panel.tsx'), 'utf8')
+  const historyRetryActionsSource = readFileSync(join(process.cwd(), 'src', 'features', 'image-generation', 'components', 'generation-history-retry-actions.ts'), 'utf8')
+
+  assertEqual(
+    historyPanelSource.includes("from '@/lib/api-image-generation-queue'"),
+    false,
+    'generation history panel should use the local retry action helper instead of importing queue API mutations directly',
+  )
+  assertEqual(
+    historyRetryActionsSource.includes("from '@/lib/api-image-generation-queue'"),
+    true,
+    'generation history retry action helper should own the queue API boundary',
+  )
 }
 
 assertStatusLabels()
@@ -409,6 +433,7 @@ assertOperationalMetaLabels()
 assertElapsedLabels()
 assertProgressPercent()
 assertHistoryRecoveryState()
+assertHistoryRetryBoundary()
 assertHeaderQuerySnapshotSelection()
 assertFilteredQueueHeaderQueryEnablement()
 assertHeaderRefreshTargets()

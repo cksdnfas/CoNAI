@@ -11,6 +11,10 @@ const generationHistoryPanelHelpersSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel-helpers.ts'),
   'utf8',
 )
+const generationHistoryRetryActionsSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/generation-history-retry-actions.ts'),
+  'utf8',
+)
 const generationHistoryStatusSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/generation-history-status.ts'),
   'utf8',
@@ -232,8 +236,13 @@ function assertSelectionRecoverySourcePolicy() {
   )
   match(
     generationHistoryPanelSource,
-    /const handleRetryHistoryRecords = useCallback\(async \([\s\S]*?runGenerationQueueMutation\([\s\S]*?acknowledgeRecoveryRecords\(retryableRecords\)[\s\S]*?\}, \[acknowledgeRecoveryRecords, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar\]\)/,
+    /const handleRetryHistoryRecords = useCallback\(async \([\s\S]*?retryGenerationHistoryRecords\(\{[\s\S]*?records: retryableRecords,[\s\S]*?queryClient,[\s\S]*?refreshHistory,[\s\S]*?acknowledgeRecoveryRecords\(retryableRecords\)[\s\S]*?\}, \[acknowledgeRecoveryRecords, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar\]\)/,
     'single, visible-bulk, and selected-bulk retry flows should share one queue mutation path',
+  )
+  match(
+    generationHistoryRetryActionsSource,
+    /function getUniqueRetryableHistoryQueueJobIds\(records: readonly GenerationHistoryRecord\[\]\) \{[\s\S]*?new Set\(getRetryableHistoryQueueJobIds\(records\)\)/,
+    'history retry boundary should dedupe queue job ids before calling the queue retry API',
   )
   match(
     generationHistoryPanelSource,

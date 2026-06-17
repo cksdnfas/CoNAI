@@ -21,7 +21,6 @@ import {
   getGenerationHistory,
   getGenerationWorkflowHistory,
 } from '@/lib/api-image-generation-history'
-import { retryGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import { cleanupPublicGenerationWorkflowFailedHistory, getPublicGenerationWorkflowHistory } from '@/lib/api-public-workflows'
 import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
 import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
@@ -35,7 +34,7 @@ import {
   resolveHistoryDisplayStatus,
 } from '../image-generation-shared'
 import { getGenerationHistoryFeedProgressSummary } from '../generation-history-feed-progress'
-import { runGenerationQueueMutation } from './generation-queue-actions'
+import { getUniqueRetryableHistoryQueueJobIds, retryGenerationHistoryRecords } from './generation-history-retry-actions'
 import {
   GENERATION_HISTORY_ACTIVE_REFRESH_MS,
   GENERATION_HISTORY_PAGE_SIZE,
@@ -50,7 +49,6 @@ import {
   getHistoryRecordStatusSummary,
   getHistoryRecoveryDetail,
   getHistoryRecoveryLabel,
-  getRetryableHistoryQueueJobIds,
   hasActiveGenerationHistory,
   hasPostprocessPendingHistory,
   isHistoryRecordDownloadReady,
@@ -414,29 +412,17 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       return
     }
 
-    const queueJobIds = getRetryableHistoryQueueJobIds(retryableRecords)
+    const queueJobIds = getUniqueRetryableHistoryQueueJobIds(retryableRecords)
     if (queueJobIds.length === 0) {
       return
     }
 
     try {
       setRetryingQueueJobIds(new Set(queueJobIds))
-      const retryQueued = await runGenerationQueueMutation({
-        execute: async () => {
-          if (queueJobIds.length === 1) {
-            return retryGenerationQueueJob(queueJobIds[0])
-          }
-
-          await Promise.all(queueJobIds.map((queueJobId) => retryGenerationQueueJob(queueJobId)))
-          return { message: options.successMessage }
-        },
-        refresh: async () => {
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
-            queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
-            refreshHistory({ watchForNewRows: true }),
-          ])
-        },
+      const retryQueued = await retryGenerationHistoryRecords({
+        records: retryableRecords,
+        queryClient,
+        refreshHistory,
         showSnackbar,
         successMessage: options.successMessage,
         failureMessage: options.failureMessage,
