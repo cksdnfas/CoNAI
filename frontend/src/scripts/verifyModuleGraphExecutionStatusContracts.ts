@@ -36,8 +36,11 @@ function extractFunction(sourceText: string, functionName: string) {
 function assertExecutionStatusLookupPolicy() {
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const syncSource = source('features/module-graph/use-module-graph-workspace-sync.ts')
+  const typesSource = source('features/module-graph/module-graph-types.ts')
+  const portCellsSource = source('features/module-graph/components/module-graph-port-cells.tsx')
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
   const statusSource = extractFunction(sharedSource, 'getNodeExecutionStatus')
+  const branchOutputStateSource = extractFunction(syncSource, 'buildConditionalOutputStates')
   const buildFlowFromGraphRecordSource = extractFunction(sharedSource, 'buildFlowFromGraphRecord')
 
   assert(
@@ -63,6 +66,33 @@ function assertExecutionStatusLookupPolicy() {
   assert(
     syncSource.includes('orderedNodeIdSet.has(node.id)'),
     'workspace sync should use Set.has for per-node execution-plan membership',
+  )
+  assert(
+    typesSource.includes("export type ModuleGraphConditionalOutputState = 'active' | 'inactive'")
+      && typesSource.includes('conditionalOutputStates?: Record<string, ModuleGraphConditionalOutputState> | null'),
+    'module graph nodes should carry conditional output state for post-run branch diagnostics',
+  )
+  assert(
+    branchOutputStateSource.includes("metadata?.operationKey !== 'system.logic_if_branch'")
+      && branchOutputStateSource.includes("writeConditionalOutputState(outputStatesByNode, artifact.node_id, activePort, 'active')")
+      && branchOutputStateSource.includes("writeConditionalOutputState(outputStatesByNode, artifact.node_id, inactivePort, 'inactive')"),
+    'workspace sync should derive active and inactive IF branch output paths from execution artifacts',
+  )
+  assert(
+    branchOutputStateSource.includes("log.event_type !== 'node_skipped_inactive_branch'")
+      && branchOutputStateSource.includes("writeConditionalOutputState(outputStatesByNode, sourceNodeId, sourcePortKey, 'inactive')"),
+    'workspace sync should preserve inactive upstream branch paths from skip logs',
+  )
+  assert(
+    syncSource.includes('conditionalOutputStateSignature')
+      && syncSource.includes('conditionalOutputStates: conditionalOutputStatesByNode[node.id] ?? null'),
+    'workspace sync should include branch output states in node sync and signature calculation',
+  )
+  assert(
+    portCellsSource.includes('outputState?: ModuleGraphConditionalOutputState | null')
+      && portCellsSource.includes("t({ ko: '활성 경로', en: 'Active path' })")
+      && portCellsSource.includes("t({ ko: '비활성 경로', en: 'Inactive path' })"),
+    'node output ports should show active and inactive conditional branch path labels',
   )
   assert(
     !syncSource.includes('orderedNodeIds.includes(node.id)'),

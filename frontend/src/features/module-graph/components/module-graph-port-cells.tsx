@@ -9,6 +9,7 @@ import {
   getModuleOperationKey,
   getPortTypeColor,
   normalizeModulePortDescription,
+  type ModuleGraphConditionalOutputState,
   type ModuleGraphNode,
 } from '../module-graph-shared'
 
@@ -23,6 +24,7 @@ type PortCellProps = {
   satisfied: boolean
   requiredMissing: boolean
   requiredMissingLabel?: string
+  outputState?: ModuleGraphConditionalOutputState | null
   onDisconnectInput?: (nodeId: string, portKey: string) => void
 }
 
@@ -120,7 +122,7 @@ export function getInputPortState(
 }
 
 /** Render one standard minimal socket row for outputs and simple port-only surfaces. */
-export function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requiredMissing, requiredMissingLabel, onDisconnectInput }: PortCellProps) {
+export function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requiredMissing, requiredMissingLabel, outputState, onDisconnectInput }: PortCellProps) {
   const { t } = useI18n()
   const resolvedRequiredMissingLabel = requiredMissingLabel ?? t({ ko: '입력 필요', en: 'Input required' })
 
@@ -129,14 +131,24 @@ export function PortCell({ nodeId, port, side, accentColor, connected, satisfied
   }
 
   const portTypeColor = getPortTypeColor(port.data_type)
-  const statusLabel = requiredMissing ? resolvedRequiredMissingLabel : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' })
-  const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
+  const outputStateLabel = outputState === 'active'
+    ? t({ ko: '활성 경로', en: 'Active path' })
+    : outputState === 'inactive'
+      ? t({ ko: '비활성 경로', en: 'Inactive path' })
+      : null
+  const statusLabel = outputStateLabel ?? (requiredMissing ? resolvedRequiredMissingLabel : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' }))
+  const borderColor = outputState === 'active'
+    ? '#22c55e99'
+    : outputState === 'inactive'
+      ? '#64748b99'
+      : requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
   const alignmentClass = side === 'input' ? 'pl-4 pr-2 text-left' : 'pl-2 pr-4 text-right'
   const rowJustifyClass = side === 'input' ? 'justify-start' : 'justify-end'
+  const handleColor = outputState === 'inactive' ? '#64748b' : portTypeColor
 
   return (
     <div
-      className={`relative min-h-[28px] border-b ${alignmentClass}`}
+      className={`relative min-h-[28px] border-b ${alignmentClass} ${outputState === 'inactive' ? 'opacity-65' : ''}`}
       style={{ borderColor } as CSSProperties}
       title={buildPortTooltip(t, port, statusLabel)}
       onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
@@ -145,7 +157,7 @@ export function PortCell({ nodeId, port, side, accentColor, connected, satisfied
         id={buildHandleId(side === 'input' ? 'in' : 'out', port.key)}
         type={side === 'input' ? 'target' : 'source'}
         position={side === 'input' ? Position.Left : Position.Right}
-        style={buildHandleStyle({ side, color: portTypeColor })}
+        style={buildHandleStyle({ side, color: handleColor })}
         title={buildPortTooltip(t, port, statusLabel)}
         onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
       />
@@ -155,6 +167,11 @@ export function PortCell({ nodeId, port, side, accentColor, connected, satisfied
           {port.label}
           {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
         </span>
+        {outputStateLabel ? (
+          <span className={`shrink-0 rounded-sm border px-1 py-0.5 text-[9px] font-medium ${outputState === 'active' ? 'border-emerald-400/40 text-emerald-200' : 'border-slate-400/30 text-slate-300'}`}>
+            {outputState === 'active' ? t({ ko: '활성', en: 'Active' }) : t({ ko: '꺼짐', en: 'Off' })}
+          </span>
+        ) : null}
       </div>
     </div>
   )

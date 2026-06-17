@@ -99,6 +99,7 @@ export function TextMergeNodeLayout({
           connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
           satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
           requiredMissing={false}
+          outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
         />
       </div>
 
@@ -193,6 +194,7 @@ export function TextTransformNodeLayout({
           connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
           satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
           requiredMissing={false}
+          outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
         />
       </div>
 
@@ -283,6 +285,7 @@ export function IfBranchNodeLayout({
                 connected={outputConnected}
                 satisfied={outputConnected}
                 requiredMissing={false}
+                outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
               />
             </div>
           )

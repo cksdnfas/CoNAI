@@ -16,6 +16,8 @@ export type NodeArtifactGroupPreview = {
   latestArtifactTextValue: string | null
 }
 
+export type ModuleGraphConditionalOutputState = 'active' | 'inactive'
+
 export type ModuleGraphNodeData = {
   module: ModuleDefinitionRecord
   label?: string
@@ -26,6 +28,7 @@ export type ModuleGraphNodeData = {
   executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
   executionArtifactCount?: number
   executionReuseState?: 'reused' | null
+  conditionalOutputStates?: Record<string, ModuleGraphConditionalOutputState> | null
   latestArtifactLabel?: string | null
   latestArtifactPreviewUrl?: string | null
   latestArtifactTextPreview?: string | null

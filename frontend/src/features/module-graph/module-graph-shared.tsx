@@ -55,6 +55,7 @@ export type {
   ModuleGraphClipboardEdge,
   ModuleGraphClipboardNode,
   ModuleGraphClipboardPayload,
+  ModuleGraphConditionalOutputState,
   ModuleGraphEdge,
   ModuleGraphNode,
   ModuleGraphNodeData,

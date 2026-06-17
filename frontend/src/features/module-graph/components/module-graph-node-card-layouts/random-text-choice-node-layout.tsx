@@ -88,6 +88,7 @@ export function RandomTextChoiceNodeLayout({
           connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
           satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
           requiredMissing={false}
+          outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
         />
       </div>
 

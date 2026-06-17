@@ -734,6 +734,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                     connected={outputConnected}
                     satisfied={outputConnected}
                     requiredMissing={false}
+                    outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
                   />
                 </div>
               )

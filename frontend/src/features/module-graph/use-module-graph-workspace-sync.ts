@@ -13,7 +13,9 @@ import {
   buildPlannedNodeExecutionOrder,
   getModuleOperationKey,
   getNodeExecutionStatus,
+  parseMetadataValue,
   parseHandleId,
+  type ModuleGraphConditionalOutputState,
   type ModuleGraphEdge,
   type ModuleGraphNode,
 } from './module-graph-shared'
@@ -28,6 +30,83 @@ type NodeArtifactPreviewRecord = {
   latestArtifactTextPreview: string | null
   latestArtifactTextValue: string | null
   executionOutputGroups: ReturnType<typeof buildNodeArtifactGroups>
+}
+
+function parseRecord(value?: string | null) {
+  const parsed = parseMetadataValue(value ?? null)
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : null
+}
+
+function readBranchPortFromMetadata(metadata: Record<string, unknown> | null) {
+  const selectedBranch = typeof metadata?.selectedBranch === 'string' ? metadata.selectedBranch : null
+  if (selectedBranch === 'true') return 'true_value'
+  if (selectedBranch === 'false') return 'false_value'
+  return null
+}
+
+function writeConditionalOutputState(
+  outputStatesByNode: Record<string, Record<string, ModuleGraphConditionalOutputState>>,
+  nodeId: string | null | undefined,
+  portKey: string | null | undefined,
+  state: ModuleGraphConditionalOutputState,
+) {
+  if (!nodeId || !portKey) {
+    return
+  }
+
+  outputStatesByNode[nodeId] = outputStatesByNode[nodeId] ?? {}
+  if (state === 'active' || outputStatesByNode[nodeId][portKey] !== 'active') {
+    outputStatesByNode[nodeId][portKey] = state
+  }
+}
+
+/** Derive post-run conditional output states from IF branch artifacts and skip logs. */
+export function buildConditionalOutputStates(executionDetail: GraphExecutionDetailRecord | undefined) {
+  const outputStatesByNode: Record<string, Record<string, ModuleGraphConditionalOutputState>> = {}
+  if (!executionDetail) {
+    return outputStatesByNode
+  }
+
+  for (const artifact of executionDetail.artifacts) {
+    const metadata = parseRecord(artifact.metadata)
+    if (metadata?.operationKey !== 'system.logic_if_branch') {
+      continue
+    }
+
+    const activePort = artifact.port_key === 'true_value' || artifact.port_key === 'false_value'
+      ? artifact.port_key
+      : readBranchPortFromMetadata(metadata)
+    if (!activePort) {
+      continue
+    }
+
+    const inactivePort = activePort === 'true_value' ? 'false_value' : 'true_value'
+    writeConditionalOutputState(outputStatesByNode, artifact.node_id, activePort, 'active')
+    writeConditionalOutputState(outputStatesByNode, artifact.node_id, inactivePort, 'inactive')
+  }
+
+  for (const log of executionDetail.logs ?? []) {
+    if (log.event_type !== 'node_skipped_inactive_branch') {
+      continue
+    }
+
+    const details = parseRecord(log.details)
+    const disabledInputs = Array.isArray(details?.disabledInputs) ? details.disabledInputs : []
+    for (const disabledInput of disabledInputs) {
+      if (!disabledInput || typeof disabledInput !== 'object') {
+        continue
+      }
+
+      const inputRecord = disabledInput as Record<string, unknown>
+      const sourceNodeId = typeof inputRecord.sourceNodeId === 'string' ? inputRecord.sourceNodeId : null
+      const sourcePortKey = typeof inputRecord.sourcePortKey === 'string' ? inputRecord.sourcePortKey : null
+      writeConditionalOutputState(outputStatesByNode, sourceNodeId, sourcePortKey, 'inactive')
+    }
+  }
+
+  return outputStatesByNode
 }
 
 /** Keep module-graph workspace selection, input defaults, feedback, and node previews in sync. */
@@ -189,6 +268,7 @@ export function useModuleGraphWorkspaceSync({
               plannedExecutionOrder: (plannedOrderIndex.get(node.id) ?? -1) + 1 || null,
               activationHint: conditionalInputNodeIds.has(node.id) ? 'conditional-input' : null,
               executionStatus: fallbackPreview ? 'completed' : 'idle',
+              conditionalOutputStates: null,
               executionArtifactCount: fallbackPreview?.executionArtifactCount ?? 0,
               latestArtifactLabel: fallbackPreview?.latestArtifactLabel ?? null,
               latestArtifactPreviewUrl: fallbackPreview?.latestArtifactPreviewUrl ?? null,
@@ -212,6 +292,7 @@ export function useModuleGraphWorkspaceSync({
     const nodeOrderIndex = buildNodeOrderIndex(orderedNodeIds)
     const orderedNodeIdSet = new Set(orderedNodeIds)
     const reusedNodeIds = new Set(executionPlan.reusedNodeIds ?? [])
+    const conditionalOutputStatesByNode = buildConditionalOutputStates(executionDetail)
     const artifactsByNode = executionDetail.artifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
       if (!acc[artifact.node_id]) {
         acc[artifact.node_id] = []
@@ -225,7 +306,11 @@ export function useModuleGraphWorkspaceSync({
       .map((artifact) => `${artifact.id}:${artifact.node_id}:${artifact.port_key}:${artifact.artifact_type}:${artifact.storage_path ?? ''}:${artifact.created_date}`)
       .join('|')
     const executionPlanSignature = `${executionDetail.execution.id}:${executionDetail.execution.status}:${executionDetail.execution.failed_node_id ?? ''}:${executionDetail.execution.updated_date}:${orderedNodeIds.join(',')}:${Array.from(reusedNodeIds).join(',')}`
-    const syncSignature = `${executionPlanSignature}|${executionArtifactSignature}|${nodeStructureSignature}|${edgeSignature}|${fallbackPreviewSignature}`
+    const conditionalOutputStateSignature = Object.entries(conditionalOutputStatesByNode)
+      .sort(([leftNodeId], [rightNodeId]) => leftNodeId.localeCompare(rightNodeId))
+      .map(([nodeId, stateByPort]) => `${nodeId}:${Object.entries(stateByPort).sort(([leftPort], [rightPort]) => leftPort.localeCompare(rightPort)).map(([portKey, state]) => `${portKey}:${state}`).join(',')}`)
+      .join('|')
+    const syncSignature = `${executionPlanSignature}|${executionArtifactSignature}|${conditionalOutputStateSignature}|${nodeStructureSignature}|${edgeSignature}|${fallbackPreviewSignature}`
     if (lastNodePreviewSyncSignatureRef.current === syncSignature) {
       return
     }
@@ -269,6 +354,7 @@ export function useModuleGraphWorkspaceSync({
             plannedExecutionOrder: (nodeOrderIndex.get(node.id) ?? -1) + 1 || null,
             activationHint: conditionalInputNodeIds.has(node.id) ? 'conditional-input' : null,
             executionStatus,
+            conditionalOutputStates: conditionalOutputStatesByNode[node.id] ?? null,
             executionArtifactCount: nodeArtifacts.length > 0 ? nodeArtifacts.length : (fallbackPreview?.executionArtifactCount ?? 0),
             latestArtifactLabel: artifactPreview.latestArtifactLabel,
             latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
