@@ -214,6 +214,34 @@ function assertDownloadReadinessSourcePolicy() {
   )
 }
 
+function assertSelectionRecoverySourcePolicy() {
+  match(
+    generationHistoryPanelHelpersSource,
+    /function collectRetryableHistoryRecords\(records: readonly GenerationHistoryRecord\[\]\) \{[\s\S]*?return records\.filter\(canRetryHistoryQueueJob\)/,
+    'generation history should share retryable record collection between recovery panel and selected actions',
+  )
+  match(
+    generationHistoryPanelHelpersSource,
+    /function getRetryableHistoryQueueJobIds\(records: readonly GenerationHistoryRecord\[\]\) \{[\s\S]*?\.map\(getRetryableHistoryQueueJobId\)[\s\S]*?queueJobId is number/,
+    'generation history should share queue job id extraction for one-off and bulk retry actions',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const selectedRetryableHistoryRecords = useMemo\([\s\S]*?collectRetryableHistoryRecords\(selectedHistoryRecords\)[\s\S]*?\[selectedHistoryRecords\]/,
+    'selected generation history rows should expose retryable records without duplicating retry detection',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const handleRetryHistoryRecords = useCallback\(async \([\s\S]*?runGenerationQueueMutation\([\s\S]*?acknowledgeRecoveryRecords\(retryableRecords\)[\s\S]*?\}, \[acknowledgeRecoveryRecords, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar\]\)/,
+    'single, visible-bulk, and selected-bulk retry flows should share one queue mutation path',
+  )
+  match(
+    generationHistoryPanelSource,
+    /selectedRetryableHistoryRecords\.length > 0[\s\S]*?handleRetrySelectedHistoryRecords\(\)[\s\S]*?선택 재실행/,
+    'selection action bar should offer a rerun action when selected history rows are retryable',
+  )
+}
+
 assertEmptySummary()
 assertPagedSummary()
 assertFilteredSummary()
@@ -223,5 +251,6 @@ assertStatusSummarySourcePolicy()
 assertRefreshPolicySource()
 assertImageListCallbackSourcePolicy()
 assertDownloadReadinessSourcePolicy()
+assertSelectionRecoverySourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

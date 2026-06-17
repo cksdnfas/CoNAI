@@ -3,6 +3,8 @@ import type { ImageRecord } from '@/types/image'
 import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import {
+  canRetryHistoryQueueJob,
+  getRetryableHistoryQueueJobId,
   getHistoryRunRecoveryState,
   isHistoryPostprocessPending,
   resolveHistoryDisplayStatus,
@@ -157,6 +159,16 @@ export function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse[
 
 export function isHistoryRecordDownloadReady(record: GenerationHistoryResponse['records'][number]) {
   return resolveHistoryDisplayStatus(record) === 'completed' && Boolean(record.actual_composite_hash)
+}
+
+export function collectRetryableHistoryRecords(records: readonly GenerationHistoryRecord[]) {
+  return records.filter(canRetryHistoryQueueJob)
+}
+
+export function getRetryableHistoryQueueJobIds(records: readonly GenerationHistoryRecord[]) {
+  return records
+    .map(getRetryableHistoryQueueJobId)
+    .filter((queueJobId): queueJobId is number => queueJobId !== null)
 }
 
 export function getHistoryRecoveryLabel(record: GenerationHistoryRecord, t: ReturnType<typeof useI18n>['t']) {
