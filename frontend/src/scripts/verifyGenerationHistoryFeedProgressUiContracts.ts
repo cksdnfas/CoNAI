@@ -138,15 +138,15 @@ function assertImageListCallbackSourcePolicy() {
     /const getHistoryImageHref = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?return `\/images\/\$\{image\.composite_hash\}`[\s\S]*?\}, \[historyRecordMap\]\)/,
     'generation history image links should use a stable callback for the virtualized image list',
   )
-  match(
+  doesNotMatch(
     generationHistoryPanelSource,
-    /const renderHistoryItemOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?const cancellationLabel = getHistoryCancellationBadgeLabel\(record\)[\s\S]*?\}, \[historyRecordMap\]\)/,
-    'generation history item overlay should use a stable callback and cache cancellation labels per render',
+    /renderHistoryItemOverlay|renderHistoryPersistentOverlay/,
+    'generation history cards should not attach status or metadata badge overlays to images',
   )
-  match(
+  doesNotMatch(
     generationHistoryPanelSource,
-    /const renderHistoryPersistentOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?renderSafetyPersistentOverlay\(image\)[\s\S]*?getHistoryMediaReviewBadges\(record, formatNumber, t\)[\s\S]*?\}, \[formatNumber, historyRecordMap, renderSafetyPersistentOverlay, t\]\)/,
-    'generation history persistent overlay should keep a stable callback for safety, cancellation, and review metadata',
+    /renderItem(?:Persistent)?Overlay=\{/,
+    'generation history image list should leave image surfaces free of badge overlays',
   )
   doesNotMatch(
     generationHistoryPanelSource,
@@ -251,16 +251,16 @@ function assertSelectionRecoverySourcePolicy() {
   )
 }
 
-function assertMediaReviewBadgeSourcePolicy() {
-  match(
+function assertNoImageBadgeOverlaySourcePolicy() {
+  doesNotMatch(
     generationHistoryPanelHelpersSource,
-    /function getHistoryMediaReviewBadges\([\s\S]*?record: GenerationHistoryRecord,[\s\S]*?formatNumber: ReturnType<typeof useI18n>\['formatNumber'\],[\s\S]*?t: ReturnType<typeof useI18n>\['t'\],[\s\S]*?\): HistoryMediaReviewBadge\[\] \{[\s\S]*?record\.actual_width \?\? record\.width[\s\S]*?record\.actual_height \?\? record\.height[\s\S]*?formatHistoryMimeLabel\(record\.actual_mime_type\)[\s\S]*?record\.nai_model\?\.trim\(\)[\s\S]*?return badges\.slice\(0, 3\)/,
-    'generation history cards should expose compact media review metadata from resolved result fields',
+    /getHistoryMediaReviewBadges|HistoryMediaReviewBadge|formatHistoryMimeLabel/,
+    'generation history should not keep media review badge helpers after removing image overlays',
   )
-  match(
+  doesNotMatch(
     generationHistoryPanelSource,
-    /const mediaReviewBadges = record \? getHistoryMediaReviewBadges\(record, formatNumber, t\) : \[\][\s\S]*?!safetyOverlay && !cancellationLabel && mediaReviewBadges\.length === 0[\s\S]*?mediaReviewBadges\.map\(\(badge\) => \([\s\S]*?max-w-\[9rem\] truncate bg-background\/85[\s\S]*?title=\{badge\.title\}/,
-    'generation history persistent overlays should render review metadata without replacing safety/cancellation badges',
+    /getHistoryCancellationBadgeLabel|getHistoryStatusLabel|resolveHistoryDisplayStatus/,
+    'generation history panel should not import badge-only image overlay status helpers',
   )
 }
 
@@ -274,6 +274,6 @@ assertRefreshPolicySource()
 assertImageListCallbackSourcePolicy()
 assertDownloadReadinessSourcePolicy()
 assertSelectionRecoverySourcePolicy()
-assertMediaReviewBadgeSourcePolicy()
+assertNoImageBadgeOverlaySourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

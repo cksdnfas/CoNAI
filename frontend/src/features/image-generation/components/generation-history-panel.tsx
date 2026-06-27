@@ -27,11 +27,7 @@ import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-i
 import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
-  getHistoryCancellationBadgeLabel,
-  getHistoryCancellationDetail,
   getRetryableHistoryQueueJobId,
-  getHistoryStatusLabel,
-  resolveHistoryDisplayStatus,
 } from '../image-generation-shared'
 import { getGenerationHistoryFeedProgressSummary } from '../generation-history-feed-progress'
 import { getUniqueRetryableHistoryQueueJobIds, retryGenerationHistoryRecords } from './generation-history-retry-actions'
@@ -45,7 +41,6 @@ import {
   dedupeHistoryRecords,
   getGenerationHistorySelectionId,
   getHistoryMediaVersion,
-  getHistoryMediaReviewBadges,
   getHistoryRecordStatusSummary,
   getHistoryRecoveryDetail,
   getHistoryRecoveryLabel,
@@ -200,7 +195,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     [historyRecords],
   )
   const {
-    renderItemPersistentOverlay: renderSafetyPersistentOverlay,
     shouldBlurItemPreview,
   } = useImageFeedSafety({
     items: historyImages,
@@ -211,32 +205,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
     [historyRecords],
   )
-  const renderHistoryPersistentOverlay = useCallback((image: ImageRecord) => {
-    const record = historyRecordMap.get(String(image?.id ?? ''))
-    const safetyOverlay = renderSafetyPersistentOverlay(image)
-    const cancellationLabel = record ? getHistoryCancellationBadgeLabel(record) : null
-    const mediaReviewBadges = record ? getHistoryMediaReviewBadges(record, formatNumber, t) : []
-
-    if (!safetyOverlay && !cancellationLabel && mediaReviewBadges.length === 0) {
-      return null
-    }
-
-    return (
-      <div className="flex flex-wrap items-end gap-2">
-        {mediaReviewBadges.map((badge) => (
-          <Badge key={badge.key} variant="outline" className="max-w-[9rem] truncate bg-background/85" title={badge.title}>
-            {badge.label}
-          </Badge>
-        ))}
-        {cancellationLabel ? (
-          <Badge variant="outline" className="border-amber-500/40 bg-background/85 text-amber-700 dark:text-amber-300" title={record ? (getHistoryCancellationDetail(record) ?? cancellationLabel) : cancellationLabel}>
-            {cancellationLabel}
-          </Badge>
-        ) : null}
-        {safetyOverlay}
-      </div>
-    )
-  }, [formatNumber, historyRecordMap, renderSafetyPersistentOverlay, t])
   const selectedHistoryRecords = useMemo(
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
     [historyRecordMap, selectedHistoryIds],
@@ -290,38 +258,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
     return `/images/${image.composite_hash}`
   }, [historyRecordMap])
-  const renderHistoryItemOverlay = useCallback((image: ImageRecord) => {
-    const imageSelectionId = String(image?.id ?? '')
-    if (!imageSelectionId) {
-      return null
-    }
-
-    const record = historyRecordMap.get(imageSelectionId)
-    if (!record) {
-      return null
-    }
-
-    const displayStatus = resolveHistoryDisplayStatus(record)
-    if (displayStatus === 'completed') {
-      return null
-    }
-
-    const cancellationLabel = getHistoryCancellationBadgeLabel(record)
-
-    return (
-      <div className="flex flex-col items-end gap-1">
-        <Badge variant="outline">
-          {getHistoryStatusLabel(displayStatus, record)}
-        </Badge>
-        {cancellationLabel ? (
-          <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
-            {cancellationLabel}
-          </Badge>
-        ) : null}
-      </div>
-    )
-  }, [historyRecordMap])
-
   useEffect(() => {
     setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id)))
   }, [historyRecordMap])
@@ -659,8 +595,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               hasMore={Boolean(historyQuery.hasNextPage)}
               isLoadingMore={historyQuery.isFetchingNextPage}
               onLoadMore={handleLoadMoreHistory}
-              renderItemOverlay={renderHistoryItemOverlay}
-              renderItemPersistentOverlay={renderHistoryPersistentOverlay}
               shouldBlurItemPreview={shouldBlurItemPreview}
             />
 
