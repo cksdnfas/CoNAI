@@ -1,6 +1,6 @@
 import { type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import { ModuleGraphSimpleValueInput, formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import { useI18n } from '@/i18n'
@@ -215,6 +215,7 @@ export function InputPortCell({
   const selectOptions = selectOptionsOverride && selectOptionsOverride.length > 0
     ? selectOptionsOverride
     : (uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : null)
+  const defaultValue = port.default_value ?? uiField?.default_value
   const numberStep = isSystemCallLlmPort && port.key === 'temperature'
     ? 0.1
     : isSystemCallLlmPort && port.key === 'max_tokens'
@@ -247,7 +248,7 @@ export function InputPortCell({
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
             options={selectOptions}
-            emptyLabel={hasMeaningfulValue(port.default_value ?? uiField?.default_value) ? t({ ko: '기본값', en: 'Default' }) : t({ ko: '선택', en: 'Select' })}
+            emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : t({ ko: '선택', en: 'Select' })}
             className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
@@ -278,7 +279,7 @@ export function InputPortCell({
             dataType="boolean"
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
-            emptyLabel={t({ ko: '기본값', en: 'Default' })}
+            emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : t({ ko: '선택', en: 'Select' })}
             className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>

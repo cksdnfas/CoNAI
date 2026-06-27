@@ -44,6 +44,7 @@ function assertExecutionPanelLookupPolicy() {
   const nodeCardRandomTextChoiceSource = source('features/module-graph/components/module-graph-node-card-layouts/random-text-choice-node-layout.tsx')
   const nodeCardTextLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts/text-node-layouts.tsx')
   const nodeCardPortCellsSource = source('features/module-graph/components/module-graph-port-cells.tsx')
+  const nodeCardSimpleValueInputSource = source('features/module-graph/components/module-graph-simple-value-input.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const nodeInspectorHelpersSource = source('features/module-graph/components/node-inspector-panel-helpers.tsx')
   const artifactSource = source('features/module-graph/module-graph-artifacts.ts')
@@ -181,6 +182,24 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     nodeCardSource.includes('uiFieldByKey.get(port.key)'),
     'node card should use Map-backed UI-field lookup for rendered input ports',
+  )
+  assert(
+    nodeCardSource.includes('const canConfigureNaiModel = Boolean(isNaiImageGenerationModule && naiModelOptions.length > 0 && data.onNodeValueChange && !connectedInputKeys.has(\'model\'))')
+      && nodeCardSource.includes('canConfigureNaiModel && port.key === \'model\'')
+      && nodeCardSource.includes('value={naiModelValue}'),
+    'NAI model inputs should render as node-level dropdown controls when they are not wired',
+  )
+  assert(
+    nodeCardSource.includes('if (inputPort && !outputPort)')
+      && nodeCardSource.includes('if (!inputPort && outputPort)')
+      && nodeCardSource.includes('className="grid grid-cols-1"'),
+    'node card port rows should give full width to unpaired input or output ports',
+  )
+  assert(
+    nodeCardSimpleValueInputSource.includes('formatModuleGraphDefaultOptionLabel')
+      && nodeCardSimpleValueInputSource.includes("t({ ko: '기본: {value}', en: 'Default: {value}' }")
+      && !nodeCardSimpleValueInputSource.includes('기본값 사용'),
+    'module graph dropdown empty options should display the concrete default value instead of a vague default label',
   )
   assert(
     nodeCardSource.includes('uiFieldByKey={uiFieldByKey}'),

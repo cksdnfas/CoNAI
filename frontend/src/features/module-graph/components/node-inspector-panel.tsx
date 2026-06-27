@@ -15,7 +15,7 @@ import { getLlmPresetOptions } from '@/lib/api-settings'
 import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphKeyValueListInput } from './module-graph-key-value-list-input'
-import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import { ModuleGraphSimpleValueInput, formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
@@ -318,7 +318,7 @@ export function NodeInspectorPanel({
             value={effectiveSelectValue}
             onChange={(value) => onNodeValueChange(node.id, port.key, value)}
             options={selectOptions}
-            emptyLabel={hasMeaningfulValue(port.default_value ?? uiField?.default_value) ? t({ ko: '기본값 사용', en: 'Use default' }) : t({ ko: '선택', en: 'Select' })}
+            emptyLabel={hasMeaningfulValue(defaultSelectValue) ? formatModuleGraphDefaultOptionLabel(t, defaultSelectValue) : t({ ko: '선택', en: 'Select' })}
             allowEmptyOption={!isCodexModelPort}
           />
         </div>
@@ -424,13 +424,14 @@ export function NodeInspectorPanel({
     const renderFieldInput = () => {
       if (field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
         const requiresConcreteSelection = selectedNodeOperationKey === 'system.logic_if_branch' && (field.key === 'mode' || field.key === 'expected_type')
+        const defaultSelectValue = field.default_value
         return (
           <ModuleGraphSimpleValueInput
             dataType="select"
-            value={requiresConcreteSelection ? (rawValue ?? field.default_value) : rawValue}
+            value={requiresConcreteSelection ? (rawValue ?? defaultSelectValue) : rawValue}
             onChange={(value) => onNodeValueChange(node.id, field.key, value)}
             options={field.options}
-            emptyLabel={hasMeaningfulValue(field.default_value) ? t({ ko: '기본값 사용', en: 'Use default' }) : t({ ko: '선택', en: 'Select' })}
+            emptyLabel={hasMeaningfulValue(defaultSelectValue) ? formatModuleGraphDefaultOptionLabel(t, defaultSelectValue) : t({ ko: '선택', en: 'Select' })}
             allowEmptyOption={!requiresConcreteSelection}
           />
         )

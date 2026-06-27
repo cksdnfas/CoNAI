@@ -338,8 +338,25 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     ?? (typeof codexModelUiField?.default_value === 'string' ? codexModelUiField.default_value : null)
     ?? (codexModelOptions[0] ? getSelectOptionValue(codexModelOptions[0]) : null)
     ?? ''
+  const isNaiImageGenerationModule = module.engine_type === 'nai' || operationKey === 'system.generate_image_nai'
+  const naiModelPort = isNaiImageGenerationModule
+    ? inputPorts.find((port) => port.key === 'model')
+    : null
+  const naiModelUiField = isNaiImageGenerationModule
+    ? uiFieldByKey.get('model') ?? null
+    : null
+  const naiModelCurrentValue = normalizeOptionalString(data.inputValues?.model)
+  const naiModelOptions = normalizeSelectOptions(
+    naiModelUiField?.data_type === 'select' ? naiModelUiField.options : null,
+  )
+  const naiModelValue = naiModelCurrentValue
+    ?? normalizeOptionalString(naiModelPort?.default_value)
+    ?? (typeof naiModelUiField?.default_value === 'string' ? naiModelUiField.default_value : null)
+    ?? (naiModelOptions[0] ? getSelectOptionValue(naiModelOptions[0]) : null)
+    ?? ''
   const canConfigureLlmModel = Boolean(isSystemCallLlmModule && llmModelOptions.length > 0 && data.onNodeValueChange)
   const canConfigureCodexModel = Boolean(isSystemCallCodexMessageModule && codexModelOptions.length > 0 && data.onNodeValueChange)
+  const canConfigureNaiModel = Boolean(isNaiImageGenerationModule && naiModelOptions.length > 0 && data.onNodeValueChange && !connectedInputKeys.has('model'))
   const canConfigureLlmPreset = Boolean(isSystemLoadLlmPresetModule && data.onNodeValueChange)
   const llmPresetType = normalizeLlmPresetType(data.inputValues?.preset_type)
   const llmPresetEntries = getLlmPresetEntries(llmPresetsQuery.data, llmPresetType)
@@ -374,6 +391,10 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     }
 
     if (canConfigureCodexModel && port.key === 'model') {
+      return false
+    }
+
+    if (canConfigureNaiModel && port.key === 'model') {
       return false
     }
 
@@ -596,6 +617,28 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         </div>
       ) : null}
 
+      {canConfigureNaiModel ? (
+        <div className="nodrag nowheel mt-2 space-y-1">
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '모델', en: 'Model' })}</div>
+          <Select
+            value={naiModelValue}
+            onMouseDown={stopNodeInteraction}
+            onClick={stopNodeInteraction}
+            onChange={(event) => {
+              stopNodeInteraction(event)
+              data.onNodeValueChange?.(id, 'model', event.target.value)
+            }}
+            className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          >
+            {naiModelOptions.map((option) => {
+              const optionValue = getSelectOptionValue(option)
+              const optionLabel = typeof option === 'string' ? option : option.label
+              return <option key={optionValue} value={optionValue}>{optionLabel}</option>
+            })}
+          </Select>
+        </div>
+      ) : null}
+
       {canConfigureLlmModel ? (
         <div className="nodrag nowheel mt-2 space-y-1">
           <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '모델', en: 'Model' })}</div>
@@ -736,6 +779,41 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
               const outputPort = visibleOutputPorts[index]
               const inputPortState = getInputPortState(data, inputPort, connectedInputKeys)
               const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
+
+              if (inputPort && !outputPort) {
+                return (
+                  <div key={`port-row-${index}`} className="grid grid-cols-1">
+                    <InputPortCell
+                      nodeId={id}
+                      data={data}
+                      port={inputPort}
+                      uiField={uiFieldByKey.get(inputPort.key) ?? null}
+                      accentColor={accentColor}
+                      connected={inputPortState.connected}
+                      satisfied={inputPortState.satisfied}
+                      requiredMissing={inputPortState.requiredMissing}
+                      selectOptionsOverride={undefined}
+                    />
+                  </div>
+                )
+              }
+
+              if (!inputPort && outputPort) {
+                return (
+                  <div key={`port-row-${index}`} className="grid grid-cols-1">
+                    <PortCell
+                      nodeId={id}
+                      port={outputPort}
+                      side="output"
+                      accentColor={accentColor}
+                      connected={outputConnected}
+                      satisfied={outputConnected}
+                      requiredMissing={false}
+                      outputState={data.conditionalOutputStates?.[outputPort.key] ?? null}
+                    />
+                  </div>
+                )
+              }
 
               return (
                 <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">

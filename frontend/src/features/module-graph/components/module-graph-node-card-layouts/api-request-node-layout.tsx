@@ -3,7 +3,7 @@ import { Handle, Position } from '@xyflow/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
-import { ModuleGraphSimpleValueInput } from '../module-graph-simple-value-input'
+import { ModuleGraphSimpleValueInput, formatModuleGraphDefaultOptionLabel } from '../module-graph-simple-value-input'
 import { ModuleGraphKeyValueListInput, getKeyValueConnectionKeys, normalizeKeyValueEntries, type KeyValueEntry } from '../module-graph-key-value-list-input'
 import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { hasMeaningfulValue } from '../module-graph-field-shared'
@@ -147,7 +147,8 @@ export function ApiRequestNodeLayout({
   }
 
   const renderSimpleEditor = (port: ModulePortDefinition, field: ModuleUiFieldDefinition | null) => {
-    const value = data.inputValues?.[port.key] ?? port.default_value ?? field?.default_value
+    const defaultValue = port.default_value ?? field?.default_value
+    const value = data.inputValues?.[port.key] ?? defaultValue
     const dataType = field?.data_type === 'select'
       ? 'select'
       : port.data_type === 'number'
@@ -163,7 +164,7 @@ export function ApiRequestNodeLayout({
         placeholder={field?.placeholder || port.label}
         min={field?.min}
         max={field?.max}
-        emptyLabel={t({ ko: '기본값', en: 'Default' })}
+        emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : t({ ko: '선택', en: 'Select' })}
         className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
       />
     )
