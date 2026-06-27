@@ -106,8 +106,10 @@ async function main() {
     settingsService.updateGenerationThrottleSettings({
       novelai: {
         maxConcurrentJobs: 1,
-        cooldownAfterCompletions: 1000,
-        cooldownSeconds: 0,
+        scheduleWindowMinutes: 1,
+        scheduleJobCount: 1000,
+        scheduleMode: 'even',
+        minStartIntervalSeconds: 0,
       },
     })
 

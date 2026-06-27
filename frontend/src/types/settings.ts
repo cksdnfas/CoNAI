@@ -220,10 +220,14 @@ export interface ImageSaveSettings {
   applyToWorkflowOutputs: boolean
 }
 
+export type GenerationThrottleScheduleMode = 'even' | 'random'
+
 export interface GenerationThrottleServiceSettings {
   maxConcurrentJobs: number
-  cooldownAfterCompletions: number
-  cooldownSeconds: number
+  scheduleWindowMinutes: number
+  scheduleJobCount: number
+  scheduleMode: GenerationThrottleScheduleMode
+  minStartIntervalSeconds: number
 }
 
 export type GenerationReservationUserQueuePolicy = 'continue_limited' | 'hold_until_empty'

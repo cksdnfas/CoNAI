@@ -219,9 +219,12 @@ router.put(
         return false;
       }
 
+      const validScheduleModes = ['even', 'random'] as const;
       if (!validateIntegerInRangeIfDefined(res, serviceSettings.maxConcurrentJobs, 1, 8, `${label} maxConcurrentJobs must be an integer between 1 and 8`)) return false;
-      if (!validateIntegerInRangeIfDefined(res, serviceSettings.cooldownAfterCompletions, 1, 50, `${label} cooldownAfterCompletions must be an integer between 1 and 50`)) return false;
-      if (!validateIntegerInRangeIfDefined(res, serviceSettings.cooldownSeconds, 0, 3600, `${label} cooldownSeconds must be an integer between 0 and 3600`)) return false;
+      if (!validateIntegerInRangeIfDefined(res, serviceSettings.scheduleWindowMinutes, 1, 1440, `${label} scheduleWindowMinutes must be an integer between 1 and 1440`)) return false;
+      if (!validateIntegerInRangeIfDefined(res, serviceSettings.scheduleJobCount, 1, 10000, `${label} scheduleJobCount must be an integer between 1 and 10000`)) return false;
+      if (!validateStringEnumIfDefined(res, serviceSettings.scheduleMode, validScheduleModes, `${label} scheduleMode must be one of: ${validScheduleModes.join(', ')}`)) return false;
+      if (!validateIntegerInRangeIfDefined(res, serviceSettings.minStartIntervalSeconds, 0, 3600, `${label} minStartIntervalSeconds must be an integer between 0 and 3600`)) return false;
 
       return true;
     };

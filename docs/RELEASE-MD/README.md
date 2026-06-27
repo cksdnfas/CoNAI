@@ -4,6 +4,7 @@
 
 ## 최신 문서
 
+- [26.6.19 workflow-media-alpha-operations 작업 노트](./RELEASE_26.6.19.md)
 - [26.6.17 feature-refactor-followup 작업 노트](./RELEASE_26.6.17.md)
 - [26.6.8 workflow-media-operations 작업 노트](./RELEASE_26.6.8.md)
 - [최신 안정 릴리즈 26.6.3](./RELEASE_26.6.3.md)

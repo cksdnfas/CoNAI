@@ -487,13 +487,17 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
     generationThrottle: {
       novelai: {
         maxConcurrentJobs: 1,
-        cooldownAfterCompletions: 1,
-        cooldownSeconds: 3,
+        scheduleWindowMinutes: 1,
+        scheduleJobCount: 20,
+        scheduleMode: 'even',
+        minStartIntervalSeconds: 1,
       },
       codex: {
         maxConcurrentJobs: 3,
-        cooldownAfterCompletions: 3,
-        cooldownSeconds: 60,
+        scheduleWindowMinutes: 3,
+        scheduleJobCount: 3,
+        scheduleMode: 'even',
+        minStartIntervalSeconds: 1,
       },
       reservations: {
         maxConcurrentJobs: 3,
