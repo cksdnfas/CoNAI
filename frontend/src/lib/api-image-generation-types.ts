@@ -29,6 +29,7 @@ export interface GenerationQueueJobRecord {
   queue_position_scope?: 'service' | 'server' | 'tag' | 'auto' | null
   queue_position_server_id?: number | null
   queue_position_server_tag?: string | null
+  estimated_start_at?: string | null
   estimated_wait_seconds?: number | null
   estimated_total_seconds?: number | null
   estimated_duration_seconds?: number | null

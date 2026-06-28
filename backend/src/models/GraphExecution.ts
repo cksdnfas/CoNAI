@@ -267,16 +267,36 @@ export class GraphExecutionModel {
 
   /** Atomically claim the next queued graph execution for a trigger class. */
   static claimNextQueued(triggerType: GraphExecutionTriggerType) {
+    const nextQueued = this.findQueuedByTriggerType(triggerType, 1)[0]
+    return nextQueued ? this.claimQueuedById(nextQueued.id) : null
+  }
+
+  /** Read a bounded ordered slice of queued executions for dispatch planning. */
+  static findQueuedByTriggerType(triggerType: GraphExecutionTriggerType, limit = 24) {
+    const db = getUserSettingsDb()
+    const safeLimit = Math.max(1, Math.min(Math.floor(limit), 200))
+    return db.prepare(`
+      SELECT *
+      FROM graph_executions
+      WHERE status = 'queued'
+        AND trigger_type = ?
+      ORDER BY created_date ASC, id ASC
+      LIMIT ?
+    `).all(triggerType, safeLimit) as GraphExecutionRecord[]
+  }
+
+  /** Atomically claim one queued graph execution by id. */
+  static claimQueuedById(executionId: number) {
     const db = getUserSettingsDb()
     const claimTransaction = db.transaction(() => {
       const row = db.prepare(`
         SELECT id
         FROM graph_executions
         WHERE status = 'queued'
-          AND trigger_type = ?
+          AND id = ?
         ORDER BY created_date ASC, id ASC
         LIMIT 1
-      `).get(triggerType) as { id: number } | undefined
+      `).get(executionId) as { id: number } | undefined
 
       if (!row) {
         return null

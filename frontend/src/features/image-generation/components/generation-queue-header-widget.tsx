@@ -26,6 +26,7 @@ import {
   getGenerationQueueLaneLabel,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
+  getGenerationQueueStartLabel,
   getGenerationQueueStatusLabel,
   getGenerationQueueWaitLabel,
   getGenerationQueueWorkflowLabel,
@@ -417,6 +418,7 @@ export function GenerationQueueHeaderWidget() {
                     const remainingLabel = getGenerationQueueRemainingLabel(record, t, formatNumber)
                     const laneLabel = getGenerationQueueLaneLabel(record, t, formatNumber)
                     const waitLabel = getGenerationQueueWaitLabel(record, t, formatNumber)
+                    const startLabel = getGenerationQueueStartLabel(record, t, locale)
                     const durationLabel = getGenerationQueueDurationLabel(record, t, formatNumber)
                     const progressPercent = getGenerationQueueProgressPercent(record)
                     const shownProgressPercent = progressPercent == null ? null : Math.min(100, Math.max(progressPercent, progressPercent > 0 ? 8 : 0))
@@ -433,6 +435,7 @@ export function GenerationQueueHeaderWidget() {
                     const operationalMetaLabel = [
                       laneLabel,
                       waitLabel,
+                      startLabel,
                       durationLabel,
                     ].filter(Boolean).join(' · ')
 

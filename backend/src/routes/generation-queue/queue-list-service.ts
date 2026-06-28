@@ -121,6 +121,7 @@ export function buildGenerationQueueListResponse(req: Request) {
         queue_position_scope: queuePosition?.scope ?? null,
         queue_position_server_id: queuePosition?.serverId ?? null,
         queue_position_server_tag: queuePosition?.serverTag ?? null,
+        estimated_start_at: queueEta?.startAt ?? null,
         estimated_wait_seconds: queueEta?.waitSeconds ?? null,
         estimated_total_seconds: queueEta?.totalSeconds ?? null,
         estimated_duration_seconds: queueEta?.durationSeconds ?? null,

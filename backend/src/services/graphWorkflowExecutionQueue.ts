@@ -1,10 +1,13 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
+import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
+import { ModuleDefinitionModel } from '../models/ModuleDefinition'
 import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
 import { settingsService } from './settingsService'
-import { writeExecutionLog } from './graph-workflow-executor/shared'
+import { getGenerationQueueServerCapacity } from './generationQueueRouting'
+import { parseGraphWorkflowRecord, parseModuleDefinition, writeExecutionLog, type ParsedModuleDefinition } from './graph-workflow-executor/shared'
 import { encodeQueuedExecutionMetadata, parseQueuedExecutionMetadata } from './graphWorkflowExecutionQueueMetadata'
 
 type QueuedExecutionJob = {
@@ -37,9 +40,12 @@ type StartupRecoverySnapshot = InterruptedExecutionRecoverySummary & {
   recoveredAt: string
 }
 
+type ReservationLane = 'novelai' | 'codex' | 'comfyui' | 'other'
+
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
 const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
+const SCHEDULE_DISPATCH_SCAN_LIMIT = 200
 
 function formatExecutionError(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown execution error'
@@ -56,6 +62,75 @@ function buildQueuedJobFromExecution(execution: NonNullable<ReturnType<typeof Gr
     triggerType: execution.trigger_type === 'schedule' ? 'schedule' : 'manual',
     scheduleId: execution.schedule_id ?? null,
   }
+}
+
+function getSystemOperationKey(moduleDefinition: Pick<ParsedModuleDefinition, 'internal_fixed_values' | 'template_defaults'>) {
+  if (typeof moduleDefinition.internal_fixed_values?.operation_key === 'string') {
+    return moduleDefinition.internal_fixed_values.operation_key
+  }
+
+  if (typeof moduleDefinition.template_defaults?.operation_key === 'string') {
+    return moduleDefinition.template_defaults.operation_key
+  }
+
+  return null
+}
+
+function addReservationLaneForModule(lanes: Set<ReservationLane>, moduleDefinition: ParsedModuleDefinition) {
+  if (moduleDefinition.engine_type === 'nai') {
+    lanes.add('novelai')
+    return
+  }
+
+  if (moduleDefinition.engine_type === 'codex') {
+    lanes.add('codex')
+    return
+  }
+
+  if (moduleDefinition.engine_type === 'comfyui') {
+    lanes.add('comfyui')
+    return
+  }
+
+  if (moduleDefinition.engine_type !== 'system') {
+    return
+  }
+
+  const operationKey = getSystemOperationKey(moduleDefinition)
+  if (operationKey === 'system.generate_image_nai') {
+    lanes.add('novelai')
+  } else if (operationKey === 'system.generate_image_codex') {
+    lanes.add('codex')
+  }
+}
+
+function collectExecutionNodeIds(graph: ReturnType<typeof parseGraphWorkflowRecord>['graph'], targetNodeId?: string) {
+  const enabledNodeIds = new Set(graph.nodes.filter((node) => node.disabled !== true).map((node) => node.id))
+  if (!targetNodeId || !enabledNodeIds.has(targetNodeId)) {
+    return enabledNodeIds
+  }
+
+  const incomingByNodeId = new Map<string, string[]>()
+  for (const edge of graph.edges) {
+    if (!enabledNodeIds.has(edge.source_node_id) || !enabledNodeIds.has(edge.target_node_id)) {
+      continue
+    }
+    const incoming = incomingByNodeId.get(edge.target_node_id) ?? []
+    incoming.push(edge.source_node_id)
+    incomingByNodeId.set(edge.target_node_id, incoming)
+  }
+
+  const orderedNodeIds = new Set<string>()
+  const pendingNodeIds = [targetNodeId]
+  while (pendingNodeIds.length > 0) {
+    const nodeId = pendingNodeIds.pop() as string
+    if (orderedNodeIds.has(nodeId)) {
+      continue
+    }
+    orderedNodeIds.add(nodeId)
+    pendingNodeIds.push(...(incomingByNodeId.get(nodeId) ?? []))
+  }
+  return orderedNodeIds
 }
 
 /** Manage graph workflow executions through a DB-backed cold backlog and a small in-process running set. */
@@ -389,7 +464,7 @@ export class GraphWorkflowExecutionQueue {
       return false
     }
 
-    const scheduleExecution = GraphExecutionModel.claimNextQueued('schedule')
+    const scheduleExecution = this.claimNextDispatchableScheduleExecution(scheduleLimit)
     if (!scheduleExecution) {
       return false
     }
@@ -413,6 +488,108 @@ export class GraphWorkflowExecutionQueue {
     }
 
     return 1
+  }
+
+  /** Claim the oldest queued reservation whose generation lane still has capacity. */
+  private static claimNextDispatchableScheduleExecution(scheduleLimit: number) {
+    if (scheduleLimit <= 0) {
+      return null
+    }
+
+    const queuedExecutions = GraphExecutionModel.findQueuedByTriggerType('schedule', SCHEDULE_DISPATCH_SCAN_LIMIT)
+    for (const execution of queuedExecutions) {
+      const job = buildQueuedJobFromExecution(execution)
+      if (!this.canDispatchScheduleJob(job, scheduleLimit)) {
+        continue
+      }
+
+      const claimed = GraphExecutionModel.claimQueuedById(execution.id)
+      if (claimed) {
+        return claimed
+      }
+    }
+
+    return null
+  }
+
+  /** Check lane occupancy before a reservation run starts waiting on the generation queue. */
+  private static canDispatchScheduleJob(job: QueuedExecutionJob, scheduleLimit: number) {
+    if (this.countRunningJobs('schedule') >= scheduleLimit) {
+      return false
+    }
+
+    for (const lane of this.resolveReservationLanesForJob(job)) {
+      const laneLimit = this.resolveReservationLaneLimit(lane)
+      if (laneLimit !== null && this.countRunningScheduleLane(lane) >= laneLimit) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  private static resolveReservationLaneLimit(lane: ReservationLane) {
+    const generationThrottle = settingsService.loadSettings().generationThrottle
+    if (lane === 'novelai') {
+      return Math.max(1, generationThrottle.novelai.maxConcurrentJobs)
+    }
+    if (lane === 'codex') {
+      return Math.max(1, generationThrottle.codex.maxConcurrentJobs)
+    }
+    if (lane === 'comfyui') {
+      const activeServers = ComfyUIServerModel.findActiveServers()
+      if (activeServers.length === 0) {
+        return 1
+      }
+      return activeServers.reduce((sum, server) => sum + getGenerationQueueServerCapacity(server), 0)
+    }
+    return null
+  }
+
+  private static countRunningScheduleLane(lane: ReservationLane) {
+    let count = 0
+    for (const runningJob of this.runningJobs.values()) {
+      if (runningJob.triggerType !== 'schedule') {
+        continue
+      }
+      if (this.resolveReservationLanesForJob(runningJob).has(lane)) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  private static resolveReservationLanesForJob(job: QueuedExecutionJob) {
+    const lanes = new Set<ReservationLane>()
+    const workflowRecord = GraphWorkflowModel.findById(job.workflowId)
+    if (!workflowRecord) {
+      lanes.add('other')
+      return lanes
+    }
+
+    try {
+      const workflow = parseGraphWorkflowRecord(workflowRecord)
+      const executableNodeIds = collectExecutionNodeIds(workflow.graph, job.targetNodeId)
+      for (const node of workflow.graph.nodes) {
+        if (!executableNodeIds.has(node.id)) {
+          continue
+        }
+
+        const moduleRecord = ModuleDefinitionModel.findById(node.module_id)
+        if (!moduleRecord) {
+          continue
+        }
+        addReservationLaneForModule(lanes, parseModuleDefinition(moduleRecord))
+      }
+    } catch (error) {
+      console.warn(`Could not resolve reservation generation lanes for workflow ${job.workflowId}:`, formatExecutionError(error))
+    }
+
+    if (lanes.size === 0) {
+      lanes.add('other')
+    }
+
+    return lanes
   }
 
   /** Treat manual graph executions and user-submitted generation queue jobs as foreground work. */

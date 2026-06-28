@@ -13,6 +13,7 @@ import {
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
+  getGenerationQueueStartLabel,
   getGenerationQueueStatusLabel,
   getGenerationQueueWaitLabel,
   getGenerationQueueWorkflowLabel,
@@ -195,6 +196,8 @@ function assertOperationalMetaLabels() {
   assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ estimated_wait_seconds: 0 }), translate, formatNumber), '곧 시작', 'zero wait should be shown as starts-soon')
   assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ estimated_wait_seconds: 90 }), translate, formatNumber), '대기 2m', 'queued wait should be separate from total remaining time')
   assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ status: 'running', estimated_wait_seconds: 90 }), translate, formatNumber), null, 'running jobs should not show queued wait')
+  assertEqual(getGenerationQueueStartLabel(makeQueueRecord({ estimated_start_at: '2026-05-14T11:22:00' }), translate, 'ko-KR'), '시작 11:22', 'queued jobs should expose the estimated start clock')
+  assertEqual(getGenerationQueueStartLabel(makeQueueRecord({ status: 'running', estimated_start_at: '2026-05-14T11:22:00' }), translate, 'ko-KR'), null, 'running jobs should hide queued start clocks')
   assertEqual(getGenerationQueueDurationLabel(makeQueueRecord({ estimated_duration_seconds: 75 }), translate, formatNumber), '예상 1m', 'median duration should be available as operational metadata')
 }
 

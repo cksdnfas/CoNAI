@@ -614,6 +614,35 @@ export class GenerationQueueService {
     return serviceType === 'novelai' ? generationThrottle.novelai : generationThrottle.codex
   }
 
+  /** Forecast the next service-level throttle start slots without mutating dispatcher state. */
+  static getThrottledServiceStartDelaySeconds(serviceType: ThrottledServiceType, count: number, now = Date.now()) {
+    const safeCount = Math.max(0, Math.floor(count))
+    if (safeCount === 0) {
+      return []
+    }
+
+    const state = this.serviceThrottleState[serviceType]
+    const durationMs = this.getServiceScheduleDurationMs(serviceType)
+    const scheduleKey = this.getServiceScheduleKey(serviceType)
+    const windowExpired = state.windowStartedAt !== null && now >= state.windowStartedAt + durationMs
+    const windowStartedAt = state.windowStartedAt === null || state.scheduleKey !== scheduleKey || windowExpired
+      ? now
+      : state.windowStartedAt
+    const scheduledOffsetsMs = state.windowStartedAt === null || state.scheduleKey !== scheduleKey || windowExpired
+      ? this.buildServiceScheduleOffsetsMs(serviceType)
+      : state.scheduledOffsetsMs
+    const offsets = scheduledOffsetsMs.length > 0 ? scheduledOffsetsMs : [0]
+    const startedInWindow = windowStartedAt === now ? 0 : Math.max(0, state.startedInWindow)
+
+    return Array.from({ length: safeCount }, (_value, index) => {
+      const absoluteStartIndex = startedInWindow + index
+      const windowOffset = Math.floor(absoluteStartIndex / offsets.length)
+      const offsetIndex = absoluteStartIndex % offsets.length
+      const startAtMs = windowStartedAt + windowOffset * durationMs + (offsets[offsetIndex] ?? 0)
+      return Math.max(0, Math.ceil((startAtMs - now) / 1000))
+    })
+  }
+
   private static getActiveWorkerCountForPrefix(workerKeyPrefix: string) {
     let count = 0
     for (const workerKey of this.activeWorkerKeys) {

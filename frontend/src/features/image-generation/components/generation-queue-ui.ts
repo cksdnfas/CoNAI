@@ -137,6 +137,23 @@ function parseQueueTimestampMs(value?: string | null) {
   return Number.isFinite(timestamp) ? timestamp : null
 }
 
+function formatQueueStartClock(value: string | null | undefined, locale: string) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
 /** Render the short workflow label for one queue entry. */
 export function getGenerationQueueWorkflowLabel(record: GenerationQueueJobRecord, t: Translate) {
   if (record.workflow_name && record.workflow_name.trim().length > 0) {
@@ -220,6 +237,20 @@ export function getGenerationQueueWaitLabel(record: GenerationQueueJobRecord, t:
   return record.estimated_wait_seconds === 0
     ? t({ ko: '곧 시작', en: 'Starts soon' })
     : t({ ko: '대기 {waitLabel}', en: 'Wait {waitLabel}' }, { waitLabel })
+}
+
+/** Render the estimated start clock so throttled queued jobs do not look stalled. */
+export function getGenerationQueueStartLabel(record: GenerationQueueJobRecord, t: Translate, locale: string) {
+  if (record.status === 'running') {
+    return null
+  }
+
+  const startClock = formatQueueStartClock(record.estimated_start_at, locale)
+  if (!startClock) {
+    return null
+  }
+
+  return t({ ko: '시작 {startClock}', en: 'Start {startClock}' }, { startClock })
 }
 
 /** Render the median duration estimate that backs queue wait/remaining labels. */
