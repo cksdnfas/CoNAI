@@ -124,6 +124,29 @@ export interface GraphWorkflowRecord {
   updated_date: string
 }
 
+export interface GraphWorkflowExportPayload {
+  schema: 'conai.graph-workflow.export'
+  schema_version: 1
+  exported_at: string
+  workflow: {
+    name: string
+    description?: string | null
+    graph: GraphWorkflowDocument
+    version: number
+    is_active: boolean
+  }
+  module_definitions: Array<Omit<ModuleDefinitionRecord, 'id' | 'created_date' | 'updated_date'> & {
+    original_id: number
+  }>
+}
+
+export interface GraphWorkflowImportResult {
+  id: number
+  placeholder_module_ids: number[]
+  placeholder_module_count: number
+  message: string
+}
+
 export interface GraphWorkflowVersionSummaryRecord {
   id: number
   workflow_id: number

@@ -288,6 +288,42 @@ function verifyWorkflowRuntimeHealthRoute() {
   )
 }
 
+function verifyWorkflowImportExportRoutes() {
+  const workflowRoutesSource = source('routes/graph-workflows/workflow-routes.ts')
+  const apiModuleGraphSource = readFileSync('../frontend/src/lib/api-module-graph.ts', 'utf8')
+  const sidebarSource = readFileSync('../frontend/src/features/module-graph/components/module-graph-workflow-list-sidebar.tsx', 'utf8')
+  const exportRouteIndex = workflowRoutesSource.indexOf("router.get('/:id/export'")
+  const importRouteIndex = workflowRoutesSource.indexOf("router.post('/import'")
+  const singleWorkflowRouteIndex = workflowRoutesSource.indexOf("router.get('/:id'")
+
+  assert.ok(exportRouteIndex >= 0, 'workflow CRUD routes should expose saved workflow export')
+  assert.ok(importRouteIndex >= 0, 'workflow CRUD routes should expose saved workflow import')
+  assert.ok(
+    exportRouteIndex < singleWorkflowRouteIndex,
+    'workflow export route must be registered before the generic workflow id route',
+  )
+  assert.ok(
+    importRouteIndex < singleWorkflowRouteIndex,
+    'workflow import route must be registered before the generic workflow id route',
+  )
+  assert.ok(
+    workflowRoutesSource.includes("schema: 'conai.graph-workflow.export'")
+      && workflowRoutesSource.includes('createPlaceholderModule')
+      && workflowRoutesSource.includes('placeholder_module_count'),
+    'workflow import/export should use a portable schema and create placeholder modules for missing definitions',
+  )
+  assert.ok(
+    apiModuleGraphSource.includes('export async function exportGraphWorkflow')
+      && apiModuleGraphSource.includes('export async function importGraphWorkflow'),
+    'frontend API client should expose workflow export/import helpers',
+  )
+  assert.ok(
+    sidebarSource.includes('워크플로우 내보내기')
+      && sidebarSource.includes('워크플로우 가져오기'),
+    'workflow sidebar should expose import/export controls',
+  )
+}
+
 verifyGraphRouteIntegerParsing()
 verifyOptionalGraphFolderIdParsing()
 verifyRequiredIdBadRequestShape()
@@ -299,5 +335,6 @@ verifyExecutionListNewestTieBreaker()
 verifyExecutionDetailNewestTieBreakers()
 verifyWorkflowVersionSummaryRoute()
 verifyWorkflowRuntimeHealthRoute()
+verifyWorkflowImportExportRoutes()
 
 console.log('✅ Graph workflow route contracts verified')

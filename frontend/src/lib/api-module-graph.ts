@@ -23,7 +23,9 @@ import type {
   GraphWorkflowEdge,
   GraphWorkflowEmptyExecutionCleanupResult,
   GraphWorkflowExposedInput,
+  GraphWorkflowExportPayload,
   GraphWorkflowFolderRecord,
+  GraphWorkflowImportResult,
   GraphWorkflowMetadata,
   GraphWorkflowNode,
   GraphWorkflowRecord,
@@ -66,7 +68,9 @@ export type {
   GraphWorkflowEdge,
   GraphWorkflowEmptyExecutionCleanupResult,
   GraphWorkflowExposedInput,
+  GraphWorkflowExportPayload,
   GraphWorkflowFolderRecord,
+  GraphWorkflowImportResult,
   GraphWorkflowMetadata,
   GraphWorkflowNode,
   GraphWorkflowRecord,
@@ -230,6 +234,29 @@ export async function updateGraphWorkflow(workflowId: number, payload: {
 }) {
   const response = await requestJson<ApiEnvelope<GraphWorkflowUpdateResult>>(`/api/graph-workflows/${workflowId}`, {
     method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return response.data
+}
+
+/** Export one saved graph workflow with the module definitions it references. */
+export async function exportGraphWorkflow(workflowId: number) {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowExportPayload>>(`/api/graph-workflows/${workflowId}/export`)
+  return response.data
+}
+
+/** Import one graph workflow export payload. Missing modules become placeholder modules. */
+export async function importGraphWorkflow(payload: {
+  payload: GraphWorkflowExportPayload
+  name?: string
+  folder_id?: number | null
+}) {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowImportResult>>('/api/graph-workflows/import', {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },

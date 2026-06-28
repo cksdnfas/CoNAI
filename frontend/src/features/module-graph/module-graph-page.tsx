@@ -225,6 +225,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     handleAssignSelectedWorkflowFolder,
     handleEditSelectedWorkflow,
     handleDuplicateSelectedWorkflow,
+    handleExportSelectedWorkflow,
+    handleImportWorkflowFile,
     handleDeleteSelectedWorkflow,
     handleLeaveWorkflowEditor,
     handleRefreshWorkspace,
@@ -331,6 +333,12 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       onCreateWorkflow={handleCreateWorkflow}
       onDuplicateWorkflow={() => {
         void handleDuplicateSelectedWorkflow()
+      }}
+      onExportWorkflow={() => {
+        void handleExportSelectedWorkflow()
+      }}
+      onImportWorkflow={(file) => {
+        void handleImportWorkflowFile(file)
       }}
       onEditWorkflow={handleEditSelectedWorkflow}
       onDeleteWorkflow={() => {
