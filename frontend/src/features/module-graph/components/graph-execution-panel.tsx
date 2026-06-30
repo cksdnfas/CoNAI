@@ -45,7 +45,7 @@ import {
 import { ExecutionComparisonContextBlock, ExecutionOutputGroupCard, ExecutionPathDiagnosticsBlock } from './graph-execution-panel-sections'
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
-import { buildFinalResultLifecycleWarningSourceLabel, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
+import { buildFinalResultLifecycleWarningSourceLabel, findLlmResponseDiagnostic, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
 
 type GraphExecutionDetail = {
   execution: GraphExecutionRecord
@@ -78,6 +78,7 @@ function SelectedExecutionSummary({
 }) {
   const { t, formatNumber, formatDateTime } = useI18n()
   const finalResultLifecycleWarnings = useMemo(() => listFinalResultLifecycleWarnings(executionDetail.logs), [executionDetail.logs])
+  const llmResponseDiagnostic = useMemo(() => findLlmResponseDiagnostic(executionDetail.logs), [executionDetail.logs])
   const finalResultLifecycleWarning = finalResultLifecycleWarnings[0] ?? null
   const additionalFinalResultWarningCount = Math.max(0, finalResultLifecycleWarnings.length - 1)
   const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])
@@ -128,6 +129,27 @@ function SelectedExecutionSummary({
       {executionDetail.execution.error_message ? (
         <div className="rounded-sm border border-[#7f1d1d] bg-[#3a1010]/60 px-3 py-2 text-sm text-[#ffb4ab]">
           {executionDetail.execution.error_message}
+        </div>
+      ) : null}
+
+      {llmResponseDiagnostic ? (
+        <div className="space-y-2 rounded-sm border border-[#7f1d1d] bg-[#180d10] px-3 py-2 text-sm text-[#ffdad6]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-medium">{t({ ko: 'LLM 응답 로그', en: 'LLM response log' })}</span>
+              {llmResponseDiagnostic.failedLog ? <Badge variant="outline">{llmResponseDiagnostic.failedLog.event_type}</Badge> : null}
+              {llmResponseDiagnostic.providerLog ? <Badge variant="outline">{llmResponseDiagnostic.providerLog.event_type}</Badge> : null}
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={onOpenDetail}>
+              <Eye className="h-4 w-4" />
+              {t({ ko: '로그', en: 'Logs' })}
+            </Button>
+          </div>
+          {llmResponseDiagnostic.textPreview ? (
+            <pre className="max-h-44 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff] whitespace-pre-wrap break-words">{llmResponseDiagnostic.textPreview}</pre>
+          ) : llmResponseDiagnostic.rawResponsePreview ? (
+            <pre className="max-h-44 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff] whitespace-pre-wrap break-words">{llmResponseDiagnostic.rawResponsePreview}</pre>
+          ) : null}
         </div>
       ) : null}
 

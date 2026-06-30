@@ -35,6 +35,18 @@ function verifyJsonResponseParsing() {
   )
 
   assert.deepEqual(
+    parseRequestedJson('{"tag":"character \\(series\\)","escaped":"quote: \\" ok"}', 'json'),
+    { value: { tag: 'character \\(series\\)', escaped: 'quote: " ok' }, strategy: 'invalid_escape_repaired' },
+    'JSON responses with model-style invalid string escapes should be repaired',
+  )
+
+  assert.deepEqual(
+    parseRequestedJson('Result:\n{"tag":"name \\[variant\\]"}', 'json'),
+    { value: { tag: 'name \\[variant\\]' }, strategy: 'invalid_escape_repaired' },
+    'embedded JSON recovery should repair invalid string escapes',
+  )
+
+  assert.deepEqual(
     parseRequestedJson('plain text', 'text'),
     { value: null, strategy: 'none' },
     'text response mode should not force JSON parsing',
@@ -60,7 +72,8 @@ function verifyDebugLoggingContracts() {
   assert(
     providerSource.includes('json_parse_strategy')
       && providerSource.includes('markdown_fence')
-      && providerSource.includes('embedded_json'),
+      && providerSource.includes('embedded_json')
+      && providerSource.includes('invalid_escape_repaired'),
     'LLM provider metadata should record JSON parse strategy',
   )
 

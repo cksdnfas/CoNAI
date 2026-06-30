@@ -4,7 +4,7 @@ import { normalizeOptionalString } from '../utils/valueNormalization'
 import type { ProviderType } from '../types/externalApi'
 
 type LlmResponseMode = 'text' | 'json'
-type LlmJsonParseStrategy = 'none' | 'strict' | 'markdown_fence' | 'embedded_json'
+type LlmJsonParseStrategy = 'none' | 'strict' | 'markdown_fence' | 'embedded_json' | 'invalid_escape_repaired'
 
 export type LlmDebugEvent = {
   eventType: 'provider_response' | 'json_parse_failed'
@@ -400,6 +400,71 @@ function tryParseJsonText(text: string) {
   }
 }
 
+function repairInvalidJsonStringEscapes(text: string) {
+  let repaired = ''
+  let inString = false
+  let changed = false
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+
+    if (!inString) {
+      repaired += char
+      if (char === '"') {
+        inString = true
+      }
+      continue
+    }
+
+    if (char === '"') {
+      repaired += char
+      inString = false
+      continue
+    }
+
+    if (char !== '\\') {
+      repaired += char
+      continue
+    }
+
+    const nextChar = text[index + 1]
+    if (!nextChar) {
+      repaired += char
+      continue
+    }
+
+    if (/["\\/bfnrtu]/.test(nextChar)) {
+      repaired += `${char}${nextChar}`
+      index += 1
+      continue
+    }
+
+    repaired += '\\\\'
+    changed = true
+  }
+
+  return changed ? repaired : null
+}
+
+function tryParseJsonTextWithInvalidEscapeRepair(text: string) {
+  const parsed = tryParseJsonText(text)
+  if (parsed.ok) {
+    return { ...parsed, repaired: false as const }
+  }
+
+  const repairedText = repairInvalidJsonStringEscapes(text)
+  if (!repairedText) {
+    return { ok: false as const }
+  }
+
+  const repairedParsed = tryParseJsonText(repairedText)
+  if (!repairedParsed.ok) {
+    return { ok: false as const }
+  }
+
+  return { ok: true as const, value: repairedParsed.value, repaired: true as const }
+}
+
 function extractMarkdownJsonFence(text: string) {
   const trimmed = text.trim()
   const match = trimmed.match(/^```(?:json|JSON)?\s*([\s\S]*?)\s*```$/)
@@ -456,9 +521,12 @@ function extractFirstParseableJson(text: string) {
       continue
     }
 
-    const parsed = tryParseJsonText(candidate)
+    const parsed = tryParseJsonTextWithInvalidEscapeRepair(candidate)
     if (parsed.ok) {
-      return parsed.value
+      return {
+        value: parsed.value,
+        repaired: parsed.repaired,
+      }
     }
   }
 
@@ -478,17 +546,27 @@ export function parseRequestedJson(text: string, responseMode: LlmResponseMode):
     return { value: strictParse.value, strategy: 'strict' }
   }
 
+  const repairedStrictParse = tryParseJsonTextWithInvalidEscapeRepair(text)
+  if (repairedStrictParse.ok && repairedStrictParse.repaired) {
+    return { value: repairedStrictParse.value, strategy: 'invalid_escape_repaired' }
+  }
+
   const fencedText = extractMarkdownJsonFence(text)
   if (fencedText) {
     const fencedParse = tryParseJsonText(fencedText)
     if (fencedParse.ok) {
       return { value: fencedParse.value, strategy: 'markdown_fence' }
     }
+
+    const repairedFencedParse = tryParseJsonTextWithInvalidEscapeRepair(fencedText)
+    if (repairedFencedParse.ok && repairedFencedParse.repaired) {
+      return { value: repairedFencedParse.value, strategy: 'invalid_escape_repaired' }
+    }
   }
 
   const embeddedJson = extractFirstParseableJson(text)
   if (embeddedJson !== undefined) {
-    return { value: embeddedJson, strategy: 'embedded_json' }
+    return { value: embeddedJson.value, strategy: embeddedJson.repaired ? 'invalid_escape_repaired' : 'embedded_json' }
   }
 
   throw new Error('LLM 응답이 JSON 형식이 아니야')

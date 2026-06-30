@@ -2,6 +2,8 @@ import type { GraphExecutionLogRecord } from '@/lib/api-module-graph'
 
 export const FINAL_RESULT_PROMOTION_FAILED_EVENT = 'final_result_promotion_failed'
 export const FINAL_RESULT_SOURCE_ARTIFACT_MISSING_EVENT = 'final_result_source_artifact_missing'
+export const LLM_JSON_PARSE_FAILED_EVENT = 'llm_json_parse_failed'
+export const LLM_PROVIDER_RESPONSE_EVENT = 'llm_provider_response'
 
 export type FinalResultLifecycleWarningKind = 'promotion_failed' | 'source_artifact_missing'
 
@@ -12,6 +14,13 @@ export type FinalResultLifecycleWarning = {
   sourcePortKey?: string | null
   sourceArtifactId?: number | null
   errorMessage?: string | null
+}
+
+export type LlmResponseDiagnostic = {
+  failedLog: GraphExecutionLogRecord | null
+  providerLog: GraphExecutionLogRecord | null
+  textPreview: string | null
+  rawResponsePreview: string | null
 }
 
 function parseLogDetails(log: GraphExecutionLogRecord) {
@@ -103,4 +112,46 @@ export function listFinalResultLifecycleWarnings(logs?: readonly GraphExecutionL
 
 export function findFinalResultLifecycleWarning(logs?: readonly GraphExecutionLogRecord[] | null): FinalResultLifecycleWarning | null {
   return listFinalResultLifecycleWarnings(logs)[0] ?? null
+}
+
+function findLatestLogByEventType(logs: readonly GraphExecutionLogRecord[], eventType: string, nodeId?: string | null) {
+  for (let index = logs.length - 1; index >= 0; index -= 1) {
+    const log = logs[index]
+    if (log.event_type !== eventType) {
+      continue
+    }
+
+    if (nodeId && log.node_id !== nodeId) {
+      continue
+    }
+
+    return log
+  }
+
+  return null
+}
+
+function readLlmDiagnosticText(log: GraphExecutionLogRecord | null, key: 'text' | 'rawResponse') {
+  return log ? readDetailsString(parseLogDetails(log), key) : null
+}
+
+export function findLlmResponseDiagnostic(logs?: readonly GraphExecutionLogRecord[] | null): LlmResponseDiagnostic | null {
+  if (!logs || logs.length === 0) {
+    return null
+  }
+
+  const failedLog = findLatestLogByEventType(logs, LLM_JSON_PARSE_FAILED_EVENT)
+  if (!failedLog) {
+    return null
+  }
+
+  const providerLog = findLatestLogByEventType(logs, LLM_PROVIDER_RESPONSE_EVENT, failedLog?.node_id)
+    ?? findLatestLogByEventType(logs, LLM_PROVIDER_RESPONSE_EVENT)
+
+  return {
+    failedLog,
+    providerLog,
+    textPreview: readLlmDiagnosticText(failedLog, 'text') ?? readLlmDiagnosticText(providerLog, 'text'),
+    rawResponsePreview: readLlmDiagnosticText(failedLog, 'rawResponse') ?? readLlmDiagnosticText(providerLog, 'rawResponse'),
+  }
 }
