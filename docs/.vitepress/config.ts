@@ -51,10 +51,11 @@ export default {
       {
         text: '릴리즈 노트',
         items: [
+          { text: '최신 안정 릴리즈 · 26.7.1', link: '/RELEASE-MD/RELEASE_26.7.1' },
           { text: '26.6.19 작업 노트', link: '/RELEASE-MD/RELEASE_26.6.19' },
           { text: '26.6.17 작업 노트', link: '/RELEASE-MD/RELEASE_26.6.17' },
           { text: '26.6.8 작업 노트', link: '/RELEASE-MD/RELEASE_26.6.8' },
-          { text: '최신 안정 릴리즈 · 26.6.3', link: '/RELEASE-MD/RELEASE_26.6.3' },
+          { text: '이전 안정 릴리즈 · 26.6.3', link: '/RELEASE-MD/RELEASE_26.6.3' },
           { text: '이전 릴리즈 · 26.05.23', link: '/RELEASE-MD/RELEASE_26.05.23' },
           { text: '전체 릴리즈 보기', link: '/RELEASE-MD/' },
         ],
