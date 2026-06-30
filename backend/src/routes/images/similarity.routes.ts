@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { ImageSimilarityModel } from '../../models/Image/ImageSimilarityModel';
+import {
+  DuplicateGroupScanTooLargeError,
+  ImageSimilarityModel,
+} from '../../models/Image/ImageSimilarityModel';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
 import { SIMILARITY_THRESHOLDS } from '../../types/similarity';
 import { runtimePaths } from '../../config/runtimePaths';
@@ -211,6 +214,9 @@ router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) =
     }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to find duplicate groups';
+    if (error instanceof DuplicateGroupScanTooLargeError) {
+      return res.status(503).json(errorResponse(errorMessage));
+    }
     return res.status(500).json(errorResponse(errorMessage));
   }
 }));

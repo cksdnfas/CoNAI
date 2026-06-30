@@ -31,11 +31,27 @@ type GenerationQueueFilters = {
   statuses?: GenerationQueueJobStatus[]
   serviceType?: GenerationQueueJobRecord['service_type']
   workflowId?: number
+  requesterAccountId?: number
+  limit?: number
+  offset?: number
 }
 
 type GenerationQueueFindAllInput = GenerationQueueJobStatus[] | GenerationQueueFilters
 type GenerationQueueStatusCountFilters = Pick<GenerationQueueFilters, 'serviceType' | 'workflowId'>
 type GenerationQueueRecentCompletedFilters = GenerationQueueStatusCountFilters & { limit?: number }
+type GenerationQueueCountFilters = Pick<GenerationQueueFilters, 'statuses' | 'serviceType' | 'workflowId' | 'requesterAccountId'>
+type GenerationQueuePayloadPruneInput = {
+  retainRecentTerminalJobs?: number
+}
+
+export type GenerationQueuePayloadPruneResult = {
+  pruned: number
+  retainRecentTerminalJobs: number
+  compactPayload: string
+}
+
+export const DEFAULT_TERMINAL_PAYLOAD_RETAIN_LIMIT = 2000
+export const COMPACTED_TERMINAL_REQUEST_PAYLOAD = JSON.stringify({ pruned: true })
 
 const GENERATION_QUEUE_LIST_COLUMNS = `
   id, service_type, status, priority,
@@ -53,6 +69,9 @@ const GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS = `
   workflow_id, requested_server_id, requested_server_tag,
   assigned_server_id, cancel_requested, queued_at
 `
+
+const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
+const TERMINAL_QUEUE_STATUS_PLACEHOLDERS = TERMINAL_QUEUE_STATUSES.map(() => '?').join(', ')
 
 type QueueWhereOptions = {
   includeStatuses?: boolean
@@ -85,6 +104,11 @@ function appendQueueFilterClauses(
   if (filters.workflowId !== undefined) {
     clauses.push('workflow_id = ?')
     values.push(filters.workflowId)
+  }
+
+  if (filters.requesterAccountId !== undefined) {
+    clauses.push('requested_by_account_id = ?')
+    values.push(filters.requesterAccountId)
   }
 }
 
@@ -193,12 +217,21 @@ export class GenerationQueueModel {
     const filters = normalizeFindAllInput(input)
     const { whereSql, values } = buildQueueWhereClause(filters)
     const orderSql = getQueueOrderSql(Boolean(filters.statuses && filters.statuses.length > 0))
+    const limitSql = filters.limit !== undefined ? 'LIMIT ?' : ''
+    const offsetSql = filters.limit !== undefined && filters.offset !== undefined ? 'OFFSET ?' : ''
+    const pageValues = filters.limit !== undefined
+      ? filters.offset !== undefined
+        ? [Math.max(1, Math.floor(filters.limit)), Math.max(0, Math.floor(filters.offset))]
+        : [Math.max(1, Math.floor(filters.limit))]
+      : []
 
     return db.prepare(`
       SELECT * FROM generation_queue_jobs
       ${whereSql}
       ${orderSql}
-    `).all(...values) as GenerationQueueJobRecord[]
+      ${limitSql}
+      ${offsetSql}
+    `).all(...values, ...pageValues) as GenerationQueueJobRecord[]
   }
 
   /** List queue jobs for polling/UI without hydrating heavyweight request payloads. */
@@ -207,13 +240,34 @@ export class GenerationQueueModel {
     const filters = normalizeFindAllInput(input)
     const { whereSql, values } = buildQueueWhereClause(filters)
     const orderSql = getQueueOrderSql(Boolean(filters.statuses && filters.statuses.length > 0))
+    const limitSql = filters.limit !== undefined ? 'LIMIT ?' : ''
+    const offsetSql = filters.limit !== undefined && filters.offset !== undefined ? 'OFFSET ?' : ''
+    const pageValues = filters.limit !== undefined
+      ? filters.offset !== undefined
+        ? [Math.max(1, Math.floor(filters.limit)), Math.max(0, Math.floor(filters.offset))]
+        : [Math.max(1, Math.floor(filters.limit))]
+      : []
 
     return db.prepare(`
       SELECT ${GENERATION_QUEUE_LIST_COLUMNS}
       FROM generation_queue_jobs
       ${whereSql}
       ${orderSql}
-    `).all(...values) as GenerationQueueJobListRecord[]
+      ${limitSql}
+      ${offsetSql}
+    `).all(...values, ...pageValues) as GenerationQueueJobListRecord[]
+  }
+
+  /** Count queue rows for a list/read filter without hydrating the backlog. */
+  static countListRecords(filters: GenerationQueueCountFilters = {}) {
+    const db = getUserSettingsDb()
+    const { whereSql, values } = buildQueueWhereClause(filters)
+    const row = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM generation_queue_jobs
+      ${whereSql}
+    `).get(...values) as { total: number } | undefined
+    return row?.total ?? 0
   }
 
   /** Check whether a queued ComfyUI job exists without hydrating queue rows. */
@@ -242,8 +296,9 @@ export class GenerationQueueModel {
   }
 
   /** List queued ComfyUI dispatch candidates without hydrating heavyweight request payloads. */
-  static findQueuedComfyDispatchCandidates() {
+  static findQueuedComfyDispatchCandidates(limit = 200) {
     const db = getUserSettingsDb()
+    const safeLimit = Math.max(1, Math.floor(limit))
     return db.prepare(`
       SELECT ${GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS}
       FROM generation_queue_jobs
@@ -251,7 +306,8 @@ export class GenerationQueueModel {
         AND service_type = 'comfyui'
         AND cancel_requested = 0
       ORDER BY priority ASC, queued_at ASC, id ASC
-    `).all() as GenerationQueueDispatchCandidateRecord[]
+      LIMIT ?
+    `).all(safeLimit) as GenerationQueueDispatchCandidateRecord[]
   }
 
   /** List lean recent completed queue jobs for ETA sampling without scanning or hydrating whole history. */
@@ -274,6 +330,46 @@ export class GenerationQueueModel {
       ORDER BY completed_at DESC, id DESC
       LIMIT ?
     `).all(...values, limit) as GenerationQueueDurationSample[]
+  }
+
+  /**
+   * Compact heavyweight request payloads from old terminal queue rows.
+   * Queue/history rows stay intact; only already-finished payload JSON is reduced.
+   */
+  static pruneTerminalRequestPayloads(input: GenerationQueuePayloadPruneInput = {}): GenerationQueuePayloadPruneResult {
+    const db = getUserSettingsDb()
+    const retainRecentTerminalJobs = Math.max(
+      0,
+      Math.floor(input.retainRecentTerminalJobs ?? DEFAULT_TERMINAL_PAYLOAD_RETAIN_LIMIT),
+    )
+
+    const info = db.prepare(`
+      WITH retained_recent AS (
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status IN (${TERMINAL_QUEUE_STATUS_PLACEHOLDERS})
+        ORDER BY COALESCE(completed_at, started_at, queued_at, created_date) DESC, id DESC
+        LIMIT ?
+      )
+      UPDATE generation_queue_jobs
+      SET request_payload = ?
+      WHERE status IN (${TERMINAL_QUEUE_STATUS_PLACEHOLDERS})
+        AND request_payload IS NOT NULL
+        AND request_payload != ?
+        AND id NOT IN (SELECT id FROM retained_recent)
+    `).run(
+      ...TERMINAL_QUEUE_STATUSES,
+      retainRecentTerminalJobs,
+      COMPACTED_TERMINAL_REQUEST_PAYLOAD,
+      ...TERMINAL_QUEUE_STATUSES,
+      COMPACTED_TERMINAL_REQUEST_PAYLOAD,
+    )
+
+    return {
+      pruned: info.changes,
+      retainRecentTerminalJobs,
+      compactPayload: COMPACTED_TERMINAL_REQUEST_PAYLOAD,
+    }
   }
 
   /** Update one queue job row. */

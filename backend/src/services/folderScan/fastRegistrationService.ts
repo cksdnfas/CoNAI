@@ -2,7 +2,6 @@ import { db } from '../../database/init';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import sharp from 'sharp';
 import pLimit from 'p-limit';
 import { FileType } from '../../types/image';
 import { FileDiscoveryService } from './fileDiscoveryService';
@@ -146,19 +145,7 @@ export class FastRegistrationService {
             return;
           }
 
-          // 2. 신규 파일 -> 기본 정보만 수집
-          let width: number | null = null;
-          let height: number | null = null;
-
-          try {
-            const metadata = await sharp(filePath).metadata();
-            width = metadata.width || null;
-            height = metadata.height || null;
-          } catch (error) {
-            console.warn(`  경고: 메타데이터 추출 실패: ${path.basename(filePath)}`);
-          }
-
-          // 3. composite_hash 없이 image_files에 등록
+          // 2. composite_hash 없이 image_files에 등록
           const fileType = this.determineFileType(mimeType, filePath);
           createFastRegisteredFile({
             filePath,

@@ -298,13 +298,54 @@ export const up = async (db: Database.Database): Promise<void> => {
     // Thumbnail loading index for chronological queries (from migration 005)
     'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen_desc ON media_metadata(first_seen_date DESC)',
     // Hide media that is still in immediate post-processing
-    'CREATE INDEX IF NOT EXISTS idx_metadata_postprocess_status ON media_metadata(postprocess_status)'
+    'CREATE INDEX IF NOT EXISTS idx_metadata_postprocess_status ON media_metadata(postprocess_status)',
+    // Auto-tag stats hot path (from migration 025)
+    'CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_tagged ON media_metadata(composite_hash) WHERE auto_tags IS NOT NULL',
+    'CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_untagged ON media_metadata(composite_hash) WHERE auto_tags IS NULL',
+    `CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_root_rating
+      ON media_metadata(
+        json_extract(auto_tags, '$.rating.general'),
+        json_extract(auto_tags, '$.rating.sensitive'),
+        json_extract(auto_tags, '$.rating.questionable'),
+        json_extract(auto_tags, '$.rating.explicit')
+      )
+      WHERE json_type(auto_tags, '$.rating') = 'object'`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_root_character
+      ON media_metadata(composite_hash)
+      WHERE json_type(auto_tags, '$.character') = 'object'`,
+    `CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_root_model
+      ON media_metadata(json_extract(auto_tags, '$.model'))
+      WHERE json_extract(auto_tags, '$.model') IS NOT NULL`
   ];
 
   metadataIndexes.forEach(sql => {
     db.exec(sql);
   });
   console.log('  ✅ 미디어 메타데이터 테이블 + 인덱스 생성 완료\n');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS media_auto_tag_index (
+      composite_hash TEXT NOT NULL,
+      tag_type TEXT NOT NULL CHECK (tag_type IN ('general', 'character', 'model')),
+      source_path TEXT NOT NULL,
+      tag_key TEXT NOT NULL,
+      normalized_tag_key TEXT NOT NULL,
+      search_key TEXT NOT NULL,
+      score REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (composite_hash, tag_type, source_path, search_key),
+      FOREIGN KEY (composite_hash) REFERENCES media_metadata(composite_hash) ON DELETE CASCADE
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_media_auto_tag_lookup
+    ON media_auto_tag_index(tag_type, search_key, score, composite_hash)
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_media_auto_tag_hash_type
+    ON media_auto_tag_index(composite_hash, tag_type)
+  `);
 
   // ============================================
   // 5. 폴더 스캔 시스템

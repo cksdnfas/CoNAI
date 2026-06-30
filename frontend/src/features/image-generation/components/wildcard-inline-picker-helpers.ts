@@ -106,7 +106,8 @@ export function flattenWildcardRecords(nodes: WildcardRecord[], parentPath: stri
 
 /** Resolve the active ++ wildcard token around the current caret position. */
 export function resolveActiveWildcardQuery(value: string, caretPosition: number): ActiveWildcardQuery | null {
-  const prefix = value.slice(0, Math.max(0, caretPosition))
+  const caret = Math.max(0, Math.min(caretPosition, value.length))
+  const prefix = value.slice(0, caret)
   const tokenStart = prefix.lastIndexOf('++')
 
   if (tokenStart < 0) {
@@ -120,6 +121,11 @@ export function resolveActiveWildcardQuery(value: string, caretPosition: number)
     }
   }
 
+  const closingIndex = value.indexOf('++', tokenStart + 2)
+  if (closingIndex >= 0 && caret <= closingIndex + 2) {
+    return null
+  }
+
   const query = prefix.slice(tokenStart + 2)
   if (query.includes('++')) {
     return null
@@ -131,7 +137,7 @@ export function resolveActiveWildcardQuery(value: string, caretPosition: number)
 
   return {
     start: tokenStart,
-    end: caretPosition,
+    end: caret,
     query,
   }
 }

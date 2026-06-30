@@ -47,7 +47,18 @@ function verifyCanvasBypassActionContract() {
   assert(nodeCardSource.includes("data.disabled === true ? 'opacity-60 grayscale'"), 'node card should visually dim disabled nodes')
 }
 
+function verifyEditorInteractionLookupContract() {
+  const interactionsSource = source('features/module-graph/use-module-graph-editor-interactions.ts')
+
+  assert(interactionsSource.includes('const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])'), 'editor interactions should build one node-id map per node snapshot')
+  assert(interactionsSource.includes('nodeById.get(connection.source)'), 'connection validation should use the node-id map')
+  assert(interactionsSource.includes('nodeById.get(connectionStart.nodeId)'), 'drag-connect node creation should use the node-id map')
+  assert(interactionsSource.includes('nodeById.get(nodeId)'), 'node duplication should use the node-id map')
+  assert(!interactionsSource.includes('nodes.find((node) => node.id ==='), 'editor interactions should avoid repeated node array scans by id')
+}
+
 verifySavedGraphDisabledFlagContract()
 verifyCanvasBypassActionContract()
+verifyEditorInteractionLookupContract()
 
 console.log('Module graph bypass UI contracts verified.')

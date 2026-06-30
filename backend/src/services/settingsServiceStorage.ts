@@ -6,6 +6,8 @@ import {
   AppearancePresetSlot,
   AppearanceThemeSettings,
   DEFAULT_ARTIST_LINK_URL_TEMPLATE,
+  HEADER_NAVIGATION_ITEM_KEYS,
+  HeaderNavigationSettings,
   LlmPresetRecord,
   TaggerModel,
   TaggerDevice,
@@ -18,6 +20,31 @@ export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'se
 
 const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
 const WALLPAPER_WIDGET_TYPES: WallpaperWidgetType[] = ['clock', 'queue-status', 'recent-results', 'activity-pulse', 'group-image-view', 'image-showcase', 'floating-collage', 'text-note'];
+
+/** Build a complete top-header navigation visibility map. */
+export function getDefaultHeaderNavigationSettings(): HeaderNavigationSettings {
+  return HEADER_NAVIGATION_ITEM_KEYS.reduce((settings, key) => {
+    settings[key] = true;
+    return settings;
+  }, {} as HeaderNavigationSettings);
+}
+
+/** Keep persisted partial/legacy navigation settings complete and boolean-only. */
+function normalizeHeaderNavigationSettings(rawNavigation: unknown): HeaderNavigationSettings {
+  const defaults = getDefaultHeaderNavigationSettings();
+  if (!rawNavigation || typeof rawNavigation !== 'object') {
+    return defaults;
+  }
+
+  const record = rawNavigation as Record<string, unknown>;
+  for (const key of HEADER_NAVIGATION_ITEM_KEYS) {
+    if (typeof record[key] === 'boolean') {
+      defaults[key] = record[key];
+    }
+  }
+
+  return defaults;
+}
 
 /** Build the default appearance theme used for fresh settings files and fallback merges. */
 function getDefaultAppearanceTheme(): AppearanceThemeSettings {
@@ -362,6 +389,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
         enabled: true,
         recycleBinPath: 'RecycleBin'
       },
+      headerNavigation: getDefaultHeaderNavigationSettings(),
       enableGallery: true,
       autoCleanupCanvasOnShutdown: false,
       showRatingBadges: true,
@@ -459,13 +487,17 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
     generationThrottle: {
       novelai: {
         maxConcurrentJobs: 1,
-        cooldownAfterCompletions: 1,
-        cooldownSeconds: 3,
+        scheduleWindowMinutes: 1,
+        scheduleJobCount: 20,
+        scheduleMode: 'even',
+        minStartIntervalSeconds: 1,
       },
       codex: {
         maxConcurrentJobs: 3,
-        cooldownAfterCompletions: 3,
-        cooldownSeconds: 60,
+        scheduleWindowMinutes: 3,
+        scheduleJobCount: 3,
+        scheduleMode: 'even',
+        minStartIntervalSeconds: 1,
       },
       reservations: {
         maxConcurrentJobs: 3,
@@ -509,6 +541,7 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
     general: {
       ...defaults.general,
       ...loadedSettings.general,
+      headerNavigation: normalizeHeaderNavigationSettings(loadedSettings.general?.headerNavigation),
     },
     tagger: {
       ...defaults.tagger,
@@ -599,6 +632,12 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
 export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): boolean {
   for (const key of Object.keys(defaults.general)) {
     if (!(key in (loaded.general || {}))) {
+      return true;
+    }
+  }
+
+  for (const key of Object.keys(defaults.general.headerNavigation)) {
+    if (!(key in (loaded.general?.headerNavigation || {}))) {
       return true;
     }
   }

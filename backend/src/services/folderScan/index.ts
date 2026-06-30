@@ -1,16 +1,12 @@
 import { db } from '../../database/init';
 import { WatchedFolderService } from '../watchedFolderService';
 import { BackgroundProcessorService } from '../backgroundProcessorService';
-import { FileWatcherService } from '../fileWatcherService';
 import { resolveFolderPath } from '../../utils/pathResolver';
 import { FileDiscoveryService } from './fileDiscoveryService';
 import { FastRegistrationService } from './fastRegistrationService';
-import { ScanResult, ProcessedFileData } from './types';
-import { HashGenerationService } from './hashGenerationService';
-import { ThumbnailGenerationService } from './thumbnailGenerationService';
-import { ScanProgressTracker } from './scanProgressTracker';
-import { DuplicateDetectionService } from './duplicateDetectionService';
+import { ScanResult } from './types';
 import { SystemMaintenanceLockService } from '../systemMaintenanceLockService';
+import { getWatcherRuntimeStatus } from '../fileWatcher/watcherRuntimeStatus';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 const isVerboseAutoScanLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
@@ -216,7 +212,7 @@ export class FolderScanService {
     for (const folder of folders) {
       try {
         // 워처 상태 확인
-        const watcherStatus = FileWatcherService.getWatcherStatus(folder.id);
+        const watcherStatus = getWatcherRuntimeStatus(folder.id);
         const isWatcherActive = watcherStatus && watcherStatus.state === 'watching';
 
         // 워처가 활성화되어 있고 최근 이벤트가 있으면 전체 스캔 건너뛰기

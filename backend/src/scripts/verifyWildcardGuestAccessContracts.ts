@@ -65,23 +65,25 @@ function assertPermissionCatalog(AuthPermissionGroup: AuthPermissionGroupModule[
   assertHasPermission(pagePermissionKeys, WILDCARD_VIEW_PERMISSION, 'permission catalog should include wildcard page view permission')
 
   const editablePermissionKeys = getPermissionKeys(AuthPermissionGroup.listBuiltInEditablePermissions())
-  assertHasPermission(editablePermissionKeys, WILDCARD_VIEW_PERMISSION, 'guest built-in editor should expose wildcard page view')
-  assertHasPermission(editablePermissionKeys, WILDCARD_EDIT_PERMISSION, 'guest built-in editor should expose wildcard edit')
-  assertHasPermission(editablePermissionKeys, WILDCARD_DELETE_PERMISSION, 'guest built-in editor should expose wildcard delete')
-  assertLacksPermission(editablePermissionKeys, WILDCARD_LORA_SCAN_PERMISSION, 'guest built-in editor should not expose LoRA scan')
+  assertHasPermission(editablePermissionKeys, WILDCARD_VIEW_PERMISSION, 'built-in editor should expose wildcard page view')
+  assertHasPermission(editablePermissionKeys, WILDCARD_EDIT_PERMISSION, 'built-in editor should expose wildcard edit')
+  assertHasPermission(editablePermissionKeys, WILDCARD_DELETE_PERMISSION, 'built-in editor should expose wildcard delete')
+  assertLacksPermission(editablePermissionKeys, WILDCARD_LORA_SCAN_PERMISSION, 'built-in editor should not expose LoRA scan')
 }
 
 function assertBuiltInGroupRules(AuthPermissionGroup: AuthPermissionGroupModule['AuthPermissionGroup']) {
-  const guestAccess = AuthPermissionGroup.replaceBuiltInPageAccess('guest', [
-    WILDCARD_VIEW_PERMISSION,
-    WILDCARD_EDIT_PERMISSION,
-    WILDCARD_DELETE_PERMISSION,
-  ])
-  assert.deepEqual(
-    new Set(guestAccess.permission_keys),
-    new Set([WILDCARD_VIEW_PERMISSION, WILDCARD_EDIT_PERMISSION, WILDCARD_DELETE_PERMISSION]),
-    'guest group should accept wildcard view/edit/delete toggles',
-  )
+  for (const groupKey of ['anonymous', 'guest'] as const) {
+    const groupAccess = AuthPermissionGroup.replaceBuiltInPageAccess(groupKey, [
+      WILDCARD_VIEW_PERMISSION,
+      WILDCARD_EDIT_PERMISSION,
+      WILDCARD_DELETE_PERMISSION,
+    ])
+    assert.deepEqual(
+      new Set(groupAccess.permission_keys),
+      new Set([WILDCARD_VIEW_PERMISSION, WILDCARD_EDIT_PERMISSION, WILDCARD_DELETE_PERMISSION]),
+      `${groupKey} group should accept wildcard view/edit/delete toggles`,
+    )
+  }
 
   assert.throws(
     () => AuthPermissionGroup.replaceBuiltInPageAccess('guest', [WILDCARD_LORA_SCAN_PERMISSION]),
@@ -90,9 +92,9 @@ function assertBuiltInGroupRules(AuthPermissionGroup: AuthPermissionGroupModule[
   )
 
   assert.throws(
-    () => AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', [WILDCARD_VIEW_PERMISSION]),
-    /Anonymous access can only include the wallpaper runtime page/,
-    'anonymous access should not be able to expose the wildcard workspace',
+    () => AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', [WILDCARD_LORA_SCAN_PERMISSION]),
+    /One or more permission keys are invalid/,
+    'anonymous built-in editor should reject LoRA scan permission',
   )
 }
 

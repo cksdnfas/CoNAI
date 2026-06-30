@@ -65,3 +65,10 @@ export async function cancelGenerationQueueJob(queueJobId: number) {
     method: 'POST',
   })
 }
+
+/** Create a new queued job from a failed or cancelled queue record. */
+export async function retryGenerationQueueJob(queueJobId: number) {
+  return requestJson<GenerationQueueMutationResponse>(`/api/generation-queue/${queueJobId}/retry`, {
+    method: 'POST',
+  })
+}

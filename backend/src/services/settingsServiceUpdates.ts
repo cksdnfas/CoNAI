@@ -23,6 +23,10 @@ export function applyGeneralSettingsUpdate(currentSettings: AppSettings, general
         ...currentSettings.general.deleteProtection,
         ...generalSettings.deleteProtection,
       },
+      headerNavigation: {
+        ...currentSettings.general.headerNavigation,
+        ...generalSettings.headerNavigation,
+      },
     },
   };
 }

@@ -8,6 +8,8 @@ import {
   PromptSimilarityRebuildResult,
   PromptSimilaritySettings,
 } from '../types/promptSimilarity';
+import { ImageSafetyService } from './imageSafetyService';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { settingsService } from './settingsService';
 
 const PROMPT_SIMILARITY_VERSION = 1;
@@ -46,7 +48,7 @@ interface PromptSimilarityPreparedTexts {
   autoFingerprint: string | null;
 }
 
-type PromptSimilarityCandidateRow = ImageWithFileView & PromptSimilarityStoredFields;
+type PromptSimilarityCandidateRow = Pick<ImageMetadataRecord, 'composite_hash'> & PromptSimilarityStoredFields;
 
 function hashToHex(input: string, length: number): string {
   return crypto.createHash('sha256').update(input).digest('hex').slice(0, length);
@@ -82,7 +84,7 @@ function normalizeWeight(value: number | undefined, fallback: number): number {
 
 export class PromptSimilarityService {
   /** Build normalized prompt texts from metadata fields. */
-  static buildSourceTexts(data: Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'>): PromptSimilaritySourceTexts {
+  static buildSourceTexts(data: Partial<Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'>>): PromptSimilaritySourceTexts {
     return {
       positive: this.normalizePromptText(data.prompt),
       negative: this.normalizePromptText(data.negative_prompt),
@@ -195,50 +197,46 @@ export class PromptSimilarityService {
       return [];
     }
 
+    const visibleCondition = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+    const readyCondition = MediaPostprocessVisibilityService.buildReadyCondition('im');
+    const candidateFingerprintCondition = this.buildPromptCandidateFingerprintCondition(activeFields);
     const rows = db.prepare(`
       SELECT
         im.composite_hash,
-        im.prompt,
-        im.negative_prompt,
-        im.auto_tags,
-        im.width,
-        im.height,
-        im.thumbnail_path,
-        im.rating_score,
-        im.first_seen_date,
-        im.metadata_updated_date,
         im.prompt_similarity_algorithm,
         im.prompt_similarity_version,
-        im.pos_prompt_normalized,
-        im.neg_prompt_normalized,
-        im.auto_prompt_normalized,
         im.pos_prompt_fingerprint,
         im.neg_prompt_fingerprint,
         im.auto_prompt_fingerprint,
-        im.prompt_similarity_updated_date,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_status,
-        if.file_type,
-        if.mime_type,
-        if.file_size,
-        if.folder_id,
-        wf.folder_name
+        im.prompt_similarity_updated_date
       FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      LEFT JOIN watched_folders wf ON if.folder_id = wf.id
       WHERE im.composite_hash != ?
-      GROUP BY im.composite_hash
-    `).all(compositeHash) as PromptSimilarityCandidateRow[];
+        AND im.prompt_similarity_algorithm = ?
+        AND im.prompt_similarity_version = ?
+        AND (${candidateFingerprintCondition})
+        AND ${visibleCondition}
+        AND ${readyCondition}
+        AND EXISTS (
+          SELECT 1
+          FROM image_files if
+          WHERE if.composite_hash = im.composite_hash
+            AND if.file_status = 'active'
+        )
+    `).all(compositeHash, settings.algorithm, PROMPT_SIMILARITY_VERSION) as PromptSimilarityCandidateRow[];
 
     const matches: PromptSimilarityMatch[] = [];
     for (const row of rows) {
       const targetPrepared = this.getPreparedTexts(row, settings.algorithm);
-      const positive = this.calculateFieldScore(sourcePrepared.positiveNormalized, targetPrepared.positiveNormalized, sourcePrepared.positiveFingerprint, targetPrepared.positiveFingerprint, settings.algorithm, settings.fieldThresholds.positive);
-      const negative = this.calculateFieldScore(sourcePrepared.negativeNormalized, targetPrepared.negativeNormalized, sourcePrepared.negativeFingerprint, targetPrepared.negativeFingerprint, settings.algorithm, settings.fieldThresholds.negative);
-      const auto = this.calculateFieldScore(sourcePrepared.autoNormalized, targetPrepared.autoNormalized, sourcePrepared.autoFingerprint, targetPrepared.autoFingerprint, settings.algorithm, settings.fieldThresholds.auto);
+      const fieldScores = this.buildInactiveFieldScores(settings);
+      for (const fieldName of activeFields) {
+        fieldScores[fieldName] = this.calculateActiveFieldScore(
+          fieldName,
+          sourcePrepared,
+          targetPrepared,
+          settings,
+        );
+      }
 
-      const fieldScores = { positive, negative, auto };
       if (!activeFields.every((fieldName) => fieldScores[fieldName].passed)) {
         continue;
       }
@@ -249,11 +247,11 @@ export class PromptSimilarityService {
       }
 
       matches.push({
-        image: row,
+        image: row as unknown as ImageWithFileView,
         combinedSimilarity,
-        positive,
-        negative,
-        auto,
+        positive: fieldScores.positive,
+        negative: fieldScores.negative,
+        auto: fieldScores.auto,
       });
     }
 
@@ -420,8 +418,8 @@ export class PromptSimilarityService {
     algorithm: PromptSimilarityAlgorithm,
     threshold: number,
   ): PromptSimilarityFieldScore {
-    const hasSource = Boolean(sourceNormalized);
-    const hasTarget = Boolean(targetNormalized);
+    const hasSource = Boolean(sourceNormalized || sourceFingerprint);
+    const hasTarget = Boolean(targetNormalized || targetFingerprint);
     const exact = Boolean(sourceNormalized && targetNormalized && sourceNormalized === targetNormalized);
 
     if (!hasSource) {
@@ -444,6 +442,64 @@ export class PromptSimilarityService {
       hasSource,
       hasTarget,
     };
+  }
+
+  /** Build placeholder scores for inactive fields so the hot path only scores source-active fields. */
+  private static buildInactiveFieldScores(settings: PromptSimilaritySettings): Record<PromptSimilarityFieldName, PromptSimilarityFieldScore> {
+    return {
+      positive: this.buildInactiveFieldScore(settings.fieldThresholds.positive),
+      negative: this.buildInactiveFieldScore(settings.fieldThresholds.negative),
+      auto: this.buildInactiveFieldScore(settings.fieldThresholds.auto),
+    };
+  }
+
+  private static buildInactiveFieldScore(threshold: number): PromptSimilarityFieldScore {
+    return {
+      similarity: 0,
+      threshold,
+      passed: true,
+      exact: false,
+      hasSource: false,
+      hasTarget: false,
+    };
+  }
+
+  private static calculateActiveFieldScore(
+    fieldName: PromptSimilarityFieldName,
+    sourcePrepared: PromptSimilarityPreparedTexts,
+    targetPrepared: PromptSimilarityPreparedTexts,
+    settings: PromptSimilaritySettings,
+  ): PromptSimilarityFieldScore {
+    if (fieldName === 'positive') {
+      return this.calculateFieldScore(
+        sourcePrepared.positiveNormalized,
+        targetPrepared.positiveNormalized,
+        sourcePrepared.positiveFingerprint,
+        targetPrepared.positiveFingerprint,
+        settings.algorithm,
+        settings.fieldThresholds.positive,
+      );
+    }
+
+    if (fieldName === 'negative') {
+      return this.calculateFieldScore(
+        sourcePrepared.negativeNormalized,
+        targetPrepared.negativeNormalized,
+        sourcePrepared.negativeFingerprint,
+        targetPrepared.negativeFingerprint,
+        settings.algorithm,
+        settings.fieldThresholds.negative,
+      );
+    }
+
+    return this.calculateFieldScore(
+      sourcePrepared.autoNormalized,
+      targetPrepared.autoNormalized,
+      sourcePrepared.autoFingerprint,
+      targetPrepared.autoFingerprint,
+      settings.algorithm,
+      settings.fieldThresholds.auto,
+    );
   }
 
   /** Calculate the weighted combined similarity score. */
@@ -482,9 +538,20 @@ export class PromptSimilarityService {
     return fields.filter((field) => field.hasSource && field.weight > 0).map((field) => field.name);
   }
 
+  /** Restrict prompt similarity candidates to rows with usable prepared fingerprints. */
+  private static buildPromptCandidateFingerprintCondition(activeFields: PromptSimilarityFieldName[]): string {
+    const fingerprintColumns: Record<PromptSimilarityFieldName, string> = {
+      positive: 'im.pos_prompt_fingerprint',
+      negative: 'im.neg_prompt_fingerprint',
+      auto: 'im.auto_prompt_fingerprint',
+    };
+
+    return activeFields.map((field) => `${fingerprintColumns[field]} IS NOT NULL`).join(' OR ') || '1 = 0';
+  }
+
   /** Build normalized text and fingerprint pairs for one row. */
   private static getPreparedTexts(
-    record: Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'> & Partial<PromptSimilarityStoredFields>,
+    record: Partial<Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'>> & Partial<PromptSimilarityStoredFields>,
     algorithm: PromptSimilarityAlgorithm,
   ): PromptSimilarityPreparedTexts {
     const canReuseStoredFields = record.prompt_similarity_algorithm === algorithm && record.prompt_similarity_version === PROMPT_SIMILARITY_VERSION;
@@ -583,16 +650,12 @@ export class PromptSimilarityService {
     targetFingerprint: string | null,
     algorithm: PromptSimilarityAlgorithm,
   ): number {
-    if (!sourceNormalized || !targetNormalized) {
-      return 0;
-    }
-
-    if (sourceNormalized === targetNormalized) {
-      return 100;
-    }
-
     if (!sourceFingerprint || !targetFingerprint) {
       return 0;
+    }
+
+    if (sourceNormalized && targetNormalized && sourceNormalized === targetNormalized) {
+      return 100;
     }
 
     if (algorithm === 'minhash') {

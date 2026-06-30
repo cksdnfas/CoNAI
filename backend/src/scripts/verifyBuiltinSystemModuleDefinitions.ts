@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { seedBuiltinSystemModuleDefinitions, type UpsertBuiltinSystemModule } from '../database/userSettingsBuiltinModuleDefinitions'
 import { getSupportedSystemOperationKeys } from '../services/graph-workflow-executor/execute-system'
 import type { ModulePortDataType, ModulePortDirection } from '../types/moduleGraph'
@@ -33,6 +35,11 @@ type UiFieldLike = {
 const VALID_PORT_DIRECTIONS = new Set<ModulePortDirection>(['input', 'output'])
 const VALID_PORT_DATA_TYPES = new Set<ModulePortDataType>(['image', 'mask', 'prompt', 'text', 'number', 'boolean', 'json', 'any'])
 const VALID_UI_DATA_TYPES = new Set([...VALID_PORT_DATA_TYPES, 'select'])
+const SOURCE_ROOT = resolve(__dirname, '..')
+
+function source(relativePath: string) {
+  return readFileSync(join(SOURCE_ROOT, relativePath), 'utf8')
+}
 
 function collectBuiltinSystemModules() {
   const definitions: BuiltinSystemModuleDefinition[] = []
@@ -230,6 +237,18 @@ function validateBuiltinSystemModules() {
 
   if (failures.length > 0) {
     throw new Error(`Built-in system module verification failed\n${failures.map((failure) => `- ${failure}`).join('\n')}`)
+  }
+
+  const seedSource = source('database/userSettingsBuiltinModuleDefinitions.ts')
+  const dataSource = source('database/userSettingsBuiltinModuleDefinitionData.ts')
+  if (!seedSource.includes('for (const definition of BUILTIN_SYSTEM_MODULE_DEFINITIONS)')) {
+    throw new Error('Built-in system module seed should iterate over the data definition table')
+  }
+  if ((seedSource.match(/upsertBuiltinModule\(/g) ?? []).length !== 1) {
+    throw new Error('Built-in system module seed should keep only one upsert call in the loop')
+  }
+  if (!dataSource.includes('export const BUILTIN_SYSTEM_MODULE_DEFINITIONS')) {
+    throw new Error('Built-in system module definitions should live in the dedicated data file')
   }
 
   console.log(

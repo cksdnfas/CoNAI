@@ -11,45 +11,76 @@ import { AutoTagStats } from '../../types/autoTag';
  * - 모든 기존 통계 기능 유지
  */
 export class ImageStatsModel {
+  private static readonly AUTO_TAG_STATS_CACHE_TTL_MS = 30_000;
+  private static autoTagStatsCache: { value: AutoTagStats; expiresAt: number } | null = null;
+
+  private static cloneAutoTagStats(stats: AutoTagStats): AutoTagStats {
+    return {
+      ...stats,
+      rating_distribution: { ...stats.rating_distribution },
+      top_general_tags: stats.top_general_tags.map((tag) => ({ ...tag })),
+      model_distribution: { ...stats.model_distribution },
+    };
+  }
+
+  static invalidateAutoTagStatsCache(): void {
+    this.autoTagStatsCache = null;
+  }
+
   /**
    * 자동태그 통계 정보 조회
    */
   static async getAutoTagStats(): Promise<AutoTagStats> {
+    const now = Date.now();
+    if (this.autoTagStatsCache && this.autoTagStatsCache.expiresAt > now) {
+      return this.cloneAutoTagStats(this.autoTagStatsCache.value);
+    }
+
     // 1. 기본 통계
-    const statsQuery = `
-      SELECT
-        COUNT(*) as total_images,
-        SUM(CASE WHEN auto_tags IS NOT NULL THEN 1 ELSE 0 END) as tagged_images,
-        SUM(CASE WHEN auto_tags IS NULL THEN 1 ELSE 0 END) as untagged_images
+    const totalRow = db.prepare('SELECT COUNT(*) as count FROM media_metadata').get() as any;
+    const taggedRow = db.prepare(`
+      SELECT COUNT(*) as count
       FROM media_metadata
-    `;
-    const statsRow = db.prepare(statsQuery).get() as any;
+      WHERE auto_tags IS NOT NULL
+    `).get() as any;
+    const untaggedRow = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM media_metadata
+      WHERE auto_tags IS NULL
+    `).get() as any;
 
     // 2. Rating 분포 조회 (가장 높은 rating 기준)
     const ratingQuery = `
       SELECT
-        SUM(CASE
-          WHEN json_extract(auto_tags, '$.rating.general') >= json_extract(auto_tags, '$.rating.sensitive')
-            AND json_extract(auto_tags, '$.rating.general') >= json_extract(auto_tags, '$.rating.questionable')
-            AND json_extract(auto_tags, '$.rating.general') >= json_extract(auto_tags, '$.rating.explicit')
-          THEN 1 ELSE 0 END) as general,
-        SUM(CASE
-          WHEN json_extract(auto_tags, '$.rating.sensitive') > json_extract(auto_tags, '$.rating.general')
-            AND json_extract(auto_tags, '$.rating.sensitive') >= json_extract(auto_tags, '$.rating.questionable')
-            AND json_extract(auto_tags, '$.rating.sensitive') >= json_extract(auto_tags, '$.rating.explicit')
-          THEN 1 ELSE 0 END) as sensitive,
-        SUM(CASE
-          WHEN json_extract(auto_tags, '$.rating.questionable') > json_extract(auto_tags, '$.rating.general')
-            AND json_extract(auto_tags, '$.rating.questionable') > json_extract(auto_tags, '$.rating.sensitive')
-            AND json_extract(auto_tags, '$.rating.questionable') >= json_extract(auto_tags, '$.rating.explicit')
-          THEN 1 ELSE 0 END) as questionable,
-        SUM(CASE
-          WHEN json_extract(auto_tags, '$.rating.explicit') > json_extract(auto_tags, '$.rating.general')
-            AND json_extract(auto_tags, '$.rating.explicit') > json_extract(auto_tags, '$.rating.sensitive')
-            AND json_extract(auto_tags, '$.rating.explicit') > json_extract(auto_tags, '$.rating.questionable')
-          THEN 1 ELSE 0 END) as explicit
-      FROM media_metadata
-      WHERE auto_tags IS NOT NULL
+        COALESCE(SUM(CASE
+          WHEN general >= sensitive
+            AND general >= questionable
+            AND general >= explicit
+          THEN 1 ELSE 0 END), 0) as general,
+        COALESCE(SUM(CASE
+          WHEN sensitive > general
+            AND sensitive >= questionable
+            AND sensitive >= explicit
+          THEN 1 ELSE 0 END), 0) as sensitive,
+        COALESCE(SUM(CASE
+          WHEN questionable > general
+            AND questionable > sensitive
+            AND questionable >= explicit
+          THEN 1 ELSE 0 END), 0) as questionable,
+        COALESCE(SUM(CASE
+          WHEN explicit > general
+            AND explicit > sensitive
+            AND explicit > questionable
+          THEN 1 ELSE 0 END), 0) as explicit
+      FROM (
+        SELECT
+          json_extract(auto_tags, '$.rating.general') as general,
+          json_extract(auto_tags, '$.rating.sensitive') as sensitive,
+          json_extract(auto_tags, '$.rating.questionable') as questionable,
+          json_extract(auto_tags, '$.rating.explicit') as explicit
+        FROM media_metadata
+        WHERE json_type(auto_tags, '$.rating') = 'object'
+      )
     `;
     const ratingRow = db.prepare(ratingQuery).get() as any;
 
@@ -57,9 +88,7 @@ export class ImageStatsModel {
     const characterQuery = `
       SELECT COUNT(*) as character_count
       FROM media_metadata
-      WHERE auto_tags IS NOT NULL
-        AND json_extract(auto_tags, '$.character') IS NOT NULL
-        AND json_type(auto_tags, '$.character') = 'object'
+      WHERE json_type(auto_tags, '$.character') = 'object'
     `;
     const characterRow = db.prepare(characterQuery).get() as any;
 
@@ -69,8 +98,7 @@ export class ImageStatsModel {
         json_extract(auto_tags, '$.model') as model,
         COUNT(*) as count
       FROM media_metadata
-      WHERE auto_tags IS NOT NULL
-        AND json_extract(auto_tags, '$.model') IS NOT NULL
+      WHERE json_extract(auto_tags, '$.model') IS NOT NULL
       GROUP BY model
       ORDER BY count DESC
     `;
@@ -86,9 +114,9 @@ export class ImageStatsModel {
 
     // 최종 결과 반환
     const stats: AutoTagStats = {
-      total_images: statsRow.total_images || 0,
-      tagged_images: statsRow.tagged_images || 0,
-      untagged_images: statsRow.untagged_images || 0,
+      total_images: totalRow.count || 0,
+      tagged_images: taggedRow.count || 0,
+      untagged_images: untaggedRow.count || 0,
       rating_distribution: {
         general: ratingRow?.general || 0,
         sensitive: ratingRow?.sensitive || 0,
@@ -98,6 +126,11 @@ export class ImageStatsModel {
       top_general_tags: [],
       character_count: characterRow?.character_count || 0,
       model_distribution: modelDistribution
+    };
+
+    this.autoTagStatsCache = {
+      value: this.cloneAutoTagStats(stats),
+      expiresAt: now + this.AUTO_TAG_STATS_CACHE_TTL_MS,
     };
 
     return stats;

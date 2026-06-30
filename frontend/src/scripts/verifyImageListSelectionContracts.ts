@@ -16,6 +16,7 @@ const imageFeedSafetySource = source('features/images/components/image-list/use-
 const homePageDataSource = source('features/home/use-home-page-data.ts')
 const groupPageQueriesSource = source('features/groups/use-group-page-queries.ts')
 const imageAttachmentPickerSource = source('features/image-generation/components/image-attachment-picker.tsx')
+const apiImagesSource = source('lib/api-images.ts')
 
 assert.match(
   imageListSource,
@@ -198,6 +199,12 @@ assert.doesNotMatch(
   imageAttachmentPickerSource,
   /getImageListDisplayName\(image\)\.toLowerCase\(\)\.includes\(search\)/,
   'Image attachment picker search must not rebuild display names while filtering each keystroke',
+)
+
+assert.match(
+  apiImagesSource,
+  /export async function batchTagImages\(compositeHashes: string\[\]\)[\s\S]*\/api\/images\/batch-tag[\s\S]*image_ids: compositeHashes/,
+  'Batch tag action should reuse the existing batch-tag API',
 )
 
 console.log('Image list selection contracts verified.')

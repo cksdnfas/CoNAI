@@ -21,6 +21,30 @@ type ModuleGraphSimpleValueInputProps = {
   step?: number
 }
 
+function formatModuleGraphOptionDefaultValue(value: unknown) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  const serialized = JSON.stringify(value)
+  return serialized.length > 48 ? `${serialized.slice(0, 47)}…` : serialized
+}
+
+export function formatModuleGraphDefaultOptionLabel(t: ReturnType<typeof useI18n>['t'], value: unknown) {
+  const formattedValue = formatModuleGraphOptionDefaultValue(value)
+  return formattedValue
+    ? t({ ko: '기본: {value}', en: 'Default: {value}' }, { value: formattedValue })
+    : t({ ko: '선택', en: 'Select' })
+}
+
 /** Render one small shared value editor for the common scalar module-graph field types. */
 export function ModuleGraphSimpleValueInput({
   dataType,
@@ -37,7 +61,7 @@ export function ModuleGraphSimpleValueInput({
   step,
 }: ModuleGraphSimpleValueInputProps) {
   const { t } = useI18n()
-  const resolvedEmptyLabel = emptyLabel ?? t({ ko: '기본값 사용', en: 'Use default value' })
+  const resolvedEmptyLabel = emptyLabel ?? t({ ko: '선택', en: 'Select' })
   if (dataType === 'select') {
     return (
       <Select

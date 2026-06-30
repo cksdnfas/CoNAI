@@ -155,6 +155,52 @@ export async function saveArtifactFileReference(
   }
 }
 
+type SaveCanonicalMediaArtifactReferenceOptions = {
+  mimeType?: string
+  originalFileName?: string
+  queueJobId?: number | null
+  historyId?: number | null
+  compositeHash?: string | null
+  metadata?: Record<string, unknown>
+}
+
+/** Persist a graph artifact descriptor for canonical generated media without copying the file. */
+export async function saveCanonicalMediaArtifactReference(
+  executionId: number,
+  nodeId: string,
+  portKey: string,
+  artifactType: ModulePortDataType | 'file',
+  storagePath: string,
+  options?: SaveCanonicalMediaArtifactReferenceOptions,
+) {
+  const metadata = {
+    kind: 'canonical-generated-media',
+    originalFileName: options?.originalFileName ?? path.basename(storagePath),
+    queueJobId: options?.queueJobId ?? null,
+    historyId: options?.historyId ?? null,
+    compositeHash: options?.compositeHash ?? null,
+    actualCompositeHash: options?.compositeHash ?? null,
+    canonicalPath: storagePath,
+    ...(options?.metadata ?? {}),
+  }
+  const savedArtifact = await saveArtifactFileReference(
+    executionId,
+    nodeId,
+    portKey,
+    artifactType,
+    storagePath,
+    {
+      mimeType: options?.mimeType,
+      metadata,
+    },
+  )
+
+  return {
+    ...savedArtifact,
+    metadata,
+  }
+}
+
 /** Look up the source artifact feeding a graph edge. */
 export function getSourceArtifact(context: ExecutionContext, edge: GraphWorkflowEdge) {
   const nodeArtifacts = context.artifactsByNode.get(edge.source_node_id)
@@ -234,6 +280,17 @@ function resolveArtifactMimeType(storagePath: string, metadata: Record<string, u
   return inferMimeTypeFromPath(storagePath, artifactType === 'file' ? 'application/octet-stream' : 'image/png')
 }
 
+function optionalMetadataString(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+}
+
+function resolveFileReferenceCompositeHash(metadata: Record<string, unknown>) {
+  return optionalMetadataString(metadata.actualCompositeHash)
+    ?? optionalMetadataString(metadata.actual_composite_hash)
+    ?? optionalMetadataString(metadata.compositeHash)
+    ?? optionalMetadataString(metadata.composite_hash)
+}
+
 function buildFileReferenceValue(storagePath: string, metadata: Record<string, unknown>, artifactType: ModulePortDataType | 'file') {
   const mimeType = resolveArtifactMimeType(storagePath, metadata, artifactType)
   return {
@@ -241,7 +298,7 @@ function buildFileReferenceValue(storagePath: string, metadata: Record<string, u
     fileName: path.basename(storagePath),
     mimeType,
     originalFileName: typeof metadata.originalFileName === 'string' ? metadata.originalFileName : undefined,
-    compositeHash: typeof metadata.compositeHash === 'string' ? metadata.compositeHash : typeof metadata.composite_hash === 'string' ? metadata.composite_hash : undefined,
+    compositeHash: resolveFileReferenceCompositeHash(metadata),
   }
 }
 

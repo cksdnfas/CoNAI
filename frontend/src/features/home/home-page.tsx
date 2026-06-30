@@ -77,7 +77,7 @@ export function HomePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow={isAnonymousSession ? t({ ko: '공개', en: 'Public' }) : t({ ko: '이미지', en: 'Image' })} title={t({ ko: '홈', en: 'Home' })} />
+      <PageHeader eyebrow={isAnonymousSession ? t({ ko: '공개', en: 'Public' }) : t({ ko: '이미지', en: 'Image' })} title={t('pageAccessCatalog.home')} />
 
       {isAnonymousSession ? (
         <PageSection

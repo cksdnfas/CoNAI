@@ -1,4 +1,5 @@
-import { ArrowLeft, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { useRef } from 'react'
+import { ArrowLeft, Copy, Download, FolderPlus, PenSquare, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
@@ -21,6 +22,9 @@ export function ModuleGraphWorkflowListSidebar({
   onRefreshWorkspace,
   onOpenBrowseManage,
   onCreateWorkflow,
+  onDuplicateWorkflow,
+  onExportWorkflow,
+  onImportWorkflow,
   onEditWorkflow,
   onDeleteWorkflow,
   onDeleteFolder,
@@ -40,11 +44,15 @@ export function ModuleGraphWorkflowListSidebar({
   onRefreshWorkspace: () => void
   onOpenBrowseManage: () => void
   onCreateWorkflow: () => void
+  onDuplicateWorkflow: () => void
+  onExportWorkflow: () => void
+  onImportWorkflow: (file: File) => void
   onEditWorkflow: () => void
   onDeleteWorkflow: () => void
   onDeleteFolder: (folderId: number) => void
 }) {
   const { t } = useI18n()
+  const importInputRef = useRef<HTMLInputElement | null>(null)
 
   return (
     <SavedGraphList
@@ -107,6 +115,60 @@ export function ModuleGraphWorkflowListSidebar({
           >
             <Plus className="h-4 w-4" />
           </Button>
+          {workflowView === 'browse' ? (
+            <>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json,.conai-workflow.json"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0]
+                  event.currentTarget.value = ''
+                  if (file) {
+                    onImportWorkflow(file)
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="bg-surface-low"
+                onClick={() => importInputRef.current?.click()}
+                aria-label={t({ ko: '워크플로우 가져오기', en: 'Import workflow' })}
+                title={t({ ko: '워크플로우 가져오기', en: 'Import workflow' })}
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+            </>
+          ) : null}
+          {workflowView === 'browse' && selectedGraphRecord ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-low"
+              onClick={onDuplicateWorkflow}
+              aria-label={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
+              title={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          ) : null}
+          {workflowView === 'browse' && selectedGraphRecord ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-low"
+              onClick={onExportWorkflow}
+              aria-label={t({ ko: '워크플로우 내보내기', en: 'Export workflow' })}
+              title={t({ ko: '워크플로우 내보내기', en: 'Export workflow' })}
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
             <Button
               type="button"

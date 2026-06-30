@@ -124,7 +124,8 @@ async function main() {
         metadata: JSON.stringify({
           mimeType: 'video/webm',
           originalFileName: 'original-output.webm',
-          compositeHash: 'hash:abc123',
+          compositeHash: 'hash:legacy',
+          actual_composite_hash: 'hash:actual',
         }),
       }),
     ])
@@ -135,7 +136,7 @@ async function main() {
       fileName: 'preview.webm',
       mimeType: 'video/webm',
       originalFileName: 'original-output.webm',
-      compositeHash: 'hash:abc123',
+      compositeHash: 'hash:actual',
     })
     assert.equal(loaded.output.type, 'file')
     assert.equal(loaded.output.storagePath, videoPath)

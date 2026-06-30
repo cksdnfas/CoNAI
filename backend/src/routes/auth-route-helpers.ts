@@ -30,13 +30,13 @@ export function invalidateConfiguredAuthCache(): void {
   configuredAuthCache = null;
 }
 
-/** Check whether any auth credential or auth account is configured. */
+/** Check whether local auth has a usable administrator configured. */
 export function hasConfiguredAuth(): boolean {
   if (configuredAuthCache !== null) {
     return configuredAuthCache;
   }
 
-  configuredAuthCache = AuthCredentials.exists() || AuthAccount.exists();
+  configuredAuthCache = AuthCredentials.exists() || AuthAccount.countActiveAdmins() > 0;
   return configuredAuthCache;
 }
 

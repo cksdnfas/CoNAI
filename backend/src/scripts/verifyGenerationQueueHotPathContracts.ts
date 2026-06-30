@@ -42,8 +42,13 @@ async function main() {
     const queueServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationQueueService.ts'), 'utf8')
     const generationQueueModelSource = fs.readFileSync(path.resolve(process.cwd(), 'src/models/GenerationQueue.ts'), 'utf8')
     const queueReadRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-read-routes.ts'), 'utf8')
+    const queueListServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-list-service.ts'), 'utf8')
     const publicWorkflowRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/public-workflows.routes.ts'), 'utf8')
     const generationHistoryServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
+    const apiImageProcessorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/APIImageProcessor.ts'), 'utf8')
+    const backgroundQueueSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundQueue.ts'), 'utf8')
+    const backgroundProcessorServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundProcessorService.ts'), 'utf8')
+    const autoTagSchedulerSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/autoTagScheduler.ts'), 'utf8')
     assert.match(
       queueServiceSource,
       /const compatibleServerIdsByJobId = new Map<number, Set<number>>\(\)/,
@@ -76,11 +81,16 @@ async function main() {
     )
     assert.match(
       queueServiceSource,
-      /GenerationQueueModel\.findQueuedComfyDispatchCandidates\(\)/,
-      'ComfyUI dispatcher should read lean queued candidates before hydrating a claimed queue job payload',
+      /GenerationQueueModel\.findQueuedComfyDispatchCandidates\(candidateLimit\)/,
+      'ComfyUI dispatcher should read a bounded lean queued-candidate window before hydrating a claimed queue job payload',
+    )
+    assert.match(
+      queueServiceSource,
+      /COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT/,
+      'ComfyUI dispatcher must cap queued candidate scans so cold backlog size cannot dominate each dispatch tick',
     )
     assert.ok(
-      queueServiceSource.indexOf('const serversWithLocalCapacity = activeServers.filter') < queueServiceSource.indexOf('GenerationQueueModel.findQueuedComfyDispatchCandidates()'),
+      queueServiceSource.indexOf('const serversWithLocalCapacity = activeServers.filter') < queueServiceSource.indexOf('GenerationQueueModel.findQueuedComfyDispatchCandidates(candidateLimit)'),
       'ComfyUI dispatcher should return early on zero local capacity before reading queued candidates',
     )
     assert.doesNotMatch(
@@ -100,13 +110,28 @@ async function main() {
     )
     assert.match(
       generationQueueModelSource,
-      /findQueuedComfyDispatchCandidates\(\)[\s\S]*SELECT \$\{GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS\}/,
-      'queued ComfyUI dispatch candidates should use a lean explicit column set',
+      /findQueuedComfyDispatchCandidates\(limit = 200\)[\s\S]*SELECT \$\{GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS\}[\s\S]*LIMIT \?/,
+      'queued ComfyUI dispatch candidates should use a lean explicit column set with a bounded LIMIT',
     )
     assert.match(
       queueReadRoutesSource,
+      /buildGenerationQueueListResponse\(req\)/,
+      'queue list route should delegate list composition instead of owning queue query/enrichment flow',
+    )
+    assert.match(
+      queueListServiceSource,
       /GenerationQueueModel\.findAllListRecords\(/,
-      'queue list route should use lean list records without request_payload',
+      'queue list service should use lean list records without request_payload',
+    )
+    assert.match(
+      queueListServiceSource,
+      /DEFAULT_QUEUE_LIST_LIMIT/,
+      'queue list service should default to a bounded page instead of returning the whole active backlog',
+    )
+    assert.match(
+      queueListServiceSource,
+      /QUEUE_ETA_WINDOW_LIMIT/,
+      'queue list service should compute ETA over a bounded active window instead of the entire waiting backlog',
     )
     assert.doesNotMatch(
       publicWorkflowRoutesSource,
@@ -117,6 +142,81 @@ async function main() {
       generationHistoryServiceSource,
       /Slow generation postprocess/,
       'generation postprocess should log slow media/group assignment timing for stalled queue diagnosis',
+    )
+    assert.match(
+      apiImageProcessorSource,
+      /metadataMode:\s*'background'/,
+      'generated-image media registration should queue AI metadata extraction instead of blocking queue completion on it',
+    )
+    assert.match(
+      backgroundProcessorServiceSource,
+      /metadataMode\?: 'inline' \| 'background'/,
+      'saved-media processing should expose an explicit metadata scheduling mode',
+    )
+    assert.match(
+      backgroundProcessorServiceSource,
+      /options\.metadataMode === 'background'[\s\S]*?queueMetadataExtraction\(filePath, compositeHash, logLabel\)/,
+      'background metadata mode should hand processed media to the background queue without awaiting extraction',
+    )
+    assert.doesNotMatch(
+      backgroundProcessorServiceSource.match(/const processedRecord =[\s\S]*?if \(!options\.quiet\)/)?.[0] ?? '',
+      /processApiGenerationGroupAssignment\(compositeHash\)/,
+      'saved-media processing must not rerun API generation group assignment after processFile already handled the hash-level handoff',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /hasQueuedOrActiveMetadataExtractionTask\(filePath: string, compositeHash: string\)/,
+      'background queue should check for exact queued or active metadata tasks before adding duplicate work',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /activeMetadataTaskKeys = new Set<string>\(\)/,
+      'background metadata task coalescing should track in-flight work after a task leaves the queued list',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /activeMetadataTaskKeys\.has\(metadataTaskKey\)/,
+      'background metadata task coalescing should suppress duplicates while an exact task is active',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /task\.type === TaskType\.METADATA_EXTRACTION[\s\S]*task\.compositeHash === compositeHash[\s\S]*path\.resolve\(task\.filePath\) === normalizedFilePath/,
+      'background metadata task coalescing should be scoped by type, hash, and resolved file path',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /activeCount: number;[\s\S]*activeTasksByType: Record<TaskType, number>;/,
+      'background queue status should expose active work separately from queued work',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /if \(SystemMaintenanceLockService\.isExclusiveActive\(\)\) \{[\s\S]*?this\.scheduleProcessQueueAfterMaintenanceLock\(\);[\s\S]*?return;/,
+      'background queue should schedule a retry when queued work arrives during an exclusive maintenance lock',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /private static scheduleProcessQueueAfterMaintenanceLock\(\): void \{[\s\S]*?if \(this\.lockRetryScheduled\) \{[\s\S]*?return;[\s\S]*?this\.lockRetryScheduled = true;[\s\S]*?setTimeout/,
+      'background queue maintenance-lock retry scheduling should be coalesced',
+    )
+    assert.match(
+      backgroundProcessorServiceSource,
+      /private static scheduleHashGenerationAfterMaintenanceLock\(options: BackgroundProcessorOptions = \{\}\): void \{[\s\S]*?if \(this\.lockRetryScheduled\) \{[\s\S]*?return;[\s\S]*?this\.lockRetryScheduled = true;[\s\S]*?setTimeout[\s\S]*?this\.triggerHashGeneration\(\{ \.\.\.options, quietIfIdle: true \}\)/,
+      'background hash generation should coalesce maintenance-lock retries without waiting for another scan event',
+    )
+    assert.match(
+      backgroundProcessorServiceSource,
+      /if \(SystemMaintenanceLockService\.isExclusiveActive\(\)\) \{[\s\S]*?this\.scheduleHashGenerationAfterMaintenanceLock\(options\);[\s\S]*?return;/,
+      'background hash generation trigger should schedule a retry when maintenance lock blocks processing',
+    )
+    assert.match(
+      autoTagSchedulerSource,
+      /private scheduleProcessPendingAfterMaintenanceLock\(\): void \{[\s\S]*?if \(this\.lockRetryScheduled\) \{[\s\S]*?return;[\s\S]*?this\.lockRetryScheduled = true;[\s\S]*?setTimeout[\s\S]*?void this\.processPendingMedia\(\)/,
+      'auto-tag postprocess scheduler should coalesce maintenance-lock retries',
+    )
+    assert.match(
+      autoTagSchedulerSource,
+      /if \(SystemMaintenanceLockService\.isExclusiveActive\(\)\) \{[\s\S]*?this\.scheduleProcessPendingAfterMaintenanceLock\(\);[\s\S]*?return;/,
+      'auto-tag postprocess scheduler should retry when maintenance lock blocks processing',
     )
 
     db.prepare(`
@@ -189,8 +289,12 @@ async function main() {
       'queue list records must not hydrate heavyweight request_payload columns',
     )
 
-    const dispatchCandidates = GenerationQueueModel.findQueuedComfyDispatchCandidates()
-    assert.ok(dispatchCandidates.length > 0)
+    for (let index = 0; index < 8; index += 1) {
+      createJob({ service_type: 'comfyui', status: 'queued', workflow_id: 7, requested_server_id: 1 })
+    }
+
+    const dispatchCandidates = GenerationQueueModel.findQueuedComfyDispatchCandidates(3)
+    assert.equal(dispatchCandidates.length, 3)
     assert.ok(
       dispatchCandidates.every((job) => !('request_payload' in job) && !('request_summary' in job)),
       'dispatch candidates must not hydrate heavyweight request payload/summary columns',

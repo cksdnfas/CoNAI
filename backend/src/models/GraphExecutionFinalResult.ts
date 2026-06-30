@@ -1,5 +1,6 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionFinalResultRecord } from '../types/moduleGraph'
+import { chunkSqliteValues, compareNewestFirst, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
 export class GraphExecutionFinalResultModel {
   /** List final results for an execution id set. */
@@ -9,26 +10,28 @@ export class GraphExecutionFinalResultModel {
     }
 
     const db = getUserSettingsDb()
-    const placeholders = executionIds.map(() => '?').join(', ')
-    return db.prepare(`
-      SELECT
-        fr.id,
-        fr.execution_id,
-        fr.final_node_id,
-        fr.source_artifact_id,
-        ga.execution_id AS source_execution_id,
-        fr.source_node_id,
-        fr.source_port_key,
-        fr.artifact_type,
-        ga.storage_path AS source_storage_path,
-        ga.metadata AS source_metadata,
-        fr.created_date
-      FROM graph_execution_final_results fr
-      INNER JOIN graph_execution_artifacts ga
-        ON ga.id = fr.source_artifact_id
-      WHERE fr.execution_id IN (${placeholders})
-      ORDER BY fr.created_date DESC, fr.id DESC
-    `).all(...executionIds) as GraphExecutionFinalResultRecord[]
+    const records = chunkSqliteValues(executionIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
+      return db.prepare(`
+        SELECT
+          fr.id,
+          fr.execution_id,
+          fr.final_node_id,
+          fr.source_artifact_id,
+          ga.execution_id AS source_execution_id,
+          fr.source_node_id,
+          fr.source_port_key,
+          fr.artifact_type,
+          ga.storage_path AS source_storage_path,
+          ga.metadata AS source_metadata,
+          fr.created_date
+        FROM graph_execution_final_results fr
+        INNER JOIN graph_execution_artifacts ga
+          ON ga.id = fr.source_artifact_id
+        WHERE fr.execution_id IN (${placeholders})
+      `).all(...batch) as GraphExecutionFinalResultRecord[]
+    })
+    return records.sort(compareNewestFirst)
   }
 
   /** Count final-result rows by execution id without joining heavy artifact metadata. */
@@ -38,13 +41,15 @@ export class GraphExecutionFinalResultModel {
     }
 
     const db = getUserSettingsDb()
-    const placeholders = executionIds.map(() => '?').join(', ')
-    const rows = db.prepare(`
-      SELECT execution_id, COUNT(*) as count
-      FROM graph_execution_final_results
-      WHERE execution_id IN (${placeholders})
-      GROUP BY execution_id
-    `).all(...executionIds) as Array<{ execution_id: number; count: number }>
+    const rows = chunkSqliteValues(executionIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
+      return db.prepare(`
+        SELECT execution_id, COUNT(*) as count
+        FROM graph_execution_final_results
+        WHERE execution_id IN (${placeholders})
+        GROUP BY execution_id
+      `).all(...batch) as Array<{ execution_id: number; count: number }>
+    })
 
     return new Map(rows.map((row) => [row.execution_id, row.count]))
   }
@@ -56,7 +61,46 @@ export class GraphExecutionFinalResultModel {
     }
 
     const db = getUserSettingsDb()
-    const placeholders = workflowIds.map(() => '?').join(', ')
+    const records = chunkSqliteValues(workflowIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
+      return db.prepare(`
+        SELECT
+          fr.id,
+          fr.execution_id,
+          fr.final_node_id,
+          fr.source_artifact_id,
+          ga.execution_id AS source_execution_id,
+          fr.source_node_id,
+          fr.source_port_key,
+          fr.artifact_type,
+          ga.storage_path AS source_storage_path,
+          ga.metadata AS source_metadata,
+          fr.created_date
+        FROM graph_execution_final_results fr
+        INNER JOIN graph_execution_artifacts ga
+          ON ga.id = fr.source_artifact_id
+        INNER JOIN graph_executions ge
+          ON ge.id = fr.execution_id
+        WHERE ge.graph_workflow_id IN (${placeholders})
+      `).all(...batch) as GraphExecutionFinalResultRecord[]
+    })
+    return records.sort(compareNewestFirst)
+  }
+
+  /** Scan final results for one workflow in newest-first pages without hydrating the whole workflow. */
+  static findByWorkflowIdPage(workflowId: number, limit = 1000, cursor?: { created_date: string; id: number }): GraphExecutionFinalResultRecord[] {
+    const db = getUserSettingsDb()
+    const safeLimit = Math.max(1, Math.floor(limit))
+    const cursorClause = cursor
+      ? `AND (
+          fr.created_date < ?
+          OR (fr.created_date = ? AND fr.id < ?)
+        )`
+      : ''
+    const params = cursor
+      ? [workflowId, cursor.created_date, cursor.created_date, cursor.id, safeLimit]
+      : [workflowId, safeLimit]
+
     return db.prepare(`
       SELECT
         fr.id,
@@ -75,9 +119,11 @@ export class GraphExecutionFinalResultModel {
         ON ga.id = fr.source_artifact_id
       INNER JOIN graph_executions ge
         ON ge.id = fr.execution_id
-      WHERE ge.graph_workflow_id IN (${placeholders})
+      WHERE ge.graph_workflow_id = ?
+      ${cursorClause}
       ORDER BY fr.created_date DESC, fr.id DESC
-    `).all(...workflowIds) as GraphExecutionFinalResultRecord[]
+      LIMIT ?
+    `).all(...params) as GraphExecutionFinalResultRecord[]
   }
 
   static create(data: {
@@ -124,7 +170,7 @@ export class GraphExecutionFinalResultModel {
       INNER JOIN graph_execution_artifacts ga
         ON ga.id = fr.source_artifact_id
       WHERE fr.execution_id = ?
-      ORDER BY fr.id ASC
+      ORDER BY fr.created_date DESC, fr.id DESC
     `).all(executionId) as GraphExecutionFinalResultRecord[]
   }
 
@@ -135,8 +181,12 @@ export class GraphExecutionFinalResultModel {
     }
 
     const db = getUserSettingsDb()
-    const placeholders = sourceArtifactIds.map(() => '?').join(', ')
-    const result = db.prepare(`DELETE FROM graph_execution_final_results WHERE source_artifact_id IN (${placeholders})`).run(...sourceArtifactIds)
-    return result.changes
+    let deletedCount = 0
+    for (const batch of chunkSqliteValues(sourceArtifactIds)) {
+      const placeholders = sqliteInPlaceholders(batch)
+      const result = db.prepare(`DELETE FROM graph_execution_final_results WHERE source_artifact_id IN (${placeholders})`).run(...batch)
+      deletedCount += result.changes
+    }
+    return deletedCount
   }
 }

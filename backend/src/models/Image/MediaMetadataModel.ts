@@ -1,10 +1,12 @@
 import { db } from '../../database/init';
 import { settingsService } from '../../services/settingsService';
+import { AutoTagIndexService } from '../../services/autoTagIndexService';
 import { PromptSimilarityService } from '../../services/promptSimilarityService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { ImageMetadataRecord } from '../../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
+import { ImageStatsModel } from './ImageStatsModel';
 import { MediaMetadataFileQueries } from './MediaMetadataFileQueries';
 
 function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): number {
@@ -143,6 +145,9 @@ export class MediaMetadataModel {
       promptSimilarityFields.prompt_similarity_updated_date
     );
 
+    AutoTagIndexService.syncForHash(data.composite_hash, data.auto_tags);
+    ImageStatsModel.invalidateAutoTagStatsCache();
+
     return data.composite_hash;
   }
 
@@ -208,6 +213,11 @@ export class MediaMetadataModel {
     const { sql, values } = buildUpdateQuery('media_metadata', finalUpdates, { composite_hash: compositeHash });
     const info = db.prepare(sql).run(...values);
 
+    if (info.changes > 0 && 'auto_tags' in filteredUpdates) {
+      AutoTagIndexService.syncForHash(compositeHash, filteredUpdates.auto_tags as string | null | undefined);
+      ImageStatsModel.invalidateAutoTagStatsCache();
+    }
+
     return info.changes > 0;
   }
 
@@ -216,6 +226,9 @@ export class MediaMetadataModel {
    */
   static delete(compositeHash: string): boolean {
     const info = db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(compositeHash);
+    if (info.changes > 0) {
+      ImageStatsModel.invalidateAutoTagStatsCache();
+    }
     return info.changes > 0;
   }
 
@@ -229,6 +242,10 @@ export class MediaMetadataModel {
     const info = db.prepare(
       `DELETE FROM media_metadata WHERE composite_hash IN (${placeholders})`
     ).run(...compositeHashes);
+
+    if (info.changes > 0) {
+      ImageStatsModel.invalidateAutoTagStatsCache();
+    }
 
     return info.changes;
   }
@@ -497,6 +514,7 @@ export class MediaMetadataModel {
     sortOrder?: 'ASC' | 'DESC';
     cursorDate?: string;
     cursorHash?: string;
+    includeTotal?: boolean;
   }): { items: any[], total: number, hasMore: boolean } {
     return MediaMetadataFileQueries.findAllWithFilesCursor(options);
   }

@@ -4,6 +4,7 @@ import { GraphExecutionModel } from '../../models/GraphExecution'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
 import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../../models/GraphExecutionLog'
+import { GraphExecutionNodeIoModel } from '../../models/GraphExecutionNodeIo'
 import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
 import { decorateGraphExecutionRecord, decorateGraphExecutionRecords } from '../../services/graphWorkflowViewService'
 import { cleanupEmptyGraphExecutions } from '../../services/graphWorkflowOutputManagementService'
@@ -78,7 +79,8 @@ export function createGraphWorkflowExecutionRoutes() {
       const artifacts = GraphExecutionArtifactModel.findByExecution(executionId)
       const finalResults = GraphExecutionFinalResultModel.findByExecution(executionId)
       const logs = GraphExecutionLogModel.findByExecution(executionId)
-      return res.json({ success: true, data: { execution: decorateGraphExecutionRecord(execution), artifacts, final_results: finalResults, logs } } as ModuleGraphResponse)
+      const nodeIo = GraphExecutionNodeIoModel.findByExecution(executionId)
+      return res.json({ success: true, data: { execution: decorateGraphExecutionRecord(execution), artifacts, final_results: finalResults, logs, node_io: nodeIo } } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error getting graph execution:', error)
       return res.status(500).json({ success: false, error: 'Failed to get graph execution' } as ModuleGraphResponse)

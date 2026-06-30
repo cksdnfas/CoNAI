@@ -320,6 +320,26 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // 17-1. Graph execution compact node IO table (ComfyUI-style wiring/ref ledger)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS graph_execution_node_io (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      execution_id INTEGER NOT NULL,
+      node_id TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK(direction IN ('input', 'output')),
+      port_key TEXT NOT NULL,
+      source_node_id TEXT,
+      source_port_key TEXT,
+      output_index INTEGER NOT NULL DEFAULT 1,
+      artifact_type TEXT,
+      ref_kind TEXT,
+      ref_value TEXT,
+      summary TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (execution_id) REFERENCES graph_executions(id) ON DELETE CASCADE
+    )
+  `);
+
   // 18. Image generation queue jobs table (durable queue source of truth)
   db.exec(`
     CREATE TABLE IF NOT EXISTS generation_queue_jobs (
@@ -747,6 +767,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_versions_workflow_id ON graph_workflow_versions(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_workflow_id ON graph_executions(graph_workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_status ON graph_executions(status)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_executions_status_trigger_created ON graph_executions(status, trigger_type, created_date ASC, id ASC)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_executions_schedule_status ON graph_executions(schedule_id, status)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_trigger_type ON graph_executions(trigger_type)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_schedule_id ON graph_executions(schedule_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_failed_node ON graph_executions(failed_node_id)',
@@ -754,6 +776,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_status ON graph_workflow_schedules(status)',
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_next_run_at ON graph_workflow_schedules(next_run_at)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_status_priority ON generation_queue_jobs(status, priority ASC, queued_at ASC, id ASC)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_dispatch_comfy ON generation_queue_jobs(status, service_type, cancel_requested, priority ASC, queued_at ASC, id ASC)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_completed_recent ON generation_queue_jobs(status, completed_at DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_completed_service_workflow_recent ON generation_queue_jobs(status, service_type, workflow_id, completed_at DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_service_type ON generation_queue_jobs(service_type)',
@@ -764,12 +787,18 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_workflow_id ON generation_queue_jobs(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_cancel_requested ON generation_queue_jobs(cancel_requested)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_id ON graph_execution_artifacts(execution_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_created ON graph_execution_artifacts(execution_id, created_date DESC, id DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_created_id ON graph_execution_artifacts(created_date DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_node_port ON graph_execution_artifacts(node_id, port_key)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_execution_id ON graph_execution_logs(execution_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_node_id ON graph_execution_logs(node_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_level ON graph_execution_logs(level)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_execution_id ON graph_execution_final_results(execution_id)',
-    'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_source_artifact_id ON graph_execution_final_results(source_artifact_id)'
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_execution_created ON graph_execution_final_results(execution_id, created_date DESC, id DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_created_id ON graph_execution_final_results(created_date DESC, id DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_source_artifact_id ON graph_execution_final_results(source_artifact_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_node_io_execution_node ON graph_execution_node_io(execution_id, node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_node_io_execution_direction ON graph_execution_node_io(execution_id, direction)'
   ];
 
   indexes.forEach(sql => db.exec(sql));

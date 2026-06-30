@@ -12,7 +12,7 @@ import {
   executeConstantPromptNode,
   executeConstantTextNode,
 } from './system-constant-operations'
-import { executeRegexTextTransformNode, executeTextMergeNode, executeWildcardTransformNode } from './system-text-operations'
+import { executeRandomTextChoiceNode, executeRegexTextTransformNode, executeTextMergeNode, executeWildcardTransformNode } from './system-text-operations'
 import { executeCallLlmNode } from './system-llm-operations'
 import { executeLoadLlmPresetNode } from './system-llm-preset-operations'
 import {
@@ -69,6 +69,7 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.base64_encode': executeBase64EncodeNode,
   'system.base64_decode': executeBase64DecodeNode,
   'system.merge_text': executeTextMergeNode,
+  'system.random_text_choice': executeRandomTextChoiceNode,
   'system.apply_wildcards': executeWildcardTransformNode,
   'system.random_prompt_from_group': executeRandomPromptFromGroup,
   'system.load_llm_preset': executeLoadLlmPresetNode,

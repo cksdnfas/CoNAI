@@ -16,6 +16,7 @@ import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ComplexFilterService } from '../complexFilterService';
 import { checkImageMatchesConditions } from './conditionEvaluator';
 import { EvaluableImage } from './types';
+import { maybeTruncateImagesWal } from '../../database/walMaintenance';
 
 /**
  * Auto Collection Orchestrator Class
@@ -88,11 +89,8 @@ export class AutoCollectionOrchestrator {
     conditions: AutoCollectCondition[],
     startTime: number
   ): Promise<AutoCollectResult> {
-    // Remove existing auto-collected images
-    const removedCount = await ImageGroupModel.removeAutoCollectedImages(groupId);
-
     // Process all images in batches
-    let addedCount = 0;
+    const matchingHashes: string[] = [];
     let page = 1;
     const limit = 100;
     let hasMore = true;
@@ -109,25 +107,16 @@ export class AutoCollectionOrchestrator {
       for (const image of images) {
         const matches = await checkImageMatchesConditions(image, conditions);
         if (matches) {
-          const alreadyInGroup = await ImageGroupModel.isImageInGroup(
-            groupId,
-            image.composite_hash
-          );
-
-          if (!alreadyInGroup) {
-            try {
-              await ImageGroupModel.addImageToGroup(groupId, image.composite_hash, 'auto');
-              addedCount++;
-            } catch (err) {
-              console.warn('Error adding image to group:', err);
-            }
-          }
+          matchingHashes.push(image.composite_hash);
         }
       }
 
       page++;
       hasMore = images.length === limit;
     }
+
+    const { removedCount, addedCount } = ImageGroupModel.replaceAutoCollectedImages(groupId, matchingHashes);
+    maybeTruncateImagesWal('auto-collection-group-legacy');
 
     // Update last run time
     await GroupModel.updateAutoCollectLastRun(groupId);
@@ -153,35 +142,17 @@ export class AutoCollectionOrchestrator {
     startTime: number
   ): Promise<AutoCollectResult> {
     try {
-      // Remove existing auto-collected images
-      const removedCount = await ImageGroupModel.removeAutoCollectedImages(groupId);
-
-      // Use ComplexFilterService for efficient querying
-      const searchResult = await ComplexFilterService.executeComplexSearch(
+      // Feed the hash search directly into set-based diff writes.
+      const matchingHashesQuery = await ComplexFilterService.buildComplexSearchHashesQuery(
         complexFilter,
-        undefined,
-        { page: 1, limit: 10000, includeStats: false } // Get all matching images without stats-side CTE recounts
+        undefined
       );
-
-      const matchingImages = searchResult.images;
-      let addedCount = 0;
-
-      // Add matching images to group
-      for (const image of matchingImages) {
-        try {
-          const alreadyInGroup = await ImageGroupModel.isImageInGroup(
-            groupId,
-            image.composite_hash
-          );
-
-          if (!alreadyInGroup) {
-            await ImageGroupModel.addImageToGroup(groupId, image.composite_hash, 'auto');
-            addedCount++;
-          }
-        } catch (err) {
-          console.warn('Error adding image to group:', err);
-        }
-      }
+      const { removedCount, addedCount } = ImageGroupModel.replaceAutoCollectedImagesFromQuery(
+        groupId,
+        matchingHashesQuery.query,
+        matchingHashesQuery.params
+      );
+      maybeTruncateImagesWal('auto-collection-group-complex');
 
       // Update last run time
       await GroupModel.updateAutoCollectLastRun(groupId);

@@ -13,24 +13,29 @@ import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOpt
 import type { ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import type { ComfyUIServer } from '@/lib/api-image-generation-types'
-import { isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
+import { WORKFLOW_INPUT_ENABLED_KEY, isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
 import {
   ApiRequestNodeLayout,
+  ConditionSelectNodeLayout,
   IfBranchNodeLayout,
   InlineWorkflowInputEditor,
-  InputPortCell,
-  MODULE_GRAPH_INLINE_CONTROL_CLASS,
   NodeArtifactOutputs,
-  PortCell,
-  SourceNodeOutputPorts,
+  RandomTextChoiceNodeLayout,
   TextMergeNodeLayout,
   TextTransformNodeLayout,
-  buildModuleUiFieldMap,
   getApiRequestDynamicInputPortKeys,
+  getRandomTextChoiceDynamicInputPortKeys,
+} from './module-graph-node-card-layouts'
+import {
+  InputPortCell,
+  MODULE_GRAPH_INLINE_CONTROL_CLASS,
+  PortCell,
+  SourceNodeOutputPorts,
+  buildModuleUiFieldMap,
   getInputPortState,
   stopNodeActionEvent,
   stopNodeInteraction,
-} from './module-graph-node-card-layouts'
+} from './module-graph-port-cells'
 import {
   getModuleBaseDisplayName,
   getModuleColor,
@@ -50,6 +55,7 @@ const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
 const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
 
 type LlmPresetCollectionKey = keyof LlmPresetOptionCollections
+type ComfyWorkflowServerCandidate = ComfyUIServer & { is_enabled?: boolean | number }
 
 function getLlmPresetTypeOptions(t: ReturnType<typeof useI18n>['t']): Array<{ value: LlmPresetCollectionKey; label: string }> {
   return [
@@ -96,8 +102,26 @@ function resolveComfyTargetBadgeLabel(t: ReturnType<typeof useI18n>['t'], inputV
   return t({ ko: '자동 분산', en: 'Auto routing' })
 }
 
+function isActiveComfyWorkflowServerCandidate(server: ComfyWorkflowServerCandidate) {
+  return server.is_active !== false && server.is_enabled !== false && server.is_enabled !== 0
+}
+
 function getSelectOptionValue(option: ModuleGraphSelectOption) {
   return typeof option === 'string' ? option : option.value
+}
+
+function normalizeBooleanFlag(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase()
+    if (normalizedValue === 'true') return true
+    if (normalizedValue === 'false') return false
+  }
+
+  return false
 }
 
 function normalizeSelectOptions(options: ModuleGraphSelectOption[] | null | undefined) {
@@ -144,6 +168,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const connectedInputKeys = new Set(data.connectedInputKeys ?? [])
   const connectedOutputKeys = new Set(data.connectedOutputKeys ?? [])
   const isWorkflowInputSource = isWorkflowInputSourceModule(module)
+  const isWorkflowInputWaiting = isWorkflowInputSource
+    && normalizeBooleanFlag(data.inputValues?.[WORKFLOW_INPUT_ENABLED_KEY])
+    && inputPorts.some((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing)
   const sourceOutputPorts = isWorkflowInputSource ? outputPorts : []
   const missingRequiredInputCount = inputPorts.filter((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing).length
 
@@ -152,7 +179,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const usesCustomNodeLabel = hasCustomModuleNodeLabel(data)
   const [isEditingLabel, setIsEditingLabel] = useState(false)
   const [labelDraft, setLabelDraft] = useState(data.label ?? '')
-  const missingStatusLabel = isWorkflowInputSource ? t({ ko: '값 필요', en: 'Value required' }) : t({ ko: '입력 필요', en: 'Input required' })
+  const missingStatusLabel = isWorkflowInputWaiting
+    ? t({ ko: '실행 입력 대기', en: 'Runtime input waiting' })
+    : isWorkflowInputSource ? t({ ko: '값 필요', en: 'Value required' }) : t({ ko: '입력 필요', en: 'Input required' })
   useEffect(() => {
     if (!isEditingLabel) {
       setLabelDraft(data.label ?? '')
@@ -174,9 +203,55 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         ? t({ ko: '실패', en: 'Failed' })
         : executionStatus === 'blocked'
           ? t({ ko: '차단됨', en: 'Blocked' })
+          : executionStatus === 'skipped'
+            ? t({ ko: '건너뜀', en: 'Skipped' })
           : missingRequiredInputCount > 0
             ? missingStatusLabel
             : null
+  const skippedReasonLabel =
+    data.executionSkipReason === 'disabled'
+      ? t({ ko: '비활성 건너뜀', en: 'Disabled skip' })
+      : data.executionSkipReason === 'source-node-skipped'
+        ? t({ ko: '상위 건너뜀', en: 'Upstream skipped' })
+        : data.executionSkipReason === 'source-output-disabled'
+          ? t({ ko: '출력 차단', en: 'Output blocked' })
+          : data.executionSkipReason === 'inactive-branch'
+            ? t({ ko: '비활성 분기', en: 'Inactive branch' })
+            : t({ ko: '건너뜀', en: 'Skipped' })
+  const activationLabel =
+    data.disabled === true
+      ? t({ ko: '비활성', en: 'Disabled' })
+      : executionStatus === 'failed'
+        ? t({ ko: '실패 지점', en: 'Failed node' })
+        : executionStatus === 'blocked'
+          ? t({ ko: '이후 차단', en: 'Blocked downstream' })
+          : executionStatus === 'skipped'
+            ? skippedReasonLabel
+          : isWorkflowInputWaiting
+            ? t({ ko: '실행 입력 대기', en: 'Runtime input waiting' })
+            : missingRequiredInputCount > 0
+            ? t({ ko: '입력 {count}개 필요', en: '{count} inputs needed' }, { count: missingRequiredInputCount })
+            : data.activationHint === 'conditional-input'
+              ? t({ ko: '조건 입력', en: 'Conditional input' })
+              : t({ ko: '실행 가능', en: 'Runnable' })
+  const activationTitle =
+    data.disabled === true
+      ? t({ ko: '이 노드는 실행 중 건너뛰고 출력도 비활성 처리돼.', en: 'This node is skipped during execution and its outputs are disabled.' })
+      : isWorkflowInputWaiting
+        ? t({ ko: '저장된 워크플로우 실행 때 이 값을 입력받도록 노출돼 있어. 실행 전 입력값을 확인해야 해.', en: 'This value is exposed for saved-workflow runs. Confirm the runtime input before execution.' })
+        : missingRequiredInputCount > 0
+        ? t({ ko: '필수 입력이 비어 있거나 연결되지 않아 실행 전 확인이 필요해.', en: 'One or more required inputs are empty or unconnected and need review before execution.' })
+        : executionStatus === 'skipped'
+          ? data.executionSkipReason === 'disabled'
+            ? t({ ko: '이전 실행에서 이 노드는 비활성 상태라 실행하지 않고 모든 출력을 비활성 처리했어.', en: 'In the selected run this node was disabled, so execution skipped it and disabled all outputs.' })
+            : data.executionSkipReason === 'source-node-skipped'
+              ? t({ ko: '이전 실행에서 상위 노드가 먼저 건너뛰어져 이 노드도 실행되지 않았어.', en: 'In the selected run an upstream node was skipped first, so this node did not run.' })
+              : data.executionSkipReason === 'source-output-disabled'
+                ? t({ ko: '이전 실행에서 연결된 상위 출력이 비활성 처리되어 이 노드가 실행되지 않았어.', en: 'In the selected run a connected upstream output was disabled, so this node did not run.' })
+                : t({ ko: '이전 실행에서 IF 분기 결과가 이 노드로 이어지지 않아 건너뛰었어.', en: 'In the selected run the IF branch result did not lead to this node, so it was skipped.' })
+        : data.activationHint === 'conditional-input'
+          ? t({ ko: 'IF 분기 출력이 연결되어 실행 때 조건 결과에 따라 건너뛸 수 있어.', en: 'An IF branch output feeds this node, so execution may skip it depending on the branch result.' })
+          : t({ ko: '현재 연결과 값 기준으로 실행 경로에 들어갈 수 있어.', en: 'Current wiring and values allow this node to enter the execution path.' })
 
   const statusBorderColor =
     data.disabled === true
@@ -187,13 +262,17 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         ? '#ff8a80'
         : executionStatus === 'blocked'
           ? '#ffd180'
+          : executionStatus === 'skipped'
+            ? '#94a3b8'
           : missingRequiredInputCount > 0
             ? '#f59e0b'
             : `${accentColor}66`
   const operationKey = getModuleOperationKey(module)
   const isFinalResult = isFinalResultModule(module)
   const isTextMergeModule = operationKey === 'system.merge_text'
+  const isRandomTextChoiceModule = operationKey === 'system.random_text_choice'
   const isTextTransformModule = operationKey === 'system.regex_text_transform'
+  const isConditionSelectModule = operationKey === 'system.logic_condition_select'
   const isIfBranchModule = operationKey === 'system.logic_if_branch'
   const isApiRequestModule = operationKey === 'system.api_request' || (module.engine_type === 'system' && module.name === 'API 요청')
   const isSystemCallLlmModule = operationKey === 'system.call_llm'
@@ -261,8 +340,25 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     ?? (typeof codexModelUiField?.default_value === 'string' ? codexModelUiField.default_value : null)
     ?? (codexModelOptions[0] ? getSelectOptionValue(codexModelOptions[0]) : null)
     ?? ''
+  const isNaiImageGenerationModule = module.engine_type === 'nai' || operationKey === 'system.generate_image_nai'
+  const naiModelPort = isNaiImageGenerationModule
+    ? inputPorts.find((port) => port.key === 'model')
+    : null
+  const naiModelUiField = isNaiImageGenerationModule
+    ? uiFieldByKey.get('model') ?? null
+    : null
+  const naiModelCurrentValue = normalizeOptionalString(data.inputValues?.model)
+  const naiModelOptions = normalizeSelectOptions(
+    naiModelUiField?.data_type === 'select' ? naiModelUiField.options : null,
+  )
+  const naiModelValue = naiModelCurrentValue
+    ?? normalizeOptionalString(naiModelPort?.default_value)
+    ?? (typeof naiModelUiField?.default_value === 'string' ? naiModelUiField.default_value : null)
+    ?? (naiModelOptions[0] ? getSelectOptionValue(naiModelOptions[0]) : null)
+    ?? ''
   const canConfigureLlmModel = Boolean(isSystemCallLlmModule && llmModelOptions.length > 0 && data.onNodeValueChange)
   const canConfigureCodexModel = Boolean(isSystemCallCodexMessageModule && codexModelOptions.length > 0 && data.onNodeValueChange)
+  const canConfigureNaiModel = Boolean(isNaiImageGenerationModule && naiModelOptions.length > 0 && data.onNodeValueChange && !connectedInputKeys.has('model'))
   const canConfigureLlmPreset = Boolean(isSystemLoadLlmPresetModule && data.onNodeValueChange)
   const llmPresetType = normalizeLlmPresetType(data.inputValues?.preset_type)
   const llmPresetEntries = getLlmPresetEntries(llmPresetsQuery.data, llmPresetType)
@@ -300,18 +396,23 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       return false
     }
 
+    if (canConfigureNaiModel && port.key === 'model') {
+      return false
+    }
+
     return true
   })
   const portRowCount = Math.max(visibleInputPorts.length, visibleOutputPorts.length, 1)
   const renderedInputPorts = isWorkflowInputSource
     ? []
-    : (isTextMergeModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? inputPorts : visibleInputPorts)
+    : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isConditionSelectModule || isIfBranchModule || isApiRequestModule ? inputPorts : visibleInputPorts)
   const renderedOutputPorts = isWorkflowInputSource
     ? sourceOutputPorts
-    : (isTextMergeModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? outputPorts : visibleOutputPorts)
+    : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isConditionSelectModule || isIfBranchModule || isApiRequestModule ? outputPorts : visibleOutputPorts)
   const renderedHandleSignature = [
     ...renderedInputPorts.map((port) => `in:${port.key}`),
     ...(isApiRequestModule ? getApiRequestDynamicInputPortKeys(data).map((portKey) => `in:${portKey}`) : []),
+    ...(isRandomTextChoiceModule ? getRandomTextChoiceDynamicInputPortKeys(data).map((portKey) => `in:${portKey}`) : []),
     ...renderedOutputPorts.map((port) => `out:${port.key}`),
   ].join('|')
 
@@ -337,8 +438,10 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     enabled: canConfigureComfyTarget,
     staleTime: 30_000,
   })
-  const linkedComfyServers = workflowServersQuery.data ?? []
-  const candidateComfyServers: ComfyUIServer[] = linkedComfyServers.length > 0 ? linkedComfyServers : (comfyServersQuery.data ?? [])
+  const linkedComfyServers = (workflowServersQuery.data ?? []) as ComfyWorkflowServerCandidate[]
+  const activeLinkedComfyServers = linkedComfyServers.filter(isActiveComfyWorkflowServerCandidate)
+  const activeGlobalComfyServers = ((comfyServersQuery.data ?? []) as ComfyWorkflowServerCandidate[]).filter(isActiveComfyWorkflowServerCandidate)
+  const candidateComfyServers: ComfyUIServer[] = linkedComfyServers.length > 0 ? activeLinkedComfyServers : activeGlobalComfyServers
   const comfyRoutingTags = Array.from(new Set(candidateComfyServers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
   const knownComfyTargetValues = new Set<string>([
     'auto',
@@ -435,10 +538,12 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          {data.plannedExecutionOrder ? <Badge variant="outline" title={t({ ko: '계획 실행 순서', en: 'Planned execution order' })}>#{data.plannedExecutionOrder}</Badge> : null}
+          <Badge variant="outline" title={activationTitle}>{activationLabel}</Badge>
           {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
           {data.executionReuseState === 'reused' ? <Badge variant="outline">{t({ ko: '캐시', en: 'Cache' })}</Badge> : null}
           {data.executionArtifactCount ? <Badge variant="outline">A {data.executionArtifactCount}</Badge> : null}
-          {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
+          {statusLabel && statusLabel !== activationLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>
       </div>
 
@@ -510,6 +615,28 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                 ))}
               </optgroup>
             ) : null}
+          </Select>
+        </div>
+      ) : null}
+
+      {canConfigureNaiModel ? (
+        <div className="nodrag nowheel mt-2 space-y-1">
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '모델', en: 'Model' })}</div>
+          <Select
+            value={naiModelValue}
+            onMouseDown={stopNodeInteraction}
+            onClick={stopNodeInteraction}
+            onChange={(event) => {
+              stopNodeInteraction(event)
+              data.onNodeValueChange?.(id, 'model', event.target.value)
+            }}
+            className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          >
+            {naiModelOptions.map((option) => {
+              const optionValue = getSelectOptionValue(option)
+              const optionLabel = typeof option === 'string' ? option : option.label
+              return <option key={optionValue} value={optionValue}>{optionLabel}</option>
+            })}
           </Select>
         </div>
       ) : null}
@@ -612,6 +739,15 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             connectedOutputKeys={connectedOutputKeys}
             uiFieldByKey={uiFieldByKey}
           />
+        ) : isRandomTextChoiceModule ? (
+          <RandomTextChoiceNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
+            uiFieldByKey={uiFieldByKey}
+          />
         ) : isTextTransformModule ? (
           <TextTransformNodeLayout
             id={id}
@@ -620,6 +756,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             connectedInputKeys={connectedInputKeys}
             connectedOutputKeys={connectedOutputKeys}
             uiFieldByKey={uiFieldByKey}
+          />
+        ) : isConditionSelectModule ? (
+          <ConditionSelectNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
           />
         ) : isIfBranchModule ? (
           <IfBranchNodeLayout
@@ -647,6 +791,41 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
               const inputPortState = getInputPortState(data, inputPort, connectedInputKeys)
               const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
 
+              if (inputPort && !outputPort) {
+                return (
+                  <div key={`port-row-${index}`} className="grid grid-cols-1">
+                    <InputPortCell
+                      nodeId={id}
+                      data={data}
+                      port={inputPort}
+                      uiField={uiFieldByKey.get(inputPort.key) ?? null}
+                      accentColor={accentColor}
+                      connected={inputPortState.connected}
+                      satisfied={inputPortState.satisfied}
+                      requiredMissing={inputPortState.requiredMissing}
+                      selectOptionsOverride={undefined}
+                    />
+                  </div>
+                )
+              }
+
+              if (!inputPort && outputPort) {
+                return (
+                  <div key={`port-row-${index}`} className="grid grid-cols-1">
+                    <PortCell
+                      nodeId={id}
+                      port={outputPort}
+                      side="output"
+                      accentColor={accentColor}
+                      connected={outputConnected}
+                      satisfied={outputConnected}
+                      requiredMissing={false}
+                      outputState={data.conditionalOutputStates?.[outputPort.key] ?? null}
+                    />
+                  </div>
+                )
+              }
+
               return (
                 <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
                   <InputPortCell
@@ -668,6 +847,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                     connected={outputConnected}
                     satisfied={outputConnected}
                     requiredMissing={false}
+                    outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
                   />
                 </div>
               )

@@ -25,6 +25,23 @@ async function main() {
   const { GenerationHistoryModel } = await import('../models/GenerationHistory');
 
   try {
+    const visibilityServiceSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/services/mediaPostprocessVisibilityService.ts'),
+      'utf8',
+    );
+    const batchReleaseStart = visibilityServiceSource.indexOf('static markReadyRowsWithoutPendingImmediateWork');
+    const batchReleaseSource = visibilityServiceSource.slice(batchReleaseStart);
+    assert.match(
+      batchReleaseSource,
+      /db\.transaction/,
+      'postprocess batch release should update releasable rows in one transaction'
+    );
+    assert.doesNotMatch(
+      batchReleaseSource,
+      /this\.markReady\(row\.composite_hash\)/,
+      'postprocess batch release must not schedule gallery invalidation once per released row'
+    );
+
     db.exec(`
       CREATE TABLE rating_weights (
         id INTEGER PRIMARY KEY,
@@ -116,6 +133,11 @@ async function main() {
         id INTEGER PRIMARY KEY,
         folder_name TEXT
       );
+
+      CREATE INDEX idx_metadata_first_seen_hash_desc
+        ON media_metadata(first_seen_date DESC, composite_hash DESC);
+      CREATE INDEX idx_image_files_hash_status_verified
+        ON image_files(composite_hash, file_status, last_verified_date DESC, id DESC);
     `);
     initializeUserSettingsDb();
     initializeApiGenerationDb();
@@ -161,12 +183,15 @@ async function main() {
       id: number,
       status: 'ready' | 'pending',
       day: string,
-      autoTagsJson: string | null = '{"tagger":{"taglist":"shared"}}'
+      autoTagsJson: string | null = '{"tagger":{"taglist":"shared"}}',
+      addGroup = true,
     ) => {
       const date = `2026-01-${day}T00:00:00.000Z`;
       insertMetadata.run(hash, autoTagsJson, date, date, status, status === 'ready' ? date : null);
       insertFile.run(id, hash, `/tmp/${hash}.png`, date);
-      insertGroupImage.run(hash, id, date);
+      if (addGroup) {
+        insertGroupImage.run(hash, id, date);
+      }
     };
 
     seed('ready-hash', 1, 'ready', '01');
@@ -218,7 +243,7 @@ async function main() {
     );
     assert.equal(list.total, 1);
 
-    const cursorList = MediaMetadataModel.findAllWithFilesCursor({ limit: 10, sortOrder: 'ASC' });
+    const cursorList = MediaMetadataModel.findAllWithFilesCursor({ limit: 10, sortOrder: 'ASC', includeTotal: true });
     assert.deepEqual(
       cursorList.items.map((image) => image.composite_hash),
       ['ready-hash'],
@@ -387,6 +412,7 @@ async function main() {
     assert.equal(readPostprocessStatus('artist-failed-hash'), 'ready');
 
     seed('disabled-release-hash', 5, 'pending', '05');
+    seed('disabled-release-hash-2', 8, 'pending', '08');
     settingsService.saveSettings({
       ...defaultSettings,
       tagger: { ...defaultSettings.tagger, enabled: false, autoTagOnUpload: false },
@@ -394,10 +420,11 @@ async function main() {
     });
     assert.equal(
       MediaPostprocessVisibilityService.markReadyRowsWithoutPendingImmediateWork(),
-      1,
+      2,
       'turning off optional auto processors should release pending rows that no longer have required work'
     );
     assert.equal(readPostprocessStatus('disabled-release-hash'), 'ready');
+    assert.equal(readPostprocessStatus('disabled-release-hash-2'), 'ready');
 
     const duplicateVideoContent = Buffer.from('duplicate video payload');
     const duplicateVideoPath = path.join(runtimeBase, 'duplicate-existing.mp4');
@@ -424,6 +451,27 @@ async function main() {
       readPostprocessStatus(duplicateVideoHash),
       'ready',
       'existing duplicate video rows should be released when no optional auto post-processing is required'
+    );
+
+    seed('group-assignment-hash', 80, 'ready', '08', '{"tagger":{"taglist":"shared"}}', false);
+    const linkedProcessingHistoryId = GenerationHistoryModel.create({
+      service_type: 'novelai',
+      generation_status: 'processing',
+      nai_model: 'model',
+      assigned_group_id: 1,
+    });
+    GenerationHistoryModel.updateImagePaths(linkedProcessingHistoryId, { compositeHash: 'group-assignment-hash' });
+    await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash('group-assignment-hash');
+    const assignedGroupRow = db.prepare(`
+      SELECT group_id, composite_hash
+      FROM image_groups
+      WHERE group_id = 1
+        AND composite_hash = 'group-assignment-hash'
+    `).get() as { group_id: number; composite_hash: string } | undefined;
+    assert.equal(
+      assignedGroupRow?.composite_hash,
+      'group-assignment-hash',
+      'generation group assignment should run after media linkage even before history is marked completed'
     );
 
     console.log('✅ Media postprocess visibility contracts passed');

@@ -1,7 +1,9 @@
 import { deepEqual, doesNotMatch, match } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { buildExecutionComparisonRows, buildExecutionComparisonSummary } from '../features/module-graph/components/graph-execution-panel-helpers'
 import { resolveModuleWorkflowOutputProgress } from '../features/module-graph/module-workflow-output-progress'
+import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphExecutionLogRecord, GraphExecutionNodeIoRecord, GraphExecutionRecord, GraphWorkflowBrowseContentRecord, GraphWorkflowRecord } from '../lib/api-module-graph'
 
 const root = resolve(process.cwd(), 'src')
 
@@ -54,9 +56,251 @@ deepEqual(clamped, {
   hiddenCount: 0,
 })
 
+const { buildModuleWorkflowOutputCollections } = await import('../features/module-graph/components/module-workflow-output-management-panel-helpers')
+
+const workflow: GraphWorkflowRecord = {
+  id: 10,
+  name: 'Mask workflow',
+  graph: { nodes: [], edges: [] },
+  version: 1,
+  is_active: true,
+  created_date: '2026-05-30T02:00:00.000Z',
+  updated_date: '2026-05-30T02:00:00.000Z',
+}
+const execution: GraphExecutionRecord = {
+  id: 20,
+  graph_workflow_id: workflow.id,
+  graph_version: 1,
+  status: 'completed',
+  created_date: '2026-05-30T02:00:00.000Z',
+  updated_date: '2026-05-30T02:00:00.000Z',
+}
+const maskArtifact: GraphExecutionArtifactRecord = {
+  id: 30,
+  execution_id: execution.id,
+  node_id: 'mask-node',
+  port_key: 'mask',
+  artifact_type: 'mask',
+  storage_path: 'C:/tmp/graph-executions/20/mask.png',
+  metadata: JSON.stringify({ label: 'Mask preview' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const newerSameTimestampMaskArtifact: GraphExecutionArtifactRecord = {
+  id: 31,
+  execution_id: execution.id,
+  node_id: 'mask-node-2',
+  port_key: 'mask',
+  artifact_type: 'mask',
+  storage_path: 'C:/tmp/graph-executions/20/mask-2.png',
+  metadata: JSON.stringify({ label: 'Mask preview 2' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const textArtifact: GraphExecutionArtifactRecord = {
+  id: 32,
+  execution_id: execution.id,
+  node_id: 'text-node',
+  port_key: 'text',
+  artifact_type: 'text',
+  storage_path: null,
+  metadata: JSON.stringify({ value: 'older same timestamp text' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const newerSameTimestampTextArtifact: GraphExecutionArtifactRecord = {
+  id: 33,
+  execution_id: execution.id,
+  node_id: 'text-node-2',
+  port_key: 'text',
+  artifact_type: 'text',
+  storage_path: null,
+  metadata: JSON.stringify({ value: 'newer same timestamp text' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const maskFinalResult: GraphExecutionFinalResultRecord = {
+  id: 40,
+  execution_id: execution.id,
+  final_node_id: 'final-mask',
+  source_artifact_id: maskArtifact.id,
+  source_node_id: maskArtifact.node_id,
+  source_port_key: maskArtifact.port_key,
+  artifact_type: 'mask',
+  source_storage_path: null,
+  source_metadata: null,
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const newerSameTimestampMaskFinalResult: GraphExecutionFinalResultRecord = {
+  id: 41,
+  execution_id: execution.id,
+  final_node_id: 'final-mask-2',
+  source_artifact_id: newerSameTimestampMaskArtifact.id,
+  source_node_id: newerSameTimestampMaskArtifact.node_id,
+  source_port_key: newerSameTimestampMaskArtifact.port_key,
+  artifact_type: 'mask',
+  source_storage_path: null,
+  source_metadata: null,
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const compactInputIo: GraphExecutionNodeIoRecord = {
+  id: 50,
+  execution_id: execution.id,
+  node_id: 'final-mask',
+  direction: 'input',
+  port_key: 'image',
+  source_node_id: 'mask-node',
+  source_port_key: 'mask',
+  output_index: 1,
+  artifact_type: 'mask',
+  ref_kind: 'node_output',
+  ref_value: 'mask-node.mask#1',
+  summary: JSON.stringify({
+    sourceArtifactId: maskArtifact.id,
+    sourceRefKind: 'file_path',
+    sourceRefValue: maskArtifact.storage_path,
+  }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const compactOutputIo: GraphExecutionNodeIoRecord = {
+  id: 51,
+  execution_id: execution.id,
+  node_id: 'mask-node',
+  direction: 'output',
+  port_key: 'mask',
+  output_index: 1,
+  artifact_type: 'mask',
+  ref_kind: 'file_path',
+  ref_value: maskArtifact.storage_path,
+  summary: JSON.stringify({
+    artifactRecordId: maskArtifact.id,
+    metadataKind: 'mask-output',
+    mimeType: 'image/png',
+    fileName: 'mask.png',
+    value: { valueKind: 'object', size: 128, hash: 'abcdef0123456789' },
+  }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const finalResultWarningLog: GraphExecutionLogRecord = {
+  id: 60,
+  execution_id: execution.id,
+  node_id: 'final-mask',
+  level: 'warn',
+  event_type: 'final_result_source_artifact_missing',
+  message: 'missing source',
+  details: JSON.stringify({ sourceNodeId: 'mask-node', sourcePortKey: 'mask' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const comparisonSummary = buildExecutionComparisonSummary({
+  inputEntries: [{ key: 'prompt', label: 'Prompt', value: 'same input' }],
+  artifacts: [maskArtifact],
+  finalResults: [maskFinalResult],
+  logs: [finalResultWarningLog],
+  nodeIo: [compactInputIo, compactOutputIo],
+})
+deepEqual(comparisonSummary, {
+  runtimeInputCount: 1,
+  compactInputCount: 1,
+  compactOutputCount: 1,
+  artifactCount: 1,
+  finalResultCount: 1,
+  issueLogCount: 1,
+  finalResultWarningCount: 1,
+})
+const comparisonRows = buildExecutionComparisonRows([compactInputIo, compactOutputIo], workflow)
+deepEqual(
+  comparisonRows.map((row) => [row.direction, row.nodeLabel, row.portKey, row.sourceLabel, row.artifactType]),
+  [
+    ['input', '노드 final-mask', 'image', '노드 mask-node · mask', 'mask'],
+    ['output', '노드 mask-node', 'mask', null, 'mask'],
+  ],
+)
+match(comparisonRows[0]?.summaryText ?? '', /source #30/)
+match(comparisonRows[1]?.summaryText ?? '', /artifact #30/)
+const outputCollections = buildModuleWorkflowOutputCollections({
+  browseContent: {
+    scope: {
+      folder_id: null,
+      folder_ids: null,
+      workflow_count: 1,
+      execution_count: 1,
+      schedule_count: 0,
+      artifact_count: 4,
+      final_result_count: 2,
+      empty_execution_count: 0,
+    },
+    workflows: [workflow],
+    schedules: [],
+    executions: [execution],
+    artifacts: [maskArtifact, newerSameTimestampMaskArtifact, textArtifact, newerSameTimestampTextArtifact],
+    final_results: [maskFinalResult, newerSameTimestampMaskFinalResult],
+    empty_executions: [],
+  } satisfies GraphWorkflowBrowseContentRecord,
+  executionById: new Map([[execution.id, execution]]),
+  workflowNameById: new Map([[workflow.id, workflow.name]]),
+})
+deepEqual(
+  outputCollections.outputItems.map((item) => [item.id, item.type, item.workflowName]),
+  [
+    [`final-${newerSameTimestampMaskFinalResult.id}`, 'mask', workflow.name],
+    [`final-${maskFinalResult.id}`, 'mask', workflow.name],
+  ],
+)
+deepEqual(outputCollections.outputItems.map((item) => [item.storagePath, item.downloadName, item.label]), [
+  [newerSameTimestampMaskArtifact.storage_path, 'mask-2.png', 'Mask preview 2'],
+  [maskArtifact.storage_path, 'mask.png', 'Mask preview'],
+])
+match(
+  outputCollections.outputItems[0]?.previewUrl ?? '',
+  /\/temp\/graph-executions\/20\/mask-2\.png/,
+  'sparse final-result rows should recover preview URLs from their source artifacts',
+)
+deepEqual(
+  outputCollections.technicalArtifacts.map((artifact) => artifact.id),
+  [newerSameTimestampTextArtifact.id, textArtifact.id],
+)
+
 const outputManagementSource = source('features/module-graph/components/module-workflow-output-management-panel.tsx')
 const artifactRecordsSource = source('features/module-graph/components/module-workflow-artifact-records-tab.tsx')
 const generatedOutputsSource = source('features/module-graph/components/module-workflow-generated-outputs-tab.tsx')
+const outputManagementHelpersSource = source('features/module-graph/components/module-workflow-output-management-panel-helpers.ts')
+const workflowFinalResultsSectionSource = source('features/module-graph/components/workflow-final-results-section.tsx')
+const apiModuleGraphSource = source('lib/api-module-graph.ts')
+const graphExecutionPanelSource = source('features/module-graph/components/graph-execution-panel.tsx')
+const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
+const pageSectionsSource = source('features/module-graph/components/module-graph-page-sections.tsx')
+
+match(
+  apiModuleGraphSource,
+  /node_io: GraphExecutionNodeIoRecord\[\]/,
+  'execution detail API type should preserve compact node input/output ledger rows',
+)
+match(
+  graphExecutionPanelSource,
+  /ExecutionComparisonContextBlock/,
+  'execution detail panel should render a compare-ready context block',
+)
+match(
+  graphExecutionPanelSource,
+  /scrollToDetailSection\('compare'\)/,
+  'execution detail modal should expose compare-context navigation',
+)
+match(
+  graphExecutionPanelSource,
+  /executionDetail\.node_io \?\? \[\]/,
+  'execution detail panel should feed compact node input/output rows into comparison helpers',
+)
+match(
+  workflowRunnerSource,
+  /latestExecutionNodeIo\?: GraphExecutionNodeIoRecord\[\] \| null/,
+  'workflow runner latest-result summary should accept compact node input/output rows',
+)
+match(
+  workflowRunnerSource,
+  /입출력 \{count\}/,
+  'workflow runner latest-result summary should expose compact input/output counts',
+)
+match(
+  pageSectionsSource,
+  /latestExecutionNodeIo=\{latestExecutionDetail\?\.node_io\}/,
+  'module graph page should pass latest execution node I/O rows into the runner summary',
+)
 
 match(
   outputManagementSource,
@@ -184,6 +428,36 @@ doesNotMatch(
   generatedOutputsSource,
   /\{watchedFolders\.find\(\(folder\) => String\(folder\.id\) === copyTargetFolderId\)\?\.folder_path\}/,
   'generated outputs copy panel must not scan watched folders inside render output',
+)
+match(
+  outputManagementHelpersSource,
+  /artifact\.artifact_type === 'image' \|\| artifact\.artifact_type === 'mask'/,
+  'workflow output management should classify final-result masks as generated visual outputs',
+)
+match(
+  outputManagementHelpersSource,
+  /\.sort\(compareNewestDateThenId\)/,
+  'workflow generated outputs should break same-timestamp ordering ties by stable output id',
+)
+match(
+  outputManagementHelpersSource,
+  /\.sort\(compareNewestArtifactDateThenId\)/,
+  'workflow technical artifacts should break same-timestamp ordering ties by artifact id',
+)
+match(
+  workflowFinalResultsSectionSource,
+  /sourcePortLabel: getFinalResultSourcePortLabel\(finalResult\.source_port_key, finalResult\.artifact_type\)/,
+  'workflow final-result cards should keep the source output port in visual overlays',
+)
+match(
+  workflowFinalResultsSectionSource,
+  /sourceNodeLabel: getFinalResultSourceNodeLabel\(sourceNodeLabel, finalResult\.source_node_id\)/,
+  'workflow final-result cards should keep the source node label in visual overlays',
+)
+match(
+  workflowFinalResultsSectionSource,
+  /\[overlayLabel, sourceNodeLabel, sourcePortLabel\]\.filter\(Boolean\)\.join/,
+  'workflow final-result file cards should keep the source node and output port in non-visual overlays',
 )
 
 console.log('Module workflow output progress contracts verified')

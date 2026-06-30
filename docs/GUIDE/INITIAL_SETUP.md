@@ -11,6 +11,7 @@ PORT=1666
 BIND_ADDRESS=0.0.0.0
 FRONTEND_URL=http://localhost:1677
 ENABLE_EXTERNAL_IP=false
+CONAI_MCP_HTTP_ENABLED=false
 RUNTIME_BASE_PATH=./user
 ```
 
@@ -23,6 +24,7 @@ RUNTIME_BASE_PATH=./user
 | `BIND_ADDRESS=localhost` | 같은 PC에서만 접속 | 완전 로컬 사용 |
 | `BIND_ADDRESS=0.0.0.0` | 같은 네트워크의 다른 기기에서도 접속 | 내부망 공유 |
 | `ENABLE_EXTERNAL_IP=false` | 외부 IP 노출 기능 비활성 | 기본 권장 |
+| `CONAI_MCP_HTTP_ENABLED=false` | HTTP MCP 엔드포인트 비활성 | 공개/데모 기본 |
 
 외부 공개, 도메인, 리버스 프록시, HTTPS를 붙일 때는 `TRUST_PROXY`, `PUBLIC_BASE_URL`, `BACKEND_ORIGIN` 같은 값도 함께 검토합니다. 보안/권한 정리 전에는 외부 공개하지 않는 것이 좋습니다.
 

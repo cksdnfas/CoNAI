@@ -36,6 +36,16 @@ function assertTotalNeverFallsBelowLoaded() {
   assertEqual(summary.hiddenCount, 0, 'visible rows above loaded should not create negative hidden count')
 }
 
+function assertCursorFeedUsesLoadedCountWhenTotalUnknown() {
+  const summary = getHomeFeedProgressSummary([
+    { total: 41, totalKnown: false, images: [{ id: 1 }, { id: 2 }] as never[] },
+    { total: 41, totalKnown: false, images: [{ id: 3 }, { id: 4 }] as never[] },
+  ], 4)
+
+  assertEqual(summary.loadedCount, 4, 'cursor feed should still count loaded rows')
+  assertEqual(summary.totalCount, 4, 'cursor feed should not render approximate API total as exact total')
+}
+
 function assertVisibleCountNormalization() {
   const negativeSummary = getHomeFeedProgressSummary([{ total: 3, images: [{ id: 1 }] as never[] }], -2.9)
   const nanSummary = getHomeFeedProgressSummary([{ total: 3, images: [{ id: 1 }] as never[] }], Number.NaN)
@@ -47,6 +57,7 @@ function assertVisibleCountNormalization() {
 assertEmptyFeedSummary()
 assertPagedFeedSummary()
 assertTotalNeverFallsBelowLoaded()
+assertCursorFeedUsesLoadedCountWhenTotalUnknown()
 assertVisibleCountNormalization()
 
 console.log('Home feed progress UI contracts verified.')

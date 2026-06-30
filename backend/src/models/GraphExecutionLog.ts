@@ -1,5 +1,6 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionLogLevel, GraphExecutionLogRecord } from '../types/moduleGraph'
+import { chunkSqliteValues, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
 export class GraphExecutionLogModel {
   /** Delete execution logs for a specific execution id set. */
@@ -9,9 +10,13 @@ export class GraphExecutionLogModel {
     }
 
     const db = getUserSettingsDb()
-    const placeholders = executionIds.map(() => '?').join(', ')
-    const result = db.prepare(`DELETE FROM graph_execution_logs WHERE execution_id IN (${placeholders})`).run(...executionIds)
-    return result.changes
+    let deletedCount = 0
+    for (const batch of chunkSqliteValues(executionIds)) {
+      const placeholders = sqliteInPlaceholders(batch)
+      const result = db.prepare(`DELETE FROM graph_execution_logs WHERE execution_id IN (${placeholders})`).run(...batch)
+      deletedCount += result.changes
+    }
+    return deletedCount
   }
 
   static create(data: {

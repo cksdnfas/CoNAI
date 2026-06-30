@@ -1,4 +1,5 @@
 import { GenerationHistoryModel, GenerationHistoryRecord, GenerationStatus } from '../models/GenerationHistory';
+import { GenerationQueueModel } from '../models/GenerationQueue';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 
 export interface CleanupDetail {
@@ -50,6 +51,17 @@ function cleanupDetailForRecord(
 export class CleanupService {
   private static periodicCleanupTimer: NodeJS.Timeout | null = null;
   private static cleanupInProgress = false;
+
+  /** Compact old completed/failed/cancelled queue payloads without deleting queue rows. */
+  private static pruneOldGenerationQueuePayloads(): number {
+    const report = GenerationQueueModel.pruneTerminalRequestPayloads();
+
+    if (report.pruned > 0) {
+      console.log(`🧹 Generation queue payload cleanup: ${report.pruned} old terminal payloads compacted, ${report.retainRecentTerminalJobs} recent terminal jobs retained`);
+    }
+
+    return report.pruned;
+  }
 
   /**
    * Find failed generation records older than specified hours
@@ -186,6 +198,10 @@ export class CleanupService {
     console.log(`   - No-hash records deleted: ${summary.no_hash_deleted}`);
     console.log(`   - Stale records updated: ${summary.stale_updated}`);
     console.log(`   - Total: ${totalDeleted} deleted, ${totalUpdated} updated`);
+
+    if (!dryRun) {
+      this.pruneOldGenerationQueuePayloads();
+    }
 
     return {
       deleted: totalDeleted,

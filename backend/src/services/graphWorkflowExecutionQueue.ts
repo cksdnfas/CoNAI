@@ -1,10 +1,14 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
+import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
+import { ModuleDefinitionModel } from '../models/ModuleDefinition'
 import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
 import { settingsService } from './settingsService'
-import { writeExecutionLog } from './graph-workflow-executor/shared'
+import { getGenerationQueueServerCapacity } from './generationQueueRouting'
+import { parseGraphWorkflowRecord, parseModuleDefinition, writeExecutionLog, type ParsedModuleDefinition } from './graph-workflow-executor/shared'
+import { encodeQueuedExecutionMetadata, parseQueuedExecutionMetadata } from './graphWorkflowExecutionQueueMetadata'
 
 type QueuedExecutionJob = {
   executionId: number
@@ -28,26 +32,114 @@ type CancelExecutionResult = {
 }
 
 type InterruptedExecutionRecoverySummary = {
-  failedQueued: number
+  queuedBacklog: number
   failedRunning: number
 }
 
-const QUEUED_EXECUTION_RESTART_MESSAGE = 'Backend restarted before this queued graph execution could begin. Re-run is required.'
+type StartupRecoverySnapshot = InterruptedExecutionRecoverySummary & {
+  recoveredAt: string
+}
+
+type ReservationLane = 'novelai' | 'codex' | 'comfyui' | 'other'
+
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
 const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
+const SCHEDULE_DISPATCH_SCAN_LIMIT = 200
 
 function formatExecutionError(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown execution error'
 }
 
-/** Manage graph workflow executions through an in-memory background queue. */
+function buildQueuedJobFromExecution(execution: NonNullable<ReturnType<typeof GraphExecutionModel.findById>>): QueuedExecutionJob {
+  const metadata = parseQueuedExecutionMetadata(execution.execution_plan)
+  return {
+    executionId: execution.id,
+    workflowId: execution.graph_workflow_id,
+    inputValues: metadata.inputValues,
+    targetNodeId: metadata.targetNodeId,
+    forceRerun: metadata.forceRerun,
+    triggerType: execution.trigger_type === 'schedule' ? 'schedule' : 'manual',
+    scheduleId: execution.schedule_id ?? null,
+  }
+}
+
+function getSystemOperationKey(moduleDefinition: Pick<ParsedModuleDefinition, 'internal_fixed_values' | 'template_defaults'>) {
+  if (typeof moduleDefinition.internal_fixed_values?.operation_key === 'string') {
+    return moduleDefinition.internal_fixed_values.operation_key
+  }
+
+  if (typeof moduleDefinition.template_defaults?.operation_key === 'string') {
+    return moduleDefinition.template_defaults.operation_key
+  }
+
+  return null
+}
+
+function addReservationLaneForModule(lanes: Set<ReservationLane>, moduleDefinition: ParsedModuleDefinition) {
+  if (moduleDefinition.engine_type === 'nai') {
+    lanes.add('novelai')
+    return
+  }
+
+  if (moduleDefinition.engine_type === 'codex') {
+    lanes.add('codex')
+    return
+  }
+
+  if (moduleDefinition.engine_type === 'comfyui') {
+    lanes.add('comfyui')
+    return
+  }
+
+  if (moduleDefinition.engine_type !== 'system') {
+    return
+  }
+
+  const operationKey = getSystemOperationKey(moduleDefinition)
+  if (operationKey === 'system.generate_image_nai') {
+    lanes.add('novelai')
+  } else if (operationKey === 'system.generate_image_codex') {
+    lanes.add('codex')
+  }
+}
+
+function collectExecutionNodeIds(graph: ReturnType<typeof parseGraphWorkflowRecord>['graph'], targetNodeId?: string) {
+  const enabledNodeIds = new Set(graph.nodes.filter((node) => node.disabled !== true).map((node) => node.id))
+  if (!targetNodeId || !enabledNodeIds.has(targetNodeId)) {
+    return enabledNodeIds
+  }
+
+  const incomingByNodeId = new Map<string, string[]>()
+  for (const edge of graph.edges) {
+    if (!enabledNodeIds.has(edge.source_node_id) || !enabledNodeIds.has(edge.target_node_id)) {
+      continue
+    }
+    const incoming = incomingByNodeId.get(edge.target_node_id) ?? []
+    incoming.push(edge.source_node_id)
+    incomingByNodeId.set(edge.target_node_id, incoming)
+  }
+
+  const orderedNodeIds = new Set<string>()
+  const pendingNodeIds = [targetNodeId]
+  while (pendingNodeIds.length > 0) {
+    const nodeId = pendingNodeIds.pop() as string
+    if (orderedNodeIds.has(nodeId)) {
+      continue
+    }
+    orderedNodeIds.add(nodeId)
+    pendingNodeIds.push(...(incomingByNodeId.get(nodeId) ?? []))
+  }
+  return orderedNodeIds
+}
+
+/** Manage graph workflow executions through a DB-backed cold backlog and a small in-process running set. */
 export class GraphWorkflowExecutionQueue {
   private static initialized = false
-  private static queue: QueuedExecutionJob[] = []
   private static runningJobs = new Map<number, QueuedExecutionJob>()
   private static cancelRequestedExecutionIds = new Set<number>()
   private static processRetryTimer: NodeJS.Timeout | null = null
+  private static lastStartupRecovery: StartupRecoverySnapshot | null = null
 
   /** Apply one conservative startup recovery pass before new executions are queued. */
   static start() {
@@ -56,24 +148,26 @@ export class GraphWorkflowExecutionQueue {
     }
 
     const recovery = this.recoverInterruptedExecutions()
+    this.lastStartupRecovery = {
+      ...recovery,
+      recoveredAt: new Date().toISOString(),
+    }
     this.initialized = true
-    console.log(`🧩 Graph workflow execution queue ready (failed_queued=${recovery.failedQueued}, failed_running=${recovery.failedRunning})`)
+    console.log(`🧩 Graph workflow execution queue ready (queued_backlog=${recovery.queuedBacklog}, failed_running=${recovery.failedRunning})`)
+    this.processQueue()
     return true
   }
 
-  /** Fail stale queued/running executions after backend restart instead of leaving them stranded. */
+  /** Keep queued backlog durable while failing only work that was actively running during restart. */
   static recoverInterruptedExecutions(): InterruptedExecutionRecoverySummary {
     const db = getUserSettingsDb()
 
     const recoverTransaction = db.transaction(() => {
-      const failedQueued = db.prepare(`
-        UPDATE graph_executions
-        SET status = 'failed',
-            error_message = COALESCE(error_message, ?),
-            updated_date = CURRENT_TIMESTAMP,
-            completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+      const queuedBacklog = db.prepare(`
+        SELECT COUNT(*) as total
+        FROM graph_executions
         WHERE status = 'queued'
-      `).run(QUEUED_EXECUTION_RESTART_MESSAGE).changes
+      `).get() as { total: number } | undefined
 
       const failedRunning = db.prepare(`
         UPDATE graph_executions
@@ -85,7 +179,7 @@ export class GraphWorkflowExecutionQueue {
       `).run(RUNNING_EXECUTION_RESTART_MESSAGE).changes
 
       return {
-        failedQueued,
+        queuedBacklog: queuedBacklog?.total ?? 0,
         failedRunning,
       }
     })
@@ -102,15 +196,17 @@ export class GraphWorkflowExecutionQueue {
     executionMeta?: EnqueueExecutionMetadata,
   ) {
     const triggerType = executionMeta?.triggerType ?? 'manual'
+    const job = { executionId: 0, workflowId: workflow.id, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null }
     const executionId = GraphExecutionModel.create({
       graph_workflow_id: workflow.id,
       graph_version: workflow.version,
       status: 'queued',
       trigger_type: triggerType,
       schedule_id: executionMeta?.scheduleId ?? null,
-      execution_plan: null,
+      execution_plan: encodeQueuedExecutionMetadata(job),
       started_at: null,
     })
+    job.executionId = executionId
 
     writeExecutionLog({
       executionId,
@@ -127,8 +223,6 @@ export class GraphWorkflowExecutionQueue {
       },
     })
 
-    const job = { executionId, workflowId: workflow.id, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null }
-    this.queue.push(job)
     return job
   }
 
@@ -201,9 +295,7 @@ export class GraphWorkflowExecutionQueue {
       }
     }
 
-    const queuedIndex = this.queue.findIndex((job) => job.executionId === executionId)
-    if (queuedIndex !== -1) {
-      this.queue.splice(queuedIndex, 1)
+    if (execution.status === 'queued') {
       GraphExecutionModel.updateStatus(executionId, 'cancelled')
       writeExecutionLog({
         executionId,
@@ -260,18 +352,8 @@ export class GraphWorkflowExecutionQueue {
       return { cancelled: 0, runningCancellationRequested: 0 }
     }
 
+    const cancelled = GraphExecutionModel.cancelQueuedByScheduleIds(scheduleIds)
     const scheduleIdSet = new Set(scheduleIds)
-    const queuedExecutionIds = this.queue
-      .filter((job) => job.scheduleId !== null && job.scheduleId !== undefined && scheduleIdSet.has(job.scheduleId))
-      .map((job) => job.executionId)
-
-    let cancelled = 0
-    for (const executionId of queuedExecutionIds) {
-      const result = this.cancel(executionId)
-      if (result.success) {
-        cancelled += 1
-      }
-    }
 
     let runningCancellationRequested = 0
     for (const runningJob of this.runningJobs.values()) {
@@ -310,17 +392,41 @@ export class GraphWorkflowExecutionQueue {
       return runtimeStateById
     }
 
-    for (let index = 0; index < this.queue.length; index += 1) {
-      const job = this.queue[index]
-      if (job && targetIds.has(job.executionId)) {
-        runtimeStateById.set(job.executionId, {
-          queue_position: index + 1,
-          cancel_requested: this.cancelRequestedExecutionIds.has(job.executionId),
-        })
-      }
+    const queuedPositions = GraphExecutionModel.findQueuedPositions(Array.from(targetIds))
+    for (const [executionId, queuePosition] of queuedPositions) {
+      runtimeStateById.set(executionId, {
+        queue_position: queuePosition,
+        cancel_requested: this.cancelRequestedExecutionIds.has(executionId),
+      })
     }
 
     return runtimeStateById
+  }
+
+  /** Return in-process queue state that complements DB-backed execution counts. */
+  static getWorkflowRuntimeQueueState(workflowId: number) {
+    let inProcessRunningCount = 0
+    let cancellationRequestedCount = 0
+
+    for (const runningJob of this.runningJobs.values()) {
+      if (runningJob.workflowId !== workflowId) {
+        continue
+      }
+
+      inProcessRunningCount += 1
+      if (this.cancelRequestedExecutionIds.has(runningJob.executionId)) {
+        cancellationRequestedCount += 1
+      }
+    }
+
+    return {
+      in_process_running_count: inProcessRunningCount,
+      retry_timer_pending: Boolean(this.processRetryTimer),
+      queue_recheck_interval_ms: QUEUE_RECHECK_INTERVAL_MS,
+      schedule_concurrency_limit: this.resolveScheduleConcurrencyLimit(),
+      cancellation_requested_count: cancellationRequestedCount,
+      last_startup_recovery: this.lastStartupRecovery,
+    }
   }
 
   /** Check whether an execution has a pending cancellation request. */
@@ -337,7 +443,7 @@ export class GraphWorkflowExecutionQueue {
       startedAny = true
     }
 
-    if (!startedAny && this.queue.length > 0) {
+    if (!startedAny && GraphExecutionModel.hasQueued()) {
       this.scheduleProcessRetry()
     }
   }
@@ -346,13 +452,10 @@ export class GraphWorkflowExecutionQueue {
   private static tryStartNextJob() {
     const manualRunning = this.countRunningJobs('manual')
     if (manualRunning === 0) {
-      const manualIndex = this.queue.findIndex((job) => job.triggerType === 'manual')
-      if (manualIndex !== -1) {
-        const [manualJob] = this.queue.splice(manualIndex, 1)
-        if (manualJob) {
-          this.startJob(manualJob)
-          return true
-        }
+      const manualExecution = GraphExecutionModel.claimNextQueued('manual')
+      if (manualExecution) {
+        this.startJob(buildQueuedJobFromExecution(manualExecution))
+        return true
       }
     }
 
@@ -361,17 +464,12 @@ export class GraphWorkflowExecutionQueue {
       return false
     }
 
-    const scheduleIndex = this.queue.findIndex((job) => job.triggerType === 'schedule')
-    if (scheduleIndex === -1) {
+    const scheduleExecution = this.claimNextDispatchableScheduleExecution(scheduleLimit)
+    if (!scheduleExecution) {
       return false
     }
 
-    const [scheduleJob] = this.queue.splice(scheduleIndex, 1)
-    if (!scheduleJob) {
-      return false
-    }
-
-    this.startJob(scheduleJob)
+    this.startJob(buildQueuedJobFromExecution(scheduleExecution))
     return true
   }
 
@@ -392,9 +490,111 @@ export class GraphWorkflowExecutionQueue {
     return 1
   }
 
+  /** Claim the oldest queued reservation whose generation lane still has capacity. */
+  private static claimNextDispatchableScheduleExecution(scheduleLimit: number) {
+    if (scheduleLimit <= 0) {
+      return null
+    }
+
+    const queuedExecutions = GraphExecutionModel.findQueuedByTriggerType('schedule', SCHEDULE_DISPATCH_SCAN_LIMIT)
+    for (const execution of queuedExecutions) {
+      const job = buildQueuedJobFromExecution(execution)
+      if (!this.canDispatchScheduleJob(job, scheduleLimit)) {
+        continue
+      }
+
+      const claimed = GraphExecutionModel.claimQueuedById(execution.id)
+      if (claimed) {
+        return claimed
+      }
+    }
+
+    return null
+  }
+
+  /** Check lane occupancy before a reservation run starts waiting on the generation queue. */
+  private static canDispatchScheduleJob(job: QueuedExecutionJob, scheduleLimit: number) {
+    if (this.countRunningJobs('schedule') >= scheduleLimit) {
+      return false
+    }
+
+    for (const lane of this.resolveReservationLanesForJob(job)) {
+      const laneLimit = this.resolveReservationLaneLimit(lane)
+      if (laneLimit !== null && this.countRunningScheduleLane(lane) >= laneLimit) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  private static resolveReservationLaneLimit(lane: ReservationLane) {
+    const generationThrottle = settingsService.loadSettings().generationThrottle
+    if (lane === 'novelai') {
+      return Math.max(1, generationThrottle.novelai.maxConcurrentJobs)
+    }
+    if (lane === 'codex') {
+      return Math.max(1, generationThrottle.codex.maxConcurrentJobs)
+    }
+    if (lane === 'comfyui') {
+      const activeServers = ComfyUIServerModel.findActiveServers()
+      if (activeServers.length === 0) {
+        return 1
+      }
+      return activeServers.reduce((sum, server) => sum + getGenerationQueueServerCapacity(server), 0)
+    }
+    return null
+  }
+
+  private static countRunningScheduleLane(lane: ReservationLane) {
+    let count = 0
+    for (const runningJob of this.runningJobs.values()) {
+      if (runningJob.triggerType !== 'schedule') {
+        continue
+      }
+      if (this.resolveReservationLanesForJob(runningJob).has(lane)) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  private static resolveReservationLanesForJob(job: QueuedExecutionJob) {
+    const lanes = new Set<ReservationLane>()
+    const workflowRecord = GraphWorkflowModel.findById(job.workflowId)
+    if (!workflowRecord) {
+      lanes.add('other')
+      return lanes
+    }
+
+    try {
+      const workflow = parseGraphWorkflowRecord(workflowRecord)
+      const executableNodeIds = collectExecutionNodeIds(workflow.graph, job.targetNodeId)
+      for (const node of workflow.graph.nodes) {
+        if (!executableNodeIds.has(node.id)) {
+          continue
+        }
+
+        const moduleRecord = ModuleDefinitionModel.findById(node.module_id)
+        if (!moduleRecord) {
+          continue
+        }
+        addReservationLaneForModule(lanes, parseModuleDefinition(moduleRecord))
+      }
+    } catch (error) {
+      console.warn(`Could not resolve reservation generation lanes for workflow ${job.workflowId}:`, formatExecutionError(error))
+    }
+
+    if (lanes.size === 0) {
+      lanes.add('other')
+    }
+
+    return lanes
+  }
+
   /** Treat manual graph executions and user-submitted generation queue jobs as foreground work. */
   private static hasManualGraphWorkPendingOrRunning() {
-    if (this.queue.some((job) => job.triggerType === 'manual')) {
+    if (GraphExecutionModel.hasQueued('manual')) {
       return true
     }
 
@@ -462,7 +662,7 @@ export class GraphWorkflowExecutionQueue {
 
   /** Retry held queued work so reservations resume after foreground queue pressure clears. */
   private static scheduleProcessRetry() {
-    if (this.processRetryTimer || this.queue.length === 0) {
+    if (this.processRetryTimer || !GraphExecutionModel.hasQueued()) {
       return
     }
 

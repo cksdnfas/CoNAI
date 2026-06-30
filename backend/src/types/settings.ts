@@ -5,9 +5,27 @@ export interface DeleteProtectionSettings {
   recycleBinPath: string;
 }
 
+export const HEADER_NAVIGATION_ITEM_KEYS = [
+  'access',
+  'home',
+  'groups',
+  'prompts',
+  'generation',
+  'upload',
+  'wallpaper',
+  'settings',
+  'search',
+  'queue',
+  'account',
+] as const;
+
+export type HeaderNavigationItemKey = typeof HEADER_NAVIGATION_ITEM_KEYS[number];
+export type HeaderNavigationSettings = Record<HeaderNavigationItemKey, boolean>;
+
 export interface GeneralSettings {
   language: SupportedLanguage;
   deleteProtection: DeleteProtectionSettings;
+  headerNavigation: HeaderNavigationSettings;
   enableGallery?: boolean;
   autoCleanupCanvasOnShutdown?: boolean;
   showRatingBadges?: boolean;
@@ -224,10 +242,14 @@ export interface ImageSaveSettings {
   applyToWorkflowOutputs: boolean;
 }
 
+export type GenerationThrottleScheduleMode = 'even' | 'random';
+
 export interface GenerationThrottleServiceSettings {
   maxConcurrentJobs: number;
-  cooldownAfterCompletions: number;
-  cooldownSeconds: number;
+  scheduleWindowMinutes: number;
+  scheduleJobCount: number;
+  scheduleMode: GenerationThrottleScheduleMode;
+  minStartIntervalSeconds: number;
 }
 
 export type GenerationReservationUserQueuePolicy = 'continue_limited' | 'hold_until_empty';

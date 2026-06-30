@@ -20,6 +20,10 @@ type NormalizedDataUrl = {
   buffer: Buffer
 }
 
+type ApiMultipartFileValue = NormalizedDataUrl & {
+  fileName?: string
+}
+
 type ApiFileReference = {
   filePath: string
   mimeType: string
@@ -212,6 +216,63 @@ function parseDataUrl(value: unknown): NormalizedDataUrl | null {
   }
 }
 
+function isLikelyFileFieldName(key: string) {
+  const normalizedKey = key.trim().toLowerCase().replace(/[_-]/g, '')
+  return normalizedKey === 'image'
+    || normalizedKey === 'file'
+    || normalizedKey === 'photo'
+    || normalizedKey.endsWith('image')
+    || normalizedKey.endsWith('file')
+}
+
+function inferImageMimeTypeFromBuffer(buffer: Buffer) {
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp'
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png'
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg'
+  if (buffer.length >= 6) {
+    const signature = buffer.subarray(0, 6).toString('ascii')
+    if (signature === 'GIF87a' || signature === 'GIF89a') return 'image/gif'
+  }
+  if (buffer.length >= 2 && buffer.subarray(0, 2).toString('ascii') === 'BM') return 'image/bmp'
+  if (buffer.length >= 12 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buffer.subarray(8, 12).toString('ascii')
+    if (brand === 'avif' || brand === 'avis') return 'image/avif'
+  }
+  return null
+}
+
+function parseRawBase64FileValue(key: string, value: unknown): ApiMultipartFileValue | null {
+  if (!isLikelyFileFieldName(key) || typeof value !== 'string') {
+    return null
+  }
+
+  const base64 = value.trim().replace(/\s/g, '')
+  if (base64.length < 16 || base64.length % 4 !== 0 || !/^[a-zA-Z0-9+/]+={0,2}$/.test(base64)) {
+    return null
+  }
+
+  const buffer = Buffer.from(base64, 'base64')
+  if (!buffer.length || buffer.toString('base64').replace(/=+$/, '') !== base64.replace(/=+$/, '')) {
+    return null
+  }
+
+  const mimeType = inferImageMimeTypeFromBuffer(buffer)
+  if (!mimeType) {
+    return null
+  }
+
+  return { mimeType, base64, buffer }
+}
+
+function parseMultipartFileValue(key: string, value: unknown): ApiMultipartFileValue | null {
+  const dataUrl = parseDataUrl(value)
+  if (dataUrl) {
+    return dataUrl
+  }
+
+  return parseRawBase64FileValue(key, value)
+}
+
 /** Resolve a stable file extension for common data URL MIME types. */
 function getObjectStringValue(value: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
@@ -294,6 +355,8 @@ function resolveApiFileReference(value: unknown): ApiFileReference | null {
   const rawPath = getObjectStringValue(record, [
     'storagePath',
     'storage_path',
+    'outputPath',
+    'output_path',
     'originalFilePath',
     'original_file_path',
     'imagePath',
@@ -306,8 +369,8 @@ function resolveApiFileReference(value: unknown): ApiFileReference | null {
   }
 
   const filePath = resolveApiFileReferencePath(rawPath)
-  const mimeType = getObjectStringValue(record, ['mimeType', 'mime_type', 'contentType', 'content_type']) ?? inferMimeTypeFromPath(filePath)
-  const fileName = getObjectStringValue(record, ['fileName', 'file_name', 'originalFileName', 'original_file_name', 'output_file_name']) ?? path.basename(filePath)
+  const mimeType = getObjectStringValue(record, ['mimeType', 'mime_type', 'outputMimeType', 'output_mime_type', 'contentType', 'content_type']) ?? inferMimeTypeFromPath(filePath)
+  const fileName = getObjectStringValue(record, ['fileName', 'file_name', 'originalFileName', 'original_file_name', 'outputFileName', 'output_file_name']) ?? path.basename(filePath)
   return { filePath, mimeType, fileName }
 }
 
@@ -352,22 +415,23 @@ function getExtensionForMimeType(mimeType: string) {
 
 /** Check whether any top-level value needs multipart/form-data transport. */
 function hasMultipartValue(value: unknown): boolean {
-  if (parseDataUrl(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  return Object.entries(value as Record<string, unknown>).some(([key, entryValue]) => hasMultipartEntryValue(key, entryValue))
+}
+
+function hasMultipartEntryValue(key: string, value: unknown): boolean {
+  if (parseMultipartFileValue(key, value)) {
     return true
   }
 
   if (Array.isArray(value)) {
-    return value.some((entryValue) => hasMultipartValue(entryValue))
+    return value.some((entryValue) => hasMultipartEntryValue(key, entryValue))
   }
 
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
-  return Object.values(value as Record<string, unknown>).some((entryValue) => (
-    Boolean(parseDataUrl(entryValue))
-    || (Array.isArray(entryValue) && entryValue.some((arrayEntryValue) => hasMultipartValue(arrayEntryValue)))
-  ))
+  return false
 }
 
 function buildBlobPartFromBuffer(buffer: Buffer) {
@@ -387,17 +451,21 @@ function buildMultipartBody(value: Record<string, unknown>) {
   const formData = new FormData()
 
   for (const [key, entryValue] of Object.entries(value)) {
-    const parsedDataUrl = parseDataUrl(entryValue)
-    if (parsedDataUrl) {
-      appendMultipartDataUrl(formData, key, parsedDataUrl)
+    const fileValue = parseMultipartFileValue(key, entryValue)
+    if (fileValue) {
+      const extension = getExtensionForMimeType(fileValue.mimeType)
+      const blob = new Blob([buildBlobPartFromBuffer(fileValue.buffer)], { type: fileValue.mimeType })
+      formData.append(key, blob, fileValue.fileName ?? `${key}.${extension}`)
       continue
     }
 
     if (Array.isArray(entryValue)) {
       entryValue.forEach((arrayEntryValue, index) => {
-        const parsedArrayDataUrl = parseDataUrl(arrayEntryValue)
-        if (parsedArrayDataUrl) {
-          appendMultipartDataUrl(formData, key, parsedArrayDataUrl, `${key}-${index}`)
+        const arrayFileValue = parseMultipartFileValue(key, arrayEntryValue)
+        if (arrayFileValue) {
+          const extension = getExtensionForMimeType(arrayFileValue.mimeType)
+          const blob = new Blob([buildBlobPartFromBuffer(arrayFileValue.buffer)], { type: arrayFileValue.mimeType })
+          formData.append(key, blob, arrayFileValue.fileName ?? `${key}-${index}.${extension}`)
           return
         }
 
@@ -471,7 +539,8 @@ function buildApiRequestPayload(params: {
   const normalizedBodyValue = bodyValue && typeof bodyValue === 'object' && !Array.isArray(bodyValue)
     ? bodyValue as Record<string, unknown>
     : { payload: bodyValue }
-  const shouldUseMultipart = bodyMode === 'form' || (bodyMode === 'auto' && hasMultipartValue(normalizedBodyValue))
+  const containsMultipartValue = hasMultipartValue(normalizedBodyValue)
+  const shouldUseMultipart = bodyMode === 'form' || containsMultipartValue
 
   if (shouldUseMultipart) {
     for (const headerName of Object.keys(headers)) {

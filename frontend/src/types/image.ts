@@ -110,6 +110,9 @@ export interface ImageListPayload {
   limit: number
   totalPages: number
   hasMore: boolean
+  totalKnown?: boolean
+  nextCursorDate?: string | null
+  nextCursorHash?: string | null
 }
 
 export interface ApiResponse<T> {

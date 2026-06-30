@@ -11,7 +11,7 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import path from 'path';
 import fs from 'fs';
-import { FolderScanService } from './folderScanService';
+import { FolderScanService } from './folderScan';
 import { shouldProcessFileExtension } from '../constants/supportedExtensions';
 import {
   disableWatcherInDatabase,
@@ -29,6 +29,11 @@ import {
   resolveWatcherPollingOptions,
   validateInitialWatcherPath,
 } from './fileWatcher/fileWatcherPathUtils';
+import {
+  removeWatcherRuntimeStatus,
+  setWatcherRuntimeStatus,
+  type WatcherRuntimeState,
+} from './fileWatcher/watcherRuntimeStatus';
 import { sleep, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
@@ -36,7 +41,7 @@ const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true
 /**
  * 워처 상태
  */
-type WatcherState = 'initializing' | 'watching' | 'error' | 'stopped';
+type WatcherState = WatcherRuntimeState;
 
 /**
  * 워처 레지스트리 엔트리
@@ -325,6 +330,20 @@ export class FileWatcherService {
   private static readonly MAX_RETRY_ATTEMPTS = parseInt(process.env.WATCHER_RETRY_ATTEMPTS || '3');
   private static readonly RETRY_DELAY_MS = parseInt(process.env.WATCHER_RETRY_DELAY_MS || '5000');
 
+  private static syncRuntimeStatus(entry: WatcherEntry): void {
+    setWatcherRuntimeStatus({
+      folderId: entry.folderId,
+      folderPath: entry.folderPath,
+      folderName: entry.folderName,
+      state: entry.state,
+      error: entry.error,
+      lastEvent: entry.lastEvent,
+      eventCount: entry.eventCount,
+      retryAttempts: entry.retryAttempts,
+      isRetrying: entry.isRetrying,
+    });
+  }
+
   /**
    * 서비스 초기화
    */
@@ -433,8 +452,10 @@ export class FileWatcherService {
     };
 
     this.watcherRegistry.set(folderId, entry);
+    this.syncRuntimeStatus(entry);
     this.registerEventHandlers(entry, watcherOptions.excludeExtensions);
     await waitForWatcherReady(entry, this.updateWatcherStatus.bind(this));
+    this.syncRuntimeStatus(entry);
   }
 
   /**
@@ -447,6 +468,7 @@ export class FileWatcherService {
       if (!this.shouldProcessFile(filePath, excludeExtensions)) return;
 
       recordWatcherEvent(entry, this.updateLastEventTime.bind(this));
+      this.syncRuntimeStatus(entry);
 
       if (isVerboseScanDebugEnabled) {
         console.log(`👀 [워처:${folderName}] 파일 추가: ${path.basename(filePath)}`);
@@ -459,6 +481,7 @@ export class FileWatcherService {
       if (!this.shouldProcessFile(filePath, excludeExtensions)) return;
 
       recordWatcherEvent(entry, this.updateLastEventTime.bind(this));
+      this.syncRuntimeStatus(entry);
 
       if (isVerboseScanDebugEnabled) {
         console.log(`📝 [워처:${folderName}] 파일 변경: ${path.basename(filePath)}`);
@@ -471,6 +494,7 @@ export class FileWatcherService {
       if (!this.shouldProcessFile(filePath, excludeExtensions)) return;
 
       recordWatcherEvent(entry, this.updateLastEventTime.bind(this));
+      this.syncRuntimeStatus(entry);
 
       if (isVerboseScanDebugEnabled) {
         console.log(`🗑️  [워처:${folderName}] 파일 삭제: ${path.basename(filePath)}`);
@@ -484,6 +508,7 @@ export class FileWatcherService {
       console.error(`❌ [워처:${folderName}] 오류:`, error);
       entry.state = 'error';
       entry.error = errorMessage;
+      this.syncRuntimeStatus(entry);
       this.updateWatcherStatus(entry.folderId, 'error', errorMessage);
 
       await this.scheduleWatcherRestart(entry.folderId);
@@ -544,6 +569,7 @@ export class FileWatcherService {
   static async stopWatcher(folderId: number): Promise<void> {
     const entry = this.watcherRegistry.get(folderId);
     if (!entry) {
+      removeWatcherRuntimeStatus(folderId);
       this.cleanupFolderState(folderId);
       return;
     }
@@ -552,6 +578,7 @@ export class FileWatcherService {
       await entry.watcher.close();
       entry.state = 'stopped';
       this.watcherRegistry.delete(folderId);
+      removeWatcherRuntimeStatus(folderId);
       this.cleanupFolderState(folderId);
       this.updateWatcherStatus(folderId, 'stopped', null);
     } catch (error) {
@@ -585,10 +612,12 @@ export class FileWatcherService {
     }
 
     entry.retryAttempts += 1;
+    this.syncRuntimeStatus(entry);
 
     if (entry.retryAttempts >= this.MAX_RETRY_ATTEMPTS) {
       console.error(`  ❌ 최대 재시도 횟수 초과: ${entry.folderName}`);
       entry.state = 'error';
+      this.syncRuntimeStatus(entry);
       disableWatcherAfterRetryFailure(folderId, entry.folderName, '최대 재시도 횟수 초과 - 자동 비활성화됨');
       return;
     }
@@ -597,6 +626,7 @@ export class FileWatcherService {
     console.warn(`⚠️  Watcher restart scheduled: ${entry.folderName} (${delay}ms, attempt ${entry.retryAttempts}/${this.MAX_RETRY_ATTEMPTS})`);
 
     entry.isRetrying = true;
+    this.syncRuntimeStatus(entry);
 
     setTimeout(async () => {
       try {
@@ -607,12 +637,14 @@ export class FileWatcherService {
       } catch (error) {
         console.error(`  ❌ 워처 재시작 실패: ${entry.folderName}`, error);
         entry.isRetrying = false;
+        this.syncRuntimeStatus(entry);
 
         if (entry.retryAttempts < this.MAX_RETRY_ATTEMPTS) {
           await this.scheduleWatcherRestart(folderId);
         } else {
           console.error('  ❌ 최대 재시도 횟수 도달, 워처 비활성화');
           entry.state = 'error';
+          this.syncRuntimeStatus(entry);
           disableWatcherAfterRetryFailure(folderId, entry.folderName, '재시작 실패 - 자동 비활성화됨');
         }
       }

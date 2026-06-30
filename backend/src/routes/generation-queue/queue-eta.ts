@@ -1,17 +1,23 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer'
 import { createGenerationQueueRoutingContext, getGenerationQueueServerCapacity, resolveGenerationQueueLaneMeta } from '../../services/generationQueueRouting'
+import { GenerationQueueService } from '../../services/generationQueueService'
 import { settingsService } from '../../services/settingsService'
 import type { GenerationQueueDurationSample, GenerationQueueJobListRecord } from '../../types/generationQueue'
 
 export type QueuePositionScope = 'service' | 'server' | 'tag' | 'auto'
 export type QueuePositionEntry = { laneKey: string; position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null; eligibleServerIds: number[] }
-export type QueueEtaEntry = { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null }
+export type QueueEtaEntry = { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null; startAt: string | null }
 
 type QueueEtaCapacityContext = {
   totalComfyCapacity: number
   comfyCapacityByServerId: Map<number, number>
   novelaiCapacity: number
   codexCapacity: number
+}
+
+type QueueEtaServiceThrottleContext = {
+  novelaiStartDelaySeconds: number[]
+  codexStartDelaySeconds: number[]
 }
 
 type DurationSampleStats = {
@@ -218,6 +224,28 @@ function buildCapacityContext(activeComfyServers: ReturnType<typeof ComfyUIServe
   }
 }
 
+function buildServiceThrottleContext(activeRecords: GenerationQueueJobListRecord[]): QueueEtaServiceThrottleContext {
+  let queuedNovelAiCount = 0
+  let queuedCodexCount = 0
+
+  for (const record of activeRecords) {
+    if (record.status !== 'queued' && record.status !== 'dispatching') {
+      continue
+    }
+
+    if (record.service_type === 'novelai') {
+      queuedNovelAiCount += 1
+    } else if (record.service_type === 'codex') {
+      queuedCodexCount += 1
+    }
+  }
+
+  return {
+    novelaiStartDelaySeconds: GenerationQueueService.getThrottledServiceStartDelaySeconds('novelai', queuedNovelAiCount),
+    codexStartDelaySeconds: GenerationQueueService.getThrottledServiceStartDelaySeconds('codex', queuedCodexCount),
+  }
+}
+
 function buildRunningLaneRecordIndex(activeRecords: GenerationQueueJobListRecord[]): RunningLaneRecordIndex {
   const index: RunningLaneRecordIndex = {
     novelai: [],
@@ -298,8 +326,12 @@ function getLaneCapacity(record: GenerationQueueJobListRecord, queuePosition: Qu
     return capacityContext.totalComfyCapacity
   }
 
+  if (queuePosition.eligibleServerIds.length === 0) {
+    return 0
+  }
+
   if (queuePosition.scope === 'server' && queuePosition.serverId !== null) {
-    return Math.max(capacityContext.comfyCapacityByServerId.get(queuePosition.serverId) ?? 0, 1)
+    return capacityContext.comfyCapacityByServerId.get(queuePosition.serverId) ?? 0
   }
 
   if (queuePosition.eligibleServerIds.length > 0) {
@@ -327,6 +359,34 @@ function getEarliestSlotIndex(slotAvailabilitySeconds: number[]) {
     }
   }
   return earliestIndex
+}
+
+function getThrottledServiceStartDelaySeconds(
+  record: GenerationQueueJobListRecord,
+  queuedStartIndex: number,
+  serviceThrottleContext: QueueEtaServiceThrottleContext,
+) {
+  if (record.service_type === 'novelai') {
+    return serviceThrottleContext.novelaiStartDelaySeconds[queuedStartIndex] ?? 0
+  }
+
+  if (record.service_type === 'codex') {
+    return serviceThrottleContext.codexStartDelaySeconds[queuedStartIndex] ?? 0
+  }
+
+  return 0
+}
+
+function resolveEstimatedStartAt(record: GenerationQueueJobListRecord, waitSeconds: number | null, nowMs: number) {
+  if (record.status === 'running') {
+    return record.started_at ?? null
+  }
+
+  if (waitSeconds === null) {
+    return null
+  }
+
+  return new Date(nowMs + Math.max(0, waitSeconds) * 1000).toISOString()
 }
 
 function buildQueuedRecordsByLaneKey(
@@ -369,29 +429,37 @@ function estimateQueueEta(
   queuePositions: Map<number, QueuePositionEntry>,
   referenceDurationById: Map<number, number | null>,
   capacityContext: QueueEtaCapacityContext,
+  serviceThrottleContext: QueueEtaServiceThrottleContext,
+  nowMs: number,
 ): QueueEtaEntry {
   const durationSeconds = referenceDurationById.get(record.id) ?? null
   if (durationSeconds === null) {
-    return { waitSeconds: null, totalSeconds: null, durationSeconds: null }
+    return { waitSeconds: null, totalSeconds: null, durationSeconds: null, startAt: null }
   }
 
   if (record.status === 'running') {
+    const totalSeconds = getEstimatedRunningRemainingSeconds(record, durationSeconds)
     return {
       waitSeconds: 0,
-      totalSeconds: getEstimatedRunningRemainingSeconds(record, durationSeconds),
+      totalSeconds,
       durationSeconds,
+      startAt: resolveEstimatedStartAt(record, 0, nowMs),
     }
   }
 
   if (record.status !== 'queued' && record.status !== 'dispatching') {
-    return { waitSeconds: null, totalSeconds: null, durationSeconds }
+    return { waitSeconds: null, totalSeconds: null, durationSeconds, startAt: null }
   }
 
   if (!queuePosition) {
-    return { waitSeconds: null, totalSeconds: null, durationSeconds }
+    return { waitSeconds: null, totalSeconds: null, durationSeconds, startAt: null }
   }
 
   const capacity = getLaneCapacity(record, queuePosition, capacityContext)
+  if (capacity <= 0) {
+    return { waitSeconds: null, totalSeconds: null, durationSeconds, startAt: null }
+  }
+
   const slotAvailabilitySeconds = getRunningLaneRecords(record, queuePosition, runningIndex)
     .map((candidate) => {
       const candidateDurationSeconds = referenceDurationById.get(candidate.id) ?? durationSeconds
@@ -405,6 +473,7 @@ function estimateQueueEta(
   }
 
   const queuedCandidatesInSameLane = queuedRecordsByLaneKey.get(queuePosition.laneKey) ?? []
+  let queuedStartIndex = 0
   for (const queuedCandidate of queuedCandidatesInSameLane) {
     if (queuedCandidate.id === record.id) {
       continue
@@ -417,14 +486,19 @@ function estimateQueueEta(
 
     const queuedDurationSeconds = referenceDurationById.get(queuedCandidate.id) ?? durationSeconds
     const earliestSlotIndex = getEarliestSlotIndex(slotAvailabilitySeconds)
-    slotAvailabilitySeconds[earliestSlotIndex] += queuedDurationSeconds ?? durationSeconds
+    const throttledStartDelaySeconds = getThrottledServiceStartDelaySeconds(queuedCandidate, queuedStartIndex, serviceThrottleContext)
+    const queuedStartSeconds = Math.max(slotAvailabilitySeconds[earliestSlotIndex] ?? 0, throttledStartDelaySeconds)
+    slotAvailabilitySeconds[earliestSlotIndex] = queuedStartSeconds + (queuedDurationSeconds ?? durationSeconds)
+    queuedStartIndex += 1
   }
 
-  const waitSeconds = Math.min(...slotAvailabilitySeconds)
+  const ownStartDelaySeconds = getThrottledServiceStartDelaySeconds(record, queuedStartIndex, serviceThrottleContext)
+  const waitSeconds = Math.max(Math.min(...slotAvailabilitySeconds), ownStartDelaySeconds)
   return {
     waitSeconds,
     totalSeconds: waitSeconds + durationSeconds,
     durationSeconds,
+    startAt: resolveEstimatedStartAt(record, waitSeconds, nowMs),
   }
 }
 
@@ -440,6 +514,8 @@ export function computeQueueEtas(
   const runningIndex = buildRunningLaneRecordIndex(activeRecords)
   const queuedRecordsByLaneKey = buildQueuedRecordsByLaneKey(activeRecords, queuePositions)
   const capacityContext = buildCapacityContext(activeComfyServers)
+  const serviceThrottleContext = buildServiceThrottleContext(activeRecords)
+  const nowMs = Date.now()
 
   for (const record of activeRecords) {
     referenceDurationById.set(record.id, resolveReferenceDurationSeconds(record, durationStats, queuePositions.get(record.id)))
@@ -448,7 +524,7 @@ export function computeQueueEtas(
   for (const record of activeRecords) {
     etaById.set(
       record.id,
-      estimateQueueEta(record, queuePositions.get(record.id), runningIndex, queuedRecordsByLaneKey, queuePositions, referenceDurationById, capacityContext),
+      estimateQueueEta(record, queuePositions.get(record.id), runningIndex, queuedRecordsByLaneKey, queuePositions, referenceDurationById, capacityContext, serviceThrottleContext, nowMs),
     )
   }
 

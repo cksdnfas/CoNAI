@@ -26,8 +26,6 @@ const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
   'wildcards.delete',
 ] as const;
 
-const ANONYMOUS_EDITABLE_PERMISSION_KEYS = ['page.wallpaper.runtime.view'] as const;
-
 export interface PermissionGroupPageAccessRecord {
   group_key: BuiltInPermissionGroupKey;
   name: string;
@@ -96,7 +94,10 @@ export class AuthPermissionGroup {
       FROM auth_permission_groups g
       LEFT JOIN auth_permission_groups parent ON parent.id = g.parent_group_id
       LEFT JOIN auth_group_permissions gp ON gp.group_id = g.id AND gp.allowed = 1
-      LEFT JOIN auth_permissions p ON p.id = gp.permission_id AND p.permission_key LIKE 'page.%'
+      LEFT JOIN auth_permissions p ON p.id = gp.permission_id AND (
+        p.permission_key LIKE 'page.%'
+        OR p.permission_key IN ('wildcards.edit', 'wildcards.delete')
+      )
       LEFT JOIN auth_account_group_memberships agm ON agm.group_id = g.id
       GROUP BY g.id
       ORDER BY g.priority ASC, g.id ASC
@@ -296,7 +297,7 @@ export class AuthPermissionGroup {
   /** Replace the directly assigned editable permissions for one built-in group. */
   static replaceBuiltInPageAccess(groupKey: 'anonymous' | 'guest', permissionKeys: string[]): PermissionGroupPageAccessRecord {
     const db = getAuthDb();
-    const normalizedPermissionKeys = this.normalizeBuiltInPermissionKeys(permissionKeys, groupKey);
+    const normalizedPermissionKeys = this.normalizeBuiltInPermissionKeys(permissionKeys);
 
     const groupRow = db.prepare('SELECT id FROM auth_permission_groups WHERE group_key = ?').get(groupKey) as { id: number } | undefined;
     if (!groupRow) {
@@ -314,13 +315,11 @@ export class AuthPermissionGroup {
   }
 
   /** Normalize and validate one direct built-in permission list. */
-  private static normalizeBuiltInPermissionKeys(permissionKeys: string[], groupKey?: string): string[] {
+  private static normalizeBuiltInPermissionKeys(permissionKeys: string[]): string[] {
     return this.normalizePermissionKeys(
       permissionKeys,
-      this.getBuiltInEditablePermissionKeys(groupKey),
-      groupKey === 'anonymous'
-        ? 'Anonymous access can only include the wallpaper runtime page'
-        : 'One or more permission keys are invalid',
+      this.getBuiltInEditablePermissionKeys(),
+      'One or more permission keys are invalid',
     );
   }
 
@@ -374,12 +373,8 @@ export class AuthPermissionGroup {
     }
   }
 
-  /** Resolve the editable built-in permission keys, with anonymous-specific restriction when needed. */
-  private static getBuiltInEditablePermissionKeys(groupKey?: string): string[] {
-    if (groupKey === 'anonymous') {
-      return [...ANONYMOUS_EDITABLE_PERMISSION_KEYS];
-    }
-
+  /** Resolve the editable built-in permission keys shared by anonymous and guest. */
+  private static getBuiltInEditablePermissionKeys(): string[] {
     return [...BUILT_IN_EDITABLE_PERMISSION_KEYS];
   }
 

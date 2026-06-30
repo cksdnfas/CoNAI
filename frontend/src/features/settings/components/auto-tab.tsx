@@ -37,6 +37,10 @@ export function AutoTab({
   isSavingKaloscope,
   isSavingRatingWeights,
   isSavingRatingTiers,
+  hasTaggerChanges,
+  hasKaloscopeChanges,
+  hasRatingWeightsChanges,
+  hasRatingTiersChanges,
   isCheckingTaggerDependencies,
   autoTestHashInput,
   onAutoTestHashInputChange,
@@ -75,9 +79,9 @@ export function AutoTab({
             <Button
               size="icon-sm"
               onClick={onSaveKaloscope}
-              disabled={!kaloscopeDraft || isSavingKaloscope}
-              aria-label={t({ ko: 'Kaloscope 저장', en: 'Save Kaloscope' })}
-              title={t({ ko: 'Kaloscope 저장', en: 'Save Kaloscope' })}
+              disabled={!kaloscopeDraft || isSavingKaloscope || !hasKaloscopeChanges}
+              aria-label={hasKaloscopeChanges ? t({ ko: 'Kaloscope 저장', en: 'Save Kaloscope' }) : t({ ko: 'Kaloscope 변경 없음', en: 'No Kaloscope changes' })}
+              title={hasKaloscopeChanges ? t({ ko: 'Kaloscope 저장', en: 'Save Kaloscope' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -95,9 +99,9 @@ export function AutoTab({
             <Button
               size="icon-sm"
               onClick={onSaveTagger}
-              disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}
-              aria-label={isCheckingTaggerDependencies ? t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' }) : t({ ko: 'WD Tagger 저장', en: 'Save WD Tagger' })}
-              title={isCheckingTaggerDependencies ? t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' }) : t({ ko: 'WD Tagger 저장', en: 'Save WD Tagger' })}
+              disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies || !hasTaggerChanges}
+              aria-label={isCheckingTaggerDependencies ? t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' }) : hasTaggerChanges ? t({ ko: 'WD Tagger 저장', en: 'Save WD Tagger' }) : t({ ko: 'WD Tagger 변경 없음', en: 'No WD Tagger changes' })}
+              title={isCheckingTaggerDependencies ? t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' }) : hasTaggerChanges ? t({ ko: 'WD Tagger 저장', en: 'Save WD Tagger' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               {isCheckingTaggerDependencies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             </Button>
@@ -115,9 +119,9 @@ export function AutoTab({
             <Button
               size="icon-sm"
               onClick={onSaveRatingWeights}
-              disabled={!ratingWeightsDraft || isSavingRatingWeights || ratingWeightValidationMessages.length > 0}
-              aria-label={t({ ko: '평가 가중치 저장', en: 'Save rating weights' })}
-              title={t({ ko: '평가 가중치 저장', en: 'Save rating weights' })}
+              disabled={!ratingWeightsDraft || isSavingRatingWeights || ratingWeightValidationMessages.length > 0 || !hasRatingWeightsChanges}
+              aria-label={hasRatingWeightsChanges ? t({ ko: '평가 가중치 저장', en: 'Save rating weights' }) : t({ ko: '평가 가중치 변경 없음', en: 'No rating weight changes' })}
+              title={hasRatingWeightsChanges ? t({ ko: '평가 가중치 저장', en: 'Save rating weights' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -147,9 +151,9 @@ export function AutoTab({
               <Button
                 size="icon-sm"
                 onClick={onSaveRatingTiers}
-                disabled={!ratingTiersDraft || isSavingRatingTiers || ratingTierValidationMessages.length > 0}
-                aria-label={t({ ko: '평가 등급 저장', en: 'Save rating tiers' })}
-                title={t({ ko: '평가 등급 저장', en: 'Save rating tiers' })}
+                disabled={!ratingTiersDraft || isSavingRatingTiers || ratingTierValidationMessages.length > 0 || !hasRatingTiersChanges}
+                aria-label={hasRatingTiersChanges ? t({ ko: '평가 등급 저장', en: 'Save rating tiers' }) : t({ ko: '평가 등급 변경 없음', en: 'No rating tier changes' })}
+                title={hasRatingTiersChanges ? t({ ko: '평가 등급 저장', en: 'Save rating tiers' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
               >
                 <Save className="h-4 w-4" />
               </Button>

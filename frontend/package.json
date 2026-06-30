@@ -1,17 +1,18 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "26.5.23",
+  "version": "26.6.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/build-production.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "verify:app-document-metadata-contracts": "tsx src/scripts/verifyAppDocumentMetadataContracts.ts",
     "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts",
     "verify:module-graph-execution-status-contracts": "tsx src/scripts/verifyModuleGraphExecutionStatusContracts.ts",
     "verify:module-graph-execution-panel-contracts": "tsx src/scripts/verifyModuleGraphExecutionPanelContracts.ts",
+    "verify:module-graph-workflow-stability-contracts": "tsx src/scripts/verifyModuleGraphWorkflowStabilityContracts.ts",
     "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts",
     "verify:wallpaper-queue-status-contracts": "tsx src/scripts/verifyWallpaperQueueStatusContracts.ts",
     "verify:generation-queue-ui-contracts": "tsx src/scripts/verifyGenerationQueueUiContracts.ts",
@@ -21,6 +22,7 @@
     "verify:home-feed-progress-ui-contracts": "tsx src/scripts/verifyHomeFeedProgressUiContracts.ts",
     "verify:group-image-feed-progress-ui-contracts": "tsx src/scripts/verifyGroupImageFeedProgressUiContracts.ts",
     "verify:group-explorer-count-map-contracts": "tsx src/scripts/verifyGroupExplorerCountMapContracts.ts",
+    "verify:group-rematch-polling-contracts": "tsx src/scripts/verifyGroupRematchPollingContracts.ts",
     "verify:prompt-list-progress-contracts": "tsx src/scripts/verifyPromptListProgressContracts.ts",
     "verify:danbooru-browser-progress-contracts": "tsx src/scripts/verifyDanbooruBrowserProgressContracts.ts",
     "verify:module-workflow-output-progress-contracts": "tsx src/scripts/verifyModuleWorkflowOutputProgressContracts.ts",
@@ -33,6 +35,7 @@
     "verify:upload-result-links": "tsx src/scripts/verifyUploadResultLinks.ts",
     "verify:prompt-tag-links": "tsx src/scripts/verifyPromptTagLinks.ts",
     "verify:prompt-weight-display-contracts": "tsx src/scripts/verifyPromptWeightDisplayContracts.ts",
+    "verify:prompt-inline-syntax-contracts": "tsx src/scripts/verifyPromptInlineSyntaxContracts.ts",
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
     "verify:image-editor-tool-contracts": "tsx src/scripts/verifyImageEditorToolContracts.ts",
     "verify:image-similarity-policy-contracts": "tsx src/scripts/verifyImageSimilarityPolicyContracts.ts",
@@ -67,7 +70,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-konva": "^19.2.3",
-    "react-router-dom": "^7.13.1",
+    "react-router-dom": "^7.17.0",
     "react-virtuoso": "^4.18.3",
     "tailwind-merge": "^3.5.0"
   },
@@ -91,6 +94,6 @@
     "tw-animate-css": "^1.4.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.1",
-    "vite": "^8.0.1"
+    "vite": "^8.0.16"
   }
 }

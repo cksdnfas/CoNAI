@@ -159,6 +159,11 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       return initialImage
     }
 
+    const prefetchedImage = queryClient.getQueryData<ImageRecord>(['image-detail', compositeHash])
+    if (prefetchedImage?.composite_hash === compositeHash) {
+      return prefetchedImage
+    }
+
     if (presentation === 'modal') {
       return undefined
     }
@@ -544,12 +549,12 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
                 <SegmentedControl
                   value={activeImageAreaTab}
                   items={[
-                    { value: 'current', label: t({ ko: '현재 이미지', en: 'Current image' }) },
-                    { value: 'similar', label: t({ ko: '유사 이미지', en: 'Similar images' }), disabled: Boolean(image) && !canLoadRelatedImages },
+                    { value: 'current', label: t({ ko: '이미지', en: 'Image' }) },
+                    { value: 'similar', label: t({ ko: '유사', en: 'Similar' }), disabled: Boolean(image) && !canLoadRelatedImages },
                   ]}
                   onChange={handleSelectImageAreaTab}
                   size="xs"
-                  className="shrink-0 flex-nowrap whitespace-nowrap border-white/14 bg-black/42 text-white shadow-[0_12px_32px_rgba(0,0,0,0.32)] backdrop-blur-md"
+                  className="image-detail-modal-image-tabs shrink-0 flex-nowrap whitespace-nowrap border-white/14 bg-black/42 text-white shadow-[0_12px_32px_rgba(0,0,0,0.32)] backdrop-blur-md"
                 />
               </div>
             </div>

@@ -7,10 +7,13 @@ import { SystemSettingsService } from './systemSettingsService';
 import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoTagsComposeService } from './autoTagsComposeService';
+import { AutoTagIndexService } from './autoTagIndexService';
+import { AutoCollectionService } from './autoCollectionService';
 import { kaloscopeTaggerService } from './kaloscopeTaggerService';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { QueryCacheService } from './QueryCacheService';
+import { ImageStatsModel } from '../models/Image/ImageStatsModel';
 import { RatingData } from '../types/autoTag';
 
 interface PendingAutoTagMedia {
@@ -35,8 +38,10 @@ class AutoTagScheduler {
   private isRunning = false;
   private isProcessing = false;
   private rerunRequested = false;
+  private lockRetryScheduled = false;
   private pollingTimer: NodeJS.Timeout | null = null;
   private readonly PROCESSING_DELAY_MS = 1000;
+  private readonly LOCK_RETRY_DELAY_MS = 5000;
 
   private getPollingIntervalMs(): number {
     return SystemSettingsService.getAutoTagPollingInterval() * 1000;
@@ -168,6 +173,7 @@ class AutoTagScheduler {
 
   private async processPendingMedia(): Promise<void> {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
+      this.scheduleProcessPendingAfterMaintenanceLock();
       return;
     }
 
@@ -195,6 +201,7 @@ class AutoTagScheduler {
         }
 
         if (SystemMaintenanceLockService.isExclusiveActive()) {
+          this.scheduleProcessPendingAfterMaintenanceLock();
           break;
         }
 
@@ -280,7 +287,7 @@ class AutoTagScheduler {
     }
 
     const ratingScore = await this.calculateRatingScore(ratingData);
-    this.persistAutoTags(compositeHash, autoTags, ratingScore);
+    await this.persistAutoTags(compositeHash, autoTags, ratingScore);
     await this.collectAutoPrompts(taggerTaglist);
   }
 
@@ -298,12 +305,27 @@ class AutoTagScheduler {
     }
   }
 
-  private persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number | null): void {
+  private async persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number | null): Promise<void> {
     db.prepare(`
       UPDATE media_metadata
       SET auto_tags = ?, rating_score = ?, metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
     `).run(autoTags, ratingScore, compositeHash);
+    AutoTagIndexService.syncForHash(compositeHash, autoTags);
+    ImageStatsModel.invalidateAutoTagStatsCache();
+
+    try {
+      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(compositeHash);
+      if (autoCollectResults.length > 0) {
+        QueryCacheService.scheduleGalleryCacheInvalidation();
+        console.log(`[AutoTagScheduler] Auto-assigned ${compositeHash.substring(0, 12)} to ${autoCollectResults.length} group(s) after auto-tag extraction`);
+      }
+    } catch (error) {
+      console.warn(
+        `[AutoTagScheduler] Auto-collection failed after auto-tag extraction for ${compositeHash.substring(0, 12)}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
 
     const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
     if (releasedForVisibility) {
@@ -334,6 +356,19 @@ class AutoTagScheduler {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Retry postprocess tagging promptly after an exclusive maintenance lock can clear. */
+  private scheduleProcessPendingAfterMaintenanceLock(): void {
+    if (this.lockRetryScheduled) {
+      return;
+    }
+
+    this.lockRetryScheduled = true;
+    setTimeout(() => {
+      this.lockRetryScheduled = false;
+      void this.processPendingMedia();
+    }, this.LOCK_RETRY_DELAY_MS);
   }
 
   getStatus(): {

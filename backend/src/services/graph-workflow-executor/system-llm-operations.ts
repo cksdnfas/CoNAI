@@ -77,6 +77,21 @@ export async function executeCallLlmNode(
     maxTokens: normalizeOptionalNumber(resolvedInputs.max_tokens),
     responseMode,
     structuredOutputJson,
+    onDebugEvent: (event) => {
+      writeExecutionLog({
+        executionId: context.executionId,
+        nodeId: node.id,
+        level: event.eventType === 'json_parse_failed' ? 'error' : 'info',
+        eventType: event.eventType === 'json_parse_failed' ? 'llm_json_parse_failed' : 'llm_provider_response',
+        message: event.eventType === 'json_parse_failed'
+          ? `LLM JSON parse failed: ${moduleDefinition.name}`
+          : `LLM provider response received: ${moduleDefinition.name}`,
+        details: {
+          operationKey: 'system.call_llm',
+          ...event.details,
+        },
+      })
+    },
   })
 
   const metadataValue = {

@@ -2,6 +2,7 @@ import { GenerationHistoryModel, GenerationHistoryRecord, GenerationHistoryListR
 import type { AuthAccountType } from '../models/AuthAccount';
 import { APIImageProcessor } from './APIImageProcessor';
 import { BackgroundProcessorService } from './backgroundProcessorService';
+import { pruneGenerationResultRetention } from './generationResultRetentionService';
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
 
 const SLOW_GENERATION_POSTPROCESS_MS = 3000;
@@ -162,6 +163,7 @@ export class GenerationHistoryService {
 
       // Step 4: Update status to completed (file save complete)
       GenerationHistoryModel.updateStatus(historyId, 'completed');
+      pruneGenerationResultRetention();
 
       console.log(`✅ ${serviceType.toUpperCase()} image saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
@@ -219,6 +221,7 @@ export class GenerationHistoryService {
       });
 
       GenerationHistoryModel.updateStatus(historyId, 'completed');
+      pruneGenerationResultRetention();
 
       console.log(`✅ ${serviceType.toUpperCase()} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
@@ -262,7 +265,7 @@ export class GenerationHistoryService {
   }): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
     const records = GenerationHistoryModel.findAllWithMetadata(filters);
-    const total = GenerationHistoryModel.count({
+    const total = GenerationHistoryModel.countListRecords({
       service_type: filters?.service_type,
       generation_status: filters?.generation_status,
       queue_job_id: filters?.queue_job_id,
@@ -315,17 +318,7 @@ export class GenerationHistoryService {
     pending: number;
     processing: number;
   }> {
-    // All model calls are now synchronous
-    const total = GenerationHistoryModel.count();
-    const comfyui = GenerationHistoryModel.count({ service_type: 'comfyui' });
-    const novelai = GenerationHistoryModel.count({ service_type: 'novelai' });
-    const codex = GenerationHistoryModel.count({ service_type: 'codex' });
-    const completed = GenerationHistoryModel.count({ generation_status: 'completed' });
-    const failed = GenerationHistoryModel.count({ generation_status: 'failed' });
-    const pending = GenerationHistoryModel.count({ generation_status: 'pending' });
-    const processing = GenerationHistoryModel.count({ generation_status: 'processing' });
-
-    return { total, comfyui, novelai, codex, completed, failed, pending, processing };
+    return GenerationHistoryModel.getListStatistics();
   }
 
   /**
@@ -346,7 +339,7 @@ export class GenerationHistoryService {
   ): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
     const records = GenerationHistoryModel.findAllWithMetadata({ ...filters, workflow_id: workflowId });
-    const total = GenerationHistoryModel.count({
+    const total = GenerationHistoryModel.countListRecords({
       workflow_id: workflowId,
       generation_status: filters?.generation_status,
       queue_job_id: filters?.queue_job_id,
@@ -369,5 +362,18 @@ export class GenerationHistoryService {
     processing: number;
   }> {
     return GenerationHistoryModel.getWorkflowStatistics(workflowId);
+  }
+
+  /**
+   * Get workflow statistics aligned with compact history-list visibility.
+   */
+  static async getWorkflowListStatistics(workflowId: number): Promise<{
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+  }> {
+    return GenerationHistoryModel.getWorkflowListStatistics(workflowId);
   }
 }

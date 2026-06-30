@@ -1,6 +1,6 @@
 import type { ImageListPayload } from '@/types/image'
 
-type HomeFeedProgressPage = Pick<ImageListPayload, 'images' | 'total'>
+type HomeFeedProgressPage = Pick<ImageListPayload, 'images' | 'total' | 'totalKnown'>
 
 export interface HomeFeedProgressSummary {
   loadedCount: number
@@ -11,7 +11,7 @@ export interface HomeFeedProgressSummary {
 
 export function getHomeFeedProgressSummary(pages: readonly HomeFeedProgressPage[] | undefined, visibleCount: number): HomeFeedProgressSummary {
   const loadedCount = pages?.reduce((sum, page) => sum + page.images.length, 0) ?? 0
-  const totalCount = pages?.[0]?.total ?? loadedCount
+  const totalCount = pages?.[0]?.totalKnown === false ? loadedCount : (pages?.[0]?.total ?? loadedCount)
   const rawVisibleCount = Number.isFinite(visibleCount) ? visibleCount : 0
   const safeVisibleCount = Math.max(0, Math.trunc(rawVisibleCount))
 

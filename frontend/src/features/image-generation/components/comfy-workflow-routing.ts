@@ -16,8 +16,12 @@ export function isComfyWorkflowServerConnected(testState?: ComfyUIServerTestStat
   return testState?.status?.is_connected === true
 }
 
+export function isComfyWorkflowServerActive(server: ComfyUIServer) {
+  return server.is_active !== false
+}
+
 export function isComfyWorkflowServerRoutable(server: ComfyUIServer, testState?: ComfyUIServerTestState) {
-  return isComfyWorkflowModalServer(server, testState) || isComfyWorkflowServerConnected(testState)
+  return isComfyWorkflowServerActive(server) && (isComfyWorkflowModalServer(server, testState) || isComfyWorkflowServerConnected(testState))
 }
 
 export function buildComfyWorkflowServerRoutingSummary(
@@ -30,6 +34,10 @@ export function buildComfyWorkflowServerRoutingSummary(
   let autoRoutableCount = 0
 
   for (const server of servers) {
+    if (!isComfyWorkflowServerActive(server)) {
+      continue
+    }
+
     serverById.set(server.id, server)
     const testState = serverTests[server.id]
     const isModal = isComfyWorkflowModalServer(server, testState)

@@ -109,6 +109,10 @@ function validateRatingTiersDraft(tiers: RatingTierRecord[] | null, t: ReturnTyp
   return Array.from(new Set(messages))
 }
 
+function areSettingsDraftsEqual(left: unknown, right: unknown) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
 /** Keep tier ranges continuous while respecting edited boundaries. */
 function normalizeRatingTierDrafts(tiers: RatingTierRecord[]) {
   if (tiers.length === 0) {
@@ -188,6 +192,10 @@ export function useAutoSettingsTab({
   const effectiveKaloscopeDraft = kaloscopeDraft ?? kaloscopeSettings ?? null
   const effectiveRatingWeightsDraft = ratingWeightsDraft ?? ratingWeightsQuery.data ?? null
   const effectiveRatingTiersDraft = ratingTiersDraft ?? ratingTiersQuery.data ?? null
+  const hasTaggerChanges = Boolean(effectiveTaggerDraft && taggerSettings && !areSettingsDraftsEqual(effectiveTaggerDraft, taggerSettings))
+  const hasKaloscopeChanges = Boolean(effectiveKaloscopeDraft && kaloscopeSettings && !areSettingsDraftsEqual(effectiveKaloscopeDraft, kaloscopeSettings))
+  const hasRatingWeightsChanges = Boolean(effectiveRatingWeightsDraft && ratingWeightsQuery.data && !areSettingsDraftsEqual(effectiveRatingWeightsDraft, ratingWeightsQuery.data))
+  const hasRatingTiersChanges = Boolean(effectiveRatingTiersDraft && ratingTiersQuery.data && !areSettingsDraftsEqual(effectiveRatingTiersDraft, ratingTiersQuery.data))
   const ratingWeightValidationMessages = useMemo(
     () => validateRatingWeightsDraft(effectiveRatingWeightsDraft, t),
     [effectiveRatingWeightsDraft, t],
@@ -537,6 +545,10 @@ export function useAutoSettingsTab({
       isSavingKaloscope: kaloscopeMutation.isPending,
       isSavingRatingWeights: ratingWeightsMutation.isPending,
       isSavingRatingTiers: ratingTiersMutation.isPending,
+      hasTaggerChanges,
+      hasKaloscopeChanges,
+      hasRatingWeightsChanges,
+      hasRatingTiersChanges,
       isCheckingTaggerDependencies: taggerDependencyMutation.isPending,
       autoTestHashInput,
       onAutoTestHashInputChange: handleAutoTestHashInputChange,

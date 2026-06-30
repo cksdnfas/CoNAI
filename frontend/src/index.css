@@ -523,12 +523,22 @@
     }
 
     .image-detail-modal-toolbar-inner {
+      flex-direction: column;
+      align-items: stretch;
       gap: 0.5rem;
+    }
+
+    .image-detail-modal-header-actions {
+      width: 100%;
+    }
+
+    .image-detail-modal-image-tabs {
+      max-width: 100%;
       overflow-x: auto;
       scrollbar-width: none;
     }
 
-    .image-detail-modal-toolbar-inner::-webkit-scrollbar {
+    .image-detail-modal-image-tabs::-webkit-scrollbar {
       display: none;
     }
 
@@ -677,6 +687,11 @@
   .image-list-grid-item {
     display: flex;
     min-width: 0;
+  }
+
+  .workflow-final-results-list .image-list-selectable img,
+  .workflow-final-results-list .image-list-selectable video {
+    object-fit: contain;
   }
 
   .related-image-gallery-grid {

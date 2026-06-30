@@ -97,8 +97,10 @@ export function ImageGenerationPage() {
   }
 
   useEffect(() => {
-    if (activeTab !== 'comfyui' && selectedComfyWorkflowId !== null) {
-      setSelectedComfyWorkflowId(null)
+    if (activeTab !== 'comfyui') {
+      if (selectedComfyWorkflowId !== null) {
+        setSelectedComfyWorkflowId(null)
+      }
     }
   }, [activeTab, selectedComfyWorkflowId])
 

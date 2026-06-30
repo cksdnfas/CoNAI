@@ -1,5 +1,6 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
+import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
 import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
 import type {
@@ -15,6 +16,7 @@ import type {
   GroupMutationMessage,
   GroupMutationResult,
   GroupRecord,
+  GroupRematchJobRecord,
   GroupWithHierarchy,
 } from '@/types/group'
 
@@ -184,7 +186,7 @@ export async function removeImagesFromGroup(groupId: number, compositeHashes: st
 }
 
 export async function runGroupAutoCollect(groupId: number) {
-  const response = await fetchJson<ApiResponse<GroupAutoCollectResult>>(`/api/groups/${groupId}/auto-collect`, {
+  const response = await fetchJson<ApiResponse<GroupAutoCollectResult | GroupRematchJobRecord<GroupAutoCollectResult>>>(`/api/groups/${groupId}/auto-collect`, {
     method: 'POST',
   })
 
@@ -192,11 +194,11 @@ export async function runGroupAutoCollect(groupId: number) {
     throw createApiFallbackError(response.error, 'groups.autoCollect.run')
   }
 
-  return response.data
+  return resolveGroupRematchJobResponse(response.data)
 }
 
 export async function runAllGroupsAutoCollect() {
-  const response = await fetchJson<ApiResponse<GroupAutoCollectAllResult>>('/api/groups/auto-collect-all', {
+  const response = await fetchJson<ApiResponse<GroupAutoCollectAllResult | GroupRematchJobRecord<GroupAutoCollectAllResult>>>('/api/groups/auto-collect-all', {
     method: 'POST',
   })
 
@@ -204,7 +206,7 @@ export async function runAllGroupsAutoCollect() {
     throw createApiFallbackError(response.error, 'groups.autoCollectAll.run')
   }
 
-  return response.data
+  return resolveGroupRematchJobResponse(response.data)
 }
 
 export async function getGroupFileCounts(groupId: number) {

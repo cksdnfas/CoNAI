@@ -3,6 +3,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 const backendRoot = path.resolve(__dirname, '..', '..')
+const repoRoot = path.resolve(backendRoot, '..')
 const deletionServicePath = path.join(backendRoot, 'src', 'services', 'deletionService.ts')
 const wdv3DaemonPath = path.join(backendRoot, 'python', 'wdv3_tagger_daemon.py')
 const kaloscopeDaemonPath = path.join(backendRoot, 'python', 'kaloscope_tagger_daemon.py')
@@ -70,8 +71,62 @@ function verifyPythonTaggersCloseImageHandles() {
   )
 }
 
+function verifyMediaReviewDoesNotExposeDestructiveCleanup() {
+  const mediaReviewSource = read(path.join(repoRoot, 'frontend', 'src', 'features', 'media-review', 'media-review-page.tsx'))
+  const mediaReviewUtilsSource = read(path.join(repoRoot, 'frontend', 'src', 'features', 'media-review', 'media-review-utils.ts'))
+
+  assert.match(
+    mediaReviewSource,
+    /data-media-review-cleanup-guardrail="true"/,
+    'media review should show an explicit cleanup guardrail before batch actions',
+  )
+
+  assert.match(
+    mediaReviewSource,
+    /data-media-review-cleanup-staging="true"/,
+    'media review should stage cleanup review separately from deletion actions',
+  )
+
+  assert.match(
+    mediaReviewSource,
+    /handleStageCleanupSelected[\s\S]*setCleanupStageItems/,
+    'media review cleanup staging should stay as local review state',
+  )
+
+  assert.match(
+    mediaReviewSource,
+    /const selectedActionableImages = useMemo\([\s\S]*?file_status !== 'missing'[\s\S]*?file_status !== 'deleted'/,
+    'media review batch mutations should exclude missing/deleted records from active write actions',
+  )
+
+  assert.match(
+    mediaReviewUtilsSource,
+    /recoverabilityState: MediaReviewRecoverabilityState/,
+    'media review signals should preserve file recoverability state for review UI',
+  )
+
+  assert.match(
+    mediaReviewUtilsSource,
+    /if \(queue === 'recoverable'\) \{[\s\S]*?signals\.recoverabilityState !== 'active'/,
+    'media review should expose a recoverable queue without adding cleanup mutation routes',
+  )
+
+  assert.match(
+    mediaReviewUtilsSource,
+    /destructiveAction: false/,
+    'media review cleanup staging must explicitly separate review staging from destructive cleanup',
+  )
+
+  assert.doesNotMatch(
+    mediaReviewSource,
+    /deleteImagesBulk|Trash2|\/api\/images\/bulk/,
+    'media review must not expose destructive image deletion or bulk-delete wiring in this roadmap unit',
+  )
+}
+
 verifyDeletionFailureDoesNotPretendSuccess()
 verifyRecycleBinDirectoryIsCreatedBeforeCopy()
 verifyPythonTaggersCloseImageHandles()
+verifyMediaReviewDoesNotExposeDestructiveCleanup()
 
 console.log('✅ Deletion lock contracts passed')

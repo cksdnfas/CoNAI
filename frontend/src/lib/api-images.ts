@@ -18,12 +18,29 @@ interface ComplexImageSearchRequest {
   sortOrder?: 'ASC' | 'DESC'
 }
 
-export async function getImages(params?: { page?: number; limit?: number }) {
+export async function getImages(params?: {
+  page?: number
+  limit?: number
+  pagination?: 'offset' | 'cursor'
+  cursorDate?: string | null
+  cursorHash?: string | null
+  includeTotal?: boolean
+}) {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('limit', String(params?.limit ?? 12))
   searchParams.set('sortBy', 'first_seen_date')
   searchParams.set('sortOrder', 'DESC')
+  if (params?.pagination === 'cursor') {
+    searchParams.set('pagination', 'cursor')
+    searchParams.set('include_total', params.includeTotal ? 'true' : 'false')
+    if (params.cursorDate) {
+      searchParams.set('cursor_date', params.cursorDate)
+    }
+    if (params.cursorHash) {
+      searchParams.set('cursor_hash', params.cursorHash)
+    }
+  }
 
   const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images?${searchParams.toString()}`)
   if (!response.success) {
@@ -94,6 +111,37 @@ export async function deleteImagesBulk(compositeHashes: string[]) {
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.bulkDelete')
+  }
+
+  return response.data
+}
+
+export interface BatchImageTagResultItem {
+  composite_hash: string
+  success: boolean
+  auto_tags?: unknown
+  error?: string
+  error_type?: string
+}
+
+export interface BatchImageTagResult {
+  total: number
+  success_count: number
+  fail_count: number
+  results: BatchImageTagResultItem[]
+}
+
+export async function batchTagImages(compositeHashes: string[]) {
+  const response = await fetchJson<ApiResponse<BatchImageTagResult>>('/api/images/batch-tag', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ image_ids: compositeHashes }),
+  })
+
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'images.batchTag')
   }
 
   return response.data

@@ -30,6 +30,48 @@ function getReadyImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('im');
 }
 
+const AUTO_TAG_SEARCH_TOTAL_CACHE_TTL_MS = 30_000;
+const AUTO_TAG_SEARCH_TOTAL_CACHE_MAX_ENTRIES = 250;
+
+type AutoTagSearchTotalCacheEntry = {
+  total: number;
+  expiresAt: number;
+};
+
+const autoTagSearchTotalCache = new Map<string, AutoTagSearchTotalCacheEntry>();
+
+function getAutoTagSearchTotalCacheKey(conditions: string[], params: unknown[]): string {
+  return JSON.stringify({ conditions, params });
+}
+
+function getCachedAutoTagSearchTotal(cacheKey: string, now = Date.now()): number | null {
+  const cached = autoTagSearchTotalCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= now) {
+    autoTagSearchTotalCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.total;
+}
+
+function setCachedAutoTagSearchTotal(cacheKey: string, total: number, now = Date.now()): void {
+  if (autoTagSearchTotalCache.size >= AUTO_TAG_SEARCH_TOTAL_CACHE_MAX_ENTRIES) {
+    const oldestKey = autoTagSearchTotalCache.keys().next().value;
+    if (oldestKey) {
+      autoTagSearchTotalCache.delete(oldestKey);
+    }
+  }
+
+  autoTagSearchTotalCache.set(cacheKey, {
+    total,
+    expiresAt: now + AUTO_TAG_SEARCH_TOTAL_CACHE_TTL_MS,
+  });
+}
+
 export class ImageSearchModel {
 
   /**
@@ -194,16 +236,20 @@ export class ImageSearchModel {
     // AutoTagSearchService가 쿼리 조건을 생성 (media_metadata 기반으로 수정 필요)
     const queryBuilder = await AutoTagSearchService.buildAutoTagSearchQuery(searchParams, basicSearchParams);
 
-    // 조건을 media_metadata 테이블 기준으로 변경
-    const conditions = queryBuilder.conditions.map((cond: string) => {
-      return cond
+    const mapAutoTagConditionAliases = (cond: string) => cond
         .replace(/\bi\.upload_date\b/g, 'im.first_seen_date')
         .replace(/\bi\.prompt\b/g, 'im.prompt')
         .replace(/\bi\.negative_prompt\b/g, 'im.negative_prompt')
         .replace(/\bi\.ai_tool\b/g, 'im.ai_tool')
         .replace(/\bi\.model_name\b/g, 'im.model_name')
-        .replace(/\bi\.auto_tags\b/g, 'im.auto_tags');
-    });
+        .replace(/\bi\.auto_tags\b/g, 'im.auto_tags')
+        .replace(/\bi\.rating_score\b/g, 'im.rating_score')
+        .replace(/\bi\.composite_hash\b/g, 'im.composite_hash');
+
+    // 조건을 media_metadata 테이블 기준으로 변경
+    const conditions = queryBuilder.conditions.map(mapAutoTagConditionAliases);
+    const orderedConditions = (queryBuilder.orderedConditions ?? queryBuilder.conditions)
+      .map(mapAutoTagConditionAliases);
 
     const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
@@ -215,8 +261,16 @@ export class ImageSearchModel {
       ${whereClause}
     `;
 
-    const countRow = db.prepare(countQuery).get(...queryBuilder.params) as any;
-    const total = countRow.total;
+    const countCacheKey = getAutoTagSearchTotalCacheKey(safeConditions, queryBuilder.params);
+    const cachedTotal = getCachedAutoTagSearchTotal(countCacheKey);
+    let total: number;
+    if (cachedTotal !== null) {
+      total = cachedTotal;
+    } else {
+      const countRow = db.prepare(countQuery).get(...queryBuilder.params) as any;
+      total = countRow.total;
+      setCachedAutoTagSearchTotal(countCacheKey, total);
+    }
 
     // 정렬 컬럼 매핑
     let sortColumn = 'im.first_seen_date';
@@ -225,6 +279,34 @@ export class ImageSearchModel {
     } else if (sortBy === 'file_size') {
       sortColumn = 'if.file_size';
     }
+
+    const pageJoinClause = sortBy === 'file_size'
+      ? "LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'"
+      : '';
+    const pageGroupClause = sortBy === 'file_size' ? 'GROUP BY im.composite_hash' : '';
+
+    const pageSafeConditions = [...orderedConditions, getVisibleImageCondition(), getReadyImageCondition()];
+    const pageWhereClause = pageSafeConditions.length > 0 ? `WHERE ${pageSafeConditions.join(' AND ')}` : '';
+
+    const pageHashQuery = `
+      SELECT im.composite_hash
+      FROM media_metadata im
+      ${pageJoinClause}
+      ${pageWhereClause}
+      ${pageGroupClause}
+      ORDER BY ${sortColumn} ${sortOrder}, im.composite_hash ASC
+      LIMIT ? OFFSET ?
+    `;
+
+    const pageHashRows = db.prepare(pageHashQuery).all(...queryBuilder.params, limit, offset) as Array<{ composite_hash: string }>;
+    const pageHashes = pageHashRows.map((row) => row.composite_hash);
+
+    if (pageHashes.length === 0) {
+      return { images: [], total };
+    }
+
+    const pageHashPlaceholders = pageHashes.map(() => '?').join(', ');
+    const pageOrderCase = pageHashes.map((_, index) => `WHEN ? THEN ${index}`).join(' ');
 
     // 데이터 조회
     const dataQuery = `
@@ -244,13 +326,12 @@ export class ImageSearchModel {
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
       LEFT JOIN groups g ON ig.group_id = g.id
-      ${whereClause}
+      WHERE im.composite_hash IN (${pageHashPlaceholders})
       GROUP BY im.composite_hash
-      ORDER BY ${sortColumn} ${sortOrder}
-      LIMIT ? OFFSET ?
+      ORDER BY CASE im.composite_hash ${pageOrderCase} ELSE ${pageHashes.length} END
     `;
 
-    const rows = db.prepare(dataQuery).all(...queryBuilder.params, limit, offset) as any[];
+    const rows = db.prepare(dataQuery).all(...pageHashes, ...pageHashes) as any[];
 
     return { images: mapGroupedImageRows(rows), total };
   }
@@ -321,36 +402,30 @@ export class ImageSearchModel {
 
   /**
    * 검색 조건에 맞는 랜덤 이미지 조회
-   * Using OFFSET with random index for true randomness
+   * Uses an indexed file-id start point instead of count + deep OFFSET scans.
    */
   static async getRandomFromSearch(
     searchParams: ImageSearchParamsInput
   ): Promise<any | null> {
-    const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams);
+    const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams, {
+      requireCompositeHash: true,
+      requireActiveFile: true,
+    });
 
     const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
-    // First get the count
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      ${groupJoinClause}
-      ${whereClause}
-    `;
+    const maxFileIdRow = db.prepare(`
+      SELECT MAX(id) as maxFileId
+      FROM image_files
+      WHERE file_status = 'active'
+        AND composite_hash IS NOT NULL
+    `).get() as { maxFileId: number | null };
 
-    const countRow = db.prepare(countQuery).get(...params) as { total: number };
-
-    if (!countRow || countRow.total === 0) {
+    if (!maxFileIdRow?.maxFileId) {
       return null;
     }
 
-    // Generate random offset
-    const randomOffset = Math.floor(Math.random() * countRow.total);
-    console.log('[ImageSearchModel] Random offset:', randomOffset, 'out of', countRow.total);
-
-    // Get the image at that offset
     const query = `
       SELECT
         im.*,
@@ -361,14 +436,20 @@ export class ImageSearchModel {
         if.mime_type,
         if.folder_id,
         if.file_type
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+      FROM image_files if
+      INNER JOIN media_metadata im ON if.composite_hash = im.composite_hash
       ${groupJoinClause}
       ${whereClause}
-      LIMIT 1 OFFSET ?
+        AND if.id >= ?
+      ORDER BY if.id ASC
+      LIMIT 1
     `;
 
-    const row = db.prepare(query).get(...params, randomOffset);
+    const randomStartId = Math.floor(Math.random() * maxFileIdRow.maxFileId) + 1;
+    console.log('[ImageSearchModel] Random start id:', randomStartId, 'max', maxFileIdRow.maxFileId);
+
+    const stmt = db.prepare(query);
+    const row = stmt.get(...params, randomStartId) ?? stmt.get(...params, 0);
     console.log('[ImageSearchModel] Random image selected:', (row as any)?.composite_hash?.substring(0, 8));
 
     return row || null;

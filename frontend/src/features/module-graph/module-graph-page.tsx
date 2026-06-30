@@ -126,6 +126,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     latestExecution,
     latestArtifactPreviewByNode,
     latestExecutionDetail,
+    latestExecutionDetailIsLoading,
+    latestExecutionDetailError,
     selectedExecution,
     selectedNode,
     selectedEdge,
@@ -222,6 +224,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     handleConfirmDeleteFolder,
     handleAssignSelectedWorkflowFolder,
     handleEditSelectedWorkflow,
+    handleDuplicateSelectedWorkflow,
+    handleExportSelectedWorkflow,
+    handleImportWorkflowFile,
     handleDeleteSelectedWorkflow,
     handleLeaveWorkflowEditor,
     handleRefreshWorkspace,
@@ -242,6 +247,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     nodes,
     edges,
     modules,
+    graphWorkflows: graphWorkflowsQuery.data ?? [],
     graphWorkflowFolders: graphWorkflowFoldersQuery.data ?? [],
     selectedFolderId,
     selectedFolderRecord,
@@ -325,6 +331,15 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       }}
       onOpenBrowseManage={() => setIsBrowseManageModalOpen(true)}
       onCreateWorkflow={handleCreateWorkflow}
+      onDuplicateWorkflow={() => {
+        void handleDuplicateSelectedWorkflow()
+      }}
+      onExportWorkflow={() => {
+        void handleExportSelectedWorkflow()
+      }}
+      onImportWorkflow={(file) => {
+        void handleImportWorkflowFile(file)
+      }}
       onEditWorkflow={handleEditSelectedWorkflow}
       onDeleteWorkflow={() => {
         void handleDeleteSelectedWorkflow()
@@ -354,6 +369,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     executingGraphId,
     latestExecution,
     latestExecutionDetail,
+    latestExecutionDetailIsLoading,
+    latestExecutionDetailError,
     selectedWorkflowCanExecute,
     selectedWorkflowValidationIssues,
     nodes,

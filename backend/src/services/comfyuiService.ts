@@ -1,24 +1,29 @@
 import axios, { AxiosInstance } from 'axios';
-import * as path from 'path';
 import * as fs from 'fs';
-import FormData from 'form-data';
-import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse, ComfyUIOutputFile } from '../types/workflow';
+import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse } from '../types/workflow';
 import type { ComfyUIBackendType, ComfyUIQueueState, ComfyUIServerRecord, ComfyUIServerRuntimeStatus } from '../types/comfyuiServer';
-import { runtimePaths } from '../config/runtimePaths';
-
-type ComfyUIQueueResponse = {
-  queue_running?: unknown;
-  queue_pending?: unknown;
-};
-
-type ComfyOutputKind = 'image' | 'animated' | 'video';
+import { resolveAxiosErrorMessage } from './comfyui/errors';
+import { downloadComfyOutputFile, uploadComfyInputImage } from './comfyui/fileTransfer';
+import {
+  buildComfyUIQueueState,
+  type ComfyUIQueueResponse,
+} from './comfyui/queueState';
+import {
+  extractComfyOutputInfo,
+  writeModalOutputToTemp,
+  type CollectedComfyOutput,
+  type ModalComfyGenerateResponse,
+} from './comfyui/outputCollector';
+import {
+  buildModalRuntimeStatus,
+  buildQueueRuntimeStatus,
+  buildRuntimeStatusError,
+  normalizeComfyCapacity,
+  type ComfyRuntimeStatusMeta,
+} from './comfyui/runtimeStatus';
+import { substituteComfyPromptData } from './comfyui/workflowSubstitution';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
-
-type CollectedComfyOutput = ComfyUIOutputFile & {
-  nodeId: string;
-  kind: ComfyOutputKind;
-};
 
 type WaitForCompletionOptions = {
   shouldCancel?: () => boolean | Promise<boolean>;
@@ -30,21 +35,6 @@ type ComfyUIServiceOptions = {
   capacity?: number;
 };
 
-type ModalComfyFile = {
-  node_id?: string;
-  filename?: string;
-  subfolder?: string;
-  type?: string;
-  data_base64?: string;
-  format?: string;
-};
-
-type ModalComfyGenerateResponse = {
-  images?: ModalComfyFile[];
-  videos?: ModalComfyFile[];
-  error?: string;
-};
-
 export type ComfyUICancelPromptResult = {
   promptId: string;
   matchedRunning: boolean;
@@ -52,84 +42,6 @@ export type ComfyUICancelPromptResult = {
   interrupted: boolean;
   deleted: boolean;
 };
-
-function normalizeQueueEntries(value: unknown): unknown[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>);
-  }
-
-  return [];
-}
-
-function extractPromptIdFromQueueEntry(entry: unknown): string | null {
-  if (Array.isArray(entry)) {
-    if (typeof entry[1] === 'string' && entry[1].trim().length > 0) {
-      return entry[1].trim();
-    }
-
-    for (const item of entry) {
-      const nested = extractPromptIdFromQueueEntry(item);
-      if (nested) {
-        return nested;
-      }
-    }
-    return null;
-  }
-
-  if (entry && typeof entry === 'object') {
-    const record = entry as Record<string, unknown>;
-    if (typeof record.prompt_id === 'string' && record.prompt_id.trim().length > 0) {
-      return record.prompt_id.trim();
-    }
-    if (typeof record.id === 'string' && record.id.trim().length > 0) {
-      return record.id.trim();
-    }
-
-    for (const value of Object.values(record)) {
-      const nested = extractPromptIdFromQueueEntry(value);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-
-  return null;
-}
-
-function collectPromptIds(entries: unknown[]) {
-  const promptIds = new Set<string>();
-  for (const entry of entries) {
-    const promptId = extractPromptIdFromQueueEntry(entry);
-    if (promptId) {
-      promptIds.add(promptId);
-    }
-  }
-  return [...promptIds];
-}
-
-function resolveAxiosErrorMessage(error: unknown) {
-  if (axios.isAxiosError(error)) {
-    const responseData = error.response?.data;
-    if (typeof responseData === 'string' && responseData.trim().length > 0) {
-      return `${error.message} | ${responseData.trim()}`;
-    }
-
-    if (responseData && typeof responseData === 'object') {
-      try {
-        return `${error.message} | ${JSON.stringify(responseData)}`;
-      } catch {
-        // fall through to the base axios message
-      }
-    }
-
-    return error.message;
-  }
-  return error instanceof Error ? error.message : 'Unknown error';
-}
 
 /**
  * ComfyUI API 서비스
@@ -183,27 +95,6 @@ export class ComfyUIService {
   }
 
   /**
-   * 워크플로우 JSON의 특정 경로에 값 설정
-   * @param obj 대상 객체
-   * @param path 경로 (예: "6.inputs.text")
-   * @param value 설정할 값
-   */
-  private setValueByPath(obj: any, path: string, value: any): void {
-    const keys = path.split('.');
-    let current = obj;
-
-    for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
-      if (!(key in current)) {
-        current[key] = {};
-      }
-      current = current[key];
-    }
-
-    current[keys[keys.length - 1]] = value;
-  }
-
-  /**
    * 워크플로우 JSON에 프롬프트 데이터 치환
    * @param workflowJson 원본 워크플로우 JSON 문자열
    * @param markedFields 마킹된 필드 배열
@@ -215,20 +106,7 @@ export class ComfyUIService {
     markedFields: MarkedField[],
     promptData: Record<string, any>
   ): any {
-    const workflow = JSON.parse(workflowJson);
-
-    // 각 마킹된 필드에 대해 값 치환
-    for (const field of markedFields) {
-      const value = promptData[field.id];
-      if (value !== undefined && value !== null) {
-        this.setValueByPath(workflow, field.jsonPath, value);
-      } else if (field.default_value !== undefined) {
-        // 사용자 입력이 없으면 기본값 사용
-        this.setValueByPath(workflow, field.jsonPath, field.default_value);
-      }
-    }
-
-    return workflow;
+    return substituteComfyPromptData(workflowJson, markedFields, promptData);
   }
 
   /**
@@ -337,112 +215,7 @@ export class ComfyUIService {
    * @returns 다운로드된 임시 파일의 절대 경로
    */
   async downloadOutputFile(filename: string, subfolder: string = '', type: string = 'output'): Promise<string> {
-    try {
-      // 다운로드 URL 구성
-      const params = new URLSearchParams({
-        filename,
-        subfolder,
-        type
-      });
-      const url = `/view?${params.toString()}`;
-
-      // 출력 파일 다운로드
-      const response = await this.axiosInstance.get(url, {
-        responseType: 'arraybuffer'
-      });
-
-      // temp 폴더가 없으면 생성
-      const tempDir = runtimePaths.tempDir;
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-
-      // 고유한 임시 파일명 생성
-      const ext = path.extname(filename);
-      const uniqueFilename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-      const tempFilePath = path.join(tempDir, uniqueFilename);
-
-      // temp 폴더에 파일 저장
-      fs.writeFileSync(tempFilePath, Buffer.from(response.data));
-
-      return tempFilePath; // 절대 경로 반환
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`ComfyUI output download error: ${error.message}`);
-      }
-      throw error;
-    }
-  }
-
-  private resolveOutputKind(bucket: 'images' | 'gifs' | 'videos' | 'files', file: ComfyUIOutputFile): ComfyOutputKind {
-    if (bucket === 'videos') {
-      return 'video';
-    }
-
-    const normalizedFormat = (file.format || '').toLowerCase();
-    const extension = path.extname(file.filename).toLowerCase();
-
-    if (normalizedFormat.startsWith('video/') || ['.mp4', '.webm', '.mov', '.mkv', '.avi'].includes(extension)) {
-      return 'video';
-    }
-
-    if (bucket === 'gifs' || ['.gif', '.webp'].includes(extension)) {
-      return 'animated';
-    }
-
-    return 'image';
-  }
-
-  private parseNodeOrder(nodeId: string): number {
-    const match = nodeId.match(/^\d+/);
-    return match ? Number(match[0]) : -1;
-  }
-
-  /**
-   * 히스토리에서 생성된 최종 출력 정보를 추출한다.
-   */
-  extractOutputInfo(
-    history: ComfyUIHistoryResponse,
-    promptId: string,
-    onlyFinalOutput: boolean = true
-  ): CollectedComfyOutput[] {
-    const item = history[promptId];
-    if (!item || !item.outputs) {
-      return [];
-    }
-
-    const allOutputs: CollectedComfyOutput[] = [];
-
-    for (const nodeId in item.outputs) {
-      const output = item.outputs[nodeId];
-      const buckets: Array<'images' | 'gifs' | 'videos' | 'files'> = ['images', 'gifs', 'videos', 'files'];
-
-      for (const bucket of buckets) {
-        const files = output[bucket];
-        if (!Array.isArray(files)) {
-          continue;
-        }
-
-        files.forEach((file) => {
-          allOutputs.push({
-            ...file,
-            nodeId,
-            kind: this.resolveOutputKind(bucket, file),
-          });
-        });
-      }
-    }
-
-    if (onlyFinalOutput && allOutputs.length > 0) {
-      const maxNodeOrder = Math.max(...allOutputs.map((file) => this.parseNodeOrder(file.nodeId)));
-      const finalOutputs = allOutputs.filter((file) => this.parseNodeOrder(file.nodeId) === maxNodeOrder);
-
-      console.log(`📦 Found ${allOutputs.length} outputs, returning ${finalOutputs.length} final output(s) from node #${maxNodeOrder}`);
-      return finalOutputs;
-    }
-
-    console.log(`📦 Found ${allOutputs.length} outputs, returning all`);
-    return allOutputs;
+    return downloadComfyOutputFile(this.axiosInstance, filename, subfolder, type);
   }
 
   /**
@@ -450,7 +223,7 @@ export class ComfyUIService {
    */
   async collectGeneratedOutputs(promptId: string, options?: WaitForCompletionOptions & { onlyFinalOutput?: boolean }): Promise<Array<CollectedComfyOutput & { tempPath: string }>> {
     const history = await this.waitForCompletion(promptId, 1800, 2000, options);
-    const outputInfos = this.extractOutputInfo(history, promptId, options?.onlyFinalOutput ?? true);
+    const outputInfos = extractComfyOutputInfo(history, promptId, options?.onlyFinalOutput ?? true);
 
     if (outputInfos.length === 0) {
       throw new Error('No outputs generated by ComfyUI');
@@ -470,33 +243,6 @@ export class ComfyUIService {
     }
 
     return tempFiles;
-  }
-
-  private writeModalOutputToTemp(file: ModalComfyFile, fallbackName: string, kind: ComfyOutputKind): CollectedComfyOutput & { tempPath: string } {
-    const encoded = typeof file.data_base64 === 'string' ? file.data_base64 : '';
-    if (!encoded) {
-      throw new Error(`Modal ComfyUI output ${file.filename ?? fallbackName} did not include data_base64`);
-    }
-
-    const filename = path.basename(file.filename || fallbackName);
-    const tempDir = runtimePaths.tempDir;
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-
-    const ext = path.extname(filename) || (kind === 'video' ? '.mp4' : '.png');
-    const tempFilePath = path.join(tempDir, `modal_comfyui_${Date.now()}_${Math.random().toString(36).slice(2, 9)}${ext}`);
-    fs.writeFileSync(tempFilePath, Buffer.from(encoded, 'base64'));
-
-    return {
-      filename,
-      subfolder: typeof file.subfolder === 'string' ? file.subfolder : '',
-      type: typeof file.type === 'string' && file.type.trim().length > 0 ? file.type : 'output',
-      format: file.format,
-      nodeId: String(file.node_id ?? 'modal'),
-      kind,
-      tempPath: tempFilePath,
-    };
   }
 
   /**
@@ -537,8 +283,8 @@ export class ComfyUIService {
     const imageOutputs = Array.isArray(response.data?.images) ? response.data.images : [];
     const videoOutputs = Array.isArray(response.data?.videos) ? response.data.videos : [];
     const outputs = [
-      ...imageOutputs.map((file, index) => this.writeModalOutputToTemp(file, `modal_image_${index}.png`, 'image')),
-      ...videoOutputs.map((file, index) => this.writeModalOutputToTemp(file, `modal_video_${index}.mp4`, 'video')),
+      ...imageOutputs.map((file, index) => writeModalOutputToTemp(file, `modal_image_${index}.png`, 'image')),
+      ...videoOutputs.map((file, index) => writeModalOutputToTemp(file, `modal_video_${index}.mp4`, 'video')),
     ];
 
     if (outputs.length === 0) {
@@ -637,27 +383,7 @@ export class ComfyUIService {
    * Upload an input image to the target ComfyUI server and return the stored filename.
    */
   async uploadInputImage(fileName: string, imageInput: Buffer | fs.ReadStream, options?: { contentType?: string }): Promise<string> {
-    try {
-      const formData = new FormData();
-      formData.append('image', imageInput, {
-        filename: fileName,
-        contentType: options?.contentType || 'image/png'
-      });
-      formData.append('type', 'input');
-      formData.append('overwrite', 'false');
-
-      const response = await this.axiosInstance.post('/upload/image', formData, {
-        headers: formData.getHeaders(),
-        maxBodyLength: Infinity,
-      });
-
-      return response.data?.name || fileName;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`ComfyUI image upload error: ${error.message}`);
-      }
-      throw error;
-    }
+    return uploadComfyInputImage(this.axiosInstance, fileName, imageInput, options);
   }
 
   /**
@@ -666,16 +392,7 @@ export class ComfyUIService {
   async getQueueState(timeout: number = 5000): Promise<ComfyUIQueueState> {
     try {
       const response = await this.axiosInstance.get<ComfyUIQueueResponse>('/queue', { timeout });
-      const runningEntries = normalizeQueueEntries(response.data?.queue_running);
-      const pendingEntries = normalizeQueueEntries(response.data?.queue_pending);
-
-      return {
-        pending_count: pendingEntries.length,
-        running_count: runningEntries.length,
-        pending_prompt_ids: collectPromptIds(pendingEntries),
-        running_prompt_ids: collectPromptIds(runningEntries),
-        is_idle: pendingEntries.length === 0 && runningEntries.length === 0,
-      };
+      return buildComfyUIQueueState(response.data);
     } catch (error) {
       throw new Error(`ComfyUI queue API error: ${resolveAxiosErrorMessage(error)}`);
     }
@@ -684,82 +401,47 @@ export class ComfyUIService {
   /**
    * Combine reachability and queue occupancy into one runtime status payload.
    */
-  async getRuntimeStatus(serverMeta?: Pick<ComfyUIServerRecord, 'id' | 'name' | 'endpoint' | 'backend_type' | 'capacity'>): Promise<ComfyUIServerRuntimeStatus> {
+  async getRuntimeStatus(serverMeta?: ComfyRuntimeStatusMeta): Promise<ComfyUIServerRuntimeStatus> {
     const startedAt = Date.now();
     const observedAt = new Date().toISOString();
     const backendType = serverMeta?.backend_type ?? this.backendType;
-    const capacity = Math.max(1, Math.floor(serverMeta?.capacity ?? this.capacity));
+    const capacity = normalizeComfyCapacity(serverMeta?.capacity, this.capacity);
+    const runtimeStatusInput = {
+      serverMeta,
+      apiEndpoint: this.apiEndpoint,
+      backendType,
+      capacity,
+      startedAt,
+      observedAt,
+    };
 
     if (backendType === 'modal') {
       try {
         const isConnected = await this.testConnection();
-        return {
-          server_id: serverMeta?.id ?? 0,
-          server_name: serverMeta?.name ?? '',
-          endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
-          backend_type: backendType,
-          capacity,
-          available_count: isConnected ? capacity : 0,
-          is_connected: isConnected,
-          response_time: Date.now() - startedAt,
-          error_message: undefined,
-          is_idle: isConnected,
-          pending_count: 0,
-          running_count: 0,
-          observed_at: observedAt,
-        };
+        return buildModalRuntimeStatus({
+          ...runtimeStatusInput,
+          isConnected,
+        });
       } catch (error) {
-        return {
-          server_id: serverMeta?.id ?? 0,
-          server_name: serverMeta?.name ?? '',
-          endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
-          backend_type: backendType,
-          capacity,
-          available_count: 0,
-          is_connected: false,
-          response_time: Date.now() - startedAt,
-          error_message: resolveAxiosErrorMessage(error),
-          is_idle: false,
-          pending_count: 0,
-          running_count: 0,
-          observed_at: observedAt,
-        };
+        return buildRuntimeStatusError({
+          ...runtimeStatusInput,
+          errorMessage: resolveAxiosErrorMessage(error),
+          includeZeroQueueCounts: true,
+        });
       }
     }
 
     try {
       const queueState = await this.getQueueState();
-      return {
-        server_id: serverMeta?.id ?? 0,
-        server_name: serverMeta?.name ?? '',
-        endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
-        backend_type: backendType,
-        capacity,
-        available_count: queueState.is_idle ? 1 : 0,
-        is_connected: true,
-        response_time: Date.now() - startedAt,
-        error_message: undefined,
-        is_idle: queueState.is_idle,
-        pending_count: queueState.pending_count,
-        running_count: queueState.running_count,
-        observed_at: observedAt,
-      };
+      return buildQueueRuntimeStatus({
+        ...runtimeStatusInput,
+        queueState,
+      });
     } catch (error) {
-      return {
-        server_id: serverMeta?.id ?? 0,
-        server_name: serverMeta?.name ?? '',
-        endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
-        backend_type: backendType,
-        capacity,
-        available_count: 0,
-        is_connected: false,
-        response_time: Date.now() - startedAt,
-        error_message: resolveAxiosErrorMessage(error),
-        is_idle: false,
-        pending_count: undefined,
-        running_count: undefined,
-        observed_at: observedAt,
-      };
+      return buildRuntimeStatusError({
+        ...runtimeStatusInput,
+        errorMessage: resolveAxiosErrorMessage(error),
+      });
     }
   }
 
@@ -793,264 +475,4 @@ export function createComfyUIService(apiEndpoint: string, server?: Pick<ComfyUIS
     backendType: server?.backend_type ?? 'comfyui',
     capacity: server?.capacity,
   });
-}
-
-/**
- * Collect runtime occupancy status for multiple ComfyUI servers in parallel.
- */
-export function buildUnprobedModalRuntimeStatus(server: ComfyUIServerRecord): ComfyUIServerRuntimeStatus {
-  const capacity = Math.max(1, Math.floor(server.capacity ?? 10));
-  return {
-    server_id: server.id,
-    server_name: server.name,
-    endpoint: server.endpoint,
-    backend_type: 'modal',
-    capacity,
-    available_count: capacity,
-    is_connected: true,
-    response_time: undefined,
-    error_message: undefined,
-    is_idle: true,
-    pending_count: undefined,
-    running_count: undefined,
-    observed_at: new Date().toISOString(),
-  };
-}
-
-export async function getComfyUIServerRuntimeStatuses(servers: ComfyUIServerRecord[]): Promise<ComfyUIServerRuntimeStatus[]> {
-  const results = await Promise.allSettled(
-    servers.map(async (server) => {
-      if (server.backend_type === 'modal') {
-        return buildUnprobedModalRuntimeStatus(server);
-      }
-
-      const comfyService = new ComfyUIService(server.endpoint, {
-        backendType: server.backend_type,
-        capacity: server.capacity,
-      });
-      return comfyService.getRuntimeStatus(server);
-    })
-  );
-
-  return results.map((result, index) => {
-    const server = servers[index];
-    if (result.status === 'fulfilled') {
-      return result.value;
-    }
-
-    return {
-      server_id: server.id,
-      server_name: server.name,
-      endpoint: server.endpoint,
-      backend_type: server.backend_type,
-      capacity: server.capacity,
-      available_count: 0,
-      is_connected: false,
-      response_time: undefined,
-      error_message: resolveAxiosErrorMessage(result.reason),
-      is_idle: false,
-      pending_count: undefined,
-      running_count: undefined,
-      observed_at: new Date().toISOString(),
-    };
-  });
-}
-
-/**
- * 여러 ComfyUI 서버에서 병렬로 이미지 생성
- */
-export class ParallelGenerationService {
-  /**
-   * 여러 서버에 동시에 이미지 생성 요청
-   * @param servers 서버 목록
-   * @param workflow 워크플로우 레코드
-   * @param promptData 프롬프트 데이터
-   * @returns 각 서버의 생성 결과
-   */
-  static async generateOnMultipleServers(
-    servers: Array<{ id: number; name: string; endpoint: string; backend_type?: ComfyUIBackendType; capacity?: number }>,
-    workflow: WorkflowRecord,
-    promptData: Record<string, any>
-  ): Promise<Array<{
-    serverId: number;
-    serverName: string;
-    success: boolean;
-    promptId?: string;
-    imagePaths?: string[];
-    error?: string;
-  }>> {
-    const results = await Promise.allSettled(
-      servers.map(async (server) => {
-        try {
-          const comfyService = new ComfyUIService(server.endpoint, {
-            backendType: server.backend_type,
-            capacity: server.capacity,
-          });
-          const result = await comfyService.generateImages(workflow, promptData);
-
-          return {
-            serverId: server.id,
-            serverName: server.name,
-            success: true,
-            promptId: result.promptId,
-            imagePaths: result.imagePaths
-          };
-        } catch (error) {
-          return {
-            serverId: server.id,
-            serverName: server.name,
-            success: false,
-            error: (error as Error).message
-          };
-        }
-      })
-    );
-
-    return results.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      } else {
-        return {
-          serverId: servers[index].id,
-          serverName: servers[index].name,
-          success: false,
-          error: result.reason?.message || 'Unknown error'
-        };
-      }
-    });
-  }
-
-  /**
-   * 여러 서버에 프롬프트만 제출 (비동기 생성용)
-   * @param servers 서버 목록
-   * @param workflow 워크플로우 레코드 (미사용, 하위 호환성 유지용)
-   * @param promptData Frontend에서 이미 치환된 완전한 ComfyUI workflow 객체
-   * @returns 각 서버의 프롬프트 ID
-   */
-  static async submitToMultipleServers(
-    servers: Array<{ id: number; name: string; endpoint: string; backend_type?: ComfyUIBackendType; capacity?: number }>,
-    workflow: WorkflowRecord,
-    promptData: Record<string, any>
-  ): Promise<Array<{
-    serverId: number;
-    serverName: string;
-    success: boolean;
-    promptId?: string;
-    error?: string;
-  }>> {
-    // Frontend에서 이미 완전한 workflow로 치환되어 전송됨
-    console.log('🚀 Submitting to multiple servers (pre-substituted from frontend)');
-
-    const results = await Promise.allSettled(
-      servers.map(async (server) => {
-        try {
-          const comfyService = new ComfyUIService(server.endpoint, {
-            backendType: server.backend_type,
-            capacity: server.capacity,
-          });
-
-          // ComfyUI에 프롬프트 제출 (promptData가 이미 완전한 workflow)
-          const promptId = comfyService.isModalBackend()
-            ? comfyService.createProviderJobId()
-            : await comfyService.submitPrompt(promptData);
-          if (comfyService.isModalBackend()) {
-            await comfyService.runModalWorkflowAndCollectOutputs(promptData, promptId);
-          }
-
-          return {
-            serverId: server.id,
-            serverName: server.name,
-            success: true,
-            promptId
-          };
-        } catch (error) {
-          return {
-            serverId: server.id,
-            serverName: server.name,
-            success: false,
-            error: (error as Error).message
-          };
-        }
-      })
-    );
-
-    return results.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      } else {
-        return {
-          serverId: servers[index].id,
-          serverName: servers[index].name,
-          success: false,
-          error: result.reason?.message || 'Unknown error'
-        };
-      }
-    });
-  }
-
-  /**
-   * 여러 서버의 연결 상태 동시 확인
-   * @param servers 서버 목록
-   * @returns 각 서버의 연결 상태
-   */
-  static async testMultipleConnections(
-    servers: Array<{ id: number; name: string; endpoint: string; backend_type?: ComfyUIBackendType; capacity?: number }>
-  ): Promise<Array<{
-    serverId: number;
-    serverName: string;
-    isConnected: boolean;
-    responseTime?: number;
-    error?: string;
-  }>> {
-    const results = await Promise.allSettled(
-      servers.map(async (server) => {
-        const startTime = Date.now();
-        try {
-          if (server.backend_type === 'modal') {
-            return {
-              serverId: server.id,
-              serverName: server.name,
-              isConnected: true,
-              error: 'Modal connection test skipped to avoid waking the GPU endpoint.',
-            };
-          }
-
-          const comfyService = new ComfyUIService(server.endpoint, {
-            backendType: server.backend_type,
-            capacity: server.capacity,
-          });
-          const isConnected = await comfyService.testConnection();
-          const responseTime = Date.now() - startTime;
-
-          return {
-            serverId: server.id,
-            serverName: server.name,
-            isConnected,
-            responseTime
-          };
-        } catch (error) {
-          return {
-            serverId: server.id,
-            serverName: server.name,
-            isConnected: false,
-            responseTime: Date.now() - startTime,
-            error: (error as Error).message
-          };
-        }
-      })
-    );
-
-    return results.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      } else {
-        return {
-          serverId: servers[index].id,
-          serverName: servers[index].name,
-          isConnected: false,
-          error: result.reason?.message || 'Unknown error'
-        };
-      }
-    });
-  }
 }

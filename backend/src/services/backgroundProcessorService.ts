@@ -20,6 +20,7 @@ import { QueryCacheService } from './QueryCacheService';
 import { MetadataExtractionError } from '../types/errors';
 import type { FileType } from '../types/image';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
+import { maybeTruncateImagesWal } from '../database/walMaintenance';
 
 interface UnhashedFile {
   id: number;
@@ -60,6 +61,7 @@ interface SavedMediaProcessingOptions {
   folderId?: number;
   mimeType?: string;
   triggerAutoTag?: boolean;
+  metadataMode?: 'inline' | 'background';
   quiet?: boolean;
 }
 
@@ -68,6 +70,10 @@ interface SavedMediaProcessingResult {
   compositeHash: string | null;
   fileType: FileType;
   status: 'processed' | 'already_processed';
+}
+
+interface ProcessFileOptions {
+  metadataMode?: 'inline' | 'background';
 }
 
 interface ImageFileProcessingRecord extends UnhashedFile {
@@ -134,6 +140,26 @@ function linkImageFileToHash(fileId: number, compositeHash: string): void {
   );
 }
 
+function markFileAsProcessingFailed(fileId: number, filePath: string, reason: string): void {
+  db.prepare(
+    `
+      UPDATE image_files
+      SET file_status = 'failed',
+          last_verified_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `
+  ).run(fileId);
+
+  console.warn(
+    `  ⚠️  Media file skipped and marked failed: ${path.basename(filePath)} (${reason})`
+  );
+}
+
+function isUnsupportedImageFormatError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /unsupported image format|input file is missing|empty input file/i.test(message);
+}
+
 function determineFileType(mimeType: string, filePath: string): FileType {
   if (mimeType.startsWith('video/')) {
     return 'video';
@@ -175,8 +201,10 @@ function yieldToHttpRequests(): Promise<void> {
  */
 export class BackgroundProcessorService {
   private static processing = false;
+  private static lockRetryScheduled = false;
   private static readonly BATCH_SIZE = 50;
   private static readonly CONCURRENCY = resolveBackgroundMediaConcurrency();
+  private static readonly LOCK_RETRY_DELAY_MS = 5000;
 
   /**
    * Register and process a media file that this backend just saved.
@@ -264,6 +292,8 @@ export class BackgroundProcessorService {
       folder_id: folderId,
       mime_type: mimeType,
       file_type: fileType,
+    }, {
+      metadataMode: options.metadataMode,
     });
 
     const processedRecord = db.prepare(`
@@ -274,7 +304,6 @@ export class BackgroundProcessorService {
 
     const compositeHash = processedRecord?.composite_hash ?? null;
     if (compositeHash) {
-      await this.processApiGenerationGroupAssignment(compositeHash);
       this.triggerAutoTagProcessing(compositeHash, resolvedPath, options);
     }
 
@@ -305,6 +334,22 @@ export class BackgroundProcessorService {
     }, 0);
   }
 
+  private static queueMetadataExtraction(filePath: string, compositeHash: string, logLabel: string): void {
+    try {
+      BackgroundQueueService.addMetadataExtractionTask(filePath, compositeHash);
+      console.log(`  🧠 Metadata extraction queued: ${logLabel}`);
+    } catch (queueError) {
+      console.warn(
+        `  ⚠️  Failed to queue metadata extraction for ${logLabel}:`,
+        queueError instanceof Error ? queueError.message : queueError
+      );
+      const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
+      if (releasedForVisibility) {
+        QueryCacheService.scheduleGalleryCacheInvalidation();
+      }
+    }
+  }
+
   private static async extractMetadataNowOrQueue(filePath: string, compositeHash: string, logLabel: string): Promise<void> {
     try {
       await BackgroundQueueService.extractAndPersistMetadata(filePath, compositeHash);
@@ -315,19 +360,22 @@ export class BackgroundProcessorService {
         error instanceof Error ? error.message : error
       );
 
-      try {
-        BackgroundQueueService.addMetadataExtractionTask(filePath, compositeHash);
-      } catch (queueError) {
-        console.warn(
-          `  ⚠️  Failed to queue metadata extraction retry for ${logLabel}:`,
-          queueError instanceof Error ? queueError.message : queueError
-        );
-        const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
-        if (releasedForVisibility) {
-          QueryCacheService.scheduleGalleryCacheInvalidation();
-        }
-      }
+      this.queueMetadataExtraction(filePath, compositeHash, logLabel);
     }
+  }
+
+  private static async extractMetadataForProcessedMedia(
+    filePath: string,
+    compositeHash: string,
+    logLabel: string,
+    options: ProcessFileOptions = {},
+  ): Promise<void> {
+    if (options.metadataMode === 'background') {
+      this.queueMetadataExtraction(filePath, compositeHash, logLabel);
+      return;
+    }
+
+    await this.extractMetadataNowOrQueue(filePath, compositeHash, logLabel);
   }
 
   /**
@@ -336,6 +384,9 @@ export class BackgroundProcessorService {
    */
   static async processUnhashedImages(options: BackgroundProcessorOptions = {}): Promise<ProcessingResult> {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
+      if (this.getUnprocessedCount() > 0) {
+        this.scheduleHashGenerationAfterMaintenanceLock(options);
+      }
       if (!options.quietIfIdle) {
         console.log('⏸️  Background processor paused by system maintenance lock');
       }
@@ -410,6 +461,15 @@ export class BackgroundProcessorService {
 
       await Promise.all(tasks);
 
+      if (SystemMaintenanceLockService.isExclusiveActive() && this.getUnprocessedCount() > 0) {
+        this.scheduleHashGenerationAfterMaintenanceLock(options);
+        this.processing = false;
+        if (!options.quietIfIdle) {
+          console.log('⏸️  Background processor retry scheduled after system maintenance lock');
+        }
+        return result;
+      }
+
       console.log(
         `✅ Batch complete: ${result.processed} processed, ${result.errors} errors`
       );
@@ -436,7 +496,7 @@ export class BackgroundProcessorService {
   /**
    * Process a single file: generate hash, check duplicates, create thumbnail
    */
-  private static async processFile(file: UnhashedFile & { file_type: string }): Promise<void> {
+  private static async processFile(file: UnhashedFile & { file_type: string }, options: ProcessFileOptions = {}): Promise<void> {
     const fileName = path.basename(file.original_file_path);
 
     // Check if file still exists and is readable
@@ -464,6 +524,12 @@ export class BackgroundProcessorService {
       );
     }
 
+    const stats = await fs.promises.stat(file.original_file_path);
+    if (stats.size <= 0) {
+      markFileAsProcessingFailed(file.id, file.original_file_path, 'empty file');
+      return;
+    }
+
     // 파일 타입에 따라 처리
     if (file.file_type === 'video' || file.file_type === 'animated') {
       // 동영상 및 애니메이션 이미지: file_hash 생성 후 composite_hash에 저장
@@ -472,20 +538,33 @@ export class BackgroundProcessorService {
     }
 
     // 일반 이미지: perceptual hash 생성
-    await this.processImageFile(file);
+    await this.processImageFile(file, options);
   }
 
   /**
    * Process image file: generate hash, check duplicates, create thumbnail
    */
-  private static async processImageFile(file: UnhashedFile): Promise<void> {
+  private static async processImageFile(file: UnhashedFile, options: ProcessFileOptions = {}): Promise<void> {
     const fileName = path.basename(file.original_file_path);
 
     // Generate hashes and color histogram
-    const { hashes, colorHistogram } =
-      await ImageSimilarityService.generateHashAndHistogram(
+    let hashes: Awaited<ReturnType<typeof ImageSimilarityService.generateHashAndHistogram>>['hashes'];
+    let colorHistogram: Awaited<ReturnType<typeof ImageSimilarityService.generateHashAndHistogram>>['colorHistogram'];
+
+    try {
+      const result = await ImageSimilarityService.generateHashAndHistogram(
         file.original_file_path
       );
+      hashes = result.hashes;
+      colorHistogram = result.colorHistogram;
+    } catch (error) {
+      if (isUnsupportedImageFormatError(error)) {
+        markFileAsProcessingFailed(file.id, file.original_file_path, 'unsupported image format');
+        return;
+      }
+
+      throw error;
+    }
 
     // Check if this hash already exists (duplicate detection)
     const existing = findExistingMediaMetadataSummary(hashes.compositeHash);
@@ -495,10 +574,11 @@ export class BackgroundProcessorService {
       linkImageFileToHash(file.id, hashes.compositeHash);
 
       if (shouldBackfillDuplicateMetadata(existing)) {
-        await this.extractMetadataNowOrQueue(
+        await this.extractMetadataForProcessedMedia(
           file.original_file_path,
           hashes.compositeHash,
           `duplicate backfill ${fileName}`,
+          options,
         );
       } else {
         const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(hashes.compositeHash);
@@ -568,15 +648,18 @@ export class BackgroundProcessorService {
     // Process pending API generation group assignments
     await this.processApiGenerationGroupAssignment(hashes.compositeHash);
 
-    // Extract AI metadata immediately so upload/generation/folder-scan results
-    // persist the same prompt/info quality as the upload-page preview route.
-    await this.extractMetadataNowOrQueue(
+    // Extract AI metadata through the selected scheduling mode so upload and
+    // background scans can stay inline while generated-media completion can
+    // hand the heavier work to the background queue.
+    await this.extractMetadataForProcessedMedia(
       file.original_file_path,
       hashes.compositeHash,
       fileName,
+      options,
     );
 
     console.log(`  ✨ Processed image: ${fileName}`);
+    maybeTruncateImagesWal('background-image-processed');
   }
 
   /**
@@ -673,6 +756,7 @@ export class BackgroundProcessorService {
     }
 
     console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
+    maybeTruncateImagesWal('background-video-processed');
   }
 
   /**
@@ -692,6 +776,9 @@ export class BackgroundProcessorService {
    */
   static triggerHashGeneration(options: BackgroundProcessorOptions = {}): void {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
+      if (this.getUnprocessedCount() > 0) {
+        this.scheduleHashGenerationAfterMaintenanceLock(options);
+      }
       return;
     }
 
@@ -707,6 +794,19 @@ export class BackgroundProcessorService {
         this.processUnhashedImages(options);
       }, 2000); // 2 second delay to allow scan to complete
     }
+  }
+
+  /** Retry hash generation promptly after an exclusive maintenance lock can clear. */
+  private static scheduleHashGenerationAfterMaintenanceLock(options: BackgroundProcessorOptions = {}): void {
+    if (this.lockRetryScheduled) {
+      return;
+    }
+
+    this.lockRetryScheduled = true;
+    setTimeout(() => {
+      this.lockRetryScheduled = false;
+      this.triggerHashGeneration({ ...options, quietIfIdle: true });
+    }, this.LOCK_RETRY_DELAY_MS);
   }
 
   /**
@@ -760,16 +860,17 @@ export class BackgroundProcessorService {
       const { apiGenDb } = await import('../database/apiGenerationDb');
       const { ImageGroupModel } = await import('../models/Group');
 
-      // Check if there's a pending group assignment for this hash
-      const pendingAssignment = apiGenDb.prepare(`
-        SELECT id, assigned_group_id
+      // Assign once the history row is linked to saved media; completed status
+      // can be written immediately after this handoff.
+      const pendingAssignments = apiGenDb.prepare(`
+        SELECT DISTINCT assigned_group_id
         FROM api_generation_history
         WHERE composite_hash = ?
           AND assigned_group_id IS NOT NULL
-          AND generation_status = 'completed'
-      `).get(compositeHash) as { id: number; assigned_group_id: number } | undefined;
+          AND generation_status IN ('processing', 'completed')
+      `).all(compositeHash) as Array<{ assigned_group_id: number }>;
 
-      if (pendingAssignment) {
+      for (const pendingAssignment of pendingAssignments) {
         // Add image to the assigned group
         const added = await ImageGroupModel.addImageToGroup(
           pendingAssignment.assigned_group_id,

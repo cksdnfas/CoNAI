@@ -12,7 +12,7 @@ export function configureSqliteConnection(db: BetterSqlite3.Database, options: S
   try {
     const journalMode = db.pragma('journal_mode = WAL', { simple: true })
     db.pragma('synchronous = NORMAL')
-    db.pragma('busy_timeout = 5000')
+    db.pragma('busy_timeout = 60000')
 
     if (options.enableForeignKeys !== false) {
       db.pragma('foreign_keys = ON')

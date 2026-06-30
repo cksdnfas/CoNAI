@@ -31,6 +31,7 @@ export class APIImageProcessor {
       this.resolveSavedMediaPath(saved.originalPath),
       {
         mimeType: saved.mimeType,
+        metadataMode: 'background',
         quiet: true,
       },
     );

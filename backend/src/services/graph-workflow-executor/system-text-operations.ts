@@ -7,6 +7,14 @@ import {
 } from './shared'
 
 type TextTransformMode = 'extract' | 'replace'
+type RandomChoiceOutputType = 'text' | 'number' | 'boolean' | 'json' | 'any'
+
+type RandomTextChoiceEntry = {
+  key?: unknown
+  value?: unknown
+}
+
+const RANDOM_TEXT_CHOICE_FIELD_PREFIX = 'options.'
 
 /** Normalize one upstream workflow value into text for text utilities. */
 function normalizeTextValue(value: unknown) {
@@ -134,6 +142,132 @@ function mergeTextSlots(params: {
   return chunks.join('')
 }
 
+function normalizeRandomChoiceOutputType(value: unknown): RandomChoiceOutputType {
+  return value === 'number'
+    || value === 'boolean'
+    || value === 'json'
+    || value === 'any'
+    ? value
+    : 'text'
+}
+
+function parseRandomChoiceBoolean(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'number') {
+    if (value === 1) return true
+    if (value === 0) return false
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true
+    if (normalized === 'false' || normalized === '0' || normalized === 'no') return false
+  }
+
+  return undefined
+}
+
+function normalizeRandomChoiceCandidateValue(value: unknown, outputType: RandomChoiceOutputType) {
+  if (outputType === 'any') {
+    return value === undefined || value === null || value === '' ? undefined : value
+  }
+
+  if (outputType === 'number') {
+    const numericValue = Number(value)
+    return Number.isFinite(numericValue) ? numericValue : undefined
+  }
+
+  if (outputType === 'boolean') {
+    return parseRandomChoiceBoolean(value)
+  }
+
+  if (outputType === 'json') {
+    if (value === undefined || value === null || value === '') {
+      return undefined
+    }
+
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value)
+      } catch {
+        return undefined
+      }
+    }
+
+    return value
+  }
+
+  const textValue = normalizeTextValue(value)
+  return textValue.length > 0 ? textValue : undefined
+}
+
+/** Normalize configured candidate rows from the random text choice node. */
+function normalizeRandomTextChoiceEntries(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (entry && typeof entry === 'object' ? entry as RandomTextChoiceEntry : null))
+      .filter((entry): entry is RandomTextChoiceEntry => Boolean(entry))
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => ({ key, value: entryValue }))
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      return normalizeRandomTextChoiceEntries(JSON.parse(value))
+    } catch {
+      return []
+    }
+  }
+
+  return []
+}
+
+/** Collect explicit rows plus dynamic upstream inputs such as `options.text_1`. */
+function collectRandomTextChoiceCandidates(resolvedInputs: Record<string, any>, outputType: RandomChoiceOutputType) {
+  const candidates: unknown[] = []
+  const connectedValueByKey = new Map<string, unknown>()
+
+  for (const [inputKey, inputValue] of Object.entries(resolvedInputs)) {
+    if (!inputKey.startsWith(RANDOM_TEXT_CHOICE_FIELD_PREFIX)) {
+      continue
+    }
+
+    const entryKey = inputKey.slice(RANDOM_TEXT_CHOICE_FIELD_PREFIX.length).trim()
+    const candidateValue = normalizeRandomChoiceCandidateValue(inputValue, outputType)
+    if (entryKey && candidateValue !== undefined) {
+      connectedValueByKey.set(entryKey, candidateValue)
+    }
+  }
+
+  const configuredKeys = new Set<string>()
+  for (const entry of normalizeRandomTextChoiceEntries(resolvedInputs.options)) {
+    const key = typeof entry.key === 'string' ? entry.key.trim() : ''
+    if (key) {
+      configuredKeys.add(key)
+    }
+
+    const candidateValue = key && connectedValueByKey.has(key)
+      ? connectedValueByKey.get(key)
+      : normalizeRandomChoiceCandidateValue(entry.value, outputType)
+    if (candidateValue !== undefined) {
+      candidates.push(candidateValue)
+    }
+  }
+
+  for (const [key, candidateValue] of connectedValueByKey) {
+    if (!configuredKeys.has(key)) {
+      candidates.push(candidateValue)
+    }
+  }
+
+  return candidates
+}
+
 /** Execute the built-in A/B/C text merge system node. */
 export function executeTextMergeNode(
   context: ExecutionContext,
@@ -157,6 +291,31 @@ export function executeTextMergeNode(
   }
 
   completeSystemNode(context, node, moduleDefinition, 'system.merge_text', nodeArtifacts)
+}
+
+/** Execute the expandable random text choice system node. */
+export function executeRandomTextChoiceNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const outputType = normalizeRandomChoiceOutputType(resolvedInputs.output_type)
+  const candidates = collectRandomTextChoiceCandidates(resolvedInputs, outputType)
+  const selectedValue = candidates.length > 0
+    ? candidates[Math.floor(Math.random() * candidates.length)]
+    : outputType === 'text' ? '' : null
+
+  const nodeArtifacts = {
+    text: buildRuntimeArtifact(context.executionId, node.id, 'text', outputType, selectedValue, {
+      kind: 'system-random-text-choice',
+      operationKey: 'system.random_text_choice',
+      outputType,
+      candidateCount: candidates.length,
+    }),
+  }
+
+  completeSystemNode(context, node, moduleDefinition, 'system.random_text_choice', nodeArtifacts)
 }
 
 /** Execute a prompt wildcard transform node and emit tool-specific prompt outputs. */

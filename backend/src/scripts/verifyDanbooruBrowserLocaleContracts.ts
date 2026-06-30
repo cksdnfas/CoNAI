@@ -7,7 +7,10 @@ import Database from 'better-sqlite3';
 
 const runtimeBase = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-danbooru-locale-'));
 const dbPath = path.join(runtimeBase, 'danbooru.sqlite');
+process.env.RUNTIME_BASE_PATH = runtimeBase;
 process.env.DANBOORU_SQLITE_PATH = dbPath;
+
+const characterImagePath = path.join(runtimeBase, 'database', 'character-images', 'character_original', 'cover.webp');
 
 function createFixtureDb() {
   const db = new Database(dbPath);
@@ -116,6 +119,12 @@ function createFixtureDb() {
   db.close();
 }
 
+function createFixtureCharacterImages() {
+  fs.mkdirSync(path.dirname(characterImagePath), { recursive: true });
+  fs.writeFileSync(characterImagePath, 'fixture-image');
+  fs.writeFileSync(path.join(path.dirname(characterImagePath), 'note.txt'), 'not an image');
+}
+
 function assertEmptyListPayload(payload: { items: unknown[]; pagination: { page: number; limit: number; total: number; totalPages: number } }, expectedLimit: number) {
   assert.deepEqual(payload.items, []);
   assert.equal(payload.pagination.page, 1);
@@ -126,15 +135,24 @@ function assertEmptyListPayload(payload: { items: unknown[]; pagination: { page:
 
 async function main() {
   const { danbooruBrowserService } = await import('../services/danbooruBrowserService');
+  const { PromptGroupService } = await import('../services/promptGroupService');
+  const { closeDatabase, initializeDatabase } = await import('../database/init');
 
   try {
+    await initializeDatabase();
+
     assert.equal(danbooruBrowserService.getSummary().database.available, false);
     assertEmptyListPayload(danbooruBrowserService.listTags({ q: '일반 번역명', page: 1, limit: 10 }), 10);
     assertEmptyListPayload(danbooruBrowserService.listArtists({ q: '작가 번역명', page: 1, limit: 10 }), 10);
     assertEmptyListPayload(danbooruBrowserService.listCharacters({ q: '캐릭터 번역명', page: 1, limit: 10 }), 10);
     assert.equal(danbooruBrowserService.getCharacterImageFilePath(301, 'cover.webp'), null);
+    const missingGroupingPreview = PromptGroupService.previewDanbooruGrouping({ language: 'ko' });
+    assert.equal(missingGroupingPreview.database.available, false);
+    assert.equal(missingGroupingPreview.totals.matchedPrompts, 0);
+    assert.equal(PromptGroupService.applyDanbooruGrouping({ language: 'ko' }).database.available, false);
 
     createFixtureDb();
+    createFixtureCharacterImages();
 
     const tags = danbooruBrowserService.listTags({ q: '일반 번역명', page: 1, limit: 10 });
     assert.deepEqual(tags.items.map((item) => item.name), ['general_original']);
@@ -151,6 +169,15 @@ async function main() {
     const characters = danbooruBrowserService.listCharacters({ q: '캐릭터 번역명', page: 1, limit: 10 });
     assert.deepEqual(characters.items.map((item) => item.name), ['character_original']);
     assert.equal(characters.items[0]?.translatedName, '캐릭터 번역명');
+    assert.deepEqual(characters.items[0]?.images, [
+      {
+        fileName: 'cover.webp',
+        url: '/api/danbooru-browser/character-images/301/cover.webp',
+      },
+    ]);
+    assert.equal(danbooruBrowserService.getCharacterImageFilePath(301, 'cover.webp'), characterImagePath);
+    assert.equal(danbooruBrowserService.getCharacterImageFilePath(301, 'note.txt'), null);
+    assert.equal(danbooruBrowserService.getCharacterImageFilePath(301, '../cover.webp'), null);
     assert.equal(
       characters.items[0]?.copyrights[0]?.translatedName,
       '작품 번역명',
@@ -160,6 +187,7 @@ async function main() {
     console.log('✅ Danbooru browser locale contracts passed');
   } finally {
     danbooruBrowserService.close();
+    closeDatabase();
     fs.rmSync(runtimeBase, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }

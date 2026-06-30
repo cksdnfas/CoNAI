@@ -28,6 +28,7 @@ interface ImageListItemProps {
   showDefaultQuickActions?: boolean
   interactive?: boolean
   blurPreview?: boolean
+  onPreviewIntent?: (image: ImageRecord) => void
 }
 
 /** Prevent native media dragging so drag gestures can be used for selection. */
@@ -50,6 +51,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   showDefaultQuickActions = true,
   interactive = true,
   blurPreview = false,
+  onPreviewIntent,
 }: ImageListItemProps) {
   const { t } = useI18n()
   const previewUrl = getImageListPreviewUrl(image)
@@ -151,6 +153,8 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       aria-pressed={selected}
       draggable={false}
       onDragStart={preventNativeDrag}
+      onPointerEnter={interactive ? (() => onPreviewIntent?.(image)) : undefined}
+      onFocus={interactive ? (() => onPreviewIntent?.(image)) : undefined}
       onClick={interactive ? (() => onActivate?.(image, imageId, href)) : undefined}
       onKeyDown={handleKeyDown}
     >

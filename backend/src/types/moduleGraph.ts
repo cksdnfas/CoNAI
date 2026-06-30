@@ -206,6 +206,68 @@ export interface GraphWorkflowVersionRecord {
   created_date: string
 }
 
+export interface GraphWorkflowVersionSummaryRecord {
+  id: number
+  workflow_id: number
+  version: number
+  changelog?: string | null
+  created_date: string
+  node_count: number
+  edge_count: number
+  exposed_input_count: number
+  debug_mode: boolean
+  previous_version?: number | null
+  node_delta: number
+  edge_delta: number
+  exposed_input_delta: number
+}
+
+export interface GraphWorkflowRuntimeHealthRecord {
+  workflow_id: number
+  queue: {
+    queued_count: number
+    running_count: number
+    manual_queued_count: number
+    manual_running_count: number
+    schedule_queued_count: number
+    schedule_running_count: number
+    in_process_running_count: number
+    oldest_queued_at?: string | null
+    retry_timer_pending: boolean
+    queue_recheck_interval_ms: number
+    schedule_concurrency_limit: number
+    cancellation_requested_count: number
+  }
+  retry_policy: {
+    schedule_count: number
+    active_schedule_count: number
+    stop_on_failure_count: number
+    continue_on_failure_count: number
+    paused_for_review_count: number
+    stopped_after_error_count: number
+    overlap_stopped_count: number
+  }
+  retention: {
+    output_retention_limit: number
+    pending_prune: boolean
+    pending_prune_count: number
+  }
+  recovery: {
+    last_startup_recovery_at?: string | null
+    startup_queued_backlog: number
+    startup_failed_running: number
+    running_not_in_process_count: number
+  }
+  telemetry: {
+    completed_count: number
+    failed_count: number
+    cancelled_count: number
+    latest_completed_at?: string | null
+    latest_failed_at?: string | null
+    latest_error_message?: string | null
+  }
+}
+
 export interface GraphExecutionRecord {
   id: number
   graph_workflow_id: number
@@ -333,6 +395,24 @@ export interface GraphExecutionFinalResultRecord {
   artifact_type: ModulePortDataType | 'file'
   source_storage_path?: string | null
   source_metadata?: string | null
+  created_date: string
+}
+
+export type GraphExecutionNodeIoDirection = 'input' | 'output'
+
+export interface GraphExecutionNodeIoRecord {
+  id: number
+  execution_id: number
+  node_id: string
+  direction: GraphExecutionNodeIoDirection
+  port_key: string
+  source_node_id?: string | null
+  source_port_key?: string | null
+  output_index: number
+  artifact_type?: ModulePortDataType | 'file' | null
+  ref_kind?: string | null
+  ref_value?: string | null
+  summary?: string | null
   created_date: string
 }
 

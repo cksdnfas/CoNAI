@@ -16,7 +16,7 @@ import {
 } from '@/lib/api-danbooru-browser'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import type { DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
+import type { DanbooruBrowserDatabaseInfo, DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
 import { resolveDanbooruBrowserProgress } from '../danbooru-browser-progress'
 import {
@@ -42,6 +42,31 @@ import {
   readStoredRelatedTagOptions,
   type DanbooruBrowserSelectedNode,
 } from './prompt-danbooru-browser-panel-ui'
+
+function DanbooruDatabaseMissingNotice({ database }: { database: DanbooruBrowserDatabaseInfo }) {
+  const { t } = useI18n()
+  const filePatterns = database.filePatterns.join(', ')
+
+  return (
+    <Alert>
+      <AlertTitle>{t({ ko: 'Danbooru DB 파일 없음', en: 'Danbooru DB file missing' })}</AlertTitle>
+      <AlertDescription>
+        <div className="space-y-2">
+          <p>{t({ ko: '태그, 작가, 캐릭터 목록은 DB 파일을 배치하면 활성화돼.', en: 'Tags, artists, and characters become available after placing the DB file.' })}</p>
+          <div className="grid gap-1 text-xs sm:grid-cols-[120px_minmax(0,1fr)]">
+            <span className="font-medium text-muted-foreground">{t({ ko: '기본 경로', en: 'Default path' })}</span>
+            <span className="min-w-0 break-all font-mono text-foreground">{database.expectedPath}</span>
+            <span className="font-medium text-muted-foreground">{t({ ko: '허용 파일명', en: 'Accepted names' })}</span>
+            <span className="min-w-0 break-all font-mono text-foreground">{filePatterns}</span>
+            <span className="font-medium text-muted-foreground">{t({ ko: '다운로드', en: 'Download' })}</span>
+            <a className="min-w-0 break-all text-primary underline-offset-4 hover:underline" href={database.downloadUrl} target="_blank" rel="noreferrer">{database.downloadUrl}</a>
+          </div>
+          <p className="text-xs">{t({ ko: '다른 위치를 쓰려면 DANBOORU_SQLITE_PATH 환경변수로 파일 경로를 지정해.', en: 'Set DANBOORU_SQLITE_PATH to use a file from another location.' })}</p>
+        </div>
+      </AlertDescription>
+    </Alert>
+  )
+}
 
 export function PromptDanbooruBrowserPanel() {
   const { language, t } = useI18n()
@@ -356,6 +381,8 @@ export function PromptDanbooruBrowserPanel() {
         ) : null}
 
         {isDanbooruDbAvailable && activeQuery.isLoading ? <TableLoading columns={activeSection === 'characters' ? 6 : activeSection === 'artists' ? 3 : 2} /> : null}
+
+        {!summaryQuery.isLoading && !summaryQuery.isError && database && !isDanbooruDbAvailable ? <DanbooruDatabaseMissingNotice database={database} /> : null}
 
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'tags' ? <TagsTable items={tagItems} language={language} /> : null}
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'artists' ? <ArtistsTable items={artistItems} language={language} /> : null}

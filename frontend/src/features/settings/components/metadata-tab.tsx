@@ -12,11 +12,12 @@ interface MetadataTabProps {
   onPatchMetadata: (patch: Partial<MetadataExtractionSettings>) => void
   onSave: () => void
   isSaving: boolean
+  hasChanges: boolean
   onReextractAll: () => void
   isReextracting: boolean
 }
 
-export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, onReextractAll, isReextracting }: MetadataTabProps) {
+export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, hasChanges, onReextractAll, isReextracting }: MetadataTabProps) {
   const { t } = useI18n()
   const handleReextractAll = () => {
     if (!window.confirm(t('settings.metadataTab.reExtractAiMetadataFor'))) {
@@ -34,9 +35,9 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
             <Button
               size="icon-sm"
               onClick={onSave}
-              disabled={!metadataDraft || isSaving}
-              aria-label={t('settings.metadataTab.metadataSave')}
-              title={t('settings.metadataTab.metadataSave')}
+              disabled={!metadataDraft || isSaving || !hasChanges}
+              aria-label={hasChanges ? t('settings.metadataTab.metadataSave') : t({ ko: '메타데이터 설정 변경 없음', en: 'No metadata settings changes' })}
+              title={hasChanges ? t('settings.metadataTab.metadataSave') : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>

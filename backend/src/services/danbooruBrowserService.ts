@@ -1,7 +1,18 @@
 import Database from 'better-sqlite3';
-import fs from 'fs';
-import path from 'path';
-import { runtimePaths } from '../config/runtimePaths';
+import {
+  DanbooruCharacterImageStore,
+  type DanbooruBrowserCharacterImageRecord,
+} from './danbooruBrowser/characterImages';
+import {
+  resolveDanbooruDbInfo,
+  type DanbooruBrowserDatabaseInfo,
+} from './danbooruBrowser/dbResolver';
+import {
+  parsePromptGroupSyntax,
+  resolvePromptGroupPickCount,
+  type PromptGroupSyntax,
+} from './danbooruBrowser/promptGroupSyntax';
+import { buildTaxonomyParentKeyByKey } from './danbooruBrowser/taxonomyHierarchy';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -9,11 +20,6 @@ const CHARACTER_PAGE_SIZE = 30;
 const DEFAULT_RELATED_TAG_LIMIT_PER_CHARACTER = 100;
 const MAX_RELATED_TAG_LIMIT_PER_CHARACTER = 500;
 const RELATED_TAG_CATEGORY_NAMES = ['general', 'artist', 'copyright', 'character', 'meta'] as const;
-const DANBOORU_DB_DOWNLOAD_URL = 'https://github.com/cksdnfas/danbooru-db-viewer';
-const DANBOORU_DB_FILE_PATTERNS = ['danbooru.sqlite', '*danbooru*.sqlite', '*danbooru*.sqlite3', '*danbooru*.db'];
-const DANBOORU_DB_EXTENSIONS = new Set(['.sqlite', '.sqlite3', '.db']);
-const CHARACTER_IMAGE_DIRECTORY_NAME = 'character-images';
-const CHARACTER_IMAGE_EXTENSIONS = new Set(['.webp', '.png', '.jpg', '.jpeg', '.gif']);
 
 type RelatedTagCategoryName = typeof RELATED_TAG_CATEGORY_NAMES[number];
 
@@ -85,10 +91,7 @@ export interface DanbooruBrowserCopyrightRecord {
   isPrimary: boolean;
 }
 
-export interface DanbooruBrowserCharacterImageRecord {
-  fileName: string;
-  url: string;
-}
+export type { DanbooruBrowserCharacterImageRecord, DanbooruBrowserDatabaseInfo };
 
 export interface DanbooruBrowserCharacterRecord {
   tagId: number;
@@ -101,16 +104,6 @@ export interface DanbooruBrowserCharacterRecord {
   relatedTags: DanbooruBrowserRelatedTagRecord[];
   images: DanbooruBrowserCharacterImageRecord[];
   danbooruUrl: string;
-}
-
-export interface DanbooruBrowserDatabaseInfo {
-  available: boolean;
-  path: string;
-  expectedPath: string;
-  expectedDirectory: string;
-  downloadUrl: string;
-  filePatterns: string[];
-  matchedBy: 'configured' | 'default' | 'discovered' | 'missing';
 }
 
 interface CountRow {
@@ -183,110 +176,13 @@ interface CharacterRelatedTagRow {
   score: number | null;
 }
 
-function isDanbooruDbCandidate(fileName: string): boolean {
-  const lowerFileName = fileName.toLowerCase();
-  const extension = path.extname(lowerFileName);
-  return lowerFileName.includes('danbooru')
-    && DANBOORU_DB_EXTENSIONS.has(extension)
-    && !lowerFileName.endsWith('-wal')
-    && !lowerFileName.endsWith('-shm')
-    && !lowerFileName.endsWith('-journal');
+interface PromptGroupTagRow {
+  name: string;
+  post_count: number;
 }
 
-function compareDanbooruDbCandidates(left: string, right: string): number {
-  const scoreCandidate = (filePath: string) => {
-    const fileName = path.basename(filePath).toLowerCase();
-    const extension = path.extname(fileName);
-    const baseName = fileName.slice(0, fileName.length - extension.length);
-    const stat = fs.statSync(filePath);
+export { resolveDanbooruDbInfo };
 
-    return {
-      exact: fileName === 'danbooru.sqlite' ? 0 : 1,
-      startsWith: baseName.startsWith('danbooru') ? 0 : 1,
-      extension: extension === '.sqlite' ? 0 : extension === '.sqlite3' ? 1 : 2,
-      length: fileName.length,
-      newest: -stat.mtimeMs,
-      fileName,
-    };
-  };
-
-  const leftScore = scoreCandidate(left);
-  const rightScore = scoreCandidate(right);
-  return leftScore.exact - rightScore.exact
-    || leftScore.startsWith - rightScore.startsWith
-    || leftScore.extension - rightScore.extension
-    || leftScore.length - rightScore.length
-    || leftScore.newest - rightScore.newest
-    || leftScore.fileName.localeCompare(rightScore.fileName);
-}
-
-function findDanbooruDbCandidate(directory: string): string | null {
-  if (!fs.existsSync(directory)) {
-    return null;
-  }
-
-  const candidates = fs.readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && isDanbooruDbCandidate(entry.name))
-    .map((entry) => path.join(directory, entry.name))
-    .sort(compareDanbooruDbCandidates);
-
-  return candidates[0] ?? null;
-}
-
-export function resolveDanbooruDbInfo(): DanbooruBrowserDatabaseInfo {
-  const expectedDirectory = runtimePaths.databaseDir;
-  const expectedPath = path.join(expectedDirectory, 'danbooru.sqlite');
-  const configuredPath = process.env.DANBOORU_SQLITE_PATH?.trim();
-
-  if (configuredPath) {
-    const resolvedConfiguredPath = path.resolve(configuredPath);
-    const exists = fs.existsSync(resolvedConfiguredPath);
-    return {
-      available: exists,
-      path: resolvedConfiguredPath,
-      expectedPath: resolvedConfiguredPath,
-      expectedDirectory: path.dirname(resolvedConfiguredPath),
-      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
-      filePatterns: DANBOORU_DB_FILE_PATTERNS,
-      matchedBy: exists ? 'configured' : 'missing',
-    };
-  }
-
-  if (fs.existsSync(expectedPath)) {
-    return {
-      available: true,
-      path: expectedPath,
-      expectedPath,
-      expectedDirectory,
-      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
-      filePatterns: DANBOORU_DB_FILE_PATTERNS,
-      matchedBy: 'default',
-    };
-  }
-
-  const discoveredPath = findDanbooruDbCandidate(expectedDirectory);
-  if (discoveredPath) {
-    return {
-      available: true,
-      path: discoveredPath,
-      expectedPath,
-      expectedDirectory,
-      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
-      filePatterns: DANBOORU_DB_FILE_PATTERNS,
-      matchedBy: 'discovered',
-    };
-  }
-
-  return {
-    available: false,
-    path: expectedPath,
-    expectedPath,
-    expectedDirectory,
-    downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
-    filePatterns: DANBOORU_DB_FILE_PATTERNS,
-    matchedBy: 'missing',
-  };
-}
 
 function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = Number(value);
@@ -330,6 +226,10 @@ function normalizeQuery(value?: string | null): string {
   return (value ?? '').trim().toLowerCase().replace(/\s+/g, '_');
 }
 
+function normalizePromptGroupLookup(value?: string | null): string {
+  return normalizeQuery(value).replace(/[^a-z0-9_가-힣ぁ-んァ-ン一-龥]/g, '');
+}
+
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
@@ -354,114 +254,16 @@ function buildEmptyListPayload<T>(page: number, limit: number): { items: T[]; pa
   };
 }
 
-function sanitizeCharacterImageDirectoryName(name: string): string {
-  const sanitized = name
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-    .replace(/[.\s]+$/g, '');
-  return sanitized || 'character';
-}
-
-function isCharacterImageFile(fileName: string): boolean {
-  return CHARACTER_IMAGE_EXTENSIONS.has(path.extname(fileName).toLowerCase());
-}
-
-function buildCharacterImageUrl(tagId: number, fileName: string): string {
-  return `/api/danbooru-browser/character-images/${tagId}/${encodeURIComponent(fileName)}`;
-}
-
-function resolveTaxonomyParentKeyFromNodeKey(nodeKey: string, nodeKeySet: Set<string>): string | null {
-  const parts = nodeKey.split('__');
-
-  for (let length = parts.length - 1; length > 0; length -= 1) {
-    const candidate = parts.slice(0, length).join('__');
-    if (nodeKeySet.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  if ((parts[0] === 'manual' || parts[0] === 'proposed') && parts.length >= 3) {
-    const groupKey = parts[1];
-    const candidates = [
-      groupKey,
-      `${parts[0]}__${groupKey}`,
-      `manual__${groupKey}`,
-      groupKey.startsWith('manual_') ? `manual__${groupKey.slice('manual_'.length)}` : `manual__${groupKey}`,
-    ];
-
-    for (const candidate of candidates) {
-      if (nodeKeySet.has(candidate)) {
-        return candidate;
-      }
-    }
-  }
-
-  return null;
-}
-
-function findExactMemberCountSubset(candidates: TaxonomyNodeRow[], targetCount: number): TaxonomyNodeRow[] {
-  const sorted = [...candidates].sort((left, right) => right.member_tag_count - left.member_tag_count || left.id - right.id);
-  const memo = new Set<string>();
-
-  const search = (index: number, remaining: number): TaxonomyNodeRow[] | null => {
-    if (remaining === 0) return [];
-    if (remaining < 0 || index >= sorted.length) return null;
-
-    const memoKey = `${index}:${remaining}`;
-    if (memo.has(memoKey)) return null;
-
-    const current = sorted[index];
-    if (current.member_tag_count <= remaining) {
-      const withCurrent = search(index + 1, remaining - current.member_tag_count);
-      if (withCurrent) return [current, ...withCurrent];
-    }
-
-    const withoutCurrent = search(index + 1, remaining);
-    if (withoutCurrent) return withoutCurrent;
-
-    memo.add(memoKey);
-    return null;
-  };
-
-  return search(0, targetCount) ?? [];
-}
-
-function buildTaxonomyParentKeyByKey(rows: TaxonomyNodeRow[]): Map<string, string> {
-  const nodeKeySet = new Set(rows.map((row) => row.node_key));
-  const parentKeyByKey = new Map<string, string>();
-
-  for (const row of rows) {
-    const parentKey = resolveTaxonomyParentKeyFromNodeKey(row.node_key, nodeKeySet);
-    if (parentKey) {
-      parentKeyByKey.set(row.node_key, parentKey);
-    }
-  }
-
-  const tagLabParentGroups = rows.filter((row) => row.description?.startsWith('TAG LAB parent group:'));
-  const tagLabCategories = rows.filter((row) =>
-    row.description?.startsWith('TAG LAB category:')
-    && row.direct_member_tag_count === 0
-    && !row.description.startsWith('TAG LAB parent group:')
-    && !parentKeyByKey.has(row.node_key),
-  );
-
-  for (const parentGroup of tagLabParentGroups) {
-    const children = findExactMemberCountSubset(tagLabCategories, parentGroup.member_tag_count);
-    for (const child of children) {
-      parentKeyByKey.set(child.node_key, parentGroup.node_key);
-    }
-  }
-
-  return parentKeyByKey;
-}
-
 class DanbooruBrowserService {
   private db: Database.Database | null = null;
   private taxonomyDescendantIdsById: Map<number, number[]> | null = null;
+  private characterImages = new DanbooruCharacterImageStore();
 
   close(): void {
     this.db?.close();
     this.db = null;
     this.taxonomyDescendantIdsById = null;
+    this.characterImages.clear();
   }
 
   private hasAvailableDb(): boolean {
@@ -484,51 +286,6 @@ class DanbooruBrowserService {
     return nextDb;
   }
 
-  private getCharacterImageRootDirectory(): string {
-    return path.join(runtimePaths.databaseDir, CHARACTER_IMAGE_DIRECTORY_NAME);
-  }
-
-  private getCharacterImageDirectory(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): string | null {
-    const rootDirectory = this.getCharacterImageRootDirectory();
-    if (!fs.existsSync(rootDirectory)) {
-      return null;
-    }
-
-    const candidates = Array.from(new Set([
-      row.name,
-      row.normalized_name,
-      sanitizeCharacterImageDirectoryName(row.name),
-      sanitizeCharacterImageDirectoryName(row.normalized_name),
-      `${sanitizeCharacterImageDirectoryName(row.name)}__${row.tag_id}`,
-      `${sanitizeCharacterImageDirectoryName(row.normalized_name)}__${row.tag_id}`,
-    ].filter(Boolean)));
-
-    for (const candidate of candidates) {
-      const candidatePath = path.join(rootDirectory, candidate);
-      if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isDirectory()) {
-        return candidatePath;
-      }
-    }
-
-    return null;
-  }
-
-  private getCharacterImageRecords(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): DanbooruBrowserCharacterImageRecord[] {
-    const directory = this.getCharacterImageDirectory(row);
-    if (!directory) {
-      return [];
-    }
-
-    return fs.readdirSync(directory, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && isCharacterImageFile(entry.name))
-      .map((entry) => entry.name)
-      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }))
-      .map((fileName) => ({
-        fileName,
-        url: buildCharacterImageUrl(row.tag_id, fileName),
-      }));
-  }
-
   getCharacterImageFilePath(tagId: unknown, fileName: string): string | null {
     const parsedTagId = Number(tagId);
     if (!Number.isFinite(parsedTagId) || !fileName || fileName.includes('/') || fileName.includes('\\')) {
@@ -547,17 +304,7 @@ class DanbooruBrowserService {
       return null;
     }
 
-    const directory = this.getCharacterImageDirectory(row);
-    if (!directory) {
-      return null;
-    }
-
-    const filePath = path.join(directory, fileName);
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile() || !isCharacterImageFile(fileName)) {
-      return null;
-    }
-
-    return filePath;
+    return this.characterImages.getFilePath(row, fileName);
   }
 
   getSummary() {
@@ -677,6 +424,94 @@ class DanbooruBrowserService {
     }
 
     return this.taxonomyDescendantIdsById.get(taxonomyNodeId) ?? [taxonomyNodeId];
+  }
+
+  private findPromptGroupNode(groupName: string): TaxonomyNodeRow | null {
+    const normalizedGroupName = normalizePromptGroupLookup(groupName);
+    if (!normalizedGroupName) {
+      return null;
+    }
+
+    for (const row of this.getTaxonomyRows()) {
+      const nodeKeyLeaf = row.node_key.split('__').at(-1) ?? row.node_key;
+      const candidates = [
+        row.title,
+        row.translated_title,
+        row.node_key,
+        nodeKeyLeaf,
+        row.title.replace(/_/g, ' '),
+      ];
+
+      if (candidates.some((candidate) => normalizePromptGroupLookup(candidate) === normalizedGroupName)) {
+        return row;
+      }
+    }
+
+    return null;
+  }
+
+  private listPromptGroupTags(node: TaxonomyNodeRow, syntax: PromptGroupSyntax, limit: number): string[] {
+    if (limit <= 0) {
+      return [];
+    }
+
+    const taxonomyNodeIds = this.getTaxonomyDescendantIds(node.id);
+    const placeholders = taxonomyNodeIds.map(() => '?').join(',');
+    const clauses = [
+      'tags.is_deprecated = 0',
+      `EXISTS (SELECT 1 FROM taxonomy_tag_memberships tm WHERE tm.tag_id = tags.id AND tm.taxonomy_node_id IN (${placeholders}))`,
+    ];
+    const values: Array<number | string> = [...taxonomyNodeIds];
+
+    if (syntax.usageFilter.min !== undefined) {
+      clauses.push('tags.post_count >= ?');
+      values.push(syntax.usageFilter.min);
+    }
+    if (syntax.usageFilter.max !== undefined) {
+      clauses.push('tags.post_count <= ?');
+      values.push(syntax.usageFilter.max);
+    }
+
+    const rows = this.getDb().prepare(`
+      SELECT tags.name, tags.post_count
+      FROM tags
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY RANDOM()
+      LIMIT ?
+    `).all(...values, limit) as PromptGroupTagRow[];
+
+    return rows.map((row) => row.name);
+  }
+
+  expandPromptGroups(text: string): string {
+    if (!text) {
+      return text;
+    }
+
+    const hasDb = this.hasAvailableDb();
+    return text.replace(/__([^_\r\n][^\r\n]*?)__/g, (match, rawGroup: string) => {
+      if (!hasDb) {
+        return '';
+      }
+
+      const syntax = parsePromptGroupSyntax(rawGroup);
+      if (!syntax) {
+        return '';
+      }
+
+      const node = this.findPromptGroupNode(syntax.groupName);
+      if (!node) {
+        return '';
+      }
+
+      const pickCount = resolvePromptGroupPickCount(syntax.pickRange);
+      if (pickCount === 0) {
+        return '';
+      }
+
+      const tags = this.listPromptGroupTags(node, syntax, pickCount);
+      return tags.length > 0 ? tags.join(', ') : '';
+    });
   }
 
   listTags(params: { q?: string; category?: string; taxonomyNodeId?: string; page?: unknown; limit?: unknown }) {
@@ -843,7 +678,7 @@ class DanbooruBrowserService {
         worksCount: row.post_count,
         copyrights: copyrightsByCharacter.get(row.tag_id) ?? [],
         relatedTags: relatedTagsByCharacter.get(row.tag_id) ?? [],
-        images: this.getCharacterImageRecords(row),
+        images: this.characterImages.getRecords(row),
         danbooruUrl: buildDanbooruPostsUrl(row.name),
       })),
       pagination: this.buildPagination(page, limit, total),

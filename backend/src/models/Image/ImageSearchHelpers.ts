@@ -126,15 +126,22 @@ export function buildImageSearchFilterParts(
 
 /** Map grouped SQL rows into the legacy image payload shape with groups[]. */
 export function mapGroupedImageRows(rows: any[]): any[] {
-  return rows.map((row) => ({
-    ...row,
-    id: row.composite_hash,
-    upload_date: row.first_seen_date,
-    groups: row.group_names ? row.group_names.split(',').map((name: string, index: number) => ({
-      id: parseInt(row.group_ids.split(',')[index]),
-      name,
-      color: row.group_colors.split(',')[index] || null,
-      collection_type: row.collection_types.split(',')[index],
-    })) : [],
-  }));
+  return rows.map((row) => {
+    const groupNames = row.group_names ? String(row.group_names).split(',') : [];
+    const groupIds = row.group_ids ? String(row.group_ids).split(',') : [];
+    const groupColors = row.group_colors ? String(row.group_colors).split(',') : [];
+    const collectionTypes = row.collection_types ? String(row.collection_types).split(',') : [];
+
+    return {
+      ...row,
+      id: row.composite_hash,
+      upload_date: row.first_seen_date,
+      groups: groupNames.map((name: string, index: number) => ({
+        id: parseInt(groupIds[index] ?? '0', 10),
+        name,
+        color: groupColors[index] || null,
+        collection_type: collectionTypes[index] || null,
+      })),
+    };
+  });
 }

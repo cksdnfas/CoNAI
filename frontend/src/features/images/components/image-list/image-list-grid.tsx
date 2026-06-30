@@ -24,6 +24,7 @@ interface ImageListGridProps {
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
+  onPreviewIntent?: (image: ImageRecord) => void
 }
 
 interface ImageListGridContext {
@@ -38,6 +39,7 @@ interface ImageListGridContext {
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
+  onPreviewIntent?: (image: ImageRecord) => void
 }
 
 const computeImageGridItemKey: GridComputeItemKey<ImageRecord, ImageListGridContext> = (index, item, context) => (
@@ -65,6 +67,7 @@ const ImageGridItemContent: GridItemContent<ImageRecord, ImageListGridContext> =
       showDefaultQuickActions={context.showDefaultQuickActions}
       interactive={context.interactive}
       blurPreview={context.shouldBlurItemPreview?.(image) ?? false}
+      onPreviewIntent={context.onPreviewIntent}
     />
   )
 }
@@ -90,6 +93,7 @@ export function ImageListGrid({
   showDefaultQuickActions,
   interactive,
   shouldBlurItemPreview,
+  onPreviewIntent,
 }: ImageListGridProps) {
   const usesWindowScroll = scrollMode === 'window'
   const resolvedContainerHeight = usesWindowScroll
@@ -111,6 +115,7 @@ export function ImageListGrid({
     showDefaultQuickActions,
     interactive,
     shouldBlurItemPreview,
+    onPreviewIntent,
   }), [
     selectedIdSet,
     selectionMode,
@@ -123,6 +128,7 @@ export function ImageListGrid({
     showDefaultQuickActions,
     interactive,
     shouldBlurItemPreview,
+    onPreviewIntent,
   ])
 
   return (

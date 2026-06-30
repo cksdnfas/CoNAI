@@ -1,7 +1,40 @@
 import * as assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createAIToolSearchChip, getSearchScopeStyle } from '../features/search/search-utils'
 import { isPromptSuggestionScope, shouldEnableSearchSuggestionQuery, type SearchSuggestionQueryKind } from '../features/search/search-suggestion-query-policy'
 import type { SearchScope } from '../features/search/search-types'
+
+const searchSuggestionDataSource = readFileSync(
+  resolve(process.cwd(), 'src/features/search/use-search-suggestion-data.ts'),
+  'utf8',
+)
+
+assert.match(
+  searchSuggestionDataSource,
+  /const SEARCH_SUGGESTION_INPUT_DEBOUNCE_MS = 180/,
+  'search suggestion network queries should wait for a short input-settle window instead of firing on every keystroke',
+)
+assert.match(
+  searchSuggestionDataSource,
+  /function useDebouncedSearchInput\(value: string\)[\s\S]*?window\.setTimeout\(\(\) => \{[\s\S]*?setDebouncedValue\(value\)[\s\S]*?SEARCH_SUGGESTION_INPUT_DEBOUNCE_MS/,
+  'search suggestion debounce should publish the latest settled input through one shared hook',
+)
+assert.match(
+  searchSuggestionDataSource,
+  /queryKey: \['search-suggestions', searchScope, debouncedInput\][\s\S]*?query: debouncedInput/,
+  'prompt suggestion queries should use the settled input in both cache key and request payload',
+)
+assert.match(
+  searchSuggestionDataSource,
+  /queryKey: \['search-model-suggestions', debouncedInput\][\s\S]*?getSearchModelSuggestions\(\{ query: debouncedInput, limit: 16 \}\)/,
+  'model suggestions should use the settled input in both cache key and request payload',
+)
+assert.match(
+  searchSuggestionDataSource,
+  /ratingTiers\.filter\(\(tier\) => matchesRatingTierSearch\(tier\.tier_name, tier\.min_score, tier\.max_score, normalizedInput\.toLowerCase\(\)\)\)/,
+  'rating tier suggestions should filter locally by the visible input instead of showing the full tier list while typing',
+)
 
 const scopes: SearchScope[] = ['positive', 'negative', 'auto', 'rating', 'model', 'lora', 'tool']
 const promptScopes: SearchScope[] = ['positive', 'negative', 'auto']

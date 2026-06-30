@@ -3,6 +3,7 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
 import type { ImageRecord } from '@/types/image'
+import { useMemo } from 'react'
 import {
   getArtifactPreviewUrl,
   isGraphArtifactVisualMedia,
@@ -10,7 +11,7 @@ import {
   resolveGraphArtifactMimeType,
 } from '../module-graph-shared'
 import { ExecutionArtifactCard } from './execution-artifact-card'
-import { getNodeDisplayLabel } from './graph-execution-panel-helpers'
+import { buildNodeDisplayLabelMap, getNodeDisplayLabelFromMap } from './graph-execution-panel-helpers'
 
 function getFinalResultOverlayLabel(nodeLabel: string) {
   const normalizedLabel = nodeLabel.trim().toLowerCase()
@@ -19,6 +20,29 @@ function getFinalResultOverlayLabel(nodeLabel: string) {
   }
 
   return nodeLabel
+}
+
+function getFinalResultSourcePortLabel(portKey: string | null | undefined, artifactType: string | null | undefined) {
+  const normalizedPortKey = portKey?.trim()
+  if (!normalizedPortKey) {
+    return undefined
+  }
+
+  const normalizedArtifactType = artifactType?.trim().toLowerCase()
+  if (normalizedArtifactType && normalizedPortKey.toLowerCase() === normalizedArtifactType) {
+    return undefined
+  }
+
+  return normalizedPortKey
+}
+
+function getFinalResultSourceNodeLabel(nodeLabel: string, sourceNodeId: string) {
+  const normalizedLabel = nodeLabel.trim()
+  if (!normalizedLabel || normalizedLabel === sourceNodeId || normalizedLabel === `노드 ${sourceNodeId}`) {
+    return undefined
+  }
+
+  return normalizedLabel
 }
 
 function buildFallbackArtifact(finalResult: GraphExecutionFinalResultRecord): GraphExecutionArtifactRecord {
@@ -39,35 +63,110 @@ type ResolvedFinalResultEntry = {
   artifact: GraphExecutionArtifactRecord
   nodeLabel: string
   overlayLabel?: string
+  sourceNodeLabel?: string
+  sourcePortLabel?: string
 }
 
-function readMetadataNumber(metadata: Record<string, unknown> | null, key: string) {
-  const value = metadata?.[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+type FinalResultPreviewArtifact = GraphExecutionArtifactRecord & {
+  source_metadata?: string | null
+  source_storage_path?: string | null
+}
+
+function readMetadataNumber(metadata: Record<string, unknown> | null, keys: string | string[]) {
+  const candidateKeys = Array.isArray(keys) ? keys : [keys]
+  for (const key of candidateKeys) {
+    const value = metadata?.[key]
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+  }
+
+  return null
+}
+
+function readMetadataString(metadata: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = metadata?.[key]
+    if (typeof value !== 'string') {
+      continue
+    }
+
+    const trimmedValue = value.trim()
+    if (trimmedValue) {
+      return trimmedValue
+    }
+  }
+
+  return null
+}
+
+function resolveFinalResultOriginalFilePath(metadata: Record<string, unknown> | null, previewArtifact: FinalResultPreviewArtifact) {
+  return readMetadataString(metadata, [
+    'originalFileName',
+    'original_file_name',
+    'outputFileName',
+    'output_file_name',
+    'fileName',
+    'file_name',
+    'originalFilePath',
+    'original_file_path',
+    'outputPath',
+    'output_path',
+    'filePath',
+    'file_path',
+  ])
+    ?? previewArtifact.source_storage_path
+    ?? previewArtifact.storage_path
+    ?? null
+}
+
+function buildFinalResultPreviewArtifact(entry: ResolvedFinalResultEntry): FinalResultPreviewArtifact {
+  return {
+    ...entry.artifact,
+    source_metadata: entry.finalResult.source_metadata,
+    source_storage_path: entry.artifact.storage_path ? undefined : entry.finalResult.source_storage_path,
+  }
+}
+
+function resolveFinalResultMetadataRecord(entry: ResolvedFinalResultEntry) {
+  const sourceMetadata = parseArtifactMetadataRecord(entry.finalResult.source_metadata)
+  const artifactMetadata = parseArtifactMetadataRecord(entry.artifact.metadata)
+
+  if (sourceMetadata && artifactMetadata) {
+    return { ...sourceMetadata, ...artifactMetadata }
+  }
+
+  return artifactMetadata ?? sourceMetadata
 }
 
 function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageRecord | null {
-  const previewUrl = getArtifactPreviewUrl(entry.artifact)
-  if (!previewUrl || !isGraphArtifactVisualMedia(entry.artifact)) {
+  const previewArtifact = buildFinalResultPreviewArtifact(entry)
+  const previewUrl = getArtifactPreviewUrl(previewArtifact)
+  if (!previewUrl || !isGraphArtifactVisualMedia(previewArtifact)) {
     return null
   }
 
-  const mimeType = resolveGraphArtifactMimeType(entry.artifact)
+  const mimeType = resolveGraphArtifactMimeType(previewArtifact)
   const fileType = mimeType?.startsWith('video/')
     ? 'video'
     : mimeType === 'image/gif'
       ? 'animated'
       : 'image'
-  const metadata = parseArtifactMetadataRecord(entry.artifact.metadata)
+  const metadata = resolveFinalResultMetadataRecord(entry)
 
   return {
     id: `final-result-${entry.finalResult.id}`,
-    composite_hash: null,
-    original_file_path: entry.artifact.storage_path,
+    composite_hash: readMetadataString(metadata, ['actualCompositeHash', 'actual_composite_hash', 'compositeHash', 'composite_hash']),
+    original_file_path: resolveFinalResultOriginalFilePath(metadata, previewArtifact),
     thumbnail_url: previewUrl,
     image_url: previewUrl,
-    width: readMetadataNumber(metadata, 'width'),
-    height: readMetadataNumber(metadata, 'height'),
+    width: readMetadataNumber(metadata, ['actualWidth', 'actual_width', 'outputWidth', 'output_width', 'width']),
+    height: readMetadataNumber(metadata, ['actualHeight', 'actual_height', 'outputHeight', 'output_height', 'height']),
     mime_type: mimeType,
     file_type: fileType,
   }
@@ -89,33 +188,54 @@ export function WorkflowFinalResultsSection({
 }) {
   const { t } = useI18n()
   const resolvedEmptyLabel = emptyLabel ?? t({ ko: '최종 결과 노드를 추가하고 원하는 출력에 연결해줘.', en: 'Add a final result node and connect it to the output you want to finalize.' })
-  const artifactsById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
-  const resolvedEntries: ResolvedFinalResultEntry[] = finalResults.map((finalResult) => {
-    const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id, nodeLabelOverrides)
+  const artifactsById = useMemo(() => new Map(artifacts.map((artifact) => [artifact.id, artifact])), [artifacts])
+  const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])
+  const resolvedEntries = useMemo<ResolvedFinalResultEntry[]>(() => finalResults.map((finalResult) => {
+    const finalNodeLabel = getNodeDisplayLabelFromMap(nodeLabelMap, finalResult.final_node_id, nodeLabelOverrides)
+    const sourceNodeLabel = getNodeDisplayLabelFromMap(nodeLabelMap, finalResult.source_node_id, nodeLabelOverrides)
 
     return {
       finalResult,
       artifact: artifactsById.get(finalResult.source_artifact_id) ?? buildFallbackArtifact(finalResult),
       nodeLabel: finalNodeLabel,
       overlayLabel: getFinalResultOverlayLabel(finalNodeLabel),
+      sourceNodeLabel: getFinalResultSourceNodeLabel(sourceNodeLabel, finalResult.source_node_id),
+      sourcePortLabel: getFinalResultSourcePortLabel(finalResult.source_port_key, finalResult.artifact_type),
     }
-  })
-  const visualEntries: Array<{ entry: ResolvedFinalResultEntry; image: ImageRecord }> = []
-  for (const entry of resolvedEntries) {
-    const image = buildFinalResultImageRecord(entry)
-    if (image) {
-      visualEntries.push({ entry, image })
+  }), [artifactsById, finalResults, nodeLabelMap, nodeLabelOverrides])
+  const { visualEntries, registeredVisualEntries, previewOnlyVisualEntries, visualEntryByImageId, nonVisualEntries } = useMemo(() => {
+    const nextVisualEntries: Array<{ entry: ResolvedFinalResultEntry; image: ImageRecord }> = []
+    for (const entry of resolvedEntries) {
+      const image = buildFinalResultImageRecord(entry)
+      if (image) {
+        nextVisualEntries.push({ entry, image })
+      }
     }
-  }
-  const visualEntryByImageId = new Map(visualEntries.map((item) => [String(item.image.id), item.entry]))
-  const visualArtifactIds = new Set(visualEntries.map((item) => item.entry.artifact.id))
-  const nonVisualEntries = resolvedEntries.filter((entry) => !visualArtifactIds.has(entry.artifact.id))
+
+    const nextRegisteredVisualEntries = nextVisualEntries.filter((item) => typeof item.image.composite_hash === 'string' && item.image.composite_hash.trim().length > 0)
+    const nextPreviewOnlyVisualEntries = nextVisualEntries.filter((item) => !item.image.composite_hash?.trim())
+    const nextVisualArtifactIds = new Set(nextVisualEntries.map((item) => item.entry.artifact.id))
+
+    return {
+      visualEntries: nextVisualEntries,
+      registeredVisualEntries: nextRegisteredVisualEntries,
+      previewOnlyVisualEntries: nextPreviewOnlyVisualEntries,
+      visualEntryByImageId: new Map(nextRegisteredVisualEntries.map((item) => [String(item.image.id), item.entry])),
+      nonVisualEntries: resolvedEntries.filter((entry) => !nextVisualArtifactIds.has(entry.artifact.id)),
+    }
+  }, [resolvedEntries])
 
   return (
     <div className="space-y-2.5">
       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         <span>{t({ ko: '결과물', en: 'Results' })}</span>
         <Badge variant="outline">{resolvedEntries.length}</Badge>
+        {resolvedEntries.length > 0 ? (
+          <>
+            <Badge variant={visualEntries.length > 0 ? 'secondary' : 'outline'}>{t({ ko: '미디어 {count}', en: 'Media {count}' }, { count: visualEntries.length })}</Badge>
+            {nonVisualEntries.length > 0 ? <Badge variant="outline">{t({ ko: '파일 {count}', en: 'Files {count}' }, { count: nonVisualEntries.length })}</Badge> : null}
+          </>
+        ) : null}
       </div>
 
       {resolvedEntries.length === 0 ? (
@@ -125,45 +245,76 @@ export function WorkflowFinalResultsSection({
         </div>
       ) : (
         <div className="space-y-3">
-          {visualEntries.length > 0 ? (
+          {registeredVisualEntries.length > 0 ? (
             <ImageList
-              items={visualEntries.map((item) => item.image)}
+              items={registeredVisualEntries.map((item) => item.image)}
               layout="grid"
-              activationMode="none"
+              activationMode="modal"
               getItemId={(image) => String(image.id)}
-              minColumnWidth={220}
-              preferredColumnCount={Math.min(visualEntries.length, 4)}
-              gridItemHeight={320}
+              minColumnWidth={160}
+              gridItemHeight={240}
               columnGap={12}
               rowGap={12}
+              className="workflow-final-results-list"
               showDefaultQuickActions={false}
+              modalAccessOptions={{
+                allowEditAction: false,
+                allowGroupAssignAction: false,
+              }}
               renderItemPersistentOverlay={(image) => {
                 const entry = visualEntryByImageId.get(String(image.id))
-                if (!entry?.overlayLabel && !entry?.artifact.artifact_type) {
+                if (!entry?.overlayLabel && !entry?.sourceNodeLabel && !entry?.sourcePortLabel && !entry?.artifact.artifact_type) {
                   return null
                 }
+                const overlayText = [entry.overlayLabel, entry.sourceNodeLabel, entry.sourcePortLabel, entry.artifact.artifact_type].filter(Boolean).join(' · ')
 
                 return (
-                  <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm">
+                  <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm" title={overlayText} aria-label={overlayText}>
                     {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
-                    <Badge variant="secondary" className="h-5 border-white/15 bg-white/14 px-1.5 text-[10px] text-white">{entry.artifact.artifact_type}</Badge>
+                    {entry.sourceNodeLabel ? <span className="truncate text-white/92">{entry.sourceNodeLabel}</span> : null}
+                    {entry.sourcePortLabel ? <span className="truncate text-white/82">{entry.sourcePortLabel}</span> : null}
+                    {entry.artifact.artifact_type ? <Badge variant="secondary" className="h-5 border-white/15 bg-white/14 px-1.5 text-[10px] text-white">{entry.artifact.artifact_type}</Badge> : null}
                   </div>
                 )
               }}
             />
           ) : null}
 
+          {previewOnlyVisualEntries.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {previewOnlyVisualEntries.map(({ entry }) => {
+                const overlayText = [entry.overlayLabel, entry.sourceNodeLabel, entry.sourcePortLabel, entry.artifact.artifact_type].filter(Boolean).join(' · ') || undefined
+
+                return (
+                  <ExecutionArtifactCard
+                    key={entry.finalResult.id}
+                    artifact={buildFinalResultPreviewArtifact(entry)}
+                    compact
+                    hideTitle
+                    title={overlayText}
+                    overlayLabel={overlayText}
+                  />
+                )
+              })}
+            </div>
+          ) : null}
+
           {nonVisualEntries.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {nonVisualEntries.map(({ finalResult, artifact, overlayLabel }) => (
-                <ExecutionArtifactCard
-                  key={finalResult.id}
-                  artifact={artifact}
-                  compact
-                  hideTitle
-                  overlayLabel={overlayLabel}
-                />
-              ))}
+              {nonVisualEntries.map(({ finalResult, artifact, overlayLabel, sourceNodeLabel, sourcePortLabel }) => {
+                const overlayText = [overlayLabel, sourceNodeLabel, sourcePortLabel].filter(Boolean).join(' · ') || undefined
+
+                return (
+                  <ExecutionArtifactCard
+                    key={finalResult.id}
+                    artifact={artifact}
+                    compact
+                    hideTitle
+                    title={overlayText}
+                    overlayLabel={overlayText}
+                  />
+                )
+              })}
             </div>
           ) : null}
         </div>

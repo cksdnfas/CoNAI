@@ -52,6 +52,7 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   actual_width?: number | null;
   actual_height?: number | null;
   actual_mime_type?: string | null;
+  result_file_status?: 'active' | 'missing' | 'deleted' | null;
   rating_score?: number | null;
   requested_server_id?: number | null;
   requested_server_name?: string | null;
@@ -70,6 +71,7 @@ export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
   actual_width?: number | null;
   actual_height?: number | null;
   actual_mime_type?: string | null;
+  result_file_status?: 'active' | 'missing' | 'deleted' | null;
   rating_score?: number | null;
   requested_server_id?: number | null;
   requested_server_name?: string | null;
@@ -102,6 +104,61 @@ export interface FilterOptions {
  * Uses better-sqlite3 synchronous API
  */
 export class GenerationHistoryModel {
+  private static appendFilterConditions(
+    sql: string,
+    params: any[],
+    filters: Omit<FilterOptions, 'limit' | 'offset'>,
+    tableAlias = '',
+  ): string {
+    const columnPrefix = tableAlias ? `${tableAlias}.` : '';
+
+    if (filters.service_type) {
+      sql += ` AND ${columnPrefix}service_type = ?`;
+      params.push(filters.service_type);
+    }
+
+    if (filters.generation_status) {
+      sql += ` AND ${columnPrefix}generation_status = ?`;
+      params.push(filters.generation_status);
+    }
+
+    if (filters.workflow_id !== undefined) {
+      sql += ` AND ${columnPrefix}workflow_id = ?`;
+      params.push(filters.workflow_id);
+    }
+
+    if (filters.queue_job_id !== undefined) {
+      sql += ` AND ${columnPrefix}queue_job_id = ?`;
+      params.push(filters.queue_job_id);
+    }
+
+    if (filters.requested_by_account_id !== undefined) {
+      sql += ` AND ${columnPrefix}requested_by_account_id = ?`;
+      params.push(filters.requested_by_account_id);
+    }
+
+    if (filters.requested_by_account_type !== undefined) {
+      sql += ` AND ${columnPrefix}requested_by_account_type = ?`;
+      params.push(filters.requested_by_account_type);
+    }
+
+    if (filters.server_id !== undefined) {
+      sql += ` AND ${columnPrefix}server_id = ?`;
+      params.push(filters.server_id);
+    }
+
+    return sql;
+  }
+
+  private static appendHistoryListVisibilityFilter(sql: string): string {
+    return `${sql}
+      AND NOT (
+        gh.generation_status = 'completed'
+        AND gh.composite_hash IS NULL
+        AND COALESCE(workflow.result_view_mode, '') = 'artifact_explorer'
+      )`;
+  }
+
   /**
    * Create a new generation history record
    */
@@ -225,7 +282,7 @@ export class GenerationHistoryModel {
    */
   static update(id: number, data: Partial<GenerationHistoryRecord>): void {
     // JOIN으로 계산된 필드 필터링 (actual_* 필드는 테이블에 없음)
-    const computedFields = ['actual_composite_hash', 'actual_width', 'actual_height'];
+    const computedFields = ['actual_composite_hash', 'actual_width', 'actual_height', 'actual_mime_type', 'result_file_status', 'rating_score'];
 
     // id와 computed fields 제거
     const cleanData = Object.fromEntries(
@@ -288,6 +345,26 @@ export class GenerationHistoryModel {
     stmt.run(errorMessage, id);
   }
 
+  /** Mark in-flight histories linked to terminal queue jobs as failed. */
+  static recordErrorByQueueJobIds(queueJobIds: number[], errorMessage: string): number {
+    const uniqueJobIds = Array.from(new Set(queueJobIds.filter((id) => Number.isInteger(id) && id > 0)));
+    if (uniqueJobIds.length === 0) {
+      return 0;
+    }
+
+    const placeholders = uniqueJobIds.map(() => '?').join(',');
+    const stmt = apiGenDb.prepare(`
+      UPDATE api_generation_history
+      SET generation_status = 'failed',
+          error_message = ?,
+          completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+      WHERE queue_job_id IN (${placeholders})
+        AND generation_status IN ('pending', 'processing')
+    `);
+    const info = stmt.run(errorMessage, ...uniqueJobIds);
+    return info.changes;
+  }
+
   /**
    * Delete history record
    */
@@ -314,44 +391,87 @@ export class GenerationHistoryModel {
     let sql = 'SELECT COUNT(*) as total FROM api_generation_history WHERE 1=1';
     const params: any[] = [];
 
-    if (filters.service_type) {
-      sql += ' AND service_type = ?';
-      params.push(filters.service_type);
-    }
-
-    if (filters.generation_status) {
-      sql += ' AND generation_status = ?';
-      params.push(filters.generation_status);
-    }
-
-    if (filters.workflow_id !== undefined) {
-      sql += ' AND workflow_id = ?';
-      params.push(filters.workflow_id);
-    }
-
-    if (filters.queue_job_id !== undefined) {
-      sql += ' AND queue_job_id = ?';
-      params.push(filters.queue_job_id);
-    }
-
-    if (filters.requested_by_account_id !== undefined) {
-      sql += ' AND requested_by_account_id = ?';
-      params.push(filters.requested_by_account_id);
-    }
-
-    if (filters.requested_by_account_type !== undefined) {
-      sql += ' AND requested_by_account_type = ?';
-      params.push(filters.requested_by_account_type);
-    }
-
-    if (filters.server_id !== undefined) {
-      sql += ' AND server_id = ?';
-      params.push(filters.server_id);
-    }
+    sql = this.appendFilterConditions(sql, params, filters);
 
     const stmt = apiGenDb.prepare(sql);
     const result = stmt.get(...params) as { total: number } | undefined;
     return result?.total || 0;
+  }
+
+  /**
+   * Count rows visible in compact history-list surfaces.
+   */
+  static countListRecords(filters: Omit<FilterOptions, 'limit' | 'offset'> = {}): number {
+    let sql = `
+      SELECT COUNT(*) as total
+      FROM api_generation_history gh
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    sql = this.appendFilterConditions(sql, params, filters, 'gh');
+    sql = this.appendHistoryListVisibilityFilter(sql);
+
+    const stmt = apiGenDb.prepare(sql);
+    const result = stmt.get(...params) as { total: number } | undefined;
+    return result?.total || 0;
+  }
+
+  /**
+   * Aggregate rows visible in compact history-list surfaces.
+   */
+  static getListStatistics(filters: Omit<FilterOptions, 'limit' | 'offset'> = {}): {
+    total: number;
+    comfyui: number;
+    novelai: number;
+    codex: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+  } {
+    let sql = `
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN gh.service_type = 'comfyui' THEN 1 ELSE 0 END) as comfyui,
+        SUM(CASE WHEN gh.service_type = 'novelai' THEN 1 ELSE 0 END) as novelai,
+        SUM(CASE WHEN gh.service_type = 'codex' THEN 1 ELSE 0 END) as codex,
+        SUM(CASE WHEN gh.generation_status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN gh.generation_status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN gh.generation_status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN gh.generation_status = 'processing' THEN 1 ELSE 0 END) as processing
+      FROM api_generation_history gh
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    sql = this.appendFilterConditions(sql, params, filters, 'gh');
+    sql = this.appendHistoryListVisibilityFilter(sql);
+
+    const stmt = apiGenDb.prepare(sql);
+    const result = stmt.get(...params) as {
+      total?: number | null;
+      comfyui?: number | null;
+      novelai?: number | null;
+      codex?: number | null;
+      completed?: number | null;
+      failed?: number | null;
+      pending?: number | null;
+      processing?: number | null;
+    } | undefined;
+
+    return {
+      total: result?.total || 0,
+      comfyui: result?.comfyui || 0,
+      novelai: result?.novelai || 0,
+      codex: result?.codex || 0,
+      completed: result?.completed || 0,
+      failed: result?.failed || 0,
+      pending: result?.pending || 0,
+      processing: result?.processing || 0,
+    };
   }
 
   /**
@@ -391,13 +511,15 @@ export class GenerationHistoryModel {
         qj.status as queue_status,
         qj.cancel_requested as queue_cancel_requested,
         qj.provider_job_id,
-        im.composite_hash as actual_composite_hash,
-        im.width as actual_width,
-        im.height as actual_height,
-        matched_file.mime_type as actual_mime_type,
-        im.rating_score as rating_score
+        CASE WHEN matched_file.file_status = 'active' THEN im.composite_hash ELSE NULL END as actual_composite_hash,
+        CASE WHEN matched_file.file_status = 'active' THEN im.width ELSE NULL END as actual_width,
+        CASE WHEN matched_file.file_status = 'active' THEN im.height ELSE NULL END as actual_height,
+        CASE WHEN matched_file.file_status = 'active' THEN matched_file.mime_type ELSE NULL END as actual_mime_type,
+        matched_file.file_status as result_file_status,
+        CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
       LEFT JOIN comfyui_servers assigned_server ON assigned_server.id = qj.assigned_server_id
       LEFT JOIN main_db.image_files matched_file ON matched_file.id = (
@@ -449,13 +571,15 @@ export class GenerationHistoryModel {
         qj.status as queue_status,
         qj.cancel_requested as queue_cancel_requested,
         qj.provider_job_id,
-        im.composite_hash as actual_composite_hash,
-        im.width as actual_width,
-        im.height as actual_height,
-        matched_file.mime_type as actual_mime_type,
-        im.rating_score as rating_score
+        CASE WHEN matched_file.file_status = 'active' THEN im.composite_hash ELSE NULL END as actual_composite_hash,
+        CASE WHEN matched_file.file_status = 'active' THEN im.width ELSE NULL END as actual_width,
+        CASE WHEN matched_file.file_status = 'active' THEN im.height ELSE NULL END as actual_height,
+        CASE WHEN matched_file.file_status = 'active' THEN matched_file.mime_type ELSE NULL END as actual_mime_type,
+        matched_file.file_status as result_file_status,
+        CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
       LEFT JOIN comfyui_servers assigned_server ON assigned_server.id = qj.assigned_server_id
       LEFT JOIN main_db.image_files matched_file ON matched_file.id = (
@@ -474,40 +598,8 @@ export class GenerationHistoryModel {
     `;
     const params: any[] = [];
 
-    if (filters.service_type) {
-      sql += ' AND gh.service_type = ?';
-      params.push(filters.service_type);
-    }
-
-    if (filters.generation_status) {
-      sql += ' AND gh.generation_status = ?';
-      params.push(filters.generation_status);
-    }
-
-    if (filters.workflow_id !== undefined) {
-      sql += ' AND gh.workflow_id = ?';
-      params.push(filters.workflow_id);
-    }
-
-    if (filters.queue_job_id !== undefined) {
-      sql += ' AND gh.queue_job_id = ?';
-      params.push(filters.queue_job_id);
-    }
-
-    if (filters.requested_by_account_id !== undefined) {
-      sql += ' AND gh.requested_by_account_id = ?';
-      params.push(filters.requested_by_account_id);
-    }
-
-    if (filters.requested_by_account_type !== undefined) {
-      sql += ' AND gh.requested_by_account_type = ?';
-      params.push(filters.requested_by_account_type);
-    }
-
-    if (filters.server_id !== undefined) {
-      sql += ' AND gh.server_id = ?';
-      params.push(filters.server_id);
-    }
+    sql = this.appendFilterConditions(sql, params, filters, 'gh');
+    sql = this.appendHistoryListVisibilityFilter(sql);
 
     // Order by
     const orderBy = filters.order_by || 'created_at';
@@ -560,6 +652,40 @@ export class GenerationHistoryModel {
       WHERE workflow_id = ?
     `);
 
+    const result = stmt.get(workflowId) as any;
+    return {
+      total: result?.total || 0,
+      completed: result?.completed || 0,
+      failed: result?.failed || 0,
+      pending: result?.pending || 0,
+      processing: result?.processing || 0
+    };
+  }
+
+  /**
+   * Get workflow statistics for compact history-list surfaces.
+   */
+  static getWorkflowListStatistics(workflowId: number): {
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+  } {
+    let sql = `
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN gh.generation_status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN gh.generation_status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN gh.generation_status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN gh.generation_status = 'processing' THEN 1 ELSE 0 END) as processing
+      FROM api_generation_history gh
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
+      WHERE gh.workflow_id = ?
+    `;
+    sql = this.appendHistoryListVisibilityFilter(sql);
+
+    const stmt = apiGenDb.prepare(sql);
     const result = stmt.get(workflowId) as any;
     return {
       total: result?.total || 0,
@@ -630,5 +756,23 @@ export class GenerationHistoryModel {
     const info = stmt.run(...ids);
 
     return info.changes;
+  }
+
+  /** Find completed history rows outside the retained recent-result window. */
+  static findCompletedOverflowIds(retentionLimit: number): number[] {
+    const safeLimit = Math.max(0, Math.floor(retentionLimit));
+    if (safeLimit === 0) {
+      return [];
+    }
+
+    const stmt = apiGenDb.prepare(`
+      SELECT id
+      FROM api_generation_history
+      WHERE generation_status = 'completed'
+      ORDER BY COALESCE(completed_at, created_at) DESC, id DESC
+      LIMIT -1 OFFSET ?
+    `);
+
+    return (stmt.all(safeLimit) as Array<{ id: number }>).map((row) => row.id);
   }
 }

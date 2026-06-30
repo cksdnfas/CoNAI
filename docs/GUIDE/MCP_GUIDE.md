@@ -7,6 +7,7 @@ CoNAI는 MCP(Model Context Protocol) 서버를 제공합니다. Claude Code, Her
 - 기본 HTTP 엔드포인트: `http://localhost:1666/mcp`
 - 전송 방식: Streamable HTTP(권장), stdio(로컬 전용)
 - HTTP 서버는 stateless 방식이라 `POST /mcp`만 사용합니다.
+- HTTP MCP는 기본 비활성입니다. 신뢰된 로컬/내부망 클라이언트에만 `CONAI_MCP_HTTP_ENABLED=true`로 켭니다.
 - 기본 백엔드 포트는 `1666`, 프론트엔드 포트는 `1677`입니다. 헷갈리면 바로 터집니다.
 
 ## 사전 조건
@@ -16,6 +17,14 @@ CoNAI 백엔드가 실행 중이어야 합니다.
 ```bash
 npm run dev
 ```
+
+HTTP 방식으로 연결하려면 `.env`에 다음 값을 추가하고 백엔드를 다시 시작합니다.
+
+```ini
+CONAI_MCP_HTTP_ENABLED=true
+```
+
+MCP 도구는 프롬프트/이미지 조회와 생성 작업을 실행할 수 있습니다. 외부 공개 주소에는 열지 말고, 공개 데모에서는 꺼진 상태를 기본으로 유지하세요. 로컬 stdio 방식은 이 값이 필요 없습니다.
 
 프로덕션 실행 환경에서는 앱을 실행한 뒤 백엔드 URL을 확인합니다.
 

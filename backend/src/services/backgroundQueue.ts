@@ -95,18 +95,46 @@ export interface BackgroundTask {
  */
 export class BackgroundQueueService {
   private static queue: BackgroundTask[] = [];
+  private static activeTasks: BackgroundTask[] = [];
+  private static activeMetadataTaskKeys = new Set<string>();
   private static processing = false;
+  private static lockRetryScheduled = false;
   private static readonly MAX_RETRIES = 3;
   private static readonly BATCH_SIZE = resolveBackgroundQueueBatchSize(); // 동시 처리 작업 수
+
+  private static getMetadataExtractionTaskKey(filePath: string, compositeHash: string): string {
+    return `${compositeHash}\u0000${path.resolve(filePath)}`;
+  }
+
+  /** Check for an exact queued or active metadata task before adding duplicate work. */
+  private static hasQueuedOrActiveMetadataExtractionTask(filePath: string, compositeHash: string): boolean {
+    const metadataTaskKey = this.getMetadataExtractionTaskKey(filePath, compositeHash);
+    if (this.activeMetadataTaskKeys.has(metadataTaskKey)) {
+      return true;
+    }
+
+    const normalizedFilePath = path.resolve(filePath);
+    return this.queue.some((task) => (
+      task.type === TaskType.METADATA_EXTRACTION
+      && task.compositeHash === compositeHash
+      && path.resolve(task.filePath) === normalizedFilePath
+    ));
+  }
 
   /**
    * 메타데이터 추출 작업 추가
    */
   static addMetadataExtractionTask(filePath: string, compositeHash: string): void {
+    const resolvedFilePath = path.resolve(filePath);
+    if (this.hasQueuedOrActiveMetadataExtractionTask(resolvedFilePath, compositeHash)) {
+      logger.debug(`  ⏭️  백그라운드 메타데이터 작업 이미 대기 중: ${path.basename(resolvedFilePath)}`);
+      return;
+    }
+
     const task: BackgroundTask = {
       id: `${compositeHash}_metadata_${Date.now()}`,
       type: TaskType.METADATA_EXTRACTION,
-      filePath,
+      filePath: resolvedFilePath,
       compositeHash,
       priority: 1,
       retries: 0,
@@ -181,7 +209,12 @@ export class BackgroundQueueService {
    * 큐 처리 (배치 병렬 처리)
    */
   private static async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0 || SystemMaintenanceLockService.isExclusiveActive()) {
+    if (this.processing || this.queue.length === 0) {
+      return;
+    }
+
+    if (SystemMaintenanceLockService.isExclusiveActive()) {
+      this.scheduleProcessQueueAfterMaintenanceLock();
       return;
     }
 
@@ -198,6 +231,12 @@ export class BackgroundQueueService {
 
       // 배치 추출
       const batch = this.queue.splice(0, this.BATCH_SIZE);
+      this.activeTasks.push(...batch);
+      batch.forEach((task) => {
+        if (task.type === TaskType.METADATA_EXTRACTION) {
+          this.activeMetadataTaskKeys.add(this.getMetadataExtractionTaskKey(task.filePath, task.compositeHash));
+        }
+      });
 
       // 배치 병렬 처리
       const results = await Promise.allSettled(
@@ -222,6 +261,12 @@ export class BackgroundQueueService {
           }
         }
       });
+      this.activeTasks = this.activeTasks.filter((task) => !batch.includes(task));
+      batch.forEach((task) => {
+        if (task.type === TaskType.METADATA_EXTRACTION) {
+          this.activeMetadataTaskKeys.delete(this.getMetadataExtractionTaskKey(task.filePath, task.compositeHash));
+        }
+      });
 
       // 짧은 대기 (CPU 부하 방지)
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -230,14 +275,24 @@ export class BackgroundQueueService {
     this.processing = false;
 
     if (this.queue.length > 0 && SystemMaintenanceLockService.isExclusiveActive()) {
-      setTimeout(() => {
-        void this.processQueue();
-      }, 5000);
+      this.scheduleProcessQueueAfterMaintenanceLock();
       logger.info('⏸️  백그라운드 큐 처리 대기: 시스템 유지보수 잠금 활성\n');
       return;
     }
 
     logger.info('✅ 백그라운드 큐 처리 완료\n');
+  }
+
+  private static scheduleProcessQueueAfterMaintenanceLock(): void {
+    if (this.lockRetryScheduled) {
+      return;
+    }
+
+    this.lockRetryScheduled = true;
+    setTimeout(() => {
+      this.lockRetryScheduled = false;
+      void this.processQueue();
+    }, 5000);
   }
 
   /**
@@ -434,10 +489,17 @@ export class BackgroundQueueService {
    */
   static getQueueStatus(): {
     queueLength: number;
+    activeCount: number;
     processing: boolean;
     tasksByType: Record<TaskType, number>;
+    activeTasksByType: Record<TaskType, number>;
   } {
     const tasksByType: Record<TaskType, number> = {
+      [TaskType.METADATA_EXTRACTION]: 0,
+      [TaskType.PROMPT_COLLECTION]: 0,
+      [TaskType.CIVITAI_MODEL_LOOKUP]: 0
+    };
+    const activeTasksByType: Record<TaskType, number> = {
       [TaskType.METADATA_EXTRACTION]: 0,
       [TaskType.PROMPT_COLLECTION]: 0,
       [TaskType.CIVITAI_MODEL_LOOKUP]: 0
@@ -446,11 +508,16 @@ export class BackgroundQueueService {
     this.queue.forEach(task => {
       tasksByType[task.type]++;
     });
+    this.activeTasks.forEach(task => {
+      activeTasksByType[task.type]++;
+    });
 
     return {
       queueLength: this.queue.length,
+      activeCount: this.activeTasks.length,
       processing: this.processing,
-      tasksByType
+      tasksByType,
+      activeTasksByType
     };
   }
 

@@ -63,8 +63,9 @@ export function writeExecutionLog(params: {
   eventType: string
   message: string
   details?: Record<string, unknown> | string | null
+  always?: boolean
 }) {
-  if (!debugEnabledExecutionIds.has(params.executionId)) {
+  if (!params.always && !debugEnabledExecutionIds.has(params.executionId)) {
     return
   }
 

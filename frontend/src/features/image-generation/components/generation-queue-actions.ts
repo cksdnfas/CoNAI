@@ -36,7 +36,9 @@ export async function runGenerationQueueMutation({
     const result = await execute()
     await refresh()
     showSnackbar({ message: result.message || successMessage, tone: 'info' })
+    return true
   } catch (error) {
     showSnackbar({ message: getErrorMessage(error, failureMessage), tone: 'error' })
+    return false
   }
 }

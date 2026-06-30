@@ -1,22 +1,23 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import fs from 'fs';
-import path from 'path';
 import { WorkflowModel } from '../../models/Workflow';
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer';
-import { ComfyUIService, ParallelGenerationService } from '../../services/comfyuiService';
+import { ComfyUIService } from '../../services/comfyuiService';
+import { ParallelGenerationService } from '../../services/comfyui/parallelGenerationService';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
-import { ImageSimilarityService } from '../../services/imageSimilarity';
-import { runtimePaths } from '../../config/runtimePaths';
-import { getToken } from '../../utils/nai/auth';
-import { preprocessMetadata } from '../../utils/nai/metadata';
-import axios from 'axios';
-// @ts-ignore - no types available
-import AdmZip from 'adm-zip';
+import { registerNovelAiGenerationTools } from './generationNovelAiTools';
+import { cleanupMcpComfyTempFile, processMcpComfyOutput } from './mcpComfyOutputService';
 
 export function registerGenerationTools(server: McpServer): void {
+  registerWorkflowListTools(server);
+  registerComfyGenerationTools(server);
+  registerWorkflowDetailTools(server);
+  registerNovelAiGenerationTools(server);
+}
+
+function registerWorkflowListTools(server: McpServer): void {
   // 워크플로우 목록 조회
   server.tool(
     'list_workflows',
@@ -78,7 +79,9 @@ export function registerGenerationTools(server: McpServer): void {
       }
     }
   );
+}
 
+function registerComfyGenerationTools(server: McpServer): void {
   // ComfyUI 이미지 생성
   server.tool(
     'generate_comfyui',
@@ -124,6 +127,7 @@ export function registerGenerationTools(server: McpServer): void {
           workflowId: workflow_id,
           workflowName: workflow.name,
           groupId: group_id,
+          serverId: server_id,
         });
 
         // 이미지 생성 (temp 폴더에 다운로드)
@@ -138,59 +142,57 @@ export function registerGenerationTools(server: McpServer): void {
           console.error('[MCP ComfyUI] Failed to update history processing status:', e);
         }
 
-        // temp → 영구 저장소로 이동 (웹 UI execution.routes.ts와 동일한 처리)
+        // temp → 영구 저장소로 이동하고 메인 이미지 DB까지 즉시 등록
+        const historyIds: number[] = [historyId];
         const savedPaths: string[] = [];
-        for (const tempPath of result.imagePaths) {
-          try {
-            const imageBuffer = await fs.promises.readFile(tempPath);
+        let failedSaveCount = 0;
+        for (let index = 0; index < result.imagePaths.length; index += 1) {
+          const tempPath = result.imagePaths[index];
+          let outputHistoryId = historyId;
 
-            // 날짜 기반 디렉토리 생성
-            const dateDir = new Date().toISOString().split('T')[0];
-            const targetDir = path.join(runtimePaths.uploadsDir, 'API', 'images', dateDir);
-            if (!fs.existsSync(targetDir)) {
-              fs.mkdirSync(targetDir, { recursive: true });
-            }
-
-            // 고유 파일명 생성
-            const ext = path.extname(tempPath);
-            const filename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-            const targetPath = path.join(targetDir, filename);
-
-            // 파일 저장
-            fs.writeFileSync(targetPath, imageBuffer);
-
-            // temp 파일 삭제
-            fs.unlinkSync(tempPath);
-
-            const relativePath = `API/images/${dateDir}/${filename}`;
-            savedPaths.push(relativePath);
-
-            // 히스토리 업데이트 (첫 번째 이미지만)
-            if (result.imagePaths.indexOf(tempPath) === 0) {
-              const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
-              GenerationHistoryModel.updateImagePaths(historyId, {
-                compositeHash: hashes.compositeHash
+          if (index > 0) {
+            try {
+              outputHistoryId = await GenerationHistoryService.createComfyUIHistory({
+                workflowId: workflow_id,
+                workflowName: workflow.name,
+                groupId: group_id,
+                serverId: server_id,
               });
+              historyIds.push(outputHistoryId);
+            } catch (historyError) {
+              failedSaveCount += 1;
+              console.error(`[MCP ComfyUI] Failed to create history for extra output ${tempPath}:`, historyError);
+              await cleanupMcpComfyTempFile(tempPath);
+              continue;
             }
-          } catch (fileError) {
-            console.error(`[MCP ComfyUI] Failed to save image ${tempPath}:`, fileError);
+          }
+
+          const savedPath = await processMcpComfyOutput(outputHistoryId, tempPath);
+          if (savedPath) {
+            savedPaths.push(savedPath);
+          } else {
+            failedSaveCount += 1;
           }
         }
-
-        // 완료 상태 업데이트
-        GenerationHistoryModel.updateStatus(historyId, 'completed');
+        if (savedPaths.length === 0 && failedSaveCount === 0) {
+          failedSaveCount = 1;
+          GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output file was returned');
+        }
 
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              success: true,
+              success: savedPaths.length > 0,
               historyId,
+              historyIds,
               promptId: result.promptId,
               imageCount: savedPaths.length,
+              failedSaveCount,
               imagePaths: savedPaths,
               server: serverRecord.name,
               workflow: workflow.name,
+              error: savedPaths.length > 0 ? undefined : 'No generated output could be saved',
             }, null, 2),
           }],
         };
@@ -257,7 +259,9 @@ export function registerGenerationTools(server: McpServer): void {
           serverName: string;
           success: boolean;
           historyId?: number;
+          historyIds?: number[];
           imagePaths?: string[];
+          failedSaveCount?: number;
           error?: string;
         }> = [];
 
@@ -279,6 +283,7 @@ export function registerGenerationTools(server: McpServer): void {
               workflowId: workflow_id,
               workflowName: workflow.name,
               groupId: group_id,
+              serverId: result.serverId,
             });
 
             GenerationHistoryModel.update(historyId, {
@@ -288,50 +293,48 @@ export function registerGenerationTools(server: McpServer): void {
             console.error(`[MCP ComfyUI Parallel] Failed to create history for server ${result.serverName}:`, historyError);
           }
 
-          // temp → 영구 저장소로 이동
+          // temp → 영구 저장소로 이동하고 메인 이미지 DB까지 즉시 등록
+          const historyIds: number[] = historyId ? [historyId] : [];
           const savedPaths: string[] = [];
-          for (const tempPath of result.imagePaths) {
-            try {
-              const imageBuffer = await fs.promises.readFile(tempPath);
+          let failedSaveCount = 0;
+          for (let index = 0; index < result.imagePaths.length; index += 1) {
+            const tempPath = result.imagePaths[index];
+            let outputHistoryId = historyId;
 
-              const dateDir = new Date().toISOString().split('T')[0];
-              const targetDir = path.join(runtimePaths.uploadsDir, 'API', 'images', dateDir);
-              if (!fs.existsSync(targetDir)) {
-                fs.mkdirSync(targetDir, { recursive: true });
-              }
-
-              const ext = path.extname(tempPath);
-              const filename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-              const targetPath = path.join(targetDir, filename);
-
-              fs.writeFileSync(targetPath, imageBuffer);
-              fs.unlinkSync(tempPath);
-
-              const relativePath = `API/images/${dateDir}/${filename}`;
-              savedPaths.push(relativePath);
-
-              // 히스토리 업데이트 (첫 번째 이미지만)
-              if (historyId && result.imagePaths.indexOf(tempPath) === 0) {
-                const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
-                GenerationHistoryModel.updateImagePaths(historyId, {
-                  compositeHash: hashes.compositeHash
+            if (!outputHistoryId || index > 0) {
+              try {
+                outputHistoryId = await GenerationHistoryService.createComfyUIHistory({
+                  workflowId: workflow_id,
+                  workflowName: workflow.name,
+                  groupId: group_id,
+                  serverId: result.serverId,
                 });
+                historyIds.push(outputHistoryId);
+              } catch (historyError) {
+                failedSaveCount += 1;
+                console.error(`[MCP ComfyUI Parallel] Failed to create history for output ${tempPath}:`, historyError);
+                await cleanupMcpComfyTempFile(tempPath);
+                continue;
               }
-            } catch (fileError) {
-              console.error(`[MCP ComfyUI Parallel] Failed to save image ${tempPath}:`, fileError);
             }
-          }
 
-          if (historyId) {
-            GenerationHistoryModel.updateStatus(historyId, 'completed');
+            const savedPath = await processMcpComfyOutput(outputHistoryId, tempPath);
+            if (savedPath) {
+              savedPaths.push(savedPath);
+            } else {
+              failedSaveCount += 1;
+            }
           }
 
           serverResults.push({
             serverId: result.serverId,
             serverName: result.serverName,
-            success: true,
+            success: savedPaths.length > 0,
             historyId,
+            historyIds,
             imagePaths: savedPaths,
+            failedSaveCount,
+            error: savedPaths.length > 0 ? undefined : 'No generated output could be saved',
           });
         }
 
@@ -358,7 +361,9 @@ export function registerGenerationTools(server: McpServer): void {
       }
     }
   );
+}
 
+function registerWorkflowDetailTools(server: McpServer): void {
   // 워크플로우 상세 조회
   server.tool(
     'get_workflow_details',
@@ -417,189 +422,6 @@ export function registerGenerationTools(server: McpServer): void {
         return {
           isError: true,
           content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
-      }
-    }
-  );
-
-  // NovelAI 이미지 생성
-  server.tool(
-    'generate_nai',
-    'Generate images using NovelAI. Requires a valid NAI token to be configured in the system (via login).',
-    {
-      prompt: z.string().describe('Positive prompt for image generation'),
-      negative_prompt: z.string().default('').describe('Negative prompt'),
-      model: z.enum(['nai-diffusion', 'nai-diffusion-4', 'nai-diffusion-4-5']).default('nai-diffusion-4-5').describe('NAI model to use'),
-      width: z.number().int().default(1024).describe('Image width in pixels'),
-      height: z.number().int().default(1024).describe('Image height in pixels'),
-      steps: z.number().int().min(1).max(50).default(28).describe('Number of diffusion steps'),
-      scale: z.number().min(0).max(30).default(5.0).describe('CFG scale'),
-      sampler: z.string().default('k_euler_ancestral').describe('Sampler name'),
-      seed: z.number().int().optional().describe('Random seed (auto-generated if not provided)'),
-      n_samples: z.number().int().min(1).max(4).default(1).describe('Number of images to generate'),
-      group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
-    },
-    async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, group_id }) => {
-      try {
-        const token = getToken();
-        if (!token) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: 'NovelAI token not configured. Please login via the web UI first (/api/nai/auth/login or /api/nai/auth/login-with-token).' }],
-          };
-        }
-
-        const actualSeed = seed ?? Math.floor(Math.random() * 4294967295);
-
-        // 메타데이터 전처리 (기존 유틸리티 사용)
-        const metadata = preprocessMetadata({
-          prompt,
-          negative_prompt,
-          model,
-          width,
-          height,
-          steps,
-          scale,
-          sampler,
-          seed: actualSeed,
-          n_samples,
-          action: 'generate',
-          noise_schedule: 'karras',
-        });
-
-        // V4/V4.5 파라미터 구성
-        const isV4_5 = model.includes('nai-diffusion-4-5');
-        const isV4 = model.includes('nai-diffusion-4');
-
-        const baseParams: any = {
-          params_version: (isV4_5 || isV4) ? 3 : 1,
-          width: metadata.width,
-          height: metadata.height,
-          scale: metadata.scale,
-          sampler: metadata.sampler,
-          steps: metadata.steps,
-          n_samples: metadata.n_samples,
-          seed: metadata.seed,
-          noise_schedule: metadata.noise_schedule,
-          legacy: false,
-        };
-
-        if (isV4_5 || isV4) {
-          baseParams.autoSmea = false;
-          baseParams.variety_plus = false;
-          baseParams.uncond_scale = 1.0;
-          baseParams.cfg_rescale = 0.7;
-          baseParams.dynamic_thresholding = false;
-          baseParams.controlnet_strength = 1.0;
-          baseParams.ucPreset = 0;
-          baseParams.add_original_image = true;
-          baseParams.legacy_v3_extend = false;
-          baseParams.skip_cfg_above_sigma = null;
-          baseParams.use_coords = false;
-          baseParams.normalize_reference_strength_multiple = true;
-          baseParams.inpaintImg2ImgStrength = 1;
-          baseParams.legacy_uc = false;
-          baseParams.characterPrompts = [];
-          baseParams.deliberate_euler_ancestral_bug = false;
-          baseParams.prefer_brownian = true;
-          baseParams.stream = 'msgpack';
-          baseParams.negative_prompt = metadata.negative_prompt || '';
-
-          baseParams.v4_prompt = {
-            caption: { base_caption: metadata.prompt, char_captions: [] },
-            use_coords: false,
-            use_order: true,
-          };
-          baseParams.v4_negative_prompt = {
-            caption: { base_caption: metadata.negative_prompt || '', char_captions: [] },
-            legacy_uc: false,
-          };
-        } else {
-          baseParams.ucPreset = 0;
-          baseParams.negative_prompt = metadata.negative_prompt || '';
-        }
-
-        const requestBody = {
-          input: metadata.prompt,
-          model: metadata.model,
-          action: 'generate',
-          parameters: baseParams,
-          use_new_shared_trial: true,
-        };
-
-        // NovelAI API 호출
-        const response = await axios.post(
-          'https://image.novelai.net/ai/generate-image',
-          requestBody,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-              'Origin': 'https://novelai.net',
-              'Referer': 'https://novelai.net',
-            },
-            responseType: 'arraybuffer',
-            timeout: 120000,
-          }
-        );
-
-        // ZIP 파일 파싱
-        const zip = new AdmZip(Buffer.from(response.data));
-        const zipEntries = zip.getEntries();
-        const images = zipEntries.map((entry: any, index: number) => ({
-          filename: `nai_${Date.now()}_${index}.png`,
-          data: entry.getData().toString('base64'),
-        }));
-
-        // 히스토리 저장
-        const historyIds: number[] = [];
-        for (let i = 0; i < images.length; i++) {
-          const historyId = await GenerationHistoryService.createNAIHistory({
-            model: metadata.model || 'unknown',
-            groupId: group_id,
-          });
-          historyIds.push(historyId);
-
-          // 백그라운드 업로드
-          const imageBuffer = Buffer.from(images[i].data, 'base64');
-          GenerationHistoryService.processAndUploadImage(historyId, imageBuffer, 'novelai')
-            .catch(err => console.error(`[MCP NAI] Background upload failed for history ${historyId}:`, err));
-        }
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              success: true,
-              historyIds,
-              count: historyIds.length,
-              metadata: {
-                prompt: metadata.prompt,
-                negative_prompt: metadata.negative_prompt,
-                seed: metadata.seed,
-                resolution: `${metadata.width}x${metadata.height}`,
-                steps: metadata.steps,
-                scale: metadata.scale,
-                sampler: metadata.sampler,
-                model: metadata.model,
-              },
-            }, null, 2),
-          }],
-        };
-      } catch (error: any) {
-        let errorMessage = error.message;
-
-        if (error.response?.status === 401) {
-          errorMessage = 'Invalid or expired NAI token. Please re-login via the web UI.';
-        } else if (error.response?.status === 402) {
-          errorMessage = 'Active NovelAI subscription required.';
-        } else if (error.code === 'ECONNABORTED') {
-          errorMessage = 'Request timeout. Please try again.';
-        }
-
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `NAI generation error: ${errorMessage}` }],
         };
       }
     }

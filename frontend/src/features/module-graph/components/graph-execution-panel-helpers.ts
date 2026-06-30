@@ -1,15 +1,21 @@
 import type {
   GraphExecutionArtifactRecord,
+  GraphExecutionFinalResultRecord,
+  GraphExecutionLogRecord,
+  GraphExecutionNodeIoRecord,
+  GraphExecutionRecord,
   GraphWorkflowExposedInput,
   GraphWorkflowRecord,
 } from '@/lib/api-module-graph'
 import {
   buildArtifactTextPreview,
   buildArtifactTextValue,
+  compareGraphArtifactsNewestFirst,
   getArtifactStoredValue,
   hasGraphArtifactVisualPreview,
   isEmptyLlmJsonArtifact,
 } from '../module-graph-shared'
+import { listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
 
 export type ParsedExecutionPlan = {
   orderedNodeIds?: string[]
@@ -31,6 +37,35 @@ export type ExecutionInputEntry = {
   key: string
   label: string
   value: unknown
+}
+
+export type ExecutionComparisonSummary = {
+  runtimeInputCount: number
+  compactInputCount: number
+  compactOutputCount: number
+  artifactCount: number
+  finalResultCount: number
+  issueLogCount: number
+  finalResultWarningCount: number
+}
+
+export type ExecutionComparisonRow = {
+  id: number
+  direction: GraphExecutionNodeIoRecord['direction']
+  nodeLabel: string
+  portKey: string
+  sourceLabel: string | null
+  artifactType: string | null
+  refLabel: string | null
+  summaryText: string | null
+}
+
+export type ExecutionPathDiagnosticRow = {
+  id: string
+  tone: 'failed' | 'blocked' | 'skipped'
+  nodeLabel: string
+  reasonLabel: string
+  sourceLabel: string | null
 }
 
 const COMPACT_HIDDEN_ARTIFACT_PORT_KEYS = new Set(['image_ref', 'metadata'])
@@ -94,6 +129,93 @@ export function formatPrimitiveValue(value: unknown) {
   }
 
   return JSON.stringify(value)
+}
+
+function compactComparisonText(value: string, maxLength = 72) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized
+}
+
+function parseNodeIoSummary(value?: string | null) {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function parseLogDetails(value?: string | null) {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function readSummaryString(summary: Record<string, unknown> | null, key: string) {
+  const value = summary?.[key]
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
+function readSummaryNumber(summary: Record<string, unknown> | null, key: string) {
+  const value = summary?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function summarizeNodeIoValue(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  const valueKind = typeof record.valueKind === 'string' ? record.valueKind : null
+  const size = typeof record.size === 'number' && Number.isFinite(record.size) ? record.size : null
+  const hash = typeof record.hash === 'string' && record.hash.trim() ? record.hash.trim().slice(0, 12) : null
+  return [valueKind, size !== null ? `${size}b` : null, hash ? `#${hash}` : null].filter(Boolean).join(' ') || null
+}
+
+function summarizeNodeIoSummary(value?: string | null) {
+  const summary = parseNodeIoSummary(value)
+  if (!summary) {
+    return null
+  }
+
+  const sourceArtifactId = readSummaryNumber(summary, 'sourceArtifactId')
+  const sourceRefKind = readSummaryString(summary, 'sourceRefKind')
+  const sourceRefValue = readSummaryString(summary, 'sourceRefValue')
+  const artifactRecordId = readSummaryNumber(summary, 'artifactRecordId')
+  const metadataKind = readSummaryString(summary, 'metadataKind')
+  const mimeType = readSummaryString(summary, 'mimeType')
+  const fileName = readSummaryString(summary, 'fileName')
+  const queueJobId = readSummaryNumber(summary, 'queueJobId')
+  const historyId = readSummaryNumber(summary, 'historyId')
+  const valueSummary = summarizeNodeIoValue(summary.value)
+
+  return [
+    sourceArtifactId !== null ? `source #${sourceArtifactId}` : null,
+    sourceRefKind && sourceRefValue ? `${sourceRefKind}: ${compactComparisonText(sourceRefValue, 48)}` : sourceRefKind,
+    artifactRecordId !== null ? `artifact #${artifactRecordId}` : null,
+    metadataKind,
+    mimeType,
+    fileName,
+    queueJobId !== null ? `queue #${queueJobId}` : null,
+    historyId !== null ? `history #${historyId}` : null,
+    valueSummary,
+  ].filter(Boolean).join(' · ') || null
 }
 
 /** Summarize one structured value into a small list of readable preview lines. */
@@ -198,8 +320,182 @@ export function getExecutionInputEntries(plan: ParsedExecutionPlan | null, input
   }))
 }
 
-/** Resolve a human-readable node label from the selected workflow graph. */
-function buildNodeDisplayLabelMap(selectedGraph: GraphWorkflowRecord | null | undefined) {
+export function buildExecutionComparisonSummary({
+  inputEntries,
+  artifacts,
+  finalResults,
+  logs,
+  nodeIo,
+}: {
+  inputEntries: ExecutionInputEntry[]
+  artifacts: GraphExecutionArtifactRecord[]
+  finalResults: GraphExecutionFinalResultRecord[]
+  logs: GraphExecutionLogRecord[]
+  nodeIo: GraphExecutionNodeIoRecord[]
+}): ExecutionComparisonSummary {
+  const finalResultWarningCount = listFinalResultLifecycleWarnings(logs).length
+  const issueLogCount = logs.filter((log) => log.level === 'warn' || log.level === 'error').length
+
+  return {
+    runtimeInputCount: inputEntries.length,
+    compactInputCount: nodeIo.filter((record) => record.direction === 'input').length,
+    compactOutputCount: nodeIo.filter((record) => record.direction === 'output').length,
+    artifactCount: artifacts.length,
+    finalResultCount: finalResults.length,
+    issueLogCount,
+    finalResultWarningCount,
+  }
+}
+
+export function buildExecutionComparisonRows(
+  nodeIo: GraphExecutionNodeIoRecord[],
+  selectedGraph?: GraphWorkflowRecord | null,
+  nodeLabelOverrides?: Record<string, string> | null,
+): ExecutionComparisonRow[] {
+  const nodeLabelMap = buildNodeDisplayLabelMap(selectedGraph)
+
+  return nodeIo.map((record) => {
+    const nodeLabel = getNodeDisplayLabelFromMap(nodeLabelMap, record.node_id, nodeLabelOverrides)
+    const sourceNodeLabel = record.source_node_id
+      ? getNodeDisplayLabelFromMap(nodeLabelMap, record.source_node_id, nodeLabelOverrides)
+      : null
+    const sourceLabel = sourceNodeLabel
+      ? [sourceNodeLabel, record.source_port_key].filter(Boolean).join(' · ')
+      : null
+    const refLabel = [record.ref_kind, record.ref_value ? compactComparisonText(record.ref_value, 64) : null].filter(Boolean).join(': ') || null
+
+    return {
+      id: record.id,
+      direction: record.direction,
+      nodeLabel,
+      portKey: record.port_key,
+      sourceLabel,
+      artifactType: record.artifact_type ?? null,
+      refLabel,
+      summaryText: summarizeNodeIoSummary(record.summary),
+    }
+  })
+}
+
+function readSkipReasonLabel(details: Record<string, unknown> | null) {
+  const disabledInputs = Array.isArray(details?.disabledInputs) ? details.disabledInputs : []
+  const inputReasons = disabledInputs
+    .filter((input): input is Record<string, unknown> => Boolean(input) && typeof input === 'object' && !Array.isArray(input))
+    .map((input) => input.reason)
+
+  if (inputReasons.includes('source_node_skipped')) {
+    return '상위 노드가 먼저 건너뜀'
+  }
+
+  if (inputReasons.includes('source_output_disabled')) {
+    return '상위 출력이 비활성'
+  }
+
+  if (inputReasons.includes('inactive_if_branch')) {
+    return 'IF 분기 비활성 경로'
+  }
+
+  return '건너뛴 경로'
+}
+
+function readFirstDisabledInputSource(details: Record<string, unknown> | null, nodeLabelMap: ReadonlyMap<string, string>, nodeLabelOverrides?: Record<string, string> | null) {
+  const disabledInputs = Array.isArray(details?.disabledInputs) ? details.disabledInputs : []
+  const sourceInput = disabledInputs.find((input): input is Record<string, unknown> => Boolean(input) && typeof input === 'object' && !Array.isArray(input))
+  const sourceNodeId = typeof sourceInput?.sourceNodeId === 'string' ? sourceInput.sourceNodeId : null
+  const sourcePortKey = typeof sourceInput?.sourcePortKey === 'string' ? sourceInput.sourcePortKey : null
+  if (!sourceNodeId) {
+    return null
+  }
+
+  return [getNodeDisplayLabelFromMap(nodeLabelMap, sourceNodeId, nodeLabelOverrides), sourcePortKey].filter(Boolean).join(' · ')
+}
+
+/** Build readable skipped/failed/blocked path diagnostics for execution summary surfaces. */
+export function buildExecutionPathDiagnosticRows({
+  execution,
+  logs,
+  plan,
+  selectedGraph,
+  nodeLabelOverrides,
+}: {
+  execution: GraphExecutionRecord
+  logs: GraphExecutionLogRecord[]
+  plan: ParsedExecutionPlan | null
+  selectedGraph?: GraphWorkflowRecord | null
+  nodeLabelOverrides?: Record<string, string> | null
+}): ExecutionPathDiagnosticRow[] {
+  const nodeLabelMap = buildNodeDisplayLabelMap(selectedGraph)
+  const rows: ExecutionPathDiagnosticRow[] = []
+  const seenNodeDiagnostics = new Set<string>()
+
+  for (const log of logs) {
+    if (!log.node_id) {
+      continue
+    }
+
+    if (log.event_type === 'node_skipped_disabled') {
+      const key = `skipped:${log.node_id}`
+      if (!seenNodeDiagnostics.has(key)) {
+        seenNodeDiagnostics.add(key)
+        rows.push({
+          id: key,
+          tone: 'skipped',
+          nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, log.node_id, nodeLabelOverrides),
+          reasonLabel: '비활성 노드',
+          sourceLabel: null,
+        })
+      }
+      continue
+    }
+
+    if (log.event_type === 'node_skipped_inactive_branch') {
+      const details = parseLogDetails(log.details)
+      const key = `skipped:${log.node_id}`
+      if (!seenNodeDiagnostics.has(key)) {
+        seenNodeDiagnostics.add(key)
+        rows.push({
+          id: key,
+          tone: 'skipped',
+          nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, log.node_id, nodeLabelOverrides),
+          reasonLabel: readSkipReasonLabel(details),
+          sourceLabel: readFirstDisabledInputSource(details, nodeLabelMap, nodeLabelOverrides),
+        })
+      }
+    }
+  }
+
+  if (execution.status === 'failed') {
+    const failedNodeId = execution.failed_node_id ?? logs.filter((log) => log.node_id).at(-1)?.node_id ?? null
+    if (failedNodeId) {
+      rows.push({
+        id: `failed:${failedNodeId}`,
+        tone: 'failed',
+        nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, failedNodeId, nodeLabelOverrides),
+        reasonLabel: '실패 지점',
+        sourceLabel: execution.error_message ?? null,
+      })
+
+      const orderedNodeIds = plan?.orderedNodeIds ?? []
+      const failedIndex = orderedNodeIds.indexOf(failedNodeId)
+      if (failedIndex !== -1) {
+        for (const blockedNodeId of orderedNodeIds.slice(failedIndex + 1)) {
+          rows.push({
+            id: `blocked:${blockedNodeId}`,
+            tone: 'blocked',
+            nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, blockedNodeId, nodeLabelOverrides),
+            reasonLabel: '실패 이후 미실행',
+            sourceLabel: getNodeDisplayLabelFromMap(nodeLabelMap, failedNodeId, nodeLabelOverrides),
+          })
+        }
+      }
+    }
+  }
+
+  return rows
+}
+
+/** Build a reusable node-label lookup map for execution summary surfaces. */
+export function buildNodeDisplayLabelMap(selectedGraph: GraphWorkflowRecord | null | undefined) {
   return new Map((selectedGraph?.graph.nodes ?? []).map((node) => [node.id, node.label?.trim() ?? ''] as const))
 }
 
@@ -220,13 +516,21 @@ function resolveNodeDisplayLabel(
   return `노드 ${nodeId}`
 }
 
+/** Resolve a human-readable node label from a precomputed graph-label map. */
+export function getNodeDisplayLabelFromMap(
+  nodeLabelMap: ReadonlyMap<string, string>,
+  nodeId: string,
+  nodeLabelOverrides?: Record<string, string> | null,
+) {
+  return resolveNodeDisplayLabel(nodeId, nodeLabelMap.get(nodeId), nodeLabelOverrides)
+}
+
 export function getNodeDisplayLabel(
   selectedGraph: GraphWorkflowRecord | null | undefined,
   nodeId: string,
   nodeLabelOverrides?: Record<string, string> | null,
 ) {
-  const nodeRecord = selectedGraph?.graph.nodes.find((node) => node.id === nodeId)
-  return resolveNodeDisplayLabel(nodeId, nodeRecord?.label?.trim(), nodeLabelOverrides)
+  return getNodeDisplayLabelFromMap(buildNodeDisplayLabelMap(selectedGraph), nodeId, nodeLabelOverrides)
 }
 
 /** Group artifacts by node so the panel can render per-node outputs. */
@@ -248,12 +552,16 @@ export function groupArtifactsByNode(
     .map(([nodeId, nodeArtifacts]) => ({
       nodeId,
       nodeLabel: resolveNodeDisplayLabel(nodeId, nodeLabelMap.get(nodeId), nodeLabelOverrides),
-      artifacts: [...nodeArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime()),
+      artifacts: [...nodeArtifacts].sort(compareGraphArtifactsNewestFirst),
     }))
     .sort((left, right) => {
-      const leftTime = new Date(left.artifacts[0]?.created_date ?? 0).getTime()
-      const rightTime = new Date(right.artifacts[0]?.created_date ?? 0).getTime()
-      return rightTime - leftTime
+      const leftArtifact = left.artifacts[0]
+      const rightArtifact = right.artifacts[0]
+      if (leftArtifact && rightArtifact) {
+        return compareGraphArtifactsNewestFirst(leftArtifact, rightArtifact)
+      }
+
+      return leftArtifact ? -1 : rightArtifact ? 1 : 0
     })
 }
 
@@ -261,7 +569,7 @@ export function groupArtifactsByNode(
 function pickHighlightedArtifacts(artifacts: GraphExecutionArtifactRecord[]) {
   const sortedArtifacts = [...artifacts]
     .filter((artifact) => !isEmptyLlmJsonArtifact(artifact))
-    .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+    .sort(compareGraphArtifactsNewestFirst)
   const visualArtifacts = sortedArtifacts.filter((artifact) => hasGraphArtifactVisualPreview(artifact))
 
   if (visualArtifacts.length > 0) {

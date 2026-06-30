@@ -186,6 +186,7 @@ export function NaiGenerationPanel({
       naiCostInputs.n_samples > 0,
   })
 
+  const naiCostErrorMessage = naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost')) : null
   const generationImageSaveOptions = useMemo(() => ({
     format: generationSaveSettings.defaultFormat,
     quality: generationSaveSettings.quality,
@@ -274,7 +275,7 @@ export function NaiGenerationPanel({
     isGenerating: isNaiGenerating,
     canGenerate: naiForm.prompt.trim().length > 0,
     generateButtonLabel: naiGenerateButtonLabel,
-    costErrorMessage: naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost')) : null,
+    costErrorMessage: naiCostErrorMessage,
     onUpscale: handleUpscale,
     onReset: resetNaiForm,
     onGenerate: handleNaiGenerate,

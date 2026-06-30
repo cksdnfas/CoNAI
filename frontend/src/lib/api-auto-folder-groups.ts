@@ -1,8 +1,9 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
+import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
 import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
-import type { GroupBreadcrumbItem, GroupDownloadType, GroupFileCounts, GroupImagesPayload, GroupRecord, GroupWithHierarchy } from '@/types/group'
+import type { GroupBreadcrumbItem, GroupDownloadType, GroupFileCounts, GroupImagesPayload, GroupRecord, GroupRematchJobRecord, GroupWithHierarchy } from '@/types/group'
 
 interface AutoFolderGroupApiRecord {
   id: number
@@ -32,6 +33,12 @@ interface AutoFolderGroupImagesApiPayload {
     total: number
     totalPages: number
   }
+}
+
+interface AutoFolderGroupRebuildResult {
+  success?: boolean
+  message?: string
+  rebuilt?: number
 }
 
 function normalizeAutoFolderGroup(group: AutoFolderGroupApiRecord): GroupWithHierarchy {
@@ -126,7 +133,7 @@ export async function getAutoFolderGroupFileCounts(groupId: number) {
 }
 
 export async function rebuildAutoFolderGroups() {
-  const response = await fetchJson<ApiResponse<{ success?: boolean; message?: string; rebuilt?: number }>>('/api/auto-folder-groups/rebuild', {
+  const response = await fetchJson<ApiResponse<AutoFolderGroupRebuildResult | GroupRematchJobRecord<AutoFolderGroupRebuildResult>>>('/api/auto-folder-groups/rebuild', {
     method: 'POST',
   })
 
@@ -134,7 +141,7 @@ export async function rebuildAutoFolderGroups() {
     throw createApiFallbackError(response.error, 'autoFolderGroups.rebuild')
   }
 
-  return response.data
+  return resolveGroupRematchJobResponse(response.data)
 }
 
 export async function getAutoFolderGroupPreviewImage(groupId: number, params?: { includeChildren?: boolean }) {

@@ -169,6 +169,37 @@ async function verifyApiRequestNode(baseUrl: string, tempBasePath: string) {
     'ok',
   )
 
+  assert.equal(
+    await executeApi({
+      url: `${baseUrl}/multipart`,
+      method: 'POST',
+      body_mode: 'json',
+      headers: [],
+      'headers.x-upload-token': 'secret',
+      values: [
+        { key: 'image', value: '' },
+        { key: 'note', value: 'json-mode-file' },
+      ],
+      'values.image': 'data:image/png;base64,aGVsbG8=',
+    }),
+    'ok',
+  )
+
+  const rawPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
+  assert.equal(
+    await executeApi({
+      url: `${baseUrl}/multipart`,
+      method: 'POST',
+      headers: [],
+      'headers.x-upload-token': 'secret',
+      values: [
+        { key: 'image', value: rawPngBase64 },
+        { key: 'note', value: 'raw-base64-image' },
+      ],
+    }),
+    'ok',
+  )
+
   const referencedImagePath = path.join(tempBasePath, 'referenced-image.webp')
   fs.writeFileSync(referencedImagePath, Buffer.from('hello'))
   assert.equal(
@@ -281,6 +312,15 @@ async function verifyBase64Nodes(tempBasePath: string) {
     input_mode: 'auto',
   })
   assert.equal(fileReferenceContext.artifactsByNode.get(node.id)?.base64.value, Buffer.from('hello').toString('base64'))
+
+  const outputAliasImagePath = path.join(tempBasePath, 'base64-output-alias.webp')
+  fs.writeFileSync(outputAliasImagePath, Buffer.from('alias'))
+  const outputAliasContext = createExecutionContext()
+  await executeBase64EncodeNode(outputAliasContext, node, moduleDefinition, {
+    value: { outputPath: outputAliasImagePath, outputMimeType: 'image/webp', outputFileName: 'base64-output-alias.webp' },
+    input_mode: 'auto',
+  })
+  assert.equal(outputAliasContext.artifactsByNode.get(node.id)?.base64.value, Buffer.from('alias').toString('base64'))
 
   const publicImageRelativePath = path.join('images', '2026', '05', '26', 'base64-reference.webp')
   const publicImagePath = path.join(tempBasePath, 'uploads', publicImageRelativePath)

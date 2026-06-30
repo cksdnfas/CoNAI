@@ -3,14 +3,10 @@ import { useI18n } from '@/i18n'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowBrowseContentRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api-module-graph'
 import type { WorkflowValidationIssue } from './workflow-validation-panel'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
+import { GraphExecutionPanel } from './graph-execution-panel'
 import { ModuleWorkflowBrowseView } from './module-workflow-browse-view'
 import { ModuleWorkflowEditorView } from './module-workflow-editor-view'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
-
-const GraphExecutionPanelLazy = lazy(async () => {
-  const module = await import('./graph-execution-panel')
-  return { default: module.GraphExecutionPanel }
-})
 
 const ModuleWorkflowOutputManagementPanelLazy = lazy(async () => {
   const module = await import('./module-workflow-output-management-panel')
@@ -83,26 +79,24 @@ export function ModuleGraphWorkflowBrowseContent({
       workflowListSidebar={workflowListSidebar}
       workflowRunnerPanel={workflowBrowseSidePanel}
       graphExecutionPanel={selectedGraphRecord ? (
-        <Suspense fallback={<WorkflowContentFallback />}>
-          <GraphExecutionPanelLazy
-            selectedGraphId={selectedGraphId}
-            selectedGraph={selectedGraphRecord}
-            selectedExecutionId={selectedExecutionId}
-            selectedExecutionStatus={selectedExecutionStatus}
-            executionList={executionList}
-            executionListError={executionListError}
-            executionListIsError={executionListIsError}
-            executionDetail={executionDetail}
-            executionDetailError={executionDetailError}
-            executionDetailIsError={executionDetailIsError}
-            isExecutingGraph={executingGraphId !== null}
-            isCancellingExecution={cancellingExecutionId === selectedExecutionId}
-            onSelectExecution={onSelectExecution}
-            onRerunGraph={onRerunGraph}
-            onRetryExecution={onRetryExecution}
-            onCancelExecution={onCancelExecution}
-          />
-        </Suspense>
+        <GraphExecutionPanel
+          selectedGraphId={selectedGraphId}
+          selectedGraph={selectedGraphRecord}
+          selectedExecutionId={selectedExecutionId}
+          selectedExecutionStatus={selectedExecutionStatus}
+          executionList={executionList}
+          executionListError={executionListError}
+          executionListIsError={executionListIsError}
+          executionDetail={executionDetail}
+          executionDetailError={executionDetailError}
+          executionDetailIsError={executionDetailIsError}
+          isExecutingGraph={executingGraphId !== null}
+          isCancellingExecution={cancellingExecutionId === selectedExecutionId}
+          onSelectExecution={onSelectExecution}
+          onRerunGraph={onRerunGraph}
+          onRetryExecution={onRetryExecution}
+          onCancelExecution={onCancelExecution}
+        />
       ) : null}
       browseContentPanel={selectedGraphRecord ? null : browseContentIsError ? (
         <div className="rounded-sm border border-dashed border-destructive/40 px-4 py-10 text-sm text-muted-foreground">

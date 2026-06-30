@@ -70,6 +70,13 @@ async function main() {
     assert.equal(ComfyUIServerModel.findDefault()?.id, thirdId)
     assert.equal(ComfyUIServerModel.findDefaultActive()?.id, thirdId)
 
+    assert.equal(ComfyUIServerModel.update(thirdId, { is_active: false }), true, 'deactivating a representative should preserve its saved record')
+    assert.equal(ComfyUIServerModel.findDefault()?.id, thirdId, 'findDefault should preserve saved representative status even when inactive')
+    assert.equal(ComfyUIServerModel.findDefaultActive(), null, 'findDefaultActive should exclude inactive representative servers')
+    assert.equal(ComfyUIServerModel.findAll(true).some((server) => server.id === thirdId), false, 'active-only server lists should exclude inactive records')
+    assert.equal(ComfyUIServerModel.update(thirdId, { is_active: true }), true, 'reactivating a representative should restore it to active default candidates')
+    assert.equal(ComfyUIServerModel.findDefaultActive()?.id, thirdId)
+
     assert.equal(ComfyUIServerModel.update(thirdId, { backend_type: 'modal' }), true, 'converting a representative to Modal should clear representative status')
     assert.deepEqual(listDefaultIds(), [], 'Modal conversion should leave no representative')
     assert.equal(ComfyUIServerModel.findById(thirdId)?.is_default, false)

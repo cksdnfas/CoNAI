@@ -11,6 +11,7 @@ const homeSearchContext = readFileSync(resolve(root, 'features/home/home-search-
 const homePage = readFileSync(resolve(root, 'features/home/home-page.tsx'), 'utf8')
 const homePageData = readFileSync(resolve(root, 'features/home/use-home-page-data.ts'), 'utf8')
 const imageList = readFileSync(resolve(root, 'features/images/components/image-list/image-list.tsx'), 'utf8')
+const searchSuggestionData = readFileSync(resolve(root, 'features/search/use-search-suggestion-data.ts'), 'utf8')
 
 assert.ok(
   homeSearchUi.includes('let homeSearchDrawerContentLoadPromise'),
@@ -66,6 +67,31 @@ assert.ok(
 assert.ok(
   imageList.includes("key={`masonry:${resetKey ?? 'stable'}`}") && imageList.includes("key={`grid:${resetKey ?? 'stable'}`}"),
   'image list virtualizers should remount from the reset key so stale filter layouts cannot render blank lists',
+)
+assert.match(
+  searchSuggestionData,
+  /const SEARCH_SUGGESTION_INPUT_DEBOUNCE_MS = 180[\s\S]*?function useDebouncedSearchInput\(value: string\)[\s\S]*?window\.setTimeout[\s\S]*?window\.clearTimeout/,
+  'network-backed suggestion queries should debounce fast typing before hitting prompt/model/LoRA endpoints',
+)
+assert.match(
+  searchSuggestionData,
+  /queryKey: \['search-suggestions', searchScope, debouncedInput\][\s\S]*?query: debouncedInput/,
+  'prompt suggestions should query with the debounced input snapshot',
+)
+assert.match(
+  searchSuggestionData,
+  /queryKey: \['search-model-suggestions', debouncedInput\][\s\S]*?getSearchModelSuggestions\(\{ query: debouncedInput, limit: 16 \}\)/,
+  'model suggestions should query with the debounced input snapshot',
+)
+assert.match(
+  searchSuggestionData,
+  /matchesRatingTierSearch\(tier\.tier_name, tier\.min_score, tier\.max_score, normalizedInput\.toLowerCase\(\)\)/,
+  'rating suggestions should filter locally instead of sending extra network queries while typing',
+)
+assert.match(
+  searchSuggestionData,
+  /suggestionsLoading: shouldEnableSearchSuggestionQuery\('prompt', searchScope, normalizedInput\) && \(isInputSettling \|\| promptSuggestionsQuery\.isLoading\)/,
+  'suggestion loading state should reflect the current raw input while the debounced query settles',
 )
 
 const defaultTextChip = createTextSearchChip('positive', 'crow \\la+ darknesss\\')

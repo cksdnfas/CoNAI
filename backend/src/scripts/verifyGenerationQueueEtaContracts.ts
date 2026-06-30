@@ -64,11 +64,16 @@ function completedJob(overrides: Partial<GenerationQueueJobRecord> & Pick<Genera
 }
 
 function assertEta(
-  etas: Map<number, { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null }>,
+  etas: Map<number, { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null; startAt?: string | null }>,
   id: number,
   expected: { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null },
 ) {
-  assert.deepEqual(etas.get(id), expected, `unexpected ETA for queue job ${id}`)
+  const actual = etas.get(id)
+  assert.deepEqual(
+    actual ? { waitSeconds: actual.waitSeconds, totalSeconds: actual.totalSeconds, durationSeconds: actual.durationSeconds } : actual,
+    expected,
+    `unexpected ETA for queue job ${id}`,
+  )
 }
 
 function main() {
@@ -82,6 +87,16 @@ function main() {
     queueEtaSource,
     /eligibleServerIds\.includes\(candidateServerId\)/,
     'running-lane ETA scans must not linearly check eligible servers for every active job',
+  )
+  assert.match(
+    queueEtaSource,
+    /GenerationQueueService\.getThrottledServiceStartDelaySeconds/,
+    'NAI/Codex ETA should include service throttle start slots, not only active worker duration',
+  )
+  assert.match(
+    queueEtaSource,
+    /resolveEstimatedStartAt/,
+    'queue ETA source should retain an estimated start timestamp path for UI visibility',
   )
 
   const dualSlotServer = server({ id: 1, name: 'Dual Slot', capacity: 2, routing_tags: ['fast'] })
@@ -141,6 +156,18 @@ function main() {
   const noSamplePositions = computeQueuePositions(noSampleQueue, activeServers)
   const noSampleEtas = computeQueueEtas(noSampleQueue, noSamplePositions, [], activeServers)
   assertEta(noSampleEtas, 40, { waitSeconds: null, totalSeconds: null, durationSeconds: null })
+
+  const unavailableServerQueue = [job({ id: 50, service_type: 'comfyui', requested_server_id: 999 })]
+  const unavailableServerPositions = computeQueuePositions(unavailableServerQueue, activeServers)
+  assert.deepEqual(unavailableServerPositions.get(50)?.eligibleServerIds, [], 'inactive explicit server lanes should stay visibly unrunnable')
+  const unavailableServerEtas = computeQueueEtas(unavailableServerQueue, unavailableServerPositions, durationSamples, activeServers)
+  assertEta(unavailableServerEtas, 50, { waitSeconds: null, totalSeconds: null, durationSeconds: 40 })
+
+  const unavailableTagQueue = [job({ id: 51, service_type: 'comfyui', requested_server_tag: 'missing-tag' })]
+  const unavailableTagPositions = computeQueuePositions(unavailableTagQueue, activeServers)
+  assert.deepEqual(unavailableTagPositions.get(51)?.eligibleServerIds, [], 'tag lanes without active servers should stay visibly unrunnable')
+  const unavailableTagEtas = computeQueueEtas(unavailableTagQueue, unavailableTagPositions, durationSamples, activeServers)
+  assertEta(unavailableTagEtas, 51, { waitSeconds: null, totalSeconds: null, durationSeconds: 40 })
 
   console.log('✅ Generation queue ETA contracts passed (capacity-aware ComfyUI lanes, queued-ahead distribution, missing samples)')
 }

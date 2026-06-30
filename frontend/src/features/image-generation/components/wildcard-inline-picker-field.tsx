@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type SyntheticEvent, type UIEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQueries } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { getWildcards } from '@/lib/api-wildcards'
+import { getDanbooruBrowserCharacters } from '@/lib/api-danbooru-browser'
 import { cn } from '@/lib/utils'
 import type { PromptTypeFilter } from '@/types/prompt'
 import {
@@ -13,18 +13,10 @@ import {
 } from './wildcard-generation-panel-helpers'
 import {
   buildWildcardInsertion,
-  countStoredWildcardItemsForTool,
-  countWildcardItemsForTool,
-  flattenWildcardRecords,
   MAX_RECENT_WILDCARDS,
   readStoredRecentWildcards,
   readStoredWildcardFilterMode,
-  resolveActiveWildcardQuery,
-  scoreWildcardMatch,
   writeStoredRecentWildcards,
-  writeStoredWildcardFilterMode,
-  resolvePreferredWildcardItemTool,
-  type FlattenedWildcardRecord,
   type PromptWildcardTool,
   type WildcardFilterMode,
   type WildcardInsertionRange,
@@ -34,20 +26,23 @@ import {
   getPromptSyntaxKindLabel,
   summarizePromptSyntaxTokens,
 } from './prompt-syntax-highlight-helpers'
-import { useWildcardWorkspaceBrowser } from './use-wildcard-workspace-browser'
-import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
+import { useWildcardInlinePickerData } from './use-wildcard-inline-picker-data'
 import { resolveFloatingDropdownRectFromRect } from './floating-dropdown-utils'
 import {
   buildPromptAutocompleteInsertion,
+  normalizeAutocompleteText,
+  resolvePromptDetectedCharacterCandidates,
   usePromptInlineAutocomplete,
   type PromptAutocompleteSuggestion,
 } from './use-prompt-inline-autocomplete'
+import { usePromptInlineSyntaxSettings } from './prompt-inline-syntax-settings'
+import { useWildcardInlinePickerSuggestions } from './use-wildcard-inline-picker-suggestions'
+import { WildcardInlinePickerPopupContent } from './wildcard-inline-picker-popup-content'
 import {
   getPromptSyntaxChipClass,
   getTextFieldCaretClientRect,
   PromptAutocompletePopup,
   PromptSyntaxTokenPopup,
-  renderHighlightedText,
   renderPromptSyntaxOverlay,
   WildcardInlinePickerPopup,
   type InlinePickerPopupPosition,
@@ -87,6 +82,7 @@ export function WildcardInlinePickerField({
   const detectedPopupCloseTimerRef = useRef<number | null>(null)
   const detectedPopupRef = useRef<HTMLDivElement | null>(null)
   const detectedTokenButtonRefs = useRef(new Map<string, HTMLButtonElement | null>())
+  const detectedCharacterButtonRefs = useRef(new Map<string, HTMLButtonElement | null>())
   const [caretPosition, setCaretPosition] = useState(0)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isFocused, setIsFocused] = useState(false)
@@ -98,33 +94,51 @@ export function WildcardInlinePickerField({
   const [fieldScrollTop, setFieldScrollTop] = useState(0)
   const [fieldScrollLeft, setFieldScrollLeft] = useState(0)
   const [activeDetectedTokenKey, setActiveDetectedTokenKey] = useState<string | null>(null)
+  const [activeDetectedCharacterKey, setActiveDetectedCharacterKey] = useState<string | null>(null)
   const [detectedPopupPosition, setDetectedPopupPosition] = useState<PromptSyntaxPopupPosition | null>(null)
+  const [detectedCharacterPopupPosition, setDetectedCharacterPopupPosition] = useState<InlinePickerPopupPosition | null>(null)
   const [inlinePopupPosition, setInlinePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
   const [promptAutocompletePopupPosition, setPromptAutocompletePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
+  const { settings: syntaxSettings } = usePromptInlineSyntaxSettings()
+  const shouldLoadWildcardData = !disabled && isFocused
 
-  const wildcardsQuery = useQuery({
-    queryKey: ['wildcards', 'inline-picker'],
-    queryFn: () => getWildcards({ hierarchical: true, withItems: true }),
-    staleTime: 60_000,
-  })
-
-  const wildcards = useMemo(() => wildcardsQuery.data ?? [], [wildcardsQuery.data])
-  const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
-  const activeQuery = useMemo(() => resolveActiveWildcardQuery(value, caretPosition), [value, caretPosition])
   const {
-    treeNodes: explorerTreeNodes,
-    entries: explorerEntries,
-    selectedWildcardId: selectedExplorerId,
-    setSelectedWildcardId: setSelectedExplorerId,
-  } = useWildcardWorkspaceBrowser({
-    records: wildcards,
+    wildcardsQuery,
+    flattenedWildcards,
+    explorerTreeNodes,
+    explorerEntries,
+    selectedExplorerId,
+    setSelectedExplorerId,
+    explorerEntryIdSet,
+    rootExplorerEntryIds,
+  } = useWildcardInlinePickerData({
     activeTab: activeExplorerTab,
+    enabled: shouldLoadWildcardData,
   })
-  const explorerEntryIdSet = useMemo(() => new Set(explorerEntries.map((entry) => entry.wildcard.id)), [explorerEntries])
-  const rootExplorerEntryIds = useMemo(
-    () => explorerEntries.filter((entry) => entry.depth === 0).map((entry) => entry.wildcard.id),
-    [explorerEntries],
-  )
+  const {
+    activeGroupQuery,
+    activeWildcardQuery,
+    activeSource,
+    activeQuery,
+    activePreprocessQuery,
+    activeDanbooruGroupQuery,
+    danbooruSummaryQuery,
+    preprocessSuggestions,
+    groupSuggestions,
+    suggestions,
+    normalizedActiveQuery,
+    indexedSuggestions,
+    recentSuggestions,
+    remainingSuggestions,
+  } = useWildcardInlinePickerSuggestions({
+    value,
+    caretPosition,
+    syntaxSettings,
+    flattenedWildcards,
+    filterMode,
+    recentWildcardNames,
+    tool,
+  })
   const detectedTokens = useMemo(
     () => detectPromptSyntaxTokens(value, flattenedWildcards, tool),
     [flattenedWildcards, tool, value],
@@ -137,61 +151,58 @@ export function WildcardInlinePickerField({
     () => detectedTokenSummaries.find((token) => token.key === activeDetectedTokenKey) ?? null,
     [activeDetectedTokenKey, detectedTokenSummaries],
   )
-
-  const suggestions = useMemo(() => {
-    if (!activeQuery) {
+  const detectedCharacterCandidates = useMemo(
+    () => (syntaxSettings.characterRelatedTags ? resolvePromptDetectedCharacterCandidates(value) : []),
+    [syntaxSettings.characterRelatedTags, value],
+  )
+  const detectedCharacterQueries = useQueries({
+    queries: detectedCharacterCandidates.map((candidate) => ({
+      queryKey: ['prompt-inline-detected-character', candidate.normalizedQuery],
+      queryFn: () => getDanbooruBrowserCharacters({
+        query: candidate.query,
+        page: 1,
+        limit: 5,
+        relatedTagLimit: 42,
+      }),
+      enabled: candidate.normalizedQuery.length >= 2,
+      staleTime: 60_000,
+      retry: false,
+    })),
+  })
+  const detectedCharacters = useMemo(() => detectedCharacterCandidates.flatMap((candidate, index) => {
+    const items = detectedCharacterQueries[index]?.data?.items ?? []
+    const matchedCharacter = items.find((item) => {
+      const normalizedName = normalizeAutocompleteText(item.name).replace(/ /g, '_')
+      const normalizedDisplayName = normalizeAutocompleteText(item.displayName).replace(/ /g, '_')
+      return normalizedName === candidate.normalizedQuery || normalizedDisplayName === candidate.normalizedQuery
+    })
+    if (!matchedCharacter) {
       return []
     }
 
-    const normalizedQuery = activeQuery.query.trim().toLowerCase()
-    const recentIndexMap = new Map(recentWildcardNames.map((name, index) => [name, index]))
-    const records = flattenedWildcards
-      .map((record) => ({
-        record,
-        score: scoreWildcardMatch(record, normalizedQuery),
-        toolItemCount: countWildcardItemsForTool(record.items, tool),
-        generalItemCount: countStoredWildcardItemsForTool(record.items, 'general'),
-        naiItemCount: countStoredWildcardItemsForTool(record.items, 'nai'),
-        comfyuiItemCount: countStoredWildcardItemsForTool(record.items, 'comfyui'),
-        recentIndex: recentIndexMap.get(record.name) ?? Number.POSITIVE_INFINITY,
-      }))
-      .filter(({ score, toolItemCount }) => {
-        if (normalizedQuery.length > 0 && score < 0) {
-          return false
-        }
+    const suggestion: PromptAutocompleteSuggestion = {
+      id: `detected-character:${matchedCharacter.tagId}:${candidate.key}`,
+      kind: 'character',
+      label: matchedCharacter.displayName,
+      insertText: matchedCharacter.name,
+      translatedName: matchedCharacter.translatedName,
+      secondaryText: matchedCharacter.copyrights.map((copyright) => copyright.displayName).slice(0, 2).join(' · '),
+      usageCount: matchedCharacter.worksCount,
+      relatedTags: matchedCharacter.relatedTags
+        .slice()
+        .sort((left, right) => right.usageCount - left.usageCount)
+        .slice(0, 42),
+    }
 
-        if (filterMode === 'available-only' && toolItemCount === 0) {
-          return false
-        }
+    return [{ candidate, suggestion }]
+  }), [detectedCharacterCandidates, detectedCharacterQueries])
+  const activeDetectedCharacter = useMemo(
+    () => detectedCharacters.find((character) => character.candidate.key === activeDetectedCharacterKey) ?? null,
+    [activeDetectedCharacterKey, detectedCharacters],
+  )
 
-        return true
-      })
-      .sort((left, right) => {
-        if (normalizedQuery.length === 0 && left.recentIndex !== right.recentIndex) {
-          return left.recentIndex - right.recentIndex
-        }
-
-        if (right.score !== left.score) {
-          return right.score - left.score
-        }
-
-        if (left.recentIndex !== right.recentIndex) {
-          return left.recentIndex - right.recentIndex
-        }
-
-        if (right.toolItemCount !== left.toolItemCount) {
-          return right.toolItemCount - left.toolItemCount
-        }
-
-        return left.record.path.join('/').localeCompare(right.record.path.join('/'))
-      })
-      .slice(0, 8)
-
-    return records
-  }, [activeQuery, filterMode, flattenedWildcards, recentWildcardNames, tool])
-
-  const isTreeExplorerMode = filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
-  const isPopupOpen = isFocused && (activeQuery !== null || isExplorerPinned) && !disabled
+  const isTreeExplorerMode = activeSource === 'wildcard' && filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
+  const isPopupOpen = isFocused && !disabled && (activeSource === 'danbooru-group' || activeSource === 'preprocess' || activeSource === 'wildcard' || isExplorerPinned)
   const {
     activeQuery: activePromptAutocompleteQuery,
     isOpen: isPromptAutocompleteOpen,
@@ -202,22 +213,13 @@ export function WildcardInlinePickerField({
   } = usePromptInlineAutocomplete({
     value,
     caretPosition,
-    activeWildcardQuery: activeQuery,
+    activeWildcardQuery: activeSource === 'tag' ? null : (activeWildcardQuery ?? activeGroupQuery),
     isExplorerPinned,
     isFocused,
-    disabled,
+    disabled: disabled || activeSource !== 'tag',
     isWildcardPopupOpen: isPopupOpen,
     autocompletePromptType,
   })
-  const normalizedActiveQuery = activeQuery?.query.trim() ?? ''
-  const indexedSuggestions = suggestions.map((suggestion, index) => ({ ...suggestion, index }))
-  const recentSuggestions = normalizedActiveQuery.length === 0
-    ? indexedSuggestions.filter((suggestion) => Number.isFinite(suggestion.recentIndex))
-    : []
-  const remainingSuggestions = normalizedActiveQuery.length === 0
-    ? indexedSuggestions.filter((suggestion) => !Number.isFinite(suggestion.recentIndex))
-    : indexedSuggestions
-
   useLayoutEffect(() => {
     if (!multiline || !(fieldRef.current instanceof HTMLTextAreaElement)) {
       return
@@ -230,7 +232,7 @@ export function WildcardInlinePickerField({
 
   useEffect(() => {
     setActiveIndex(0)
-  }, [activeQuery?.query, filterMode, tool])
+  }, [activeDanbooruGroupQuery?.query, activePreprocessQuery?.query, activeQuery?.query, activeSource, filterMode, tool])
 
   useEffect(() => {
     setFilterMode(readStoredWildcardFilterMode(tool))
@@ -296,6 +298,43 @@ export function WildcardInlinePickerField({
       window.removeEventListener('scroll', updatePosition, true)
     }
   }, [activeDetectedTokenKey])
+
+  useEffect(() => {
+    if (activeDetectedCharacterKey && !detectedCharacters.some((character) => character.candidate.key === activeDetectedCharacterKey)) {
+      setActiveDetectedCharacterKey(null)
+    }
+  }, [activeDetectedCharacterKey, detectedCharacters])
+
+  useEffect(() => {
+    if (!activeDetectedCharacter || typeof window === 'undefined') {
+      setDetectedCharacterPopupPosition(null)
+      return
+    }
+
+    const updatePosition = () => {
+      const anchor = detectedCharacterButtonRefs.current.get(activeDetectedCharacter.candidate.key)
+      if (!anchor) {
+        setDetectedCharacterPopupPosition(null)
+        return
+      }
+
+      setDetectedCharacterPopupPosition(resolveFloatingDropdownRectFromRect(anchor.getBoundingClientRect(), {
+        minWidth: 280,
+        preferredMaxHeight: 220,
+        minUsableHeight: 120,
+        gap: 8,
+      }))
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [activeDetectedCharacter])
 
   useEffect(() => {
     if (!isPopupOpen || typeof window === 'undefined') {
@@ -462,6 +501,40 @@ export function WildcardInlinePickerField({
     })
   }
 
+  const handleInsertPreprocess = (preprocessName: string) => {
+    if (!fieldRef.current || !activePreprocessQuery) {
+      return
+    }
+
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, preprocessName, activePreprocessQuery)
+
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+    setActiveIndex(0)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
+  const handleInsertDanbooruGroup = (groupName: string) => {
+    if (!fieldRef.current || !activeDanbooruGroupQuery) {
+      return
+    }
+
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, `__${groupName}__`, activeDanbooruGroupQuery)
+
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+    setActiveIndex(0)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
   const handleInsertPromptAutocomplete = (suggestion: PromptAutocompleteSuggestion) => {
     if (!fieldRef.current || !activePromptAutocompleteQuery) {
       return
@@ -495,8 +568,65 @@ export function WildcardInlinePickerField({
     })
   }
 
+  const handleInsertDetectedCharacterRelatedTag = (tagName: string) => {
+    if (!fieldRef.current || !activeDetectedCharacter) {
+      return
+    }
+
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, tagName, activeDetectedCharacter.candidate, 'append')
+
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+    setActiveDetectedCharacterKey(null)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (isPopupOpen && !isTreeExplorerMode && suggestions.length > 0) {
+    if (isPopupOpen && activeSource === 'danbooru-group' && groupSuggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActiveIndex((current) => (current + 1) % groupSuggestions.length)
+        return
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActiveIndex((current) => (current - 1 + groupSuggestions.length) % groupSuggestions.length)
+        return
+      }
+
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
+        handleInsertDanbooruGroup(groupSuggestions[activeIndex]?.label ?? groupSuggestions[0].label)
+        return
+      }
+    }
+
+    if (isPopupOpen && activeSource === 'preprocess' && preprocessSuggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActiveIndex((current) => (current + 1) % preprocessSuggestions.length)
+        return
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActiveIndex((current) => (current - 1 + preprocessSuggestions.length) % preprocessSuggestions.length)
+        return
+      }
+
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
+        handleInsertPreprocess(preprocessSuggestions[activeIndex]?.record.name ?? preprocessSuggestions[0].record.name)
+        return
+      }
+    }
+
+    if (isPopupOpen && activeSource === 'wildcard' && !isTreeExplorerMode && suggestions.length > 0) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
         setActiveIndex((current) => (current + 1) % suggestions.length)
@@ -582,59 +712,6 @@ export function WildcardInlinePickerField({
     detectedPopupCloseTimerRef.current = window.setTimeout(() => {
       setActiveDetectedTokenKey(null)
     }, 120)
-  }
-
-  const renderSuggestionButton = ({
-    record,
-    toolItemCount,
-    generalItemCount,
-    naiItemCount,
-    comfyuiItemCount,
-    recentIndex,
-    index,
-  }: {
-    record: FlattenedWildcardRecord
-    toolItemCount: number
-    generalItemCount: number
-    naiItemCount: number
-    comfyuiItemCount: number
-    recentIndex: number
-    index: number
-  }) => {
-    const isActive = index === activeIndex
-    const preferredBadgeTool = resolvePreferredWildcardItemTool(record.items, tool)
-
-    return (
-      <button
-        key={record.id}
-        type="button"
-        onMouseDown={(event) => {
-          event.preventDefault()
-          handleInsertWildcard(record.name)
-        }}
-        className={cn(
-          'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
-          isActive ? 'bg-surface-high' : 'hover:bg-surface-lowest',
-        )}
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-medium text-foreground">{renderHighlightedText(record.name, normalizedActiveQuery)}</span>
-            <Badge variant={record.type === 'chain' ? 'secondary' : 'outline'}>{record.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
-            {record.isAutoCollected ? <Badge variant="outline">Auto LoRA</Badge> : null}
-            {Number.isFinite(recentIndex) ? <Badge variant="secondary">{t('image-generation.components.wildcard.inline.picker.field.recent')}</Badge> : null}
-            {toolItemCount === 0 ? <Badge variant="outline">{t('image-generation.components.wildcard.inline.picker.field.current.tool.is.empty')}</Badge> : null}
-          </div>
-          <div className="mt-1 truncate text-xs text-muted-foreground">{renderHighlightedText(record.path.join(' / '), normalizedActiveQuery)}</div>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <Badge variant={preferredBadgeTool === 'general' ? 'secondary' : 'outline'}>General {generalItemCount}</Badge>
-          <Badge variant={preferredBadgeTool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
-          <Badge variant={preferredBadgeTool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
-        </div>
-      </button>
-    )
   }
 
   return (
@@ -724,6 +801,35 @@ export function WildcardInlinePickerField({
         </div>
       ) : null}
 
+      {showDetectedSyntax && detectedCharacters.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-[11px] text-muted-foreground">
+          <span>{t({ ko: '캐릭터', en: 'Characters' })}</span>
+          {detectedCharacters.map(({ candidate, suggestion }) => {
+            const isActive = candidate.key === activeDetectedCharacterKey
+            return (
+              <button
+                key={candidate.key}
+                ref={(node) => {
+                  detectedCharacterButtonRefs.current.set(candidate.key, node)
+                }}
+                type="button"
+                className={cn(
+                  'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors',
+                  isActive ? 'border-cyan-300/60 bg-cyan-400/18 text-foreground' : 'border-cyan-400/20 bg-cyan-400/10 text-foreground/90 hover:bg-cyan-400/16',
+                )}
+                onClick={() => {
+                  setActiveDetectedCharacterKey((current) => current === candidate.key ? null : candidate.key)
+                }}
+              >
+                <span className="max-w-[12rem] truncate">{suggestion.label}</span>
+                {suggestion.translatedName ? <span className="max-w-[8rem] truncate text-muted-foreground">{suggestion.translatedName}</span> : null}
+                {suggestion.relatedTags?.length ? <Badge variant="secondary">{suggestion.relatedTags.length}</Badge> : null}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       {showDetectedSyntax && activeDetectedToken && detectedPopupPosition ? (
         <PromptSyntaxTokenPopup
           token={activeDetectedToken}
@@ -735,6 +841,17 @@ export function WildcardInlinePickerField({
           onMouseLeave={() => {
             scheduleDetectedPopupClose()
           }}
+        />
+      ) : null}
+
+      {showDetectedSyntax && activeDetectedCharacter && detectedCharacterPopupPosition ? (
+        <PromptAutocompletePopup
+          position={detectedCharacterPopupPosition}
+          suggestions={[]}
+          activeCharacter={activeDetectedCharacter.suggestion}
+          isLoading={false}
+          onSelect={() => undefined}
+          onSelectRelatedTag={handleInsertDetectedCharacterRelatedTag}
         />
       ) : null}
 
@@ -751,84 +868,34 @@ export function WildcardInlinePickerField({
 
       {isPopupOpen && inlinePopupPosition ? (
         <WildcardInlinePickerPopup position={inlinePopupPosition}>
-          <div className="space-y-2 border-b border-border/70 px-3 py-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                    setFilterMode('available-only')
-                    setIsExplorerPinned(false)
-                    writeStoredWildcardFilterMode(tool, 'available-only')
-                  }}
-                  className={cn(
-                    'rounded-sm border px-2 py-1 text-xs transition-colors',
-                    filterMode === 'available-only' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
-                  )}
-                >
-                  {t('image-generation.components.wildcard.inline.picker.field.search')}
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                    setFilterMode('all')
-                    setIsExplorerPinned(true)
-                    writeStoredWildcardFilterMode(tool, 'all')
-                  }}
-                  className={cn(
-                    'rounded-sm border px-2 py-1 text-xs transition-colors',
-                    filterMode === 'all' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
-                  )}
-                >
-                  {t('image-generation.components.wildcard.inline.picker.field.browse.all')}
-                </button>
-              </div>
-              <Badge variant="outline">{isTreeExplorerMode ? explorerEntries.length : suggestions.length}</Badge>
-            </div>
-          </div>
-
-          {wildcardsQuery.isLoading ? (
-            <div className="px-3 py-3 text-sm text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.loading.wildcards')}</div>
-          ) : isTreeExplorerMode ? (
-            <WildcardInlinePickerExplorer
-              activeTab={activeExplorerTab}
-              expandedWildcardIds={expandedExplorerIds}
-              selectedWildcardId={selectedExplorerId}
-              tool={tool}
-              treeNodes={explorerTreeNodes}
-              onChangeActiveTab={setActiveExplorerTab}
-              onInsertWildcard={handleInsertWildcard}
-              onSelectWildcard={setSelectedExplorerId}
-              onToggleExpanded={toggleExplorerExpanded}
-            />
-          ) : suggestions.length > 0 ? (
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
-              {recentSuggestions.length > 0 ? (
-                <div className="space-y-1">
-                  <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.recent')}</div>
-                  <div className="space-y-1">
-                    {recentSuggestions.map(renderSuggestionButton)}
-                  </div>
-                </div>
-              ) : null}
-
-              {remainingSuggestions.length > 0 ? (
-                <div className="space-y-1">
-                  {recentSuggestions.length > 0 ? <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.all.results')}</div> : null}
-                  <div className="space-y-1">
-                    {remainingSuggestions.map(renderSuggestionButton)}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="space-y-2 px-3 py-3 text-sm text-muted-foreground">
-              <div>{t('image-generation.components.wildcard.inline.picker.field.no.matching.wildcards')}</div>
-              {filterMode === 'available-only' ? <div className="text-xs">{t('image-generation.components.wildcard.inline.picker.field.search.mode.may.hide.wildcards.dedicated.to')}</div> : null}
-            </div>
-          )}
+          <WildcardInlinePickerPopupContent
+            activeSource={activeSource}
+            activeIndex={activeIndex}
+            activeListSuggestions={indexedSuggestions}
+            activeExplorerTab={activeExplorerTab}
+            expandedExplorerIds={expandedExplorerIds}
+            explorerEntriesCount={explorerEntries.length}
+            explorerTreeNodes={explorerTreeNodes}
+            filterMode={filterMode}
+            groupSuggestions={groupSuggestions}
+            isDanbooruDatabaseAvailable={danbooruSummaryQuery.data?.database.available !== false}
+            isDanbooruSummaryLoading={danbooruSummaryQuery.isLoading}
+            isTreeExplorerMode={isTreeExplorerMode}
+            isWildcardsLoading={wildcardsQuery.isLoading}
+            normalizedActiveQuery={normalizedActiveQuery}
+            recentSuggestions={recentSuggestions}
+            remainingSuggestions={remainingSuggestions}
+            selectedExplorerId={selectedExplorerId}
+            tool={tool}
+            onChangeActiveExplorerTab={setActiveExplorerTab}
+            onChangeFilterMode={setFilterMode}
+            onInsertDanbooruGroup={handleInsertDanbooruGroup}
+            onInsertPreprocess={handleInsertPreprocess}
+            onInsertWildcard={handleInsertWildcard}
+            onSelectExplorerId={setSelectedExplorerId}
+            onSetExplorerPinned={setIsExplorerPinned}
+            onToggleExplorerExpanded={toggleExplorerExpanded}
+          />
         </WildcardInlinePickerPopup>
       ) : null}
     </div>

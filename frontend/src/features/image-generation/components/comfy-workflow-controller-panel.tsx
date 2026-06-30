@@ -8,7 +8,7 @@ import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
-import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
+import { hasWorkflowFieldValue, type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
 import { WorkflowFieldDisclosureCard } from './workflow-field-disclosure-card'
 import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownItemClassName, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
@@ -239,13 +239,53 @@ export function ComfyWorkflowControllerPanel({
   const selectedTagRoutableCount = selectedTag
     ? routingSummary.tagRoutableCounts.get(selectedTag) ?? 0
     : 0
-  const canGenerateSelected = selectedTarget === 'auto'
+  const routingCanGenerate = selectedTarget === 'auto'
     ? routingSummary.autoRoutableCount > 0
     : selectedTag !== null
       ? selectedTagRoutableCount > 0
       : selectedServer
         ? isComfyWorkflowServerRoutable(selectedServer, serverTests[selectedServer.id])
         : false
+  const missingRequiredFields = useMemo(
+    () => workflowFields.filter((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id])),
+    [workflowDraft, workflowFields],
+  )
+  const queueRegistrationNumber = Number(queueRegistrationCount)
+  const queueRegistrationCountValid = Number.isInteger(queueRegistrationNumber) && queueRegistrationNumber >= 1 && queueRegistrationNumber <= 32
+  const readinessIssues = useMemo(() => {
+    const issues: string[] = []
+
+    if (workflowFields.length === 0) {
+      issues.push(t({ ko: '노출된 입력 필드가 없어 큐 등록을 막았어.', en: 'Queueing is blocked because this workflow has no exposed input fields.' }))
+    }
+
+    if (missingRequiredFields.length > 0) {
+      const labels = missingRequiredFields.slice(0, 3).map((field) => field.label).join(', ')
+      const suffix = missingRequiredFields.length > 3
+        ? t({ ko: ' 외 {count}개', en: ' and {count} more' }, { count: missingRequiredFields.length - 3 })
+        : ''
+      issues.push(t({ ko: '필수 입력을 채워줘: {labels}{suffix}', en: 'Fill required inputs: {labels}{suffix}' }, { labels, suffix }))
+    }
+
+    if (servers.length === 0) {
+      issues.push(t({ ko: '활성 ComfyUI 서버가 없어. 서버를 등록하거나 비활성 서버를 켜줘.', en: 'There are no active ComfyUI servers. Register a server or enable a disabled one.' }))
+    } else if (!routingCanGenerate) {
+      if (selectedTarget === 'auto') {
+        issues.push(t({ ko: '자동 분산에 연결 확인된 일반 ComfyUI 서버가 없어. 서버 테스트를 실행하거나 개별 서버를 골라줘.', en: 'Auto routing has no connected regular ComfyUI server. Test a server or choose a specific target.' }))
+      } else if (selectedTag) {
+        issues.push(t({ ko: '#{tag} 라우팅에 사용 가능한 서버가 없어. 서버 태그와 연결 상태를 확인해줘.', en: 'No server is available for #{tag}. Check server tags and connection state.' }, { tag: selectedTag }))
+      } else {
+        issues.push(t({ ko: '선택한 서버가 실행 가능한 상태가 아니야. 연결 테스트 또는 활성 상태를 확인해줘.', en: 'The selected server is not ready to run. Check its connection test or active state.' }))
+      }
+    }
+
+    if (!queueRegistrationCountValid) {
+      issues.push(t({ ko: '큐 등록 개수는 1부터 32 사이의 정수여야 해.', en: 'Queue count must be an integer between 1 and 32.' }))
+    }
+
+    return issues
+  }, [missingRequiredFields, queueRegistrationCountValid, routingCanGenerate, selectedTag, selectedTarget, servers.length, t, workflowFields.length])
+  const canGenerateSelected = routingCanGenerate && missingRequiredFields.length === 0 && queueRegistrationCountValid
   const targetOptions = useMemo<WorkflowTargetOption[]>(() => {
     if (servers.length === 0) {
       return [{ value: 'auto', label: t({ ko: '서버 없음', en: 'No servers' }) }]
@@ -479,6 +519,19 @@ export function ComfyWorkflowControllerPanel({
           <Alert>
             <AlertTitle>{t({ ko: '서버 필요', en: 'Server required' })}</AlertTitle>
             <AlertDescription>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {readinessIssues.length > 0 ? (
+          <Alert variant="destructive">
+            <AlertTitle>{t({ ko: '실행 준비 필요', en: 'Run readiness needs attention' })}</AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc space-y-1 pl-4">
+                {readinessIssues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </AlertDescription>
           </Alert>
         ) : null}
 

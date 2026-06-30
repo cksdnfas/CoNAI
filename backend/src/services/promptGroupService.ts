@@ -16,184 +16,37 @@ import {
   getPromptCollectionTableName as getPromptTableName,
   getPromptGroupTableName as getTableName,
 } from '../utils/promptTables';
-import { resolveDanbooruDbInfo } from './danbooruBrowserService';
+import {
+  buildDanbooruGroupName,
+  buildDanbooruParentKeyByKey,
+  collectDanbooruNodeKeysWithAncestors,
+  formatDanbooruCategoryTitle,
+  normalizeDanbooruGroupingOptions,
+  PROMPT_TYPES,
+  resolveDanbooruNodeTitle,
+  resolveDynamicCategoryParentKey,
+  summarizeDanbooruGrouping,
+  type DanbooruGroupingMode,
+  type DanbooruGroupingOptions,
+  type DanbooruGroupingPreviewResult,
+  type PromptCollectionType,
+} from './promptGroups/danbooruGroupingHelpers';
+import {
+  getDanbooruGroupRootName,
+  getDanbooruManagedGroupIds,
+  getHiddenDanbooruRootGroupsWithCounts,
+  isDanbooruManagedGroupId,
+} from './promptGroups/danbooruManagedGroups';
+import {
+  ensureDanbooruGroupingDbAttached,
+  getDanbooruGroupingDatabaseInfo,
+  getDanbooruGroupingTypePreview,
+  getDanbooruPromptMatches,
+  getDanbooruTaxonomyRows,
+  getUnavailableDanbooruGroupingTypePreview,
+} from './promptGroups/danbooruGroupingQueries';
 
-type PromptCollectionType = 'positive' | 'negative' | 'auto';
-
-type DanbooruGroupingMode = 'unclassified-only' | 'overwrite-existing';
-type DanbooruGroupingLanguage = 'ko' | 'en';
-
-interface DanbooruGroupingOptions {
-  mode?: DanbooruGroupingMode;
-  language?: DanbooruGroupingLanguage;
-  includeAssignedPrompts?: boolean;
-}
-
-const PROMPT_TYPES: PromptCollectionType[] = ['positive', 'auto', 'negative'];
-const DANBOORU_GROUP_ROOT_NAME_EN = 'Danbooru';
-const DANBOORU_GROUP_ROOT_NAME_KO = '단부루';
-const DANBOORU_GROUP_ROOT_NAMES = [DANBOORU_GROUP_ROOT_NAME_EN, DANBOORU_GROUP_ROOT_NAME_KO];
-
-function danbooruRootNamePlaceholders(): string {
-  return DANBOORU_GROUP_ROOT_NAMES.map(() => '?').join(',');
-}
-
-interface DanbooruTaxonomyNodeRow {
-  id: number;
-  node_key: string;
-  title: string;
-  translated_title?: string | null;
-  member_tag_count: number;
-}
-
-interface DanbooruPromptMatchRow {
-  prompt_id: number;
-  prompt: string;
-  usage_count: number;
-  taxonomy_node_id: number | null;
-  node_key: string;
-  title: string;
-  translated_title?: string | null;
-}
-
-interface DanbooruGroupingTypeResult {
-  type: PromptCollectionType;
-  totalPrompts: number;
-  eligiblePrompts: number;
-  matchedPrompts: number;
-  assignedPrompts: number;
-  createdGroups: number;
-  reusedGroups: number;
-  matchedGroups: number;
-  skippedAssignedPrompts: number;
-  sampleUnmatchedPrompts: Array<{ prompt: string; usage_count: number }>;
-}
-
-export interface DanbooruGroupingPreviewResult {
-  mode: DanbooruGroupingMode;
-  language: DanbooruGroupingLanguage;
-  includeAssignedPrompts: boolean;
-  database: ReturnType<typeof resolveDanbooruDbInfo>;
-  totals: {
-    totalPrompts: number;
-    eligiblePrompts: number;
-    matchedPrompts: number;
-    assignedPrompts: number;
-    createdGroups: number;
-    reusedGroups: number;
-    matchedGroups: number;
-    skippedAssignedPrompts: number;
-  };
-  byType: DanbooruGroupingTypeResult[];
-}
-
-function normalizeDanbooruGroupTitle(value: string): string {
-  return value.trim().replace(/\s+/g, ' ') || 'Untitled';
-}
-
-function escapeSqliteString(value: string): string {
-  return value.replace(/'/g, "''");
-}
-
-function resolveTaxonomyParentKeyFromNodeKey(nodeKey: string, nodeKeySet: Set<string>): string | null {
-  const parts = nodeKey.split('__');
-
-  for (let length = parts.length - 1; length > 0; length -= 1) {
-    const candidate = parts.slice(0, length).join('__');
-    if (nodeKeySet.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-function buildDanbooruParentKeyByKey(rows: DanbooruTaxonomyNodeRow[]): Map<string, string> {
-  const nodeKeySet = new Set(rows.map((row) => row.node_key));
-  const parentKeyByKey = new Map<string, string>();
-
-  for (const row of rows) {
-    const parentKey = resolveTaxonomyParentKeyFromNodeKey(row.node_key, nodeKeySet);
-    if (parentKey) {
-      parentKeyByKey.set(row.node_key, parentKey);
-    }
-  }
-
-  return parentKeyByKey;
-}
-
-function resolveDynamicCategoryParentKey(nodeKey: string): string | null {
-  if (!nodeKey.startsWith('category__')) {
-    return null;
-  }
-
-  const parts = nodeKey.split('__');
-  if (parts.length <= 2) {
-    return null;
-  }
-
-  return parts.slice(0, -1).join('__');
-}
-
-function collectDanbooruNodeKeysWithAncestors(nodeKeys: Set<string>, parentKeyByKey: Map<string, string>): Set<string> {
-  const collected = new Set<string>();
-
-  for (const nodeKey of nodeKeys) {
-    let currentKey: string | undefined = nodeKey;
-    while (currentKey && !collected.has(currentKey)) {
-      collected.add(currentKey);
-      currentKey = parentKeyByKey.get(currentKey) ?? resolveDynamicCategoryParentKey(currentKey) ?? undefined;
-    }
-  }
-
-  return collected;
-}
-
-function formatDanbooruCategoryTitle(categoryName: string | null, language: DanbooruGroupingLanguage = 'en'): string {
-  const normalized = (categoryName || 'other').trim().toLowerCase().replace(/^category__/, '');
-  const labels: Record<string, Record<DanbooruGroupingLanguage, string>> = {
-    general: { en: 'General Tags', ko: '일반 태그' },
-    artist: { en: 'Artist Tags', ko: '작가 태그' },
-    copyright: { en: 'Copyright Tags', ko: '작품 태그' },
-    character: { en: 'Character Tags', ko: '캐릭터 태그' },
-    meta: { en: 'Meta Tags', ko: '메타 태그' },
-  };
-  return labels[normalized]?.[language] ?? (language === 'ko' ? `${normalized.replace(/_/g, ' ')} 태그` : `${normalized.replace(/_/g, ' ')} Tags`);
-}
-
-function resolveDanbooruNodeTitle(node: DanbooruTaxonomyNodeRow, language: DanbooruGroupingLanguage): string {
-  return normalizeDanbooruGroupTitle(language === 'ko' ? (node.translated_title || node.title) : node.title);
-}
-
-function buildDanbooruGroupName(node: DanbooruTaxonomyNodeRow, duplicateTitleCounts: Map<string, number>, language: DanbooruGroupingLanguage): string {
-  const title = resolveDanbooruNodeTitle(node, language);
-  const duplicateCount = duplicateTitleCounts.get(title.toLowerCase()) ?? 0;
-  if (duplicateCount <= 1) {
-    return title;
-  }
-  return `${title} · ${node.node_key.replace(/__/g, ' / ')}`;
-}
-
-function getDanbooruMatchExpression(): string {
-  return "lower(replace(replace(trim(pc.prompt), '\\', ''), ' ', '_'))";
-}
-
-function normalizeDanbooruGroupingOptions(optionsOrMode?: DanbooruGroupingOptions | DanbooruGroupingMode): Required<DanbooruGroupingOptions> {
-  if (typeof optionsOrMode === 'string') {
-    return {
-      mode: optionsOrMode,
-      language: 'en',
-      includeAssignedPrompts: optionsOrMode === 'overwrite-existing',
-    };
-  }
-
-  const mode = optionsOrMode?.mode === 'overwrite-existing' || optionsOrMode?.includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only';
-  return {
-    mode,
-    language: optionsOrMode?.language === 'ko' ? 'ko' : 'en',
-    includeAssignedPrompts: Boolean(optionsOrMode?.includeAssignedPrompts) || mode === 'overwrite-existing',
-  };
-}
+export type { DanbooruGroupingPreviewResult };
 
 export class PromptGroupService {
   private static isProtectedLoRAGroup(group: { group_name?: string | null } | null | undefined): boolean {
@@ -209,7 +62,7 @@ export class PromptGroupService {
   ): Promise<PromptGroupWithPrompts[]> {
     try {
       const groups = await PromptGroupModel.findAllWithCounts(includeHidden, type);
-      const visibleGroups = includeHidden ? groups : [...this.getHiddenDanbooruRootGroupsWithCounts(type), ...groups];
+      const visibleGroups = includeHidden ? groups : [...getHiddenDanbooruRootGroupsWithCounts(type), ...groups];
 
       // "Unclassified" 그룹 추가 (group_id가 NULL인 프롬프트들)
       const unclassifiedCount = await this.getUnclassifiedPromptCount(type);
@@ -632,261 +485,20 @@ export class PromptGroupService {
     }
   }
 
-  private static ensureDanbooruDbAttached(): ReturnType<typeof resolveDanbooruDbInfo> {
-    const database = resolveDanbooruDbInfo();
-    if (!database.available) {
-      throw new Error(`Danbooru database not found. Place a DB file matching ${database.filePatterns.join(' or ')} in ${database.expectedDirectory}. Download guide: ${database.downloadUrl}`);
-    }
-
-    const rows = db.prepare('PRAGMA database_list').all() as Array<{ name: string; file: string }>;
-    const attached = rows.find((row) => row.name === 'danbooru');
-    if (attached?.file === database.path) {
-      return database;
-    }
-
-    if (attached) {
-      db.exec('DETACH DATABASE danbooru');
-    }
-
-    db.exec(`ATTACH DATABASE '${escapeSqliteString(database.path)}' AS danbooru`);
-    return database;
-  }
-
-  private static getDanbooruTaxonomyRows(): DanbooruTaxonomyNodeRow[] {
-    return db.prepare(`
-      SELECT n.id, n.node_key, n.title, nt.translated_title, n.member_tag_count
-      FROM danbooru.taxonomy_nodes n
-      LEFT JOIN danbooru.taxonomy_node_translations nt ON nt.node_key = n.node_key AND nt.locale = 'ko'
-      WHERE n.node_type = 'manual_group'
-      ORDER BY n.member_tag_count DESC, n.title ASC
-    `).all() as DanbooruTaxonomyNodeRow[];
-  }
-
-  private static getDanbooruGroupRootName(language: DanbooruGroupingLanguage): string {
-    return language === 'ko' ? DANBOORU_GROUP_ROOT_NAME_KO : DANBOORU_GROUP_ROOT_NAME_EN;
-  }
-
-  private static getHiddenDanbooruRootGroupsWithCounts(type: PromptCollectionType): PromptGroupWithPrompts[] {
-    const groupTableName = getTableName(type);
-    const promptTableName = getPromptTableName(type);
-    const placeholders = danbooruRootNamePlaceholders();
-    return db.prepare(`
-      SELECT
-        g.*,
-        COUNT(p.id) as prompt_count
-      FROM ${groupTableName} g
-      LEFT JOIN ${promptTableName} p ON g.id = p.group_id
-      WHERE g.is_visible = 0
-        AND g.parent_id IS NULL
-        AND g.group_name IN (${placeholders})
-      GROUP BY g.id
-      ORDER BY g.display_order ASC
-    `).all(...DANBOORU_GROUP_ROOT_NAMES) as PromptGroupWithPrompts[];
-  }
-
-  private static getDanbooruRootGroupIds(type: PromptCollectionType): number[] {
-    const tableName = getTableName(type);
-    const placeholders = danbooruRootNamePlaceholders();
-    const rows = db.prepare(`SELECT id FROM ${tableName} WHERE parent_id IS NULL AND group_name IN (${placeholders})`).all(...DANBOORU_GROUP_ROOT_NAMES) as Array<{ id: number }>;
-    return rows.map((row) => row.id);
-  }
-
-  private static getDanbooruManagedGroupIds(type: PromptCollectionType): number[] {
-    const tableName = getTableName(type);
-    const rootIds = this.getDanbooruRootGroupIds(type);
-    if (rootIds.length === 0) {
-      return [];
-    }
-
-    const rows = db.prepare(`SELECT id, parent_id FROM ${tableName}`).all() as Array<{ id: number; parent_id: number | null }>;
-    const childrenByParentId = new Map<number, number[]>();
-    for (const row of rows) {
-      if (row.parent_id == null) continue;
-      const children = childrenByParentId.get(row.parent_id) ?? [];
-      children.push(row.id);
-      childrenByParentId.set(row.parent_id, children);
-    }
-
-    const ids: number[] = [];
-    const visited = new Set<number>();
-    const collect = (groupId: number) => {
-      if (visited.has(groupId)) return;
-      visited.add(groupId);
-      ids.push(groupId);
-      for (const childId of childrenByParentId.get(groupId) ?? []) {
-        collect(childId);
-      }
-    };
-    for (const rootId of rootIds) collect(rootId);
-    return ids;
-  }
-
   static isDanbooruManagedGroupId(groupId: number | null | undefined, type: PromptCollectionType = 'positive'): boolean {
-    if (groupId == null) {
-      return false;
-    }
-    return this.getDanbooruManagedGroupIds(type).includes(groupId);
-  }
-
-  private static buildDanbooruAssignmentFilter(type: PromptCollectionType, options: Required<DanbooruGroupingOptions>, alias: string = 'pc'): { sql: string; params: number[] } {
-    const groupTableName = getTableName(type);
-    const loraFilter = `AND NOT EXISTS (SELECT 1 FROM ${groupTableName} pg_lora WHERE pg_lora.id = ${alias}.group_id AND LOWER(TRIM(pg_lora.group_name)) = 'lora')`;
-
-    if (options.includeAssignedPrompts) {
-      return { sql: loraFilter, params: [] };
-    }
-
-    const danbooruGroupIds = this.getDanbooruManagedGroupIds(type);
-    if (danbooruGroupIds.length === 0) {
-      return { sql: `${loraFilter} AND ${alias}.group_id IS NULL`, params: [] };
-    }
-
-    const placeholders = danbooruGroupIds.map(() => '?').join(',');
-    return {
-      sql: `${loraFilter} AND (${alias}.group_id IS NULL OR ${alias}.group_id IN (${placeholders}))`,
-      params: danbooruGroupIds,
-    };
-  }
-
-  private static getDanbooruPromptMatches(type: PromptCollectionType, options: Required<DanbooruGroupingOptions>): DanbooruPromptMatchRow[] {
-    const tableName = getPromptTableName(type);
-    const matchExpression = getDanbooruMatchExpression();
-    const assignmentFilter = this.buildDanbooruAssignmentFilter(type, options);
-
-    return db.prepare(`
-      WITH prompt_matches AS (
-        SELECT pc.id AS prompt_id, pc.prompt, pc.usage_count, t.id AS tag_id, t.category_name
-        FROM ${tableName} pc
-        JOIN danbooru.tags t INDEXED BY idx_tags_normalized_name
-          ON t.normalized_name = ${matchExpression}
-          AND COALESCE(t.is_deprecated, 0) = 0
-        WHERE 1 = 1 ${assignmentFilter.sql}
-        UNION
-        SELECT pc.id AS prompt_id, pc.prompt, pc.usage_count, t.id AS tag_id, t.category_name
-        FROM ${tableName} pc
-        JOIN danbooru.tags t INDEXED BY idx_tags_name
-          ON t.name = ${matchExpression}
-          AND COALESCE(t.is_deprecated, 0) = 0
-        WHERE 1 = 1 ${assignmentFilter.sql}
-      )
-      SELECT
-        pm.prompt_id,
-        pm.prompt,
-        pm.usage_count,
-        m.taxonomy_node_id,
-        COALESCE(
-          n.node_key,
-          CASE LOWER(COALESCE(pm.category_name, 'other'))
-            WHEN 'character' THEN 'category__character__' || COALESCE(cp.normalized_name, 'uncategorized')
-            ELSE 'category__' || LOWER(COALESCE(pm.category_name, 'other'))
-          END
-        ) AS node_key,
-        COALESCE(
-          n.title,
-          CASE LOWER(COALESCE(pm.category_name, 'other'))
-            WHEN 'general' THEN 'General Tags'
-            WHEN 'artist' THEN 'Artist Tags'
-            WHEN 'copyright' THEN 'Copyright Tags'
-            WHEN 'character' THEN COALESCE(REPLACE(cp.name, '_', ' '), 'Uncategorized Characters')
-            WHEN 'meta' THEN 'Meta Tags'
-            ELSE COALESCE(pm.category_name, 'Other') || ' Tags'
-          END
-        ) AS title,
-        COALESCE(
-          nt.translated_title,
-          CASE LOWER(COALESCE(pm.category_name, 'other'))
-            WHEN 'general' THEN '일반 태그'
-            WHEN 'artist' THEN '작가 태그'
-            WHEN 'copyright' THEN '작품 태그'
-            WHEN 'character' THEN COALESCE(cp_tt.translated_name, REPLACE(cp.name, '_', ' '), '미분류 캐릭터')
-            WHEN 'meta' THEN '메타 태그'
-            ELSE COALESCE(pm.category_name, '기타') || ' 태그'
-          END
-        ) AS translated_title
-      FROM prompt_matches pm
-      LEFT JOIN danbooru.taxonomy_tag_memberships m INDEXED BY idx_taxonomy_tag_memberships_tag ON m.tag_id = pm.tag_id
-      LEFT JOIN danbooru.taxonomy_nodes n ON n.id = m.taxonomy_node_id AND n.node_type = 'manual_group'
-      LEFT JOIN danbooru.taxonomy_node_translations nt ON nt.node_key = n.node_key AND nt.locale = 'ko'
-      LEFT JOIN danbooru.character_copyright_links ccl ON ccl.character_tag_id = pm.tag_id AND ccl.is_primary = 1
-      LEFT JOIN danbooru.copyrights cp ON cp.tag_id = ccl.copyright_tag_id
-      LEFT JOIN danbooru.tag_translations cp_tt ON cp_tt.tag_id = cp.tag_id AND cp_tt.locale = 'ko'
-      GROUP BY pm.prompt_id
-      ORDER BY pm.usage_count DESC, pm.prompt ASC
-    `).all(...assignmentFilter.params, ...assignmentFilter.params) as DanbooruPromptMatchRow[];
-  }
-
-  private static getDanbooruGroupingTypePreview(type: PromptCollectionType, options: Required<DanbooruGroupingOptions>): DanbooruGroupingTypeResult {
-    const tableName = getPromptTableName(type);
-    const matchExpression = getDanbooruMatchExpression();
-    const assignmentFilter = this.buildDanbooruAssignmentFilter(type, options);
-    const totalRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get() as { count: number };
-    const eligibleRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName} pc WHERE 1=1 ${assignmentFilter.sql}`).get(...assignmentFilter.params) as { count: number };
-    const matchedRows = this.getDanbooruPromptMatches(type, options);
-    const matchedNodeIds = new Set(matchedRows.map((row) => row.node_key));
-    const sampleUnmatchedPrompts = db.prepare(`
-      SELECT pc.prompt, pc.usage_count
-      FROM ${tableName} pc
-      WHERE 1 = 1
-        ${assignmentFilter.sql}
-        AND NOT EXISTS (
-          SELECT 1
-          FROM danbooru.tags t INDEXED BY idx_tags_normalized_name
-          WHERE t.normalized_name = ${matchExpression}
-            AND COALESCE(t.is_deprecated, 0) = 0
-        )
-        AND NOT EXISTS (
-          SELECT 1
-          FROM danbooru.tags t INDEXED BY idx_tags_name
-          WHERE t.name = ${matchExpression}
-            AND COALESCE(t.is_deprecated, 0) = 0
-        )
-      ORDER BY pc.usage_count DESC, pc.prompt ASC
-      LIMIT 8
-    `).all(...assignmentFilter.params) as Array<{ prompt: string; usage_count: number }>;
-
-    return {
-      type,
-      totalPrompts: totalRow.count,
-      eligiblePrompts: eligibleRow.count,
-      matchedPrompts: matchedRows.length,
-      assignedPrompts: 0,
-      createdGroups: 0,
-      reusedGroups: 0,
-      matchedGroups: matchedNodeIds.size,
-      skippedAssignedPrompts: options.includeAssignedPrompts ? 0 : Math.max(totalRow.count - eligibleRow.count, 0),
-      sampleUnmatchedPrompts,
-    };
-  }
-
-  private static summarizeDanbooruGrouping(options: Required<DanbooruGroupingOptions>, database: ReturnType<typeof resolveDanbooruDbInfo>, byType: DanbooruGroupingTypeResult[]): DanbooruGroupingPreviewResult {
-    const totals = byType.reduce((acc, item) => ({
-      totalPrompts: acc.totalPrompts + item.totalPrompts,
-      eligiblePrompts: acc.eligiblePrompts + item.eligiblePrompts,
-      matchedPrompts: acc.matchedPrompts + item.matchedPrompts,
-      assignedPrompts: acc.assignedPrompts + item.assignedPrompts,
-      createdGroups: acc.createdGroups + item.createdGroups,
-      reusedGroups: acc.reusedGroups + item.reusedGroups,
-      matchedGroups: acc.matchedGroups + item.matchedGroups,
-      skippedAssignedPrompts: acc.skippedAssignedPrompts + item.skippedAssignedPrompts,
-    }), {
-      totalPrompts: 0,
-      eligiblePrompts: 0,
-      matchedPrompts: 0,
-      assignedPrompts: 0,
-      createdGroups: 0,
-      reusedGroups: 0,
-      matchedGroups: 0,
-      skippedAssignedPrompts: 0,
-    });
-
-    return { mode: options.mode, language: options.language, includeAssignedPrompts: options.includeAssignedPrompts, database, totals, byType };
+    return isDanbooruManagedGroupId(groupId, type);
   }
 
   static previewDanbooruGrouping(optionsOrMode?: DanbooruGroupingOptions | DanbooruGroupingMode): DanbooruGroupingPreviewResult {
     const options = normalizeDanbooruGroupingOptions(optionsOrMode);
-    const database = this.ensureDanbooruDbAttached();
-    const byType = PROMPT_TYPES.map((type) => this.getDanbooruGroupingTypePreview(type, options));
-    return this.summarizeDanbooruGrouping(options, database, byType);
+    const database = getDanbooruGroupingDatabaseInfo();
+    if (!database.available) {
+      const byType = PROMPT_TYPES.map((type) => getUnavailableDanbooruGroupingTypePreview(type, options));
+      return summarizeDanbooruGrouping(options, database, byType);
+    }
+    ensureDanbooruGroupingDbAttached();
+    const byType = PROMPT_TYPES.map((type) => getDanbooruGroupingTypePreview(type, options));
+    return summarizeDanbooruGrouping(options, database, byType);
   }
 
   private static findOrCreateDanbooruGroup(type: PromptCollectionType, groupName: string, parentId: number | null, fallbackSuffix: string, isVisible = true): { id: number; created: boolean } {
@@ -923,7 +535,7 @@ export class PromptGroupService {
   }
 
   private static resetDanbooruGroupsForType(type: PromptCollectionType): number {
-    const groupIds = this.getDanbooruManagedGroupIds(type);
+    const groupIds = getDanbooruManagedGroupIds(type);
     if (groupIds.length === 0) {
       return 0;
     }
@@ -934,8 +546,13 @@ export class PromptGroupService {
 
   static applyDanbooruGrouping(optionsOrMode?: DanbooruGroupingOptions | DanbooruGroupingMode): DanbooruGroupingPreviewResult {
     const options = normalizeDanbooruGroupingOptions(optionsOrMode);
-    const database = this.ensureDanbooruDbAttached();
-    const taxonomyRows = this.getDanbooruTaxonomyRows();
+    const database = getDanbooruGroupingDatabaseInfo();
+    if (!database.available) {
+      const byType = PROMPT_TYPES.map((type) => getUnavailableDanbooruGroupingTypePreview(type, options));
+      return summarizeDanbooruGrouping(options, database, byType);
+    }
+    ensureDanbooruGroupingDbAttached();
+    const taxonomyRows = getDanbooruTaxonomyRows();
     const taxonomyByKey = new Map(taxonomyRows.map((row) => [row.node_key, row] as const));
     const parentKeyByKey = buildDanbooruParentKeyByKey(taxonomyRows);
     const duplicateTitleCounts = taxonomyRows.reduce((map, row) => {
@@ -945,8 +562,8 @@ export class PromptGroupService {
     }, new Map<string, number>());
 
     const byType = db.transaction(() => PROMPT_TYPES.map((type) => {
-      const preview = this.getDanbooruGroupingTypePreview(type, options);
-      const matches = this.getDanbooruPromptMatches(type, options);
+      const preview = getDanbooruGroupingTypePreview(type, options);
+      const matches = getDanbooruPromptMatches(type, options);
       this.resetDanbooruGroupsForType(type);
       const matchedNodeKeys = new Set(matches.map((row) => row.node_key));
       for (const match of matches) {
@@ -985,7 +602,7 @@ export class PromptGroupService {
         };
       }
 
-      const rootGroup = this.findOrCreateDanbooruGroup(type, this.getDanbooruGroupRootName(options.language), null, 'root', options.includeAssignedPrompts);
+      const rootGroup = this.findOrCreateDanbooruGroup(type, getDanbooruGroupRootName(options.language), null, 'root', options.includeAssignedPrompts);
       if (rootGroup.created) createdGroups += 1;
       else reusedGroups += 1;
 
@@ -1018,7 +635,7 @@ export class PromptGroupService {
       };
     }))();
 
-    return this.summarizeDanbooruGrouping(options, database, byType);
+    return summarizeDanbooruGrouping(options, database, byType);
   }
 
   /**

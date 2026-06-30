@@ -21,10 +21,14 @@ import {
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueHeaderRefreshTargets,
+  getGenerationQueueDurationLabel,
   getGenerationQueueProgressPercent,
+  getGenerationQueueLaneLabel,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
+  getGenerationQueueStartLabel,
   getGenerationQueueStatusLabel,
+  getGenerationQueueWaitLabel,
   getGenerationQueueWorkflowLabel,
   shouldEnableFilteredQueueHeaderQuery,
 } from './generation-queue-ui'
@@ -40,7 +44,7 @@ import {
 
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
 const ACTIVE_QUEUE_REFETCH_INTERVAL_MS = 3_000
-const IDLE_QUEUE_REFETCH_INTERVAL_MS = 8_000
+const IDLE_QUEUE_REFETCH_INTERVAL_MS = 30_000
 const LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY = 'conai:image-generation-queue:last-seen-job-id'
 
 type QueueFilterValue = 'all' | 'novelai' | 'codex' | 'comfyui' | `workflow:${number}`
@@ -76,6 +80,14 @@ function persistLastSeenQueueJobId(value: number) {
   } catch {
     // Session storage can be unavailable in hardened browser contexts.
   }
+}
+
+function getGenerationQueueHeaderRefetchInterval(activeCount: number, isOpen: boolean) {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    return false
+  }
+
+  return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS
 }
 
 function parseQueueFilter(value: QueueFilterValue) {
@@ -171,7 +183,7 @@ export function GenerationQueueHeaderWidget() {
     enabled: hasGenerationPermission,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
-      return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS
+      return getGenerationQueueHeaderRefetchInterval(activeCount, isOpen)
     },
   })
 
@@ -185,7 +197,7 @@ export function GenerationQueueHeaderWidget() {
     enabled: isFilteredQueueQueryEnabled,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
-      return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS
+      return getGenerationQueueHeaderRefetchInterval(activeCount, isOpen)
     },
   })
 
@@ -404,6 +416,10 @@ export function GenerationQueueHeaderWidget() {
                     const workflowLabel = getGenerationQueueWorkflowLabel(record, t)
                     const creatorLabel = getGenerationQueueRequesterLabel(record, t)
                     const remainingLabel = getGenerationQueueRemainingLabel(record, t, formatNumber)
+                    const laneLabel = getGenerationQueueLaneLabel(record, t, formatNumber)
+                    const waitLabel = getGenerationQueueWaitLabel(record, t, formatNumber)
+                    const startLabel = getGenerationQueueStartLabel(record, t, locale)
+                    const durationLabel = getGenerationQueueDurationLabel(record, t, formatNumber)
                     const progressPercent = getGenerationQueueProgressPercent(record)
                     const shownProgressPercent = progressPercent == null ? null : Math.min(100, Math.max(progressPercent, progressPercent > 0 ? 8 : 0))
                     const canManageRecord = !isCancelRequested && (authStatusQuery.data?.isAdmin === true || record.is_mine === true)
@@ -415,6 +431,12 @@ export function GenerationQueueHeaderWidget() {
                       `#${record.id}`,
                       startTimeLabel,
                       elapsedLabel,
+                    ].filter(Boolean).join(' · ')
+                    const operationalMetaLabel = [
+                      laneLabel,
+                      waitLabel,
+                      startLabel,
+                      durationLabel,
                     ].filter(Boolean).join(' · ')
 
                     return (
@@ -460,6 +482,11 @@ export function GenerationQueueHeaderWidget() {
                             <span>{idTimingLabel}</span>
                             <span className="truncate">{record.is_mine ? t('image-generation.components.generation.queue.header.widget.value.me', { creatorLabel }) : creatorLabel}</span>
                           </div>
+                          {operationalMetaLabel ? (
+                            <div className="truncate text-[10px] text-muted-foreground" title={operationalMetaLabel}>
+                              {operationalMetaLabel}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     )

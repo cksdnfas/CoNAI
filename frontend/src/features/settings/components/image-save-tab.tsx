@@ -18,13 +18,17 @@ const IMAGE_SAVE_SIZE_PRESETS = [
 const DEFAULT_GENERATION_THROTTLE_SETTINGS: GenerationThrottleSettings = {
   novelai: {
     maxConcurrentJobs: 1,
-    cooldownAfterCompletions: 1,
-    cooldownSeconds: 3,
+    scheduleWindowMinutes: 1,
+    scheduleJobCount: 20,
+    scheduleMode: 'even',
+    minStartIntervalSeconds: 1,
   },
   codex: {
     maxConcurrentJobs: 3,
-    cooldownAfterCompletions: 3,
-    cooldownSeconds: 60,
+    scheduleWindowMinutes: 3,
+    scheduleJobCount: 3,
+    scheduleMode: 'even',
+    minStartIntervalSeconds: 1,
   },
   reservations: {
     maxConcurrentJobs: 3,
@@ -43,18 +47,22 @@ interface ImageSaveTabProps {
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
   onSave: () => void
   isSaving: boolean
+  hasImageSaveChanges: boolean
   thumbnailDraft: ThumbnailSettings | null
   onPatchThumbnail: (patch: Partial<ThumbnailSettings>) => void
   onSaveThumbnail: () => void
   isSavingThumbnail: boolean
+  hasThumbnailChanges: boolean
   generationThrottleDraft: GenerationThrottleSettings | null
   onPatchGenerationThrottle: (patch: GenerationThrottleDraftPatch) => void
   onSaveGenerationThrottle: () => void
   isSavingGenerationThrottle: boolean
+  hasGenerationThrottleChanges: boolean
   videoOptimizationDraft: VideoOptimizationSettings | null
   onPatchVideoOptimization: (patch: Partial<VideoOptimizationSettings>) => void
   onSaveVideoOptimization: () => void
   isSavingVideoOptimization: boolean
+  hasVideoOptimizationChanges: boolean
 }
 
 /** Render media save defaults used by save dialogs and attachment flows. */
@@ -63,18 +71,22 @@ export function ImageSaveTab({
   onPatchImageSave,
   onSave,
   isSaving,
+  hasImageSaveChanges,
   thumbnailDraft,
   onPatchThumbnail,
   onSaveThumbnail,
   isSavingThumbnail,
+  hasThumbnailChanges,
   generationThrottleDraft,
   onPatchGenerationThrottle,
   onSaveGenerationThrottle,
   isSavingGenerationThrottle,
+  hasGenerationThrottleChanges,
   videoOptimizationDraft,
   onPatchVideoOptimization,
   onSaveVideoOptimization,
   isSavingVideoOptimization,
+  hasVideoOptimizationChanges,
 }: ImageSaveTabProps) {
   const { t } = useI18n()
 
@@ -87,9 +99,9 @@ export function ImageSaveTab({
             <Button
               size="icon-sm"
               onClick={onSaveGenerationThrottle}
-              disabled={!generationThrottleDraft || isSavingGenerationThrottle}
-              aria-label={t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' })}
-              title={t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' })}
+              disabled={!generationThrottleDraft || isSavingGenerationThrottle || !hasGenerationThrottleChanges}
+              aria-label={hasGenerationThrottleChanges ? t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' }) : t({ ko: '생성 텀 설정 변경 없음', en: 'No generation throttle changes' })}
+              title={hasGenerationThrottleChanges ? t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -146,15 +158,28 @@ export function ImageSaveTab({
                     <RefreshCw className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-5">
                   <SettingsField label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
                     <Input type="number" min={1} max={8} variant="settings" value={generationThrottleDraft.novelai.maxConcurrentJobs} onChange={(event) => onPatchGenerationThrottle({ novelai: { maxConcurrentJobs: Number(event.target.value) || 1 } })} />
                   </SettingsField>
-                  <SettingsField label={t({ ko: '몇 건마다 쉬기', en: 'Pause after every N jobs' })}>
-                    <Input type="number" min={1} max={50} variant="settings" value={generationThrottleDraft.novelai.cooldownAfterCompletions} onChange={(event) => onPatchGenerationThrottle({ novelai: { cooldownAfterCompletions: Number(event.target.value) || 1 } })} />
+                  <SettingsField label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
+                    <Input type="number" min={1} max={1440} variant="settings" value={generationThrottleDraft.novelai.scheduleWindowMinutes} onChange={(event) => onPatchGenerationThrottle({ novelai: { scheduleWindowMinutes: Number(event.target.value) || 1 } })} />
                   </SettingsField>
-                  <SettingsField label={t({ ko: '휴식 시간(초)', en: 'Cooldown (seconds)' })}>
-                    <Input type="number" min={0} max={3600} variant="settings" value={generationThrottleDraft.novelai.cooldownSeconds} onChange={(event) => onPatchGenerationThrottle({ novelai: { cooldownSeconds: Number(event.target.value) || 0 } })} />
+                  <SettingsField label={t({ ko: '생성횟수', en: 'Job count' })}>
+                    <Input type="number" min={1} max={10000} variant="settings" value={generationThrottleDraft.novelai.scheduleJobCount} onChange={(event) => onPatchGenerationThrottle({ novelai: { scheduleJobCount: Number(event.target.value) || 1 } })} />
+                  </SettingsField>
+                  <SettingsField label={t({ ko: '분배', en: 'Distribution' })}>
+                    <Select
+                      variant="settings"
+                      value={generationThrottleDraft.novelai.scheduleMode}
+                      onChange={(event) => onPatchGenerationThrottle({ novelai: { scheduleMode: event.target.value as GenerationThrottleSettings['novelai']['scheduleMode'] } })}
+                    >
+                      <option value="even">{t({ ko: '균등', en: 'Even' })}</option>
+                      <option value="random">{t({ ko: '비균등', en: 'Random' })}</option>
+                    </Select>
+                  </SettingsField>
+                  <SettingsField label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
+                    <Input type="number" min={0} max={3600} variant="settings" value={generationThrottleDraft.novelai.minStartIntervalSeconds} onChange={(event) => onPatchGenerationThrottle({ novelai: { minStartIntervalSeconds: Number(event.target.value) || 0 } })} />
                   </SettingsField>
                 </div>
               </div>
@@ -177,15 +202,28 @@ export function ImageSaveTab({
                     <RefreshCw className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-5">
                   <SettingsField label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
                     <Input type="number" min={1} max={8} variant="settings" value={generationThrottleDraft.codex.maxConcurrentJobs} onChange={(event) => onPatchGenerationThrottle({ codex: { maxConcurrentJobs: Number(event.target.value) || 1 } })} />
                   </SettingsField>
-                  <SettingsField label={t({ ko: '몇 건마다 쉬기', en: 'Pause after every N jobs' })}>
-                    <Input type="number" min={1} max={50} variant="settings" value={generationThrottleDraft.codex.cooldownAfterCompletions} onChange={(event) => onPatchGenerationThrottle({ codex: { cooldownAfterCompletions: Number(event.target.value) || 1 } })} />
+                  <SettingsField label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
+                    <Input type="number" min={1} max={1440} variant="settings" value={generationThrottleDraft.codex.scheduleWindowMinutes} onChange={(event) => onPatchGenerationThrottle({ codex: { scheduleWindowMinutes: Number(event.target.value) || 1 } })} />
                   </SettingsField>
-                  <SettingsField label={t({ ko: '휴식 시간(초)', en: 'Cooldown (seconds)' })}>
-                    <Input type="number" min={0} max={3600} variant="settings" value={generationThrottleDraft.codex.cooldownSeconds} onChange={(event) => onPatchGenerationThrottle({ codex: { cooldownSeconds: Number(event.target.value) || 0 } })} />
+                  <SettingsField label={t({ ko: '생성횟수', en: 'Job count' })}>
+                    <Input type="number" min={1} max={10000} variant="settings" value={generationThrottleDraft.codex.scheduleJobCount} onChange={(event) => onPatchGenerationThrottle({ codex: { scheduleJobCount: Number(event.target.value) || 1 } })} />
+                  </SettingsField>
+                  <SettingsField label={t({ ko: '분배', en: 'Distribution' })}>
+                    <Select
+                      variant="settings"
+                      value={generationThrottleDraft.codex.scheduleMode}
+                      onChange={(event) => onPatchGenerationThrottle({ codex: { scheduleMode: event.target.value as GenerationThrottleSettings['codex']['scheduleMode'] } })}
+                    >
+                      <option value="even">{t({ ko: '균등', en: 'Even' })}</option>
+                      <option value="random">{t({ ko: '비균등', en: 'Random' })}</option>
+                    </Select>
+                  </SettingsField>
+                  <SettingsField label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
+                    <Input type="number" min={0} max={3600} variant="settings" value={generationThrottleDraft.codex.minStartIntervalSeconds} onChange={(event) => onPatchGenerationThrottle({ codex: { minStartIntervalSeconds: Number(event.target.value) || 0 } })} />
                   </SettingsField>
                 </div>
               </div>
@@ -203,9 +241,9 @@ export function ImageSaveTab({
             <Button
               size="icon-sm"
               onClick={onSave}
-              disabled={!imageSaveDraft || isSaving}
-              aria-label={t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' })}
-              title={t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' })}
+              disabled={!imageSaveDraft || isSaving || !hasImageSaveChanges}
+              aria-label={hasImageSaveChanges ? t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' }) : t({ ko: '이미지 저장 설정 변경 없음', en: 'No image saving settings changes' })}
+              title={hasImageSaveChanges ? t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -355,9 +393,9 @@ export function ImageSaveTab({
             <Button
               size="icon-sm"
               onClick={onSaveThumbnail}
-              disabled={!thumbnailDraft || isSavingThumbnail}
-              aria-label={t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' })}
-              title={t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' })}
+              disabled={!thumbnailDraft || isSavingThumbnail || !hasThumbnailChanges}
+              aria-label={hasThumbnailChanges ? t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' }) : t({ ko: '썸네일 설정 변경 없음', en: 'No thumbnail settings changes' })}
+              title={hasThumbnailChanges ? t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -405,6 +443,7 @@ export function ImageSaveTab({
         onPatchVideoOptimization={onPatchVideoOptimization}
         onSave={onSaveVideoOptimization}
         isSaving={isSavingVideoOptimization}
+        hasChanges={hasVideoOptimizationChanges}
       />
     </div>
   )

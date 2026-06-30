@@ -2,13 +2,14 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { WorkflowModel } from '../models/Workflow'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { ComfyUIServerModel } from '../models/ComfyUIServer'
-import { createComfyUIService, getComfyUIServerRuntimeStatuses } from './comfyuiService'
+import { createComfyUIService } from './comfyuiService'
+import { getComfyUIServerRuntimeStatuses } from './comfyui/runtimeStatusService'
 import { createGenerationQueueRoutingContext, getGenerationQueueEligibleServerIds, getGenerationQueueServerCapacity } from './generationQueueRouting'
 import { settingsService } from './settingsService'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
-import type { ServiceType } from '../models/GenerationHistory'
+import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type {
   GenerationQueueDispatchCandidateRecord,
@@ -27,13 +28,17 @@ const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobSt
 }
 
 const DISPATCH_INTERVAL_MS = 3000
+const COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT = 24
+const COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT = 240
 const NAI_WORKER_KEY = 'novelai'
 const CODEX_WORKER_KEY = 'codex'
 
 type ThrottledServiceType = 'novelai' | 'codex'
 type ServiceThrottleState = {
-  completedSinceCooldown: number
-  cooldownUntil: number | null
+  windowStartedAt: number | null
+  startedInWindow: number
+  scheduledOffsetsMs: number[]
+  scheduleKey: string | null
 }
 
 const TERMINAL_QUEUE_STATUSES = new Set<GenerationQueueJobStatus>(['completed', 'failed', 'cancelled'])
@@ -52,8 +57,8 @@ export class GenerationQueueService {
   private static activeWorkerKeys = new Set<string>()
   private static terminalJobWaiters = new Map<number, Set<TerminalJobWaiter>>()
   private static serviceThrottleState: Record<ThrottledServiceType, ServiceThrottleState> = {
-    novelai: { completedSinceCooldown: 0, cooldownUntil: null },
-    codex: { completedSinceCooldown: 0, cooldownUntil: null },
+    novelai: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
+    codex: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
   }
 
   /** Start queue recovery hooks and dispatcher once per process. */
@@ -92,8 +97,8 @@ export class GenerationQueueService {
     this.activeWorkerKeys.clear()
     this.resolveTerminalJobWaiters(null)
     this.serviceThrottleState = {
-      novelai: { completedSinceCooldown: 0, cooldownUntil: null },
-      codex: { completedSinceCooldown: 0, cooldownUntil: null },
+      novelai: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
+      codex: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
     }
     return true
   }
@@ -524,6 +529,23 @@ export class GenerationQueueService {
     const nowIso = new Date().toISOString()
 
     const recoveryTransaction = db.transaction(() => {
+      const cancelledBeforeDispatchJobIds = db.prepare(`
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status = 'queued'
+          AND cancel_requested = 1
+      `).all().map((row) => (row as { id: number }).id)
+      const interruptedDispatchingJobIds = db.prepare(`
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status = 'dispatching'
+      `).all().map((row) => (row as { id: number }).id)
+      const interruptedRunningJobIds = db.prepare(`
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status = 'running'
+      `).all().map((row) => (row as { id: number }).id)
+
       const cancelledBeforeDispatch = db.prepare(`
         UPDATE generation_queue_jobs
         SET status = 'cancelled',
@@ -553,10 +575,24 @@ export class GenerationQueueService {
         WHERE status = 'running'
       `).run(nowIso).changes
 
+      const cancelledHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+        cancelledBeforeDispatchJobIds,
+        'Cancelled before dispatch.',
+      )
+      const failedDispatchingHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+        interruptedDispatchingJobIds,
+        'Backend restarted while this queue job was dispatching. Retry is required.',
+      )
+      const failedRunningHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+        interruptedRunningJobIds,
+        'Backend restarted while this queue job was running. Retry is required.',
+      )
+
       return {
         cancelledBeforeDispatch,
         failedDispatching,
         failedRunning,
+        failedHistoryRecords: cancelledHistoryRecords + failedDispatchingHistoryRecords + failedRunningHistoryRecords,
       }
     })
 
@@ -578,6 +614,35 @@ export class GenerationQueueService {
     return serviceType === 'novelai' ? generationThrottle.novelai : generationThrottle.codex
   }
 
+  /** Forecast the next service-level throttle start slots without mutating dispatcher state. */
+  static getThrottledServiceStartDelaySeconds(serviceType: ThrottledServiceType, count: number, now = Date.now()) {
+    const safeCount = Math.max(0, Math.floor(count))
+    if (safeCount === 0) {
+      return []
+    }
+
+    const state = this.serviceThrottleState[serviceType]
+    const durationMs = this.getServiceScheduleDurationMs(serviceType)
+    const scheduleKey = this.getServiceScheduleKey(serviceType)
+    const windowExpired = state.windowStartedAt !== null && now >= state.windowStartedAt + durationMs
+    const windowStartedAt = state.windowStartedAt === null || state.scheduleKey !== scheduleKey || windowExpired
+      ? now
+      : state.windowStartedAt
+    const scheduledOffsetsMs = state.windowStartedAt === null || state.scheduleKey !== scheduleKey || windowExpired
+      ? this.buildServiceScheduleOffsetsMs(serviceType)
+      : state.scheduledOffsetsMs
+    const offsets = scheduledOffsetsMs.length > 0 ? scheduledOffsetsMs : [0]
+    const startedInWindow = windowStartedAt === now ? 0 : Math.max(0, state.startedInWindow)
+
+    return Array.from({ length: safeCount }, (_value, index) => {
+      const absoluteStartIndex = startedInWindow + index
+      const windowOffset = Math.floor(absoluteStartIndex / offsets.length)
+      const offsetIndex = absoluteStartIndex % offsets.length
+      const startAtMs = windowStartedAt + windowOffset * durationMs + (offsets[offsetIndex] ?? 0)
+      return Math.max(0, Math.ceil((startAtMs - now) / 1000))
+    })
+  }
+
   private static getActiveWorkerCountForPrefix(workerKeyPrefix: string) {
     let count = 0
     for (const workerKey of this.activeWorkerKeys) {
@@ -588,46 +653,113 @@ export class GenerationQueueService {
     return count
   }
 
-  private static isServiceCoolingDown(serviceType: ThrottledServiceType) {
-    const cooldownUntil = this.serviceThrottleState[serviceType].cooldownUntil
-    return cooldownUntil !== null && cooldownUntil > Date.now()
+  private static getServiceScheduleDurationMs(serviceType: ThrottledServiceType) {
+    const throttle = this.getServiceThrottleConfig(serviceType)
+    return Math.max(60_000, Math.round(throttle.scheduleWindowMinutes * 60_000))
   }
 
-  private static noteServiceCompletion(serviceType: ThrottledServiceType) {
+  private static getServiceScheduleKey(serviceType: ThrottledServiceType) {
     const throttle = this.getServiceThrottleConfig(serviceType)
+    return [
+      Math.max(60_000, Math.round(throttle.scheduleWindowMinutes * 60_000)),
+      Math.max(1, Math.floor(throttle.scheduleJobCount)),
+      throttle.scheduleMode,
+      Math.max(0, Math.round(throttle.minStartIntervalSeconds * 1000)),
+    ].join(':')
+  }
+
+  private static buildEvenScheduleOffsetsMs(durationMs: number, jobCount: number) {
+    const intervalMs = durationMs / jobCount
+    return Array.from({ length: jobCount }, (_value, index) => Math.floor(index * intervalMs))
+  }
+
+  private static buildRandomScheduleOffsetsMs(durationMs: number, jobCount: number, minStartIntervalMs: number) {
+    if (jobCount <= 1) {
+      return [0]
+    }
+
+    const effectiveMinStartIntervalMs = Math.min(
+      Math.max(0, minStartIntervalMs),
+      Math.floor(durationMs / Math.max(jobCount - 1, 1)),
+    )
+    const remainingMs = Math.max(0, durationMs - effectiveMinStartIntervalMs * (jobCount - 1))
+    const weights = Array.from({ length: jobCount }, () => -Math.log(Math.max(Number.EPSILON, Math.random())))
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1
+    const offsets = [0]
+    let elapsedMs = 0
+
+    for (let index = 0; index < jobCount - 1; index += 1) {
+      const jitterMs = remainingMs * ((weights[index] ?? 0) / totalWeight)
+      elapsedMs += effectiveMinStartIntervalMs + jitterMs
+      offsets.push(Math.min(durationMs, Math.round(elapsedMs)))
+    }
+
+    return offsets
+  }
+
+  private static buildServiceScheduleOffsetsMs(serviceType: ThrottledServiceType) {
+    const throttle = this.getServiceThrottleConfig(serviceType)
+    const durationMs = this.getServiceScheduleDurationMs(serviceType)
+    const jobCount = Math.max(1, Math.floor(throttle.scheduleJobCount))
+    const minStartIntervalMs = Math.max(0, Math.round(throttle.minStartIntervalSeconds * 1000))
+
+    if (throttle.scheduleMode === 'random') {
+      return this.buildRandomScheduleOffsetsMs(durationMs, jobCount, minStartIntervalMs)
+    }
+
+    return this.buildEvenScheduleOffsetsMs(durationMs, jobCount)
+  }
+
+  private static resetServiceScheduleWindow(serviceType: ThrottledServiceType, now: number) {
     const state = this.serviceThrottleState[serviceType]
-    const cooldownAfterCompletions = Math.max(1, throttle.cooldownAfterCompletions)
-    const cooldownSeconds = Math.max(0, throttle.cooldownSeconds)
+    state.windowStartedAt = now
+    state.startedInWindow = 0
+    state.scheduleKey = this.getServiceScheduleKey(serviceType)
+    state.scheduledOffsetsMs = this.buildServiceScheduleOffsetsMs(serviceType)
+  }
 
-    if (state.cooldownUntil !== null && state.cooldownUntil <= Date.now()) {
-      state.cooldownUntil = null
+  private static isServiceStartDue(serviceType: ThrottledServiceType) {
+    const now = Date.now()
+    const state = this.serviceThrottleState[serviceType]
+    const durationMs = this.getServiceScheduleDurationMs(serviceType)
+    const scheduleKey = this.getServiceScheduleKey(serviceType)
+
+    if (state.scheduleKey !== scheduleKey || state.windowStartedAt === null) {
+      this.resetServiceScheduleWindow(serviceType, now)
+    } else if (now >= state.windowStartedAt + durationMs) {
+      this.resetServiceScheduleWindow(serviceType, now)
     }
 
-    state.completedSinceCooldown += 1
-    if (cooldownSeconds <= 0 || state.completedSinceCooldown < cooldownAfterCompletions) {
-      return
+    if (state.startedInWindow >= state.scheduledOffsetsMs.length) {
+      return false
     }
 
-    state.completedSinceCooldown = 0
-    state.cooldownUntil = Date.now() + cooldownSeconds * 1000
+    const nextOffsetMs = state.scheduledOffsetsMs[state.startedInWindow] ?? durationMs
+    return now >= (state.windowStartedAt ?? now) + nextOffsetMs
+  }
+
+  private static noteServiceStart(serviceType: ThrottledServiceType) {
+    const state = this.serviceThrottleState[serviceType]
+    state.startedInWindow += 1
   }
 
   private static tryStartThrottledServiceWorkers(serviceType: ThrottledServiceType, workerKeyPrefix: string, label: string) {
-    if (this.isServiceCoolingDown(serviceType)) {
-      return
-    }
-
     const throttle = this.getServiceThrottleConfig(serviceType)
     const maxConcurrentJobs = Math.max(1, throttle.maxConcurrentJobs)
     const activeWorkers = this.getActiveWorkerCountForPrefix(workerKeyPrefix)
     const availableSlots = Math.max(0, maxConcurrentJobs - activeWorkers)
 
     for (let slotIndex = 0; slotIndex < availableSlots; slotIndex += 1) {
+      if (!this.isServiceStartDue(serviceType)) {
+        return
+      }
+
       const job = this.claimNextDispatchableJob({ serviceType })
       if (!job) {
         return
       }
 
+      this.noteServiceStart(serviceType)
       const workerKey = `${workerKeyPrefix}:${job.id}`
       this.activeWorkerKeys.add(workerKey)
       void this.runClaimedJob(job)
@@ -636,10 +768,6 @@ export class GenerationQueueService {
         })
         .finally(() => {
           this.activeWorkerKeys.delete(workerKey)
-          const latest = GenerationQueueModel.findById(job.id)
-          if (latest?.status === 'completed') {
-            this.noteServiceCompletion(serviceType)
-          }
           this.requestDispatch()
         })
     }
@@ -669,7 +797,16 @@ export class GenerationQueueService {
       return
     }
 
-    const queuedJobs = GenerationQueueModel.findQueuedComfyDispatchCandidates()
+    const availableLocalSlotCount = serversWithLocalCapacity.reduce((sum, server) => {
+      const capacity = getGenerationQueueServerCapacity(server)
+      const localRunning = this.getActiveComfyWorkerCount(server.id)
+      return sum + Math.max(0, capacity - localRunning)
+    }, 0)
+    const candidateLimit = Math.min(
+      COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT,
+      Math.max(COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT, availableLocalSlotCount * COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT),
+    )
+    const queuedJobs = GenerationQueueModel.findQueuedComfyDispatchCandidates(candidateLimit)
     if (queuedJobs.length === 0) {
       return
     }

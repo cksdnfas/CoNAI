@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import type { CustomDropdownList, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
@@ -78,6 +79,7 @@ export function ComfyGenerationPanel({
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
+  const navigate = useNavigate()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
@@ -103,8 +105,8 @@ export function ComfyGenerationPanel({
   })
 
   const serversQuery = useQuery({
-    queryKey: ['image-generation-comfyui-servers'],
-    queryFn: () => getGenerationComfyUIServers(true),
+    queryKey: ['image-generation-comfyui-servers', 'all'],
+    queryFn: () => getGenerationComfyUIServers(false),
   })
 
   const dropdownListsQuery = useQuery({
@@ -173,7 +175,8 @@ export function ComfyGenerationPanel({
   const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
   const moduleSaveWorkflowFields = useMemo(() => resolveWorkflowFields(moduleSaveWorkflow), [resolveWorkflowFields, moduleSaveWorkflow])
 
-  const activeServers = useMemo(() => serversQuery.data ?? [], [serversQuery.data])
+  const servers = useMemo(() => serversQuery.data ?? [], [serversQuery.data])
+  const activeServers = useMemo(() => servers.filter((server) => server.is_active !== false), [servers])
   const {
     isComfyServerSubmitting,
     comfyServerForm,
@@ -190,7 +193,9 @@ export function ComfyGenerationPanel({
     handleSubmitComfyServer,
     handleEditServer,
     handleDeleteServer,
+    handleToggleComfyServerActive,
   } = useComfyServerController({
+    servers,
     activeServers,
     refetchServers: serversQuery.refetch,
     showSnackbar,
@@ -521,6 +526,7 @@ export function ComfyGenerationPanel({
       setComfyOverwriteModuleId(null)
       void moduleDefinitionsQuery.refetch()
       showSnackbar({ message: comfyOverwriteModuleId ? t({ ko: '{name} 워크플로우로 기존 모듈을 덮어썼어.', en: 'Overwrote the existing module with the {name} workflow.' }, { name: moduleSaveWorkflow.name }) : t({ ko: '{name} 워크플로우를 모듈로 저장했어.', en: 'Saved the {name} workflow as a module.' }, { name: moduleSaveWorkflow.name }), tone: 'info' })
+      navigate('/generation?tab=workflows')
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: 'ComfyUI 모듈 저장에 실패했어.', en: 'Failed to save the ComfyUI module.' })), tone: 'error' })
     } finally {
@@ -575,12 +581,14 @@ export function ComfyGenerationPanel({
             />
 
             <ComfyServerListSection
-              servers={activeServers}
+              servers={servers}
+              activeServerCount={activeServers.length}
               serverTests={comfyServerTests}
               onOpenCreateServer={handleOpenCreateServer}
               onEditServer={handleEditServer}
               onDeleteServer={(serverId) => void handleDeleteServer(serverId)}
               onTestServer={(serverId) => void handleTestComfyServer(serverId)}
+              onToggleServerActive={(serverId, isActive) => void handleToggleComfyServerActive(serverId, isActive)}
             />
           </div>
         ) : selectedWorkflow ? (

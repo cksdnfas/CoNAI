@@ -32,5 +32,6 @@ export interface ImageListProps {
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
   showDefaultQuickActions?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
+  onPreviewIntent?: (image: ImageRecord) => void
   modalAccessOptions?: ImageViewModalAccessOptions
 }

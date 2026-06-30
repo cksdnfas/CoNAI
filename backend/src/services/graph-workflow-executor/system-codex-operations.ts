@@ -6,7 +6,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { ImageUploadService } from '../imageUploadService'
 import { settingsService } from '../settingsService'
-import { saveArtifactBuffer, saveArtifactFileReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
+import { saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import {
   bufferToDataUrl,
   normalizeOptionalString,
@@ -238,46 +238,27 @@ async function resolveQueueBackedCodexOutput(params: {
   const shouldMaterializeValue = shouldMaterializeRuntimeArtifactValue(params.context, params.node.id, primaryOutputPort.key, artifactType)
 
   let outputValue: unknown = referenceValue
-  let storagePath: string
-  let artifactRecordId: number
+  const referencedArtifact = await saveCanonicalMediaArtifactReference(
+    params.context.executionId,
+    params.node.id,
+    primaryOutputPort.key,
+    artifactType,
+    absoluteOriginalPath,
+    {
+      mimeType: resolvedMimeType,
+      originalFileName,
+      queueJobId: completedJob.id,
+      historyId,
+      compositeHash,
+      metadata: {
+        source: 'codex-queue-image',
+      },
+    },
+  )
 
   if (shouldMaterializeValue) {
     const outputBuffer = await fs.promises.readFile(absoluteOriginalPath)
     outputValue = bufferToDataUrl(outputBuffer, resolvedMimeType)
-    const savedArtifact = await saveArtifactBuffer(
-      params.context.executionId,
-      params.node.id,
-      primaryOutputPort.key,
-      artifactType,
-      outputBuffer,
-      {
-        mimeType: resolvedMimeType,
-        sourcePathForMetadata: absoluteOriginalPath,
-        originalFileName,
-      },
-    )
-    storagePath = savedArtifact.storagePath
-    artifactRecordId = savedArtifact.artifactRecordId
-  } else {
-    const referencedArtifact = await saveArtifactFileReference(
-      params.context.executionId,
-      params.node.id,
-      primaryOutputPort.key,
-      artifactType,
-      absoluteOriginalPath,
-      {
-        mimeType: resolvedMimeType,
-        metadata: {
-          kind: 'codex-queue-image',
-          originalFileName,
-          queueJobId: completedJob.id,
-          historyId,
-          compositeHash,
-        },
-      },
-    )
-    storagePath = referencedArtifact.storagePath
-    artifactRecordId = referencedArtifact.artifactRecordId
   }
 
   const metadataValue = {
@@ -291,14 +272,9 @@ async function resolveQueueBackedCodexOutput(params: {
     [primaryOutputPort.key]: {
       type: artifactType,
       value: outputValue,
-      storagePath,
-      artifactRecordId,
-      metadata: {
-        kind: 'codex-queue-image',
-        queueJobId: completedJob.id,
-        historyId,
-        compositeHash,
-      },
+      storagePath: referencedArtifact.storagePath,
+      artifactRecordId: referencedArtifact.artifactRecordId,
+      metadata: referencedArtifact.metadata,
     },
     image_ref: {
       type: 'json',
@@ -330,7 +306,8 @@ async function resolveQueueBackedCodexOutput(params: {
       queueJobId: completedJob.id,
       historyId,
       compositeHash,
-      storagePath,
+      storagePath: referencedArtifact.storagePath,
+      referenceKind: 'canonical-generated-media',
       requestedWidth: params.requestedSize.width,
       requestedHeight: params.requestedSize.height,
       requestedAspectRatio: params.requestedSize.aspectRatio,

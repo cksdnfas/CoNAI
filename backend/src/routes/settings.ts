@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import {
@@ -15,9 +14,9 @@ import { kaloscopeTaggerService } from '../services/kaloscopeTaggerService';
 import {
   DEFAULT_ARTIST_LINK_URL_TEMPLATE,
   GeneralSettings,
+  HEADER_NAVIGATION_ITEM_KEYS,
   ImageSimilarityCheckMode,
   KaloscopeSettings,
-  LlmPresetRecord,
   LlmSettings,
   SupportedLanguage,
   TaggerDevice,
@@ -34,6 +33,7 @@ import {
   buildConaiHelperCustomNodeArchive,
   CONAI_HELPER_CUSTOM_NODE_PACKAGE_FILENAME,
 } from '../services/conaiHelperCustomNodePackageService';
+import { normalizeLlmPresetCollectionPayload } from './settings/llmPresetPayload';
 
 const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
@@ -41,95 +41,7 @@ const validImageSimilarityCheckModes: ImageSimilarityCheckMode[] = ['manual', 'a
 const validKaloscopeDevices = ['auto', 'cpu', 'cuda'] as const;
 const validTaggerModels = ['vit', 'swinv2', 'convnext'] as const;
 const validTaggerDevices = ['auto', 'cpu', 'cuda'] as const;
-
-function normalizeOptionalText(value: unknown) {
-  return typeof value === 'string' ? value : '';
-}
-
-function normalizeOptionalIsoDate(value: unknown, fallback: string) {
-  if (typeof value !== 'string') {
-    return fallback;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return fallback;
-  }
-
-  const parsed = Date.parse(trimmed);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : fallback;
-}
-
-function normalizeStructuredOutputJson(value: unknown) {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2);
-  } catch {
-    throw new Error('구조화 출력 JSON 양식은 올바른 JSON이어야 해.');
-  }
-}
-
-function normalizeLlmPresetCollectionPayload(
-  value: unknown,
-  options: { collectionKey: string; label: string; valueType?: 'text' | 'json' },
-): LlmPresetRecord[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${options.collectionKey} must be an array`);
-  }
-
-  const now = new Date().toISOString();
-  const normalizedPresets = value.map((entry) => {
-    if (!entry || typeof entry !== 'object') {
-      throw new Error(`${options.label} 항목은 객체여야 해.`);
-    }
-
-    const record = entry as Record<string, unknown>;
-    const name = normalizeOptionalText(record.name).trim();
-    if (!name) {
-      throw new Error(`${options.label}에는 이름이 필요해.`);
-    }
-
-    const content = options.valueType === 'json'
-      ? normalizeStructuredOutputJson(record.content)
-      : normalizeOptionalText(record.content);
-    if (!content.trim()) {
-      throw new Error(`${options.label} '${name}' 에 저장할 내용이 비어 있어.`);
-    }
-
-    return {
-      id: normalizeOptionalText(record.id).trim() || randomUUID(),
-      name,
-      content,
-      createdAt: normalizeOptionalIsoDate(record.createdAt, now),
-      updatedAt: now,
-    } satisfies LlmPresetRecord;
-  });
-
-  const seenIds = new Set<string>();
-  const seenNames = new Set<string>();
-  for (const preset of normalizedPresets) {
-    const normalizedName = preset.name.toLowerCase();
-    if (seenIds.has(preset.id)) {
-      throw new Error(`${options.label}에 중복된 프리셋 id가 있어: ${preset.id}`);
-    }
-    if (seenNames.has(normalizedName)) {
-      throw new Error(`${options.label} 이름이 중복됐어: ${preset.name}`);
-    }
-
-    seenIds.add(preset.id);
-    seenNames.add(normalizedName);
-  }
-
-  return normalizedPresets;
-}
+const validHeaderNavigationItemKeys = new Set<string>(HEADER_NAVIGATION_ITEM_KEYS);
 
 /**
  * GET /api/settings
@@ -247,6 +159,25 @@ router.put(
       ) {
         sendRouteBadRequest(res, 'deleteProtection.recycleBinPath must be a non-empty string');
         return;
+      }
+    }
+
+    if (generalSettings.headerNavigation !== undefined) {
+      if (!generalSettings.headerNavigation || typeof generalSettings.headerNavigation !== 'object') {
+        sendRouteBadRequest(res, 'headerNavigation must be an object');
+        return;
+      }
+
+      for (const [key, value] of Object.entries(generalSettings.headerNavigation)) {
+        if (!validHeaderNavigationItemKeys.has(key)) {
+          sendRouteBadRequest(res, `Invalid headerNavigation key: ${key}`);
+          return;
+        }
+
+        if (typeof value !== 'boolean') {
+          sendRouteBadRequest(res, `headerNavigation.${key} must be a boolean`);
+          return;
+        }
       }
     }
 

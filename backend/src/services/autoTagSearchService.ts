@@ -15,8 +15,12 @@ import {
   buildAutoTagRatingExpr,
   pushAutoTagPathMatchParams,
 } from './autoTagSqlShared';
-import { normalizeAutoTagSearchTerm } from './autoTagSearch/autoTagSearchTerms';
+import {
+  normalizeAutoTagIndexSearchKeys,
+  normalizeAutoTagSearchTerm,
+} from './autoTagSearch/autoTagSearchTerms';
 import { AutoTagSearchMatcher } from './autoTagSearch/AutoTagSearchMatcher';
+import { AutoTagIndexService } from './autoTagIndexService';
 
 /**
  * 자동태그 검색 서비스
@@ -42,6 +46,7 @@ export class AutoTagSearchService {
   ): Promise<QueryBuilderResult> {
     const conditions: string[] = [];
     const params: any[] = [];
+    const canUseIndex = AutoTagIndexService.hasIndexTable();
 
     // 기본 검색 조건 추가
     if (basicSearchParams) {
@@ -101,32 +106,48 @@ export class AutoTagSearchService {
 
     // 3. General 태그 필터
     if (searchParams.general_tags && searchParams.general_tags.length > 0) {
-      const generalConditions = this.buildGeneralTagConditions(searchParams.general_tags);
+      const generalConditions = canUseIndex
+        ? this.buildIndexedTagConditions(searchParams.general_tags, ['general'])
+        : this.buildGeneralTagConditions(searchParams.general_tags);
       conditions.push(...generalConditions.conditions);
       params.push(...generalConditions.params);
     }
 
     // 4. Character 필터
     if (searchParams.character) {
-      const characterConditions = this.buildCharacterConditions(searchParams.character);
+      const characterConditions = canUseIndex
+        ? this.buildIndexedCharacterConditions(searchParams.character)
+        : this.buildCharacterConditions(searchParams.character);
       conditions.push(...characterConditions.conditions);
       params.push(...characterConditions.params);
     }
 
     // 4.5 Any Tag 필터 (General + Character 통합 검색)
     if (searchParams.any_tags && searchParams.any_tags.length > 0) {
-      const anyConditions = this.buildAnyTagConditions(searchParams.any_tags);
+      const anyConditions = canUseIndex
+        ? this.buildIndexedTagConditions(searchParams.any_tags, ['general', 'character'])
+        : this.buildAnyTagConditions(searchParams.any_tags);
       conditions.push(...anyConditions.conditions);
       params.push(...anyConditions.params);
     }
 
     // 5. Model 필터
     if (searchParams.model) {
-      conditions.push(`${buildAutoTagModelExpr('i')} = ?`);
-      params.push(searchParams.model);
+      if (canUseIndex) {
+        const modelCondition = this.buildIndexedModelCondition(searchParams.model);
+        conditions.push(...modelCondition.conditions);
+        params.push(...modelCondition.params);
+      } else {
+        conditions.push(`${buildAutoTagModelExpr('i')} = ?`);
+        params.push(searchParams.model);
+      }
     }
 
-    return { conditions, params };
+    return {
+      conditions,
+      params,
+      orderedConditions: conditions.map((condition) => this.rewriteIndexedConditionForOrderedScan(condition)),
+    };
   }
 
   /**
@@ -256,6 +277,128 @@ export class AutoTagSearchService {
     }
 
     return { conditions, params };
+  }
+
+  /**
+   * Indexed General/Character/Any 태그 조건 생성
+   */
+  private static buildIndexedTagConditions(tags: TagFilter[], tagTypes: readonly string[]): QueryBuilderResult {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    for (const tagFilter of tags) {
+      const condition = this.buildIndexedTagMatchCondition(tagFilter, tagTypes);
+      if (condition.conditions.length > 0) {
+        conditions.push(...condition.conditions);
+        params.push(...condition.params);
+      }
+    }
+
+    return { conditions, params };
+  }
+
+  private static buildIndexedTagMatchCondition(
+    tagFilter: TagFilter,
+    tagTypes: readonly string[],
+  ): QueryBuilderResult {
+    const searchKeys = normalizeAutoTagIndexSearchKeys(tagFilter.tag);
+    if (searchKeys.length === 0) {
+      return { conditions: [], params: [] };
+    }
+
+    const typePlaceholders = tagTypes.map(() => '?').join(', ');
+    const keyPlaceholders = searchKeys.map(() => '?').join(', ');
+    const scoreConditions: string[] = [];
+    const params: any[] = [...tagTypes, ...searchKeys];
+
+    const hasMinFilter = tagFilter.min_score !== undefined && tagFilter.min_score > 0;
+    const hasMaxFilter = tagFilter.max_score !== undefined && tagFilter.max_score < 1;
+
+    if (hasMinFilter) {
+      scoreConditions.push('score >= ?');
+      params.push(tagFilter.min_score);
+    }
+    if (hasMaxFilter) {
+      scoreConditions.push('score <= ?');
+      params.push(tagFilter.max_score);
+    }
+
+    const condition = `i.composite_hash IN (
+      SELECT composite_hash
+      FROM media_auto_tag_index
+      WHERE tag_type IN (${typePlaceholders})
+        AND search_key IN (${keyPlaceholders})
+        ${scoreConditions.length > 0 ? `AND ${scoreConditions.join(' AND ')}` : ''}
+    )`;
+
+    return { conditions: [condition], params };
+  }
+
+  private static buildIndexedCharacterConditions(character: CharacterFilter): QueryBuilderResult {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (character.has_character !== undefined) {
+      params.push('character');
+      conditions.push(`i.composite_hash ${character.has_character ? '' : 'NOT '}IN (
+        SELECT composite_hash
+        FROM media_auto_tag_index
+        WHERE tag_type = ?
+      )`);
+    }
+
+    if (character.name) {
+      const nameCondition = this.buildIndexedTagMatchCondition(
+        {
+          tag: character.name,
+          min_score: character.min_score,
+          max_score: character.max_score,
+        },
+        ['character'],
+      );
+      conditions.push(...nameCondition.conditions);
+      params.push(...nameCondition.params);
+    }
+
+    return { conditions, params };
+  }
+
+  private static buildIndexedModelCondition(model: string): QueryBuilderResult {
+    const searchKeys = normalizeAutoTagIndexSearchKeys(model);
+    if (searchKeys.length === 0) {
+      return { conditions: [], params: [] };
+    }
+
+    const keyPlaceholders = searchKeys.map(() => '?').join(', ');
+    return {
+      conditions: [`i.composite_hash IN (
+        SELECT composite_hash
+        FROM media_auto_tag_index
+        WHERE tag_type = ?
+          AND search_key IN (${keyPlaceholders})
+      )`],
+      params: ['model', ...searchKeys],
+    };
+  }
+
+  private static rewriteIndexedConditionForOrderedScan(condition: string): string {
+    const match = condition.match(/^i\.composite_hash\s+(NOT\s+)?IN\s+\(\s*SELECT composite_hash\s+FROM media_auto_tag_index\s+WHERE\s+([\s\S]*)\s*\)$/);
+    if (!match) {
+      return condition;
+    }
+
+    const negate = Boolean(match[1]);
+    const indexPredicate = match[2]
+      .replace(/\btag_type\b/g, 'ati.tag_type')
+      .replace(/\bsearch_key\b/g, 'ati.search_key')
+      .replace(/\bscore\b/g, 'ati.score');
+
+    return `${negate ? 'NOT ' : ''}EXISTS (
+      SELECT 1
+      FROM media_auto_tag_index ati
+      WHERE ati.composite_hash = i.composite_hash
+        AND ${indexPredicate}
+    )`;
   }
 
   /**

@@ -36,7 +36,12 @@ function extractFunction(sourceText: string, functionName: string) {
 function assertExecutionStatusLookupPolicy() {
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const syncSource = source('features/module-graph/use-module-graph-workspace-sync.ts')
+  const typesSource = source('features/module-graph/module-graph-types.ts')
+  const portCellsSource = source('features/module-graph/components/module-graph-port-cells.tsx')
+  const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
   const statusSource = extractFunction(sharedSource, 'getNodeExecutionStatus')
+  const branchOutputStateSource = extractFunction(syncSource, 'buildConditionalOutputStates')
+  const skippedNodeReasonSource = extractFunction(syncSource, 'buildSkippedNodeReasonMap')
   const buildFlowFromGraphRecordSource = extractFunction(sharedSource, 'buildFlowFromGraphRecord')
 
   assert(
@@ -64,6 +69,53 @@ function assertExecutionStatusLookupPolicy() {
     'workspace sync should use Set.has for per-node execution-plan membership',
   )
   assert(
+    typesSource.includes("export type ModuleGraphConditionalOutputState = 'active' | 'inactive'")
+      && typesSource.includes('conditionalOutputStates?: Record<string, ModuleGraphConditionalOutputState> | null'),
+    'module graph nodes should carry conditional output state for post-run branch diagnostics',
+  )
+  assert(
+    typesSource.includes("export type ModuleGraphExecutionStatus = 'idle' | 'completed' | 'failed' | 'blocked' | 'skipped'")
+      && typesSource.includes("export type ModuleGraphExecutionSkipReason = 'disabled' | 'inactive-branch' | 'source-node-skipped' | 'source-output-disabled' | 'unknown'")
+      && typesSource.includes('executionSkipReason?: ModuleGraphExecutionSkipReason | null'),
+    'module graph nodes should carry skipped execution status and reasons',
+  )
+  assert(
+    branchOutputStateSource.includes("metadata?.operationKey !== 'system.logic_if_branch'")
+      && branchOutputStateSource.includes("writeConditionalOutputState(outputStatesByNode, artifact.node_id, activePort, 'active')")
+      && branchOutputStateSource.includes("writeConditionalOutputState(outputStatesByNode, artifact.node_id, inactivePort, 'inactive')"),
+    'workspace sync should derive active and inactive IF branch output paths from execution artifacts',
+  )
+  assert(
+    branchOutputStateSource.includes("log.event_type !== 'node_skipped_inactive_branch'")
+      && branchOutputStateSource.includes("writeConditionalOutputState(outputStatesByNode, sourceNodeId, sourcePortKey, 'inactive')"),
+    'workspace sync should preserve inactive upstream branch paths from skip logs',
+  )
+  assert(
+    syncSource.includes('conditionalOutputStateSignature')
+      && syncSource.includes('conditionalOutputStates: conditionalOutputStatesByNode[node.id] ?? null'),
+    'workspace sync should include branch output states in node sync and signature calculation',
+  )
+  assert(
+    skippedNodeReasonSource.includes("log.event_type === 'node_skipped_disabled'")
+      && skippedNodeReasonSource.includes("log.event_type === 'node_skipped_inactive_branch'")
+      && skippedNodeReasonSource.includes("skippedNodeReasons.set(log.node_id, 'disabled')")
+      && syncSource.includes('skippedNodeReasonSignature')
+      && syncSource.includes('executionSkipReason: skippedNodeReasons.get(node.id) ?? null'),
+    'workspace sync should derive skipped-node reasons from execution logs and sync them to node cards',
+  )
+  assert(
+    statusSource.includes('skippedNodeReasons?: ReadonlyMap<string, ModuleGraphExecutionSkipReason>')
+      && sharedSource.includes("if (skippedNodeReasons?.has(nodeId))")
+      && sharedSource.includes("return 'skipped'"),
+    'execution status resolver should expose skipped nodes before failed-run fallback states',
+  )
+  assert(
+    portCellsSource.includes('outputState?: ModuleGraphConditionalOutputState | null')
+      && portCellsSource.includes("t({ ko: '활성 경로', en: 'Active path' })")
+      && portCellsSource.includes("t({ ko: '비활성 경로', en: 'Inactive path' })"),
+    'node output ports should show active and inactive conditional branch path labels',
+  )
+  assert(
     !syncSource.includes('orderedNodeIds.includes(node.id)'),
     'workspace sync must not scan orderedNodeIds while mapping each node',
   )
@@ -82,6 +134,46 @@ function assertExecutionStatusLookupPolicy() {
   assert(
     !buildFlowFromGraphRecordSource.includes('nodes.find((node) => node.id === edge.'),
     'saved workflow loading must not scan graph nodes for every edge',
+  )
+  assert(
+    workflowRunnerSource.includes('const runReadinessMessage = !selectedGraph'),
+    'workflow runner should compute one actionable run-readiness message before execution',
+  )
+  assert(
+    workflowRunnerSource.includes('const firstBlockingIssue = validationIssues.find((issue) => issue.severity === \'error\') ?? null'),
+    'workflow runner should surface the first blocking validation issue near the run action',
+  )
+  assert(
+    workflowRunnerSource.includes('Action needed before running'),
+    'workflow runner should render an explicit action-needed state when validation blocks execution',
+  )
+  assert(
+    workflowRunnerSource.includes('const shouldShowRunReadinessAlert = isExecuting || !canExecute || warningIssueCount > 0'),
+    'workflow runner should only show readiness alerts when action, warning, or execution feedback is needed',
+  )
+  assert(
+    !/필수 실행 조건이 충족|Required run conditions are satisfied|<span>\{canExecute \? t\(\{ ko: '실행 준비'/.test(workflowRunnerSource),
+    'workflow runner must not show repeated success readiness copy',
+  )
+
+  const workflowValidationPanelSource = source('features/module-graph/components/workflow-validation-panel.tsx')
+  const workflowEditorViewSource = source('features/module-graph/components/module-workflow-editor-view.tsx')
+  assert(
+    workflowValidationPanelSource.includes('if (issues.length === 0 && !showHeader)'),
+    'workflow validation panel should render nothing for empty inline validation state',
+  )
+  assert(
+    !/지금 바로 실행 가능|Ready to run now|필수 입력 확인 완료|Required inputs confirmed/.test(workflowValidationPanelSource),
+    'workflow validation panel must not show repeated success readiness copy',
+  )
+  assert(
+    workflowEditorViewSource.includes('if (validationIssues.length > 0)')
+      && workflowEditorViewSource.includes('open={isValidationPopupOpen && validationIssues.length > 0}'),
+    'workflow editor validation popup should open only when there are validation issues',
+  )
+  assert(
+    !/지금 상태 좋아|Everything looks good|막히는 이슈는 없어|There are no blocking issues/.test(workflowEditorViewSource),
+    'workflow editor validation popup must not show repeated success readiness copy',
   )
 }
 

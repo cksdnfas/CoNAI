@@ -36,6 +36,8 @@ export function useModuleGraphPageEditorPanels({
   executingGraphId,
   latestExecution,
   latestExecutionDetail,
+  latestExecutionDetailIsLoading,
+  latestExecutionDetailError,
   selectedWorkflowCanExecute,
   selectedWorkflowValidationIssues,
   nodes,
@@ -119,6 +121,8 @@ export function useModuleGraphPageEditorPanels({
   executingGraphId: number | null
   latestExecution: GraphExecutionRecord | null
   latestExecutionDetail: GraphExecutionDetailRecord | null
+  latestExecutionDetailIsLoading: boolean
+  latestExecutionDetailError: string | null
   selectedWorkflowCanExecute: boolean
   selectedWorkflowValidationIssues: WorkflowValidationIssue[]
   nodes: ModuleGraphNode[]
@@ -267,6 +271,8 @@ export function useModuleGraphPageEditorPanels({
       isExecuting={executingGraphId !== null}
       latestExecution={latestExecution}
       latestExecutionDetail={latestExecutionDetail}
+      latestExecutionDetailIsLoading={latestExecutionDetailIsLoading}
+      latestExecutionDetailError={latestExecutionDetailError}
       selectedWorkflowCanExecute={selectedWorkflowCanExecute}
       selectedWorkflowValidationIssues={selectedWorkflowValidationIssues}
       onInputValueChange={onWorkflowRunInputChange}

@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getDataRematchStatus, startDataRematchJob, type DataRematchJobSnapshot, type DataRematchOptions } from '@/lib/api-settings'
 import { useI18n } from '@/i18n'
-import type { GeneralSettings } from '@/types/settings'
+import { DEFAULT_HEADER_NAVIGATION_SETTINGS, type GeneralSettings, type HeaderNavigationItemKey } from '@/types/settings'
 import { cn } from '@/lib/utils'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsToggleRow, SettingsValueTile } from './settings-primitives'
 
@@ -18,6 +18,7 @@ interface GeneralTabProps {
   onPatchDeleteProtection: (patch: Partial<GeneralSettings['deleteProtection']>) => void
   onSave: () => void
   isSaving: boolean
+  hasChanges: boolean
 }
 
 const DEFAULT_DATA_REMATCH_OPTIONS: DataRematchOptions = {
@@ -25,6 +26,20 @@ const DEFAULT_DATA_REMATCH_OPTIONS: DataRematchOptions = {
   metadata: false,
   hash: false,
 }
+
+const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; label: { ko: string; en: string } }> = [
+  { key: 'access', label: { ko: '페이지 목록', en: 'Page list' } },
+  { key: 'home', label: { ko: '홈', en: 'Home' } },
+  { key: 'groups', label: { ko: '그룹', en: 'Groups' } },
+  { key: 'prompts', label: { ko: '프롬프트', en: 'Prompts' } },
+  { key: 'generation', label: { ko: '생성', en: 'Generation' } },
+  { key: 'upload', label: { ko: '업로드', en: 'Upload' } },
+  { key: 'wallpaper', label: { ko: '월페이퍼', en: 'Wallpaper' } },
+  { key: 'settings', label: { ko: '설정', en: 'Settings' } },
+  { key: 'search', label: { ko: '검색', en: 'Search' } },
+  { key: 'queue', label: { ko: '대기열', en: 'Queue' } },
+  { key: 'account', label: { ko: '사용자', en: 'User' } },
+]
 
 function formatCount(value: number) {
   return Number.isFinite(value) ? value.toLocaleString() : '0'
@@ -48,7 +63,7 @@ function getPhaseLabel(status: DataRematchJobSnapshot | undefined, locale: 'ko' 
 }
 
 /** Render app-wide defaults that should be easy to find from the first settings tab. */
-export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtection, onSave, isSaving }: GeneralTabProps) {
+export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtection, onSave, isSaving, hasChanges }: GeneralTabProps) {
   const { t, language } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -103,6 +118,20 @@ export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtecti
     }
   }
 
+  const updateHeaderNavigationItem = (key: HeaderNavigationItemKey, checked: boolean) => {
+    if (!generalDraft) {
+      return
+    }
+
+    onPatchGeneral({
+      headerNavigation: {
+        ...DEFAULT_HEADER_NAVIGATION_SETTINGS,
+        ...generalDraft.headerNavigation,
+        [key]: checked,
+      },
+    })
+  }
+
   const startDataRematch = () => {
     if (!hasSelectedDataRematchOption) {
       showSnackbar({ message: t({ ko: '재생성 범위를 먼저 선택해.', en: 'Select a rematch scope first.' }), tone: 'error' })
@@ -121,9 +150,9 @@ export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtecti
             <Button
               size="icon-sm"
               onClick={onSave}
-              disabled={!generalDraft || isSaving}
-              aria-label={t({ ko: '일반 설정 저장', en: 'Save general settings' })}
-              title={t({ ko: '일반 설정 저장', en: 'Save general settings' })}
+              disabled={!generalDraft || isSaving || !hasChanges}
+              aria-label={hasChanges ? t({ ko: '일반 설정 저장', en: 'Save general settings' }) : t({ ko: '일반 설정 변경 없음', en: 'No general settings changes' })}
+              title={hasChanges ? t({ ko: '일반 설정 저장', en: 'Save general settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -205,6 +234,24 @@ export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtecti
                   />
                   {t({ ko: '종료 시 캔버스 임시 데이터를 자동 정리', en: 'Automatically clean up temporary canvas data on exit' })}
                 </SettingsToggleRow>
+
+                <SettingsInsetBlock className="md:col-span-2">
+                  <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {t({ ko: '상단 네비 표시', en: 'Header navigation' })}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {HEADER_NAVIGATION_OPTIONS.map((option) => (
+                      <SettingsToggleRow key={option.key}>
+                        <input
+                          type="checkbox"
+                          checked={(generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS)[option.key] ?? true}
+                          onChange={(event) => updateHeaderNavigationItem(option.key, event.target.checked)}
+                        />
+                        {t(option.label)}
+                      </SettingsToggleRow>
+                    ))}
+                  </div>
+                </SettingsInsetBlock>
               </>
             ) : (
               <Skeleton className="h-56 w-full rounded-sm md:col-span-2" />

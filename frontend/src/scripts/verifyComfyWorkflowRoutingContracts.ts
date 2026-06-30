@@ -5,6 +5,7 @@ import type { ComfyUIServerTestState } from '../features/image-generation/image-
 import {
   buildComfyWorkflowServerRoutingSummary,
   isComfyWorkflowModalServer,
+  isComfyWorkflowServerActive,
   isComfyWorkflowServerRoutable,
 } from '../features/image-generation/components/comfy-workflow-routing'
 
@@ -41,14 +42,16 @@ function assertRoutingSummary() {
   const modalRender = makeServer({ id: 3, name: 'Modal render', backend_type: 'modal', routing_tags: ['modal', 'render'] })
   const statusModalRender = makeServer({ id: 4, name: 'Status modal render', routing_tags: ['burst', 'render'] })
   const statusModalConnected = makeServer({ id: 5, name: 'Status modal connected', routing_tags: ['modal'] })
+  const inactiveConnected = makeServer({ id: 6, name: 'Inactive connected', routing_tags: ['render', 'paused'], is_active: false })
 
-  const servers = [connectedRender, disconnectedRender, modalRender, statusModalRender, statusModalConnected]
+  const servers = [connectedRender, disconnectedRender, modalRender, statusModalRender, statusModalConnected, inactiveConnected]
   const serverTests: Record<number, ComfyUIServerTestState> = {
     1: makeTestState({ server_id: 1, server_name: 'Connected render', is_connected: true }),
     2: makeTestState({ server_id: 2, server_name: 'Disconnected render', is_connected: false }),
     3: makeTestState({ server_id: 3, server_name: 'Modal render', is_connected: false }),
     4: makeTestState({ server_id: 4, server_name: 'Status modal render', backend_type: 'modal', is_connected: false }),
     5: makeTestState({ server_id: 5, server_name: 'Status modal connected', backend_type: 'modal', is_connected: true }),
+    6: makeTestState({ server_id: 6, server_name: 'Inactive connected', is_connected: true }),
   }
 
   const summary = buildComfyWorkflowServerRoutingSummary(servers, serverTests)
@@ -60,9 +63,12 @@ function assertRoutingSummary() {
   equal(summary.tagRoutableCounts.get('modal'), 2, 'backend Modal and status Modal servers should be tag-routable')
   equal(summary.tagRoutableCounts.get('missing') ?? 0, 0, 'missing tag counts should fall back to zero')
   equal(summary.serverById.get(3), modalRender, 'server lookup map should preserve server records by id')
+  equal(summary.serverById.has(6), false, 'inactive servers should be excluded from target lookup candidates')
   equal(isComfyWorkflowServerRoutable(disconnectedRender, serverTests[2]), false, 'disconnected non-Modal servers should not be routable')
   equal(isComfyWorkflowServerRoutable(modalRender, serverTests[3]), true, 'backend Modal servers should be routable without a live connection')
   equal(isComfyWorkflowServerRoutable(statusModalRender, serverTests[4]), true, 'status Modal servers should be routable without a live connection')
+  equal(isComfyWorkflowServerActive(inactiveConnected), false, 'inactive servers should be classified separately from connection state')
+  equal(isComfyWorkflowServerRoutable(inactiveConnected, serverTests[6]), false, 'inactive servers should not be routable even when connected')
   equal(isComfyWorkflowModalServer(statusModalConnected, serverTests[5]), true, 'status Modal should override the configured backend type')
 }
 
@@ -88,7 +94,31 @@ function assertControllerUsesIndexedRoutingSummary() {
   )
 }
 
+function assertServerManagementKeepsInactiveRecordsOutOfRouting() {
+  const panelSource = readFileSync(new URL('../features/image-generation/components/comfy-generation-panel.tsx', import.meta.url), 'utf8')
+  const controllerSource = readFileSync(new URL('../features/image-generation/components/use-comfy-server-controller.ts', import.meta.url), 'utf8')
+  const nodeCardSource = readFileSync(new URL('../features/module-graph/components/module-graph-node-card.tsx', import.meta.url), 'utf8')
+
+  ok(
+    panelSource.includes('getGenerationComfyUIServers(false)'),
+    'Comfy server management should load all saved servers, including inactive records',
+  )
+  ok(
+    panelSource.includes('servers.filter((server) => server.is_active !== false)'),
+    'Comfy generation surfaces should derive active routing candidates from all saved servers',
+  )
+  ok(
+    controllerSource.includes('handleToggleComfyServerActive'),
+    'Comfy server controller should expose an active/inactive toggle instead of deleting saved records',
+  )
+  ok(
+    nodeCardSource.includes('isActiveComfyWorkflowServerCandidate') && nodeCardSource.includes('linkedComfyServers.length > 0 ? activeLinkedComfyServers : activeGlobalComfyServers'),
+    'module graph Comfy target picker should exclude inactive workflow-linked servers without falling back to global servers',
+  )
+}
+
 assertRoutingSummary()
 assertControllerUsesIndexedRoutingSummary()
+assertServerManagementKeepsInactiveRecordsOutOfRouting()
 
 console.log('Comfy workflow routing contracts verified.')

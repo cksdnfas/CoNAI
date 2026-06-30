@@ -4,6 +4,7 @@ import { runtimePaths } from '../config/runtimePaths'
 import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
 import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../models/GraphExecutionLog'
+import { GraphExecutionNodeIoModel } from '../models/GraphExecutionNodeIo'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
@@ -201,6 +202,7 @@ export function cleanupEmptyGraphExecutions(executionIds: number[]) {
   }
 
   GraphExecutionLogModel.deleteByExecutionIds(deletableExecutionIds)
+  GraphExecutionNodeIoModel.deleteByExecutionIds(deletableExecutionIds)
   const deletedCount = GraphExecutionModel.deleteByIds(deletableExecutionIds)
 
   return {

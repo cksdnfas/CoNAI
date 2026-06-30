@@ -29,6 +29,7 @@ export interface GenerationQueueJobRecord {
   queue_position_scope?: 'service' | 'server' | 'tag' | 'auto' | null
   queue_position_server_id?: number | null
   queue_position_server_tag?: string | null
+  estimated_start_at?: string | null
   estimated_wait_seconds?: number | null
   estimated_total_seconds?: number | null
   estimated_duration_seconds?: number | null
@@ -88,6 +89,7 @@ export interface GenerationHistoryRecord {
   actual_width?: number | null
   actual_height?: number | null
   actual_mime_type?: string | null
+  result_file_status?: 'active' | 'missing' | 'deleted' | null
   rating_score?: number | null
 
   // Detail/compat-only legacy fields
@@ -186,6 +188,7 @@ export interface CreateComfyUIServerPayload {
   capacity?: number
   description?: string
   routing_tags?: string[]
+  is_active?: boolean
   is_default?: boolean
 }
 

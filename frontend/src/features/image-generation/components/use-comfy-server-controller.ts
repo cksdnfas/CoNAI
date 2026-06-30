@@ -19,10 +19,12 @@ function parseRoutingTagsCsv(value: string) {
 
 /** Manage ComfyUI server selection, registration, editing, deletion, and connectivity tests for the panel. */
 export function useComfyServerController({
+  servers,
   activeServers,
   refetchServers,
   showSnackbar,
 }: {
+  servers: ComfyUIServer[]
   activeServers: ComfyUIServer[]
   refetchServers: () => Promise<unknown>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
@@ -60,6 +62,13 @@ export function useComfyServerController({
         }
       }
 
+      if (field === 'isActive') {
+        return {
+          ...current,
+          isActive: value === true,
+        }
+      }
+
       if (typeof value !== 'string') {
         return current
       }
@@ -91,7 +100,7 @@ export function useComfyServerController({
 
   /** Test a single ComfyUI server and cache its reachability state. */
   const handleTestComfyServer = useCallback(async (serverId: number, options?: { silent?: boolean }) => {
-    const server = activeServers.find((item) => item.id === serverId)
+    const server = servers.find((item) => item.id === serverId)
     if (server?.backend_type === 'modal') {
       if (options?.silent) {
         return
@@ -141,7 +150,7 @@ export function useComfyServerController({
         showSnackbar({ message, tone: 'error' })
       }
     }
-  }, [activeServers, showSnackbar])
+  }, [servers, showSnackbar])
 
   useEffect(() => {
     if (selectedTarget === 'auto' || selectedTarget.startsWith('tag:')) {
@@ -201,15 +210,19 @@ export function useComfyServerController({
           capacity,
           description: comfyServerForm.description.trim() || undefined,
           routing_tags: parseRoutingTagsCsv(comfyServerForm.routingTags),
-          is_active: true,
+          is_active: comfyServerForm.isActive,
           is_default: comfyServerForm.backendType !== 'modal' && comfyServerForm.isDefault,
         })
 
         await refetchServers()
-        setSelectedTarget(`server:${editingServerId}`)
+        if (comfyServerForm.isActive) {
+          setSelectedTarget(`server:${editingServerId}`)
+        } else if (selectedTarget === `server:${editingServerId}`) {
+          setSelectedTarget('auto')
+        }
         handleCloseServerModal()
         showSnackbar({ message: comfyServerForm.backendType === 'modal' ? 'Modal 서버를 수정했어. 자동 상태확인은 건너뛸게.' : 'ComfyUI 서버를 수정했어.', tone: 'info' })
-        if (comfyServerForm.backendType !== 'modal') {
+        if (comfyServerForm.isActive && comfyServerForm.backendType !== 'modal') {
           await handleTestComfyServer(editingServerId)
         }
       } else {
@@ -220,14 +233,17 @@ export function useComfyServerController({
           capacity,
           description: comfyServerForm.description.trim() || undefined,
           routing_tags: parseRoutingTagsCsv(comfyServerForm.routingTags),
+          is_active: comfyServerForm.isActive,
           is_default: comfyServerForm.backendType !== 'modal' && comfyServerForm.isDefault,
         })
 
         await refetchServers()
-        setSelectedTarget(`server:${response.data.id}`)
+        if (comfyServerForm.isActive) {
+          setSelectedTarget(`server:${response.data.id}`)
+        }
         handleCloseServerModal()
         showSnackbar({ message: comfyServerForm.backendType === 'modal' ? 'Modal 서버를 등록했어. 자동 상태확인은 건너뛸게.' : 'ComfyUI 서버를 등록했어.', tone: 'info' })
-        if (comfyServerForm.backendType !== 'modal') {
+        if (comfyServerForm.isActive && comfyServerForm.backendType !== 'modal') {
           await handleTestComfyServer(response.data.id)
         }
       }
@@ -240,7 +256,7 @@ export function useComfyServerController({
 
   /** Open the edit modal for one existing ComfyUI server. */
   const handleEditServer = (serverId: number) => {
-    const server = activeServers.find((item) => item.id === serverId)
+    const server = servers.find((item) => item.id === serverId)
     if (!server) {
       return
     }
@@ -253,6 +269,7 @@ export function useComfyServerController({
       capacity: String(server.capacity ?? (server.backend_type === 'modal' ? 10 : 1)),
       description: server.description ?? '',
       routingTags: (server.routing_tags ?? []).join(', '),
+      isActive: server.is_active !== false,
       isDefault: server.backend_type !== 'modal' && server.is_default === true,
     })
     setIsServerModalOpen(true)
@@ -260,7 +277,7 @@ export function useComfyServerController({
 
   /** Delete one ComfyUI server after confirmation and refresh cached test state. */
   const handleDeleteServer = async (serverId: number) => {
-    const server = activeServers.find((item) => item.id === serverId)
+    const server = servers.find((item) => item.id === serverId)
     if (!server) {
       return
     }
@@ -287,6 +304,36 @@ export function useComfyServerController({
     }
   }
 
+  /** Toggle whether one saved server participates in automatic routing. */
+  const handleToggleComfyServerActive = async (serverId: number, isActive: boolean) => {
+    const server = servers.find((item) => item.id === serverId)
+    if (!server) {
+      return
+    }
+
+    try {
+      await updateGenerationComfyUIServer(serverId, { is_active: isActive })
+      await refetchServers()
+      if (!isActive) {
+        setComfyServerTests((current) => {
+          const next = { ...current }
+          delete next[serverId]
+          return next
+        })
+        if (selectedTarget === `server:${serverId}`) {
+          setSelectedTarget('auto')
+        }
+      }
+
+      showSnackbar({ message: isActive ? 'ComfyUI 서버를 활성화했어.' : 'ComfyUI 서버를 비활성화했어.', tone: 'info' })
+      if (isActive && server.backend_type !== 'modal') {
+        await handleTestComfyServer(serverId)
+      }
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, 'ComfyUI 서버 활성 상태 변경에 실패했어.'), tone: 'error' })
+    }
+  }
+
   return {
     isComfyServerSubmitting,
     comfyServerForm,
@@ -303,5 +350,6 @@ export function useComfyServerController({
     handleSubmitComfyServer,
     handleEditServer,
     handleDeleteServer,
+    handleToggleComfyServerActive,
   }
 }

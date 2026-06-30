@@ -1,15 +1,21 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { TranslationInput, TranslationParams } from '../i18n'
-import type { GenerationQueueJobRecord } from '../lib/api-image-generation-types'
+import type { GenerationHistoryRecord, GenerationQueueJobRecord } from '../lib/api-image-generation-types'
+import { canRetryHistoryQueueJob, getHistoryRunRecoveryState, getRetryableHistoryQueueJobId } from '../features/image-generation/image-generation-shared'
+import { getUniqueRetryableHistoryQueueJobIds } from '../features/image-generation/components/generation-history-retry-actions'
 import {
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueHeaderRefreshTargets,
+  getGenerationQueueDurationLabel,
+  getGenerationQueueLaneLabel,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
+  getGenerationQueueStartLabel,
   getGenerationQueueStatusLabel,
+  getGenerationQueueWaitLabel,
   getGenerationQueueWorkflowLabel,
   shouldEnableFilteredQueueHeaderQuery,
 } from '../features/image-generation/components/generation-queue-ui'
@@ -156,6 +162,45 @@ function assertRemainingLabels() {
   assertEqual(getGenerationQueueRemainingLabel(makeQueueRecord({ estimated_total_seconds: 3660 }), translate, formatNumber), '1h 1m', 'hour ETA should include remaining minutes when present')
 }
 
+function makeHistoryRecord(overrides: Partial<GenerationHistoryRecord> = {}): GenerationHistoryRecord {
+  return {
+    id: 201,
+    service_type: 'comfyui',
+    generation_status: 'completed',
+    queue_job_id: 101,
+    queue_status: 'completed',
+    queue_cancel_requested: 0,
+    actual_composite_hash: 'hash',
+    created_at: '2026-05-14T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function assertOperationalMetaLabels() {
+  assertEqual(
+    getGenerationQueueLaneLabel(makeQueueRecord({ queue_position: 2, queue_position_scope: 'auto' }), translate, formatNumber),
+    '자동 · 큐 2',
+    'auto-routed jobs should expose queue position and lane scope',
+  )
+  assertEqual(
+    getGenerationQueueLaneLabel(makeQueueRecord({ queue_position: 3, queue_position_scope: 'server', queue_position_server_id: 7 }), translate, formatNumber),
+    '서버 7 · 큐 3',
+    'server-routed jobs should expose server id and queue position',
+  )
+  assertEqual(
+    getGenerationQueueLaneLabel(makeQueueRecord({ queue_position: 4, queue_position_scope: 'tag', queue_position_server_tag: 'fast' }), translate, formatNumber),
+    '#fast · 큐 4',
+    'tag-routed jobs should expose the normalized tag and queue position',
+  )
+  assertEqual(getGenerationQueueLaneLabel(makeQueueRecord({ queue_position: null }), translate, formatNumber), null, 'missing queue position should stay hidden')
+  assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ estimated_wait_seconds: 0 }), translate, formatNumber), '곧 시작', 'zero wait should be shown as starts-soon')
+  assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ estimated_wait_seconds: 90 }), translate, formatNumber), '대기 2m', 'queued wait should be separate from total remaining time')
+  assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ status: 'running', estimated_wait_seconds: 90 }), translate, formatNumber), null, 'running jobs should not show queued wait')
+  assertEqual(getGenerationQueueStartLabel(makeQueueRecord({ estimated_start_at: '2026-05-14T11:22:00' }), translate, 'ko-KR'), '시작 11:22', 'queued jobs should expose the estimated start clock')
+  assertEqual(getGenerationQueueStartLabel(makeQueueRecord({ status: 'running', estimated_start_at: '2026-05-14T11:22:00' }), translate, 'ko-KR'), null, 'running jobs should hide queued start clocks')
+  assertEqual(getGenerationQueueDurationLabel(makeQueueRecord({ estimated_duration_seconds: 75 }), translate, formatNumber), '예상 1m', 'median duration should be available as operational metadata')
+}
+
 function assertElapsedLabels() {
   const nowMs = Date.parse('2026-05-14T11:04:00.000Z')
   const queuedNinetySecondsAgo = new Date(nowMs - 90_000).toISOString()
@@ -296,6 +341,7 @@ function assertHeaderRefreshTargets() {
 
 function assertHeaderWidgetStorageGuards() {
   const headerWidgetSource = readFileSync(join(process.cwd(), 'src', 'features', 'image-generation', 'components', 'generation-queue-header-widget.tsx'), 'utf8')
+    .replace(/\r\n/g, '\n')
 
   assertEqual(
     headerWidgetSource.includes('try {\n    rawValue = window.sessionStorage.getItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY)\n  } catch {\n    return null\n  }'),
@@ -312,14 +358,85 @@ function assertHeaderWidgetStorageGuards() {
     true,
     'queue header should read the notification baseline once per mount',
   )
+  assertEqual(
+    headerWidgetSource.includes('const IDLE_QUEUE_REFETCH_INTERVAL_MS = 30_000'),
+    true,
+    'queue header should use a slow idle poll when no active job is visible',
+  )
+  assertEqual(
+    headerWidgetSource.includes("document.visibilityState === 'hidden'"),
+    true,
+    'queue header should pause interval polling while the browser tab is hidden',
+  )
+  assertEqual(
+    headerWidgetSource.includes('getGenerationQueueHeaderRefetchInterval(activeCount, isOpen)'),
+    true,
+    'queue header refetch intervals should share one visibility-aware policy',
+  )
+}
+
+function assertHistoryRecoveryState() {
+  const failedRetryable = makeHistoryRecord({
+    generation_status: 'failed',
+    queue_status: 'failed',
+    queue_job_id: 44,
+    actual_composite_hash: null,
+  })
+  assertEqual(canRetryHistoryQueueJob(failedRetryable), true, 'failed queue-linked history should be retryable')
+  assertEqual(getRetryableHistoryQueueJobId(failedRetryable), 44, 'failed queue-linked history should expose the retryable queue job id')
+  assertEqual(getHistoryRunRecoveryState(failedRetryable), 'retryable-failed', 'failed queue-linked history should use failed retry state')
+
+  const cancelledRetryable = makeHistoryRecord({
+    generation_status: 'pending',
+    queue_status: 'cancelled',
+    queue_job_id: 45,
+    actual_composite_hash: null,
+  })
+  assertEqual(canRetryHistoryQueueJob(cancelledRetryable), true, 'cancelled queue-linked history should be retryable')
+  assertEqual(getRetryableHistoryQueueJobId(cancelledRetryable), 45, 'cancelled queue-linked history should expose the retryable queue job id')
+  assertEqual(getHistoryRunRecoveryState(cancelledRetryable), 'retryable-cancelled', 'cancelled queue-linked history should use cancelled retry state')
+
+  assertEqual(getHistoryRunRecoveryState(makeHistoryRecord()), 'completed', 'completed history should route to result inspection')
+  assertEqual(getRetryableHistoryQueueJobId(makeHistoryRecord()), null, 'completed queue-linked history should not expose retry')
+  assertEqual(
+    getHistoryRunRecoveryState(makeHistoryRecord({ generation_status: 'failed', queue_job_id: null, queue_status: null, actual_composite_hash: null })),
+    'failed-no-retry',
+    'failed history without a failed/cancelled queue job should not expose replay',
+  )
+
+  const duplicatedRetryIds = getUniqueRetryableHistoryQueueJobIds([
+    failedRetryable,
+    makeHistoryRecord({ id: 202, generation_status: 'failed', queue_status: 'failed', queue_job_id: 44, actual_composite_hash: null }),
+    cancelledRetryable,
+  ])
+  assertEqual(JSON.stringify(duplicatedRetryIds), JSON.stringify([44, 45]), 'history retry actions should dedupe queue ids before crossing the queue API boundary')
+}
+
+function assertHistoryRetryBoundary() {
+  const historyPanelSource = readFileSync(join(process.cwd(), 'src', 'features', 'image-generation', 'components', 'generation-history-panel.tsx'), 'utf8')
+  const historyRetryActionsSource = readFileSync(join(process.cwd(), 'src', 'features', 'image-generation', 'components', 'generation-history-retry-actions.ts'), 'utf8')
+
+  assertEqual(
+    historyPanelSource.includes("from '@/lib/api-image-generation-queue'"),
+    false,
+    'generation history panel should use the local retry action helper instead of importing queue API mutations directly',
+  )
+  assertEqual(
+    historyRetryActionsSource.includes("from '@/lib/api-image-generation-queue'"),
+    true,
+    'generation history retry action helper should own the queue API boundary',
+  )
 }
 
 assertStatusLabels()
 assertWorkflowLabels()
 assertRequesterLabels()
 assertRemainingLabels()
+assertOperationalMetaLabels()
 assertElapsedLabels()
 assertProgressPercent()
+assertHistoryRecoveryState()
+assertHistoryRetryBoundary()
 assertHeaderQuerySnapshotSelection()
 assertFilteredQueueHeaderQueryEnablement()
 assertHeaderRefreshTargets()

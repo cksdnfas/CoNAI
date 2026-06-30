@@ -19,6 +19,10 @@ function isActiveExecutionStatus(status: GraphExecutionRecord['status'] | undefi
   return status === 'queued' || status === 'running'
 }
 
+function hasActiveGraphExecution(executions: GraphExecutionRecord[] | undefined) {
+  return executions?.some((execution) => isActiveExecutionStatus(execution.status)) === true
+}
+
 export function useModuleGraphPageQueries({
   selectedGraphId,
   selectedExecutionId,
@@ -57,6 +61,7 @@ export function useModuleGraphPageQueries({
     queryKey: ['module-graph-executions', selectedGraphId],
     queryFn: () => getGraphWorkflowExecutions(selectedGraphId as number),
     enabled: selectedGraphId !== null,
+    refetchInterval: (query) => hasActiveGraphExecution(query.state.data) ? 5_000 : false,
   })
 
   const executionDetailQuery = useQuery({

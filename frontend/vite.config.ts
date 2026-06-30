@@ -52,7 +52,7 @@ function manualChunks(id: string) {
   return undefined
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const envDir = path.resolve(__dirname, '..')
   const env = loadEnv(mode, envDir, '')
   const frontendPort = resolveFrontendPort(env.FRONTEND_URL)
@@ -69,6 +69,7 @@ export default defineConfig(({ mode }) => {
     base: './',
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
+      'process.env.NODE_ENV': JSON.stringify(command === 'build' ? 'production' : 'development'),
     },
     resolve: {
       alias: {

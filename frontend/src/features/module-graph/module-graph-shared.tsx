@@ -1,9 +1,22 @@
-import { MarkerType, type Edge, type Node } from '@xyflow/react'
-import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import { buildApiUrl } from '@/lib/api-client'
+import { MarkerType } from '@xyflow/react'
 import { applySavedWorkflowInputMetadataToNodes } from './module-graph-workflow-inputs'
+import {
+  getModuleBaseDisplayName,
+  getModuleNodeDisplayLabel,
+  getModuleOperationKey,
+  getPortTypeColor,
+} from './module-graph-module-helpers'
 import type {
-  GraphExecutionArtifactRecord,
+  ModuleGraphClipboardEdge,
+  ModuleGraphClipboardNode,
+  ModuleGraphClipboardPayload,
+  ModuleGraphEdge,
+  ModuleGraphExecutionSkipReason,
+  ModuleGraphExecutionStatus,
+  ModuleGraphNode,
+  ModuleGraphNodeData,
+} from './module-graph-types'
+import type {
   GraphExecutionStatus,
   GraphWorkflowMetadata,
   GraphWorkflowRecord,
@@ -14,68 +27,44 @@ import type {
 } from '@/lib/api-module-graph'
 
 export { normalizeOptionalString, parsePositiveIntegerish } from '@/lib/primitive-normalizers'
-
-export type NodeArtifactGroupPreview = {
-  portKey: string
-  portLabel: string
-  portType: ModulePortDataType | null
-  artifactCount: number
-  latestArtifactLabel: string | null
-  latestArtifactPreviewUrl: string | null
-  latestArtifactTextPreview: string | null
-  latestArtifactTextValue: string | null
-}
-
-export type ModuleGraphNodeData = {
-  module: ModuleDefinitionRecord
-  label?: string
-  disabled?: boolean
-  inputValues: Record<string, unknown>
-  executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
-  executionArtifactCount?: number
-  executionReuseState?: 'reused' | null
-  latestArtifactLabel?: string | null
-  latestArtifactPreviewUrl?: string | null
-  latestArtifactTextPreview?: string | null
-  latestArtifactTextValue?: string | null
-  executionOutputGroups?: NodeArtifactGroupPreview[]
-  executeNodeDisabled?: boolean
-  onExecuteNode?: () => void
-  onForceExecuteNode?: () => void
-  onDisconnectNodeInput?: (nodeId: string, portKey: string) => void
-  onNodeValueChange?: (nodeId: string, portKey: string, value: unknown) => void
-  onNodeValueClear?: (nodeId: string, portKey: string) => void
-  onNodeLabelChange?: (nodeId: string, label: string) => void
-  onNodeImageChange?: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
-  connectedInputKeys?: string[]
-  connectedOutputKeys?: string[]
-}
-
-export type ModuleGraphNode = Node<ModuleGraphNodeData, 'module'>
-export type ModuleGraphEdge = Edge
-
-export type ModuleGraphClipboardNode = {
-  id: string
-  moduleId: number
-  position: { x: number; y: number }
-  label?: string
-  disabled?: boolean
-  inputValues: Record<string, unknown>
-}
-
-export type ModuleGraphClipboardEdge = {
-  source: string
-  target: string
-  sourceHandle?: string | null
-  targetHandle?: string | null
-}
-
-export type ModuleGraphClipboardPayload = {
-  kind: 'conai/module-graph-selection'
-  version: 1
-  nodes: ModuleGraphClipboardNode[]
-  edges: ModuleGraphClipboardEdge[]
-}
+export {
+  buildArtifactTextPreview,
+  buildArtifactTextValue,
+  buildNodeArtifactGroups,
+  buildNodeArtifactPreview,
+  compareGraphArtifactsNewestFirst,
+  getArtifactPreviewUrl,
+  getArtifactStoredValue,
+  hasGraphArtifactVisualPreview,
+  isEmptyLlmJsonArtifact,
+  isGraphArtifactVisualMedia,
+  parseArtifactMetadataRecord,
+  parseMetadataValue,
+  resolveGraphArtifactMimeType,
+} from './module-graph-artifacts'
+export {
+  getModuleBaseDisplayName,
+  getModuleColor,
+  getModuleNodeDisplayLabel,
+  getModuleNodeDisplayLabelFromData,
+  getModuleOperationKey,
+  getPortTypeColor,
+  hasCustomModuleNodeLabel,
+  isFinalResultModule,
+  normalizeModulePortDescription,
+} from './module-graph-module-helpers'
+export type {
+  ModuleGraphClipboardEdge,
+  ModuleGraphClipboardNode,
+  ModuleGraphClipboardPayload,
+  ModuleGraphConditionalOutputState,
+  ModuleGraphEdge,
+  ModuleGraphExecutionSkipReason,
+  ModuleGraphExecutionStatus,
+  ModuleGraphNode,
+  ModuleGraphNodeData,
+  NodeArtifactGroupPreview,
+} from './module-graph-types'
 
 export const ADVANCED_OUTPUT_PORTS_ENABLED_KEY = '__advanced_output_ports_enabled'
 
@@ -302,125 +291,6 @@ export function parseModuleGraphClipboardPayload(value: string): ModuleGraphClip
   }
 }
 
-const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
-  image: '#4fc3f7',
-  mask: '#ffb74d',
-  prompt: '#4db6ac',
-  text: '#81c784',
-  number: '#ffd54f',
-  boolean: '#ef9a9a',
-  json: '#90a4ae',
-  any: '#b0bec5',
-}
-
-const GENERIC_MODULE_PORT_DESCRIPTIONS = new Set([
-  '노드 안에 저장해둘 텍스트 값이야.',
-  '노드 안에 저장해둘 JSON 값이야.',
-  '노드 안에 저장해둘 이미지야.',
-  '노드 안에 저장해둘 숫자 값이야.',
-  '노드 안에 저장해둘 참/거짓 값이야.',
-])
-
-/** Resolve one stable system-operation key from module metadata when present. */
-export function getModuleOperationKey(module: ModuleDefinitionRecord) {
-  if (typeof module.internal_fixed_values?.operation_key === 'string') {
-    return module.internal_fixed_values.operation_key
-  }
-
-  if (typeof module.template_defaults?.operation_key === 'string') {
-    return module.template_defaults.operation_key
-  }
-
-  return null
-}
-
-/** Resolve whether one module is the built-in explicit final-result marker. */
-export function isFinalResultModule(module: ModuleDefinitionRecord) {
-  return module.engine_type === 'system' && getModuleOperationKey(module) === 'system.final_result'
-}
-
-/** Resolve a visible color for module nodes when the module does not define one. */
-export function getModuleColor(module: ModuleDefinitionRecord) {
-  if (module.color) {
-    return module.color
-  }
-
-  if (module.engine_type === 'nai') {
-    return '#7c4dff'
-  }
-
-  if (module.engine_type === 'codex') {
-    return '#26a69a'
-  }
-
-  if (module.engine_type === 'comfyui') {
-    return '#2196f3'
-  }
-
-  if (module.engine_type === 'custom_js') {
-    return '#ff8a65'
-  }
-
-  return '#26a69a'
-}
-
-/** Resolve a stable accent color for one module port data type. */
-export function getPortTypeColor(dataType: ModulePortDataType) {
-  return PORT_TYPE_COLORS[dataType]
-}
-
-/** Hide boilerplate per-port help copy so node cards and runners stay concise. */
-export function normalizeModulePortDescription(description?: string | null) {
-  const trimmedDescription = typeof description === 'string' ? description.trim() : ''
-  if (!trimmedDescription || GENERIC_MODULE_PORT_DESCRIPTIONS.has(trimmedDescription)) {
-    return undefined
-  }
-
-  return trimmedDescription
-}
-
-/** Normalize legacy/built-in system node names into the user-facing names we want to keep. */
-export function getModuleBaseDisplayName(module: ModuleDefinitionRecord) {
-  const operationKey = getModuleOperationKey(module)
-  if (operationKey === 'system.constant_text' || operationKey === 'system.constant_prompt') {
-    return '텍스트'
-  }
-  if (operationKey === 'system.constant_json') {
-    return 'JSON'
-  }
-  if (operationKey === 'system.constant_image') {
-    return '이미지'
-  }
-  if (operationKey === 'system.constant_number') {
-    return '숫자'
-  }
-  if (operationKey === 'system.constant_boolean') {
-    return '불리언'
-  }
-  if (operationKey === 'system.merge_text') {
-    return '텍스트 합치기'
-  }
-
-  return module.name
-}
-
-/** Resolve the user-visible node name, preferring one custom label when present. */
-export function getModuleNodeDisplayLabelFromData(data: ModuleGraphNodeData) {
-  const trimmedLabel = typeof data.label === 'string' ? data.label.trim() : ''
-  return trimmedLabel || getModuleBaseDisplayName(data.module)
-}
-
-/** Check whether a node is currently using one custom user-defined label. */
-export function hasCustomModuleNodeLabel(data: ModuleGraphNodeData) {
-  const trimmedLabel = typeof data.label === 'string' ? data.label.trim() : ''
-  return trimmedLabel.length > 0 && trimmedLabel !== getModuleBaseDisplayName(data.module)
-}
-
-/** Resolve the visible node name from one graph node. */
-export function getModuleNodeDisplayLabel(node: ModuleGraphNode) {
-  return getModuleNodeDisplayLabelFromData(node.data)
-}
-
 /** Format timestamps for compact execution history display. */
 export function formatDateTime(value?: string | null) {
   if (!value) {
@@ -535,306 +405,49 @@ export function getGraphWorkflowStopReasonLabel(stopReasonCode?: string | null, 
   return localizeGraphWorkflowErrorMessage(stopReasonMessage, '예약작업이 중지됐어.')
 }
 
-type GraphArtifactPreviewLike = {
-  artifact_type: string
-  storage_path?: string | null
-  metadata?: string | null
-  source_storage_path?: string | null
-  source_metadata?: string | null
-}
-
-function getArtifactCompositeHash(metadata?: Record<string, unknown> | null) {
-  const compositeHash = metadata?.compositeHash ?? metadata?.composite_hash
-  return typeof compositeHash === 'string' && compositeHash.trim().length > 0
-    ? compositeHash.trim()
-    : null
-}
-
-/** Map a stored artifact path or media record reference back into a backend-served preview URL. */
-export function getArtifactPreviewUrl(artifact: GraphArtifactPreviewLike) {
-  const storagePath = artifact.source_storage_path ?? artifact.storage_path
-  const metadata = parseArtifactMetadataRecord(artifact.source_metadata ?? artifact.metadata)
-  const compositeHash = getArtifactCompositeHash(metadata)
-
-  if (compositeHash) {
-    return buildApiUrl(`/api/images/${encodeURIComponent(compositeHash)}/file`)
-  }
-
-  if (!storagePath) {
-    return null
-  }
-
-  const normalized = storagePath.replace(/\\/g, '/')
-  const graphExecutionMarker = '/graph-executions/'
-  const graphExecutionMarkerIndex = normalized.lastIndexOf(graphExecutionMarker)
-  if (graphExecutionMarkerIndex !== -1) {
-    return buildApiUrl(`/temp${normalized.slice(graphExecutionMarkerIndex)}`)
-  }
-
-  const uploadsMarker = '/uploads/'
-  const uploadsMarkerIndex = normalized.lastIndexOf(uploadsMarker)
-  if (uploadsMarkerIndex !== -1) {
-    return buildApiUrl(`/uploads/${normalized.slice(uploadsMarkerIndex + uploadsMarker.length)}`)
-  }
-
-  return null
-}
-
-const GRAPH_ARTIFACT_MEDIA_EXTENSION_MIME_MAP: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.bmp': 'image/bmp',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.avi': 'video/x-msvideo',
-  '.mkv': 'video/x-matroska',
-}
-
-/** Parse a JSON-ish metadata string into an inspectable value. */
-export function parseMetadataValue(value?: string | null) {
-  if (!value) {
-    return null
-  }
-
-  try {
-    return JSON.parse(value) as Record<string, unknown>
-  } catch {
-    return value
-  }
-}
-
-/** Normalize artifact metadata into one object record when it stores structured fields. */
-export function parseArtifactMetadataRecord(value?: string | null) {
-  const metadata = parseMetadataValue(value)
-  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-    ? metadata as Record<string, unknown>
-    : null
-}
-
-/** Infer one media MIME type from the stored artifact file extension. */
-function inferArtifactMimeTypeFromPath(path?: string | null) {
-  if (!path) {
-    return null
-  }
-
-  const normalized = path.replace(/\\/g, '/').toLowerCase()
-  const lastDotIndex = normalized.lastIndexOf('.')
-  if (lastDotIndex === -1) {
-    return null
-  }
-
-  return GRAPH_ARTIFACT_MEDIA_EXTENSION_MIME_MAP[normalized.slice(lastDotIndex)] ?? null
-}
-
-/** Resolve the best available MIME type for one stored execution artifact or final-result source. */
-export function resolveGraphArtifactMimeType(artifact: GraphArtifactPreviewLike) {
-  const metadataValue = artifact.source_metadata ?? artifact.metadata
-  const storagePath = artifact.source_storage_path ?? artifact.storage_path
-  const metadata = parseArtifactMetadataRecord(metadataValue)
-  const metadataMimeType = typeof metadata?.mimeType === 'string'
-    ? metadata.mimeType
-    : (typeof metadata?.mime_type === 'string' ? metadata.mime_type : null)
-
-  if (metadataMimeType?.trim()) {
-    return metadataMimeType
-  }
-
-  if (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') {
-    return inferArtifactMimeTypeFromPath(storagePath) ?? 'image/png'
-  }
-
-  return inferArtifactMimeTypeFromPath(storagePath)
-}
-
-/** Check whether one artifact should render through the shared inline media preview. */
-export function isGraphArtifactVisualMedia(artifact: GraphArtifactPreviewLike) {
-  const mimeType = resolveGraphArtifactMimeType(artifact)
-  if (mimeType?.startsWith('image/') || mimeType?.startsWith('video/')) {
-    return true
-  }
-
-  return artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
-}
-
-/** Check whether one execution artifact has a usable visual preview URL and media type. */
-export function hasGraphArtifactVisualPreview(artifact: GraphExecutionArtifactRecord) {
-  return Boolean(getArtifactPreviewUrl(artifact) && isGraphArtifactVisualMedia(artifact))
-}
-
-/** Recover the structured value payload stored inside one execution artifact metadata blob. */
-export function getArtifactStoredValue(artifact: GraphExecutionArtifactRecord) {
-  const parsedMetadata = parseMetadataValue(artifact.metadata)
-  if (!parsedMetadata || typeof parsedMetadata !== 'object' || Array.isArray(parsedMetadata)) {
-    return parsedMetadata
-  }
-
-  return 'value' in parsedMetadata ? parsedMetadata.value : parsedMetadata
-}
-
-/** Detect legacy LLM/Codex json artifacts that only carried a null placeholder in text mode. */
-export function isEmptyLlmJsonArtifact(artifact: GraphExecutionArtifactRecord) {
-  if (artifact.port_key !== 'json' || artifact.artifact_type !== 'json') {
-    return false
-  }
-
-  const parsedMetadata = parseMetadataValue(artifact.metadata)
-  if (!parsedMetadata || typeof parsedMetadata !== 'object' || Array.isArray(parsedMetadata)) {
-    return false
-  }
-
-  return (parsedMetadata.kind === 'system-llm-json' || parsedMetadata.kind === 'system-codex-message-json')
-    && ('value' in parsedMetadata)
-    && (parsedMetadata.value === null || parsedMetadata.value === undefined)
-}
-
-/** Build the full readable text payload for prompt/text/json artifacts. */
-export function buildArtifactTextValue(artifact: GraphExecutionArtifactRecord) {
-  const storedValue = getArtifactStoredValue(artifact)
-  if (storedValue === null || storedValue === undefined) {
-    return null
-  }
-
-  if (typeof storedValue === 'string') {
-    return storedValue.trim() || null
-  }
-
-  if (typeof storedValue === 'number' || typeof storedValue === 'boolean') {
-    return String(storedValue)
-  }
-
-  return JSON.stringify(storedValue, null, 2)
-}
-
-/** Build a compact one-line text preview for prompt/text/json artifacts. */
-export function buildArtifactTextPreview(artifact: GraphExecutionArtifactRecord, maxLength = 140) {
-  const rawText = buildArtifactTextValue(artifact)
-  if (!rawText) {
-    return null
-  }
-
-  const normalizedText = rawText.replace(/\s+/g, ' ').trim()
-  if (!normalizedText) {
-    return null
-  }
-
-  return normalizedText.length > maxLength
-    ? `${normalizedText.slice(0, maxLength - 1)}…`
-    : normalizedText
-}
-
-/** Pick the most useful inline preview payload for one node artifact list. */
-export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord[]) {
-  let primaryTextArtifact: GraphExecutionArtifactRecord | null = null
-  let fallbackTextArtifact: GraphExecutionArtifactRecord | null = null
-  let structuredTextArtifact: GraphExecutionArtifactRecord | null = null
-
-  for (const artifact of artifacts) {
-    if (isEmptyLlmJsonArtifact(artifact)) {
-      continue
-    }
-
-    if (hasGraphArtifactVisualPreview(artifact)) {
-      return {
-        latestArtifactLabel: `${artifact.port_key} · ${artifact.artifact_type}`,
-        latestArtifactPreviewUrl: getArtifactPreviewUrl(artifact),
-        latestArtifactTextPreview: null,
-        latestArtifactTextValue: null,
-      }
-    }
-
-    if (artifact.port_key === 'metadata') {
-      continue
-    }
-
-    if (!primaryTextArtifact && artifact.port_key === 'text' && artifact.artifact_type === 'text') {
-      primaryTextArtifact = artifact
-    }
-
-    if (!fallbackTextArtifact && (artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text')) {
-      fallbackTextArtifact = artifact
-    }
-
-    if (!structuredTextArtifact && (artifact.artifact_type === 'json' || artifact.artifact_type === 'number' || artifact.artifact_type === 'boolean')) {
-      structuredTextArtifact = artifact
-    }
-  }
-
-  const latestTextArtifact = primaryTextArtifact ?? fallbackTextArtifact ?? structuredTextArtifact
-
-  if (latestTextArtifact) {
-    return {
-      latestArtifactLabel: `${latestTextArtifact.port_key} · ${latestTextArtifact.artifact_type}`,
-      latestArtifactPreviewUrl: null,
-      latestArtifactTextPreview: buildArtifactTextPreview(latestTextArtifact),
-      latestArtifactTextValue: buildArtifactTextValue(latestTextArtifact),
-    }
-  }
-
-  return {
-    latestArtifactLabel: null,
-    latestArtifactPreviewUrl: null,
-    latestArtifactTextPreview: null,
-    latestArtifactTextValue: null,
-  }
-}
-
-/** Build compact per-port artifact previews so node cards can expose outputs without opening the results panel. */
-export function buildNodeArtifactGroups(
-  artifacts: GraphExecutionArtifactRecord[],
-  outputPorts: ModulePortDefinition[],
-): NodeArtifactGroupPreview[] {
-  const outputPortMap = new Map(outputPorts.map((port, index) => [port.key, { port, index }]))
-  const groupedArtifacts = new Map<string, GraphExecutionArtifactRecord[]>()
-
-  for (const artifact of artifacts) {
-    if (isEmptyLlmJsonArtifact(artifact)) {
-      continue
-    }
-
-    const current = groupedArtifacts.get(artifact.port_key)
-    if (current) {
-      current.push(artifact)
-    } else {
-      groupedArtifacts.set(artifact.port_key, [artifact])
-    }
-  }
-
-  return Array.from(groupedArtifacts.entries())
-    .map(([portKey, portArtifacts]) => {
-      const sortedArtifacts = [...portArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
-      const artifactPreview = buildNodeArtifactPreview(sortedArtifacts)
-      const outputPort = outputPortMap.get(portKey)?.port ?? null
-
-      return {
-        portKey,
-        portLabel: outputPort?.label ?? portKey,
-        portType: outputPort?.data_type ?? (sortedArtifacts[0]?.artifact_type === 'file' ? null : sortedArtifacts[0]?.artifact_type ?? null),
-        artifactCount: sortedArtifacts.length,
-        latestArtifactLabel: artifactPreview.latestArtifactLabel,
-        latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
-        latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
-        latestArtifactTextValue: artifactPreview.latestArtifactTextValue,
-      } satisfies NodeArtifactGroupPreview
-    })
-    .sort((left, right) => {
-      const leftIndex = outputPortMap.get(left.portKey)?.index ?? Number.MAX_SAFE_INTEGER
-      const rightIndex = outputPortMap.get(right.portKey)?.index ?? Number.MAX_SAFE_INTEGER
-      if (leftIndex !== rightIndex) {
-        return leftIndex - rightIndex
-      }
-
-      return left.portLabel.localeCompare(right.portLabel, 'ko')
-    })
-}
-
 /** Build per-node execution-order positions so large graphs avoid repeated array scans. */
 export function buildNodeOrderIndex(orderedNodeIds: string[]): ReadonlyMap<string, number> {
   return new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index]))
+}
+
+/** Resolve the planned node order from current graph wiring, preserving canvas node order for ties. */
+export function buildPlannedNodeExecutionOrder(nodes: ModuleGraphNode[], edges: ModuleGraphEdge[]) {
+  const nodeIds = nodes.map((node) => node.id)
+  const knownNodeIds = new Set(nodeIds)
+  const inDegree = new Map<string, number>()
+  const adjacency = new Map<string, string[]>()
+
+  for (const nodeId of nodeIds) {
+    inDegree.set(nodeId, 0)
+    adjacency.set(nodeId, [])
+  }
+
+  for (const edge of edges) {
+    if (!knownNodeIds.has(edge.source) || !knownNodeIds.has(edge.target)) {
+      continue
+    }
+
+    adjacency.get(edge.source)?.push(edge.target)
+    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1)
+  }
+
+  const queue = nodeIds.filter((nodeId) => (inDegree.get(nodeId) ?? 0) === 0)
+  const orderedNodeIds: string[] = []
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift() as string
+    orderedNodeIds.push(nodeId)
+
+    for (const nextId of adjacency.get(nodeId) ?? []) {
+      const nextDegree = (inDegree.get(nextId) ?? 0) - 1
+      inDegree.set(nextId, nextDegree)
+      if (nextDegree === 0) {
+        queue.push(nextId)
+      }
+    }
+  }
+
+  return orderedNodeIds.length === nodes.length ? orderedNodeIds : nodeIds
 }
 
 /** Resolve a compact node execution status from the selected execution detail. */
@@ -843,13 +456,18 @@ export function getNodeExecutionStatus(params: {
   orderedNodeIds: string[]
   nodeOrderIndex: ReadonlyMap<string, number>
   artifactNodeIds: Set<string>
+  skippedNodeReasons?: ReadonlyMap<string, ModuleGraphExecutionSkipReason>
   executionStatus: GraphExecutionStatus
   failedNodeId?: string | null
-}): 'idle' | 'completed' | 'failed' | 'blocked' {
-  const { nodeId, orderedNodeIds, nodeOrderIndex, artifactNodeIds, executionStatus, failedNodeId } = params
+}): ModuleGraphExecutionStatus {
+  const { nodeId, orderedNodeIds, nodeOrderIndex, artifactNodeIds, skippedNodeReasons, executionStatus, failedNodeId } = params
 
   if (artifactNodeIds.has(nodeId)) {
     return 'completed'
+  }
+
+  if (skippedNodeReasons?.has(nodeId)) {
+    return 'skipped'
   }
 
   if (executionStatus !== 'failed') {
@@ -892,7 +510,32 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
     return directPort
   }
 
-  if (direction !== 'in' || getModuleOperationKey(node.data.module) !== 'system.api_request') {
+  const operationKey = getModuleOperationKey(node.data.module)
+
+  if (direction !== 'in') {
+    return null
+  }
+
+  if (operationKey === 'system.random_text_choice') {
+    const dynamicKey = portKey.startsWith('options.') ? portKey.slice('options.'.length).trim() : ''
+    const parentPort = node.data.module.exposed_inputs.find((port) => port.key === 'options')
+    if (!parentPort || !dynamicKey) {
+      return null
+    }
+
+    return {
+      ...parentPort,
+      key: portKey,
+      label: dynamicKey,
+      data_type: 'any',
+      required: false,
+      multiple: false,
+      default_value: undefined,
+      description: '랜덤 선택 후보 값이야.',
+    }
+  }
+
+  if (operationKey !== 'system.api_request') {
     return null
   }
 

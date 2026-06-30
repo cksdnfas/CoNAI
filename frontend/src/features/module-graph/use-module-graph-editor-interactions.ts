@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { addEdge, MarkerType, type Connection } from '@xyflow/react'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
@@ -75,6 +75,7 @@ export function useModuleGraphEditorInteractions({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const lastCopiedSelectionRef = useRef<string | null>(null)
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
 
   /** Validate whether one graph-port connection is allowed. */
   const isValidConnection = useCallback(
@@ -95,8 +96,8 @@ export function useModuleGraphEditorInteractions({
         return false
       }
 
-      const sourceNode = nodes.find((node) => node.id === connection.source)
-      const targetNode = nodes.find((node) => node.id === connection.target)
+      const sourceNode = nodeById.get(connection.source)
+      const targetNode = nodeById.get(connection.target)
       if (!sourceNode || !targetNode) {
         return false
       }
@@ -109,7 +110,7 @@ export function useModuleGraphEditorInteractions({
 
       return getModulePortCompatibility(sourcePort.data_type, targetPort.data_type) !== 'incompatible'
     },
-    [nodes],
+    [nodeById],
   )
 
   /** Create one edge connection and apply presentation metadata when valid. */
@@ -119,8 +120,8 @@ export function useModuleGraphEditorInteractions({
       return
     }
 
-    const sourceNode = nodes.find((node) => node.id === connection.source)
-    const targetNode = nodes.find((node) => node.id === connection.target)
+    const sourceNode = connection.source ? nodeById.get(connection.source) : undefined
+    const targetNode = connection.target ? nodeById.get(connection.target) : undefined
     const sourceHandle = parseHandleId(connection.sourceHandle)
     const targetHandle = parseHandleId(connection.targetHandle)
     const sourcePort = findNodePort(sourceNode, 'out', sourceHandle?.portKey)
@@ -177,7 +178,7 @@ export function useModuleGraphEditorInteractions({
 
     const connectionStart = options?.connectionStart
     if (connectionStart) {
-      const existingNode = nodes.find((node) => node.id === connectionStart.nodeId)
+      const existingNode = nodeById.get(connectionStart.nodeId)
       const parsedHandle = parseHandleId(connectionStart.handleId)
 
       if (existingNode && parsedHandle) {
@@ -241,7 +242,7 @@ export function useModuleGraphEditorInteractions({
 
     setSelectedEdgeId(null)
     setSelectedNodeId(nodeId)
-  }, [isValidConnection, nodes, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
+  }, [isValidConnection, nodeById, nodes.length, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
 
   /** Add one library module and close the library modal immediately after. */
   const handleAddModuleFromLibrary = useCallback((module: ModuleDefinitionRecord) => {
@@ -251,7 +252,7 @@ export function useModuleGraphEditorInteractions({
 
   /** Duplicate one node by id with copied input values. */
   const handleDuplicateNodeById = useCallback((nodeId: string) => {
-    const nodeToDuplicate = nodes.find((node) => node.id === nodeId)
+    const nodeToDuplicate = nodeById.get(nodeId)
     if (!nodeToDuplicate) {
       return
     }
@@ -279,7 +280,7 @@ export function useModuleGraphEditorInteractions({
     setSelectedEdgeId(null)
     setSelectedNodeId(duplicatedNodeId)
     showSnackbar({ message: '노드를 복제했어.', tone: 'info' })
-  }, [nodes, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar])
+  }, [nodeById, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar])
 
   /** Duplicate the currently selected node with copied input values. */
   const handleDuplicateSelectedNode = useCallback(() => {

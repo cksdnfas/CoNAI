@@ -160,6 +160,59 @@ function assertIdempotentBootstrap(authDbModule: AuthDbModule, databaseDir: stri
   assert.equal(getCount(db, 'SELECT COUNT(*) AS count FROM auth_permission_groups'), 3)
 }
 
+function grantDirectPermission(db: Database.Database, groupKey: string, permissionKey: string) {
+  const group = getRequiredRow<{ id: number }>(
+    db,
+    'SELECT id FROM auth_permission_groups WHERE group_key = ?',
+    groupKey,
+  )
+  const permission = getRequiredRow<{ id: number }>(
+    db,
+    'SELECT id FROM auth_permissions WHERE permission_key = ?',
+    permissionKey,
+  )
+
+  db.prepare(`
+    INSERT INTO auth_group_permissions (group_id, permission_id, allowed, created_at, updated_at)
+    VALUES (?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT(group_id, permission_id) DO UPDATE SET
+      allowed = 1,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(group.id, permission.id)
+}
+
+function assertDirectPermission(db: Database.Database, groupKey: string, permissionKey: string) {
+  assert.equal(
+    getCount(
+      db,
+      `
+        SELECT COUNT(*) AS count
+        FROM auth_group_permissions gp
+        INNER JOIN auth_permission_groups g ON g.id = gp.group_id
+        INNER JOIN auth_permissions p ON p.id = gp.permission_id
+        WHERE g.group_key = ? AND p.permission_key = ? AND gp.allowed = 1
+      `,
+      groupKey,
+      permissionKey,
+    ),
+    1,
+    `${groupKey} direct permission must preserve ${permissionKey}`,
+  )
+}
+
+function assertAnonymousBootstrapDoesNotRewriteConfiguredAccess(authDbModule: AuthDbModule) {
+  const db = authDbModule.getAuthDb()
+  grantDirectPermission(db, 'anonymous', 'page.home.view')
+  grantDirectPermission(db, 'anonymous', 'page.wildcards.view')
+
+  authDbModule.getAuthDb().close()
+  authDbModule.initializeAuthDb()
+
+  const refreshedDb = authDbModule.getAuthDb()
+  assertDirectPermission(refreshedDb, 'anonymous', 'page.home.view')
+  assertDirectPermission(refreshedDb, 'anonymous', 'page.wildcards.view')
+}
+
 function assertLegacySyncedAdminCleanup(authDbModule: AuthDbModule) {
   const db = authDbModule.getAuthDb()
   db.prepare('DELETE FROM auth_credentials WHERE id = 1').run()
@@ -214,6 +267,57 @@ function assertTrustedBootstrapAdminMode() {
   assert.equal(adminResponse.statusCode, 200)
 }
 
+function assertAuthConfigurationRequiresUsableAdmin(authDbModule: AuthDbModule) {
+  const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
+  const db = authDbModule.getAuthDb()
+  const guestGroup = getRequiredRow<{ id: number }>(
+    db,
+    'SELECT id FROM auth_permission_groups WHERE group_key = ?',
+    'guest',
+  )
+
+  const guestAccountId = db.prepare(`
+    INSERT INTO auth_accounts (
+      username, password_hash, account_type, status, created_at, updated_at
+    ) VALUES ('orphan-guest', 'hashed-password', 'guest', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `).run().lastInsertRowid as number
+
+  db.prepare(`
+    INSERT INTO auth_account_group_memberships (account_id, group_id, created_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+  `).run(guestAccountId, guestGroup.id)
+
+  authHelpers.invalidateConfiguredAuthCache()
+  assert.equal(
+    authHelpers.hasConfiguredAuth(),
+    false,
+    'A non-admin account must not close first-run bootstrap access',
+  )
+
+  const adminGroup = getRequiredRow<{ id: number }>(
+    db,
+    'SELECT id FROM auth_permission_groups WHERE group_key = ?',
+    'admin',
+  )
+  const adminAccountId = db.prepare(`
+    INSERT INTO auth_accounts (
+      username, password_hash, account_type, status, created_at, updated_at
+    ) VALUES ('standalone-admin', 'hashed-password', 'admin', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `).run().lastInsertRowid as number
+
+  db.prepare(`
+    INSERT INTO auth_account_group_memberships (account_id, group_id, created_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+  `).run(adminAccountId, adminGroup.id)
+
+  authHelpers.invalidateConfiguredAuthCache()
+  assert.equal(
+    authHelpers.hasConfiguredAuth(),
+    true,
+    'An active admin account must count as configured auth even without legacy credentials',
+  )
+}
+
 function main() {
   const tempRoot = process.env.RUNTIME_BASE_PATH
   assert.ok(tempRoot, 'Expected temporary runtime root')
@@ -232,8 +336,10 @@ function main() {
     assertLegacyMigration(db, databaseDir)
     assertLegacyAdminSynced(db)
     assertIdempotentBootstrap(authDbModule, databaseDir)
+    assertAnonymousBootstrapDoesNotRewriteConfiguredAccess(authDbModule)
     assertLegacySyncedAdminCleanup(authDbModule)
     assertTrustedBootstrapAdminMode()
+    assertAuthConfigurationRequiresUsableAdmin(authDbModule)
   } finally {
     authDbModule.getAuthDb().close()
     fs.rmSync(tempRoot, { recursive: true, force: true })

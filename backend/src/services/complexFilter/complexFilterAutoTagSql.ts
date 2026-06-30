@@ -8,7 +8,11 @@ import {
   buildAutoTagRatingExpr,
   pushAutoTagPathMatchParams,
 } from '../autoTagSqlShared';
-import { normalizeAutoTagSearchTerm } from '../autoTagSearch/autoTagSearchTerms';
+import {
+  normalizeAutoTagIndexSearchKeys,
+  normalizeAutoTagSearchTerm,
+} from '../autoTagSearch/autoTagSearchTerms';
+import { AutoTagIndexService } from '../autoTagIndexService';
 
 /** Build the complex-filter SQL fragment for one auto-tag condition. */
 export function buildComplexFilterAutoTagCondition(
@@ -16,6 +20,8 @@ export function buildComplexFilterAutoTagCondition(
   params: any[],
   _weights: RatingWeights | null,
 ): string | null {
+  const canUseIndex = AutoTagIndexService.hasIndexTable();
+
   if (condition.type === 'auto_tag_exists') {
     return condition.value === true
       ? 'im.auto_tags IS NOT NULL'
@@ -23,6 +29,12 @@ export function buildComplexFilterAutoTagCondition(
   }
 
   if (condition.type === 'auto_tag_has_character') {
+    if (canUseIndex) {
+      return condition.value === true
+        ? buildIndexedHasTypeCondition(params, ['character'], false)
+        : buildIndexedHasTypeCondition(params, ['character'], true);
+    }
+
     if (condition.value === true) {
       return `(
         (
@@ -85,6 +97,10 @@ export function buildComplexFilterAutoTagCondition(
   }
 
   if (condition.type === 'auto_tag_general') {
+    if (canUseIndex) {
+      return buildIndexedTagMatchCondition(condition, params, ['general']);
+    }
+
     return buildComplexFilterTagExistsCondition(
       condition,
       params,
@@ -93,6 +109,10 @@ export function buildComplexFilterAutoTagCondition(
   }
 
   if (condition.type === 'auto_tag_character') {
+    if (canUseIndex) {
+      return buildIndexedTagMatchCondition(condition, params, ['character']);
+    }
+
     return buildComplexFilterTagExistsCondition(
       condition,
       params,
@@ -101,11 +121,19 @@ export function buildComplexFilterAutoTagCondition(
   }
 
   if (condition.type === 'auto_tag_model') {
+    if (canUseIndex) {
+      return buildIndexedModelCondition(condition, params);
+    }
+
     params.push(condition.value);
     return `${buildAutoTagModelExpr('im')} = ?`;
   }
 
   if (condition.type === 'auto_tag_any') {
+    if (canUseIndex) {
+      return buildIndexedTagMatchCondition(condition, params, ['general', 'character']);
+    }
+
     const tag = String(condition.value).toLowerCase();
     // Complex filters represent selected chips; keep multi-word tags as one tag instead of OR-ing each token.
     const variants = normalizeAutoTagSearchTerm(tag, true);
@@ -147,6 +175,66 @@ export function buildComplexFilterAutoTagCondition(
   }
 
   return null;
+}
+
+function buildIndexedHasTypeCondition(params: any[], tagTypes: readonly string[], negate: boolean): string {
+  const typePlaceholders = tagTypes.map(() => '?').join(', ');
+  params.push(...tagTypes);
+
+  return `im.composite_hash ${negate ? 'NOT ' : ''}IN (
+    SELECT composite_hash
+    FROM media_auto_tag_index
+    WHERE tag_type IN (${typePlaceholders})
+  )`;
+}
+
+function buildIndexedModelCondition(condition: FilterCondition, params: any[]): string | null {
+  const variants = normalizeAutoTagIndexSearchKeys(String(condition.value));
+  if (variants.length === 0) {
+    return null;
+  }
+
+  params.push('model', ...variants);
+  return `im.composite_hash IN (
+    SELECT composite_hash
+    FROM media_auto_tag_index
+    WHERE tag_type = ?
+      AND search_key IN (${variants.map(() => '?').join(', ')})
+  )`;
+}
+
+function buildIndexedTagMatchCondition(
+  condition: FilterCondition,
+  params: any[],
+  tagTypes: readonly string[],
+): string | null {
+  const variants = normalizeAutoTagIndexSearchKeys(String(condition.value));
+  if (variants.length === 0) {
+    return null;
+  }
+
+  const typePlaceholders = tagTypes.map(() => '?').join(', ');
+  const variantPlaceholders = variants.map(() => '?').join(', ');
+  const scoreConditions: string[] = [];
+
+  params.push(...tagTypes, ...variants);
+
+  if (condition.min_score !== undefined) {
+    params.push(condition.min_score);
+    scoreConditions.push('score >= ?');
+  }
+  if (condition.max_score !== undefined) {
+    params.push(condition.max_score);
+    scoreConditions.push('score <= ?');
+  }
+
+  return `im.composite_hash IN (
+    SELECT composite_hash
+    FROM media_auto_tag_index
+    WHERE tag_type IN (${typePlaceholders})
+      AND search_key IN (${variantPlaceholders})
+      ${scoreConditions.length > 0 ? `AND ${scoreConditions.join(' AND ')}` : ''}
+  )`;
 }
 
 /** Build a repeated EXISTS condition for general/character auto-tag filters. */

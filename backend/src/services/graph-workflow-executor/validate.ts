@@ -10,7 +10,27 @@ function resolveInputPort(moduleDefinition: ParsedModuleDefinition, portKey: str
     return directPort
   }
 
-  if (moduleDefinition.internal_fixed_values?.operation_key !== 'system.api_request') {
+  const operationKey = moduleDefinition.internal_fixed_values?.operation_key
+
+  if (operationKey === 'system.random_text_choice') {
+    const parentPort = moduleDefinition.exposed_inputs.find((port) => port.key === 'options')
+    const dynamicKey = portKey.startsWith('options.') ? portKey.slice('options.'.length).trim() : ''
+    if (!parentPort || !dynamicKey) {
+      return null
+    }
+
+    return {
+      ...parentPort,
+      key: portKey,
+      label: dynamicKey,
+      data_type: 'any',
+      required: false,
+      multiple: false,
+      default_value: undefined,
+    }
+  }
+
+  if (operationKey !== 'system.api_request') {
     return null
   }
 

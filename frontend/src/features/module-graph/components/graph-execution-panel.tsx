@@ -12,6 +12,7 @@ import type {
   GraphExecutionArtifactRecord,
   GraphExecutionFinalResultRecord,
   GraphExecutionLogRecord,
+  GraphExecutionNodeIoRecord,
   GraphExecutionRecord,
   GraphWorkflowRecord,
 } from '@/lib/api-module-graph'
@@ -24,115 +25,37 @@ import {
 } from '../module-graph-shared'
 import {
   buildArtifactGroupModalText,
+  buildExecutionComparisonRows,
+  buildExecutionComparisonSummary,
+  buildExecutionPathDiagnosticRows,
+  buildNodeDisplayLabelMap,
+  type ExecutionComparisonRow,
+  type ExecutionComparisonSummary,
   formatPrimitiveValue,
   getExecutionInputEntries,
   getExecutionModeLabel,
   getNodeDisplayLabel,
+  getNodeDisplayLabelFromMap,
   groupArtifactsByNode,
   isCompactExecutionArtifactVisible,
   parseExecutionPlan,
   pickPrimaryExecutionArtifact,
   type ParsedExecutionPlan,
 } from './graph-execution-panel-helpers'
+import { ExecutionComparisonContextBlock, ExecutionOutputGroupCard, ExecutionPathDiagnosticsBlock } from './graph-execution-panel-sections'
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
+import { buildFinalResultLifecycleWarningSourceLabel, findLlmResponseDiagnostic, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
 
 type GraphExecutionDetail = {
   execution: GraphExecutionRecord
   artifacts: GraphExecutionArtifactRecord[]
   final_results: GraphExecutionFinalResultRecord[]
   logs: GraphExecutionLogRecord[]
+  node_io: GraphExecutionNodeIoRecord[]
 }
 
-type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'artifacts' | 'logs'
-
-function ExecutionOutputGroupCard({
-  group,
-}: {
-  group: { nodeId: string; nodeLabel: string; artifacts: GraphExecutionArtifactRecord[] }
-}) {
-  const { t, formatNumber } = useI18n()
-  const [modalType, setModalType] = useState<'text' | 'image' | null>(null)
-  const primaryArtifact = useMemo(() => pickPrimaryExecutionArtifact(group.artifacts), [group.artifacts])
-  const modalText = useMemo(() => buildArtifactGroupModalText(group.artifacts), [group.artifacts])
-  const hasVisualPreview = Boolean(primaryArtifact && hasGraphArtifactVisualPreview(primaryArtifact))
-  const previewUrl = primaryArtifact ? getArtifactPreviewUrl(primaryArtifact) : null
-  const mimeType = primaryArtifact ? resolveGraphArtifactMimeType(primaryArtifact) : null
-
-  return (
-    <>
-      <div className="rounded-sm border border-border/70 bg-background/25 p-2">
-        <div className="mb-1.5 flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="truncate text-[13px] font-semibold text-foreground">{group.nodeLabel}</div>
-            {primaryArtifact ? <div className="truncate text-[10px] text-muted-foreground">{primaryArtifact.port_key}</div> : null}
-          </div>
-          <Badge variant="outline" className="h-6 shrink-0 px-1.5 text-[10px]">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(group.artifacts.length) })}</Badge>
-        </div>
-
-        {hasVisualPreview && previewUrl && primaryArtifact ? (
-          <button
-            type="button"
-            onClick={() => setModalType('image')}
-            className="group relative block w-full overflow-hidden rounded-sm bg-surface-lowest/80"
-          >
-            <InlineMediaPreview
-              src={previewUrl}
-              mimeType={mimeType}
-              alt={`${primaryArtifact.node_id}-${primaryArtifact.port_key}`}
-              frameClassName="border-0 bg-transparent p-0"
-              mediaClassName="h-[9.5rem] w-full object-contain"
-            />
-            <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
-            </div>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setModalType('text')}
-            className="group relative flex h-[9.5rem] w-full items-center justify-center overflow-hidden rounded-sm bg-surface-lowest/80 text-sm font-medium text-foreground transition-colors hover:bg-surface-low"
-          >
-            <span>{t({ ko: '텍스트 컨텐츠', en: 'Text content' })}</span>
-            <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
-            </div>
-          </button>
-        )}
-      </div>
-
-      <SettingsModal
-        open={modalType === 'text'}
-        title={group.nodeLabel}
-        widthClassName="max-w-4xl"
-        onClose={() => setModalType(null)}
-      >
-        <pre className="max-h-[70vh] overflow-auto text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
-          {modalText}
-        </pre>
-      </SettingsModal>
-
-      <SettingsModal
-        open={modalType === 'image'}
-        title={group.nodeLabel}
-        widthClassName="max-w-6xl"
-        onClose={() => setModalType(null)}
-      >
-        {previewUrl && primaryArtifact ? (
-          <InlineMediaPreview
-            src={previewUrl}
-            mimeType={mimeType}
-            alt={`${primaryArtifact.node_id}-${primaryArtifact.port_key}`}
-            frameClassName="border-0 bg-transparent p-0"
-            mediaClassName="max-h-[80vh] w-full object-contain"
-          />
-        ) : null}
-      </SettingsModal>
-    </>
-  )
-}
+type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'compare' | 'artifacts' | 'logs'
 
 function SelectedExecutionSummary({
   executionDetail,
@@ -154,6 +77,36 @@ function SelectedExecutionSummary({
   onOpenDetail: () => void
 }) {
   const { t, formatNumber, formatDateTime } = useI18n()
+  const finalResultLifecycleWarnings = useMemo(() => listFinalResultLifecycleWarnings(executionDetail.logs), [executionDetail.logs])
+  const llmResponseDiagnostic = useMemo(() => findLlmResponseDiagnostic(executionDetail.logs), [executionDetail.logs])
+  const finalResultLifecycleWarning = finalResultLifecycleWarnings[0] ?? null
+  const additionalFinalResultWarningCount = Math.max(0, finalResultLifecycleWarnings.length - 1)
+  const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])
+  const finalResultLifecycleWarningSourceLabel = finalResultLifecycleWarning?.sourceNodeId
+    ? buildFinalResultLifecycleWarningSourceLabel(
+      finalResultLifecycleWarning,
+      getNodeDisplayLabelFromMap(nodeLabelMap, finalResultLifecycleWarning.sourceNodeId, nodeLabelOverrides),
+    )
+    : buildFinalResultLifecycleWarningSourceLabel(finalResultLifecycleWarning)
+  const executionComparisonSummary = useMemo(() => buildExecutionComparisonSummary({
+    inputEntries: executionInputEntries,
+    artifacts: executionDetail.artifacts,
+    finalResults,
+    logs: executionDetail.logs,
+    nodeIo: executionDetail.node_io ?? [],
+  }), [executionDetail.artifacts, executionDetail.logs, executionDetail.node_io, executionInputEntries, finalResults])
+  const executionComparisonRows = useMemo(() => buildExecutionComparisonRows(
+    executionDetail.node_io ?? [],
+    selectedGraph,
+    nodeLabelOverrides,
+  ), [executionDetail.node_io, nodeLabelOverrides, selectedGraph])
+  const executionPathDiagnosticRows = useMemo(() => buildExecutionPathDiagnosticRows({
+    execution: executionDetail.execution,
+    logs: executionDetail.logs,
+    plan: selectedExecutionPlan,
+    selectedGraph,
+    nodeLabelOverrides,
+  }), [executionDetail.execution, executionDetail.logs, nodeLabelOverrides, selectedExecutionPlan, selectedGraph])
 
   return (
     <div className="space-y-4 rounded-sm border border-border bg-surface-low p-3">
@@ -178,6 +131,59 @@ function SelectedExecutionSummary({
           {executionDetail.execution.error_message}
         </div>
       ) : null}
+
+      {llmResponseDiagnostic ? (
+        <div className="space-y-2 rounded-sm border border-[#7f1d1d] bg-[#180d10] px-3 py-2 text-sm text-[#ffdad6]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-medium">{t({ ko: 'LLM 응답 로그', en: 'LLM response log' })}</span>
+              {llmResponseDiagnostic.failedLog ? <Badge variant="outline">{llmResponseDiagnostic.failedLog.event_type}</Badge> : null}
+              {llmResponseDiagnostic.providerLog ? <Badge variant="outline">{llmResponseDiagnostic.providerLog.event_type}</Badge> : null}
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={onOpenDetail}>
+              <Eye className="h-4 w-4" />
+              {t({ ko: '로그', en: 'Logs' })}
+            </Button>
+          </div>
+          {llmResponseDiagnostic.textPreview ? (
+            <pre className="max-h-44 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff] whitespace-pre-wrap break-words">{llmResponseDiagnostic.textPreview}</pre>
+          ) : llmResponseDiagnostic.rawResponsePreview ? (
+            <pre className="max-h-44 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff] whitespace-pre-wrap break-words">{llmResponseDiagnostic.rawResponsePreview}</pre>
+          ) : null}
+        </div>
+      ) : null}
+
+      {finalResultLifecycleWarning ? (
+        <div className="rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          <div>
+            {finalResultLifecycleWarning.kind === 'source_artifact_missing'
+              ? finalResultLifecycleWarningSourceLabel
+                ? t({
+                  ko: '최종 결과 노드는 실행됐지만 {source} 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.',
+                  en: 'The final result node ran, but the {source} output did not create a saved result. Check the connected output port.',
+                }, { source: finalResultLifecycleWarningSourceLabel })
+                : t({ ko: '최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.', en: 'The final result node ran, but the connected output did not create a saved result. Check the connected output port.' })
+              : finalResultLifecycleWarningSourceLabel
+                ? t({
+                  ko: '최종 결과는 저장됐지만 {source} 출력의 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.',
+                  en: 'The final result was saved, but linking the {source} output into generation history failed. Check the detailed logs for the cause.',
+                }, { source: finalResultLifecycleWarningSourceLabel })
+                : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the detailed logs for the cause.' })}
+          </div>
+          {additionalFinalResultWarningCount > 0 ? (
+            <div className="mt-1 text-xs text-amber-100/80">
+              {t({ ko: '추가 최종 결과 경고 {count}개가 더 있어. 상세 로그에서 함께 확인해줘.', en: '{count} more final-result warnings are available in the detailed logs.' }, { count: formatNumber(additionalFinalResultWarningCount) })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <ExecutionComparisonContextBlock
+        summary={executionComparisonSummary}
+        rows={executionComparisonRows}
+        compact
+      />
+      <ExecutionPathDiagnosticsBlock rows={executionPathDiagnosticRows} compact />
 
       {executionInputEntries.length > 0 ? (
         <div className="space-y-2.5">
@@ -277,6 +283,7 @@ export function GraphExecutionPanel({
   const detailSectionRefs = useRef<Record<ExecutionDetailSectionKey, HTMLDivElement | null>>({
     summary: null,
     inputs: null,
+    compare: null,
     artifacts: null,
     logs: null,
   })
@@ -364,6 +371,7 @@ export function GraphExecutionPanel({
     <div className="flex flex-wrap gap-2">
       <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('summary')}>{t({ ko: '요약', en: 'Summary' })}</Button>
       {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('inputs')}>{t({ ko: '입력', en: 'Inputs' })}</Button> : null}
+      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('compare')}>{t({ ko: '비교', en: 'Compare' })}</Button>
       <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('artifacts')}>{t({ ko: '아티팩트', en: 'Artifacts' })}</Button>
       <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('logs')}>{t({ ko: '로그', en: 'Logs' })}</Button>
     </div>
@@ -536,6 +544,32 @@ export function GraphExecutionPanel({
                 </div>
               </div>
             ) : null}
+
+            <div ref={(node) => { detailSectionRefs.current.compare = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
+              <ExecutionComparisonContextBlock
+                summary={buildExecutionComparisonSummary({
+                  inputEntries: executionInputEntries,
+                  artifacts: executionDetail.artifacts,
+                  finalResults,
+                  logs: executionDetail.logs,
+                  nodeIo: executionDetail.node_io ?? [],
+                })}
+                rows={buildExecutionComparisonRows(
+                  executionDetail.node_io ?? [],
+                  selectedGraph,
+                  nodeLabelOverrides,
+                )}
+              />
+              <ExecutionPathDiagnosticsBlock
+                rows={buildExecutionPathDiagnosticRows({
+                  execution: executionDetail.execution,
+                  logs: executionDetail.logs,
+                  plan: selectedExecutionPlan,
+                  selectedGraph,
+                  nodeLabelOverrides,
+                })}
+              />
+            </div>
 
             <div ref={(node) => { detailSectionRefs.current.artifacts = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, FilePenLine, Settings2, SlidersHorizontal } from 'lucide-react'
+import { Copy, FilePenLine, Search, Settings2, SlidersHorizontal } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -153,6 +153,11 @@ function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope)
   return 'positive'
 }
 
+function getImageModelSearchValue(image: ImageRecord) {
+  const modelName = image.ai_metadata?.model_name
+  return typeof modelName === 'string' ? modelName.trim() : ''
+}
+
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -186,6 +191,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const artistPromptSection = getImageArtistPromptSection(image)
   const autoPromptCopyText = useMemo(() => getImageAutoPromptCopyText(image), [image])
   const generationParamItems = getImageGenerationParamItems(image)
+  const modelSearchValue = getImageModelSearchValue(image)
   const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
   const canTogglePromptGrouping = positivePromptTermItems.length > 0 || negativePromptTermItems.length > 0
   const metaItemClassName = 'rounded-sm border border-border bg-surface-container p-4'
@@ -296,6 +302,11 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     addScopedTextChip('auto', tag, { apply: true })
   }
 
+  const handleAddModelSearchFilter = (modelName: string) => {
+    imageViewModal?.closeImageView()
+    addScopedTextChip('model', modelName, { apply: true })
+  }
+
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -332,10 +343,22 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일 크기', en: 'File size' })}</p>
           <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
         </div>
-        {image.ai_metadata?.model_name ? (
+        {modelSearchValue ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '모델', en: 'Model' })}</p>
-            <p className="mt-2 break-words text-foreground">{image.ai_metadata.model_name}</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '모델', en: 'Model' })}</p>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => handleAddModelSearchFilter(modelSearchValue)}
+                aria-label={t({ ko: '이 모델로 검색', en: 'Search this model' })}
+                title={t({ ko: '이 모델로 검색', en: 'Search this model' })}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="mt-2 break-words text-foreground">{modelSearchValue}</p>
           </div>
         ) : null}
         {generationParamItems.map((item) => (

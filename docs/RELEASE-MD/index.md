@@ -1,15 +1,21 @@
 # 릴리즈 노트
 
-버전별 변경 사항을 모아보는 섹션입니다.
+버전별 변경 사항과 다음 작업 노트를 모아보는 섹션입니다.
 
 ## 빠르게 보기
 
-- [최신 릴리즈 26.05.23](./RELEASE_26.05.23.md)
-- [이전 릴리즈 26.5.17](./RELEASE_26.5.17.md)
-- [전전 릴리즈 26.4.27](./RELEASE_26.4.27.md)
+- [26.6.19 workflow-media-alpha-operations 작업 노트](./RELEASE_26.6.19.md)
+- [26.6.17 feature-refactor-followup 작업 노트](./RELEASE_26.6.17.md)
+- [26.6.8 workflow-media-operations 작업 노트](./RELEASE_26.6.8.md)
+- [최신 안정 릴리즈 26.6.3](./RELEASE_26.6.3.md)
+- [이전 릴리즈 26.05.23](./RELEASE_26.05.23.md)
 
 ## 전체 릴리즈
 
+- [26.6.19 workflow-media-alpha-operations 작업 노트](./RELEASE_26.6.19.md)
+- [26.6.17 feature-refactor-followup 작업 노트](./RELEASE_26.6.17.md)
+- [26.6.8 workflow-media-operations 작업 노트](./RELEASE_26.6.8.md)
+- [26.6.3](./RELEASE_26.6.3.md)
 - [26.05.23](./RELEASE_26.05.23.md)
 - [26.5.17](./RELEASE_26.5.17.md)
 - [26.4.27](./RELEASE_26.4.27.md)

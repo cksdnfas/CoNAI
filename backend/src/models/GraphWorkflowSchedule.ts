@@ -14,6 +14,16 @@ function stringifyInputValues(value: Record<string, unknown> | null | undefined)
   return value === null ? null : JSON.stringify(value)
 }
 
+export type GraphWorkflowScheduleRuntimePolicySummary = {
+  schedule_count: number
+  active_schedule_count: number
+  stop_on_failure_count: number
+  continue_on_failure_count: number
+  paused_for_review_count: number
+  stopped_after_error_count: number
+  overlap_stopped_count: number
+}
+
 export class GraphWorkflowScheduleModel {
   /** List all schedules, newest next-run first. */
   static findAll() {
@@ -32,6 +42,33 @@ export class GraphWorkflowScheduleModel {
       WHERE graph_workflow_id = ?
       ORDER BY COALESCE(next_run_at, created_date) ASC, id ASC
     `).all(workflowId) as GraphWorkflowScheduleRecord[]
+  }
+
+  /** Summarize autorun retry and stop policy state for a workflow runtime health card. */
+  static summarizeRuntimePolicyByWorkflowId(workflowId: number): GraphWorkflowScheduleRuntimePolicySummary {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT
+        COUNT(*) as schedule_count,
+        COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) as active_schedule_count,
+        COALESCE(SUM(CASE WHEN COALESCE(failure_policy, 'stop') = 'stop' THEN 1 ELSE 0 END), 0) as stop_on_failure_count,
+        COALESCE(SUM(CASE WHEN failure_policy = 'continue' THEN 1 ELSE 0 END), 0) as continue_on_failure_count,
+        COALESCE(SUM(CASE WHEN stop_reason_code = 'workflow_changed' THEN 1 ELSE 0 END), 0) as paused_for_review_count,
+        COALESCE(SUM(CASE WHEN status = 'error_stopped' THEN 1 ELSE 0 END), 0) as stopped_after_error_count,
+        COALESCE(SUM(CASE WHEN status = 'overlap_stopped' THEN 1 ELSE 0 END), 0) as overlap_stopped_count
+      FROM graph_workflow_schedules
+      WHERE graph_workflow_id = ?
+    `).get(workflowId) as GraphWorkflowScheduleRuntimePolicySummary | undefined
+
+    return {
+      schedule_count: Number(row?.schedule_count ?? 0),
+      active_schedule_count: Number(row?.active_schedule_count ?? 0),
+      stop_on_failure_count: Number(row?.stop_on_failure_count ?? 0),
+      continue_on_failure_count: Number(row?.continue_on_failure_count ?? 0),
+      paused_for_review_count: Number(row?.paused_for_review_count ?? 0),
+      stopped_after_error_count: Number(row?.stopped_after_error_count ?? 0),
+      overlap_stopped_count: Number(row?.overlap_stopped_count ?? 0),
+    }
   }
 
   /** List schedules that belong to any workflow in one id set. */

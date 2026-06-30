@@ -1,11 +1,15 @@
 import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import {
+  createGraphWorkflow,
   createGraphWorkflowFolder,
   deleteGraphWorkflow,
   deleteGraphWorkflowFolder,
+  exportGraphWorkflow,
+  importGraphWorkflow,
   updateGraphWorkflow,
   updateGraphWorkflowFolder,
+  type GraphWorkflowExportPayload,
   type GraphWorkflowExposedInput,
   type GraphWorkflowFolderDeleteMode,
   type GraphWorkflowFolderRecord,
@@ -25,6 +29,7 @@ export function useModuleGraphBrowseActions({
   folderDeleteTarget,
   workflowView,
   modules,
+  graphWorkflows,
   graphWorkflowFolders,
   setNodes,
   setEdges,
@@ -47,6 +52,7 @@ export function useModuleGraphBrowseActions({
   setFolderDeleteTarget,
   refetchGraphWorkflowFolders,
   refetchGraphWorkflows,
+  refetchModules,
   confirmDiscardUnsavedChanges,
   resetWorkflowDraft,
   enterWorkflowEditor,
@@ -59,6 +65,7 @@ export function useModuleGraphBrowseActions({
   folderDeleteTarget: GraphWorkflowFolderRecord | null
   workflowView: 'browse' | 'edit'
   modules: ModuleDefinitionRecord[]
+  graphWorkflows: GraphWorkflowRecord[]
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
   setNodes: Dispatch<SetStateAction<ModuleGraphNode[]>>
   setEdges: Dispatch<SetStateAction<ModuleGraphEdge[]>>
@@ -81,6 +88,7 @@ export function useModuleGraphBrowseActions({
   setFolderDeleteTarget: Dispatch<SetStateAction<GraphWorkflowFolderRecord | null>>
   refetchGraphWorkflowFolders: () => Promise<unknown>
   refetchGraphWorkflows: () => Promise<unknown>
+  refetchModules: () => Promise<unknown>
   confirmDiscardUnsavedChanges: () => boolean
   resetWorkflowDraft: () => void
   enterWorkflowEditor: (section?: EditorSupportSectionKey) => void
@@ -261,6 +269,95 @@ export function useModuleGraphBrowseActions({
     handleLoadGraph(selectedGraphRecord, { openEditor: true, silent: true })
   }, [handleLoadGraph, selectedGraphRecord, showSnackbar])
 
+  /** Duplicate the selected saved workflow while preserving its folder and graph document. */
+  const handleDuplicateSelectedWorkflow = useCallback(async () => {
+    if (!selectedGraphRecord) {
+      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    const currentNames = new Set(graphWorkflows.map((workflow) => workflow.name))
+    const baseName = `${selectedGraphRecord.name} 복사본`
+    let nextName = baseName
+    let suffix = 2
+    while (currentNames.has(nextName)) {
+      nextName = `${baseName} ${suffix}`
+      suffix += 1
+    }
+
+    try {
+      const result = await createGraphWorkflow({
+        name: nextName,
+        description: selectedGraphRecord.description || undefined,
+        graph: JSON.parse(JSON.stringify(selectedGraphRecord.graph)) as GraphWorkflowRecord['graph'],
+        folder_id: selectedGraphRecord.folder_id ?? null,
+        version: selectedGraphRecord.version,
+        is_active: selectedGraphRecord.is_active,
+      })
+      await refetchGraphWorkflows()
+      setSelectedGraphId(result.id)
+      setSelectedExecutionId(null)
+      setWorkflowView('browse')
+      showSnackbar({ message: '워크플로우를 복제했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 복제에 실패했어.', tone: 'error' })
+    }
+  }, [graphWorkflows, refetchGraphWorkflows, selectedGraphRecord, setSelectedExecutionId, setSelectedGraphId, setWorkflowView, showSnackbar])
+
+  /** Download the selected saved workflow as a portable JSON export. */
+  const handleExportSelectedWorkflow = useCallback(async () => {
+    if (!selectedGraphRecord) {
+      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    try {
+      const exportPayload = await exportGraphWorkflow(selectedGraphRecord.id)
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const safeName = selectedGraphRecord.name
+        .trim()
+        .replace(/[^a-zA-Z0-9가-힣_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        || `workflow-${selectedGraphRecord.id}`
+      link.href = url
+      link.download = `${safeName}.conai-workflow.json`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      showSnackbar({ message: '워크플로우 내보내기 파일을 만들었어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 내보내기에 실패했어.', tone: 'error' })
+    }
+  }, [selectedGraphRecord, showSnackbar])
+
+  /** Import one workflow export file, creating placeholder modules when definitions are missing. */
+  const handleImportWorkflowFile = useCallback(async (file: File) => {
+    try {
+      const text = await file.text()
+      const payload = JSON.parse(text) as GraphWorkflowExportPayload
+      const result = await importGraphWorkflow({
+        payload,
+        folder_id: selectedFolderId,
+      })
+
+      await Promise.all([refetchModules(), refetchGraphWorkflows()])
+      setSelectedGraphId(result.id)
+      setSelectedExecutionId(null)
+      setWorkflowView('browse')
+      showSnackbar({
+        message: result.placeholder_module_count > 0
+          ? `워크플로우를 가져왔어. 없는 모듈 ${result.placeholder_module_count}개는 빈 노드로 만들었어.`
+          : '워크플로우를 가져왔어.',
+        tone: 'info',
+      })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 가져오기에 실패했어.', tone: 'error' })
+    }
+  }, [refetchGraphWorkflows, refetchModules, selectedFolderId, setSelectedExecutionId, setSelectedGraphId, setWorkflowView, showSnackbar])
+
   /** Delete the selected workflow after confirmation and reset browse/editor state. */
   const handleDeleteSelectedWorkflow = useCallback(async () => {
     if (!selectedGraphRecord) {
@@ -335,6 +432,9 @@ export function useModuleGraphBrowseActions({
     handleConfirmDeleteFolder,
     handleAssignSelectedWorkflowFolder,
     handleEditSelectedWorkflow,
+    handleDuplicateSelectedWorkflow,
+    handleExportSelectedWorkflow,
+    handleImportWorkflowFile,
     handleDeleteSelectedWorkflow,
     handleLeaveWorkflowEditor,
     handleRefreshWorkspace,

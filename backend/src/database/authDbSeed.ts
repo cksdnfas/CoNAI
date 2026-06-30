@@ -280,7 +280,6 @@ export function seedAccessControlDefaults(db: Database.Database): void {
   }
 
   grantAllCatalogPermissionsToAdminGroup(db);
-  normalizeAnonymousRuntimePermissions(db);
 }
 
 /** Grant the seeded permission catalog to the built-in admin group. */
@@ -307,54 +306,6 @@ function grantAllCatalogPermissionsToAdminGroup(db: Database.Database): void {
   });
 
   grantTransaction(permissions);
-}
-
-/** Normalize legacy anonymous page grants to runtime-only access. */
-function normalizeAnonymousRuntimePermissions(db: Database.Database): void {
-  const anonymousGroupId = getPermissionGroupIdByKey(db, 'anonymous');
-  if (anonymousGroupId === null) {
-    return;
-  }
-
-  const permissionRows = db.prepare(`
-    SELECT id, permission_key
-    FROM auth_permissions
-    WHERE permission_key IN ('page.home.view', 'page.wallpaper.runtime.view')
-  `).all() as Array<{ id: number; permission_key: string }>;
-  const homePermissionId = permissionRows.find((row) => row.permission_key === 'page.home.view')?.id ?? null;
-  const runtimePermissionId = permissionRows.find((row) => row.permission_key === 'page.wallpaper.runtime.view')?.id ?? null;
-
-  if (homePermissionId === null || runtimePermissionId === null) {
-    return;
-  }
-
-  const assignedPermissionRows = db.prepare(`
-    SELECT permission_id
-    FROM auth_group_permissions
-    WHERE group_id = ? AND permission_id IN (?, ?) AND allowed = 1
-  `).all(anonymousGroupId, homePermissionId, runtimePermissionId) as Array<{ permission_id: number }>;
-  const hasHomePermission = assignedPermissionRows.some((row) => row.permission_id === homePermissionId);
-  const hasRuntimePermission = assignedPermissionRows.some((row) => row.permission_id === runtimePermissionId);
-
-  const normalizeTransaction = db.transaction(() => {
-    db.prepare(`
-      DELETE FROM auth_group_permissions
-      WHERE group_id = ? AND permission_id = ?
-    `).run(anonymousGroupId, homePermissionId);
-
-    if (hasHomePermission && !hasRuntimePermission) {
-      db.prepare(`
-        INSERT INTO auth_group_permissions (
-          group_id, permission_id, allowed, created_at, updated_at
-        ) VALUES (?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT(group_id, permission_id) DO UPDATE SET
-          allowed = 1,
-          updated_at = CURRENT_TIMESTAMP
-      `).run(anonymousGroupId, runtimePermissionId);
-    }
-  });
-
-  normalizeTransaction();
 }
 
 /** Resolve one permission-group id by its stable key. */

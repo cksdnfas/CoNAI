@@ -341,11 +341,13 @@ export function useSecurityTabData() {
 
   const editablePermissionCatalog = useMemo(() => {
     const catalog = pageAccessQuery.data?.permissions ?? []
-    if (activePermissionGroup?.groupKey === 'anonymous') {
-      return catalog.filter((permission) => permission.permissionKey === 'page.wallpaper.runtime.view')
+    const editingCustomGroup = permissionGroupEditorMode === 'create'
+      || (activePermissionGroup !== null && !activePermissionGroup.systemGroup)
+    if (editingCustomGroup) {
+      return catalog.filter((permission) => permission.permissionKey.startsWith('page.'))
     }
     return catalog
-  }, [activePermissionGroup?.groupKey, pageAccessQuery.data?.permissions])
+  }, [activePermissionGroup, pageAccessQuery.data?.permissions, permissionGroupEditorMode])
 
   const addableAccounts = useMemo(() => {
     const memberIds = new Set(activePermissionGroupMembers.map((member) => member.id))

@@ -80,14 +80,16 @@ export function useModuleGraphPageViewModel({
   const selectedGraphRecord = useMemo(() => graphWorkflows.find((graph) => graph.id === selectedGraphId) ?? null, [graphWorkflows, selectedGraphId])
   const selectedFolderRecord = useMemo(() => graphWorkflowFolders.find((folder) => folder.id === selectedFolderId) ?? null, [graphWorkflowFolders, selectedFolderId])
   const moduleDefinitionById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules])
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
 
   const workflowInputCandidates = useMemo(
     () =>
-      nodes.flatMap((node) =>
-        node.data.module.exposed_inputs.map((port) => {
-          const uiField = node.data.module.ui_schema?.find((field) => field.key === port.key)
-          const nodeDisplayLabel = getModuleNodeDisplayLabel(node)
+      nodes.flatMap((node) => {
+        const uiFieldByKey = new Map((node.data.module.ui_schema ?? []).map((field) => [field.key, field]))
+        const nodeDisplayLabel = getModuleNodeDisplayLabel(node)
 
+        return node.data.module.exposed_inputs.map((port) => {
+          const uiField = uiFieldByKey.get(port.key)
           return {
             id: buildWorkflowExposedInputId(node.id, port.key),
             node_id: node.id,
@@ -103,8 +105,8 @@ export function useModuleGraphPageViewModel({
             module_id: node.data.module.id,
             module_name: nodeDisplayLabel,
           }
-        }),
-      ),
+        })
+      }),
     [nodes],
   )
 
@@ -121,6 +123,15 @@ export function useModuleGraphPageViewModel({
       staleTime: 30_000,
     })),
   })
+  const latestExecutionDetailQueryIndex = useMemo(
+    () => latestExecution?.status === 'completed'
+      ? previewExecutionCandidates.findIndex((execution) => execution.id === latestExecution.id)
+      : -1,
+    [latestExecution, previewExecutionCandidates],
+  )
+  const latestExecutionDetailQuery = latestExecutionDetailQueryIndex >= 0
+    ? previewExecutionDetailQueries[latestExecutionDetailQueryIndex]
+    : undefined
 
   const latestArtifactPreviewByNode = useMemo(() => {
     const previewByNode = new Map<string, {
@@ -157,7 +168,7 @@ export function useModuleGraphPageViewModel({
           return
         }
 
-        const currentNode = nodes.find((node) => node.id === nodeId)
+        const currentNode = nodeById.get(nodeId)
         previewByNode.set(nodeId, {
           executionArtifactCount: nodeArtifacts.length,
           latestArtifactLabel: artifactPreview.latestArtifactLabel,
@@ -170,22 +181,29 @@ export function useModuleGraphPageViewModel({
     })
 
     return previewByNode
-  }, [nodes, previewExecutionCandidates, previewExecutionDetailQueries])
+  }, [nodeById, previewExecutionCandidates, previewExecutionDetailQueries])
 
   const latestExecutionDetail = useMemo(() => {
-    const latestPreviewDetail = previewExecutionDetailQueries[0]?.data
+    const latestPreviewDetail = latestExecutionDetailQuery?.data
     if (!latestExecution || !latestPreviewDetail || latestPreviewDetail.execution.id !== latestExecution.id) {
       return null
     }
 
     return latestPreviewDetail
-  }, [latestExecution, previewExecutionDetailQueries])
+  }, [latestExecution, latestExecutionDetailQuery?.data])
+  const latestExecutionDetailIsLoading = latestExecution?.status === 'completed'
+    && latestExecutionDetailQuery?.isPending === true
+  const latestExecutionDetailError = latestExecution?.status === 'completed' && latestExecutionDetailQuery?.isError
+    ? latestExecutionDetailQuery.error instanceof Error
+      ? latestExecutionDetailQuery.error.message
+      : t({ ko: '최종 결과 정보를 불러오지 못했어.', en: 'Could not load final result details.' })
+    : null
 
   const selectedExecution = useMemo(
     () => executionList.find((execution) => execution.id === selectedExecutionId) ?? executionDetail?.execution ?? null,
     [executionDetail?.execution, executionList, selectedExecutionId],
   )
-  const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
+  const selectedNode = useMemo(() => selectedNodeId ? nodeById.get(selectedNodeId) ?? null : null, [nodeById, selectedNodeId])
   const selectedEdge = useMemo(() => edges.find((edge) => edge.id === selectedEdgeId) ?? null, [edges, selectedEdgeId])
 
   const editorValidationIssues = useMemo(
@@ -246,6 +264,8 @@ export function useModuleGraphPageViewModel({
     latestExecution,
     latestArtifactPreviewByNode,
     latestExecutionDetail,
+    latestExecutionDetailIsLoading,
+    latestExecutionDetailError,
     selectedExecution,
     selectedNode,
     selectedEdge,

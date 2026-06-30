@@ -12,6 +12,7 @@ import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput } from '@/lib/api-module-graph'
 import { normalizeModulePortDescription } from '../module-graph-shared'
 import { hasMeaningfulValue } from './module-graph-field-shared'
+import { formatModuleGraphDefaultOptionLabel } from './module-graph-simple-value-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 
@@ -179,7 +180,7 @@ export function WorkflowInputFields({
             value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
             onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value)}
           >
-            <option value="">{t({ ko: '기본값 사용', en: 'Use default value' })}</option>
+            <option value="">{hasDefaultValue(inputDefinition.default_value) ? formatModuleGraphDefaultOptionLabel(t, inputDefinition.default_value) : t({ ko: '선택', en: 'Select' })}</option>
             {inputDefinition.options.map((option) => (
               <option key={option} value={option}>{getWorkflowSelectOptionLabel(option, t({ ko: '랜덤 선택', en: 'Random selection' }))}</option>
             ))}
@@ -254,7 +255,7 @@ export function WorkflowInputFields({
             value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
             onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value === '' ? '' : event.target.value === 'true')}
           >
-            <option value="">{t({ ko: '기본값 사용', en: 'Use default value' })}</option>
+            <option value="">{hasDefaultValue(inputDefinition.default_value) ? formatModuleGraphDefaultOptionLabel(t, inputDefinition.default_value) : t({ ko: '선택', en: 'Select' })}</option>
             <option value="true">true</option>
             <option value="false">false</option>
           </Select>

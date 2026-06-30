@@ -7,6 +7,26 @@ const generationHistoryPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel.tsx'),
   'utf8',
 )
+const generationHistoryPanelHelpersSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel-helpers.ts'),
+  'utf8',
+)
+const generationHistoryRetryActionsSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/generation-history-retry-actions.ts'),
+  'utf8',
+)
+const generationHistoryStatusSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/generation-history-status.ts'),
+  'utf8',
+)
+const generationHistoryRouteHelpersSource = readFileSync(
+  resolve(process.cwd(), '../backend/src/routes/generation-history/historyRouteHelpers.ts'),
+  'utf8',
+)
+const generationHistoryModelSource = readFileSync(
+  resolve(process.cwd(), '../backend/src/models/GenerationHistory.ts'),
+  'utf8',
+)
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -58,19 +78,57 @@ function assertCountNormalization() {
 
 function assertStatusSummarySourcePolicy() {
   match(
-    generationHistoryPanelSource,
+    generationHistoryPanelHelpersSource,
     /function getHistoryRecordStatusSummary\(records: GenerationHistoryResponse\['records'\]\): HistoryRecordStatusSummary \{[\s\S]*?for \(const record of records\)[\s\S]*?summary\.inFlight \+= 1[\s\S]*?summary\.completed \+= 1[\s\S]*?summary\.failed \+= 1[\s\S]*?summary\.cancellation \+= 1/,
     'generation history panel should aggregate status badge counts in one pass',
   )
   match(
     generationHistoryPanelSource,
-    /inFlight: inFlightHistoryCount,[\s\S]*?completed: completedHistoryCount,[\s\S]*?failed: failedHistoryCount,[\s\S]*?cancellation: cancellationHistoryCount,[\s\S]*?\} = useMemo\(\(\) => getHistoryRecordStatusSummary\(historyRecords\), \[historyRecords\]\)/,
+    /inFlight: inFlightHistoryCount,[\s\S]*?completed: completedHistoryCount,[\s\S]*?cleanupFailed: cleanupFailedHistoryCount,[\s\S]*?cancellation: cancellationHistoryCount,[\s\S]*?\} = useMemo\(\(\) => getHistoryRecordStatusSummary\(historyRecords\), \[historyRecords\]\)/,
     'generation history panel should memoize one status summary for badge counts',
+  )
+  match(
+    generationHistoryPanelHelpersSource,
+    /if \(record\.generation_status === 'failed'\) \{[\s\S]*?summary\.cleanupFailed \+= 1/,
+    'generation history cleanup should only enable from raw failed history rows that the cleanup endpoint removes',
+  )
+  match(
+    generationHistoryPanelSource,
+    /disabled=\{isCleaningFailed \|\| cleanupFailedHistoryCount === 0\}/,
+    'clean failed action should not enable from display-only missing/postprocess result states',
   )
   doesNotMatch(
     generationHistoryPanelSource,
     /historyRecords\.filter\(/,
     'generation history badge counts must not rescan the visible history list once per status',
+  )
+}
+
+function assertRefreshPolicySource() {
+  match(
+    generationHistoryPanelHelpersSource,
+    /const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 1_500[\s\S]*?const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000/,
+    'generation history should use separate refresh cadences for active generation and postprocess-only waits',
+  )
+  match(
+    generationHistoryPanelHelpersSource,
+    /function hasActiveGenerationHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?const displayStatus = resolveHistoryDisplayStatus\(record\)[\s\S]*?displayStatus === 'failed' \|\| isHistoryPostprocessPending\(record\)[\s\S]*?return displayStatus === 'pending' \|\| displayStatus === 'processing'/,
+    'generation history fast polling should be driven by effective active display status and skip terminal/postprocess rows',
+  )
+  match(
+    generationHistoryPanelHelpersSource,
+    /function hasPostprocessPendingHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?return records\.some\(isHistoryPostprocessPending\)/,
+    'completed rows waiting only on postprocess visibility should use the slower refresh path',
+  )
+  match(
+    generationHistoryPanelSource,
+    /if \(hasActiveGenerationHistory\(records\)\) \{[\s\S]*?return GENERATION_HISTORY_ACTIVE_REFRESH_MS[\s\S]*?historyRefreshWatchUntil > Date\.now\(\)[\s\S]*?return GENERATION_HISTORY_ACTIVE_REFRESH_MS[\s\S]*?hasPostprocessPendingHistory\(records\) \? GENERATION_HISTORY_POSTPROCESS_REFRESH_MS : false/,
+    'generation history refresh interval should keep submit-watch fast but slow down completed postprocess waits',
+  )
+  doesNotMatch(
+    generationHistoryPanelSource,
+    /hasInFlightHistory/,
+    'generation history should not fast-poll forever from display-only processing status',
   )
 }
 
@@ -80,20 +138,129 @@ function assertImageListCallbackSourcePolicy() {
     /const getHistoryImageHref = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?return `\/images\/\$\{image\.composite_hash\}`[\s\S]*?\}, \[historyRecordMap\]\)/,
     'generation history image links should use a stable callback for the virtualized image list',
   )
-  match(
+  doesNotMatch(
     generationHistoryPanelSource,
-    /const renderHistoryItemOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?const cancellationLabel = getHistoryCancellationBadgeLabel\(record\)[\s\S]*?\}, \[historyRecordMap\]\)/,
-    'generation history item overlay should use a stable callback and cache cancellation labels per render',
+    /renderHistoryItemOverlay|renderHistoryPersistentOverlay/,
+    'generation history cards should not attach status or metadata badge overlays to images',
   )
-  match(
+  doesNotMatch(
     generationHistoryPanelSource,
-    /const renderHistoryPersistentOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?renderSafetyPersistentOverlay\(image\)[\s\S]*?\}, \[historyRecordMap, renderSafetyPersistentOverlay\]\)/,
-    'generation history persistent overlay should keep a stable callback when history records are unchanged',
+    /renderItem(?:Persistent)?Overlay=\{/,
+    'generation history image list should leave image surfaces free of badge overlays',
   )
   doesNotMatch(
     generationHistoryPanelSource,
     /renderItemOverlay=\{\(image\) =>/,
     'generation history image list should not recreate the item overlay callback inline',
+  )
+}
+
+function assertDownloadReadinessSourcePolicy() {
+  match(
+    generationHistoryPanelHelpersSource,
+    /function isHistoryRecordDownloadReady\(record: GenerationHistoryResponse\['records'\]\[number\]\) \{[\s\S]*?resolveHistoryDisplayStatus\(record\) === 'completed'[\s\S]*?Boolean\(record\.actual_composite_hash\)/,
+    'generation history downloads should require a completed display status and resolved main-image metadata',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const downloadableHistoryIds = useMemo\([\s\S]*?\.filter\(isHistoryRecordDownloadReady\)[\s\S]*?\[selectedHistoryRecords\]/,
+    'downloadable history ids should use the shared readiness guard',
+  )
+  doesNotMatch(
+    generationHistoryPanelSource,
+    /Boolean\(record\.actual_composite_hash \|\| record\.composite_hash\)/,
+    'postprocess-pending history rows must not be counted as downloadable from legacy composite_hash alone',
+  )
+  match(
+    generationHistoryStatusSource,
+    /function resolveHistoryImageSource\(record: GenerationHistoryRecord\) \{[\s\S]*?const compositeHash = record\.actual_composite_hash \|\| null/,
+    'history image source URLs should require resolved main-image metadata',
+  )
+  match(
+    generationHistoryStatusSource,
+    /function isHistoryPostprocessPending\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?Boolean\(record\.composite_hash\)[\s\S]*?record\.result_file_status === 'active'[\s\S]*?!record\.actual_composite_hash/,
+    'history postprocess waits should require a completed row with an active result file and no ready main-image metadata',
+  )
+  match(
+    generationHistoryStatusSource,
+    /function isHistoryMissingLinkedResult\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?!record\.actual_composite_hash[\s\S]*?!record\.composite_hash \|\| record\.result_file_status !== 'active'/,
+    'completed history rows without any active ready result file should be classified as missing linked results',
+  )
+  match(
+    generationHistoryModelSource,
+    /CASE WHEN matched_file\.file_status = 'active' THEN im\.composite_hash ELSE NULL END as actual_composite_hash/,
+    'generation history should expose ready media hashes only for active backing files',
+  )
+  match(
+    generationHistoryModelSource,
+    /matched_file\.file_status as result_file_status/,
+    'generation history should return backing file state for display classification',
+  )
+  match(
+    generationHistoryStatusSource,
+    /if \(isHistoryMissingLinkedResult\(record\)\) \{[\s\S]*?return 'failed'[\s\S]*?\}[\s\S]*?return isHistoryPostprocessPending\(record\) \? 'processing' : 'completed'/,
+    'completed history rows without a result hash must not stay stuck as display-only processing',
+  )
+  match(
+    generationHistoryStatusSource,
+    /if \(record && isHistoryMissingLinkedResult\(record\)\) return '결과 없음'[\s\S]*?if \(record && isHistoryPostprocessPending\(record\)\) return '후처리 중'/,
+    'history status labels should distinguish missing results from postprocess waits',
+  )
+  match(
+    generationHistoryRouteHelpersSource,
+    /function getHistoryCompositeHash\(record: \{ actual_composite_hash\?: string \| null \}\) \{[\s\S]*?return record\.actual_composite_hash \|\| null;/,
+    'direct generation-history media routes should require resolved main-image metadata',
+  )
+  doesNotMatch(
+    generationHistoryStatusSource,
+    /record\.actual_composite_hash \|\| record\.composite_hash/,
+    'history image sources must not fall back to legacy hashes before postprocess visibility is ready',
+  )
+}
+
+function assertSelectionRecoverySourcePolicy() {
+  match(
+    generationHistoryPanelHelpersSource,
+    /function collectRetryableHistoryRecords\(records: readonly GenerationHistoryRecord\[\]\) \{[\s\S]*?return records\.filter\(canRetryHistoryQueueJob\)/,
+    'generation history should share retryable record collection between recovery panel and selected actions',
+  )
+  match(
+    generationHistoryPanelHelpersSource,
+    /function getRetryableHistoryQueueJobIds\(records: readonly GenerationHistoryRecord\[\]\) \{[\s\S]*?\.map\(getRetryableHistoryQueueJobId\)[\s\S]*?queueJobId is number/,
+    'generation history should share queue job id extraction for one-off and bulk retry actions',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const selectedRetryableHistoryRecords = useMemo\([\s\S]*?collectRetryableHistoryRecords\(selectedHistoryRecords\)[\s\S]*?\[selectedHistoryRecords\]/,
+    'selected generation history rows should expose retryable records without duplicating retry detection',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const handleRetryHistoryRecords = useCallback\(async \([\s\S]*?retryGenerationHistoryRecords\(\{[\s\S]*?records: retryableRecords,[\s\S]*?queryClient,[\s\S]*?refreshHistory,[\s\S]*?acknowledgeRecoveryRecords\(retryableRecords\)[\s\S]*?\}, \[acknowledgeRecoveryRecords, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar\]\)/,
+    'single, visible-bulk, and selected-bulk retry flows should share one queue mutation path',
+  )
+  match(
+    generationHistoryRetryActionsSource,
+    /function getUniqueRetryableHistoryQueueJobIds\(records: readonly GenerationHistoryRecord\[\]\) \{[\s\S]*?new Set\(getRetryableHistoryQueueJobIds\(records\)\)/,
+    'history retry boundary should dedupe queue job ids before calling the queue retry API',
+  )
+  match(
+    generationHistoryPanelSource,
+    /selectedRetryableHistoryRecords\.length > 0[\s\S]*?handleRetrySelectedHistoryRecords\(\)[\s\S]*?선택 재실행/,
+    'selection action bar should offer a rerun action when selected history rows are retryable',
+  )
+}
+
+function assertNoImageBadgeOverlaySourcePolicy() {
+  doesNotMatch(
+    generationHistoryPanelHelpersSource,
+    /getHistoryMediaReviewBadges|HistoryMediaReviewBadge|formatHistoryMimeLabel/,
+    'generation history should not keep media review badge helpers after removing image overlays',
+  )
+  doesNotMatch(
+    generationHistoryPanelSource,
+    /getHistoryCancellationBadgeLabel|getHistoryStatusLabel|resolveHistoryDisplayStatus/,
+    'generation history panel should not import badge-only image overlay status helpers',
   )
 }
 
@@ -103,6 +270,10 @@ assertFilteredSummary()
 assertTotalNeverFallsBelowLoaded()
 assertCountNormalization()
 assertStatusSummarySourcePolicy()
+assertRefreshPolicySource()
 assertImageListCallbackSourcePolicy()
+assertDownloadReadinessSourcePolicy()
+assertSelectionRecoverySourcePolicy()
+assertNoImageBadgeOverlaySourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

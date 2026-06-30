@@ -197,6 +197,44 @@ function assertWildcardLegacyMigrationDropsStaleScratchTable() {
   }
 }
 
+function assertMigrationStartupLockContracts() {
+  const migrationManagerSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/database/migrationManager.ts'),
+    'utf8',
+  )
+  const sqlitePragmasSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/database/sqlitePragmas.ts'),
+    'utf8',
+  )
+  const homeFeedMigrationSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/database/migrations/019_add_home_feed_cursor_index.ts'),
+    'utf8',
+  )
+
+  assert.match(
+    migrationManagerSource,
+    /BEGIN IMMEDIATE/,
+    'startup migrations should serialize across split API and worker processes',
+  )
+  assert.match(
+    migrationManagerSource,
+    /pendingMigrations\.length === 0[\s\S]*?return;/,
+    'startup should skip the write lock when there are no pending migrations',
+  )
+  assert.match(migrationManagerSource, /COMMIT/, 'startup migration lock should commit after pending migrations finish')
+  assert.match(migrationManagerSource, /ROLLBACK/, 'startup migration lock should roll back on migration failure')
+  assert.match(
+    sqlitePragmasSource,
+    /busy_timeout = 60000/,
+    'SQLite connections should wait long enough for startup migration/index locks',
+  )
+  assert.doesNotMatch(
+    homeFeedMigrationSource,
+    /Index creation warning/,
+    'home feed index migration must fail instead of marking a missing performance index as applied',
+  )
+}
+
 async function assertLegacyApiHistoryCollisionIsRemapped() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-api-history-migration-'))
   process.env.RUNTIME_BASE_PATH = tempRoot
@@ -299,6 +337,61 @@ async function assertLegacyApiHistoryCollisionIsRemapped() {
   }
 }
 
+async function assertNoPendingMigrationsDoNotRequireWriteLock() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-migration-no-pending-lock-'))
+  const migrationsDir = path.join(tempDir, 'migrations')
+  const dbPath = path.join(tempDir, 'main.db')
+  fs.mkdirSync(migrationsDir)
+
+  fs.writeFileSync(
+    path.join(migrationsDir, '001_noop.js'),
+    `exports.up = async () => {}; exports.down = async () => {};`,
+    'utf-8',
+  )
+
+  const setupDb = new Database(dbPath)
+  const lockDb = new Database(dbPath)
+  const startupDb = new Database(dbPath)
+
+  try {
+    setupDb.pragma('journal_mode = WAL')
+    setupDb.exec(`
+      CREATE TABLE migrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        version VARCHAR(255) NOT NULL UNIQUE,
+        applied_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO migrations (version) VALUES ('001_noop');
+    `)
+    setupDb.close()
+
+    lockDb.pragma('busy_timeout = 50')
+    startupDb.pragma('busy_timeout = 50')
+    lockDb.exec('BEGIN IMMEDIATE')
+
+    const manager = new MigrationManager(startupDb)
+    ;(manager as unknown as { migrationsPath: string }).migrationsPath = migrationsDir
+
+    await manager.migrate()
+  } finally {
+    try {
+      lockDb.exec('ROLLBACK')
+    } catch {
+      // The lock may not have been acquired if setup failed.
+    }
+    if (setupDb.open) {
+      setupDb.close()
+    }
+    if (lockDb.open) {
+      lockDb.close()
+    }
+    if (startupDb.open) {
+      startupDb.close()
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
 async function assertMigrationManagerFailsFastAndRollsBack() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-migration-manager-'))
   const migrationsDir = path.join(tempDir, 'migrations')
@@ -352,7 +445,9 @@ async function main() {
   assertModuleDefinitionRebuildPreservesExternalSourceColumns()
   assertWildcardLegacyMigrationDropsStaleScratchTable()
   assertWildcardLegacyMigrationFailsAtomically()
+  assertMigrationStartupLockContracts()
   await assertLegacyApiHistoryCollisionIsRemapped()
+  await assertNoPendingMigrationsDoNotRequireWriteLock()
   await assertMigrationManagerFailsFastAndRollsBack()
 
   console.log('✅ DB migration compatibility contracts verified')

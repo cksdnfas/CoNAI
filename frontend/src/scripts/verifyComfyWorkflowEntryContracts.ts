@@ -10,6 +10,10 @@ const imageGenerationSharedSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/image-generation-shared.tsx'),
   'utf8',
 )
+const comfyGenerationPanelSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/comfy-generation-panel.tsx'),
+  'utf8',
+)
 
 match(
   imageGenerationPageSource,
@@ -55,6 +59,16 @@ match(
   imageGenerationSharedSource,
   /COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX/,
   'ComfyUI workflow field drafts should remain persisted separately from selected workflow navigation state',
+)
+match(
+  comfyGenerationPanelSource,
+  /const navigate = useNavigate\(\)/,
+  'ComfyUI module wrapping should have a direct route into graph workflow authoring after save',
+)
+match(
+  comfyGenerationPanelSource,
+  /navigate\('\/generation\?tab=workflows'\)/,
+  'Saved ComfyUI modules should continue into the workflow graph entry tab',
 )
 
 console.log('Comfy workflow entry contracts verified.')

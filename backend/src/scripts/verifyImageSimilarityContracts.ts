@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import sharp from 'sharp'
@@ -20,6 +20,7 @@ import {
 import {
   buildColorCandidateQuery,
   buildDuplicateCandidateQuery,
+  buildDuplicateGroupMetadataCountQuery,
   buildDuplicateGroupFilesQuery,
   buildDuplicateGroupMetadataQuery,
   buildSimilarCandidateQuery,
@@ -382,6 +383,13 @@ function verifyQueryBuilderContracts() {
     assert.ok(groupMetadata.includes("f.file_status = 'active'"))
     assert.ok(groupMetadata.includes('(m.rating_score IS NULL OR NOT ((m.rating_score >= 80 AND m.rating_score < 100)))'))
 
+    const groupMetadataCount = buildDuplicateGroupMetadataCountQuery()
+    assert.ok(groupMetadataCount.includes('COUNT(DISTINCT m.composite_hash) as count'))
+    assert.ok(groupMetadataCount.includes('INNER JOIN image_files f ON m.composite_hash = f.composite_hash'))
+    assert.ok(groupMetadataCount.includes("f.file_status = 'active'"))
+    assert.ok(groupMetadataCount.includes('m.perceptual_hash IS NOT NULL'))
+    assert.ok(groupMetadataCount.includes('(m.rating_score IS NULL OR NOT ((m.rating_score >= 80 AND m.rating_score < 100)))'))
+
     const groupFiles = buildDuplicateGroupFilesQuery(['hash-a', 'hash-b'])
     assert.ok(groupFiles.query.includes('WHERE if.composite_hash IN (?,?)'))
     assert.ok(groupFiles.query.includes("if.file_status = 'active'"))
@@ -389,6 +397,19 @@ function verifyQueryBuilderContracts() {
   } finally {
     RatingScoreModel.getAllTiers = originalGetAllTiers
   }
+}
+
+function verifyDuplicateGroupScanGuardContracts() {
+  const modelSource = readFileSync(join(process.cwd(), 'src/models/Image/ImageSimilarityModel.ts'), 'utf8')
+  const routeSource = readFileSync(join(process.cwd(), 'src/routes/images/similarity.routes.ts'), 'utf8')
+
+  assert.ok(modelSource.includes('DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT = 5000'))
+  assert.ok(modelSource.includes('DuplicateGroupScanTooLargeError'))
+  assert.ok(modelSource.includes('countDuplicateGroupCandidates()'))
+  assert.ok(modelSource.includes('candidateCount > boundedCandidateLimit'))
+  assert.ok(modelSource.includes('buildDuplicateGroupMetadataQuery()).all()'))
+  assert.ok(routeSource.includes('DuplicateGroupScanTooLargeError'))
+  assert.ok(routeSource.includes('res.status(503)'))
 }
 
 function verifyOptimizedDctContracts() {
@@ -470,6 +491,7 @@ async function main() {
   verifyColorSimilarityContracts()
   verifyResultSortingContracts()
   verifyQueryBuilderContracts()
+  verifyDuplicateGroupScanGuardContracts()
   verifyOptimizedDctContracts()
   await verifyGeneratedHashPipelines()
 
