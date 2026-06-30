@@ -32,19 +32,21 @@ const node: GraphWorkflowNode = {
 
 const moduleDefinition = {
   id: 1,
-  name: '랜덤 텍스트 선택',
+  name: '랜덤 항목 출력',
   engine_type: 'system',
   authoring_source: 'manual',
   category: 'utility',
   template_defaults: {},
   exposed_inputs: [
-    { key: 'options', label: '텍스트 후보', direction: 'input', data_type: 'json', required: false, multiple: false },
+    { key: 'options', label: '항목 후보', direction: 'input', data_type: 'json', required: false, multiple: false },
   ],
   output_ports: [
-    { key: 'text', label: '텍스트', direction: 'output', data_type: 'text', required: true, multiple: false },
+    { key: 'text', label: '값', direction: 'output', data_type: 'any', required: true, multiple: false },
   ],
   internal_fixed_values: { operation_key: 'system.random_text_choice' },
-  ui_schema: [],
+  ui_schema: [
+    { key: 'output_type', label: '출력 타입', data_type: 'select', default_value: 'text', options: ['text', 'number', 'boolean', 'json', 'any'] },
+  ],
   version: 1,
   is_active: true,
   created_date: new Date(0).toISOString(),
@@ -55,6 +57,12 @@ function executeRandomText(inputs: Record<string, unknown>) {
   const context = createExecutionContext()
   executeRandomTextChoiceNode(context, node, moduleDefinition, inputs)
   return context.artifactsByNode.get(node.id)?.text.value
+}
+
+function executeRandomTextArtifact(inputs: Record<string, unknown>) {
+  const context = createExecutionContext()
+  executeRandomTextChoiceNode(context, node, moduleDefinition, inputs)
+  return context.artifactsByNode.get(node.id)?.text
 }
 
 function verifyRandomTextChoiceExecution() {
@@ -116,6 +124,34 @@ function verifyRandomTextChoiceExecution() {
     )
 
     assert.equal(executeRandomText({ options: [] }), '', 'empty candidate list should emit an empty text artifact')
+
+    const numberArtifact = executeRandomTextArtifact({
+      output_type: 'number',
+      options: [
+        { key: 'number_1', value: '3.5' },
+        { key: 'number_2', value: 'not-number' },
+      ],
+    })
+    assert.equal(numberArtifact?.type, 'number', 'number mode should emit a number artifact')
+    assert.equal(numberArtifact?.value, 3.5, 'number mode should coerce valid numeric candidates')
+
+    const booleanArtifact = executeRandomTextArtifact({
+      output_type: 'boolean',
+      options: [
+        { key: 'boolean_1', value: 'false' },
+      ],
+    })
+    assert.equal(booleanArtifact?.type, 'boolean', 'boolean mode should emit a boolean artifact')
+    assert.equal(booleanArtifact?.value, false, 'boolean mode should preserve false as a selectable candidate')
+
+    const jsonArtifact = executeRandomTextArtifact({
+      output_type: 'json',
+      options: [
+        { key: 'json_1', value: '{"ok":true}' },
+      ],
+    })
+    assert.equal(jsonArtifact?.type, 'json', 'json mode should emit a json artifact')
+    assert.deepEqual(jsonArtifact?.value, { ok: true }, 'json mode should parse configured JSON candidate values')
   } finally {
     Math.random = originalRandom
   }
@@ -125,11 +161,11 @@ function verifyDynamicTextInputValidation() {
   const sourceModule: ParsedModuleDefinition = {
     ...moduleDefinition,
     id: 2,
-    name: '텍스트',
+    name: '숫자',
     exposed_inputs: [],
     internal_fixed_values: {},
     output_ports: [
-      { key: 'text', label: '텍스트', direction: 'output', data_type: 'text', required: true, multiple: false },
+      { key: 'number', label: '숫자', direction: 'output', data_type: 'number', required: true, multiple: false },
     ],
   }
 
@@ -140,7 +176,7 @@ function verifyDynamicTextInputValidation() {
         { id: 'random-node', module_id: moduleDefinition.id, position: { x: 100, y: 0 } },
       ],
       edges: [
-        { id: 'edge-text-random', source_node_id: 'source-node', source_port_key: 'text', target_node_id: 'random-node', target_port_key: 'options.text_1' },
+        { id: 'edge-number-random', source_node_id: 'source-node', source_port_key: 'number', target_node_id: 'random-node', target_port_key: 'options.text_1' },
       ],
     },
     new Map([

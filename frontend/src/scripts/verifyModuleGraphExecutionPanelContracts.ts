@@ -214,6 +214,17 @@ function assertExecutionPanelLookupPolicy() {
     'random text choice node should expose a dedicated API-style card layout',
   )
   assert(
+    nodeCardRandomTextChoiceSource.includes("resolvedUiFieldByKey.get('output_type')")
+      && nodeCardRandomTextChoiceSource.includes('data_type: \'any\'')
+      && nodeCardRandomTextChoiceSource.includes('ModuleGraphSimpleValueInput'),
+    'random item output node should expose an output-type selector and accept typed dynamic candidate values',
+  )
+  assert(
+    nodeCardSource.includes('isConditionSelectModule')
+      && nodeCardTextLayoutsSource.includes('export function ConditionSelectNodeLayout'),
+    'condition-select logic node should have a dedicated compact value-join layout',
+  )
+  assert(
     nodeCardTextLayoutsSource.includes('const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey'),
     'specialized node card layouts should reuse the supplied UI-field map with a local fallback',
   )

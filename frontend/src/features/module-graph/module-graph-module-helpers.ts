@@ -103,7 +103,7 @@ export function getModuleBaseDisplayName(module: ModuleDefinitionRecord) {
     return '텍스트 합치기'
   }
   if (operationKey === 'system.random_text_choice') {
-    return '랜덤 텍스트 선택'
+    return '랜덤 항목 출력'
   }
 
   return module.name

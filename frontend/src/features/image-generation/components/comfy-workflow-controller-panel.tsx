@@ -522,20 +522,18 @@ export function ComfyWorkflowControllerPanel({
           </Alert>
         ) : null}
 
-        <Alert variant={readinessIssues.length > 0 ? 'destructive' : 'default'}>
-          <AlertTitle>{readinessIssues.length > 0 ? t({ ko: '실행 준비 필요', en: 'Run readiness needs attention' }) : t({ ko: '실행 준비 완료', en: 'Ready to queue' })}</AlertTitle>
-          <AlertDescription>
-            {readinessIssues.length > 0 ? (
+        {readinessIssues.length > 0 ? (
+          <Alert variant="destructive">
+            <AlertTitle>{t({ ko: '실행 준비 필요', en: 'Run readiness needs attention' })}</AlertTitle>
+            <AlertDescription>
               <ul className="list-disc space-y-1 pl-4">
                 {readinessIssues.map((issue) => (
                   <li key={issue}>{issue}</li>
                 ))}
               </ul>
-            ) : (
-              t({ ko: '필수 입력과 라우팅 상태가 확인됐어. 큐 등록 전 입력값만 마지막으로 보면 돼.', en: 'Required inputs and routing are ready. Review the input values before queueing.' })
-            )}
-          </AlertDescription>
-        </Alert>
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         <section className="space-y-3 px-4">
           {workflowFields.length > 0 ? (

@@ -23,7 +23,7 @@ function resolveInputPort(moduleDefinition: ParsedModuleDefinition, portKey: str
       ...parentPort,
       key: portKey,
       label: dynamicKey,
-      data_type: 'text',
+      data_type: 'any',
       required: false,
       multiple: false,
       default_value: undefined,

@@ -365,10 +365,11 @@ export function WorkflowRunnerPanel({
       : !canExecute
         ? firstBlockingIssue
           ? t({ ko: '{title}부터 정리하면 실행할 수 있어.', en: 'Resolve {title} first, then run.' }, { title: firstBlockingIssue.title })
-          : t({ ko: '치명 검증 이슈를 먼저 정리해야 해.', en: 'Resolve the critical validation issues first.' })
+        : t({ ko: '치명 검증 이슈를 먼저 정리해야 해.', en: 'Resolve the critical validation issues first.' })
         : warningIssueCount > 0
           ? t({ ko: '실행은 가능하지만 경고 {count}개를 먼저 훑어봐.', en: 'The workflow can run, but review {count} warnings first.' }, { count: formatNumber(warningIssueCount) })
-          : t({ ko: '필수 실행 조건이 충족됐어.', en: 'Required run conditions are satisfied.' })
+          : null
+  const shouldShowRunReadinessAlert = isExecuting || !canExecute || warningIssueCount > 0
 
   return (
     <Card>
@@ -523,16 +524,18 @@ export function WorkflowRunnerPanel({
               onInputImageChange={onInputImageChange}
             />
 
-            <Alert variant={!canExecute ? 'destructive' : 'default'}>
-              <AlertTitle className="flex flex-wrap items-center gap-1.5">
-                <span>{canExecute ? t({ ko: '실행 준비', en: 'Run readiness' }) : t({ ko: '실행 전 조치 필요', en: 'Action needed before running' })}</span>
-                {blockingIssueCount > 0 ? <Badge variant="outline">{t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(blockingIssueCount) })}</Badge> : null}
-                {warningIssueCount > 0 ? <Badge variant="outline">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningIssueCount) })}</Badge> : null}
-              </AlertTitle>
-              <AlertDescription className="pt-2 text-sm text-muted-foreground">
-                {runReadinessMessage}
-              </AlertDescription>
-            </Alert>
+            {shouldShowRunReadinessAlert ? (
+              <Alert variant={!canExecute ? 'destructive' : 'default'}>
+                <AlertTitle className="flex flex-wrap items-center gap-1.5">
+                  <span>{canExecute ? t({ ko: '실행 확인', en: 'Run check' }) : t({ ko: '실행 전 조치 필요', en: 'Action needed before running' })}</span>
+                  {blockingIssueCount > 0 ? <Badge variant="outline">{t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(blockingIssueCount) })}</Badge> : null}
+                  {warningIssueCount > 0 ? <Badge variant="outline">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningIssueCount) })}</Badge> : null}
+                </AlertTitle>
+                <AlertDescription className="pt-2 text-sm text-muted-foreground">
+                  {runReadinessMessage}
+                </AlertDescription>
+              </Alert>
+            ) : null}
 
             <div className="flex flex-wrap gap-2 pt-1">
               <Button type="button" onClick={onExecute} disabled={isExecuting || !canExecute}>

@@ -147,5 +147,10 @@ match(
   /routingCanGenerate && missingRequiredFields\.length === 0 && queueRegistrationCountValid/,
   'Comfy workflow controller should gate queueing on routing, required fields, and queue count',
 )
+doesNotMatch(
+  comfyWorkflowControllerPanelSource,
+  /실행 준비 완료|Ready to queue|필수 입력과 라우팅 상태가 확인/,
+  'Comfy workflow controller must not show repeated success readiness copy',
+)
 
 console.log('Comfy workflow authoring contracts verified.')

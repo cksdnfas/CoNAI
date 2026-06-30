@@ -53,6 +53,7 @@
     "verify:db-migration-contracts": "cd backend && npm run verify:db-migration-contracts",
     "verify:builtin-system-modules": "cd backend && npm run verify:builtin-system-modules",
     "verify:system-api-node-contracts": "cd backend && npm run verify:system-api-node-contracts",
+    "verify:system-logic-node-contracts": "cd backend && npm run verify:system-logic-node-contracts",
     "verify:system-random-text-node-contracts": "cd backend && npm run verify:system-random-text-node-contracts",
     "verify:queue-routing-smoke": "cd backend && npm run verify:queue-routing-smoke",
     "verify:queue-wakeup-smoke": "cd backend && npm run verify:queue-wakeup-smoke",

@@ -291,13 +291,13 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
     color: '#4db6ac',
   },
   {
-    name: '랜덤 텍스트 선택',
-    description: '연결된 텍스트 후보 중 하나를 무작위로 골라 하나의 텍스트로 내보내.',
+    name: '랜덤 항목 출력',
+    description: '연결되거나 직접 입력한 후보 중 하나를 무작위로 골라 선택한 타입으로 내보내.',
     category: 'utility',
     exposedInputs: [
       {
         key: 'options',
-        label: '텍스트 후보',
+        label: '항목 후보',
         direction: 'input',
         data_type: 'json',
         required: false,
@@ -306,15 +306,15 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
           { key: 'text_1', value: '' },
           { key: 'text_2', value: '' },
         ],
-        description: '노드 카드에서 후보 행을 추가하고 각 행에 텍스트 노드를 연결해.',
+        description: '노드 카드에서 후보 행을 추가하고 각 행에 값을 직접 입력하거나 노드를 연결해.',
       },
     ],
     outputPorts: [
       {
         key: 'text',
-        label: '텍스트',
+        label: '값',
         direction: 'output',
-        data_type: 'text',
+        data_type: 'any',
         required: true,
         multiple: false,
       },
@@ -322,8 +322,21 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
     internalFixedValues: { operation_key: 'system.random_text_choice' },
     uiSchema: [
       {
+        key: 'output_type',
+        label: '출력 타입',
+        data_type: 'select',
+        default_value: 'text',
+        options: [
+          { value: 'text', label: '텍스트' },
+          { value: 'number', label: '숫자' },
+          { value: 'boolean', label: '불리언' },
+          { value: 'json', label: 'JSON' },
+          { value: 'any', label: '원본 값' },
+        ],
+      },
+      {
         key: 'options',
-        label: '텍스트 후보',
+        label: '항목 후보',
         data_type: 'json',
         default_value: [
           { key: 'text_1', value: '' },
@@ -333,6 +346,7 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
       },
     ],
     color: '#4db6ac',
+    legacyNames: ['랜덤 텍스트 선택'],
   },
   {
     name: '와일드카드 적용',
@@ -1831,7 +1845,7 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
   },
   {
     name: '조건 선택',
-    description: '조건에 따라 참 값 또는 거짓 값 중 하나를 다음 노드로 넘겨줘.',
+    description: '비교나 조건 결과에 따라 참 값 또는 거짓 값 중 하나만 다음 노드로 넘겨줘.',
     category: 'logic',
     exposedInputs: [
       { key: 'condition', label: '조건', direction: 'input', data_type: 'boolean', required: true, multiple: false },

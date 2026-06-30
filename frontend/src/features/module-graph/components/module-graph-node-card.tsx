@@ -16,6 +16,7 @@ import type { ComfyUIServer } from '@/lib/api-image-generation-types'
 import { WORKFLOW_INPUT_ENABLED_KEY, isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
 import {
   ApiRequestNodeLayout,
+  ConditionSelectNodeLayout,
   IfBranchNodeLayout,
   InlineWorkflowInputEditor,
   NodeArtifactOutputs,
@@ -271,6 +272,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const isTextMergeModule = operationKey === 'system.merge_text'
   const isRandomTextChoiceModule = operationKey === 'system.random_text_choice'
   const isTextTransformModule = operationKey === 'system.regex_text_transform'
+  const isConditionSelectModule = operationKey === 'system.logic_condition_select'
   const isIfBranchModule = operationKey === 'system.logic_if_branch'
   const isApiRequestModule = operationKey === 'system.api_request' || (module.engine_type === 'system' && module.name === 'API 요청')
   const isSystemCallLlmModule = operationKey === 'system.call_llm'
@@ -403,10 +405,10 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const portRowCount = Math.max(visibleInputPorts.length, visibleOutputPorts.length, 1)
   const renderedInputPorts = isWorkflowInputSource
     ? []
-    : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? inputPorts : visibleInputPorts)
+    : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isConditionSelectModule || isIfBranchModule || isApiRequestModule ? inputPorts : visibleInputPorts)
   const renderedOutputPorts = isWorkflowInputSource
     ? sourceOutputPorts
-    : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? outputPorts : visibleOutputPorts)
+    : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isConditionSelectModule || isIfBranchModule || isApiRequestModule ? outputPorts : visibleOutputPorts)
   const renderedHandleSignature = [
     ...renderedInputPorts.map((port) => `in:${port.key}`),
     ...(isApiRequestModule ? getApiRequestDynamicInputPortKeys(data).map((portKey) => `in:${portKey}`) : []),
@@ -744,6 +746,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             accentColor={accentColor}
             connectedInputKeys={connectedInputKeys}
             connectedOutputKeys={connectedOutputKeys}
+            uiFieldByKey={uiFieldByKey}
           />
         ) : isTextTransformModule ? (
           <TextTransformNodeLayout
@@ -753,6 +756,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             connectedInputKeys={connectedInputKeys}
             connectedOutputKeys={connectedOutputKeys}
             uiFieldByKey={uiFieldByKey}
+          />
+        ) : isConditionSelectModule ? (
+          <ConditionSelectNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
           />
         ) : isIfBranchModule ? (
           <IfBranchNodeLayout

@@ -61,7 +61,7 @@ function WorkflowValidationQuickPopup({
         <div>
           <div className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">{t({ ko: '편집기 검증', en: 'Editor validation' })}</div>
           <div className="mt-1 text-sm font-medium text-foreground">
-            {errorCount > 0 ? t({ ko: '막히는 치명 이슈가 있어.', en: 'There is a blocking critical issue.' }) : warningCount > 0 ? t({ ko: '저장 전 확인할 경고가 있어.', en: 'There are warnings to review before saving.' }) : t({ ko: '지금 상태 좋아. 저장 진행해도 돼.', en: 'Everything looks good. You can save now.' })}
+            {errorCount > 0 ? t({ ko: '막히는 치명 이슈가 있어.', en: 'There is a blocking critical issue.' }) : t({ ko: '저장 전 확인할 경고가 있어.', en: 'There are warnings to review before saving.' })}
           </div>
         </div>
         <Button type="button" size="icon-xs" variant="ghost" onClick={onClose} aria-label={t({ ko: '검증 팝업 닫기', en: 'Close validation popup' })} title={t({ ko: '닫기', en: 'Close' })}>
@@ -74,35 +74,29 @@ function WorkflowValidationQuickPopup({
         {warningCount > 0 ? <Badge variant="outline">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningCount) })}</Badge> : null}
       </div>
 
-      {issues.length === 0 ? (
-        <div className="mt-3 rounded-sm border border-border bg-surface-low px-3 py-2 text-sm text-muted-foreground">
-          {t({ ko: '막히는 이슈는 없어. 저장 전에 이름이랑 폴더만 확인하면 돼.', en: 'There are no blocking issues. Just confirm the name and folder before saving.' })}
-        </div>
-      ) : (
-        <div className="mt-3 space-y-2">
-          {issues.map((issue) => (
-            <button
-              key={issue.id}
-              type="button"
-              onClick={() => {
-                onIssueSelect(issue)
-                onClose()
-              }}
-              className={cn(
-                'w-full rounded-sm border px-3 py-2 text-left transition hover:border-primary/50 hover:bg-surface-high',
-                issue.severity === 'error' ? 'border-rose-500/40 bg-rose-500/10' : 'border-amber-500/40 bg-amber-500/10',
-              )}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="text-sm font-medium text-foreground">{issue.title}</div>
-                <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.severity === 'error' ? t({ ko: '치명', en: 'Critical' }) : t({ ko: '경고', en: 'Warning' })}</Badge>
-                <Badge variant="secondary">{issue.nodeLabel}</Badge>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">{issue.detail}</div>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="mt-3 space-y-2">
+        {issues.map((issue) => (
+          <button
+            key={issue.id}
+            type="button"
+            onClick={() => {
+              onIssueSelect(issue)
+              onClose()
+            }}
+            className={cn(
+              'w-full rounded-sm border px-3 py-2 text-left transition hover:border-primary/50 hover:bg-surface-high',
+              issue.severity === 'error' ? 'border-rose-500/40 bg-rose-500/10' : 'border-amber-500/40 bg-amber-500/10',
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-sm font-medium text-foreground">{issue.title}</div>
+              <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.severity === 'error' ? t({ ko: '치명', en: 'Critical' }) : t({ ko: '경고', en: 'Warning' })}</Badge>
+              <Badge variant="secondary">{issue.nodeLabel}</Badge>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{issue.detail}</div>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -223,14 +217,18 @@ export function ModuleWorkflowEditorView({
                         validationStatus.tone === 'warning' ? 'border-amber-500/30 text-amber-200 hover:bg-amber-500/10 hover:text-amber-100' : undefined,
                         validationStatus.tone === 'error' ? 'border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100' : undefined,
                       )}
-                      onClick={() => setIsValidationPopupOpen((open) => !open)}
+                      onClick={() => {
+                        if (validationIssues.length > 0) {
+                          setIsValidationPopupOpen((open) => !open)
+                        }
+                      }}
                       aria-label={validationStatus.title}
                       title={validationStatus.title}
                     >
                       {validationStatus.tone === 'ready' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                     </Button>
 
-                    <AnchoredPopup open={isValidationPopupOpen} anchorRef={validationPopupRef} onClose={() => setIsValidationPopupOpen(false)} align="end" side="bottom" closeOnBack>
+                    <AnchoredPopup open={isValidationPopupOpen && validationIssues.length > 0} anchorRef={validationPopupRef} onClose={() => setIsValidationPopupOpen(false)} align="end" side="bottom" closeOnBack>
                       <WorkflowValidationQuickPopup
                         issues={validationIssues}
                         onIssueSelect={onValidationIssueSelect}

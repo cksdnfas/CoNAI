@@ -527,11 +527,11 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
       ...parentPort,
       key: portKey,
       label: dynamicKey,
-      data_type: 'text',
+      data_type: 'any',
       required: false,
       multiple: false,
       default_value: undefined,
-      description: '랜덤 선택 후보 텍스트야.',
+      description: '랜덤 선택 후보 값이야.',
     }
   }
 

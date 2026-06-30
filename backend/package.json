@@ -30,6 +30,7 @@
     "verify:video-optimization": "tsx src/scripts/verifyVideoOptimizationContracts.ts",
     "verify:builtin-system-modules": "tsx src/scripts/verifyBuiltinSystemModuleDefinitions.ts",
     "verify:system-api-node-contracts": "tsx src/scripts/verifySystemApiNodeContracts.ts",
+    "verify:system-logic-node-contracts": "tsx src/scripts/verifySystemLogicNodeContracts.ts",
     "verify:system-random-text-node-contracts": "tsx src/scripts/verifySystemRandomTextNodeContracts.ts",
     "verify:wildcard-chain-parsing": "tsx src/scripts/verifyWildcardChainParsing.ts",
     "verify:danbooru-prompt-group-contracts": "tsx src/scripts/verifyDanbooruPromptGroupContracts.ts",

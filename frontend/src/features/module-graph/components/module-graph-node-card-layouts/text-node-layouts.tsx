@@ -223,6 +223,63 @@ export function TextTransformNodeLayout({
   )
 }
 
+/** Render the condition-select node as one compact conditional value join. */
+export function ConditionSelectNodeLayout({
+  id,
+  data,
+  accentColor,
+  connectedInputKeys,
+  connectedOutputKeys,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  accentColor: string
+  connectedInputKeys: Set<string>
+  connectedOutputKeys: Set<string>
+}) {
+  const inputPorts = data.module.exposed_inputs ?? []
+  const outputPort = data.module.output_ports[0]
+
+  return (
+    <div className="mt-2 grid gap-1">
+      {inputPorts.map((inputPort, index) => {
+        const inputPortState = getInputPortState(data, inputPort, connectedInputKeys)
+        const shouldShowOutput = index === 0
+        const outputConnected = Boolean(shouldShowOutput && outputPort && connectedOutputKeys.has(outputPort.key))
+
+        return (
+          <div key={inputPort.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+            <InputPortCell
+              nodeId={id}
+              data={data}
+              port={inputPort}
+              uiField={null}
+              accentColor={accentColor}
+              connected={inputPortState.connected}
+              satisfied={inputPortState.satisfied}
+              requiredMissing={inputPortState.requiredMissing}
+            />
+            {shouldShowOutput ? (
+              <PortCell
+                nodeId={id}
+                port={outputPort}
+                side="output"
+                accentColor={accentColor}
+                connected={outputConnected}
+                satisfied={outputConnected}
+                requiredMissing={false}
+                outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
+              />
+            ) : (
+              <div aria-hidden="true" />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Render the IF branch node with node-level condition controls instead of hiding them in module config. */
 export function IfBranchNodeLayout({
   id,
