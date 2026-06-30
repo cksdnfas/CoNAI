@@ -4,6 +4,12 @@ import { normalizeOptionalString } from '../utils/valueNormalization'
 import type { ProviderType } from '../types/externalApi'
 
 type LlmResponseMode = 'text' | 'json'
+type LlmJsonParseStrategy = 'none' | 'strict' | 'markdown_fence' | 'embedded_json'
+
+export type LlmDebugEvent = {
+  eventType: 'provider_response' | 'json_parse_failed'
+  details: Record<string, unknown>
+}
 
 export type ExecuteLlmTextRequest = {
   providerName: string
@@ -16,6 +22,7 @@ export type ExecuteLlmTextRequest = {
   maxTokens?: number | null
   responseMode?: LlmResponseMode | null
   structuredOutputJson?: string | null
+  onDebugEvent?: (event: LlmDebugEvent) => void
 }
 
 export type ExecuteLlmTextResponse = {
@@ -27,6 +34,8 @@ export type ExecuteLlmTextResponse = {
   responseMode: LlmResponseMode
   metadata: Record<string, unknown>
 }
+
+const MAX_DEBUG_TEXT_LENGTH = 20_000
 
 function normalizeOptionalNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -41,6 +50,22 @@ function normalizeOptionalNumber(value: unknown) {
   }
 
   return null
+}
+
+function truncateDebugText(value: string) {
+  if (value.length <= MAX_DEBUG_TEXT_LENGTH) {
+    return value
+  }
+
+  return `${value.slice(0, MAX_DEBUG_TEXT_LENGTH)}\n...[truncated ${value.length - MAX_DEBUG_TEXT_LENGTH} chars]`
+}
+
+function stringifyDebugValue(value: unknown) {
+  try {
+    return truncateDebugText(JSON.stringify(value, null, 2))
+  } catch {
+    return '[unserializable]'
+  }
 }
 
 function parseProviderDefaultModel(additionalConfig: Record<string, any> | null | undefined) {
@@ -367,16 +392,106 @@ async function executeOllamaRequest(params: {
   }
 }
 
-function parseRequestedJson(text: string, responseMode: LlmResponseMode) {
-  if (responseMode !== 'json') {
+function tryParseJsonText(text: string) {
+  try {
+    return { ok: true as const, value: JSON.parse(text) }
+  } catch {
+    return { ok: false as const }
+  }
+}
+
+function extractMarkdownJsonFence(text: string) {
+  const trimmed = text.trim()
+  const match = trimmed.match(/^```(?:json|JSON)?\s*([\s\S]*?)\s*```$/)
+  return match?.[1]?.trim() ?? null
+}
+
+function extractBalancedJsonAt(text: string, startIndex: number) {
+  const openingChar = text[startIndex]
+  if (openingChar !== '{' && openingChar !== '[') {
     return null
   }
 
-  try {
-    return JSON.parse(text)
-  } catch (error) {
-    throw new Error('LLM 응답이 JSON 형식이 아니야')
+  const closingChar = openingChar === '{' ? '}' : ']'
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+      continue
+    }
+
+    if (char === openingChar) {
+      depth += 1
+    } else if (char === closingChar) {
+      depth -= 1
+      if (depth === 0) {
+        return text.slice(startIndex, index + 1)
+      }
+    }
   }
+
+  return null
+}
+
+function extractFirstParseableJson(text: string) {
+  for (let index = 0; index < text.length; index += 1) {
+    const candidate = extractBalancedJsonAt(text, index)
+    if (!candidate) {
+      continue
+    }
+
+    const parsed = tryParseJsonText(candidate)
+    if (parsed.ok) {
+      return parsed.value
+    }
+  }
+
+  return undefined
+}
+
+export function parseRequestedJson(text: string, responseMode: LlmResponseMode): {
+  value: unknown | null
+  strategy: LlmJsonParseStrategy
+} {
+  if (responseMode !== 'json') {
+    return { value: null, strategy: 'none' }
+  }
+
+  const strictParse = tryParseJsonText(text)
+  if (strictParse.ok) {
+    return { value: strictParse.value, strategy: 'strict' }
+  }
+
+  const fencedText = extractMarkdownJsonFence(text)
+  if (fencedText) {
+    const fencedParse = tryParseJsonText(fencedText)
+    if (fencedParse.ok) {
+      return { value: fencedParse.value, strategy: 'markdown_fence' }
+    }
+  }
+
+  const embeddedJson = extractFirstParseableJson(text)
+  if (embeddedJson !== undefined) {
+    return { value: embeddedJson, strategy: 'embedded_json' }
+  }
+
+  throw new Error('LLM 응답이 JSON 형식이 아니야')
 }
 
 export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Promise<ExecuteLlmTextResponse> {
@@ -450,7 +565,38 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
     throw new Error(`이 연결은 LLM 실행용 타입이 아니야: ${provider.display_name}`)
   }
 
-  const jsonValue = parseRequestedJson(result.text, responseMode)
+  request.onDebugEvent?.({
+    eventType: 'provider_response',
+    details: {
+      providerName: provider.provider_name,
+      providerType: provider.provider_type,
+      model: result.model,
+      responseMode,
+      textLength: result.text.length,
+      text: truncateDebugText(result.text),
+      rawResponse: stringifyDebugValue(result.raw),
+    },
+  })
+
+  let parsedJson: ReturnType<typeof parseRequestedJson>
+  try {
+    parsedJson = parseRequestedJson(result.text, responseMode)
+  } catch (error) {
+    request.onDebugEvent?.({
+      eventType: 'json_parse_failed',
+      details: {
+        providerName: provider.provider_name,
+        providerType: provider.provider_type,
+        model: result.model,
+        responseMode,
+        textLength: result.text.length,
+        text: truncateDebugText(result.text),
+        rawResponse: stringifyDebugValue(result.raw),
+      },
+    })
+    throw error
+  }
+
   const metadata = {
     provider_name: provider.provider_name,
     provider_display_name: provider.display_name,
@@ -458,7 +604,8 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
     base_url: baseUrl,
     model: result.model,
     response_mode: responseMode,
-    has_json: jsonValue !== null,
+    has_json: parsedJson.value !== null,
+    json_parse_strategy: parsedJson.strategy,
     structured_output_json: structuredOutputJson,
     has_image: Boolean(imageDataUrl),
     image_payload_format: result.imagePayloadFormat,
@@ -467,7 +614,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
 
   return {
     text: result.text,
-    json: jsonValue,
+    json: parsedJson.value,
     providerName: provider.provider_name,
     providerType: provider.provider_type,
     model: result.model,

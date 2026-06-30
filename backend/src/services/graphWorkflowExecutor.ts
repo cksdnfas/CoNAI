@@ -111,6 +111,24 @@ type GraphExecutionPlan = {
   reusedNodeIds?: string[]
 }
 
+type NoRunnableNodesDiagnostic = {
+  pendingNodeIds: string[]
+  completedNodeIds: string[]
+  runningNodeIds: string[]
+  readyNodeIds: string[]
+  blockedDependencies: Array<{
+    nodeId: string
+    waitingFor: string[]
+  }>
+}
+
+class GraphExecutionNoRunnableNodesError extends Error {
+  constructor(public readonly diagnostic: NoRunnableNodesDiagnostic) {
+    super('Graph execution could not make progress because no runnable nodes were available')
+    this.name = 'GraphExecutionNoRunnableNodesError'
+  }
+}
+
 const VOLATILE_SYSTEM_OPERATION_KEYS = new Set([
   'system.random_text_choice',
   'system.apply_wildcards',
@@ -209,7 +227,20 @@ async function runReadyGraphNodes(params: {
         continue
       }
 
-      throw new Error('Graph execution could not make progress because no runnable nodes were available')
+      const pendingNodeIdList = Array.from(pendingNodeIds)
+      throw new GraphExecutionNoRunnableNodesError({
+        pendingNodeIds: pendingNodeIdList,
+        completedNodeIds: Array.from(completedNodeIds),
+        runningNodeIds: Array.from(runningNodes.keys()),
+        readyNodeIds,
+        blockedDependencies: pendingNodeIdList.map((nodeId) => {
+          const dependencies = params.dependenciesByNode.get(nodeId) ?? new Set<string>()
+          return {
+            nodeId,
+            waitingFor: Array.from(dependencies).filter((dependencyNodeId) => !completedNodeIds.has(dependencyNodeId)),
+          }
+        }),
+      })
     }
 
     await Promise.race(runningNodes.values())
@@ -704,6 +735,10 @@ export class GraphWorkflowExecutor {
         level: 'error',
         eventType: 'execution_failed',
         message: errorMessage,
+        details: error instanceof GraphExecutionNoRunnableNodesError
+          ? { noRunnableNodes: error.diagnostic }
+          : undefined,
+        always: error instanceof GraphExecutionNoRunnableNodesError,
       })
       GraphExecutionModel.updateStatus(executionId, 'failed', errorMessage, failedNodeId)
       throw error
