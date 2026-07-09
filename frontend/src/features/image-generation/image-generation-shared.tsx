@@ -232,8 +232,6 @@ export const DEFAULT_COMFYUI_SERVER_FORM: ComfyUIServerFormDraft = {
   isDefault: false,
 }
 
-export * from './image-generation-drafts'
-
 export * from './generation-history-status'
 
 export function FormField({

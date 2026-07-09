@@ -14,12 +14,12 @@ import {
   updateNaiVibeAsset,
 } from '@/lib/api-image-generation-nai'
 import {
-  buildSelectedImageDraftFromUrl,
   getErrorMessage,
   parseNumberInput,
   type NAIFormDraft,
   type SelectedImageDraft,
 } from '../image-generation-shared'
+import { buildSelectedImageDraftFromUrl } from '../image-generation-drafts'
 import { deriveNaiAssetLabel } from './nai-generation-panel-helpers'
 
 function isUnauthorizedAssetRequestError(error: unknown) {

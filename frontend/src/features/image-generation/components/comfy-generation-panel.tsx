@@ -24,9 +24,11 @@ import { cn } from '@/lib/utils'
 import {
   buildWorkflowDraft,
   clearPersistedComfyWorkflowDraft,
-  getErrorMessage,
   loadPersistedComfyWorkflowDraft,
   persistComfyWorkflowDraft,
+} from '../image-generation-drafts'
+import {
+  getErrorMessage,
   type ModuleFieldOption,
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,

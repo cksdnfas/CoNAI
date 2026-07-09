@@ -5,8 +5,10 @@ import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import {
   buildWorkflowPromptData,
-  getErrorMessage,
   hasWorkflowFieldValue,
+} from '../image-generation-drafts'
+import {
+  getErrorMessage,
   parseNumberInput,
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'

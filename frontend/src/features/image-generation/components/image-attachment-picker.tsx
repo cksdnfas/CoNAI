@@ -31,6 +31,8 @@ import type { ImageSaveSettings } from '@/types/settings'
 import {
   buildSelectedImageDraftFromDataUrl,
   readFileAsDataUrl,
+} from '../image-generation-drafts'
+import {
   type SelectedImageDraft,
 } from '../image-generation-shared'
 

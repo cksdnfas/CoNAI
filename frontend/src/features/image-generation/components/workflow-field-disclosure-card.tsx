@@ -3,7 +3,8 @@ import { ChevronDown, ChevronRight, CircleQuestionMark } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
-import { hasWorkflowFieldValue, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
+import { hasWorkflowFieldValue } from '../image-generation-drafts'
+import type { SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { WorkflowFieldInput } from './workflow-field-input'
 
 function formatWorkflowFieldTypeLabel(field: WorkflowMarkedField) {

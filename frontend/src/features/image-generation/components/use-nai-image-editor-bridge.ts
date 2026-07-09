@@ -2,7 +2,8 @@ import { useState, type Dispatch, type SetStateAction } from 'react'
 import { useI18n } from '@/i18n'
 import { DEFAULT_IMAGE_SAVE_SETTINGS, buildImageSaveOutput, buildImageSaveOutputFileName, loadImageSaveSourceInfo, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@/types/settings'
-import { buildSelectedImageDraftFromDataUrl, type NAIFormDraft } from '../image-generation-shared'
+import { buildSelectedImageDraftFromDataUrl } from '../image-generation-drafts'
+import type { NAIFormDraft } from '../image-generation-shared'
 import { buildNaiEditedImageFileName } from './nai-generation-panel-helpers'
 
 /** Bridge the NAI form with the shared image editor and save-options modal flow. */

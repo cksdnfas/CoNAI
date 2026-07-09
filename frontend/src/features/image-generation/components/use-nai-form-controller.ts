@@ -7,12 +7,10 @@ import {
   EMPTY_NAI_CHARACTER_PROMPT,
   EMPTY_NAI_CHARACTER_REFERENCE,
   EMPTY_NAI_VIBE,
-  loadPersistedNaiFormDraft,
   NAI_SAMPLE_COUNT_MAX,
   NAI_SAMPLE_COUNT_MIN,
   NAI_RESOLUTION_PRESETS,
   normalizeNaiCharacterPromptDrafts,
-  persistNaiFormDraft,
   resolveNaiResolutionPreset,
   shouldUseNaiCharacterPositions,
   supportsNaiCharacterPrompts,
@@ -21,6 +19,7 @@ import {
   type NAIFormDraft,
   type SelectedImageDraft,
 } from '../image-generation-shared'
+import { loadPersistedNaiFormDraft, persistNaiFormDraft } from '../image-generation-drafts'
 
 /** Own the editable NAI form state and all local form-manipulation handlers for the panel. */
 export function useNaiFormController({
