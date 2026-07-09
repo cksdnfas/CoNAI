@@ -128,7 +128,7 @@ const MODULE_NAME_OVERRIDES: Record<string, string> = {
   'Random Image From Library': '라이브러리 랜덤 이미지',
 }
 
-export function humanizeModuleDefinitionKey(key: string): string {
+function humanizeModuleDefinitionKey(key: string): string {
   return key
     .split(/[_\-.]/g)
     .filter(Boolean)

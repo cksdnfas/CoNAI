@@ -7,7 +7,7 @@ import { getActiveFileOrBlock, type ImageDownloadType } from '../images/query-fi
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers';
 import { parsePositiveInteger } from '../routeValidation';
 
-export function parseOptionalPositiveIntegerQuery(value: unknown): number | undefined {
+function parseOptionalPositiveIntegerQuery(value: unknown): number | undefined {
   const parsed = parsePositiveInteger(value);
   if (parsed !== null) {
     return parsed;

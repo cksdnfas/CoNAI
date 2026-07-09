@@ -11,7 +11,7 @@ export type WorkflowPromptFieldLike = {
   options?: unknown[]
 }
 
-export const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
+const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
 
 const COMFY_MODEL_PATH_INPUT_KEYS = new Set([
   'ckpt_name',

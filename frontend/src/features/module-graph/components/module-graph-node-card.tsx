@@ -799,6 +799,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         moduleName={module.name}
         isFinalResult={isFinalResult}
         visibleOutputPortKeys={visibleOutputPortKeys}
-      />    </div>
+      />
+    </div>
   )
 }

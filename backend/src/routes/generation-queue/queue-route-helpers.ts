@@ -3,7 +3,7 @@ import { AuthAccount } from '../../models/AuthAccount'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../../services/generationQueueRouting'
 import { AuthAccessControlService } from '../../services/authAccessControlService'
-import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
+import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 
@@ -136,21 +136,4 @@ export function buildQueueRequesterUsernameMap(records: Array<Pick<GenerationQue
   }
 
   return usernameByAccountId
-}
-
-export function filterQueueRecords(records: GenerationQueueJobListRecord[], filters: {
-  serviceType?: GenerationQueueJobRecord['service_type']
-  workflowId?: number
-}) {
-  return records.filter((record) => {
-    if (filters.serviceType && record.service_type !== filters.serviceType) {
-      return false
-    }
-
-    if (filters.workflowId !== undefined && record.workflow_id !== filters.workflowId) {
-      return false
-    }
-
-    return true
-  })
 }

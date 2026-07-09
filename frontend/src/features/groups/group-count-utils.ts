@@ -43,7 +43,7 @@ export function buildGroupCountMaps(groups: GroupWithHierarchy[]): GroupCountMap
 }
 
 /** Format a tree count as direct(total), or just (total) when the direct count is zero. */
-export function formatHierarchyCountLabel(params: {
+function formatHierarchyCountLabel(params: {
   directCount: number
   totalWithDescendants: number
   hasChildren: boolean

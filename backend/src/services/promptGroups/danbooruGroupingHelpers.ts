@@ -75,11 +75,11 @@ export function danbooruRootNamePlaceholders(): string {
   return DANBOORU_GROUP_ROOT_NAMES.map(() => '?').join(',');
 }
 
-export function normalizeDanbooruGroupTitle(value: string): string {
+function normalizeDanbooruGroupTitle(value: string): string {
   return value.trim().replace(/\s+/g, ' ') || 'Untitled';
 }
 
-export function resolveTaxonomyParentKeyFromNodeKey(nodeKey: string, nodeKeySet: Set<string>): string | null {
+function resolveTaxonomyParentKeyFromNodeKey(nodeKey: string, nodeKeySet: Set<string>): string | null {
   const parts = nodeKey.split('__');
 
   for (let length = parts.length - 1; length > 0; length -= 1) {

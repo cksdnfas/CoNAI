@@ -38,7 +38,7 @@ function getSearchChipScoreRange(chip: Pick<SearchChip, 'minScore' | 'maxScore'>
 }
 
 /** Build a stable UI label for a search chip. */
-export function buildSearchChipLabel(_scope: SearchScope, value: string) {
+function buildSearchChipLabel(_scope: SearchScope, value: string) {
   const trimmedValue = value.trim()
   if (!trimmedValue) {
     return ''

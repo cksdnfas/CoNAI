@@ -4,7 +4,7 @@ export function getSortedEntries(scores: Record<string, number> | undefined) {
 
 const RATING_PROMPT_TAGS = new Set(['general', 'safe', 'sensitive', 'questionable', 'explicit'])
 
-export function isRatingPromptTag(tag: string) {
+function isRatingPromptTag(tag: string) {
   return RATING_PROMPT_TAGS.has(tag.trim().toLowerCase())
 }
 

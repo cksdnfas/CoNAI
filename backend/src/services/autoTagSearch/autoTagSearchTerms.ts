@@ -38,7 +38,7 @@ export function normalizeAutoTagSearchTerm(term: string, exactMatch = false): st
 }
 
 /** Collapse separator variants into one key for compact indexed equality lookups. */
-export function compactAutoTagSearchKey(term: string): string {
+function compactAutoTagSearchKey(term: string): string {
   return term.trim().toLowerCase().replace(/[_\s-]+/g, '');
 }
 
