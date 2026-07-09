@@ -230,6 +230,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     placeholderData: cachedInitialImage,
     staleTime: 0,
   })
+  const refetchImage = imageQuery.refetch
 
   const image = imageQuery.data
   const mediaKind = image ? getImageListMediaKind(image) : null
@@ -449,8 +450,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   }, [duplicateImageItemByHash])
 
   const refreshImage = useCallback(() => {
-    void imageQuery.refetch()
-  }, [imageQuery.refetch])
+    void refetchImage()
+  }, [refetchImage])
 
   const headerControls = useMemo<ImageDetailViewHeaderControls>(() => ({
     downloadName,

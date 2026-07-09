@@ -145,7 +145,7 @@ export function useModuleGraphEditorInteractions({
     if (compatibility === 'string-bridge') {
       showSnackbar({ message: 'text ↔ prompt 연결은 허용돼. 이런 브리지 연결은 점선으로 표시해둘게.', tone: 'info' })
     }
-  }, [isValidConnection, nodes, setEdges, showSnackbar])
+  }, [isValidConnection, nodeById, setEdges, showSnackbar])
 
   /** Add one new module node to the graph canvas, optionally pre-connecting it from one dragged port. */
   const handleAddModuleNode = useCallback((

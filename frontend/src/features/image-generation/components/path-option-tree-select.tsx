@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, File, Folder, RotateCcw, Search } from 'lucide-react'
 import { HierarchyNav, type HierarchyNavItemState } from '@/components/common/hierarchy-nav'
@@ -228,17 +228,17 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
   const selectedLabel = selectedNode?.label ?? (value ? getOptionDisplayLabel(value) : placeholder)
   const refreshing = isRefreshing || isLocalRefreshing
 
-  const clearModelPreviewDelay = () => {
+  const clearModelPreviewDelay = useCallback(() => {
     if (previewTimerRef.current !== null && typeof window !== 'undefined') {
       window.clearTimeout(previewTimerRef.current)
       previewTimerRef.current = null
     }
-  }
+  }, [])
 
-  const clearModelPreview = () => {
+  const clearModelPreview = useCallback(() => {
     clearModelPreviewDelay()
     setModelPreview(null)
-  }
+  }, [clearModelPreviewDelay])
 
   const handleModelPreviewCandidate = (node: PathOptionTreeNode, target: HTMLElement) => {
     if (!modelPreviewFolder || node.kind !== 'option' || !node.value || node.value === PATH_RANDOM_OPTION_VALUE) {
@@ -279,9 +279,9 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
       setSearchQuery('')
       clearModelPreview()
     }
-  }, [isOpen])
+  }, [clearModelPreview, isOpen])
 
-  useEffect(() => () => clearModelPreviewDelay(), [])
+  useEffect(() => () => clearModelPreviewDelay(), [clearModelPreviewDelay])
 
   useEffect(() => {
     if (!isOpen) {

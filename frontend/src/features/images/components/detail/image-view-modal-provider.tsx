@@ -186,7 +186,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   })
 
 
-  const activeIndex = useMemo(() => getModalActiveIndex(modalState), [modalState.compositeHash, modalState.compositeHashIndexByHash])
+  const activeIndex = useMemo(() => getModalActiveIndex(modalState), [modalState])
 
   const canViewPrevious = activeIndex > 0
   const canViewNext = activeIndex >= 0 && activeIndex < modalState.compositeHashes.length - 1
