@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { RatingScoreService } from '../../services/ratingScoreService';
 import { RatingData, RatingTierInput, RatingWeightsUpdate } from '../../types/rating';
 import { parseRouteIntegerParam, sendRouteBadRequest } from '../routeValidation';

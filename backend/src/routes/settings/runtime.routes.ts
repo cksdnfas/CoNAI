@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { MaintenanceService } from '../../services/maintenanceService';
 import { AutoScanScheduler } from '../../services/autoScanScheduler';
 import { autoTagScheduler } from '../../services/autoTagScheduler';

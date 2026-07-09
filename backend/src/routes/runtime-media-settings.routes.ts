@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { settingsService } from '../services/settingsService';
 import { RatingScoreService } from '../services/ratingScoreService';
 

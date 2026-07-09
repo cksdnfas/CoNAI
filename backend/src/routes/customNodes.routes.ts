@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { Router, type Request, type Response } from 'express';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { ModuleDefinitionModel } from '../models/ModuleDefinition';
 import { CustomNodeRegistryService } from '../services/customNodeRegistryService';
 import { runCustomJsModuleOnce } from '../services/graph-workflow-executor/execute-custom-js';

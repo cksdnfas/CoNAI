@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import fs from 'fs';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageStatsModel } from '../../models/Image/ImageStatsModel';
 import { ImageTaggingModel } from '../../models/Image/ImageTaggingModel';

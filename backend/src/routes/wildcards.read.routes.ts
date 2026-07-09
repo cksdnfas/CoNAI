@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { WildcardModel } from '../models/Wildcard';
 import { requirePermission } from '../middleware/authMiddleware';

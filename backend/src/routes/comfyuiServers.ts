@@ -6,7 +6,7 @@ import { ParallelGenerationService } from '../services/comfyui/parallelGeneratio
 import { buildUnprobedModalRuntimeStatus } from '../services/comfyui/runtimeStatus';
 import { getComfyUIServerRuntimeStatuses } from '../services/comfyui/runtimeStatusService';
 import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData, type ComfyUIBackendType } from '../types/comfyuiServer';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { sendRouteBadRequest } from './routeValidation';
 
 const router = Router();

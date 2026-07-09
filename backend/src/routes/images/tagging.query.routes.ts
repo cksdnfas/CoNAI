@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { imageTaggerService } from '../../services/imageTaggerService';
 import { runtimePaths } from '../../config/runtimePaths';
 import { AutoTagSearchService } from '../../services/autoTagSearchService';

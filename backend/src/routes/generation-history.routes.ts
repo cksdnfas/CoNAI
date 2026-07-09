@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import multer from 'multer';
 import { GenerationHistoryService } from '../services/generationHistoryService';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
 import {
   applyHistoryAccessScope,

@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import AdmZip from 'adm-zip';
 import fs from 'fs';
 import path from 'path';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
 import { CustomDropdownListModel, type CustomDropdownListWithParsedItems } from '../models/CustomDropdownList';

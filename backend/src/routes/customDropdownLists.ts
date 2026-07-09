@@ -4,7 +4,7 @@ import { CustomDropdownListModel } from '../models/CustomDropdownList';
 import { collectAndReplaceComfyModelDropdownListsFromDefaultServer } from '../services/comfyDropdownAutoCollectionService';
 import { resolveComfyModelThumbnail } from '../services/comfyModelThumbnailService';
 import { streamCacheableFile } from './images/query-file-response-helpers';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = Router();
 

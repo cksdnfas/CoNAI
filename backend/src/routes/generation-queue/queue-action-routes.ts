@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from 'express'
-import { asyncHandler } from '../../middleware/errorHandler'
+import { asyncHandler } from '../../middleware/asyncHandler'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer'
 import { WorkflowModel } from '../../models/Workflow'

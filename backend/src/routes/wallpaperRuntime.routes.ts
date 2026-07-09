@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { settingsService } from '../services/settingsService';
 import { buildGraphWorkflowBrowseContent } from '../services/graphWorkflowViewService';
 import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder';

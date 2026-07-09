@@ -1,7 +1,7 @@
 import type { Router, Request, Response } from 'express';
 import { successResponse, errorResponse } from '@conai/shared';
 import { uploadSingle } from '../../middleware/upload';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { imageTaggerService } from '../../services/imageTaggerService';
 import { kaloscopeTaggerService } from '../../services/kaloscopeTaggerService';

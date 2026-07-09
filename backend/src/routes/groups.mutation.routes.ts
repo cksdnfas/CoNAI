@@ -5,7 +5,7 @@ import { AutoCollectionService } from '../services/autoCollectionService';
 import { GroupRematchJobService } from '../services/groupRematchJobService';
 import { ComplexFilterService } from '../services/complexFilterService';
 import { GroupCreateData, GroupUpdateData, ComplexFilter, AutoCollectCondition, errorResponse, successResponse, validateId } from '@conai/shared';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
 
 const router = Router();

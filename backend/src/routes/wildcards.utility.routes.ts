@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { WildcardCreateData, WildcardModel } from '../models/Wildcard';
 import { WildcardService } from '../services/wildcardService';

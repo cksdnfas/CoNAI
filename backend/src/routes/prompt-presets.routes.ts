@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { requirePermission } from '../middleware/authMiddleware';
 import { PromptPresetModel, type PromptPresetCreateData, type PromptPresetItemInput, type PromptPresetUpdateData } from '../models/PromptPreset';
 

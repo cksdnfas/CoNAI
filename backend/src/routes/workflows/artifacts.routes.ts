@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { routeParam } from '../routeParam'
 import { WorkflowModel } from '../../models/Workflow'
-import { asyncHandler } from '../../middleware/errorHandler'
+import { asyncHandler } from '../../middleware/asyncHandler'
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../../services/workflowArtifactService'
 import { WorkflowResponse } from '../../types/workflow'
 

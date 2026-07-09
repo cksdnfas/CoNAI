@@ -8,7 +8,7 @@ import { validateId,
 successResponse,
 errorResponse,
 PAGINATION } from '@conai/shared';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { enrichCompactImageWithFileView } from './images/utils';
 import fs from 'fs';
 

@@ -10,7 +10,7 @@ import {
 } from '../../services/graphWorkflowViewService'
 import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
 import { getGraphWorkflowOutputRetentionState } from '../../services/graphWorkflowOutputRetentionService'
-import { asyncHandler } from '../../middleware/errorHandler'
+import { asyncHandler } from '../../middleware/asyncHandler'
 import { sendRouteBadRequest } from '../routeValidation'
 import type {
   GraphWorkflowCreateData,

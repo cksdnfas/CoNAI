@@ -1,7 +1,7 @@
 import path from 'path';
 import { Router, Request, Response } from 'express';
 import { uploadSingle, uploadMultiple } from '../../middleware/upload';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { VideoProcessor } from '../../services/videoProcessor';
 import { BackgroundProcessorService } from '../../services/backgroundProcessorService';

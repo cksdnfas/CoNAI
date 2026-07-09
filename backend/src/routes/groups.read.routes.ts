@@ -5,7 +5,7 @@ import { GroupModel, ImageGroupModel } from '../models/Group';
 import { db } from '../database/init';
 import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { PAGINATION, errorResponse, successResponse, validateId } from '@conai/shared';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { enrichCompactImageWithFileView, enrichImageRecord, enrichImageWithFileView } from './images/utils';
 import { parsePositiveIntegerQuery } from './routeValidation';
 

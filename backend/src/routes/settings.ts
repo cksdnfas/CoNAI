@@ -6,7 +6,7 @@ import {
   validateNumberInRangeIfDefined,
   validateStringEnumIfDefined,
 } from './routeValidation';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { settingsService } from '../services/settingsService';
 import { imageTaggerService } from '../services/imageTaggerService';
 import { autoTagScheduler } from '../services/autoTagScheduler';

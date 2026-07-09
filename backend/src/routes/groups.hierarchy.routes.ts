@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { GroupModel } from '../models/Group';
 import { GroupMoveRequest, errorResponse, successResponse, validateId } from '@conai/shared';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
 
 const router = Router();

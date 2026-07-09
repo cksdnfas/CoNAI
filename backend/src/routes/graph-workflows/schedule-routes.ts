@@ -6,7 +6,7 @@ import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
 import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
 import { GraphWorkflowScheduleService } from '../../services/graphWorkflowScheduleService'
 import { decorateGraphWorkflowScheduleRecords } from '../../services/graphWorkflowViewService'
-import { asyncHandler } from '../../middleware/errorHandler'
+import { asyncHandler } from '../../middleware/asyncHandler'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
 import {

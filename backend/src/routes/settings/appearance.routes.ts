@@ -3,7 +3,7 @@ import path from 'path'
 import multer from 'multer'
 import { Router, Request, Response } from 'express'
 import { sendRouteBadRequest } from '../routeValidation'
-import { asyncHandler } from '../../middleware/errorHandler'
+import { asyncHandler } from '../../middleware/asyncHandler'
 import { runtimePaths, publicUrls } from '../../config/runtimePaths'
 import { settingsService } from '../../services/settingsService'
 import type {

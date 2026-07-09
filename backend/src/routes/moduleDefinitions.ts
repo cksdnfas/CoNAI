@@ -9,7 +9,7 @@ import {
   ModuleDefinitionUpdateData,
   ModuleDefinitionRecord,
 } from '../types/moduleGraph'
-import { asyncHandler } from '../middleware/errorHandler'
+import { asyncHandler } from '../middleware/asyncHandler'
 import { localizeDisplayLabel, localizeModuleName } from '../services/moduleDefinitions/labels'
 import {
   buildUiSchemaFromMarkedFields,

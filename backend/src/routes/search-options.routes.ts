@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 
 const router = Router();

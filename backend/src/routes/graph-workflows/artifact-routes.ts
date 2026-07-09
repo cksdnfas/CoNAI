@@ -4,7 +4,7 @@ import {
   deleteGraphExecutionArtifacts,
   deleteGraphWorkflowArtifactsInScope,
 } from '../../services/graphWorkflowOutputManagementService'
-import { asyncHandler } from '../../middleware/errorHandler'
+import { asyncHandler } from '../../middleware/asyncHandler'
 import { requireAdmin } from '../../middleware/authMiddleware'
 import { sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'

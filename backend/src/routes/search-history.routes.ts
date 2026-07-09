@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import type { SearchHistoryChip } from '../services/searchHistoryService';
 import { SearchHistoryService } from '../services/searchHistoryService';
 import { routeParam } from './routeParam';

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
 import { BackgroundQueueService } from '../services/backgroundQueue';
 import { autoTagScheduler } from '../services/autoTagScheduler';

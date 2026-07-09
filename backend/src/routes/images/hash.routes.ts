@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { successResponse, errorResponse } from '@conai/shared';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import fs from 'fs/promises';

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
-import { asyncHandler } from '../../middleware/errorHandler'
+import { asyncHandler } from '../../middleware/asyncHandler'
 import { sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
 import { findGraphWorkflowFolderOrRespond, parseRequiredGraphRouteId } from './route-helpers'

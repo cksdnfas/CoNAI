@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { requireAdmin } from '../../middleware/authMiddleware';
 import { ImageMetadataEditError, ImageMetadataEditService } from '../../services/imageMetadataEditService';
 import { ImageManagementService } from '../../services/imageManagementService';

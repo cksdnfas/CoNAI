@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import { WorkflowServerModel } from '../../models/ComfyUIServer';
 import { WorkflowResponse } from '../../types/workflow';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 
 const router = Router();
 

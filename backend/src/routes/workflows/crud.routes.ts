@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import { WorkflowModel } from '../../models/Workflow';
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData } from '../../types/workflow';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 
 const router = Router();
 

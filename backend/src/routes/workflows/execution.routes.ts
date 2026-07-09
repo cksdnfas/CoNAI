@@ -5,7 +5,7 @@ import { createComfyUIService } from '../../services/comfyuiService';
 import { prepareComfyPromptData } from '../../services/prepareComfyPromptData';
 import { executeComfyGeneration } from '../../services/comfyGenerationExecutor';
 import { WorkflowResponse, GenerationStatusResponse } from '../../types/workflow';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { runtimePaths, publicUrls } from '../../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';

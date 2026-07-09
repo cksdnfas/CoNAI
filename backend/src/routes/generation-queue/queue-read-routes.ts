@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from 'express'
-import { asyncHandler } from '../../middleware/errorHandler'
+import { asyncHandler } from '../../middleware/asyncHandler'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { getCodexAvailabilityStatus } from '../../services/codexGenerationExecutor'
 import { readComfyRequestDebugSnapshot } from '../../services/generationRequestDebugService'

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { successResponse } from '@conai/shared';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { settingsService } from '../services/settingsService';
 
 const router = Router();
