@@ -1,4 +1,5 @@
-import { buildApiUrl, fetchJson } from '@/lib/api-client'
+import { fetchJson } from '@/lib/api-client'
+import { requestJson } from '@/lib/api-request'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import type { ApiResponse } from '@/types/image'
 import type {
@@ -400,17 +401,12 @@ export async function uploadAppearanceFont(file: File, target: 'sans' | 'mono') 
   formData.append('font', file)
   formData.append('target', target)
 
-  const response = await fetch(buildApiUrl('/api/settings/appearance/font-upload'), {
+  const payload = await requestJson<ApiResponse<AppearanceFontUploadResult>>('/api/settings/appearance/font-upload', {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-    },
     body: formData,
   })
 
-  const payload = (await response.json()) as ApiResponse<AppearanceFontUploadResult>
-  if (!response.ok || !payload.success) {
+  if (!payload.success) {
     throw createApiFallbackError(payload.error, 'settings.appearanceFont.upload')
   }
 

@@ -1,6 +1,7 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { getDownloadFileName } from '@/lib/download-utils'
+import { requestJson } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
@@ -391,11 +392,9 @@ export interface UploadTransferProgress {
   percent: number | null
 }
 
-async function readApiPayload<T>(response: Response) {
-  const payload = (await response.json()) as ApiResponse<T>
-
-  if (!response.ok || !payload.success) {
-    throw new Error(payload.error || `Request failed: ${response.status}`)
+function unwrapApiPayload<T>(payload: ApiResponse<T>) {
+  if (!payload.success) {
+    throw new Error(payload.error || 'Request failed')
   }
 
   return payload.data
@@ -482,16 +481,12 @@ async function uploadImagePreviewFile<T>(endpoint: string, file: File) {
   const formData = new FormData()
   formData.append('image', file)
 
-  const response = await fetch(buildApiUrl(endpoint), {
+  const payload = await requestJson<ApiResponse<T>>(endpoint, {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-    },
     body: formData,
   })
 
-  return readApiPayload<T>(response)
+  return unwrapApiPayload(payload)
 }
 
 export async function extractImageMetadataPreview(file: File) {
@@ -633,15 +628,13 @@ export async function downloadExistingImageWithRewrittenMetadata(
 
 /** Persist one metadata patch onto an existing library image and return the updated image record. */
 export async function saveImageMetadata(compositeHash: string, metadataPatch: MetadataPatchPayload) {
-  const response = await fetch(buildApiUrl(`/api/images/${compositeHash}/metadata`), {
+  const payload = await requestJson<ApiResponse<ImageRecord>>(`/api/images/${compositeHash}/metadata`, {
     method: 'PATCH',
-    credentials: 'include',
     headers: {
-      Accept: 'application/json',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ metadataPatch }),
   })
 
-  return readApiPayload<ImageRecord>(response)
+  return unwrapApiPayload(payload)
 }
