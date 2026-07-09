@@ -5,10 +5,10 @@ import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { createComfyUIService } from './comfyuiService'
 import { getComfyUIServerRuntimeStatuses } from './comfyui/runtimeStatusService'
 import { createGenerationQueueRoutingContext, getGenerationQueueEligibleServerIds, getGenerationQueueServerCapacity } from './generationQueueRouting'
-import { settingsService } from './settingsService'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
+import { QueueServiceThrottle, type ThrottledServiceType } from './generation-queue/queueServiceThrottle'
 import { QueueTerminalJobWaiters } from './generation-queue/queueTerminalWaiters'
 import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
@@ -34,14 +34,6 @@ const COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT = 240
 const NAI_WORKER_KEY = 'novelai'
 const CODEX_WORKER_KEY = 'codex'
 
-type ThrottledServiceType = 'novelai' | 'codex'
-type ServiceThrottleState = {
-  windowStartedAt: number | null
-  startedInWindow: number
-  scheduledOffsetsMs: number[]
-  scheduleKey: string | null
-}
-
 export class GenerationQueueService {
   private static started = false
   private static dispatcherHandle: ReturnType<typeof setInterval> | null = null
@@ -50,10 +42,7 @@ export class GenerationQueueService {
   private static dispatchTickPending = false
   private static activeWorkerKeys = new Set<string>()
   private static terminalJobWaiters = new QueueTerminalJobWaiters()
-  private static serviceThrottleState: Record<ThrottledServiceType, ServiceThrottleState> = {
-    novelai: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
-    codex: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
-  }
+  private static serviceThrottle = new QueueServiceThrottle()
 
   /** Start queue recovery hooks and dispatcher once per process. */
   static start() {
@@ -90,10 +79,7 @@ export class GenerationQueueService {
     }
     this.activeWorkerKeys.clear()
     this.terminalJobWaiters.resolve(null)
-    this.serviceThrottleState = {
-      novelai: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
-      codex: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
-    }
+    this.serviceThrottle.reset()
     return true
   }
 
@@ -545,38 +531,9 @@ export class GenerationQueueService {
     await this.tryStartComfyWorkers()
   }
 
-  private static getServiceThrottleConfig(serviceType: ThrottledServiceType) {
-    const generationThrottle = settingsService.loadSettings().generationThrottle
-    return serviceType === 'novelai' ? generationThrottle.novelai : generationThrottle.codex
-  }
-
   /** Forecast the next service-level throttle start slots without mutating dispatcher state. */
   static getThrottledServiceStartDelaySeconds(serviceType: ThrottledServiceType, count: number, now = Date.now()) {
-    const safeCount = Math.max(0, Math.floor(count))
-    if (safeCount === 0) {
-      return []
-    }
-
-    const state = this.serviceThrottleState[serviceType]
-    const durationMs = this.getServiceScheduleDurationMs(serviceType)
-    const scheduleKey = this.getServiceScheduleKey(serviceType)
-    const windowExpired = state.windowStartedAt !== null && now >= state.windowStartedAt + durationMs
-    const windowStartedAt = state.windowStartedAt === null || state.scheduleKey !== scheduleKey || windowExpired
-      ? now
-      : state.windowStartedAt
-    const scheduledOffsetsMs = state.windowStartedAt === null || state.scheduleKey !== scheduleKey || windowExpired
-      ? this.buildServiceScheduleOffsetsMs(serviceType)
-      : state.scheduledOffsetsMs
-    const offsets = scheduledOffsetsMs.length > 0 ? scheduledOffsetsMs : [0]
-    const startedInWindow = windowStartedAt === now ? 0 : Math.max(0, state.startedInWindow)
-
-    return Array.from({ length: safeCount }, (_value, index) => {
-      const absoluteStartIndex = startedInWindow + index
-      const windowOffset = Math.floor(absoluteStartIndex / offsets.length)
-      const offsetIndex = absoluteStartIndex % offsets.length
-      const startAtMs = windowStartedAt + windowOffset * durationMs + (offsets[offsetIndex] ?? 0)
-      return Math.max(0, Math.ceil((startAtMs - now) / 1000))
-    })
+    return this.serviceThrottle.getStartDelaySeconds(serviceType, count, now)
   }
 
   private static getActiveWorkerCountForPrefix(workerKeyPrefix: string) {
@@ -589,104 +546,13 @@ export class GenerationQueueService {
     return count
   }
 
-  private static getServiceScheduleDurationMs(serviceType: ThrottledServiceType) {
-    const throttle = this.getServiceThrottleConfig(serviceType)
-    return Math.max(60_000, Math.round(throttle.scheduleWindowMinutes * 60_000))
-  }
-
-  private static getServiceScheduleKey(serviceType: ThrottledServiceType) {
-    const throttle = this.getServiceThrottleConfig(serviceType)
-    return [
-      Math.max(60_000, Math.round(throttle.scheduleWindowMinutes * 60_000)),
-      Math.max(1, Math.floor(throttle.scheduleJobCount)),
-      throttle.scheduleMode,
-      Math.max(0, Math.round(throttle.minStartIntervalSeconds * 1000)),
-    ].join(':')
-  }
-
-  private static buildEvenScheduleOffsetsMs(durationMs: number, jobCount: number) {
-    const intervalMs = durationMs / jobCount
-    return Array.from({ length: jobCount }, (_value, index) => Math.floor(index * intervalMs))
-  }
-
-  private static buildRandomScheduleOffsetsMs(durationMs: number, jobCount: number, minStartIntervalMs: number) {
-    if (jobCount <= 1) {
-      return [0]
-    }
-
-    const effectiveMinStartIntervalMs = Math.min(
-      Math.max(0, minStartIntervalMs),
-      Math.floor(durationMs / Math.max(jobCount - 1, 1)),
-    )
-    const remainingMs = Math.max(0, durationMs - effectiveMinStartIntervalMs * (jobCount - 1))
-    const weights = Array.from({ length: jobCount }, () => -Math.log(Math.max(Number.EPSILON, Math.random())))
-    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1
-    const offsets = [0]
-    let elapsedMs = 0
-
-    for (let index = 0; index < jobCount - 1; index += 1) {
-      const jitterMs = remainingMs * ((weights[index] ?? 0) / totalWeight)
-      elapsedMs += effectiveMinStartIntervalMs + jitterMs
-      offsets.push(Math.min(durationMs, Math.round(elapsedMs)))
-    }
-
-    return offsets
-  }
-
-  private static buildServiceScheduleOffsetsMs(serviceType: ThrottledServiceType) {
-    const throttle = this.getServiceThrottleConfig(serviceType)
-    const durationMs = this.getServiceScheduleDurationMs(serviceType)
-    const jobCount = Math.max(1, Math.floor(throttle.scheduleJobCount))
-    const minStartIntervalMs = Math.max(0, Math.round(throttle.minStartIntervalSeconds * 1000))
-
-    if (throttle.scheduleMode === 'random') {
-      return this.buildRandomScheduleOffsetsMs(durationMs, jobCount, minStartIntervalMs)
-    }
-
-    return this.buildEvenScheduleOffsetsMs(durationMs, jobCount)
-  }
-
-  private static resetServiceScheduleWindow(serviceType: ThrottledServiceType, now: number) {
-    const state = this.serviceThrottleState[serviceType]
-    state.windowStartedAt = now
-    state.startedInWindow = 0
-    state.scheduleKey = this.getServiceScheduleKey(serviceType)
-    state.scheduledOffsetsMs = this.buildServiceScheduleOffsetsMs(serviceType)
-  }
-
-  private static isServiceStartDue(serviceType: ThrottledServiceType) {
-    const now = Date.now()
-    const state = this.serviceThrottleState[serviceType]
-    const durationMs = this.getServiceScheduleDurationMs(serviceType)
-    const scheduleKey = this.getServiceScheduleKey(serviceType)
-
-    if (state.scheduleKey !== scheduleKey || state.windowStartedAt === null) {
-      this.resetServiceScheduleWindow(serviceType, now)
-    } else if (now >= state.windowStartedAt + durationMs) {
-      this.resetServiceScheduleWindow(serviceType, now)
-    }
-
-    if (state.startedInWindow >= state.scheduledOffsetsMs.length) {
-      return false
-    }
-
-    const nextOffsetMs = state.scheduledOffsetsMs[state.startedInWindow] ?? durationMs
-    return now >= (state.windowStartedAt ?? now) + nextOffsetMs
-  }
-
-  private static noteServiceStart(serviceType: ThrottledServiceType) {
-    const state = this.serviceThrottleState[serviceType]
-    state.startedInWindow += 1
-  }
-
   private static tryStartThrottledServiceWorkers(serviceType: ThrottledServiceType, workerKeyPrefix: string, label: string) {
-    const throttle = this.getServiceThrottleConfig(serviceType)
-    const maxConcurrentJobs = Math.max(1, throttle.maxConcurrentJobs)
+    const maxConcurrentJobs = this.serviceThrottle.getMaxConcurrentJobs(serviceType)
     const activeWorkers = this.getActiveWorkerCountForPrefix(workerKeyPrefix)
     const availableSlots = Math.max(0, maxConcurrentJobs - activeWorkers)
 
     for (let slotIndex = 0; slotIndex < availableSlots; slotIndex += 1) {
-      if (!this.isServiceStartDue(serviceType)) {
+      if (!this.serviceThrottle.isStartDue(serviceType)) {
         return
       }
 
@@ -695,7 +561,7 @@ export class GenerationQueueService {
         return
       }
 
-      this.noteServiceStart(serviceType)
+      this.serviceThrottle.noteStart(serviceType)
       const workerKey = `${workerKeyPrefix}:${job.id}`
       this.activeWorkerKeys.add(workerKey)
       void this.runClaimedJob(job)
