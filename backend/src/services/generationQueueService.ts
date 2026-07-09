@@ -1,10 +1,9 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
-import { WorkflowModel } from '../models/Workflow'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { ComfyUIServerModel } from '../models/ComfyUIServer'
-import { createComfyUIService } from './comfyuiService'
 import { getComfyUIServerRuntimeStatuses } from './comfyui/runtimeStatusService'
 import { createGenerationQueueRoutingContext, getGenerationQueueEligibleServerIds, getGenerationQueueServerCapacity } from './generationQueueRouting'
+import { attemptQueueUpstreamCancellation, type QueueUpstreamCancellationOptions } from './generation-queue/queueCancellation'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
@@ -111,62 +110,8 @@ export class GenerationQueueService {
     }
   }
 
-  private static resolveComfyCancellationEndpoint(job: GenerationQueueJobRecord, assignedServer?: ComfyUIServerRecord | null) {
-    if (assignedServer?.endpoint) {
-      return assignedServer.endpoint
-    }
-
-    if (job.assigned_server_id) {
-      const server = ComfyUIServerModel.findById(job.assigned_server_id)
-      if (server?.endpoint) {
-        return server.endpoint
-      }
-    }
-
-    if (job.workflow_id) {
-      const workflow = WorkflowModel.findById(job.workflow_id)
-      if (workflow?.api_endpoint) {
-        return workflow.api_endpoint
-      }
-    }
-
-    return null
-  }
-
-  static async attemptUpstreamCancellation(jobId: number, options?: {
-    assignedServer?: ComfyUIServerRecord | null
-    providerJobId?: string | null
-  }) {
-    const latest = GenerationQueueModel.findById(jobId)
-    if (!latest || latest.service_type !== 'comfyui') {
-      return null
-    }
-
-    const promptId = options?.providerJobId ?? latest.provider_job_id ?? null
-    const assignedServer = options?.assignedServer ?? (latest.assigned_server_id ? ComfyUIServerModel.findById(latest.assigned_server_id) : null)
-    const endpoint = this.resolveComfyCancellationEndpoint(latest, assignedServer)
-    const requestedAt = new Date().toISOString()
-
-    if (!promptId || !endpoint) {
-      updateQueueRequestDebugMeta(latest, {
-        cancellation_requested_at: requestedAt,
-        cancellation_endpoint: endpoint,
-        cancellation_prompt_id: promptId,
-        cancellation_state: promptId ? 'missing_endpoint' : 'missing_prompt_id',
-      })
-      return null
-    }
-
-    const comfyService = createComfyUIService(endpoint, assignedServer)
-    const result = await comfyService.cancelPrompt(promptId)
-    updateQueueRequestDebugMeta(latest, {
-      cancellation_requested_at: requestedAt,
-      cancellation_endpoint: endpoint,
-      cancellation_prompt_id: promptId,
-      cancellation_state: assignedServer?.backend_type === 'modal' ? 'unsupported' : result.interrupted || result.deleted ? 'requested' : 'not_found',
-      cancellation_result: result,
-    })
-    return result
+  static attemptUpstreamCancellation(jobId: number, options?: QueueUpstreamCancellationOptions) {
+    return attemptQueueUpstreamCancellation(jobId, options)
   }
 
   static async requestCancellation(jobId: number) {
