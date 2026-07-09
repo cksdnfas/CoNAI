@@ -3,8 +3,8 @@
 ## Status
 - Owner: OpenClaw/Codex refactor wave
 - Source branch: main
-- Basis: current source scan plus graphify-out/GRAPH_REPORT.md from commit 155311bc
-- Note: Graphify is stale against current HEAD, so use it as navigation only and confirm every task with source search.
+- Basis: current source scan plus graphify-out/GRAPH_REPORT.md from commit f51b307e
+- Note: Graphify has been refreshed after the latest code commit in this wave; still confirm each refactor target with source search before editing.
 
 ## Objective
 Reduce global maintenance risk from duplicate helpers, mixed responsibilities, oversized files, and weak dead-code detection while keeping runtime behavior unchanged.
@@ -75,6 +75,9 @@ Verification:
 - `npm run verify:module-graph-execution-panel-contracts`
 - `npm run verify:module-graph-bypass-contracts`
 
+Completed commits:
+- `125fc53b` refactor: move graph validation contracts
+
 ### M4. Generation queue service extraction
 Problem:
 - `backend/src/services/generationQueueService.ts` is a high-risk large service.
@@ -88,6 +91,11 @@ Verification:
 - `npm run verify:queue-hot-path-contracts`
 - `npm run verify:queue-payload-pruning-contracts`
 
+Completed commits:
+- `337f4b6d` refactor: extract queue service throttle
+- `d852eafd` refactor: extract queue transition updates
+- `f51b307e` refactor: extract queue cancellation helper
+
 ### M5. Module graph node card extraction
 Problem:
 - `module-graph-node-card.tsx` mixes card rendering, node-specific editors, query use, and port rendering.
@@ -100,6 +108,9 @@ Verification:
 - `npm run build:frontend`
 - `npm run verify:module-library-grouping`
 - `npm run verify:module-graph-execution-status-contracts`
+
+Completed commits:
+- `7fbbadf4` refactor: extract graph node model options
 
 ### M6. Wildcard inline picker extraction
 Problem:
@@ -115,6 +126,9 @@ Verification:
 - `npm run verify:prompt-inline-syntax-contracts`
 - `npm run verify:wildcard-guest-access-contracts`
 
+Completed commits:
+- `9886ad0c` refactor: extract wildcard popup positioning
+
 ### M7. API request policy consolidation
 Problem:
 - Frontend JSON API calls use `fetchJson`, `requestJson`, direct `fetch`, and manual fallback errors inconsistently.
@@ -129,6 +143,10 @@ Verification:
 - `npm run verify:image-download-contracts`
 - `npm run verify:image-similarity-policy-contracts`
 
+Completed commits:
+- `f145b025` refactor: share prompt and search api readers
+- `d143bae6` refactor: share folder api data reader
+
 ### M8. Dead export detection
 Problem:
 - `noUnusedLocals` is disabled for the app build and no dead-export tool is installed.
@@ -140,6 +158,9 @@ Plan:
 Verification:
 - Tool dry run evidence.
 - Existing build and affected feature verifies.
+
+Completed commits:
+- `aad5803a` refactor: trim verified dead exports
 
 ## Completion Criteria
 - Each milestone lands as one or more small commits.
