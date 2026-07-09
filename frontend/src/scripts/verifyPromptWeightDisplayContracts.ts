@@ -8,6 +8,7 @@ import {
   getImagePromptTerms,
 } from '../lib/image-extracted-prompts'
 import type { ImageRecord } from '../types/image'
+import type { PromptGroupResolveItem } from '../types/prompt'
 
 const image = {
   composite_hash: 'prompt-weight-contract',
@@ -67,7 +68,7 @@ const groupedSections = buildGroupedPromptSections(
         group_path: ['Body'],
       },
     },
-  ] as any,
+  ] satisfies PromptGroupResolveItem[],
 )
 const groupedText = formatGroupedPromptText(groupedSections)
 

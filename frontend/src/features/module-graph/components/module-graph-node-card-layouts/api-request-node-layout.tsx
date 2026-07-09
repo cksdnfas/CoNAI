@@ -170,7 +170,7 @@ export function ApiRequestNodeLayout({
     )
   }
 
-  const renderKeyValueEditor = (port: ModulePortDefinition, field: ModuleUiFieldDefinition | null) => (
+  const renderKeyValueEditor = (port: ModulePortDefinition) => (
     <ModuleGraphKeyValueListInput
       compact
       value={getKeyValueFieldValue(port.key)}

@@ -55,7 +55,7 @@ function readLastSeenQueueJobId() {
     return null
   }
 
-  let rawValue: string | null = null
+  let rawValue: string | null
   try {
     rawValue = window.sessionStorage.getItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY)
   } catch {

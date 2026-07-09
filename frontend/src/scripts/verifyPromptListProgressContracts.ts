@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { resolvePromptListProgress } from '../features/prompts/prompt-list-progress'
 import { canDeletePromptItem, isDanbooruPromptGroup, isLockedPromptItem } from '../features/prompts/prompt-page-utils'
+import type { PromptCollectionItem, PromptGroupRecord } from '../types/prompt'
 
 const root = resolve(process.cwd(), 'src')
 
@@ -145,17 +146,19 @@ match(
   'prompt group utilities should accept a prebuilt Map while preserving array fallback behavior',
 )
 
-const rootDanbooruGroup = { id: 10, group_name: 'Danbooru', parent_id: null } as any
-const childDanbooruGroup = { id: 11, group_name: 'artist', parent_id: 10 } as any
-const regularGroup = { id: 12, group_name: 'custom', parent_id: null } as any
+const rootDanbooruGroup = { id: 10, group_name: 'Danbooru', parent_id: null, is_visible: true, display_order: 0, created_at: '', updated_at: '' } satisfies PromptGroupRecord
+const childDanbooruGroup = { id: 11, group_name: 'artist', parent_id: 10, is_visible: true, display_order: 1, created_at: '', updated_at: '' } satisfies PromptGroupRecord
+const regularGroup = { id: 12, group_name: 'custom', parent_id: null, is_visible: true, display_order: 2, created_at: '', updated_at: '' } satisfies PromptGroupRecord
 const promptGroups = [rootDanbooruGroup, childDanbooruGroup, regularGroup]
 const promptGroupById = new Map(promptGroups.map((group) => [group.id, group] as const))
+const childDanbooruItem = { id: 101, prompt: 'artist', usage_count: 0, group_id: childDanbooruGroup.id, synonyms: [], type: 'positive', group_info: childDanbooruGroup } satisfies PromptCollectionItem
+const regularItem = { id: 102, prompt: 'custom', usage_count: 0, group_id: regularGroup.id, synonyms: [], type: 'positive', group_info: regularGroup } satisfies PromptCollectionItem
 
 deepEqual(isDanbooruPromptGroup(childDanbooruGroup, promptGroups), true)
 deepEqual(isDanbooruPromptGroup(childDanbooruGroup, promptGroupById), true)
 deepEqual(isDanbooruPromptGroup(regularGroup, promptGroupById), false)
-deepEqual(isLockedPromptItem({ group_info: childDanbooruGroup } as any, promptGroupById), true)
-deepEqual(canDeletePromptItem({ group_info: regularGroup, usage_count: 0 } as any, promptGroupById), true)
-deepEqual(canDeletePromptItem({ group_info: childDanbooruGroup, usage_count: 0 } as any, promptGroupById), false)
+deepEqual(isLockedPromptItem(childDanbooruItem, promptGroupById), true)
+deepEqual(canDeletePromptItem(regularItem, promptGroupById), true)
+deepEqual(canDeletePromptItem(childDanbooruItem, promptGroupById), false)
 
 console.log('Prompt list progress and selection contracts verified')

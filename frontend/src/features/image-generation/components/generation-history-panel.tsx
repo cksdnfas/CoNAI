@@ -22,7 +22,6 @@ import {
   getGenerationWorkflowHistory,
 } from '@/lib/api-image-generation-history'
 import { cleanupPublicGenerationWorkflowFailedHistory, getPublicGenerationWorkflowHistory } from '@/lib/api-public-workflows'
-import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
 import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import {

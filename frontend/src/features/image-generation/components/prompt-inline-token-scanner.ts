@@ -37,7 +37,7 @@ export function resolveActiveDanbooruGroupQuery(value: string, caretPosition: nu
     return null
   }
 
-  const modifierIndex = query.search(/[\[<]/)
+  const modifierIndex = query.search(/[<[]/)
   if (modifierIndex >= 0) {
     return null
   }

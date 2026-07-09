@@ -24,13 +24,10 @@ import {
   resolveGraphArtifactMimeType,
 } from '../module-graph-shared'
 import {
-  buildArtifactGroupModalText,
   buildExecutionComparisonRows,
   buildExecutionComparisonSummary,
   buildExecutionPathDiagnosticRows,
   buildNodeDisplayLabelMap,
-  type ExecutionComparisonRow,
-  type ExecutionComparisonSummary,
   formatPrimitiveValue,
   getExecutionInputEntries,
   getExecutionModeLabel,
@@ -39,7 +36,6 @@ import {
   groupArtifactsByNode,
   isCompactExecutionArtifactVisible,
   parseExecutionPlan,
-  pickPrimaryExecutionArtifact,
   type ParsedExecutionPlan,
 } from './graph-execution-panel-helpers'
 import { ExecutionComparisonContextBlock, ExecutionOutputGroupCard, ExecutionPathDiagnosticsBlock } from './graph-execution-panel-sections'

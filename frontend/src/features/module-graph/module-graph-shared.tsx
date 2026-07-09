@@ -1,7 +1,6 @@
 import { MarkerType } from '@xyflow/react'
 import { applySavedWorkflowInputMetadataToNodes } from './module-graph-workflow-inputs'
 import {
-  getModuleBaseDisplayName,
   getModuleNodeDisplayLabel,
   getModuleOperationKey,
   getPortTypeColor,
