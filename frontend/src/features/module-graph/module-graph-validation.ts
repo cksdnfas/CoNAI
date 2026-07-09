@@ -7,6 +7,7 @@ import type { AppSettings } from '@/types/settings'
 import { hasMeaningfulValue } from './components/module-graph-field-shared'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
 import { isFinalResultModule } from './module-graph-module-helpers'
+import { buildWorkflowExposedInputId } from './module-graph-workflow-input-ids'
 
 export type ValidationNodeRecord = {
   id: string
@@ -21,11 +22,6 @@ export type ValidationEdgeRecord = {
 }
 
 type ValidationTranslator = (input: TranslationInput, params?: TranslationParams) => string
-
-/** Build one canonical workflow-exposed-input id from node and port keys. */
-export function buildWorkflowExposedInputId(nodeId: string, portKey: string) {
-  return `${nodeId}:${portKey}`
-}
 
 /** Resolve system capability validation issues from current application settings. */
 function resolveSystemCapabilityIssue(module: ModuleDefinitionRecord, translate: ValidationTranslator, settings?: AppSettings | null) {

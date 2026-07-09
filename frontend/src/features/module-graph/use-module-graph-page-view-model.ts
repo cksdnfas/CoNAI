@@ -5,7 +5,8 @@ import { useI18n } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
 import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, getModuleNodeDisplayLabel, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
-import { buildWorkflowExposedInputId, buildWorkflowValidationIssues } from './module-graph-validation'
+import { buildWorkflowValidationIssues } from './module-graph-validation'
+import { buildWorkflowExposedInputId } from './module-graph-workflow-input-ids'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 

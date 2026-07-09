@@ -1,6 +1,6 @@
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { normalizeOptionalString } from '@/lib/primitive-normalizers'
-import { buildWorkflowExposedInputId } from './module-graph-validation'
+import { buildWorkflowExposedInputId } from './module-graph-workflow-input-ids'
 import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, normalizeModulePortDescription } from './module-graph-module-helpers'
 import type { ModuleGraphNode } from './module-graph-types'
 
