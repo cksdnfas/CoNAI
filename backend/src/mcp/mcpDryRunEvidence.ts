@@ -46,7 +46,7 @@ const TOOL_CLASS_BY_NAME: Record<string, McpSideEffectClass> = {
   generate_nai: 'generation-external-service',
 };
 
-export const MCP_DRY_RUN_APPROVAL_BOUNDARY = [
+const MCP_DRY_RUN_APPROVAL_BOUNDARY = [
   'push',
   'deploy',
   'server restart',

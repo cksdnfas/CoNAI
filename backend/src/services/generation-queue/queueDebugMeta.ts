@@ -3,7 +3,7 @@ import { getComfyRequestDebugRelativePath, writeComfyRequestDebugSnapshot, type 
 import type { GenerationQueueJobRecord } from '../../types/generationQueue'
 import { parseStoredRequestPayload } from './queuePayloads'
 
-export function isQueueDetailedDebugEnabled(record: GenerationQueueJobRecord) {
+function isQueueDetailedDebugEnabled(record: GenerationQueueJobRecord) {
   const payload = parseStoredRequestPayload(record)
   const currentDebug = payload._debug && typeof payload._debug === 'object' && !Array.isArray(payload._debug)
     ? payload._debug as Record<string, unknown>

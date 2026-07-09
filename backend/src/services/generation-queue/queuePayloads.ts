@@ -46,7 +46,7 @@ export function parseNaiQueuePayload(record: GenerationQueueJobRecord) {
   return payload as unknown as NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }
 }
 
-export function parseCodexWildcardText(value: unknown) {
+function parseCodexWildcardText(value: unknown) {
   if (typeof value !== 'string') {
     return undefined
   }

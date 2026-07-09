@@ -12,9 +12,9 @@ import {
   parseStatusList,
 } from './queue-route-helpers'
 
-export const DEFAULT_QUEUE_LIST_LIMIT = 200
-export const MAX_QUEUE_LIST_LIMIT = 500
-export const QUEUE_ETA_WINDOW_LIMIT = 300
+const DEFAULT_QUEUE_LIST_LIMIT = 200
+const MAX_QUEUE_LIST_LIMIT = 500
+const QUEUE_ETA_WINDOW_LIMIT = 300
 
 type QueueListFilters = {
   statuses?: GenerationQueueJobStatus[]
