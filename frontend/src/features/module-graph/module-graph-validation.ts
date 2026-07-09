@@ -4,8 +4,8 @@ import type {
 } from '@/lib/api-module-graph'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
-import { hasMeaningfulValue } from './components/module-graph-field-shared'
-import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
+import type { WorkflowValidationIssue } from './module-graph-types'
+import { hasMeaningfulValue } from './module-graph-value-utils'
 import { isFinalResultModule } from './module-graph-module-helpers'
 import { buildWorkflowExposedInputId } from './module-graph-workflow-input-ids'
 

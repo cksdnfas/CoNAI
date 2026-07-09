@@ -2,6 +2,7 @@ import { CircleHelp } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import type { TranslationDictionary } from '@/i18n/resources/types'
 import type { ModulePortDefinition } from '@/lib/api-module-graph'
+export { hasMeaningfulValue } from '../module-graph-value-utils'
 
 const MODULE_GRAPH_PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], TranslationDictionary> = {
   image: { ko: '이미지', en: 'Image' },
@@ -12,11 +13,6 @@ const MODULE_GRAPH_PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], T
   boolean: { ko: '불리언', en: 'Boolean' },
   json: { ko: 'JSON', en: 'JSON' },
   any: { ko: '임의', en: 'Any' },
-}
-
-/** Check whether one inline value should count as user-provided content. */
-export function hasMeaningfulValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
 }
 
 /** Resolve one user-facing label for a module port data type. */

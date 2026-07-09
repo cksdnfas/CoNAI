@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useEffect, useRef } from 'react'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { shouldBypassOverlayHistoryBackNavigation } from '@/components/ui/use-overlay-back-close'
-import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
+import type { WorkflowValidationIssue } from './module-graph-types'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import type { ModuleGraphNode } from './module-graph-shared'
 

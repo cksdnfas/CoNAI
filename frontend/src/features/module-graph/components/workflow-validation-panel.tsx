@@ -2,18 +2,10 @@ import { AlertTriangle } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
+import type { WorkflowValidationIssue } from '../module-graph-types'
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 
-export type WorkflowValidationIssue = {
-  id: string
-  nodeId?: string
-  portKey?: string
-  nodeLabel: string
-  severity: 'error' | 'warning'
-  activationState?: 'definition-missing' | 'final-result-required' | 'missing-required-input' | 'runtime-input-waiting' | 'system-capability-disabled'
-  title: string
-  detail: string
-}
+export type { WorkflowValidationIssue } from '../module-graph-types'
 
 type WorkflowValidationPanelProps = {
   issues: WorkflowValidationIssue[]

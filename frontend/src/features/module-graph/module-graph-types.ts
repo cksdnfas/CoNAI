@@ -52,6 +52,17 @@ export type ModuleGraphNodeData = {
 export type ModuleGraphNode = Node<ModuleGraphNodeData, 'module'>
 export type ModuleGraphEdge = Edge
 
+export type WorkflowValidationIssue = {
+  id: string
+  nodeId?: string
+  portKey?: string
+  nodeLabel: string
+  severity: 'error' | 'warning'
+  activationState?: 'definition-missing' | 'final-result-required' | 'missing-required-input' | 'runtime-input-waiting' | 'system-capability-disabled'
+  title: string
+  detail: string
+}
+
 export type ModuleGraphClipboardNode = {
   id: string
   moduleId: number

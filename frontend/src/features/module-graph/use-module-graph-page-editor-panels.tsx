@@ -13,7 +13,7 @@ import {
   ModuleGraphWorkflowSetupFolderPanel,
 } from './components/module-graph-page-sections'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
-import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
+import type { WorkflowValidationIssue } from './module-graph-types'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
