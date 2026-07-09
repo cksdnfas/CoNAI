@@ -41,6 +41,7 @@ function assertExecutionPanelLookupPolicy() {
   const nodeCardSource = source('features/module-graph/components/module-graph-node-card.tsx')
   const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
   const nodeCardArtifactOutputsSource = source('features/module-graph/components/module-graph-node-card-layouts/node-artifact-outputs.tsx')
+  const nodeCardDefaultPortRowsSource = source('features/module-graph/components/module-graph-node-card-layouts/default-port-rows.tsx')
   const nodeCardRandomTextChoiceSource = source('features/module-graph/components/module-graph-node-card-layouts/random-text-choice-node-layout.tsx')
   const nodeCardTextLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts/text-node-layouts.tsx')
   const nodeCardPortCellsSource = source('features/module-graph/components/module-graph-port-cells.tsx')
@@ -48,7 +49,6 @@ function assertExecutionPanelLookupPolicy() {
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const nodeInspectorHelpersSource = source('features/module-graph/components/node-inspector-panel-helpers.tsx')
   const artifactSource = source('features/module-graph/module-graph-artifacts.ts')
-  const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const finalResultsSource = source('features/module-graph/components/workflow-final-results-section.tsx')
   const executionLogAlertsSource = source('features/module-graph/components/workflow-execution-log-alerts.ts')
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
@@ -190,9 +190,11 @@ function assertExecutionPanelLookupPolicy() {
     'NAI model inputs should render as node-level dropdown controls when they are not wired',
   )
   assert(
-    nodeCardSource.includes('if (inputPort && !outputPort)')
-      && nodeCardSource.includes('if (!inputPort && outputPort)')
-      && nodeCardSource.includes('className="grid grid-cols-1"'),
+    nodeCardLayoutsSource.includes("export * from './module-graph-node-card-layouts/default-port-rows'")
+      && nodeCardSource.includes('<DefaultModulePortRows')
+      && nodeCardDefaultPortRowsSource.includes('if (inputPort && !outputPort)')
+      && nodeCardDefaultPortRowsSource.includes('if (!inputPort && outputPort)')
+      && nodeCardDefaultPortRowsSource.includes('className="grid grid-cols-1"'),
     'node card port rows should give full width to unpaired input or output ports',
   )
   assert(

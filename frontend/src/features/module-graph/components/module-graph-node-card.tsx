@@ -17,6 +17,7 @@ import { WORKFLOW_INPUT_ENABLED_KEY, isWorkflowInputSourceModule } from '../modu
 import {
   ApiRequestNodeLayout,
   ConditionSelectNodeLayout,
+  DefaultModulePortRows,
   IfBranchNodeLayout,
   InlineWorkflowInputEditor,
   NodeArtifactOutputs,
@@ -27,9 +28,7 @@ import {
   getRandomTextChoiceDynamicInputPortKeys,
 } from './module-graph-node-card-layouts'
 import {
-  InputPortCell,
   MODULE_GRAPH_INLINE_CONTROL_CLASS,
-  PortCell,
   SourceNodeOutputPorts,
   buildModuleUiFieldMap,
   getInputPortState,
@@ -402,7 +401,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
     return true
   })
-  const portRowCount = Math.max(visibleInputPorts.length, visibleOutputPorts.length, 1)
   const renderedInputPorts = isWorkflowInputSource
     ? []
     : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isConditionSelectModule || isIfBranchModule || isApiRequestModule ? inputPorts : visibleInputPorts)
@@ -784,75 +782,16 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             uiFieldByKey={uiFieldByKey}
           />
         ) : (
-          <div className="mt-2.5 grid gap-1">
-            {Array.from({ length: portRowCount }, (_, index) => {
-              const inputPort = visibleInputPorts[index]
-              const outputPort = visibleOutputPorts[index]
-              const inputPortState = getInputPortState(data, inputPort, connectedInputKeys)
-              const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
-
-              if (inputPort && !outputPort) {
-                return (
-                  <div key={`port-row-${index}`} className="grid grid-cols-1">
-                    <InputPortCell
-                      nodeId={id}
-                      data={data}
-                      port={inputPort}
-                      uiField={uiFieldByKey.get(inputPort.key) ?? null}
-                      accentColor={accentColor}
-                      connected={inputPortState.connected}
-                      satisfied={inputPortState.satisfied}
-                      requiredMissing={inputPortState.requiredMissing}
-                      selectOptionsOverride={undefined}
-                    />
-                  </div>
-                )
-              }
-
-              if (!inputPort && outputPort) {
-                return (
-                  <div key={`port-row-${index}`} className="grid grid-cols-1">
-                    <PortCell
-                      nodeId={id}
-                      port={outputPort}
-                      side="output"
-                      accentColor={accentColor}
-                      connected={outputConnected}
-                      satisfied={outputConnected}
-                      requiredMissing={false}
-                      outputState={data.conditionalOutputStates?.[outputPort.key] ?? null}
-                    />
-                  </div>
-                )
-              }
-
-              return (
-                <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
-                  <InputPortCell
-                    nodeId={id}
-                    data={data}
-                    port={inputPort}
-                    uiField={inputPort ? uiFieldByKey.get(inputPort.key) ?? null : null}
-                    accentColor={accentColor}
-                    connected={inputPortState.connected}
-                    satisfied={inputPortState.satisfied}
-                    requiredMissing={inputPortState.requiredMissing}
-                    selectOptionsOverride={undefined}
-                  />
-                  <PortCell
-                    nodeId={id}
-                    port={outputPort}
-                    side="output"
-                    accentColor={accentColor}
-                    connected={outputConnected}
-                    satisfied={outputConnected}
-                    requiredMissing={false}
-                    outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
-                  />
-                </div>
-              )
-            })}
-          </div>
+          <DefaultModulePortRows
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
+            uiFieldByKey={uiFieldByKey}
+            visibleInputPorts={visibleInputPorts}
+            visibleOutputPorts={visibleOutputPorts}
+          />
         )
       ) : null}
 

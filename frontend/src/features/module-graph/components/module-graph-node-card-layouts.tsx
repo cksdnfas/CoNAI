@@ -1,5 +1,6 @@
 export * from './module-graph-node-card-layouts/inline-workflow-input-editor'
 export * from './module-graph-node-card-layouts/api-request-node-layout'
+export * from './module-graph-node-card-layouts/default-port-rows'
 export * from './module-graph-node-card-layouts/random-text-choice-node-layout'
 export * from './module-graph-node-card-layouts/text-node-layouts'
 export * from './module-graph-node-card-layouts/node-artifact-outputs'
