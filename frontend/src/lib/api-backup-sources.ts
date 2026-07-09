@@ -3,111 +3,73 @@ import { fetchJson } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 import type { BackupSource, BackupSourceInput, BackupSourceUpdateInput } from '@/types/folder'
 
+async function requestBackupSourceData<T>(path: string, fallbackKey: Parameters<typeof createApiFallbackError>[1], init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
+  if (!response.success) {
+    throw createApiFallbackError(response.error, fallbackKey)
+  }
+  return response.data
+}
+
 export async function getBackupSources(activeOnly = false) {
   const searchParams = new URLSearchParams()
   if (activeOnly) {
     searchParams.set('active_only', 'true')
   }
 
-  const response = await fetchJson<ApiResponse<BackupSource[]>>(`/api/backup-sources?${searchParams.toString()}`)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'backupSources.list.load')
-  }
-  return response.data
+  return requestBackupSourceData<BackupSource[]>(`/api/backup-sources?${searchParams.toString()}`, 'backupSources.list.load')
 }
 
 export async function addBackupSource(input: BackupSourceInput) {
-  const response = await fetchJson<ApiResponse<{ id: number; source: BackupSource }>>('/api/backup-sources', {
+  return requestBackupSourceData<{ id: number; source: BackupSource }>('/api/backup-sources', 'backupSources.create', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'backupSources.create')
-  }
-
-  return response.data
 }
 
 export async function updateBackupSource(sourceId: number, updates: BackupSourceUpdateInput) {
-  const response = await fetchJson<ApiResponse<{ source: BackupSource }>>(`/api/backup-sources/${sourceId}`, {
+  return requestBackupSourceData<{ source: BackupSource }>(`/api/backup-sources/${sourceId}`, 'backupSources.update', {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(updates),
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'backupSources.update')
-  }
-
-  return response.data
 }
 
 export async function deleteBackupSource(sourceId: number) {
-  const response = await fetchJson<ApiResponse<{ message: string }>>(`/api/backup-sources/${sourceId}`, {
+  return requestBackupSourceData<{ message: string }>(`/api/backup-sources/${sourceId}`, 'backupSources.delete', {
     method: 'DELETE',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'backupSources.delete')
-  }
-
-  return response.data
 }
 
 export async function validateBackupSourcePath(sourcePath: string) {
-  const response = await fetchJson<ApiResponse<{ valid: boolean; message: string }>>('/api/backup-sources/validate-path', {
+  return requestBackupSourceData<{ valid: boolean; message: string }>('/api/backup-sources/validate-path', 'backupSources.path.validate', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ source_path: sourcePath }),
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'backupSources.path.validate')
-  }
-
-  return response.data
 }
 
 export async function startBackupSourceWatcher(sourceId: number) {
-  const response = await fetchJson<ApiResponse<BackupSource>>(`/api/backup-sources/${sourceId}/watcher/start`, {
+  return requestBackupSourceData<BackupSource>(`/api/backup-sources/${sourceId}/watcher/start`, 'backupSources.watcher.start', {
     method: 'POST',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'backupSources.watcher.start')
-  }
-
-  return response.data
 }
 
 export async function stopBackupSourceWatcher(sourceId: number) {
-  const response = await fetchJson<ApiResponse<BackupSource>>(`/api/backup-sources/${sourceId}/watcher/stop`, {
+  return requestBackupSourceData<BackupSource>(`/api/backup-sources/${sourceId}/watcher/stop`, 'backupSources.watcher.stop', {
     method: 'POST',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'backupSources.watcher.stop')
-  }
-
-  return response.data
 }
 
 export async function restartBackupSourceWatcher(sourceId: number) {
-  const response = await fetchJson<ApiResponse<BackupSource>>(`/api/backup-sources/${sourceId}/watcher/restart`, {
+  return requestBackupSourceData<BackupSource>(`/api/backup-sources/${sourceId}/watcher/restart`, 'backupSources.watcher.restart', {
     method: 'POST',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'backupSources.watcher.restart')
-  }
-
-  return response.data
 }
