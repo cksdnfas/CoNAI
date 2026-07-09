@@ -22,7 +22,7 @@ export function getDownloadFileName(contentDisposition: string | null, fallbackF
 }
 
 /** Read a useful message from failed blob download responses. */
-export async function readDownloadError(response: Response) {
+export async function readDownloadError(response: Response, fallbackMessage?: string) {
   const contentType = response.headers.get('Content-Type') || ''
 
   if (contentType.includes('application/json')) {
@@ -30,12 +30,22 @@ export async function readDownloadError(response: Response) {
       const payload = (await response.json()) as ApiErrorPayload
       return typeof payload.error === 'string' && payload.error.length > 0
         ? payload.error
-        : `Request failed: ${response.status}`
+        : fallbackMessage || `Request failed: ${response.status}`
     } catch {
-      return `Request failed: ${response.status}`
+      return fallbackMessage || `Request failed: ${response.status}`
     }
   }
 
   const text = await response.text().catch(() => '')
-  return text || `Request failed: ${response.status}`
+  return text || fallbackMessage || `Request failed: ${response.status}`
+}
+
+/** Read a blob response while preserving backend error text when the request fails. */
+export async function readDownloadBlob(response: Response, fallbackMessage?: string) {
+  if (!response.ok) {
+    const message = await readDownloadError(response, fallbackMessage)
+    throw new Error(message || fallbackMessage || `Request failed: ${response.status}`)
+  }
+
+  return response.blob()
 }

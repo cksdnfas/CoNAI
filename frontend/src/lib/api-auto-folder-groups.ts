@@ -1,7 +1,7 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
-import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
+import { getDownloadFileName, readDownloadBlob } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
 import type { GroupBreadcrumbItem, GroupDownloadType, GroupFileCounts, GroupImagesPayload, GroupRecord, GroupRematchJobRecord, GroupWithHierarchy } from '@/types/group'
 
@@ -183,11 +183,7 @@ export async function downloadAutoFolderGroupArchive(
     },
   })
 
-  if (!response.ok) {
-    throw new Error(await readDownloadError(response))
-  }
-
-  const blob = await response.blob()
+  const blob = await readDownloadBlob(response)
   const fallbackFileName = `auto-folder-group-${groupId}-${options.type}.zip`
   const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
   triggerBlobDownload(blob, fileName)

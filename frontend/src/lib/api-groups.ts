@@ -1,7 +1,7 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
-import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
+import { getDownloadFileName, readDownloadBlob } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
 import type {
   GroupAutoCollectAllResult,
@@ -263,11 +263,7 @@ export async function downloadGroupArchive(
     },
   })
 
-  if (!response.ok) {
-    throw new Error(await readDownloadError(response))
-  }
-
-  const blob = await response.blob()
+  const blob = await readDownloadBlob(response)
   const fallbackFileName = `group-${groupId}-${options.type}.zip`
   const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
   triggerBlobDownload(blob, fileName)

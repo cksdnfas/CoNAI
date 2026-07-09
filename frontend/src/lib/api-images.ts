@@ -1,6 +1,6 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { getDownloadFileName } from '@/lib/download-utils'
+import { getDownloadFileName, readDownloadBlob } from '@/lib/download-utils'
 import { requestJson } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
@@ -75,15 +75,6 @@ export async function getImage(compositeHash: string, init?: RequestInit) {
     throw createApiFallbackError(response.error, 'images.detail.load')
   }
   return response.data
-}
-
-async function readDownloadBlob(response: Response, fallbackMessage: string) {
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(text || fallbackMessage || `Request failed: ${response.status}`)
-  }
-
-  return response.blob()
 }
 
 function metadataRewriteHeaders(response: Response) {
