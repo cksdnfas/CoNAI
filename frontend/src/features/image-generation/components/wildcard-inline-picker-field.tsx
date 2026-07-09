@@ -22,7 +22,6 @@ import {
   summarizePromptSyntaxTokens,
 } from './prompt-syntax-highlight-helpers'
 import { useWildcardInlinePickerData } from './use-wildcard-inline-picker-data'
-import { resolveFloatingDropdownRectFromRect } from './floating-dropdown-utils'
 import {
   buildPromptAutocompleteInsertion,
   usePromptInlineAutocomplete,
@@ -32,15 +31,13 @@ import { usePromptInlineSyntaxSettings } from './prompt-inline-syntax-settings'
 import { useWildcardInlineDetectedCharacters } from './use-wildcard-inline-detected-characters'
 import { useWildcardInlinePickerSuggestions } from './use-wildcard-inline-picker-suggestions'
 import { WildcardInlinePickerDetectedChips } from './wildcard-inline-picker-detected-chips'
+import { useWildcardInlinePopupPositions } from './use-wildcard-inline-popup-positions'
 import { WildcardInlinePickerPopupContent } from './wildcard-inline-picker-popup-content'
 import {
-  getTextFieldCaretClientRect,
   PromptAutocompletePopup,
   PromptSyntaxTokenPopup,
   renderPromptSyntaxOverlay,
   WildcardInlinePickerPopup,
-  type InlinePickerPopupPosition,
-  type PromptSyntaxPopupPosition,
 } from './wildcard-inline-picker-field-ui'
 
 type WildcardInlinePickerFieldProps = {
@@ -88,10 +85,6 @@ export function WildcardInlinePickerField({
   const [fieldScrollLeft, setFieldScrollLeft] = useState(0)
   const [activeDetectedTokenKey, setActiveDetectedTokenKey] = useState<string | null>(null)
   const [activeDetectedCharacterKey, setActiveDetectedCharacterKey] = useState<string | null>(null)
-  const [detectedPopupPosition, setDetectedPopupPosition] = useState<PromptSyntaxPopupPosition | null>(null)
-  const [detectedCharacterPopupPosition, setDetectedCharacterPopupPosition] = useState<InlinePickerPopupPosition | null>(null)
-  const [inlinePopupPosition, setInlinePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
-  const [promptAutocompletePopupPosition, setPromptAutocompletePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
   const { settings: syntaxSettings } = usePromptInlineSyntaxSettings()
   const shouldLoadWildcardData = !disabled && isFocused
 
@@ -169,6 +162,29 @@ export function WildcardInlinePickerField({
     isWildcardPopupOpen: isPopupOpen,
     autocompletePromptType,
   })
+  const {
+    detectedPopupPosition,
+    detectedCharacterPopupPosition,
+    inlinePopupPosition,
+    promptAutocompletePopupPosition,
+  } = useWildcardInlinePopupPositions({
+    activeDetectedTokenKey,
+    activeDetectedCharacterKey: activeDetectedCharacter?.candidate.key ?? null,
+    isPopupOpen,
+    isPromptAutocompleteOpen,
+    rootRef,
+    fieldRef,
+    detectedTokenButtonRefs,
+    detectedCharacterButtonRefs,
+    caretPosition,
+    fieldScrollLeft,
+    fieldScrollTop,
+    isTreeExplorerMode,
+    suggestionsLength: suggestions.length,
+    promptAutocompleteSuggestionsLength: promptAutocompleteSuggestions.length,
+    value,
+  })
+
   useLayoutEffect(() => {
     if (!multiline || !(fieldRef.current instanceof HTMLTextAreaElement)) {
       return
@@ -208,167 +224,10 @@ export function WildcardInlinePickerField({
   }, [])
 
   useEffect(() => {
-    if (!activeDetectedTokenKey || typeof window === 'undefined') {
-      setDetectedPopupPosition(null)
-      return
-    }
-
-    const updatePosition = () => {
-      const anchor = detectedTokenButtonRefs.current.get(activeDetectedTokenKey)
-      if (!anchor) {
-        setDetectedPopupPosition(null)
-        return
-      }
-
-      const rect = anchor.getBoundingClientRect()
-      const viewportPadding = 12
-      const popupGap = 8
-      const popupWidth = Math.min(300, window.innerWidth - viewportPadding * 2)
-      const estimatedPopupHeight = 112
-      const shouldOpenAbove = rect.bottom + popupGap + estimatedPopupHeight > window.innerHeight - viewportPadding && rect.top > estimatedPopupHeight + popupGap
-
-      let left = rect.left + rect.width / 2 - popupWidth / 2
-      left = Math.max(viewportPadding, Math.min(left, window.innerWidth - viewportPadding - popupWidth))
-
-      setDetectedPopupPosition({
-        top: shouldOpenAbove ? rect.top - popupGap : rect.bottom + popupGap,
-        left,
-        width: popupWidth,
-        placement: shouldOpenAbove ? 'top' : 'bottom',
-      })
-    }
-
-    updatePosition()
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition, true)
-
-    return () => {
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition, true)
-    }
-  }, [activeDetectedTokenKey])
-
-  useEffect(() => {
     if (activeDetectedCharacterKey && !detectedCharacters.some((character) => character.candidate.key === activeDetectedCharacterKey)) {
       setActiveDetectedCharacterKey(null)
     }
   }, [activeDetectedCharacterKey, detectedCharacters])
-
-  useEffect(() => {
-    if (!activeDetectedCharacter || typeof window === 'undefined') {
-      setDetectedCharacterPopupPosition(null)
-      return
-    }
-
-    const updatePosition = () => {
-      const anchor = detectedCharacterButtonRefs.current.get(activeDetectedCharacter.candidate.key)
-      if (!anchor) {
-        setDetectedCharacterPopupPosition(null)
-        return
-      }
-
-      setDetectedCharacterPopupPosition(resolveFloatingDropdownRectFromRect(anchor.getBoundingClientRect(), {
-        minWidth: 280,
-        preferredMaxHeight: 220,
-        minUsableHeight: 120,
-        gap: 8,
-      }))
-    }
-
-    updatePosition()
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition, true)
-
-    return () => {
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition, true)
-    }
-  }, [activeDetectedCharacter])
-
-  useEffect(() => {
-    if (!isPopupOpen || typeof window === 'undefined') {
-      setInlinePopupPosition(null)
-      return
-    }
-
-    const updatePosition = () => {
-      const anchor = rootRef.current
-      const field = fieldRef.current
-      if (!anchor || !field) {
-        setInlinePopupPosition(null)
-        return
-      }
-
-      const fieldRect = field.getBoundingClientRect()
-      const caretRect = getTextFieldCaretClientRect(field, caretPosition)
-      const popupAnchorRect = caretRect
-        ? {
-            left: fieldRect.left,
-            top: caretRect.top,
-            bottom: caretRect.bottom,
-            width: fieldRect.width,
-          }
-        : fieldRect
-
-      setInlinePopupPosition(resolveFloatingDropdownRectFromRect(popupAnchorRect, {
-        minWidth: fieldRect.width,
-        preferredMaxHeight: 420,
-        minUsableHeight: 220,
-        gap: 8,
-      }))
-    }
-
-    updatePosition()
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition, true)
-
-    return () => {
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition, true)
-    }
-  }, [caretPosition, fieldScrollLeft, fieldScrollTop, isPopupOpen, isTreeExplorerMode, suggestions.length, value])
-
-  useEffect(() => {
-    if (!isPromptAutocompleteOpen || typeof window === 'undefined') {
-      setPromptAutocompletePopupPosition(null)
-      return
-    }
-
-    const updatePosition = () => {
-      const field = fieldRef.current
-      if (!field) {
-        setPromptAutocompletePopupPosition(null)
-        return
-      }
-
-      const fieldRect = field.getBoundingClientRect()
-      const caretRect = getTextFieldCaretClientRect(field, caretPosition)
-      const popupAnchorRect = caretRect
-        ? {
-            left: fieldRect.left,
-            top: caretRect.top,
-            bottom: caretRect.bottom,
-            width: fieldRect.width,
-          }
-        : fieldRect
-
-      setPromptAutocompletePopupPosition(resolveFloatingDropdownRectFromRect(popupAnchorRect, {
-        minWidth: Math.min(Math.max(fieldRect.width * 0.55, 240), 420),
-        preferredMaxHeight: 180,
-        minUsableHeight: 96,
-        gap: 10,
-      }))
-    }
-
-    updatePosition()
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition, true)
-
-    return () => {
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition, true)
-    }
-  }, [caretPosition, fieldScrollLeft, fieldScrollTop, isPromptAutocompleteOpen, promptAutocompleteSuggestions.length, value])
 
   useEffect(() => {
     if (!activeDetectedTokenKey || typeof document === 'undefined') {
