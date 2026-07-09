@@ -8,9 +8,15 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
-import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
+import { getExternalApiLlmOptions } from '@/lib/api-external-api'
 import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOptionRecord } from '@/lib/api-settings'
-import type { ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import {
+  getLlmModelBindings,
+  getLlmModelOptions,
+  getSelectOptionValue,
+  normalizeSelectOptions,
+  resolveModelSelectValue,
+} from './module-graph-node-card-options'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import type { ComfyUIServer } from '@/lib/api-image-generation-types'
 import { WORKFLOW_INPUT_ENABLED_KEY, isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
@@ -105,10 +111,6 @@ function isActiveComfyWorkflowServerCandidate(server: ComfyWorkflowServerCandida
   return server.is_active !== false && server.is_enabled !== false && server.is_enabled !== 0
 }
 
-function getSelectOptionValue(option: ModuleGraphSelectOption) {
-  return typeof option === 'string' ? option : option.value
-}
-
 function normalizeBooleanFlag(value: unknown) {
   if (typeof value === 'boolean') {
     return value
@@ -121,12 +123,6 @@ function normalizeBooleanFlag(value: unknown) {
   }
 
   return false
-}
-
-function normalizeSelectOptions(options: ModuleGraphSelectOption[] | null | undefined) {
-  return Array.isArray(options)
-    ? options.filter((option) => getSelectOptionValue(option).trim().length > 0)
-    : []
 }
 
 function normalizeLlmPresetType(value: unknown): LlmPresetCollectionKey {
@@ -289,25 +285,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     enabled: isSystemLoadLlmPresetModule,
     staleTime: 30_000,
   })
-  const llmModelBindings = (() => {
-    if (!isSystemCallLlmModule) {
-      return [] as Array<ExternalApiLlmOptionRecord & { default_model: string }>
-    }
-
-    const entries = (llmProvidersQuery.data ?? [])
-      .map((provider) => ({
-        ...provider,
-        default_model: normalizeOptionalString(provider.default_model),
-      }))
-      .filter((provider): provider is ExternalApiLlmOptionRecord & { default_model: string } => Boolean(provider.default_model))
-      .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
-
-    return entries
-  })()
-  const llmModelOptions = llmModelBindings.map((provider) => ({
-    value: provider.provider_name,
-    label: `${provider.provider_name} · ${provider.default_model}`,
-  })) satisfies ModuleGraphSelectOption[]
+  const llmModelBindings = isSystemCallLlmModule ? getLlmModelBindings(llmProvidersQuery.data) : []
+  const llmModelOptions = getLlmModelOptions(llmModelBindings)
   const llmSelectedProviderName = normalizeOptionalString(data.inputValues?.provider_name) ?? ''
   const applyLlmModelBinding = (providerName: string) => {
     if (!data.onNodeValueChange) {
@@ -334,11 +313,12 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const codexModelOptions = normalizeSelectOptions(
     codexModelUiField?.data_type === 'select' ? codexModelUiField.options : null,
   )
-  const codexModelValue = codexModelCurrentValue
-    ?? normalizeOptionalString(codexModelPort?.default_value)
-    ?? (typeof codexModelUiField?.default_value === 'string' ? codexModelUiField.default_value : null)
-    ?? (codexModelOptions[0] ? getSelectOptionValue(codexModelOptions[0]) : null)
-    ?? ''
+  const codexModelValue = resolveModelSelectValue({
+    currentValue: codexModelCurrentValue,
+    port: codexModelPort,
+    uiField: codexModelUiField,
+    options: codexModelOptions,
+  })
   const isNaiImageGenerationModule = module.engine_type === 'nai' || operationKey === 'system.generate_image_nai'
   const naiModelPort = isNaiImageGenerationModule
     ? inputPorts.find((port) => port.key === 'model')
@@ -350,11 +330,12 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const naiModelOptions = normalizeSelectOptions(
     naiModelUiField?.data_type === 'select' ? naiModelUiField.options : null,
   )
-  const naiModelValue = naiModelCurrentValue
-    ?? normalizeOptionalString(naiModelPort?.default_value)
-    ?? (typeof naiModelUiField?.default_value === 'string' ? naiModelUiField.default_value : null)
-    ?? (naiModelOptions[0] ? getSelectOptionValue(naiModelOptions[0]) : null)
-    ?? ''
+  const naiModelValue = resolveModelSelectValue({
+    currentValue: naiModelCurrentValue,
+    port: naiModelPort,
+    uiField: naiModelUiField,
+    options: naiModelOptions,
+  })
   const canConfigureLlmModel = Boolean(isSystemCallLlmModule && llmModelOptions.length > 0 && data.onNodeValueChange)
   const canConfigureCodexModel = Boolean(isSystemCallCodexMessageModule && codexModelOptions.length > 0 && data.onNodeValueChange)
   const canConfigureNaiModel = Boolean(isNaiImageGenerationModule && naiModelOptions.length > 0 && data.onNodeValueChange && !connectedInputKeys.has('model'))
