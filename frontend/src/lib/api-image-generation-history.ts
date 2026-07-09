@@ -1,4 +1,5 @@
 import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
+import { readDownloadBlob } from '@/lib/download-utils'
 import { requestJson } from './api-image-generation-request'
 import type { ImageDownloadType } from './api-images'
 import type { GenerationHistoryRecord, GenerationServiceType, SaveBrowserImageRecord } from './api-image-generation-types'
@@ -105,11 +106,7 @@ export async function downloadGenerationHistorySelection(historyIds: number[], t
     body: JSON.stringify({ historyIds, type }),
   })
 
-  if (!response.ok) {
-    throw new Error(`Generation history download failed: ${response.status}`)
-  }
-
-  const blob = await response.blob()
+  const blob = await readDownloadBlob(response, `Generation history download failed: ${response.status}`)
   triggerBlobDownload(blob, `conai-generation-history-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`)
 }
 
