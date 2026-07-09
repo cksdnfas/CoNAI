@@ -1,20 +1,20 @@
 import { GenerationQueueModel } from '../../models/GenerationQueue'
-import { type GenerationQueueJobRecord, type GenerationQueueJobStatus } from '../../types/generationQueue'
+import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { GenerationQueueService } from '../generationQueueService'
+import { isTerminalQueueStatus } from '../generation-queue/queueTerminalWaiters'
 import { writeExecutionLog, type ExecutionContext } from './shared'
 
 export const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
 
 const QUEUE_POLL_INTERVAL_MS = 1500
 const QUEUE_TERMINAL_WAIT_TIMEOUT_MS = 15000
-const TERMINAL_QUEUE_STATUSES = new Set<GenerationQueueJobStatus>(['completed', 'failed', 'cancelled'])
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function isGraphQueueTerminalStatus(status: GenerationQueueJobStatus) {
-  return TERMINAL_QUEUE_STATUSES.has(status)
+  return isTerminalQueueStatus(status)
 }
 
 export function shouldRequestGraphQueueCancellation(record: Pick<GenerationQueueJobRecord, 'status'> | null | undefined) {

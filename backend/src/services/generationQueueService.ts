@@ -9,6 +9,7 @@ import { settingsService } from './settingsService'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
+import { QueueTerminalJobWaiters } from './generation-queue/queueTerminalWaiters'
 import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type {
@@ -41,13 +42,6 @@ type ServiceThrottleState = {
   scheduleKey: string | null
 }
 
-const TERMINAL_QUEUE_STATUSES = new Set<GenerationQueueJobStatus>(['completed', 'failed', 'cancelled'])
-
-type TerminalJobWaiter = {
-  resolve: (record: GenerationQueueJobRecord | null) => void
-  timeoutHandle: ReturnType<typeof setTimeout> | null
-}
-
 export class GenerationQueueService {
   private static started = false
   private static dispatcherHandle: ReturnType<typeof setInterval> | null = null
@@ -55,7 +49,7 @@ export class GenerationQueueService {
   private static dispatchTickRunning = false
   private static dispatchTickPending = false
   private static activeWorkerKeys = new Set<string>()
-  private static terminalJobWaiters = new Map<number, Set<TerminalJobWaiter>>()
+  private static terminalJobWaiters = new QueueTerminalJobWaiters()
   private static serviceThrottleState: Record<ThrottledServiceType, ServiceThrottleState> = {
     novelai: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
     codex: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
@@ -95,7 +89,7 @@ export class GenerationQueueService {
       this.dispatcherHandle = null
     }
     this.activeWorkerKeys.clear()
-    this.resolveTerminalJobWaiters(null)
+    this.terminalJobWaiters.resolve(null)
     this.serviceThrottleState = {
       novelai: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
       codex: { windowStartedAt: null, startedInWindow: 0, scheduledOffsetsMs: [], scheduleKey: null },
@@ -259,65 +253,7 @@ export class GenerationQueueService {
 
   /** Wait for a queue job to reach a terminal state without per-consumer DB polling. */
   static waitForTerminalJob(id: number, options?: { timeoutMs?: number }) {
-    const current = GenerationQueueModel.findById(id)
-    if (!current || TERMINAL_QUEUE_STATUSES.has(current.status)) {
-      return Promise.resolve(current)
-    }
-
-    return new Promise<GenerationQueueJobRecord | null>((resolve) => {
-      const waiter: TerminalJobWaiter = {
-        resolve,
-        timeoutHandle: null,
-      }
-      const waiters = this.terminalJobWaiters.get(id) ?? new Set<TerminalJobWaiter>()
-      waiters.add(waiter)
-      this.terminalJobWaiters.set(id, waiters)
-
-      const timeoutMs = options?.timeoutMs
-      if (timeoutMs && timeoutMs > 0) {
-        waiter.timeoutHandle = setTimeout(() => {
-          waiters.delete(waiter)
-          if (waiters.size === 0) {
-            this.terminalJobWaiters.delete(id)
-          }
-
-          const latest = GenerationQueueModel.findById(id)
-          resolve(latest && TERMINAL_QUEUE_STATUSES.has(latest.status) ? latest : null)
-        }, timeoutMs)
-      }
-    })
-  }
-
-  private static resolveTerminalJobWaiters(record: GenerationQueueJobRecord | null) {
-    if (record === null) {
-      for (const waiters of this.terminalJobWaiters.values()) {
-        for (const waiter of waiters) {
-          if (waiter.timeoutHandle) {
-            clearTimeout(waiter.timeoutHandle)
-          }
-          waiter.resolve(null)
-        }
-      }
-      this.terminalJobWaiters.clear()
-      return
-    }
-
-    if (!TERMINAL_QUEUE_STATUSES.has(record.status)) {
-      return
-    }
-
-    const waiters = this.terminalJobWaiters.get(record.id)
-    if (!waiters) {
-      return
-    }
-
-    this.terminalJobWaiters.delete(record.id)
-    for (const waiter of waiters) {
-      if (waiter.timeoutHandle) {
-        clearTimeout(waiter.timeoutHandle)
-      }
-      waiter.resolve(record)
-    }
+    return this.terminalJobWaiters.waitFor(id, options)
   }
 
   /** Validate and apply one queue job state transition. */
@@ -405,7 +341,7 @@ export class GenerationQueueService {
     }
 
     const latest = GenerationQueueModel.findById(id)
-    this.resolveTerminalJobWaiters(latest)
+    this.terminalJobWaiters.resolve(latest)
     return latest
   }
 
