@@ -44,6 +44,7 @@ for (const syntax of ['__Group__', '__Group[3]__', '__Group[0~3]__', '__Group<1k
 }
 
 const inlineFieldSource = source('features/image-generation/components/wildcard-inline-picker-field.tsx')
+const detectedChipsSource = source('features/image-generation/components/wildcard-inline-picker-detected-chips.tsx')
 const inlineDataSource = source('features/image-generation/components/use-wildcard-inline-picker-data.ts')
 const inlineSuggestionsSource = source('features/image-generation/components/use-wildcard-inline-picker-suggestions.ts')
 const inlinePopupSource = source('features/image-generation/components/wildcard-inline-picker-popup-content.tsx')
@@ -58,7 +59,7 @@ equal(
   'inline picker must route preprocess matches separately from tag suggestions',
 )
 equal(
-  inlineFieldSource.includes('activeDetectedCharacter'),
+  inlineFieldSource.includes('WildcardInlinePickerDetectedChips') && detectedChipsSource.includes('activeDetectedCharacterKey') && detectedChipsSource.includes('suggestion.relatedTags?.length'),
   true,
   'inline picker must expose detected character chips with a related-tag popup',
 )

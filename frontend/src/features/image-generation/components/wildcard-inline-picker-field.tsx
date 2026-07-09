@@ -1,9 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type SyntheticEvent, type UIEvent } from 'react'
 import { useQueries } from '@tanstack/react-query'
-import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
-import { useI18n } from '@/i18n'
 import { getDanbooruBrowserCharacters } from '@/lib/api-danbooru-browser'
 import { cn } from '@/lib/utils'
 import type { PromptTypeFilter } from '@/types/prompt'
@@ -23,7 +21,6 @@ import {
 } from './wildcard-inline-picker-helpers'
 import {
   detectPromptSyntaxTokens,
-  getPromptSyntaxKindLabel,
   summarizePromptSyntaxTokens,
 } from './prompt-syntax-highlight-helpers'
 import { useWildcardInlinePickerData } from './use-wildcard-inline-picker-data'
@@ -37,9 +34,9 @@ import {
 } from './use-prompt-inline-autocomplete'
 import { usePromptInlineSyntaxSettings } from './prompt-inline-syntax-settings'
 import { useWildcardInlinePickerSuggestions } from './use-wildcard-inline-picker-suggestions'
+import { WildcardInlinePickerDetectedChips } from './wildcard-inline-picker-detected-chips'
 import { WildcardInlinePickerPopupContent } from './wildcard-inline-picker-popup-content'
 import {
-  getPromptSyntaxChipClass,
   getTextFieldCaretClientRect,
   PromptAutocompletePopup,
   PromptSyntaxTokenPopup,
@@ -75,7 +72,6 @@ export function WildcardInlinePickerField({
   showDetectedSyntax = true,
   autocompletePromptType = 'positive',
 }: WildcardInlinePickerFieldProps) {
-  const { t } = useI18n()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
   const closeTimerRef = useRef<number | null>(null)
@@ -760,75 +756,19 @@ export function WildcardInlinePickerField({
         )}
       </div>
 
-      {showDetectedSyntax && detectedTokenSummaries.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-[11px] text-muted-foreground">
-          <span>{t('image-generation.components.wildcard.inline.picker.field.detected')}</span>
-          {detectedTokenSummaries.map((token) => {
-            const isActive = token.key === activeDetectedTokenKey
-            return (
-              <button
-                key={token.key}
-                ref={(node) => {
-                  detectedTokenButtonRefs.current.set(token.key, node)
-                }}
-                type="button"
-                className={getPromptSyntaxChipClass(token.kind, isActive)}
-                onMouseEnter={() => {
-                  cancelDetectedPopupClose()
-                  setActiveDetectedTokenKey(token.key)
-                }}
-                onMouseLeave={() => {
-                  scheduleDetectedPopupClose()
-                }}
-                onFocus={() => {
-                  cancelDetectedPopupClose()
-                  setActiveDetectedTokenKey(token.key)
-                }}
-                onBlur={() => {
-                  scheduleDetectedPopupClose()
-                }}
-                onClick={() => {
-                  cancelDetectedPopupClose()
-                  setActiveDetectedTokenKey((current) => current === token.key ? null : token.key)
-                }}
-              >
-                <span className="max-w-[12rem] truncate">{token.kind === 'comment' ? t('image-generation.components.wildcard.inline.picker.field.comment.items', { count: token.count }) : token.rawText}</span>
-                <span className="text-muted-foreground">{getPromptSyntaxKindLabel(token.kind)}</span>
-                {token.count > 1 ? <Badge variant="secondary">{token.count}</Badge> : null}
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
-
-      {showDetectedSyntax && detectedCharacters.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-[11px] text-muted-foreground">
-          <span>{t({ ko: '캐릭터', en: 'Characters' })}</span>
-          {detectedCharacters.map(({ candidate, suggestion }) => {
-            const isActive = candidate.key === activeDetectedCharacterKey
-            return (
-              <button
-                key={candidate.key}
-                ref={(node) => {
-                  detectedCharacterButtonRefs.current.set(candidate.key, node)
-                }}
-                type="button"
-                className={cn(
-                  'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors',
-                  isActive ? 'border-cyan-300/60 bg-cyan-400/18 text-foreground' : 'border-cyan-400/20 bg-cyan-400/10 text-foreground/90 hover:bg-cyan-400/16',
-                )}
-                onClick={() => {
-                  setActiveDetectedCharacterKey((current) => current === candidate.key ? null : candidate.key)
-                }}
-              >
-                <span className="max-w-[12rem] truncate">{suggestion.label}</span>
-                {suggestion.translatedName ? <span className="max-w-[8rem] truncate text-muted-foreground">{suggestion.translatedName}</span> : null}
-                {suggestion.relatedTags?.length ? <Badge variant="secondary">{suggestion.relatedTags.length}</Badge> : null}
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
+      <WildcardInlinePickerDetectedChips
+        showDetectedSyntax={showDetectedSyntax}
+        detectedTokenSummaries={detectedTokenSummaries}
+        activeDetectedTokenKey={activeDetectedTokenKey}
+        detectedTokenButtonRefs={detectedTokenButtonRefs}
+        detectedCharacters={detectedCharacters}
+        activeDetectedCharacterKey={activeDetectedCharacterKey}
+        detectedCharacterButtonRefs={detectedCharacterButtonRefs}
+        onCancelDetectedPopupClose={cancelDetectedPopupClose}
+        onScheduleDetectedPopupClose={scheduleDetectedPopupClose}
+        onSetActiveDetectedTokenKey={setActiveDetectedTokenKey}
+        onSetActiveDetectedCharacterKey={setActiveDetectedCharacterKey}
+      />
 
       {showDetectedSyntax && activeDetectedToken && detectedPopupPosition ? (
         <PromptSyntaxTokenPopup

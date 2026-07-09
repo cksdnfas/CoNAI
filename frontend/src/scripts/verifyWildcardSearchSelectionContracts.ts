@@ -97,13 +97,14 @@ equal(
 )
 
 const inlinePickerFieldSource = source('features/image-generation/components/wildcard-inline-picker-field.tsx')
+const inlinePickerDataSource = source('features/image-generation/components/use-wildcard-inline-picker-data.ts')
 equal(
-  inlinePickerFieldSource.includes('const explorerEntryIdSet = useMemo(() => new Set(explorerEntries.map((entry) => entry.wildcard.id)), [explorerEntries])'),
+  inlinePickerDataSource.includes('const explorerEntryIdSet = useMemo(() => new Set(explorerEntries.map((entry) => entry.wildcard.id)), [explorerEntries])'),
   true,
   'inline wildcard picker should memoize explorer entry ids once per explorer entry snapshot',
 )
 equal(
-  inlinePickerFieldSource.includes('const rootExplorerEntryIds = useMemo('),
+  inlinePickerDataSource.includes('const rootExplorerEntryIds = useMemo('),
   true,
   'inline wildcard picker should memoize root explorer ids for default expansion',
 )
