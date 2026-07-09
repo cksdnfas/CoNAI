@@ -1,8 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type SyntheticEvent, type UIEvent } from 'react'
-import { useQueries } from '@tanstack/react-query'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
-import { getDanbooruBrowserCharacters } from '@/lib/api-danbooru-browser'
 import { cn } from '@/lib/utils'
 import type { PromptTypeFilter } from '@/types/prompt'
 import {
@@ -27,12 +25,11 @@ import { useWildcardInlinePickerData } from './use-wildcard-inline-picker-data'
 import { resolveFloatingDropdownRectFromRect } from './floating-dropdown-utils'
 import {
   buildPromptAutocompleteInsertion,
-  normalizeAutocompleteText,
-  resolvePromptDetectedCharacterCandidates,
   usePromptInlineAutocomplete,
   type PromptAutocompleteSuggestion,
 } from './use-prompt-inline-autocomplete'
 import { usePromptInlineSyntaxSettings } from './prompt-inline-syntax-settings'
+import { useWildcardInlineDetectedCharacters } from './use-wildcard-inline-detected-characters'
 import { useWildcardInlinePickerSuggestions } from './use-wildcard-inline-picker-suggestions'
 import { WildcardInlinePickerDetectedChips } from './wildcard-inline-picker-detected-chips'
 import { WildcardInlinePickerPopupContent } from './wildcard-inline-picker-popup-content'
@@ -147,51 +144,7 @@ export function WildcardInlinePickerField({
     () => detectedTokenSummaries.find((token) => token.key === activeDetectedTokenKey) ?? null,
     [activeDetectedTokenKey, detectedTokenSummaries],
   )
-  const detectedCharacterCandidates = useMemo(
-    () => (syntaxSettings.characterRelatedTags ? resolvePromptDetectedCharacterCandidates(value) : []),
-    [syntaxSettings.characterRelatedTags, value],
-  )
-  const detectedCharacterQueries = useQueries({
-    queries: detectedCharacterCandidates.map((candidate) => ({
-      queryKey: ['prompt-inline-detected-character', candidate.normalizedQuery],
-      queryFn: () => getDanbooruBrowserCharacters({
-        query: candidate.query,
-        page: 1,
-        limit: 5,
-        relatedTagLimit: 42,
-      }),
-      enabled: candidate.normalizedQuery.length >= 2,
-      staleTime: 60_000,
-      retry: false,
-    })),
-  })
-  const detectedCharacters = useMemo(() => detectedCharacterCandidates.flatMap((candidate, index) => {
-    const items = detectedCharacterQueries[index]?.data?.items ?? []
-    const matchedCharacter = items.find((item) => {
-      const normalizedName = normalizeAutocompleteText(item.name).replace(/ /g, '_')
-      const normalizedDisplayName = normalizeAutocompleteText(item.displayName).replace(/ /g, '_')
-      return normalizedName === candidate.normalizedQuery || normalizedDisplayName === candidate.normalizedQuery
-    })
-    if (!matchedCharacter) {
-      return []
-    }
-
-    const suggestion: PromptAutocompleteSuggestion = {
-      id: `detected-character:${matchedCharacter.tagId}:${candidate.key}`,
-      kind: 'character',
-      label: matchedCharacter.displayName,
-      insertText: matchedCharacter.name,
-      translatedName: matchedCharacter.translatedName,
-      secondaryText: matchedCharacter.copyrights.map((copyright) => copyright.displayName).slice(0, 2).join(' · '),
-      usageCount: matchedCharacter.worksCount,
-      relatedTags: matchedCharacter.relatedTags
-        .slice()
-        .sort((left, right) => right.usageCount - left.usageCount)
-        .slice(0, 42),
-    }
-
-    return [{ candidate, suggestion }]
-  }), [detectedCharacterCandidates, detectedCharacterQueries])
+  const detectedCharacters = useWildcardInlineDetectedCharacters(value, syntaxSettings.characterRelatedTags)
   const activeDetectedCharacter = useMemo(
     () => detectedCharacters.find((character) => character.candidate.key === activeDetectedCharacterKey) ?? null,
     [activeDetectedCharacterKey, detectedCharacters],
