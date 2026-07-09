@@ -15,12 +15,16 @@ function appendPagingParams(searchParams: URLSearchParams, params?: { query?: st
   if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
 }
 
-export async function getDanbooruBrowserSummary() {
-  const response = await fetchJson<ApiResponse<DanbooruBrowserSummary>>('/api/danbooru-browser/summary')
+async function requestDanbooruData<T>(path: string, fallbackMessage: string) {
+  const response = await fetchJson<ApiResponse<T>>(path)
   if (!response.success) {
-    throw new Error(response.error || 'Failed to load Danbooru database summary.')
+    throw new Error(response.error || fallbackMessage)
   }
   return response.data
+}
+
+export async function getDanbooruBrowserSummary() {
+  return requestDanbooruData<DanbooruBrowserSummary>('/api/danbooru-browser/summary', 'Failed to load Danbooru database summary.')
 }
 
 export async function getDanbooruBrowserTags(params?: { query?: string; categoryCode?: number; taxonomyNodeId?: number; page?: number; limit?: number }) {
@@ -29,22 +33,14 @@ export async function getDanbooruBrowserTags(params?: { query?: string; category
   if (params?.categoryCode !== undefined) searchParams.set('category', String(params.categoryCode))
   if (params?.taxonomyNodeId !== undefined) searchParams.set('taxonomyNodeId', String(params.taxonomyNodeId))
 
-  const response = await fetchJson<ApiResponse<DanbooruBrowserListPayload<DanbooruBrowserTagRecord>>>(`/api/danbooru-browser/tags?${searchParams.toString()}`)
-  if (!response.success) {
-    throw new Error(response.error || 'Failed to load Danbooru tags.')
-  }
-  return response.data
+  return requestDanbooruData<DanbooruBrowserListPayload<DanbooruBrowserTagRecord>>(`/api/danbooru-browser/tags?${searchParams.toString()}`, 'Failed to load Danbooru tags.')
 }
 
 export async function getDanbooruBrowserArtists(params?: { query?: string; page?: number; limit?: number }) {
   const searchParams = new URLSearchParams()
   appendPagingParams(searchParams, params)
 
-  const response = await fetchJson<ApiResponse<DanbooruBrowserListPayload<DanbooruBrowserArtistRecord>>>(`/api/danbooru-browser/artists?${searchParams.toString()}`)
-  if (!response.success) {
-    throw new Error(response.error || 'Failed to load Danbooru artists.')
-  }
-  return response.data
+  return requestDanbooruData<DanbooruBrowserListPayload<DanbooruBrowserArtistRecord>>(`/api/danbooru-browser/artists?${searchParams.toString()}`, 'Failed to load Danbooru artists.')
 }
 
 export async function getDanbooruBrowserCharacters(params?: { query?: string; copyrightTagId?: number; page?: number; limit?: number; relatedTagCategories?: DanbooruBrowserRelatedTagCategory[]; relatedTagScoreMin?: number; relatedTagScoreMax?: number; relatedTagLimit?: number }) {
@@ -56,9 +52,5 @@ export async function getDanbooruBrowserCharacters(params?: { query?: string; co
   if (params?.relatedTagScoreMax !== undefined) searchParams.set('relatedTagScoreMax', String(params.relatedTagScoreMax))
   if (params?.relatedTagLimit !== undefined) searchParams.set('relatedTagLimit', String(params.relatedTagLimit))
 
-  const response = await fetchJson<ApiResponse<DanbooruBrowserListPayload<DanbooruBrowserCharacterRecord>>>(`/api/danbooru-browser/characters?${searchParams.toString()}`)
-  if (!response.success) {
-    throw new Error(response.error || 'Failed to load Danbooru characters.')
-  }
-  return response.data
+  return requestDanbooruData<DanbooruBrowserListPayload<DanbooruBrowserCharacterRecord>>(`/api/danbooru-browser/characters?${searchParams.toString()}`, 'Failed to load Danbooru characters.')
 }
