@@ -1,4 +1,4 @@
-import { requestJson } from '@/lib/api-request'
+import { requestApiData, requestJson } from '@/lib/api-request'
 
 import type {
   ApiEnvelope,
@@ -83,47 +83,40 @@ export async function getModuleDefinitions(activeOnly = true) {
     searchParams.set('active', 'true')
   }
 
-  const response = await requestJson<ApiEnvelope<ModuleDefinitionRecord[]>>(`/api/module-definitions${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
-  return response.data
+  return requestApiData<ModuleDefinitionRecord[]>(`/api/module-definitions${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
 }
 
 /** Create a reusable NAI module from a captured generation-page snapshot. */
 export async function createNaiModuleFromSnapshot(payload: CreateNaiModuleFromSnapshotPayload) {
-  const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/module-definitions/from-nai-snapshot', {
+  return requestApiData<CreateEnvelope>('/api/module-definitions/from-nai-snapshot', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
   })
-
-  return response.data
 }
 
 /** Create a reusable Codex module from the current generation-tab snapshot. */
 export async function createCodexModuleFromSnapshot(payload: CreateCodexModuleFromSnapshotPayload) {
-  const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/module-definitions/from-codex-snapshot', {
+  return requestApiData<CreateEnvelope>('/api/module-definitions/from-codex-snapshot', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
   })
-
-  return response.data
 }
 
 /** Wrap an existing ComfyUI workflow as a reusable module definition. */
 export async function createComfyModuleFromWorkflow(workflowId: number, payload: CreateComfyModuleFromWorkflowPayload) {
-  const response = await requestJson<ApiEnvelope<CreateEnvelope>>(`/api/module-definitions/from-comfy-workflow/${workflowId}`, {
+  return requestApiData<CreateEnvelope>(`/api/module-definitions/from-comfy-workflow/${workflowId}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
   })
-
-  return response.data
 }
 
 /** List saved graph workflows for the future graph editor page. */
@@ -133,14 +126,12 @@ export async function getGraphWorkflows(activeOnly = true) {
     searchParams.set('active', 'true')
   }
 
-  const response = await requestJson<ApiEnvelope<GraphWorkflowRecord[]>>(`/api/graph-workflows${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
-  return response.data
+  return requestApiData<GraphWorkflowRecord[]>(`/api/graph-workflows${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
 }
 
 /** List workflow explorer folders for the graph editor. */
 export async function getGraphWorkflowFolders() {
-  const response = await requestJson<ApiEnvelope<GraphWorkflowFolderRecord[]>>('/api/graph-workflows/folders')
-  return response.data
+  return requestApiData<GraphWorkflowFolderRecord[]>('/api/graph-workflows/folders')
 }
 
 /** Create one workflow explorer folder. */
@@ -149,15 +140,13 @@ export async function createGraphWorkflowFolder(payload: {
   description?: string
   parent_id?: number | null
 }) {
-  const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/graph-workflows/folders', {
+  return requestApiData<CreateEnvelope>('/api/graph-workflows/folders', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
   })
-
-  return response.data
 }
 
 /** Rename one workflow explorer folder. */
@@ -166,26 +155,22 @@ export async function updateGraphWorkflowFolder(folderId: number, payload: {
   description?: string | null
   parent_id?: number | null
 }) {
-  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/folders/${folderId}`, {
+  return requestApiData<{ message: string }>(`/api/graph-workflows/folders/${folderId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
   })
-
-  return response.data
 }
 
 export type GraphWorkflowFolderDeleteMode = 'move_children' | 'delete_tree'
 
 /** Delete one workflow explorer folder. */
 export async function deleteGraphWorkflowFolder(folderId: number, mode: GraphWorkflowFolderDeleteMode = 'move_children') {
-  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/folders/${folderId}?mode=${mode}`, {
+  return requestApiData<{ message: string }>(`/api/graph-workflows/folders/${folderId}?mode=${mode}`, {
     method: 'DELETE',
   })
-
-  return response.data
 }
 
 /** Save a graph workflow document. */
