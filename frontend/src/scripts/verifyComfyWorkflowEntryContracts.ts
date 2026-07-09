@@ -10,6 +10,10 @@ const imageGenerationSharedSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/image-generation-shared.tsx'),
   'utf8',
 )
+const imageGenerationDraftsSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/image-generation-drafts.ts'),
+  'utf8',
+)
 const comfyGenerationPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/comfy-generation-panel.tsx'),
   'utf8',
@@ -56,7 +60,7 @@ doesNotMatch(
   'Shared image-generation state should not keep a persisted ComfyUI selected-workflow contract',
 )
 match(
-  imageGenerationSharedSource,
+  imageGenerationDraftsSource,
   /COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX/,
   'ComfyUI workflow field drafts should remain persisted separately from selected workflow navigation state',
 )

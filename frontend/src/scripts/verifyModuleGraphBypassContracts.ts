@@ -12,12 +12,14 @@ function source(path: string) {
 
 function verifySavedGraphDisabledFlagContract() {
   const apiSource = source('lib/api-module-graph.ts')
+  const apiTypeSource = source('lib/api-module-graph-types.ts')
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const validationSource = source('features/module-graph/module-graph-validation.ts')
   const viewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
   const interactionsSource = source('features/module-graph/use-module-graph-editor-interactions.ts')
 
-  assert(apiSource.includes('disabled?: boolean'), 'graph workflow node API type should expose disabled flag')
+  assert(apiSource.includes('GraphWorkflowNode'), 'graph workflow API module should re-export the workflow node type')
+  assert(apiTypeSource.includes('disabled?: boolean'), 'graph workflow node API type should expose disabled flag')
   assert(sharedSource.includes('disabled: node.data.disabled === true ? true : undefined'), 'graph payload should persist disabled nodes')
   assert(sharedSource.includes('if (node.disabled === true)'), 'saved graph loading should restore disabled node state')
   assert(sharedSource.includes("(node.disabled === undefined || typeof node.disabled === 'boolean')"), 'clipboard parser should accept only boolean disabled node state')
