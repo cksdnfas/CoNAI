@@ -1,7 +1,7 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { getDownloadFileName, readDownloadBlob } from '@/lib/download-utils'
-import { requestJson } from '@/lib/api-request'
+import { requestApiData } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
@@ -383,14 +383,6 @@ export interface UploadTransferProgress {
   percent: number | null
 }
 
-function unwrapApiPayload<T>(payload: ApiResponse<T>) {
-  if (!payload.success) {
-    throw new Error(payload.error || 'Request failed')
-  }
-
-  return payload.data
-}
-
 function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgress?: (progress: UploadTransferProgress) => void) {
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -472,12 +464,10 @@ async function uploadImagePreviewFile<T>(endpoint: string, file: File) {
   const formData = new FormData()
   formData.append('image', file)
 
-  const payload = await requestJson<ApiResponse<T>>(endpoint, {
+  return requestApiData<T>(endpoint, {
     method: 'POST',
     body: formData,
   })
-
-  return unwrapApiPayload(payload)
 }
 
 export async function extractImageMetadataPreview(file: File) {
@@ -619,13 +609,11 @@ export async function downloadExistingImageWithRewrittenMetadata(
 
 /** Persist one metadata patch onto an existing library image and return the updated image record. */
 export async function saveImageMetadata(compositeHash: string, metadataPatch: MetadataPatchPayload) {
-  const payload = await requestJson<ApiResponse<ImageRecord>>(`/api/images/${compositeHash}/metadata`, {
+  return requestApiData<ImageRecord>(`/api/images/${compositeHash}/metadata`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ metadataPatch }),
   })
-
-  return unwrapApiPayload(payload)
 }

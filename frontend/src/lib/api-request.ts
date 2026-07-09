@@ -6,6 +6,12 @@ interface RequestJsonOptions {
 
 type ResponsePayload = unknown
 
+export interface ApiEnvelope<T> {
+  success: boolean
+  data: T
+  error?: string
+}
+
 async function readResponsePayload(response: Response): Promise<ResponsePayload> {
   const contentType = response.headers.get('content-type') ?? ''
   return contentType.includes('application/json') ? await response.json() : await response.text()
@@ -44,4 +50,14 @@ export async function requestJson<T>(path: string, init?: RequestInit, options: 
   }
 
   return payload as T
+}
+
+/** Execute an API-envelope JSON request and return the successful data payload. */
+export async function requestApiData<T>(path: string, init?: RequestInit, options: RequestJsonOptions = {}) {
+  const payload = await requestJson<ApiEnvelope<T>>(path, init, options)
+  if (!payload.success) {
+    throw new Error(payload.error || 'Request failed')
+  }
+
+  return payload.data
 }
