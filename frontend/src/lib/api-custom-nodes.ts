@@ -2,6 +2,14 @@ import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 
+async function requestCustomNodeData<T>(path: string, fallbackKey: Parameters<typeof createApiFallbackError>[1], init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
+  if (!response.success) {
+    throw createApiFallbackError(response.error, fallbackKey)
+  }
+  return response.data
+}
+
 export type CustomNodePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type CustomNodeUiDataType = CustomNodePortDataType | 'select'
 export type CustomNodeScaffoldTemplate = 'empty' | 'hello_world' | 'http_json' | 'image_file'
@@ -124,75 +132,47 @@ export interface CustomNodeTestResult {
 }
 
 export async function listCustomNodes() {
-  const response = await fetchJson<ApiResponse<CustomNodeScanResult>>('/api/custom-nodes')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'customNodes.list.load')
-  }
-  return response.data
+  return requestCustomNodeData<CustomNodeScanResult>('/api/custom-nodes', 'customNodes.list.load')
 }
 
 export async function rescanCustomNodes() {
-  const response = await fetchJson<ApiResponse<CustomNodeSyncResult>>('/api/custom-nodes/rescan', {
+  return requestCustomNodeData<CustomNodeSyncResult>('/api/custom-nodes/rescan', 'customNodes.rescan', {
     method: 'POST',
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'customNodes.rescan')
-  }
-  return response.data
 }
 
 export async function scaffoldCustomNode(input: CustomNodeScaffoldInput) {
-  const response = await fetchJson<ApiResponse<CustomNodeScaffoldResult>>('/api/custom-nodes/scaffold', {
+  return requestCustomNodeData<CustomNodeScaffoldResult>('/api/custom-nodes/scaffold', 'customNodes.scaffold', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'customNodes.scaffold')
-  }
-  return response.data
 }
 
 export async function getCustomNodeSource(key: string) {
-  const response = await fetchJson<ApiResponse<CustomNodeSourceResult>>(`/api/custom-nodes/${encodeURIComponent(key)}/source`)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'customNodes.source.load')
-  }
-  return response.data
+  return requestCustomNodeData<CustomNodeSourceResult>(`/api/custom-nodes/${encodeURIComponent(key)}/source`, 'customNodes.source.load')
 }
 
 export async function openCustomNodeFolder(key: string) {
-  const response = await fetchJson<ApiResponse<{ key: string; folderPath: string }>>(`/api/custom-nodes/${encodeURIComponent(key)}/open-folder`, {
+  return requestCustomNodeData<{ key: string; folderPath: string }>(`/api/custom-nodes/${encodeURIComponent(key)}/open-folder`, 'customNodes.folder.open', {
     method: 'POST',
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'customNodes.folder.open')
-  }
-  return response.data
 }
 
 export async function installCustomNodeDependencies(key: string) {
-  const response = await fetchJson<ApiResponse<CustomNodeInstallResult>>(`/api/custom-nodes/${encodeURIComponent(key)}/install`, {
+  return requestCustomNodeData<CustomNodeInstallResult>(`/api/custom-nodes/${encodeURIComponent(key)}/install`, 'customNodes.dependencies.install', {
     method: 'POST',
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'customNodes.dependencies.install')
-  }
-  return response.data
 }
 
 export async function testCustomNode(key: string, inputs?: Record<string, unknown>) {
-  const response = await fetchJson<ApiResponse<CustomNodeTestResult>>(`/api/custom-nodes/${encodeURIComponent(key)}/test`, {
+  return requestCustomNodeData<CustomNodeTestResult>(`/api/custom-nodes/${encodeURIComponent(key)}/test`, 'customNodes.test.run', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ inputs: inputs ?? {} }),
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'customNodes.test.run')
-  }
-  return response.data
 }
