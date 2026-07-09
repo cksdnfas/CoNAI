@@ -8,61 +8,57 @@ interface ApiResponse<T> {
   error?: string
 }
 
+type SearchFallbackKey = Parameters<typeof createApiFallbackError>[1]
+
+async function requestSearchData<T>(path: string, fallbackKey: SearchFallbackKey, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
+  if (!response.success || !response.data) {
+    throw createApiFallbackError(response.error, fallbackKey)
+  }
+
+  return response.data
+}
+
+async function requestSearchAction<T>(path: string, fallbackKey: SearchFallbackKey, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
+  if (!response.success) {
+    throw createApiFallbackError(response.error, fallbackKey)
+  }
+}
+
 /** Load saved search history entries from the backend JSON store. */
 export async function getSearchHistory() {
-  const response = await fetchJson<ApiResponse<SearchHistoryEntry[]>>('/api/search-history')
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'search.history.load')
-  }
-  return response.data
+  return requestSearchData<SearchHistoryEntry[]>('/api/search-history', 'search.history.load')
 }
 
 /** Persist a saved search entry to the backend JSON store. */
 export async function saveSearchHistory(input: { label: string; chips: SearchChip[] }) {
-  const response = await fetchJson<ApiResponse<SearchHistoryEntry>>('/api/search-history', {
+  return requestSearchData<SearchHistoryEntry>('/api/search-history', 'search.history.save', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
   })
-
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'search.history.save')
-  }
-
-  return response.data
 }
 
 /** Delete a single saved search history entry. */
 export async function deleteSearchHistory(entryId: string) {
-  const response = await fetchJson<ApiResponse<{ deleted: boolean }>>(`/api/search-history/${encodeURIComponent(entryId)}`, {
+  await requestSearchAction<{ deleted: boolean }>(`/api/search-history/${encodeURIComponent(entryId)}`, 'search.history.delete', {
     method: 'DELETE',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'search.history.delete')
-  }
 }
 
 /** Remove all saved search history entries. */
 export async function clearSearchHistory() {
-  const response = await fetchJson<ApiResponse<{ cleared: boolean }>>('/api/search-history', {
+  await requestSearchAction<{ cleared: boolean }>('/api/search-history', 'search.history.clear', {
     method: 'DELETE',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'search.history.clear')
-  }
 }
 
 /** Load user-configured rating tiers for tier-based search chips. */
 export async function getRatingTiers() {
-  const response = await fetchJson<ApiResponse<RatingTierRecord[]>>('/api/runtime-media-settings/rating-tiers')
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'search.ratingTiers.load')
-  }
-  return response.data
+  return requestSearchData<RatingTierRecord[]>('/api/runtime-media-settings/rating-tiers', 'search.ratingTiers.load')
 }
 
 /** Load distinct model suggestions from indexed image metadata. */
@@ -71,11 +67,7 @@ export async function getSearchModelSuggestions(params?: { query?: string; limit
   searchParams.set('q', params?.query ?? '')
   searchParams.set('limit', String(params?.limit ?? 16))
 
-  const response = await fetchJson<ApiResponse<SearchMetadataSuggestion[]>>(`/api/search-options/models?${searchParams.toString()}`)
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'search.modelSuggestions.load')
-  }
-  return response.data
+  return requestSearchData<SearchMetadataSuggestion[]>(`/api/search-options/models?${searchParams.toString()}`, 'search.modelSuggestions.load')
 }
 
 /** Load distinct LoRA suggestions from indexed image metadata. */
@@ -84,9 +76,5 @@ export async function getSearchLoraSuggestions(params?: { query?: string; limit?
   searchParams.set('q', params?.query ?? '')
   searchParams.set('limit', String(params?.limit ?? 16))
 
-  const response = await fetchJson<ApiResponse<SearchMetadataSuggestion[]>>(`/api/search-options/loras?${searchParams.toString()}`)
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'search.loraSuggestions.load')
-  }
-  return response.data
+  return requestSearchData<SearchMetadataSuggestion[]>(`/api/search-options/loras?${searchParams.toString()}`, 'search.loraSuggestions.load')
 }

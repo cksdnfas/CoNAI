@@ -7,6 +7,26 @@ interface ApiResponse<T> {
   error?: string
 }
 
+type WildcardFallbackKey = Parameters<typeof createApiFallbackError>[1]
+
+async function requestWildcardData<T>(path: string, fallbackKey: WildcardFallbackKey, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
+  if (!response.success || !response.data) {
+    throw createApiFallbackError(response.error, fallbackKey)
+  }
+
+  return response.data
+}
+
+async function requestWildcardAction<T>(path: string, fallbackKey: WildcardFallbackKey, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
+  if (!response.success) {
+    throw createApiFallbackError(response.error, fallbackKey)
+  }
+
+  return response
+}
+
 export type WildcardTool = 'general' | 'comfyui' | 'nai'
 
 export interface WildcardItemRecord {
@@ -112,46 +132,29 @@ export async function getWildcards(params?: { hierarchical?: boolean; rootsOnly?
   }
 
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  const response = await fetchJson<ApiResponse<WildcardRecord[]>>(`/api/wildcards${suffix}`)
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'wildcards.list.load')
-  }
-
-  return response.data
+  return requestWildcardData<WildcardRecord[]>(`/api/wildcards${suffix}`, 'wildcards.list.load')
 }
 
 /** Create a new wildcard-like record in the shared wildcard store. */
 export async function createWildcard(input: WildcardMutationInput) {
-  const response = await fetchJson<ApiResponse<WildcardRecord>>('/api/wildcards', {
+  return requestWildcardData<WildcardRecord>('/api/wildcards', 'wildcards.create', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
   })
-
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'wildcards.create')
-  }
-
-  return response.data
 }
 
 /** Update an existing wildcard-like record in the shared wildcard store. */
 export async function updateWildcard(wildcardId: number, input: WildcardMutationInput) {
-  const response = await fetchJson<ApiResponse<WildcardRecord>>(`/api/wildcards/${wildcardId}`, {
+  return requestWildcardData<WildcardRecord>(`/api/wildcards/${wildcardId}`, 'wildcards.update', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
   })
-
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'wildcards.update')
-  }
-
-  return response.data
 }
 
 /** Remove a wildcard-like record, optionally cascading through its children. */
@@ -162,15 +165,9 @@ export async function deleteWildcard(wildcardId: number, options?: { cascade?: b
   }
 
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  const response = await fetchJson<ApiResponse<{ message?: string }>>(`/api/wildcards/${wildcardId}${suffix}`, {
+  return requestWildcardAction<{ message?: string }>(`/api/wildcards/${wildcardId}${suffix}`, 'wildcards.delete', {
     method: 'DELETE',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'wildcards.delete')
-  }
-
-  return response
 }
 
 /** Load the latest auto-generated LoRA scan summary when available. */
@@ -185,24 +182,18 @@ export async function getWildcardLastScanLog() {
 
 /** Scan a LoRA folder dump and rebuild the auto-collected wildcard tree. */
 export async function scanWildcardLoraFolder(input: LoraScanRequest) {
-  const response = await fetchJson<ApiResponse<LoraScanResponse>>('/api/wildcards/scan-lora-folder', {
+  return requestWildcardData<LoraScanResponse>('/api/wildcards/scan-lora-folder', 'wildcards.loraScan.run', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
   })
-
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'wildcards.loraScan.run')
-  }
-
-  return response.data
 }
 
 /** Ask the backend wildcard parser to preview one or more resolved prompt results. */
 export async function parseWildcards(input: { text: string; tool: WildcardTool | 'codex'; count?: number }) {
-  const response = await fetchJson<ApiResponse<WildcardParseResponse>>('/api/wildcards/parse', {
+  return requestWildcardData<WildcardParseResponse>('/api/wildcards/parse', 'wildcards.preview.parse', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -213,10 +204,4 @@ export async function parseWildcards(input: { text: string; tool: WildcardTool |
       count: input.count ?? 5,
     }),
   })
-
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'wildcards.preview.parse')
-  }
-
-  return response.data
 }

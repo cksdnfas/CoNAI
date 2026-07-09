@@ -7,6 +7,26 @@ interface ApiResponse<T> {
   error?: string
 }
 
+type PromptPresetFallbackKey = Parameters<typeof createApiFallbackError>[1]
+
+async function requestPromptPresetData<T>(path: string, fallbackKey: PromptPresetFallbackKey, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
+  if (!response.success || !response.data) {
+    throw createApiFallbackError(response.error, fallbackKey)
+  }
+
+  return response.data
+}
+
+async function requestPromptPresetAction<T>(path: string, fallbackKey: PromptPresetFallbackKey, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
+  if (!response.success) {
+    throw createApiFallbackError(response.error, fallbackKey)
+  }
+
+  return response
+}
+
 export interface PromptPresetItemRecord {
   id: number
   preset_id: number
@@ -52,40 +72,23 @@ export async function getPromptPresets(params?: { hierarchical?: boolean; rootsO
   }
 
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  const response = await fetchJson<ApiResponse<PromptPresetRecord[]>>(`/api/prompt-presets${suffix}`)
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'promptPresets.list.load')
-  }
-
-  return response.data
+  return requestPromptPresetData<PromptPresetRecord[]>(`/api/prompt-presets${suffix}`, 'promptPresets.list.load')
 }
 
 export async function createPromptPreset(input: PromptPresetMutationInput) {
-  const response = await fetchJson<ApiResponse<PromptPresetRecord>>('/api/prompt-presets', {
+  return requestPromptPresetData<PromptPresetRecord>('/api/prompt-presets', 'promptPresets.create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
-
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'promptPresets.create')
-  }
-
-  return response.data
 }
 
 export async function updatePromptPreset(presetId: number, input: PromptPresetMutationInput) {
-  const response = await fetchJson<ApiResponse<PromptPresetRecord>>(`/api/prompt-presets/${presetId}`, {
+  return requestPromptPresetData<PromptPresetRecord>(`/api/prompt-presets/${presetId}`, 'promptPresets.update', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
-
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'promptPresets.update')
-  }
-
-  return response.data
 }
 
 export async function deletePromptPreset(presetId: number, options?: { cascade?: boolean }) {
@@ -95,15 +98,9 @@ export async function deletePromptPreset(presetId: number, options?: { cascade?:
   }
 
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  const response = await fetchJson<ApiResponse<{ message?: string }>>(`/api/prompt-presets/${presetId}${suffix}`, {
+  return requestPromptPresetAction<{ message?: string }>(`/api/prompt-presets/${presetId}${suffix}`, 'promptPresets.delete', {
     method: 'DELETE',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'promptPresets.delete')
-  }
-
-  return response
 }
 
 function normalizePresetValue(value: string) {
