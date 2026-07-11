@@ -48,6 +48,7 @@ function assertUnique(values: string[], label: string) {
 
 const wallpaperEditorPageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-editor-page.tsx'), 'utf8')
 const wallpaperRuntimePageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-runtime-page.tsx'), 'utf8')
+const appRouterSource = readFileSync(resolve(process.cwd(), 'src/app/router.tsx'), 'utf8')
 const wallpaperCanvasViewSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-canvas-view.tsx'), 'utf8')
 const wallpaperWidgetUtilsSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-widget-utils.ts'), 'utf8')
 const wallpaperClockSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-clock-widget-body.tsx'), 'utf8')
@@ -262,8 +263,13 @@ const koreanQueryPreset = makePreset({ id: 'ko-01', name: '대표 월페이퍼' 
 const presetQueries = [queryPreset, koreanQueryPreset]
 const queryValue = buildWallpaperPresetQueryValue(queryPreset)
 assert(queryValue === 'hero-layout--hero-01', `unexpected query value: ${queryValue}`)
-assert(buildWallpaperRuntimePath(queryPreset) === '/wallpaper/runtime?preset=hero-layout--hero-01', 'saved wallpaper runtime path must include its stable preset token')
-assert(buildWallpaperDraftRuntimePath() === '/wallpaper/runtime?draft=1', 'draft wallpaper runtime path must explicitly request local draft mode')
+assert(buildWallpaperRuntimePath(queryPreset) === '/#/wallpaper/runtime?preset=hero-layout--hero-01', 'saved wallpaper runtime path must target the hash-router runtime route with its stable preset token')
+assert(buildWallpaperDraftRuntimePath() === '/#/wallpaper/runtime?draft=1', 'draft wallpaper runtime path must target the hash-router runtime route in local draft mode')
+assert(
+  appRouterSource.includes("window.location.pathname !== '/wallpaper/runtime'")
+    && appRouterSource.includes('`/#/wallpaper/runtime${window.location.search}`'),
+  'legacy pathname-based wallpaper URLs must be normalized before the hash router is created',
+)
 assert(findWallpaperPresetByQuery(presetQueries, 'hero-01')?.id === queryPreset.id, 'preset query must resolve by id case-insensitively')
 assert(findWallpaperPresetByQuery(presetQueries, 'HERO-LAYOUT')?.id === queryPreset.id, 'preset query must resolve by slug case-insensitively')
 assert(findWallpaperPresetByQuery(presetQueries, queryValue)?.id === queryPreset.id, 'preset query must resolve by slug/id token')

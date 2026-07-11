@@ -20,6 +20,21 @@ import {
   WallpaperRuntimeRoute,
 } from '@/app/lazy-routes'
 
+/** Move legacy pathname-based wallpaper links into the hash router before it reads location. */
+function normalizeLegacyWallpaperRuntimeLocation() {
+  if (window.location.pathname !== '/wallpaper/runtime' || window.location.hash) {
+    return
+  }
+
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `/#/wallpaper/runtime${window.location.search}`,
+  )
+}
+
+normalizeLegacyWallpaperRuntimeLocation()
+
 export const appRouter = createHashRouter([
   {
     path: '/login',

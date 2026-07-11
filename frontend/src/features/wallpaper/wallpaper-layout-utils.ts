@@ -33,12 +33,12 @@ export function buildWallpaperPresetQueryValue(preset: Pick<WallpaperLayoutPrese
 
 /** Build the stable runtime path for one saved wallpaper preset. */
 export function buildWallpaperRuntimePath(preset: Pick<WallpaperLayoutPreset, 'id' | 'name'>) {
-  return `/wallpaper/runtime?preset=${encodeURIComponent(buildWallpaperPresetQueryValue(preset))}`
+  return `/#/wallpaper/runtime?preset=${encodeURIComponent(buildWallpaperPresetQueryValue(preset))}`
 }
 
 /** Build the local-only runtime path used to preview the current editor draft. */
 export function buildWallpaperDraftRuntimePath() {
-  return '/wallpaper/runtime?draft=1'
+  return '/#/wallpaper/runtime?draft=1'
 }
 
 /** Resolve one saved wallpaper preset from a runtime preset query token. */
