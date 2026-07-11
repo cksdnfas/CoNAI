@@ -192,7 +192,7 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
               <div className="mt-1 text-sm text-foreground">{formatWildcardDateTime(log.timestamp, formatDateTime)}</div>
             </div>
             <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">LoRA weight</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: 'LoRA 가중치', en: 'LoRA weight' })}</div>
               <div className="mt-1 text-sm text-foreground">{log.loraWeight}</div>
             </div>
             <div className="rounded-sm border border-border bg-surface-container px-3 py-3">

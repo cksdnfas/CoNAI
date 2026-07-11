@@ -57,7 +57,7 @@ export function PromptSidebar({
 
   return (
     <ExplorerSidebar
-      title="Groups"
+      title={t({ ko: '그룹', en: 'Groups' })}
       badge={<Badge variant="outline">{formatNumber(visibleGroupCount)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:prompts:sidebar-locked"

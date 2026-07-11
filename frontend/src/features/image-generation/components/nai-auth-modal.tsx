@@ -66,15 +66,15 @@ export function NaiAuthModal({
 
         {loginMode === 'account' ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Username">
+            <FormField label={t({ ko: '사용자 이름', en: 'Username' })}>
               <Input value={username} onChange={(event) => onUsernameChange(event.target.value)} autoComplete="username" />
             </FormField>
-            <FormField label="Password">
+            <FormField label={t({ ko: '비밀번호', en: 'Password' })}>
               <Input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete="current-password" />
             </FormField>
           </div>
         ) : (
-          <FormField label="Access Token">
+          <FormField label={t({ ko: '액세스 토큰', en: 'Access Token' })}>
             <Input
               value={token}
               onChange={(event) => onTokenChange(event.target.value)}

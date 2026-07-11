@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { buildComfyModelThumbnailUrl } from '@/lib/api-image-generation-workflows'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 
 const PATH_RANDOM_OPTION_VALUE = '__random__'
@@ -45,16 +46,16 @@ function splitOptionPath(option: string) {
   return option.split(/[\\/]+/).map((part) => part.trim()).filter(Boolean)
 }
 
-function getOptionDisplayLabel(option: string) {
+function getOptionDisplayLabel(option: string, randomSelectionLabel: string) {
   if (option === PATH_RANDOM_OPTION_VALUE) {
-    return '랜덤 선택'
+    return randomSelectionLabel
   }
 
   const parts = splitOptionPath(option)
   return parts.at(-1) ?? option
 }
 
-function buildPathOptionTree(options: string[], placeholder: string): PathOptionTreeNode[] {
+function buildPathOptionTree(options: string[], placeholder: string, randomSelectionLabel: string): PathOptionTreeNode[] {
   const nodes: PathOptionTreeNode[] = [
     {
       id: 'placeholder:',
@@ -72,7 +73,7 @@ function buildPathOptionTree(options: string[], placeholder: string): PathOption
       nodes.push({
         id: `option:${option}`,
         parentId: null,
-        label: getOptionDisplayLabel(option),
+        label: getOptionDisplayLabel(option, randomSelectionLabel),
         value: option,
         kind: 'random',
         order: -1,
@@ -211,7 +212,11 @@ function resolveModelPreviewPosition(target: HTMLElement) {
 }
 
 /** Render path-like select options as a reusable HierarchyNav tree while preserving the actual selected value. */
-export function PathOptionTreeSelect({ value, options, placeholder = '선택', refreshLabel = '자동수집 새로고침', isRefreshing = false, modelPreviewFolder, onRefresh, onChange }: PathOptionTreeSelectProps) {
+export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel, isRefreshing = false, modelPreviewFolder, onRefresh, onChange }: PathOptionTreeSelectProps) {
+  const { t } = useI18n()
+  const resolvedPlaceholder = placeholder ?? t({ ko: '선택', en: 'Select' })
+  const resolvedRefreshLabel = refreshLabel ?? t({ ko: '자동수집 새로고침', en: 'Refresh auto-collected options' })
+  const randomSelectionLabel = t({ ko: '랜덤 선택', en: 'Random selection' })
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [menuRect, setMenuRect] = useState<FloatingDropdownRect | null>(null)
@@ -221,11 +226,11 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
   const previewTimerRef = useRef<number | null>(null)
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const menuId = useId()
-  const treeNodes = useMemo(() => buildPathOptionTree(options, placeholder), [options, placeholder])
+  const treeNodes = useMemo(() => buildPathOptionTree(options, resolvedPlaceholder, randomSelectionLabel), [options, randomSelectionLabel, resolvedPlaceholder])
   const filteredTreeNodes = useMemo(() => filterPathOptionTreeNodes(treeNodes, searchQuery), [searchQuery, treeNodes])
   const searchExpandedIds = useMemo(() => (searchQuery.trim() ? collectPathOptionFolderIds(filteredTreeNodes) : []), [filteredTreeNodes, searchQuery])
   const selectedNode = treeNodes.find((node) => node.value === value) ?? null
-  const selectedLabel = selectedNode?.label ?? (value ? getOptionDisplayLabel(value) : placeholder)
+  const selectedLabel = selectedNode?.label ?? (value ? getOptionDisplayLabel(value, randomSelectionLabel) : resolvedPlaceholder)
   const refreshing = isRefreshing || isLocalRefreshing
 
   const clearModelPreviewDelay = useCallback(() => {
@@ -372,8 +377,8 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
             className="theme-input-surface h-auto min-h-10 shrink-0 border-border/80"
             disabled={refreshing}
             onClick={(event) => void handleRefresh(event)}
-            aria-label={refreshLabel}
-            title={refreshLabel}
+            aria-label={resolvedRefreshLabel}
+            title={resolvedRefreshLabel}
           >
             <RotateCcw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
           </Button>
@@ -392,8 +397,8 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="검색"
-                  aria-label="옵션 검색"
+                  placeholder={t({ ko: '검색', en: 'Search' })}
+                  aria-label={t({ ko: '옵션 검색', en: 'Search options' })}
                   className="h-8 pl-8 text-sm"
                 />
               </div>
@@ -436,7 +441,7 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
               <img
                 key={modelPreview.key}
                 src={modelPreview.src}
-                alt="모델 썸네일"
+                alt={t({ ko: '모델 썸네일', en: 'Model thumbnail' })}
                 className="block max-h-[240px] w-full bg-surface-low object-contain"
                 loading="eager"
                 decoding="async"

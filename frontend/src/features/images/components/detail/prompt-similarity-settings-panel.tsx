@@ -57,17 +57,17 @@ export function PromptSimilaritySettingsPanel({
                 <SectionTitleWithTooltip title={t('images.components.detail.prompt.similarity.settings.panel.score.weights')} tooltip={t('images.components.detail.prompt.similarity.settings.panel.weight.applied.when.calculating.the.combined.score')} />
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>Positive</label>
+                  <label className={detailSettingsLabelClassName}>{t({ ko: '포지티브', en: 'Positive' })}</label>
                   <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.positive} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, positive: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>Negative</label>
+                  <label className={detailSettingsLabelClassName}>{t({ ko: '네거티브', en: 'Negative' })}</label>
                   <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.negative} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, negative: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>Auto</label>
+                  <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
                   <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.auto} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
                 </div>
               </div>
@@ -76,17 +76,17 @@ export function PromptSimilaritySettingsPanel({
                 <SectionTitleWithTooltip title={t('images.components.detail.prompt.similarity.settings.panel.minimum.field.thresholds')} tooltip={t('images.components.detail.prompt.similarity.settings.panel.each.field.must.meet.or.exceed.this')} />
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>Positive</label>
+                  <label className={detailSettingsLabelClassName}>{t({ ko: '포지티브', en: 'Positive' })}</label>
                   <ScrubbableNumberInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.positive} onChange={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, positive: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>Negative</label>
+                  <label className={detailSettingsLabelClassName}>{t({ ko: '네거티브', en: 'Negative' })}</label>
                   <ScrubbableNumberInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.negative} onChange={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, negative: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>Auto</label>
+                  <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
                   <ScrubbableNumberInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.auto} onChange={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(value) } })} />
                 </div>
               </div>

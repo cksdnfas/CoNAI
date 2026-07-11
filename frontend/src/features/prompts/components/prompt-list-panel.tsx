@@ -81,9 +81,9 @@ export function PromptListPanel({
         <div className="space-y-1">
           <div className="hidden grid-cols-[32px_auto_minmax(0,1fr)_auto] border-b border-border/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground sm:grid">
             <span />
-            <span>Usage</span>
-            <span>Prompt</span>
-            <span className="text-right">Actions</span>
+            <span>{t({ ko: '사용량', en: 'Usage' })}</span>
+            <span>{t({ ko: '프롬프트', en: 'Prompt' })}</span>
+            <span className="text-right">{t({ ko: '작업', en: 'Actions' })}</span>
           </div>
 
           {isLoading ? (

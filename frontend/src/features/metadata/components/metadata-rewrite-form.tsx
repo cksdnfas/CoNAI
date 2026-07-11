@@ -24,7 +24,7 @@ export function MetadataRewriteForm({ draft, disabled = false, formatLabel, show
       {showHeader ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm font-medium text-foreground">{t('metadata.components.metadata.rewrite.form.edit.metadata')}</div>
-          <Badge variant="outline">rewrite</Badge>
+          <Badge variant="outline">{t({ ko: '다시 쓰기', en: 'Rewrite' })}</Badge>
         </div>
       ) : null}
 

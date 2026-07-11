@@ -4,6 +4,7 @@ import path from 'path'
 
 const ROOT = process.cwd()
 const I18N_RESOURCES_DIR = path.join(ROOT, 'frontend', 'src', 'i18n', 'resources')
+const FRONTEND_SRC_DIR = path.join(ROOT, 'frontend', 'src')
 const FRONTEND_FEATURES_DIR = path.join(ROOT, 'frontend', 'src', 'features')
 const FRONTEND_LIB_DIR = path.join(ROOT, 'frontend', 'src', 'lib')
 const OUTPUT_MD = path.join(ROOT, 'docs', 'i18n-gap-report.md')
@@ -73,6 +74,34 @@ function extractResourceKeys(filePath) {
     byLang[lang] = keys
   }
   return byLang
+}
+
+function findMissingStaticTranslationKeys(resourceFiles) {
+  const catalogKeys = new Set()
+  for (const resourceFile of resourceFiles) {
+    const byLang = extractResourceKeys(path.join(I18N_RESOURCES_DIR, resourceFile))
+    for (const key of byLang[BASE_LANG] ?? []) catalogKeys.add(key)
+  }
+
+  const findings = []
+  const sourceFiles = walkFiles(FRONTEND_SRC_DIR, ['.ts', '.tsx'])
+  for (const filePath of sourceFiles) {
+    if (filePath.startsWith(`${I18N_RESOURCES_DIR}${path.sep}`)) continue
+    const code = fs.readFileSync(filePath, 'utf8')
+    const translationCallRegex = /\bt\(\s*(["'])([^"']+)\1/g
+    let match
+    while ((match = translationCallRegex.exec(code)) !== null) {
+      const key = match[2]
+      if (catalogKeys.has(key)) continue
+      findings.push({
+        file: path.relative(ROOT, filePath).split(path.sep).join('/'),
+        line: lineNumberAt(code, match.index),
+        key,
+      })
+    }
+  }
+
+  return findings
 }
 
 function walkFiles(dir, exts, out = []) {
@@ -213,6 +242,7 @@ function featureFromPath(filePath) {
 
 function main() {
   const resourceFiles = listResourceFiles()
+  const missingStaticTranslationKeys = findMissingStaticTranslationKeys(resourceFiles)
   const missingByLang = {}
   const missingNamespacesByLang = {}
   const statsByLang = {}
@@ -303,6 +333,7 @@ function main() {
     missingByLang,
     statsByLang,
     resourceKeyCountsByNamespace,
+    missingStaticTranslationKeys,
     hardcodedSummary: {
       filesWithFindings: hardcodedFiles.length,
       totalFindings: hardcodedFiles.reduce((acc, cur) => acc + cur.findings.length, 0),
@@ -355,6 +386,17 @@ function main() {
     }
     lines.push('')
   }
+
+  lines.push('## Missing Static Translation Keys')
+  lines.push('')
+  if (missingStaticTranslationKeys.length === 0) {
+    lines.push('- No missing static `t("key")` references')
+  } else {
+    for (const finding of missingStaticTranslationKeys) {
+      lines.push(`- ${finding.file}:${finding.line} \`${finding.key}\``)
+    }
+  }
+  lines.push('')
 
   lines.push('## Hardcoded Hangul String Findings (Heuristic)')
   lines.push('')
@@ -418,8 +460,8 @@ function main() {
 
   const totalMissingKeys = Object.values(statsByLang).reduce((acc, stats) => acc + stats.missingKeys, 0)
   const totalMissingNamespaces = Object.values(statsByLang).reduce((acc, stats) => acc + stats.missingNamespaces, 0)
-  if (totalMissingKeys > 0 || totalMissingNamespaces > 0) {
-    console.error(`[i18n-check] Missing translation resources found: ${totalMissingKeys} keys, ${totalMissingNamespaces} namespaces`)
+  if (totalMissingKeys > 0 || totalMissingNamespaces > 0 || missingStaticTranslationKeys.length > 0) {
+    console.error(`[i18n-check] Missing translation resources found: ${totalMissingKeys} locale keys, ${totalMissingNamespaces} namespaces, ${missingStaticTranslationKeys.length} static references`)
     process.exitCode = 1
   }
 }

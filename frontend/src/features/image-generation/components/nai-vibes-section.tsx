@@ -97,10 +97,10 @@ export function NaiVibesSection({
                 {vibe.image ? <NaiSelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} /> : null}
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="Strength">
+                  <FormField label={t({ ko: '강도', en: 'Strength' })}>
                     <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(value) => onVibeFieldChange(index, 'strength', value)} />
                   </FormField>
-                  <FormField label="Information Extracted">
+                  <FormField label={t({ ko: '정보 추출량', en: 'Information Extracted' })}>
                     <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(value) => onVibeFieldChange(index, 'informationExtracted', value)} />
                   </FormField>
                 </div>

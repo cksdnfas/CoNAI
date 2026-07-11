@@ -136,7 +136,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         <span className="font-mono text-xs text-muted-foreground">#{index + 1}</span>
                         <span className="truncate text-sm font-medium text-foreground">{field.label || field.id}</span>
                         <Badge variant="outline">{formatMarkedFieldTypeLabel(field)}</Badge>
-                        {field.required ? <Badge variant="outline">required</Badge> : null}
+                        {field.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
                         {field.default_collapsed ? <Badge variant="secondary">{t('image-generation.components.comfy.workflow.marked.fields.editor.collapsed.by.default')}</Badge> : null}
                       </div>
                       <div className="truncate text-[11px] text-muted-foreground">{field.jsonPath}</div>

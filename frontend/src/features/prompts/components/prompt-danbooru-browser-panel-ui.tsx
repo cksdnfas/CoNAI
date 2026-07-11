@@ -211,10 +211,11 @@ export function EmptyTable() {
 }
 
 export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord[]; language: string }) {
+  const { t } = useI18n()
   if (items.length === 0) return <EmptyTable />
 
   return (
-    <SettingsResourceTable gridClassName="grid-cols-[minmax(0,1fr)_120px] gap-4" minWidthClassName="min-w-0" headers={['Tag', <span className="block text-right" key="usage">Usage</span>]}>
+    <SettingsResourceTable gridClassName="grid-cols-[minmax(0,1fr)_120px] gap-4" minWidthClassName="min-w-0" headers={[t({ ko: '태그', en: 'Tag' }), <span className="block text-right" key="usage">{t({ ko: '사용량', en: 'Usage' })}</span>]}>
       {items.map((item) => (
         <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-high/60">
           <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{getLocalizedGeneralTagLabel(item, language)}</div>
@@ -226,15 +227,16 @@ export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord
 }
 
 export function ArtistsTable({ items, language }: { items: DanbooruBrowserArtistRecord[]; language: string }) {
+  const { t } = useI18n()
   if (items.length === 0) return <EmptyTable />
 
   return (
-    <SettingsResourceTable gridClassName="grid-cols-[minmax(0,1fr)_120px_64px] gap-4" minWidthClassName="min-w-0" headers={['Artist', <span className="block text-right" key="works">Works</span>, 'Link']}>
+    <SettingsResourceTable gridClassName="grid-cols-[minmax(0,1fr)_120px_64px] gap-4" minWidthClassName="min-w-0" headers={[t({ ko: '아티스트', en: 'Artist' }), <span className="block text-right" key="works">{t({ ko: '작품 수', en: 'Works' })}</span>, t({ ko: '링크', en: 'Link' })]}>
       {items.map((item) => (
         <div key={item.tagId} className="grid grid-cols-[minmax(0,1fr)_120px_64px] items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-high/60">
           <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{getLocalizedGeneralTagLabel(item, language)}</div>
           <div className="text-right font-mono text-muted-foreground tabular-nums" title={String(item.worksCount)}>{formatCompactK(item.worksCount)}</div>
-          <div className="flex justify-center"><DanbooruLinkButton href={item.danbooruUrl} label={`Open ${item.name} on Danbooru`} /></div>
+          <div className="flex justify-center"><DanbooruLinkButton href={item.danbooruUrl} label={t({ ko: 'Danbooru에서 {name} 열기', en: 'Open {name} on Danbooru' }, { name: item.name })} /></div>
         </div>
       ))}
     </SettingsResourceTable>
@@ -415,13 +417,13 @@ export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruB
       <div className="w-[min(560px,92vw)] rounded-md border border-border bg-popover p-4 text-popover-foreground shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="min-w-0 truncate text-sm font-semibold">{item.displayName}</div>
-          <Button type="button" size="icon-sm" variant="ghost" onClick={onClose} aria-label="Close">
+          <Button type="button" size="icon-sm" variant="ghost" onClick={onClose} aria-label={t({ ko: '닫기', en: 'Close' })}>
             <X className="h-4 w-4" />
           </Button>
         </div>
         <div className="space-y-4 text-sm">
           <section>
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Original</div>
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '원문', en: 'Original' })}</div>
             <div className="whitespace-pre-wrap break-words rounded-sm border border-border/70 bg-surface-container/40 p-3 text-foreground">{originalText || '—'}</div>
           </section>
           <section>
@@ -446,7 +448,14 @@ export function CharactersTable({ items, language }: { items: DanbooruBrowserCha
       <SettingsResourceTable
         gridClassName="grid-cols-[88px_minmax(150px,0.85fr)_110px_minmax(140px,0.85fr)_minmax(220px,1.8fr)_72px] gap-4"
         minWidthClassName="min-w-0"
-        headers={['Image', 'Character', <span className="block text-left" key="works">Works</span>, 'Copyright', 'Related tags', 'Link']}
+        headers={[
+          t({ ko: '이미지', en: 'Image' }),
+          t({ ko: '캐릭터', en: 'Character' }),
+          <span className="block text-left" key="works">{t({ ko: '작품 수', en: 'Works' })}</span>,
+          t({ ko: '저작물', en: 'Copyright' }),
+          t({ ko: '관련 태그', en: 'Related tags' }),
+          t({ ko: '링크', en: 'Link' }),
+        ]}
       >
         {items.map((item) => (
           <div
@@ -468,7 +477,7 @@ export function CharactersTable({ items, language }: { items: DanbooruBrowserCha
                   <Languages className="h-4 w-4" />
                 </Button>
               ) : null}
-              <DanbooruLinkButton href={item.danbooruUrl} label={`Open ${item.name} on Danbooru`} />
+              <DanbooruLinkButton href={item.danbooruUrl} label={t({ ko: 'Danbooru에서 {name} 열기', en: 'Open {name} on Danbooru' }, { name: item.name })} />
             </div>
           </div>
         ))}

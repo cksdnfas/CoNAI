@@ -211,8 +211,8 @@ export function ModuleWorkflowArtifactRecordsTab({
                             onDeleteSingle(artifact.id)
                           }}
                           disabled={isDeletingArtifacts}
-                          title="Delete artifact"
-                          aria-label="Delete artifact"
+                          title={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
+                          aria-label={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
                           data-no-select-drag="true"
                         >
                           <Trash2 className="h-4 w-4" />

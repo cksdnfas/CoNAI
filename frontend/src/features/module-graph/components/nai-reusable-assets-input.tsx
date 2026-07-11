@@ -448,17 +448,17 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               </label>
 
               <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">Encoded</span>
-                <Textarea rows={4} value={draft.encoded} onChange={(event) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, encoded: event.target.value } : entry))} placeholder="encoded vibe payload" />
+                <span className="text-sm font-medium text-foreground">{t({ ko: '인코딩된 데이터', en: 'Encoded' })}</span>
+                <Textarea rows={4} value={draft.encoded} onChange={(event) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, encoded: event.target.value } : entry))} placeholder={t({ ko: '인코딩된 Vibe 데이터', en: 'Encoded Vibe payload' })} />
               </label>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-2">
-                  <span className="text-sm font-medium text-foreground">Strength</span>
+                  <span className="text-sm font-medium text-foreground">{t({ ko: '강도', en: 'Strength' })}</span>
                   <Input type="number" min={0.01} max={1} step={0.01} value={draft.strength} onChange={(event) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, strength: event.target.value } : entry))} />
                 </label>
                 <label className="space-y-2">
-                  <span className="text-sm font-medium text-foreground">Information Extracted</span>
+                  <span className="text-sm font-medium text-foreground">{t({ ko: '정보 추출량', en: 'Information Extracted' })}</span>
                   <Input type="number" min={0.01} max={1} step={0.01} value={draft.informationExtracted} onChange={(event) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, informationExtracted: event.target.value } : entry))} />
                 </label>
               </div>

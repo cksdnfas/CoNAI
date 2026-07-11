@@ -20,7 +20,7 @@ interface MetadataTabProps {
 export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, hasChanges, onReextractAll, isReextracting }: MetadataTabProps) {
   const { t } = useI18n()
   const handleReextractAll = () => {
-    if (!window.confirm(t('settings.metadataTab.reExtractAiMetadataFor'))) {
+    if (!window.confirm(t('metadataTab.reExtractAiMetadataFor'))) {
       return
     }
     onReextractAll()
@@ -36,8 +36,8 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
               size="icon-sm"
               onClick={onSave}
               disabled={!metadataDraft || isSaving || !hasChanges}
-              aria-label={hasChanges ? t('settings.metadataTab.metadataSave') : t({ ko: '메타데이터 설정 변경 없음', en: 'No metadata settings changes' })}
-              title={hasChanges ? t('settings.metadataTab.metadataSave') : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
+              aria-label={hasChanges ? t('metadataTab.metadataSave') : t({ ko: '메타데이터 설정 변경 없음', en: 'No metadata settings changes' })}
+              title={hasChanges ? t('metadataTab.metadataSave') : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -47,7 +47,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
             {metadataDraft ? (
               <>
                 <SettingsInsetBlock className="flex flex-col gap-3 text-sm text-muted-foreground md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-                  <span>{t('settings.metadataTab.standardMetadataIsReadFirst')}</span>
+                  <span>{t('metadataTab.standardMetadataIsReadFirst')}</span>
                   <Button
                     type="button"
                     variant="secondary"
@@ -78,11 +78,11 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                   <span className="mt-2 text-xs text-muted-foreground">{t({ ko: 'stealth 스캔 범위를 조절해.', en: 'Adjust the stealth scan range.' })}</span>
                 </SettingsField>
 
-                <SettingsField label={t('settings.metadataTab.maximumFileSizeMb')}>
+                <SettingsField label={t('metadataTab.maximumFileSizeMb')}>
                   <Input type="number" min={1} variant="settings" value={metadataDraft.stealthMaxFileSizeMB} onChange={(event) => onPatchMetadata({ stealthMaxFileSizeMB: Number(event.target.value) || 1 })} />
                 </SettingsField>
 
-                <SettingsField label={t('settings.metadataTab.maximumResolutionMp')}>
+                <SettingsField label={t('metadataTab.maximumResolutionMp')}>
                   <Input type="number" min={1} variant="settings" value={metadataDraft.stealthMaxResolutionMP} onChange={(event) => onPatchMetadata({ stealthMaxResolutionMP: Number(event.target.value) || 1 })} />
                 </SettingsField>
 

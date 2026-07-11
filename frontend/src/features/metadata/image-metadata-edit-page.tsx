@@ -177,7 +177,7 @@ export function ImageMetadataEditPage() {
                 <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
               </PageInset>
               <PageInset className="text-sm text-muted-foreground">
-                <p className="text-[11px] uppercase tracking-[0.18em]">File</p>
+                <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일', en: 'File' })}</p>
                 <p className="mt-2 break-all text-foreground">{downloadName}</p>
               </PageInset>
             </div>

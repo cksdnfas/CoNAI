@@ -214,7 +214,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-foreground">Negative Prompt</span>
+              <span className="text-sm font-medium text-foreground">{t({ ko: '네거티브 프롬프트', en: 'Negative Prompt' })}</span>
               <Textarea
                 rows={3}
                 value={draft.uc}

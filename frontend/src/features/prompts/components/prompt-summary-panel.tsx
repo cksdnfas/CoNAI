@@ -27,17 +27,17 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
       <SettingsSection heading={t({ ko: '{typeLabel} 요약', en: '{typeLabel} summary' }, { typeLabel: getTypeLabel(promptType) })}>
         <div className="grid gap-3 sm:grid-cols-3">
           <SettingsValueTile
-            label="Current type total"
+            label={t({ ko: '현재 유형 전체', en: 'Current type total' })}
             value={formatNumber(getPromptTypeTotal(promptType, statistics))}
             valueClassName="text-2xl"
           />
           <SettingsValueTile
-            label="All positive"
+            label={t({ ko: '전체 포지티브', en: 'All positive' })}
             value={formatNumber(statistics?.total_prompts ?? 0)}
             valueClassName="text-2xl"
           />
           <SettingsValueTile
-            label="All negative / auto"
+            label={t({ ko: '전체 네거티브 / 자동', en: 'All negative / auto' })}
             value={`${formatNumber(statistics?.total_negative_prompts ?? 0)} / ${formatNumber(statistics?.total_auto_prompts ?? 0)}`}
             valueClassName="text-2xl"
           />

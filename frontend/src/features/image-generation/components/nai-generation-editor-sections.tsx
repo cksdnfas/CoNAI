@@ -230,7 +230,7 @@ export function NaiGenerationEditorSections({
       <NaiControllerSection heading="Settings">
         <div className="space-y-5">
           <div className="space-y-3">
-            <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Core</div>
+            <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '핵심 설정', en: 'Core' })}</div>
             <NaiControllerInsetBlock>
               <div className="grid gap-4 md:grid-cols-4">
                 <div className="md:col-span-3">
@@ -255,7 +255,7 @@ export function NaiGenerationEditorSections({
           </div>
 
           <div className="space-y-3">
-            <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Sampling</div>
+            <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '샘플링', en: 'Sampling' })}</div>
             <NaiControllerInsetBlock>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <FormField label="Sampler">
@@ -286,7 +286,7 @@ export function NaiGenerationEditorSections({
           </div>
 
           <div className="space-y-3">
-            <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Output</div>
+            <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '출력', en: 'Output' })}</div>
             <NaiControllerInsetBlock>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <FormField label="Preset">
@@ -294,7 +294,7 @@ export function NaiGenerationEditorSections({
                     {NAI_RESOLUTION_PRESETS.map((preset) => (
                       <option key={preset.key} value={preset.key}>{preset.label}</option>
                     ))}
-                    <option value="custom">Custom</option>
+                    <option value="custom">{t({ ko: '사용자 지정', en: 'Custom' })}</option>
                   </Select>
                 </FormField>
 
@@ -381,9 +381,9 @@ export function NaiGenerationEditorSections({
             ) : null}
 
             <NaiControllerInsetBlock className="space-y-4">
-              <div className="text-sm font-medium text-foreground">Image Options</div>
+              <div className="text-sm font-medium text-foreground">{t({ ko: '이미지 옵션', en: 'Image Options' })}</div>
               <div className="grid gap-4 md:grid-cols-2">
-                <FormField label="Strength">
+                <FormField label={t({ ko: '강도', en: 'Strength' })}>
                   <ScrubbableNumberInput min={0} max={1} step={0.01} value={naiForm.strength} onChange={(value) => handleNaiFieldChange('strength', value)} />
                 </FormField>
                 <FormField label="Noise">
@@ -393,7 +393,7 @@ export function NaiGenerationEditorSections({
 
               {naiForm.action === 'infill' ? (
                 <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
-                  <div className="text-sm text-foreground">Original</div>
+                  <div className="text-sm text-foreground">{t({ ko: '원본', en: 'Original' })}</div>
                   <input type="checkbox" checked={naiForm.addOriginalImage} onChange={(event) => setNaiForm((current) => ({ ...current, addOriginalImage: event.target.checked }))} />
                 </ToggleRow>
               ) : null}

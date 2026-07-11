@@ -70,7 +70,7 @@ export function WildcardPreviewModal({
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
           <Input value={selectedWildcardSyntax} readOnly placeholder={t({ ko: '선택한 {label}', en: 'Selected {label}' }, { label: selectedWildcardSyntaxLabel })} />
           <Select value={previewTool} onChange={(event) => onPreviewToolChange(event.target.value as WildcardTool | 'codex')}>
-            <option value="general">General</option>
+            <option value="general">{t({ ko: '일반', en: 'General' })}</option>
             <option value="nai">NAI</option>
             <option value="comfyui">ComfyUI</option>
             <option value="codex">Codex</option>

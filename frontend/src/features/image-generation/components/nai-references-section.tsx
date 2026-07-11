@@ -97,17 +97,17 @@ export function NaiReferencesSection({
                 {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} /> : null}
 
                 <div className="grid gap-4 md:grid-cols-3">
-                  <FormField label="Type">
+                  <FormField label={t({ ko: '유형', en: 'Type' })}>
                     <Select value={reference.type} onChange={(event) => onReferenceFieldChange(index, 'type', event.target.value)}>
                       <option value="character">character</option>
                       <option value="style">style</option>
                       <option value="character&style">character&style</option>
                     </Select>
                   </FormField>
-                  <FormField label="Strength">
+                  <FormField label={t({ ko: '강도', en: 'Strength' })}>
                     <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.strength} onChange={(value) => onReferenceFieldChange(index, 'strength', value)} />
                   </FormField>
-                  <FormField label="Fidelity">
+                  <FormField label={t({ ko: '충실도', en: 'Fidelity' })}>
                     <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.fidelity} onChange={(value) => onReferenceFieldChange(index, 'fidelity', value)} />
                   </FormField>
                 </div>

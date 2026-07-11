@@ -475,15 +475,15 @@ export function ModuleWorkflowOutputManagementPanel({
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Workflows</div>
+            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '워크플로', en: 'Workflows' })}</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.workflow_count}</div>
           </div>
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Executions</div>
+            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '실행', en: 'Executions' })}</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.execution_count}</div>
           </div>
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Artifacts</div>
+            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '결과물', en: 'Artifacts' })}</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.artifact_count}</div>
           </div>
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
@@ -610,8 +610,8 @@ export function ModuleWorkflowOutputManagementPanel({
               variant="destructive"
               onClick={() => void handleDeleteSelectedArtifacts()}
               disabled={isDeletingArtifacts || selectedArtifacts.length === 0}
-              title={`Delete selected artifacts (${selectedArtifacts.length})`}
-              aria-label={`Delete selected artifacts (${selectedArtifacts.length})`}
+              title={t({ ko: '선택한 결과물 삭제 ({count}개)', en: 'Delete selected artifacts ({count})' }, { count: selectedArtifacts.length })}
+              aria-label={t({ ko: '선택한 결과물 삭제 ({count}개)', en: 'Delete selected artifacts ({count})' }, { count: selectedArtifacts.length })}
               data-no-select-drag="true"
             >
               <Trash2 className="h-4 w-4" />

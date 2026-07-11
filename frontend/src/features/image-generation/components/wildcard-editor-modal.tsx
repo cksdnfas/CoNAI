@@ -683,8 +683,8 @@ export function WildcardEditorModal({
             {isChainTab ? (
               <SettingsField label={t(wildcardEditorKey('chain.behavior'))}>
                 <Select variant="settings" value={chainOption} onChange={(event) => setChainOption(event.target.value as 'replace' | 'append')}>
-                  <option value="replace">replace</option>
-                  <option value="append">append</option>
+                  <option value="replace">{t({ ko: '대체', en: 'Replace' })}</option>
+                  <option value="append">{t({ ko: '뒤에 추가', en: 'Append' })}</option>
                 </Select>
               </SettingsField>
             ) : null}

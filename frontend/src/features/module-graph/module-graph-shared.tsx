@@ -530,7 +530,6 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
       required: false,
       multiple: false,
       default_value: undefined,
-      description: '랜덤 선택 후보 값이야.',
     }
   }
 
@@ -557,9 +556,6 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
     required: false,
     multiple: false,
     default_value: undefined,
-    description: dynamicParentKey === 'headers'
-      ? 'API 요청 헤더 항목 값이야.'
-      : 'API 요청 입력 값 항목이야.',
   }
 }
 
