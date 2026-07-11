@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { WallpaperFloatingCollageBody } from './wallpaper-floating-collage-widget-body'
+import { WallpaperClockWidgetBody } from './wallpaper-clock-widget-body'
 import {
   WallpaperGroupImageViewBody,
   WallpaperImageShowcaseBody,
@@ -15,124 +16,8 @@ import { getWallpaperQueueAgeLabelFromAnchor, getWallpaperQueueExecutionSummary 
 import { useWallpaperBrowseContentQuery } from './wallpaper-widget-data'
 import {
   getWallpaperMotionStrengthMultiplier,
-  useWallpaperClockText,
   useWallpaperMotionTick,
 } from './wallpaper-widget-utils'
-
-function clampWallpaperMetric(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
-}
-
-function resolveWallpaperClockMetrics(width: number, height: number, visualStyle: 'minimal' | 'glow' | 'split', showSeconds: boolean) {
-  const safeWidth = Math.max(width, 220)
-  const safeHeight = Math.max(height, 120)
-  const timeDivisor = visualStyle === 'split' ? (showSeconds ? 5.9 : 5.1) : (showSeconds ? 4.7 : 4)
-  const timeSize = clampWallpaperMetric(
-    Math.min(safeWidth / timeDivisor, safeHeight * (visualStyle === 'split' ? 0.34 : 0.42)),
-    26,
-    visualStyle === 'split' ? 76 : 96,
-  )
-
-  return {
-    labelSize: clampWallpaperMetric(Math.min(safeWidth * 0.028, safeHeight * 0.095), 10, 16),
-    dateSize: clampWallpaperMetric(Math.min(safeWidth * 0.045, safeHeight * 0.16), 12, 24),
-    timeSize,
-    secondaryTimeSize: clampWallpaperMetric(timeSize * 0.38, 12, 30),
-    sidePanelWidth: clampWallpaperMetric(safeWidth * 0.24, 76, 140),
-  }
-}
-
-/** Render the live clock body without forcing timers on every widget. */
-function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'clock' }> }) {
-  const currentTime = useWallpaperClockText()
-  const { t, locale, formatDate } = useI18n()
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const [containerSize, setContainerSize] = useState({ width: widget.w * 72, height: widget.h * 56 })
-  const timeFormat = widget.settings.timeFormat
-  const showSeconds = widget.settings.showSeconds
-  const visualStyle = widget.settings.visualStyle ?? 'minimal'
-  const timeText = currentTime.toLocaleTimeString(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: showSeconds ? '2-digit' : undefined,
-    hour12: timeFormat === '12h',
-  })
-  const [hourText, minuteText, secondText] = timeText.split(':')
-  const dateText = formatDate(currentTime, { month: 'long', day: 'numeric', weekday: 'long' })
-  const metrics = resolveWallpaperClockMetrics(containerSize.width, containerSize.height, visualStyle, showSeconds)
-  const labelTracking = `${Math.max(1.5, metrics.labelSize * 0.2)}px`
-
-  useEffect(() => {
-    const element = containerRef.current
-    if (!element) {
-      return
-    }
-
-    const updateSize = () => {
-      setContainerSize({
-        width: Math.max(element.clientWidth, widget.w * 72),
-        height: Math.max(element.clientHeight, widget.h * 56),
-      })
-    }
-
-    updateSize()
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateSize)
-      return () => window.removeEventListener('resize', updateSize)
-    }
-
-    const observer = new ResizeObserver(() => {
-      updateSize()
-    })
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [widget.h, widget.w])
-
-  if (visualStyle === 'split') {
-    return (
-      <div ref={containerRef} className="grid h-full grid-cols-[1fr_auto] gap-3">
-        <div className="flex min-w-0 flex-col justify-center rounded-sm border border-border/70 bg-surface-low px-3 py-3">
-          <div className="uppercase text-secondary" style={{ fontSize: metrics.labelSize, letterSpacing: labelTracking }}>{t('wallpaper.wallpaper.widget.bodies.uppercase.text.secondary')}</div>
-          <div className="mt-1 flex items-end gap-2 font-semibold tracking-[-0.08em] text-foreground" style={{ fontSize: metrics.timeSize, lineHeight: 0.92 }}>
-            <span>{hourText}:{minuteText}</span>
-            {showSeconds ? <span className="pb-0.5 text-muted-foreground" style={{ fontSize: metrics.secondaryTimeSize, lineHeight: 1 }}>{secondText}</span> : null}
-          </div>
-        </div>
-        <div
-          className="flex flex-col justify-between rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--secondary)_16%,transparent),transparent),var(--surface-low)] px-3 py-3 text-right"
-          style={{ width: metrics.sidePanelWidth }}
-        >
-          <div className="uppercase text-muted-foreground" style={{ fontSize: metrics.labelSize, letterSpacing: labelTracking }}>{t('wallpaper.wallpaper.widget.bodies.clock')}</div>
-          <div className="text-muted-foreground" style={{ fontSize: metrics.dateSize, lineHeight: 1.2 }}>{dateText}</div>
-        </div>
-      </div>
-    )
-  }
-
-  if (visualStyle === 'glow') {
-    return (
-      <div ref={containerRef} className="flex h-full flex-col justify-center rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_22%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_56%)] px-3">
-        <div
-          className="font-semibold tracking-[-0.08em] text-foreground drop-shadow-[0_0_18px_color-mix(in_srgb,var(--secondary)_22%,transparent)]"
-          style={{ fontSize: metrics.timeSize, lineHeight: 0.92 }}
-        >
-          {timeText}
-        </div>
-        <div className="mt-1 text-muted-foreground" style={{ fontSize: metrics.dateSize, lineHeight: 1.2 }}>{dateText}</div>
-      </div>
-    )
-  }
-
-  return (
-    <div ref={containerRef} className="flex h-full flex-col justify-center">
-      <div className="font-semibold tracking-[-0.06em] text-foreground" style={{ fontSize: metrics.timeSize, lineHeight: 0.92 }}>
-        {timeText}
-      </div>
-      <div className="text-muted-foreground" style={{ fontSize: metrics.dateSize, lineHeight: 1.2 }}>{dateText}</div>
-    </div>
-  )
-}
 
 /** Render one graph execution status widget using existing browse-content APIs. */
 function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'queue-status' }> }) {
@@ -393,7 +278,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
 /** Render one widget body based on the widget type. */
 export function WallpaperWidgetBody({ widget, mode, onOpenImage }: { widget: WallpaperWidgetInstance; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   if (widget.type === 'clock') {
-    return <WallpaperClockBody widget={widget} />
+    return <WallpaperClockWidgetBody widget={widget} />
   }
 
   if (widget.type === 'queue-status') {

@@ -15,8 +15,9 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
       showBackground: false,
       showBorder: false,
       timeFormat: '24h',
-      showSeconds: true,
-      visualStyle: 'glow',
+      showSeconds: false,
+      showDate: true,
+      visualStyle: 'clean',
     },
   },
   {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus, Save, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, Maximize2, Minimize2, Plus, Save, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
@@ -37,6 +37,9 @@ import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import type { WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from './wallpaper-types'
 import { WallpaperWidgetInspector } from './wallpaper-widget-inspector'
 import { WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
+import { WallpaperLivelyHelpModal } from './wallpaper-lively-help-modal'
+import { WallpaperTemplateModal } from './wallpaper-template-modal'
+import { buildWallpaperTemplateLayout, type WallpaperTemplateDefinition } from './wallpaper-templates'
 
 interface WallpaperWidgetInstancePatch {
   x?: number
@@ -92,6 +95,8 @@ export function WallpaperEditorPage() {
   const isCoarsePointer = useIsCoarsePointer()
   const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false)
   const [selectedLibraryWidgetType, setSelectedLibraryWidgetType] = useState<WallpaperWidgetType | null>(null)
+  const [isLivelyHelpOpen, setIsLivelyHelpOpen] = useState(false)
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
 
   const notifyInfo = (message: string) => showSnackbar({ message, tone: 'info' })
   const notifyError = (message: string) => showSnackbar({ message, tone: 'error' })
@@ -313,11 +318,41 @@ export function WallpaperEditorPage() {
     setLayoutPreset((current) => normalizeWallpaperLayoutPreset({ ...current, canvasPresetId: nextPreset.id }, nextPreset))
   }
 
+  const handleApplyTemplate = (template: WallpaperTemplateDefinition) => {
+    if (layoutPreset.widgets.length > 0 && !window.confirm(t({
+      ko: '현재 초안의 위젯을 템플릿으로 교체할까? 저장된 프리셋은 영향을 받지 않아.',
+      en: 'Replace widgets in the current draft with this template? Saved presets are not affected.',
+    }))) {
+      return
+    }
+
+    const nextLayout = buildWallpaperTemplateLayout(template.id, layoutPreset.canvasPresetId, t(template.name))
+    setActivePresetId(null)
+    setLayoutPreset(nextLayout)
+    setSelectedWidgetId(nextLayout.widgets[0]?.id ?? null)
+    setSelectedLibraryWidgetType(null)
+    setIsTemplateModalOpen(false)
+    syncWallpaperPresetState(savedPresets, null)
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow={t({ ko: '월페이퍼', en: 'Wallpaper' })}
         title={t({ ko: '월페이퍼 배치', en: 'Wallpaper Layout' })}
+        description={t({ ko: '웹 월페이퍼를 만들고 Lively Wallpaper에 고유 URL로 연결해.', en: 'Build a web wallpaper and connect its unique URL to Lively Wallpaper.' })}
+        actions={(
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => setIsLivelyHelpOpen(true)}
+            aria-label={t({ ko: 'Lively 연결 도움말', en: 'Lively connection help' })}
+            title={t({ ko: 'Lively 연결 도움말', en: 'Lively connection help' })}
+          >
+            <HelpCircle className="h-4 w-4" />
+          </Button>
+        )}
       />
 
       <section className="rounded-sm border border-border bg-surface-container/70 p-3">
@@ -353,6 +388,15 @@ export function WallpaperEditorPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setIsTemplateModalOpen(true)}
+              aria-label={t({ ko: '빠른 시작 템플릿', en: 'Quick-start templates' })}
+              title={t({ ko: '빠른 시작 템플릿', en: 'Quick-start templates' })}
+            >
+              <LayoutTemplate className="h-4 w-4" />
+            </Button>
             <Button
               variant="outline"
               size="icon-sm"
@@ -676,6 +720,18 @@ export function WallpaperEditorPage() {
           />
         </section>
       </div>
+
+      <WallpaperLivelyHelpModal
+        open={isLivelyHelpOpen}
+        runtimeUrl={activePresetRuntimeUrl}
+        onClose={() => setIsLivelyHelpOpen(false)}
+        onCopyRuntimeUrl={() => void handleCopyRuntimeUrl()}
+      />
+      <WallpaperTemplateModal
+        open={isTemplateModalOpen}
+        onClose={() => setIsTemplateModalOpen(false)}
+        onApply={handleApplyTemplate}
+      />
     </div>
   )
 }

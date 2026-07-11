@@ -25,16 +25,22 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
         <WallpaperInspectorSectionCard title={t({ ko: '시계', en: 'Clock' })}>
           <SettingsField label={t({ ko: '스타일', en: 'Style' })}>
             <Select
-              value={selectedWidget.settings.visualStyle ?? 'minimal'}
+              value={selectedWidget.settings.visualStyle === 'glow'
+                ? 'glass'
+                : selectedWidget.settings.visualStyle === 'split'
+                  ? 'editorial'
+                  : selectedWidget.settings.visualStyle === 'minimal'
+                    ? 'clean'
+                    : selectedWidget.settings.visualStyle ?? 'clean'}
               onChange={(event) => {
                 updateWidgetSettings({
-                  visualStyle: event.target.value === 'glow' ? 'glow' : event.target.value === 'split' ? 'split' : 'minimal',
+                  visualStyle: event.target.value === 'glass' ? 'glass' : event.target.value === 'editorial' ? 'editorial' : 'clean',
                 })
               }}
             >
-              <option value="minimal">{t({ ko: '미니멀', en: 'Minimal' })}</option>
-              <option value="glow">{t({ ko: '글로우', en: 'Glow' })}</option>
-              <option value="split">{t({ ko: '분할', en: 'Split' })}</option>
+              <option value="clean">{t({ ko: '클린', en: 'Clean' })}</option>
+              <option value="glass">{t({ ko: '글래스', en: 'Glass' })}</option>
+              <option value="editorial">{t({ ko: '에디토리얼', en: 'Editorial' })}</option>
             </Select>
           </SettingsField>
           <SettingsField label={t({ ko: '시간 형식', en: 'Time format' })}>
@@ -57,6 +63,16 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
               checked={selectedWidget.settings.showSeconds}
               onChange={(event) => {
                 updateWidgetSettings({ showSeconds: event.target.checked })
+              }}
+            />
+          </SettingsToggleRow>
+          <SettingsToggleRow>
+            <span className="flex-1">{t({ ko: '날짜 표시', en: 'Show date' })}</span>
+            <input
+              type="checkbox"
+              checked={selectedWidget.settings.showDate !== false}
+              onChange={(event) => {
+                updateWidgetSettings({ showDate: event.target.checked })
               }}
             />
           </SettingsToggleRow>

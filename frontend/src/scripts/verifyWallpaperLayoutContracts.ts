@@ -23,6 +23,7 @@ import {
   listWallpaperWidgetDefinitions,
 } from '../features/wallpaper/wallpaper-widget-registry'
 import type { WallpaperCanvasPreset, WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from '../features/wallpaper/wallpaper-types'
+import { buildWallpaperTemplateLayout, WALLPAPER_TEMPLATES } from '../features/wallpaper/wallpaper-templates'
 
 const expectedWidgetTypes = [
   'clock',
@@ -49,6 +50,8 @@ const wallpaperEditorPageSource = readFileSync(resolve(process.cwd(), 'src/featu
 const wallpaperRuntimePageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-runtime-page.tsx'), 'utf8')
 const wallpaperCanvasViewSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-canvas-view.tsx'), 'utf8')
 const wallpaperWidgetUtilsSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-widget-utils.ts'), 'utf8')
+const wallpaperClockSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-clock-widget-body.tsx'), 'utf8')
+const wallpaperLivelyHelpSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-lively-help-modal.tsx'), 'utf8')
 const appearanceSettingsRouteSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/settings/appearance.routes.ts'), 'utf8')
 assert(
   wallpaperWidgetUtilsSource.includes('useSyncExternalStore'),
@@ -88,6 +91,17 @@ assert(
   !wallpaperEditorPageSource.includes('layoutPreset.widgets.some((widget) => widget.id === selectedWidgetId)')
     && !wallpaperEditorPageSource.includes('layoutPreset.widgets.find((widget) => widget.id === effectiveSelectedWidgetId)'),
   'wallpaper editor selected widget lookup should use the widget id index instead of repeated array scans',
+)
+assert(
+  wallpaperClockSource.includes("style === 'glow'")
+    && wallpaperClockSource.includes("style === 'split'")
+    && wallpaperClockSource.includes("return 'clean'"),
+  'rebuilt clock must render legacy saved visual styles through safe replacements',
+)
+assert(
+  wallpaperLivelyHelpSource.includes('https://github.com/rocksdanister/lively')
+    && wallpaperLivelyHelpSource.includes('runtimeUrl'),
+  'wallpaper help must recommend Lively and explain the current unique runtime URL',
 )
 assert(
   wallpaperEditorPageSource.includes('window.confirm')
@@ -148,6 +162,17 @@ for (const canvasPreset of canvasPresets) {
   assert(canvasPreset.gridColumns > 0, `${canvasPreset.id}: grid columns must be positive`)
   assert(canvasPreset.gridRows > 0, `${canvasPreset.id}: grid rows must be positive`)
   assert(canvasPreset.aspectRatioLabel.trim().length > 0, `${canvasPreset.id}: aspect ratio label must be visible`)
+}
+
+assert(WALLPAPER_TEMPLATES.length >= 4, 'wallpaper editor should offer multiple useful starter templates')
+for (const template of WALLPAPER_TEMPLATES) {
+  for (const canvasPreset of canvasPresets) {
+    const templateLayout = buildWallpaperTemplateLayout(template.id, canvasPreset.id, template.name.en)
+    assert(templateLayout.widgets.length > 0, `${template.id}: template must contain widgets`)
+    for (const widget of templateLayout.widgets) {
+      assertWidgetWithinCanvas(widget, canvasPreset, `${template.id} ${canvasPreset.id} ${widget.type}`)
+    }
+  }
 }
 
 const fallbackCanvasPreset = getWallpaperCanvasPreset('missing-canvas-preset')

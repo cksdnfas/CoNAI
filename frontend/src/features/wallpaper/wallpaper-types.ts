@@ -46,10 +46,13 @@ export type WallpaperImageHoverMotion = number
 
 export type WallpaperFloatingCollageSwapMode = 'time' | 'bounce'
 
+export type WallpaperClockVisualStyle = 'clean' | 'glass' | 'editorial' | 'minimal' | 'glow' | 'split'
+
 export interface WallpaperClockWidgetSettings extends WallpaperBaseWidgetSettings {
   timeFormat: '12h' | '24h'
   showSeconds: boolean
-  visualStyle: 'minimal' | 'glow' | 'split'
+  showDate?: boolean
+  visualStyle: WallpaperClockVisualStyle
 }
 
 export interface WallpaperQueueStatusWidgetSettings extends WallpaperBaseWidgetSettings {
