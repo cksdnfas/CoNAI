@@ -1,7 +1,7 @@
 import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { useI18n } from '@/i18n'
-import { getGroupHierarchyCountLabel, getGroupHierarchyTotalCount, type GroupCountMaps } from '@/features/groups/group-count-utils'
+import { getGroupHierarchyCountLabel, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import type { GroupWithHierarchy } from '@/types/group'
 
 interface GroupTreeProps {
@@ -33,8 +33,6 @@ export function GroupTree({ groups, countMaps, selectedGroupId, onSelectGroup }:
         )
       }}
       sortItems={(left, right) => left.name.localeCompare(right.name)}
-      isItemSelectable={(group) => getGroupHierarchyTotalCount(group, countMaps) > 0}
-      getItemClassName={(group, state) => (!state.isSelectable && !state.hasChildren ? 'text-muted-foreground/45' : undefined)}
       renderIcon={(group, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
     />
   )

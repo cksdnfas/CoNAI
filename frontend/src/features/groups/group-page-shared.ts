@@ -12,7 +12,7 @@ import {
   getGroupPreviewImage,
   getGroupsHierarchyAll,
 } from '@/lib/api-groups'
-import type { GroupFileCounts, GroupRecord } from '@/types/group'
+import type { GroupBreadcrumbItem, GroupFileCounts, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
 
@@ -90,6 +90,24 @@ export function getGroupCardGridClassName(cardStyle: GroupExplorerCardStyle) {
   return cardStyle === 'media-tile'
     ? 'grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
     : 'grid gap-4 md:grid-cols-2 xl:grid-cols-3'
+}
+
+/** Build the selected group path from the already-loaded hierarchy. */
+export function buildGroupPathItems(groups: GroupWithHierarchy[], selectedGroupId: number | undefined): GroupBreadcrumbItem[] {
+  if (!Number.isFinite(selectedGroupId)) {
+    return []
+  }
+
+  const groupsById = new Map(groups.map((group) => [group.id, group]))
+  const path: GroupBreadcrumbItem[] = []
+  let current = groupsById.get(selectedGroupId!)
+
+  while (current) {
+    path.unshift({ id: current.id, name: current.name })
+    current = current.parent_id == null ? undefined : groupsById.get(current.parent_id)
+  }
+
+  return path
 }
 
 /** Calculate downloadable original/thumbnail/video counts from one image list. */

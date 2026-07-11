@@ -1,15 +1,11 @@
-import { ArrowLeft, ChevronRight } from 'lucide-react'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
-import { getGroupHierarchyCountLabel, getGroupHierarchyTotalCount, type GroupCountMaps } from '@/features/groups/group-count-utils'
+import { getGroupHierarchyTotalCount, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import { GroupChildCard } from './group-child-card'
 import { useI18n } from '@/i18n'
 
 interface GroupNavigationGridSectionProps {
-  backNavigationGroup: GroupWithHierarchy
-  parentGroupHierarchy: GroupWithHierarchy | null
-  rootTitle: string
   childGroups: GroupWithHierarchy[]
   countMaps: GroupCountMaps
   cardStyle: GroupExplorerCardStyle
@@ -17,15 +13,10 @@ interface GroupNavigationGridSectionProps {
   previewSourceKey: 'custom' | 'folders'
   loadPreviewImage: (groupId: number) => Promise<ImageRecord | null>
   onOpenGroup: (groupId: number) => void
-  onOpenRoot: () => void
-  isWideLayout?: boolean
 }
 
-/** Render the back-navigation card plus the current group's direct child groups. */
+/** Render the current group's direct child folders. */
 export function GroupNavigationGridSection({
-  backNavigationGroup,
-  parentGroupHierarchy,
-  rootTitle,
   childGroups,
   countMaps,
   cardStyle,
@@ -33,90 +24,25 @@ export function GroupNavigationGridSection({
   previewSourceKey,
   loadPreviewImage,
   onOpenGroup,
-  onOpenRoot,
-  isWideLayout = false,
 }: GroupNavigationGridSectionProps) {
   const { t, formatNumber } = useI18n()
-  const backTitle = parentGroupHierarchy?.name ?? rootTitle
-  const backSubtitle = parentGroupHierarchy ? t({ ko: '상위 그룹으로 이동', en: 'Go to parent group' }) : t({ ko: '루트 목록으로 이동', en: 'Go to root list' })
-  const handleOpenBack = () => {
-    if (parentGroupHierarchy) {
-      onOpenGroup(backNavigationGroup.id)
-    } else {
-      onOpenRoot()
-    }
-  }
 
   return (
     <section className="space-y-4">
-      {isWideLayout ? (
-        <div className={gridClassName}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '하위 폴더 {count}개', en: '{count} child folders' }, { count: formatNumber(childGroups.length) })}</div>
+      <div className={gridClassName}>
+        {childGroups.map((group) => (
           <GroupChildCard
-            group={backNavigationGroup}
-            variant="back"
-            titleOverride={backTitle}
-            subtitleOverride={backSubtitle}
+            key={group.id}
+            group={group}
+            previewSourceKey={previewSourceKey}
+            loadPreviewImage={loadPreviewImage}
+            totalImageCount={getGroupHierarchyTotalCount(group, countMaps)}
             cardStyle={cardStyle}
-            onOpen={(groupId) => {
-              if (parentGroupHierarchy) {
-                onOpenGroup(groupId)
-              } else {
-                onOpenRoot()
-              }
-            }}
+            onOpen={onOpenGroup}
           />
-
-          {childGroups.map((group) => (
-            <GroupChildCard
-              key={group.id}
-              group={group}
-              previewSourceKey={previewSourceKey}
-              loadPreviewImage={loadPreviewImage}
-              subtitleOverride={t({ ko: '이미지 {count}개', en: '{count} images' }, { count: getGroupHierarchyCountLabel(group, countMaps, formatNumber) })}
-              totalImageCount={getGroupHierarchyTotalCount(group, countMaps)}
-              cardStyle={cardStyle}
-              onOpen={onOpenGroup}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={handleOpenBack}
-            className="group flex w-full items-center gap-3 rounded-sm border border-border/80 bg-surface-container/30 px-4 py-3 text-left transition-colors hover:bg-surface-container/45"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-surface-low">
-              <ArrowLeft className="h-4 w-4 text-muted-foreground transition-transform group-hover:-translate-x-0.5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-foreground">{backTitle}</div>
-              <div className="mt-1 text-xs text-muted-foreground">{backSubtitle}</div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-          </button>
-
-          {childGroups.length > 0 ? (
-            <div className="space-y-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '하위 그룹 {count}개', en: '{count} child groups' }, { count: formatNumber(childGroups.length) })}</div>
-              <div className={gridClassName}>
-                {childGroups.map((group) => (
-                  <GroupChildCard
-                    key={group.id}
-                    group={group}
-                    previewSourceKey={previewSourceKey}
-                    loadPreviewImage={loadPreviewImage}
-                    subtitleOverride={t({ ko: '이미지 {count}개', en: '{count} images' }, { count: getGroupHierarchyCountLabel(group, countMaps, formatNumber) })}
-                    totalImageCount={getGroupHierarchyTotalCount(group, countMaps)}
-                    cardStyle={cardStyle}
-                    onOpen={onOpenGroup}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      )}
+        ))}
+      </div>
     </section>
   )
 }

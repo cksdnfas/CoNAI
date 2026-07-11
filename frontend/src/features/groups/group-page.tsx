@@ -22,7 +22,7 @@ import { ImageSelectionBar } from '@/features/images/components/image-selection-
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { buildGroupCountMaps, getGroupHierarchyCountLabel } from './group-count-utils'
-import { formatGroupTimestamp, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
+import { buildGroupPathItems, formatGroupTimestamp, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
 import { useGroupPageQueries } from './use-group-page-queries'
 import { useGroupPageActions } from './use-group-page-actions'
 import { useI18n } from '@/i18n'
@@ -71,7 +71,6 @@ export function GroupPage() {
     groupsQuery,
     assignableCustomGroupsQuery,
     selectedGroupQuery,
-    breadcrumbQuery,
     groupImagesQuery,
     groupFileCountsQuery,
     refreshCustomGroupQueries,
@@ -81,8 +80,6 @@ export function GroupPage() {
     selectedGroupHierarchy,
     rootGroups,
     childGroups,
-    parentGroupHierarchy,
-    backNavigationGroup,
     groupImages,
     selectedGroupCompositeHashes,
     activeDownloadCounts,
@@ -98,6 +95,7 @@ export function GroupPage() {
   })
 
   const groupCountMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
+  const groupPathItems = useMemo(() => buildGroupPathItems(allGroups, selectedGroupId), [allGroups, selectedGroupId])
   const selectedGroupCountLabel = selectedGroupHierarchy ? getGroupHierarchyCountLabel(selectedGroupHierarchy, groupCountMaps, formatNumber) : formatNumber(selectedGroupQuery.data?.image_count ?? 0)
   const selectedGroupImageTotalCount = groupImagesQuery.data?.pages[0]?.pagination.total ?? selectedGroupQuery.data?.image_count ?? 0
 
@@ -247,10 +245,12 @@ export function GroupPage() {
         />
 
         <section className="space-y-6">
-          {isWideLayout && selectedGroupId && !isCustomSource ? (
+          {selectedGroupId ? (
             <GroupBreadcrumbs
-              items={breadcrumbQuery.data ?? []}
+              items={groupPathItems}
               selectedGroupId={selectedGroupId}
+              rootLabel={getSourceLabel(selectedSource, 'root')}
+              compact={!isWideLayout}
               onOpenGroup={handleOpenGroup}
               onOpenRoot={handleOpenRoot}
             />
@@ -303,11 +303,8 @@ export function GroupPage() {
                 />
               )}
 
-              {backNavigationGroup ? (
+              {childGroups.length > 0 ? (
                 <GroupNavigationGridSection
-                  backNavigationGroup={backNavigationGroup}
-                  parentGroupHierarchy={parentGroupHierarchy}
-                  rootTitle={getSourceLabel(selectedSource, 'root')}
                   childGroups={childGroups}
                   countMaps={groupCountMaps}
                   cardStyle={groupExplorerCardStyle}
@@ -315,8 +312,6 @@ export function GroupPage() {
                   previewSourceKey={selectedSource.key}
                   loadPreviewImage={selectedSource.getPreviewImage}
                   onOpenGroup={handleOpenGroup}
-                  onOpenRoot={handleOpenRoot}
-                  isWideLayout={isWideLayout}
                 />
               ) : null}
 

@@ -3,7 +3,7 @@ import { SectionHeading } from '@/components/common/section-heading'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
-import { getGroupHierarchyCountLabel, getGroupHierarchyTotalCount, type GroupCountMaps } from '@/features/groups/group-count-utils'
+import { getGroupHierarchyTotalCount, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import { GroupChildCard } from './group-child-card'
 import { useI18n } from '@/i18n'
 
@@ -45,7 +45,6 @@ export function GroupRootGridSection({
             group={group}
             previewSourceKey={previewSourceKey}
             loadPreviewImage={loadPreviewImage}
-            subtitleOverride={t({ ko: '이미지 {count}개', en: '{count} images' }, { count: getGroupHierarchyCountLabel(group, countMaps, formatNumber) })}
             totalImageCount={getGroupHierarchyTotalCount(group, countMaps)}
             cardStyle={cardStyle}
             onOpen={onOpenGroup}

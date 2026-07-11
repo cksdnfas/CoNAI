@@ -97,17 +97,17 @@ for (const [name, componentSource] of [
     /buildGroupCountMaps/,
     `${name} must not rebuild group hierarchy count maps during render`,
   )
-  assert.match(
-    componentSource,
-    /getGroupHierarchyCountLabel\(group, countMaps, formatNumber\)/,
-    `${name} should use shared maps for visible group count labels`,
-  )
 }
 
 assert.match(
   treeSource,
-  /getGroupHierarchyTotalCount\(group, countMaps\) > 0/,
-  'Group tree selectability should use shared count maps for descendant totals',
+  /getGroupHierarchyCountLabel\(group, countMaps, formatNumber\)/,
+  'Group tree should use shared maps for visible group count labels',
+)
+assert.doesNotMatch(
+  treeSource,
+  /isItemSelectable=/,
+  'Group tree should keep empty folders selectable',
 )
 assert.match(
   rootGridSource,
