@@ -43,6 +43,8 @@ type GenerationThrottleDraftPatch = {
 }
 
 interface ImageSaveTabProps {
+  showGenerationThrottle?: boolean
+  showMediaSettings?: boolean
   imageSaveDraft: ImageSaveSettings | null
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
   onSave: () => void
@@ -65,8 +67,10 @@ interface ImageSaveTabProps {
   hasVideoOptimizationChanges: boolean
 }
 
-/** Render media save defaults used by save dialogs and attachment flows. */
+/** Render generation pacing and media-processing sections for settings composition. */
 export function ImageSaveTab({
+  showGenerationThrottle = true,
+  showMediaSettings = true,
   imageSaveDraft,
   onPatchImageSave,
   onSave,
@@ -92,6 +96,7 @@ export function ImageSaveTab({
 
   return (
     <div className="space-y-6">
+      {showGenerationThrottle ? (
       <section>
         <SettingsSection
           heading={t({ ko: '생성 텀 / 쓰로틀', en: 'Generation pacing / throttle' })}
@@ -233,7 +238,10 @@ export function ImageSaveTab({
           )}
         </SettingsSection>
       </section>
+      ) : null}
 
+      {showMediaSettings ? (
+      <>
       <section>
         <SettingsSection
           heading={t({ ko: '이미지 저장', en: 'Image saving' })}
@@ -429,7 +437,7 @@ export function ImageSaveTab({
               </SettingsField>
 
               <p className="md:col-span-2 text-sm text-muted-foreground">
-                {t({ ko: '기존 썸네일은 재생성 필요. 일반 탭의 썸네일 재생성을 실행하면 새 품질로 다시 만들어져.', en: 'Existing thumbnails need regeneration. Run thumbnail regeneration in the General tab to rebuild them with the new quality.' })}
+                {t({ ko: '기존 썸네일은 재생성 필요. 계정 및 시스템의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch under Accounts and system.' })}
               </p>
             </div>
           ) : (
@@ -445,6 +453,8 @@ export function ImageSaveTab({
         isSaving={isSavingVideoOptimization}
         hasChanges={hasVideoOptimizationChanges}
       />
+      </>
+      ) : null}
     </div>
   )
 }

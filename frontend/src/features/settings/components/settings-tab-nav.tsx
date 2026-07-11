@@ -2,7 +2,7 @@ import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import { type TranslationDictionary, useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { SETTINGS_TAB_ITEMS, type SettingsTab } from '../settings-tabs'
+import { SETTINGS_TAB_ITEMS, type SettingsTab, type SettingsTabGroup } from '../settings-tabs'
 
 interface SettingsTabNavProps {
   activeTab: SettingsTab
@@ -11,14 +11,20 @@ interface SettingsTabNavProps {
 
 const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
   general: { ko: '일반', en: 'General' },
-  folders: { ko: '감시 폴더', en: 'Watched folders' },
-  appearance: { ko: '외형', en: 'Appearance' },
-  security: { ko: '보안', en: 'Security' },
-  auto: { ko: '자동화', en: 'Automation' },
-  metadata: { ko: '메타데이터', en: 'Metadata' },
-  'image-save': { ko: '미디어 생성/저장', en: 'Media generation/save' },
-  'integration-tools': { ko: '연동 도구', en: 'Integration tools' },
-  'llm-connections': { ko: 'LLM 설정', en: 'LLM settings' },
+  appearance: { ko: '화면 및 탐색', en: 'Appearance and navigation' },
+  library: { ko: '라이브러리 및 가져오기', en: 'Library and imports' },
+  media: { ko: '미디어 처리', en: 'Media processing' },
+  auto: { ko: '자동화 및 분석', en: 'Automation and analysis' },
+  generation: { ko: '생성 및 AI', en: 'Generation and AI' },
+  integration: { ko: '연동', en: 'Integrations' },
+  system: { ko: '계정 및 시스템', en: 'Accounts and system' },
+}
+
+const SETTINGS_TAB_GROUP_LABELS: Record<SettingsTabGroup, TranslationDictionary> = {
+  personalization: { ko: '기본 환경', en: 'Preferences' },
+  library: { ko: '콘텐츠', en: 'Content' },
+  services: { ko: '기능 및 서비스', en: 'Features and services' },
+  administration: { ko: '관리', en: 'Administration' },
 }
 
 export function SettingsTabNav({ activeTab, onChange }: SettingsTabNavProps) {
@@ -31,23 +37,35 @@ export function SettingsTabNav({ activeTab, onChange }: SettingsTabNavProps) {
       floatingLockStorageKey="conai:settings:sidebar-locked"
       className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start"
     >
-      <div className="space-y-1.5">
-        {SETTINGS_TAB_ITEMS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => onChange(item.value)}
-            className={cn(
-              getNavigationItemClassName({
-                active: activeTab === item.value,
-                className: 'py-2.5 text-sm font-semibold',
-              }),
-              'rounded-sm',
-            )}
-          >
-            {t(SETTINGS_TAB_LABELS[item.value])}
-          </button>
-        ))}
+      <div className="space-y-4">
+        {Object.keys(SETTINGS_TAB_GROUP_LABELS).map((groupKey) => {
+          const group = groupKey as SettingsTabGroup
+          const items = SETTINGS_TAB_ITEMS.filter((item) => item.group === group)
+
+          return (
+            <div key={group} className="space-y-1.5">
+              <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {t(SETTINGS_TAB_GROUP_LABELS[group])}
+              </div>
+              {items.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => onChange(item.value)}
+                  className={cn(
+                    getNavigationItemClassName({
+                      active: activeTab === item.value,
+                      className: 'py-2.5 text-sm font-semibold',
+                    }),
+                    'rounded-sm',
+                  )}
+                >
+                  {t(SETTINGS_TAB_LABELS[item.value])}
+                </button>
+              ))}
+            </div>
+          )
+        })}
       </div>
     </ExplorerSidebar>
   )

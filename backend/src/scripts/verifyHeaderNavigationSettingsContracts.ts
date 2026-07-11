@@ -36,13 +36,15 @@ const settingsRoutes = read('backend/src/routes/settings.ts');
 const registerRoutes = read('backend/src/startup/registerAppRoutes.ts');
 const apiSettings = read('frontend/src/lib/api-settings.ts');
 const appShell = read('frontend/src/components/layout/app-shell.tsx');
-const generalTab = read('frontend/src/features/settings/components/general-tab.tsx');
+const generalPreferences = read('frontend/src/features/settings/components/general-preferences-sections.tsx');
 const settingsPage = read('frontend/src/features/settings/settings-page.tsx');
+const settingsTabs = read('frontend/src/features/settings/settings-tabs.ts');
+const settingsTabNav = read('frontend/src/features/settings/components/settings-tab-nav.tsx');
 
 for (const key of HEADER_NAVIGATION_KEYS) {
   assertIncludes(backendTypes, `'${key}'`, 'backend header navigation keys');
   assertIncludes(frontendTypes, `'${key}'`, 'frontend header navigation keys');
-  assertIncludes(generalTab, `key: '${key}'`, 'general tab checklist options');
+  assertIncludes(generalPreferences, `key: '${key}'`, 'appearance checklist options');
 }
 
 assertIncludes(storage, 'getDefaultHeaderNavigationSettings()', 'default header navigation settings');
@@ -58,11 +60,20 @@ assertIncludes(appShell, 'headerNavigation[item.id] !== false', 'app shell nav i
 assertIncludes(appShell, 'headerNavigation.queue !== false', 'app shell queue visibility gate');
 assertIncludes(appShell, 'headerNavigation.search !== false', 'app shell search visibility gate');
 assertIncludes(appShell, 'headerNavigation.account !== false', 'app shell account visibility gate');
-assertIncludes(generalTab, 'HEADER_NAVIGATION_OPTIONS.map', 'general tab checklist rendering');
+assertIncludes(generalPreferences, 'HEADER_NAVIGATION_OPTIONS.map', 'appearance checklist rendering');
 assertIncludes(settingsPage, "['public-header-navigation-settings']", 'settings page public nav cache sync');
 assertIncludes(settingsPage, 'isGeneralDraftDirty', 'settings page general draft dirty check');
-assertIncludes(settingsPage, 'hasImageSaveChanges={isImageSaveDraftDirty}', 'settings page image-save draft dirty check');
-assertIncludes(settingsPage, 'hasGenerationThrottleChanges={isGenerationThrottleDraftDirty}', 'settings page generation throttle draft dirty check');
-assertIncludes(generalTab, 'disabled={!generalDraft || isSaving || !hasChanges}', 'general tab save only enables for draft changes');
+assertIncludes(settingsPage, 'hasImageSaveChanges: isImageSaveDraftDirty', 'settings page image-save draft dirty check');
+assertIncludes(settingsPage, 'hasGenerationThrottleChanges: isGenerationThrottleDraftDirty', 'settings page generation throttle draft dirty check');
+assertIncludes(generalPreferences, 'disabled={!generalDraft || isSaving || !hasChanges}', 'preference save only enables for draft changes');
+for (const section of ['general', 'appearance', 'library', 'media', 'auto', 'generation', 'integration', 'system']) {
+  assertIncludes(settingsTabs, `value: '${section}'`, 'settings information architecture');
+}
+assertIncludes(settingsTabs, "folders: 'library'", 'legacy folder settings link');
+assertIncludes(settingsTabs, "'llm-connections': 'generation'", 'legacy LLM settings link');
+assertIncludes(settingsTabNav, 'SETTINGS_TAB_GROUP_LABELS', 'grouped settings navigation');
+assertIncludes(settingsPage, "useSearchParams()", 'settings URL section state');
+assertIncludes(settingsPage, 'showGenerationThrottle={false}', 'media section generation split');
+assertIncludes(settingsPage, 'showMediaSettings={false}', 'generation section media split');
 
 console.log('Header navigation settings contracts verified.');

@@ -19,7 +19,7 @@ assert.ok(settingsPage.includes('effectiveThumbnailDraft'), 'settings page must 
 assert.ok(settingsPage.includes('thumbnailMutation'), 'settings page must create thumbnail mutation');
 assert.ok(settingsPage.includes('setThumbnailDraft(settings.thumbnail)'), 'thumbnail mutation must sync thumbnail draft from saved settings');
 assert.ok(settingsPage.includes('patchThumbnailDraft'), 'settings page must expose thumbnail draft patcher');
-for (const prop of ['thumbnailDraft={effectiveThumbnailDraft}', 'onPatchThumbnail={patchThumbnailDraft}', 'onSaveThumbnail=', 'isSavingThumbnail={thumbnailMutation.isPending}']) {
+for (const prop of ['thumbnailDraft: effectiveThumbnailDraft', 'onPatchThumbnail: patchThumbnailDraft', 'onSaveThumbnail:', 'isSavingThumbnail: thumbnailMutation.isPending']) {
   assert.ok(settingsPage.includes(prop), `ImageSaveTab missing prop: ${prop}`);
 }
 

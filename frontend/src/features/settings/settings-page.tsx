@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
@@ -28,7 +28,7 @@ import type {
   VideoOptimizationSettings,
 } from '@/types/settings'
 import { SettingsTabNav } from './components/settings-tab-nav'
-import type { SettingsTab } from './settings-tabs'
+import { parseSettingsTab, type SettingsTab } from './settings-tabs'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 import { useAppearanceSettingsTab } from './use-appearance-settings-tab'
 import { useAutoSettingsTab } from './use-auto-settings-tab'
@@ -36,6 +36,11 @@ import { useAutoSettingsTab } from './use-auto-settings-tab'
 const GeneralTabLazy = lazy(async () => {
   const module = await import('./components/general-tab')
   return { default: module.GeneralTab }
+})
+
+const GeneralPreferencesSectionsLazy = lazy(async () => {
+  const module = await import('./components/general-preferences-sections')
+  return { default: module.GeneralPreferencesSections }
 })
 
 const FoldersTabLazy = lazy(async () => {
@@ -94,7 +99,8 @@ export function SettingsPage() {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = parseSettingsTab(searchParams.get('section'))
   const [generalDraft, setGeneralDraft] = useState<GeneralSettings | null>(null)
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
@@ -103,6 +109,16 @@ export function SettingsPage() {
   const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
   const canOpenSettings = authStatusQuery.data?.isAdmin === true || authStatusQuery.data?.hasCredentials !== true
+
+  const setActiveTab = (tab: SettingsTab) => {
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (tab === 'general') {
+      nextSearchParams.delete('section')
+    } else {
+      nextSearchParams.set('section', tab)
+    }
+    setSearchParams(nextSearchParams, { replace: true })
+  }
 
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -323,6 +339,29 @@ export function SettingsPage() {
     setVideoOptimizationDraft({ ...effectiveVideoOptimizationDraft, ...patch })
   }
 
+  const imageSaveTabProps = {
+    imageSaveDraft: effectiveImageSaveDraft,
+    onPatchImageSave: patchImageSaveDraft,
+    onSave: () => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft),
+    isSaving: imageSaveMutation.isPending,
+    hasImageSaveChanges: isImageSaveDraftDirty,
+    thumbnailDraft: effectiveThumbnailDraft,
+    onPatchThumbnail: patchThumbnailDraft,
+    onSaveThumbnail: () => effectiveThumbnailDraft && void thumbnailMutation.mutateAsync(effectiveThumbnailDraft),
+    isSavingThumbnail: thumbnailMutation.isPending,
+    hasThumbnailChanges: isThumbnailDraftDirty,
+    generationThrottleDraft: effectiveGenerationThrottleDraft,
+    onPatchGenerationThrottle: patchGenerationThrottleDraft,
+    onSaveGenerationThrottle: () => effectiveGenerationThrottleDraft && void generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft),
+    isSavingGenerationThrottle: generationThrottleMutation.isPending,
+    hasGenerationThrottleChanges: isGenerationThrottleDraftDirty,
+    videoOptimizationDraft: effectiveVideoOptimizationDraft,
+    onPatchVideoOptimization: patchVideoOptimizationDraft,
+    onSaveVideoOptimization: () => effectiveVideoOptimizationDraft && void videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft),
+    isSavingVideoOptimization: videoOptimizationMutation.isPending,
+    hasVideoOptimizationChanges: isVideoOptimizationDraftDirty,
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -340,7 +379,8 @@ export function SettingsPage() {
         <section className="space-y-6">
           <Suspense fallback={<SettingsSectionFallback />}>
             {activeTab === 'general' ? (
-              <GeneralTabLazy
+              <GeneralPreferencesSectionsLazy
+                sections={['basic']}
                 generalDraft={effectiveGeneralDraft}
                 onPatchGeneral={patchGeneralDraft}
                 onPatchDeleteProtection={patchDeleteProtectionDraft}
@@ -350,58 +390,83 @@ export function SettingsPage() {
               />
             ) : null}
 
-            {activeTab === 'folders' ? <FoldersTabLazy {...foldersTabProps} /> : null}
-
             {activeTab === 'appearance' ? (
-              <AppearanceTabLazy {...appearanceTabProps} />
+              <div className="space-y-6">
+                <GeneralPreferencesSectionsLazy
+                  sections={['appearance']}
+                  generalDraft={effectiveGeneralDraft}
+                  onPatchGeneral={patchGeneralDraft}
+                  onPatchDeleteProtection={patchDeleteProtectionDraft}
+                  onSave={() => effectiveGeneralDraft && void generalMutation.mutateAsync(effectiveGeneralDraft)}
+                  isSaving={generalMutation.isPending}
+                  hasChanges={isGeneralDraftDirty}
+                />
+                <AppearanceTabLazy {...appearanceTabProps} />
+              </div>
             ) : null}
 
-            {activeTab === 'security' ? <SecurityTabLazy /> : null}
+            {activeTab === 'library' ? (
+              <div className="space-y-6">
+                <GeneralPreferencesSectionsLazy
+                  sections={['library']}
+                  generalDraft={effectiveGeneralDraft}
+                  onPatchGeneral={patchGeneralDraft}
+                  onPatchDeleteProtection={patchDeleteProtectionDraft}
+                  onSave={() => effectiveGeneralDraft && void generalMutation.mutateAsync(effectiveGeneralDraft)}
+                  isSaving={generalMutation.isPending}
+                  hasChanges={isGeneralDraftDirty}
+                />
+                <FoldersTabLazy {...foldersTabProps} />
+                <MetadataTabLazy
+                  metadataDraft={effectiveMetadataDraft}
+                  onPatchMetadata={patchMetadataDraft}
+                  onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
+                  isSaving={metadataMutation.isPending}
+                  hasChanges={isMetadataDraftDirty}
+                  onReextractAll={() => void metadataReextractMutation.mutateAsync()}
+                  isReextracting={metadataReextractMutation.isPending}
+                />
+              </div>
+            ) : null}
+
+            {activeTab === 'media' ? (
+              <ImageSaveTabLazy
+                {...imageSaveTabProps}
+                showGenerationThrottle={false}
+              />
+            ) : null}
 
             {activeTab === 'auto' ? (
               <AutoTabLazy {...autoTabProps} />
             ) : null}
 
-            {activeTab === 'metadata' ? (
-              <MetadataTabLazy
-                metadataDraft={effectiveMetadataDraft}
-                onPatchMetadata={patchMetadataDraft}
-                onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
-                isSaving={metadataMutation.isPending}
-                hasChanges={isMetadataDraftDirty}
-                onReextractAll={() => void metadataReextractMutation.mutateAsync()}
-                isReextracting={metadataReextractMutation.isPending}
-              />
+            {activeTab === 'generation' ? (
+              <div className="space-y-6">
+                <ImageSaveTabLazy
+                  {...imageSaveTabProps}
+                  showMediaSettings={false}
+                />
+                <LlmConnectionsTabLazy />
+              </div>
             ) : null}
 
-            {activeTab === 'image-save' ? (
-              <ImageSaveTabLazy
-                imageSaveDraft={effectiveImageSaveDraft}
-                onPatchImageSave={patchImageSaveDraft}
-                onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
-                isSaving={imageSaveMutation.isPending}
-                hasImageSaveChanges={isImageSaveDraftDirty}
-                thumbnailDraft={effectiveThumbnailDraft}
-                onPatchThumbnail={patchThumbnailDraft}
-                onSaveThumbnail={() => effectiveThumbnailDraft && void thumbnailMutation.mutateAsync(effectiveThumbnailDraft)}
-                isSavingThumbnail={thumbnailMutation.isPending}
-                hasThumbnailChanges={isThumbnailDraftDirty}
-                generationThrottleDraft={effectiveGenerationThrottleDraft}
-                onPatchGenerationThrottle={patchGenerationThrottleDraft}
-                onSaveGenerationThrottle={() => effectiveGenerationThrottleDraft && void generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft)}
-                isSavingGenerationThrottle={generationThrottleMutation.isPending}
-                hasGenerationThrottleChanges={isGenerationThrottleDraftDirty}
-                videoOptimizationDraft={effectiveVideoOptimizationDraft}
-                onPatchVideoOptimization={patchVideoOptimizationDraft}
-                onSaveVideoOptimization={() => effectiveVideoOptimizationDraft && void videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft)}
-                isSavingVideoOptimization={videoOptimizationMutation.isPending}
-                hasVideoOptimizationChanges={isVideoOptimizationDraftDirty}
-              />
+            {activeTab === 'integration' ? <IntegrationToolsTabLazy /> : null}
+
+            {activeTab === 'system' ? (
+              <div className="space-y-6">
+                <SecurityTabLazy />
+                <GeneralPreferencesSectionsLazy
+                  sections={['safety']}
+                  generalDraft={effectiveGeneralDraft}
+                  onPatchGeneral={patchGeneralDraft}
+                  onPatchDeleteProtection={patchDeleteProtectionDraft}
+                  onSave={() => effectiveGeneralDraft && void generalMutation.mutateAsync(effectiveGeneralDraft)}
+                  isSaving={generalMutation.isPending}
+                  hasChanges={isGeneralDraftDirty}
+                />
+                <GeneralTabLazy />
+              </div>
             ) : null}
-
-            {activeTab === 'integration-tools' ? <IntegrationToolsTabLazy /> : null}
-
-            {activeTab === 'llm-connections' ? <LlmConnectionsTabLazy /> : null}
           </Suspense>
         </section>
       </div>
