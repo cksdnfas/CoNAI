@@ -31,6 +31,7 @@ interface GroupImageSectionProps {
   maxColumnCount?: number
   onColumnCountChange?: (value: number) => void
   onColumnCountReset?: () => void
+  toolbarActions?: ReactNode
   selectable?: boolean
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
@@ -63,6 +64,7 @@ export function GroupImageSection({
   maxColumnCount = 8,
   onColumnCountChange,
   onColumnCountReset,
+  toolbarActions,
   selectable = false,
   selectedIds = [],
   onSelectedIdsChange,
@@ -171,6 +173,7 @@ export function GroupImageSection({
                 ) : null}
               </div>
             ) : null}
+            {toolbarActions}
           </div>
         </PageInset>
       ) : null}

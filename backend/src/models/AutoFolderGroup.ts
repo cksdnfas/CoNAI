@@ -18,6 +18,10 @@ function getReadyAutoFolderImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('m');
 }
 
+function hasAutoFolderChildren(groupId: number): boolean {
+  return !!db.prepare('SELECT 1 FROM auto_folder_groups WHERE parent_id = ? LIMIT 1').get(groupId);
+}
+
 function getRandomAutoFolderMembershipPivot(groupId: number): number | null {
   const row = db.prepare(`
     SELECT MAX(id) as maxId
@@ -269,7 +273,7 @@ export class AutoFolderGroupImageModel {
       const cursorClause = options?.cursorDate && options.cursorHash
         ? 'AND (m.first_seen_date < ? OR (m.first_seen_date = ? AND m.composite_hash < ?))'
         : '';
-      const includeChildren = options?.includeChildren === true;
+      const includeChildren = options?.includeChildren === true && hasAutoFolderChildren(groupId);
       const cteClause = includeChildren ? `WITH RECURSIVE target_groups(id) AS (
         SELECT ?
         UNION ALL
@@ -336,7 +340,7 @@ export class AutoFolderGroupImageModel {
    * 그룹의 총 이미지 개수
    */
   static getImageCount(groupId: number, includeChildren: boolean = false): number {
-    const result = includeChildren
+    const result = includeChildren && hasAutoFolderChildren(groupId)
       ? db.prepare(`
           WITH RECURSIVE target_groups(id) AS (
             SELECT ?
@@ -406,7 +410,7 @@ export class AutoFolderGroupImageModel {
    * 그룹의 모든 composite_hash 조회
    */
   static getCompositeHashesForGroup(groupId: number, includeChildren: boolean = false): string[] {
-    const rows = includeChildren
+    const rows = includeChildren && hasAutoFolderChildren(groupId)
       ? db.prepare(`
           WITH RECURSIVE target_groups(id) AS (
             SELECT ?

@@ -113,13 +113,17 @@ type GroupImageQuerySource = {
   queryParams: (number | string)[];
 };
 
+function hasChildGroups(groupId: number): boolean {
+  return !!db.prepare('SELECT 1 FROM groups WHERE parent_id = ? LIMIT 1').get(groupId);
+}
+
 /** Build direct or recursive group membership source while deduplicating descendant images. */
 function buildGroupImageQuerySource(
   groupId: number,
   collectionType?: GroupImageCollectionType,
   includeChildren: boolean = false,
 ): GroupImageQuerySource {
-  if (includeChildren) {
+  if (includeChildren && hasChildGroups(groupId)) {
     const collectionClause = collectionType ? 'AND source_ig.collection_type = ?' : '';
     return {
       cteClause: `WITH RECURSIVE target_groups(id) AS (
@@ -338,7 +342,7 @@ export function findPreviewImagesQuery(
 
 /** Find all composite hashes for one group in display order. */
 export function getCompositeHashesForGroupQuery(groupId: number, includeChildren: boolean = false): string[] {
-  const query = includeChildren ? `
+  const query = includeChildren && hasChildGroups(groupId) ? `
     WITH RECURSIVE target_groups(id) AS (
       SELECT ?
       UNION ALL

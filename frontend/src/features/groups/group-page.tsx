@@ -18,7 +18,7 @@ import { GroupEditorModal } from './components/group-editor-modal'
 import { GroupAssignModal } from './components/group-assign-modal'
 import { GroupImageSection } from './components/group-image-section'
 import { GroupDownloadModal } from './components/group-download-modal'
-import { GroupDetailHeaderCard } from './components/group-detail-header-card'
+import { GroupOptionsMenu } from './components/group-options-menu'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { buildGroupCountMaps } from './group-count-utils'
@@ -252,22 +252,6 @@ export function GroupPage() {
 
           {selectedGroupId && selectedGroupQuery.data ? (
             <div className="space-y-6">
-              <GroupDetailHeaderCard
-                  group={selectedGroupQuery.data}
-                  selectedGroupHierarchy={selectedGroupHierarchy}
-                  isCustomSource={isCustomSource}
-                  isGroupFileCountsLoading={groupFileCountsQuery.isLoading}
-                  isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
-                  isAutoCollectPending={autoCollectMutation.isPending}
-                  isDeletePending={deleteGroupMutation.isPending}
-                  imageCountLabel={formatNumber(selectedGroupImageTotalCount)}
-                  onOpenDownload={handleOpenGroupDownloadModal}
-                  onOpenCreateModal={handleOpenCreateModal}
-                  onOpenEditModal={handleOpenEditModal}
-                  onRunAutoCollect={() => void handleRunAutoCollect()}
-                  onDeleteGroup={() => void handleDeleteSelectedGroup()}
-              />
-
               {childGroups.length > 0 ? (
                 <GroupNavigationGridSection
                   childGroups={childGroups}
@@ -296,6 +280,19 @@ export function GroupPage() {
                 maxColumnCount={maxGroupColumnCount}
                 onColumnCountChange={setGroupColumnCount}
                 onColumnCountReset={resetGroupColumnCount}
+                toolbarActions={(
+                  <GroupOptionsMenu
+                    isCustomSource={isCustomSource}
+                    isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
+                    isAutoCollectPending={autoCollectMutation.isPending}
+                    isDeletePending={deleteGroupMutation.isPending}
+                    onOpenDownload={handleOpenGroupDownloadModal}
+                    onOpenCreateModal={handleOpenCreateModal}
+                    onOpenEditModal={handleOpenEditModal}
+                    onRunAutoCollect={() => void handleRunAutoCollect()}
+                    onDeleteGroup={() => void handleDeleteSelectedGroup()}
+                  />
+                )}
                 selectable={true}
                 selectedIds={selectedGroupImageIds}
                 onSelectedIdsChange={setSelectedGroupImageIds}

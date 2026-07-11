@@ -90,7 +90,9 @@ export function useGroupPageQueries({
     queryFn: () => (isCustomSource
       ? getGroupFileCounts(selectedGroupId!, { includeChildren: true })
       : getAutoFolderGroupFileCounts(selectedGroupId!, { includeChildren: true })),
-    enabled: Number.isFinite(selectedGroupId),
+    // File counts inspect every candidate path on disk. Defer that expensive work
+    // until the secondary download dialog is actually opened.
+    enabled: Number.isFinite(selectedGroupId) && downloadScope === 'group',
   })
 
   const refreshCustomGroupQueries = async () => {
