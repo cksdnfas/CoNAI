@@ -141,6 +141,7 @@
     "verify:single-image-auto-collect-contracts": "cd backend && npm run verify:single-image-auto-collect-contracts",
     "verify:danbooru-prompt-group-contracts": "cd backend && npm run verify:danbooru-prompt-group-contracts",
     "verify:group-image-route-contracts": "cd backend && npm run verify:group-image-route-contracts",
+    "verify:group-descendant-image-contracts": "cd backend && npm run verify:group-descendant-image-contracts",
     "verify:group-wal-hot-path-contracts": "cd backend && npm run verify:group-wal-hot-path-contracts",
     "verify:group-rematch-job-contracts": "cd backend && npm run verify:group-rematch-job-contracts",
     "verify:group-rematch-polling-contracts": "cd frontend && npm run verify:group-rematch-polling-contracts",

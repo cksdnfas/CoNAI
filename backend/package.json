@@ -70,6 +70,7 @@
     "verify:auto-tag-index-contracts": "tsx src/scripts/verifyAutoTagIndexContracts.ts",
     "verify:single-image-auto-collect-contracts": "tsx src/scripts/verifySingleImageAutoCollectContracts.ts",
     "verify:group-image-route-contracts": "tsx src/scripts/verifyGroupImageRouteContracts.ts",
+    "verify:group-descendant-image-contracts": "tsx src/scripts/verifyGroupDescendantImageContracts.ts",
     "verify:group-wal-hot-path-contracts": "tsx src/scripts/verifyGroupWalHotPathContracts.ts",
     "verify:group-rematch-job-contracts": "tsx src/scripts/verifyGroupRematchJobContracts.ts",
     "verify:supported-extension-contracts": "tsx src/scripts/verifySupportedExtensionContracts.ts",

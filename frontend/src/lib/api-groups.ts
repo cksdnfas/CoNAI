@@ -79,12 +79,14 @@ export async function getGroupImages(groupId: number, params?: {
   cursorOrderIndex?: number | null
   cursorAddedDate?: string | null
   cursorHash?: string | null
+  includeChildren?: boolean
 }): Promise<GroupImagesPayload> {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('limit', String(params?.limit ?? 40))
   searchParams.set('pagination', 'cursor')
   searchParams.set('include_total', params?.cursorHash ? 'false' : 'true')
+  searchParams.set('include_children', String(params?.includeChildren ?? false))
   if (params?.cursorOrderIndex !== null && params?.cursorOrderIndex !== undefined) {
     searchParams.set('cursor_order_index', String(params.cursorOrderIndex))
   }
@@ -227,8 +229,9 @@ export async function runAllGroupsAutoCollect() {
   return resolveGroupRematchJobResponse(response.data)
 }
 
-export async function getGroupFileCounts(groupId: number) {
-  const response = await fetchJson<ApiResponse<GroupFileCounts>>(`/api/groups/${groupId}/file-counts`)
+export async function getGroupFileCounts(groupId: number, options?: { includeChildren?: boolean }) {
+  const searchParams = new URLSearchParams({ include_children: String(options?.includeChildren ?? false) })
+  const response = await fetchJson<ApiResponse<GroupFileCounts>>(`/api/groups/${groupId}/file-counts?${searchParams.toString()}`)
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.fileCounts.load')
@@ -262,10 +265,12 @@ export async function downloadGroupArchive(
     type: GroupDownloadType
     compositeHashes?: string[]
     captionMode?: 'auto_tags' | 'merged'
+    includeChildren?: boolean
   },
 ) {
   const searchParams = new URLSearchParams()
   searchParams.set('type', options.type)
+  searchParams.set('include_children', String(options.includeChildren ?? false))
 
   if (options.compositeHashes && options.compositeHashes.length > 0) {
     searchParams.set('hashes', JSON.stringify(options.compositeHashes))

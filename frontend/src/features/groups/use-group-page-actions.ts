@@ -150,10 +150,10 @@ export function useGroupPageActions({
       const compositeHashes = scope === 'selection' ? selectedGroupCompositeHashes : undefined
 
       if (isCustomSource) {
-        return downloadGroupArchive(selectedGroupId, { type, compositeHashes })
+        return downloadGroupArchive(selectedGroupId, { type, compositeHashes, includeChildren: true })
       }
 
-      return downloadAutoFolderGroupArchive(selectedGroupId, { type, compositeHashes })
+      return downloadAutoFolderGroupArchive(selectedGroupId, { type, compositeHashes, includeChildren: true })
     },
     onSuccess: (_, variables) => {
       setDownloadScope(null)

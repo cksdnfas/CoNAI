@@ -106,11 +106,49 @@ export function normalizeGroupImagePositiveInteger(
   return Math.min(Math.max(floored, 1), max);
 }
 
-/** Build the shared WHERE clause for group image list queries. */
-function buildGroupImageWhereClause(
+type GroupImageQuerySource = {
+  cteClause: string;
+  fromClause: string;
+  whereClause: string;
+  queryParams: (number | string)[];
+};
+
+/** Build direct or recursive group membership source while deduplicating descendant images. */
+function buildGroupImageQuerySource(
   groupId: number,
-  collectionType?: GroupImageCollectionType
-): { whereClause: string; queryParams: (number | string)[] } {
+  collectionType?: GroupImageCollectionType,
+  includeChildren: boolean = false,
+): GroupImageQuerySource {
+  if (includeChildren) {
+    const collectionClause = collectionType ? 'AND source_ig.collection_type = ?' : '';
+    return {
+      cteClause: `WITH RECURSIVE target_groups(id) AS (
+        SELECT ?
+        UNION ALL
+        SELECT g.id
+        FROM groups g
+        INNER JOIN target_groups parent ON g.parent_id = parent.id
+      )`,
+      fromClause: `(
+        SELECT
+          source_ig.composite_hash,
+          MIN(source_ig.order_index) AS order_index,
+          MAX(source_ig.added_date) AS added_date,
+          CASE
+            WHEN SUM(source_ig.collection_type = 'manual') > 0 THEN 'manual'
+            ELSE 'auto'
+          END AS collection_type
+        FROM image_groups source_ig
+        WHERE source_ig.group_id IN (SELECT id FROM target_groups)
+          AND source_ig.composite_hash IS NOT NULL
+          ${collectionClause}
+        GROUP BY source_ig.composite_hash
+      ) ig`,
+      whereClause: 'WHERE ig.composite_hash IS NOT NULL',
+      queryParams: collectionType ? [groupId, collectionType] : [groupId],
+    };
+  }
+
   let whereClause = 'WHERE ig.group_id = ? AND ig.composite_hash IS NOT NULL';
   const queryParams: (number | string)[] = [groupId];
 
@@ -119,7 +157,12 @@ function buildGroupImageWhereClause(
     queryParams.push(collectionType);
   }
 
-  return { whereClause, queryParams };
+  return {
+    cteClause: '',
+    fromClause: 'image_groups ig',
+    whereClause,
+    queryParams,
+  };
 }
 
 /** Find one page of group images while preserving the existing response shape. */
@@ -129,11 +172,17 @@ export function findImagesByGroupQuery(
   limit: number = 20,
   collectionType?: GroupImageCollectionType,
   cursor?: { orderIndex: number; addedDate: string; compositeHash: string; includeTotal?: boolean },
+  includeChildren: boolean = false,
 ): GroupImageListResult {
   const normalizedPage = normalizeGroupImagePositiveInteger(page, 1);
   const normalizedLimit = normalizeGroupImagePositiveInteger(limit, 20);
   const offset = (normalizedPage - 1) * normalizedLimit;
-  const { whereClause: baseWhereClause, queryParams: baseQueryParams } = buildGroupImageWhereClause(groupId, collectionType);
+  const {
+    cteClause,
+    fromClause,
+    whereClause: baseWhereClause,
+    queryParams: baseQueryParams,
+  } = buildGroupImageQuerySource(groupId, collectionType, includeChildren);
   let whereClause = baseWhereClause;
   const queryParams = [...baseQueryParams];
 
@@ -148,14 +197,16 @@ export function findImagesByGroupQuery(
 
   const shouldCountTotal = !cursor || cursor.includeTotal !== false;
   const countRow = shouldCountTotal ? db.prepare(
-    `SELECT COUNT(*) as total
-     FROM image_groups ig
+    `${cteClause}
+     SELECT COUNT(*) as total
+     FROM ${fromClause}
      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
      ${baseWhereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}`
   ).get(...baseQueryParams) as { total: number } : null;
   const total = countRow?.total ?? 0;
 
   const query = `
+    ${cteClause}
     SELECT
       COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
       im.width,
@@ -179,7 +230,7 @@ export function findImagesByGroupQuery(
       ig.collection_type
       ,ig.order_index as cursor_order_index
       ,ig.added_date as cursor_added_date
-    FROM image_groups ig
+    FROM ${fromClause}
     LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
     ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
     GROUP BY ig.composite_hash
@@ -219,11 +270,11 @@ export function findImagesByGroupWithFilesQuery(
   const normalizedPage = normalizeGroupImagePositiveInteger(page, 1);
   const normalizedLimit = normalizeGroupImagePositiveInteger(limit, 20);
   const offset = (normalizedPage - 1) * normalizedLimit;
-  const { whereClause, queryParams } = buildGroupImageWhereClause(groupId, collectionType);
+  const { fromClause, whereClause, queryParams } = buildGroupImageQuerySource(groupId, collectionType);
 
   const countRow = db.prepare(
     `SELECT COUNT(*) as total
-     FROM image_groups ig
+     FROM ${fromClause}
      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
      ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}`
   ).get(...queryParams) as { total: number };
@@ -237,7 +288,7 @@ export function findImagesByGroupWithFilesQuery(
       if.file_status,
       if.folder_id,
       wf.folder_name
-    FROM image_groups ig
+    FROM ${fromClause}
     INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
     LEFT JOIN image_files if ON if.composite_hash = im.composite_hash AND if.file_status = 'active'
     LEFT JOIN watched_folders wf ON if.folder_id = wf.id
@@ -286,8 +337,21 @@ export function findPreviewImagesQuery(
 }
 
 /** Find all composite hashes for one group in display order. */
-export function getCompositeHashesForGroupQuery(groupId: number): string[] {
-  const query = `
+export function getCompositeHashesForGroupQuery(groupId: number, includeChildren: boolean = false): string[] {
+  const query = includeChildren ? `
+    WITH RECURSIVE target_groups(id) AS (
+      SELECT ?
+      UNION ALL
+      SELECT g.id
+      FROM groups g
+      INNER JOIN target_groups parent ON g.parent_id = parent.id
+    )
+    SELECT ig.composite_hash
+    FROM image_groups ig
+    INNER JOIN target_groups target ON target.id = ig.group_id
+    GROUP BY ig.composite_hash
+    ORDER BY MIN(ig.order_index) ASC, MAX(ig.added_date) DESC
+  ` : `
     SELECT composite_hash
     FROM image_groups
     WHERE group_id = ?

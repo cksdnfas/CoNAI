@@ -21,8 +21,8 @@ import { GroupDownloadModal } from './components/group-download-modal'
 import { GroupDetailHeaderCard } from './components/group-detail-header-card'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
-import { buildGroupCountMaps, getGroupHierarchyCountLabel } from './group-count-utils'
-import { buildGroupPathItems, formatGroupTimestamp, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
+import { buildGroupCountMaps } from './group-count-utils'
+import { buildGroupPathItems, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
 import { useGroupPageQueries } from './use-group-page-queries'
 import { useGroupPageActions } from './use-group-page-actions'
 import { useI18n } from '@/i18n'
@@ -30,7 +30,7 @@ import { useI18n } from '@/i18n'
 export function GroupPage() {
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
-  const { t, formatNumber, formatDateTime } = useI18n()
+  const { t, formatNumber } = useI18n()
   const {
     columnCount: groupColumnCount,
     setColumnCount: setGroupColumnCount,
@@ -97,7 +97,6 @@ export function GroupPage() {
 
   const groupCountMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
   const groupPathItems = useMemo(() => buildGroupPathItems(allGroups, selectedGroupId), [allGroups, selectedGroupId])
-  const selectedGroupCountLabel = selectedGroupHierarchy ? getGroupHierarchyCountLabel(selectedGroupHierarchy, groupCountMaps, formatNumber) : formatNumber(selectedGroupQuery.data?.image_count ?? 0)
   const selectedGroupImageTotalCount = groupImagesQuery.data?.pages[0]?.pagination.total ?? selectedGroupQuery.data?.image_count ?? 0
 
   const {
@@ -257,14 +256,11 @@ export function GroupPage() {
                   group={selectedGroupQuery.data}
                   selectedGroupHierarchy={selectedGroupHierarchy}
                   isCustomSource={isCustomSource}
-                  isWideLayout={isWideLayout}
                   isGroupFileCountsLoading={groupFileCountsQuery.isLoading}
                   isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
                   isAutoCollectPending={autoCollectMutation.isPending}
                   isDeletePending={deleteGroupMutation.isPending}
-                  lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run, { emptyLabel: t({ ko: '아직 없음', en: 'Not yet' }), formatDateTime })}
-                  parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? t('groups.group.page.root.group') : t('groups.group.page.linked.as.a.child.group')}
-                  imageCountLabel={selectedGroupCountLabel}
+                  imageCountLabel={formatNumber(selectedGroupImageTotalCount)}
                   onOpenDownload={handleOpenGroupDownloadModal}
                   onOpenCreateModal={handleOpenCreateModal}
                   onOpenEditModal={handleOpenEditModal}

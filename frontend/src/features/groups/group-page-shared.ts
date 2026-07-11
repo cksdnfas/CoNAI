@@ -59,23 +59,6 @@ export function normalizeGroupSourceKey(value: string | null): GroupSourceKey {
   return value === 'folders' ? 'folders' : 'custom'
 }
 
-/** Format a backend timestamp into a compact label for group metadata. */
-export function formatGroupTimestamp(
-  value?: string | null,
-  options?: { emptyLabel?: string; formatDateTime?: (value: Date | string | number, formatOptions?: Intl.DateTimeFormatOptions) => string },
-) {
-  if (!value) {
-    return options?.emptyLabel ?? '아직 없음'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return options?.formatDateTime ? options.formatDateTime(date) : date.toLocaleString()
-}
-
 /** Build an empty download-count record for group archive actions. */
 export function createEmptyGroupFileCounts(): GroupFileCounts {
   return {

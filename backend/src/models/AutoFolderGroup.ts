@@ -261,33 +261,39 @@ export class AutoFolderGroupImageModel {
     groupId: number,
     page: number = 1,
     pageSize: number = 50,
-    options?: { useCursor?: boolean; cursorDate?: string; cursorHash?: string },
+    options?: { useCursor?: boolean; cursorDate?: string; cursorHash?: string; includeChildren?: boolean },
   ): { images: ImageMetadataRecord[]; hasMore: boolean; nextCursorDate: string | null; nextCursorHash: string | null } {
     const offset = Math.floor((page - 1) * pageSize);
 
     try {
-      console.log('[AutoFolderGroup] findImagesByGroup params:', {
-        groupId,
-        groupIdType: typeof groupId,
-        page,
-        pageSize,
-        offset,
-        offsetType: typeof offset
-      });
-
       const cursorClause = options?.cursorDate && options.cursorHash
         ? 'AND (m.first_seen_date < ? OR (m.first_seen_date = ? AND m.composite_hash < ?))'
         : '';
+      const includeChildren = options?.includeChildren === true;
+      const cteClause = includeChildren ? `WITH RECURSIVE target_groups(id) AS (
+        SELECT ?
+        UNION ALL
+        SELECT afg.id
+        FROM auto_folder_groups afg
+        INNER JOIN target_groups parent ON afg.parent_id = parent.id
+      )` : '';
+      const membershipSource = includeChildren
+        ? `(SELECT DISTINCT source_afgi.composite_hash
+            FROM auto_folder_group_images source_afgi
+            INNER JOIN target_groups target ON target.id = source_afgi.group_id) afgi`
+        : 'auto_folder_group_images afgi';
+      const groupClause = includeChildren ? '' : 'afgi.group_id = ? AND';
       const query = `
+        ${cteClause}
         SELECT m.*,
         (SELECT id FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as id,
         (SELECT file_type FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as file_type,
         (SELECT mime_type FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
         (SELECT file_size FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
         (SELECT original_file_path FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path
-        FROM auto_folder_group_images afgi
+        FROM ${membershipSource}
         INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-        WHERE afgi.group_id = ? AND ${getReadyAutoFolderImageCondition()} ${cursorClause}
+        WHERE ${groupClause} ${getReadyAutoFolderImageCondition()} ${cursorClause}
         ORDER BY m.first_seen_date DESC, m.composite_hash DESC
         LIMIT ?${options?.useCursor ? '' : ' OFFSET ?'}
       `;
@@ -306,7 +312,6 @@ export class AutoFolderGroupImageModel {
         rows.pop();
       }
       const lastRow = rows.at(-1);
-      console.log('[AutoFolderGroup] findImagesByGroup result:', { rowCount: rows.length });
       return {
         images: rows,
         hasMore,
@@ -330,12 +335,25 @@ export class AutoFolderGroupImageModel {
   /**
    * 그룹의 총 이미지 개수
    */
-  static getImageCount(groupId: number): number {
-    const result = db.prepare(`
-      SELECT COUNT(*) as count
-      FROM auto_folder_group_images
-      WHERE group_id = ?
-    `).get(groupId) as { count: number };
+  static getImageCount(groupId: number, includeChildren: boolean = false): number {
+    const result = includeChildren
+      ? db.prepare(`
+          WITH RECURSIVE target_groups(id) AS (
+            SELECT ?
+            UNION ALL
+            SELECT afg.id
+            FROM auto_folder_groups afg
+            INNER JOIN target_groups parent ON afg.parent_id = parent.id
+          )
+          SELECT COUNT(DISTINCT afgi.composite_hash) as count
+          FROM auto_folder_group_images afgi
+          INNER JOIN target_groups target ON target.id = afgi.group_id
+        `).get(groupId) as { count: number }
+      : db.prepare(`
+          SELECT COUNT(*) as count
+          FROM auto_folder_group_images
+          WHERE group_id = ?
+        `).get(groupId) as { count: number };
 
     return result?.count || 0;
   }
@@ -387,12 +405,25 @@ export class AutoFolderGroupImageModel {
   /**
    * 그룹의 모든 composite_hash 조회
    */
-  static getCompositeHashesForGroup(groupId: number): string[] {
-    const rows = db.prepare(`
-      SELECT composite_hash
-      FROM auto_folder_group_images
-      WHERE group_id = ?
-    `).all(groupId) as Array<{ composite_hash: string }>;
+  static getCompositeHashesForGroup(groupId: number, includeChildren: boolean = false): string[] {
+    const rows = includeChildren
+      ? db.prepare(`
+          WITH RECURSIVE target_groups(id) AS (
+            SELECT ?
+            UNION ALL
+            SELECT afg.id
+            FROM auto_folder_groups afg
+            INNER JOIN target_groups parent ON afg.parent_id = parent.id
+          )
+          SELECT DISTINCT afgi.composite_hash
+          FROM auto_folder_group_images afgi
+          INNER JOIN target_groups target ON target.id = afgi.group_id
+        `).all(groupId) as Array<{ composite_hash: string }>
+      : db.prepare(`
+          SELECT composite_hash
+          FROM auto_folder_group_images
+          WHERE group_id = ?
+        `).all(groupId) as Array<{ composite_hash: string }>;
 
     return rows.map(r => r.composite_hash);
   }

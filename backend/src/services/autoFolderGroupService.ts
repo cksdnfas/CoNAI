@@ -325,12 +325,12 @@ export class AutoFolderGroupService {
     groupId: number,
     page: number = 1,
     pageSize: number = 50,
-    options?: { useCursor?: boolean; cursorDate?: string; cursorHash?: string; includeTotal?: boolean },
+    options?: { useCursor?: boolean; cursorDate?: string; cursorHash?: string; includeTotal?: boolean; includeChildren?: boolean },
   ) {
     return this.withReadableGroups(async () => {
       const result = await AutoFolderGroupImageModel.findImagesByGroup(groupId, page, pageSize, options);
       const totalKnown = options?.includeTotal !== false;
-      const total = totalKnown ? await AutoFolderGroupImageModel.getImageCount(groupId) : 0;
+      const total = totalKnown ? await AutoFolderGroupImageModel.getImageCount(groupId, options?.includeChildren) : 0;
 
       return {
         images: result.images,

@@ -114,12 +114,14 @@ export async function getAutoFolderGroupImages(groupId: number, params?: {
   cursorHash?: string | null
   cursorOrderIndex?: number | null
   cursorAddedDate?: string | null
+  includeChildren?: boolean
 }): Promise<GroupImagesPayload> {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('pageSize', String(params?.limit ?? 40))
   searchParams.set('pagination', 'cursor')
   searchParams.set('include_total', params?.cursorHash ? 'false' : 'true')
+  searchParams.set('include_children', String(params?.includeChildren ?? false))
   if (params?.cursorDate) {
     searchParams.set('cursor_date', params.cursorDate)
   }
@@ -147,8 +149,9 @@ export async function getAutoFolderGroupImages(groupId: number, params?: {
   } satisfies GroupImagesPayload
 }
 
-export async function getAutoFolderGroupFileCounts(groupId: number) {
-  const response = await fetchJson<ApiResponse<GroupFileCounts>>(`/api/auto-folder-groups/${groupId}/file-counts`)
+export async function getAutoFolderGroupFileCounts(groupId: number, options?: { includeChildren?: boolean }) {
+  const searchParams = new URLSearchParams({ include_children: String(options?.includeChildren ?? false) })
+  const response = await fetchJson<ApiResponse<GroupFileCounts>>(`/api/auto-folder-groups/${groupId}/file-counts?${searchParams.toString()}`)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'autoFolderGroups.fileCounts.load')
   }
@@ -187,10 +190,12 @@ export async function downloadAutoFolderGroupArchive(
     type: GroupDownloadType
     compositeHashes?: string[]
     captionMode?: 'auto_tags' | 'merged'
+    includeChildren?: boolean
   },
 ) {
   const searchParams = new URLSearchParams()
   searchParams.set('type', options.type)
+  searchParams.set('include_children', String(options.includeChildren ?? false))
 
   if (options.compositeHashes && options.compositeHashes.length > 0) {
     searchParams.set('hashes', options.compositeHashes.join(','))

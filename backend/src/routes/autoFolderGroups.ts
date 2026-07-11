@@ -141,12 +141,14 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
     const useCursor = req.query.pagination === 'cursor';
     const cursorDate = typeof req.query.cursor_date === 'string' ? req.query.cursor_date : undefined;
     const cursorHash = typeof req.query.cursor_hash === 'string' ? req.query.cursor_hash : undefined;
+    const includeChildren = req.query.include_children === 'true';
 
     const result = await AutoFolderGroupService.getGroupImages(id, page, pageSize, {
       useCursor,
       cursorDate,
       cursorHash,
       includeTotal: req.query.include_total !== 'false',
+      includeChildren,
     });
 
     // 이미지 메타데이터 보강 (URL 추가)
@@ -215,6 +217,7 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const type = (req.query.type as DownloadType) || 'original';
     const hashesParam = req.query.hashes as string | undefined;
+    const includeChildren = req.query.include_children === 'true';
 
     // 선택된 이미지만 다운로드 (옵션)
     const selectedHashes = hashesParam ? hashesParam.split(',') : undefined;
@@ -244,6 +247,7 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       downloadType: type,
       groupType: 'auto-folder',
       compositeHashes: selectedHashes,
+      includeChildren,
       captionOptions: captionMode ? { captionMode: captionMode as CaptionMode } : undefined
     });
 
@@ -275,8 +279,9 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
 router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const includeChildren = req.query.include_children === 'true';
 
-    const fileCounts = await GroupDownloadService.getFileCountByType(id, 'auto-folder');
+    const fileCounts = await GroupDownloadService.getFileCountByType(id, 'auto-folder', includeChildren);
 
     return res.json(successResponse(fileCounts));
   } catch (error) {

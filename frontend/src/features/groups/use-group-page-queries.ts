@@ -67,8 +67,8 @@ export function useGroupPageQueries({
     queryKey: ['group-images', selectedSource.key, selectedGroupId, isCustomSource ? groupImageCollectionFilter : 'all'],
     queryFn: async ({ pageParam }): Promise<GroupImagesPayload> => (
       isCustomSource
-        ? getGroupImages(selectedGroupId!, { ...pageParam, limit: 40, collectionType: groupImageCollectionFilter })
-        : selectedSource.getImages(selectedGroupId!, { ...pageParam, limit: 40 })
+        ? getGroupImages(selectedGroupId!, { ...pageParam, limit: 40, collectionType: groupImageCollectionFilter, includeChildren: true })
+        : selectedSource.getImages(selectedGroupId!, { ...pageParam, limit: 40, includeChildren: true })
     ),
     initialPageParam: {} as GroupImagesPageParam,
     getNextPageParam: (lastPage): GroupImagesPageParam | undefined => {
@@ -87,7 +87,9 @@ export function useGroupPageQueries({
 
   const groupFileCountsQuery = useQuery({
     queryKey: ['group-file-counts', selectedSource.key, selectedGroupId],
-    queryFn: () => (isCustomSource ? getGroupFileCounts(selectedGroupId!) : getAutoFolderGroupFileCounts(selectedGroupId!)),
+    queryFn: () => (isCustomSource
+      ? getGroupFileCounts(selectedGroupId!, { includeChildren: true })
+      : getAutoFolderGroupFileCounts(selectedGroupId!, { includeChildren: true })),
     enabled: Number.isFinite(selectedGroupId),
   })
 

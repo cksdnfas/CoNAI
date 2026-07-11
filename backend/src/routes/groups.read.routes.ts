@@ -129,6 +129,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
     const page = pageResult.value;
     const limit = limitResult.value;
     const collectionType = req.query.collection_type as 'manual' | 'auto';
+    const includeChildren = req.query.include_children === 'true';
     const cursorOrderIndex = Number(req.query.cursor_order_index);
     const cursorAddedDate = typeof req.query.cursor_added_date === 'string' ? req.query.cursor_added_date : '';
     const cursorHash = typeof req.query.cursor_hash === 'string' ? req.query.cursor_hash : '';
@@ -142,7 +143,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
         }
       : undefined;
 
-    const result = await ImageGroupModel.findImagesByGroup(id, page, limit, collectionType, cursor);
+    const result = await ImageGroupModel.findImagesByGroup(id, page, limit, collectionType, cursor, includeChildren);
     const group = await GroupModel.findById(id);
 
     const enrichedImages = result.images.map(image => {
@@ -219,6 +220,7 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
   try {
     const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const downloadType = (req.query.type as DownloadType) || 'thumbnail';
+    const includeChildren = req.query.include_children === 'true';
 
     let compositeHashes: string[] | undefined;
     if (req.query.hashes) {
@@ -246,6 +248,7 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       downloadType,
       groupType: 'custom',
       compositeHashes,
+      includeChildren,
       captionOptions: captionMode ? { captionMode: captionMode as CaptionMode } : undefined
     });
 
@@ -288,7 +291,8 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
 router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
-    const counts = await GroupDownloadService.getFileCountByType(id, 'custom');
+    const includeChildren = req.query.include_children === 'true';
+    const counts = await GroupDownloadService.getFileCountByType(id, 'custom', includeChildren);
     return res.json(successResponse(counts));
   } catch (error) {
     console.error('Error getting file counts:', error);

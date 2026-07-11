@@ -17,6 +17,7 @@ interface DownloadOptions {
   downloadType: DownloadType;
   groupType: GroupType; // 그룹 타입 추가
   compositeHashes?: string[]; // 선택된 이미지만 다운로드 (없으면 전체)
+  includeChildren?: boolean;
   captionOptions?: {
     captionMode: CaptionMode; // 'auto_tags': taglist만, 'merged': taglist + prompt 병합
   };
@@ -38,7 +39,7 @@ export class GroupDownloadService {
    * 그룹 이미지를 ZIP 파일로 생성
    */
   static async createGroupZip(options: DownloadOptions): Promise<DownloadResult> {
-    const { groupId, downloadType, groupType, compositeHashes, captionOptions } = options;
+    const { groupId, downloadType, groupType, compositeHashes, captionOptions, includeChildren = false } = options;
 
     // 그룹 정보 조회
     let groupName: string;
@@ -57,7 +58,7 @@ export class GroupDownloadService {
     }
 
     // 그룹에 속한 모든 이미지 조회 (파일 정보 포함)
-    const allImages = await this.getAllImagesWithFiles(groupId, groupType);
+    const allImages = await this.getAllImagesWithFiles(groupId, groupType, includeChildren);
 
     // 선택된 이미지만 필터링 (선택 옵션이 있는 경우)
     let images = allImages;
@@ -105,10 +106,10 @@ export class GroupDownloadService {
    * 그룹의 모든 이미지와 파일 정보 조회 (페이지네이션 없이 전체)
    * composite_hash 기준으로 중복 제거 (해시당 1개만)
    */
-  private static async getAllImagesWithFiles(groupId: number, groupType: GroupType): Promise<ImageWithFileView[]> {
+  private static async getAllImagesWithFiles(groupId: number, groupType: GroupType, includeChildren: boolean = false): Promise<ImageWithFileView[]> {
     const compositeHashes = groupType === 'custom'
-      ? ImageGroupModel.getCompositeHashesForGroup(groupId)
-      : AutoFolderGroupImageModel.getCompositeHashesForGroup(groupId);
+      ? ImageGroupModel.getCompositeHashesForGroup(groupId, includeChildren)
+      : AutoFolderGroupImageModel.getCompositeHashesForGroup(groupId, includeChildren);
 
     return this.loadImagesByCompositeHashes(compositeHashes);
   }
@@ -394,12 +395,12 @@ export class GroupDownloadService {
   /**
    * 그룹의 파일 타입별 개수 조회
    */
-  static async getFileCountByType(groupId: number, groupType: GroupType): Promise<{
+  static async getFileCountByType(groupId: number, groupType: GroupType, includeChildren: boolean = false): Promise<{
     thumbnail: number;
     original: number;
     video: number;
   }> {
-    const images = await this.getAllImagesWithFiles(groupId, groupType);
+    const images = await this.getAllImagesWithFiles(groupId, groupType, includeChildren);
 
     let thumbnailCount = 0;
     let originalCount = 0;

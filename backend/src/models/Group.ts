@@ -382,8 +382,9 @@ export class ImageGroupModel {
     limit: number = 20,
     collectionType?: 'manual' | 'auto',
     cursor?: { orderIndex: number; addedDate: string; compositeHash: string; includeTotal?: boolean },
+    includeChildren: boolean = false,
   ) {
-    return findImagesByGroupQuery(groupId, page, limit, collectionType, cursor);
+    return findImagesByGroupQuery(groupId, page, limit, collectionType, cursor, includeChildren);
   }
 
   /**
@@ -469,8 +470,8 @@ export class ImageGroupModel {
   /**
    * 그룹에 속한 모든 composite_hash 조회
    */
-  static getCompositeHashesForGroup(groupId: number): string[] {
-    return getCompositeHashesForGroupQuery(groupId);
+  static getCompositeHashesForGroup(groupId: number, includeChildren: boolean = false): string[] {
+    return getCompositeHashesForGroupQuery(groupId, includeChildren);
   }
 
   /**
