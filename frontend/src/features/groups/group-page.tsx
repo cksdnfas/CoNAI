@@ -319,6 +319,14 @@ export function GroupPage() {
           subtitle={getSourceLabel(selectedSource, 'root')}
           ariaLabel={t({ ko: '그룹 폴더 탐색', en: 'Group folder explorer' })}
           closeLabel={t({ ko: '탐색기 닫기', en: 'Close explorer' })}
+          headerActions={selectedGroupId ? (
+            <Button type="button" size="sm" variant="secondary" onClick={() => {
+              setIsExplorerOpen(false)
+              handleOpenRoot()
+            }}>
+              {t({ ko: '루트로 이동', en: 'Go to root' })}
+            </Button>
+          ) : undefined}
           onClose={() => setIsExplorerOpen(false)}
         >
           <GroupExplorerSidebarPanel

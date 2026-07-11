@@ -120,7 +120,7 @@ export function GroupDetailHeaderCard({
             <Badge variant="outline">{t({ ko: '자동 수집 {count}', en: 'Auto-collected {count}' }, { count: formatNumber(group.auto_collected_count ?? 0) })}</Badge>
           </>
         ) : null}
-        {selectedGroupHierarchy?.has_children ? <Badge variant="outline">{t({ ko: '하위 {count}', en: 'Children {count}' }, { count: formatNumber(selectedGroupHierarchy.child_count) })}</Badge> : null}
+        {selectedGroupHierarchy?.has_children ? <Badge variant="outline">{t({ ko: '하위 폴더 {count}', en: '{count} child folders' }, { count: formatNumber(selectedGroupHierarchy.child_count) })}</Badge> : null}
       </div>
 
       {isCustomSource ? (
