@@ -20,7 +20,6 @@ import { GroupImageSection } from './components/group-image-section'
 import { GroupDownloadModal } from './components/group-download-modal'
 import { GroupDetailHeaderCard } from './components/group-detail-header-card'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
-import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { buildGroupCountMaps, getGroupHierarchyCountLabel } from './group-count-utils'
 import { buildGroupPathItems, formatGroupTimestamp, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
@@ -296,6 +295,11 @@ export function GroupPage() {
                 totalCount={selectedGroupImageTotalCount}
                 onLoadMore={() => void groupImagesQuery.fetchNextPage()}
                 preferredColumnCount={groupColumnCount}
+                defaultColumnCount={defaultGroupColumnCount}
+                minColumnCount={minGroupColumnCount}
+                maxColumnCount={maxGroupColumnCount}
+                onColumnCountChange={setGroupColumnCount}
+                onColumnCountReset={resetGroupColumnCount}
                 selectable={true}
                 selectedIds={selectedGroupImageIds}
                 onSelectedIdsChange={setSelectedGroupImageIds}
@@ -303,17 +307,6 @@ export function GroupPage() {
                 onCollectionFilterChange={isCustomSource ? setGroupImageCollectionFilter : undefined}
               />
 
-              {groupImages.length > 0 ? (
-                <ImageListColumnFloatingControl
-                  value={groupColumnCount}
-                  defaultValue={defaultGroupColumnCount}
-                  min={minGroupColumnCount}
-                  max={maxGroupColumnCount}
-                  title={t('groups.group.page.group.cards.per.row')}
-                  onChange={setGroupColumnCount}
-                  onReset={resetGroupColumnCount}
-                />
-              ) : null}
             </div>
           ) : null}
         </section>

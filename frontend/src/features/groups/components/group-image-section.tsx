@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Bot, Images, Loader2, Pencil } from 'lucide-react'
+import { Bot, Images, LayoutGrid, Loader2, Minus, Pencil, Plus, RotateCcw } from 'lucide-react'
 import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
@@ -26,6 +26,11 @@ interface GroupImageSectionProps {
   hideHeader?: boolean
   presentation?: 'page' | 'drawer'
   preferredColumnCount?: number
+  defaultColumnCount?: number
+  minColumnCount?: number
+  maxColumnCount?: number
+  onColumnCountChange?: (value: number) => void
+  onColumnCountReset?: () => void
   selectable?: boolean
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
@@ -53,6 +58,11 @@ export function GroupImageSection({
   hideHeader = false,
   presentation = 'page',
   preferredColumnCount,
+  defaultColumnCount,
+  minColumnCount = 1,
+  maxColumnCount = 8,
+  onColumnCountChange,
+  onColumnCountReset,
   selectable = false,
   selectedIds = [],
   onSelectedIdsChange,
@@ -80,16 +90,21 @@ export function GroupImageSection({
     visibleCount: visibleGroupImages.length,
     totalCount,
   })
+  const shouldShowFeedProgress = !isLoading && !isError && visibleGroupImages.length > 0 && (
+    isLoadingMore || feedProgress.hiddenCount > 0 || feedProgress.loadedCount < feedProgress.totalCount
+  )
 
   return (
     <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-4'}>
       {!hideHeader ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">{t('groups.components.group.image.section.images')}</h2>
-            <div className="mt-1 text-sm text-muted-foreground">{t({ ko: '{count}개 항목', en: '{count} items' }, { count: formatNumber(visibleGroupImages.length) })}</div>
+        <PageInset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">{t('groups.components.group.image.section.images')}</h2>
+            <Badge variant="secondary">
+              {t({ ko: '전체 {count}', en: '{count} total' }, { count: formatNumber(feedProgress.totalCount) })}
+            </Badge>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {typeof onCollectionFilterChange === 'function' ? (
               <div className="flex flex-wrap items-center gap-2">
                 {COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, labelKey }) => {
@@ -98,25 +113,66 @@ export function GroupImageSection({
                   <Button
                     key={value}
                     type="button"
-                    size="icon-sm"
+                    size="sm"
                     variant={collectionFilter === value ? 'default' : 'secondary'}
                     onClick={() => onCollectionFilterChange(value)}
                     aria-label={translatedLabel}
                     title={translatedLabel}
                   >
                     <Icon className="h-4 w-4" />
+                    {translatedLabel}
                   </Button>
                   )
                 })}
               </div>
             ) : shouldShowCollectionCounts ? (
               <>
-                <Badge variant="outline">manual {formatNumber(group.manual_added_count ?? 0)}</Badge>
-                <Badge variant="outline">auto {formatNumber(group.auto_collected_count ?? 0)}</Badge>
+                <Badge variant="outline">{t({ ko: '직접 추가 {count}', en: 'Manual {count}' }, { count: formatNumber(group.manual_added_count ?? 0) })}</Badge>
+                <Badge variant="outline">{t({ ko: '자동 수집 {count}', en: 'Auto-collected {count}' }, { count: formatNumber(group.auto_collected_count ?? 0) })}</Badge>
               </>
             ) : null}
+            {preferredColumnCount !== undefined && onColumnCountChange ? (
+              <div className="inline-flex items-center gap-1 rounded-sm border border-border/80 bg-surface-container px-1 py-1" aria-label={t({ ko: '한 줄 이미지 수', en: 'Images per row' })}>
+                <LayoutGrid className="mx-1 h-4 w-4 text-muted-foreground" />
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  onClick={() => onColumnCountChange(Math.max(minColumnCount, preferredColumnCount - 1))}
+                  disabled={preferredColumnCount <= minColumnCount}
+                  aria-label={t({ ko: '열 수 줄이기', en: 'Decrease columns' })}
+                  title={t({ ko: '열 수 줄이기', en: 'Decrease columns' })}
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </Button>
+                <span className="min-w-6 text-center text-xs font-semibold tabular-nums text-foreground">{preferredColumnCount}</span>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  onClick={() => onColumnCountChange(Math.min(maxColumnCount, preferredColumnCount + 1))}
+                  disabled={preferredColumnCount >= maxColumnCount}
+                  aria-label={t({ ko: '열 수 늘리기', en: 'Increase columns' })}
+                  title={t({ ko: '열 수 늘리기', en: 'Increase columns' })}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+                {onColumnCountReset && defaultColumnCount !== undefined && preferredColumnCount !== defaultColumnCount ? (
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    onClick={onColumnCountReset}
+                    aria-label={t({ ko: '기본 열 수로 복원', en: 'Reset columns' })}
+                    title={t({ ko: '기본 열 수로 복원', en: 'Reset columns' })}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-        </div>
+        </PageInset>
       ) : null}
 
       {isLoading ? (
@@ -134,7 +190,7 @@ export function GroupImageSection({
         </Alert>
       ) : null}
 
-      {!isLoading && !isError && visibleGroupImages.length > 0 ? (
+      {shouldShowFeedProgress ? (
         <PageInset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>
