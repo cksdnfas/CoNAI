@@ -337,7 +337,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           key={`recent-grid-slot-${index}`}
           image={entry.previewImage}
           alt={entry.workflowName}
-          onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+          onOpenImage={mode === 'runtime' && widget.settings.imageClickAction !== 'none' ? onOpenImage : undefined}
           transitionStyle={imageTransitionStyle}
           transitionSpeed={imageTransitionSpeed}
           transitionDurationMs={imageTransitionDurationMs}
@@ -367,6 +367,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(1, Math.min(9, widget.settings.visibleCount))
+  const layoutMode = widget.settings.layoutMode ?? 'grid'
   const slideshowInterval = Math.max(4, widget.settings.slideshowIntervalSec ?? 12) * 1000
   const previewPoolCount = Math.max(visibleCount + 1, visibleCount * 3, 12)
   const motionMode = widget.settings.motionMode ?? 'static'
@@ -381,10 +382,11 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const allowPointerMotion = motionMode === 'pointer' && mode === 'runtime'
   const ambientTick = useWallpaperMotionTick(motionMode === 'ambient')
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
+  const [isPointerInside, setIsPointerInside] = useState(false)
 
   const previewQuery = useWallpaperGroupPreviewImagesQuery('group-image-view', groupId, includeChildren, previewPoolCount)
   const images = useMemo(() => previewQuery.data ?? [], [previewQuery.data])
-  const rotationEnabled = images.length > visibleCount
+  const rotationEnabled = images.length > visibleCount && !(widget.settings.pauseOnHover !== false && isPointerInside)
   const rotationIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
   const targetVisibleImages = useMemo(() => {
     if (images.length <= visibleCount) {
@@ -427,7 +429,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
     }
   }, [targetVisibleImages, visibleImages])
 
-  const columnCount = visibleCount >= 6 ? 3 : visibleCount >= 4 ? 2 : 1
+  const columnCount = layoutMode === 'filmstrip' ? visibleCount : visibleCount >= 6 ? 3 : visibleCount >= 4 ? 2 : 1
   const rowCount = Math.max(1, Math.ceil(Math.max(visibleImages.length, 1) / columnCount))
 
   if (groupId === null) {
@@ -446,13 +448,19 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
     <div
       className="relative grid h-full gap-2"
       style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+      onPointerEnter={() => setIsPointerInside(true)}
       onPointerMove={allowPointerMotion ? (event) => {
         const rect = event.currentTarget.getBoundingClientRect()
         const nextX = ((event.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2
         const nextY = ((event.clientY - rect.top) / Math.max(1, rect.height) - 0.5) * 2
         setPointerOffset({ x: nextX, y: nextY })
       } : undefined}
-      onPointerLeave={allowPointerMotion ? () => setPointerOffset(null) : undefined}
+      onPointerLeave={() => {
+        setIsPointerInside(false)
+        if (allowPointerMotion) {
+          setPointerOffset(null)
+        }
+      }}
     >
       {visibleImages.length === 0 ? (
         <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
@@ -485,7 +493,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
             key={`group-grid-slot-${index}`}
             image={image}
             alt={t({ ko: '그룹 미리보기', en: 'Group preview' })}
-            onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+            onOpenImage={mode === 'runtime' && widget.settings.imageClickAction !== 'none' ? onOpenImage : undefined}
             transitionStyle={imageTransitionStyle}
             transitionSpeed={imageTransitionSpeed}
             transitionDurationMs={imageTransitionDurationMs}
@@ -532,11 +540,12 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
   const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
   const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
   const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
+  const [isPointerInside, setIsPointerInside] = useState(false)
 
   const previewQuery = useWallpaperGroupPreviewImagesQuery('image-showcase', groupId, includeChildren, previewCount)
 
   const images = useMemo(() => previewQuery.data ?? [], [previewQuery.data])
-  const rotationEnabled = playbackMode !== 'static' && images.length > 1
+  const rotationEnabled = playbackMode !== 'static' && images.length > 1 && !(widget.settings.pauseOnHover !== false && isPointerInside)
   const kenBurnsEnabled = playbackMode === 'ken-burns'
   const currentIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
   const motionTick = useWallpaperMotionTick(kenBurnsEnabled)
@@ -576,7 +585,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
     <WallpaperPreviewImageSurface
       image={currentImage}
       alt={t({ ko: '쇼케이스', en: 'Showcase' })}
-      onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+      onOpenImage={mode === 'runtime' && widget.settings.imageClickAction !== 'none' ? onOpenImage : undefined}
       transitionStyle={imageTransitionStyle}
       transitionSpeed={imageTransitionSpeed}
       transitionDurationMs={imageTransitionDurationMs}
@@ -587,13 +596,15 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
       className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-surface-low"
       imageClassName={cn(
         'h-full w-full rounded-xl ease-out will-change-transform',
-        widget.settings.fitMode === 'contain' ? 'object-contain' : 'object-cover',
+        widget.settings.fitMode === 'contain' ? 'object-contain' : widget.settings.fitMode === 'scale-down' ? 'object-scale-down' : 'object-cover',
         kenBurnsEnabled ? 'transition-transform duration-200' : 'transition-transform duration-[1600ms]',
       )}
       imageStyle={{
         transform: showcaseTransform,
         transitionTimingFunction: getWallpaperAnimationEasingCss(imageTransitionEasing),
       }}
+      onPointerEnter={() => setIsPointerInside(true)}
+      onPointerLeave={() => setIsPointerInside(false)}
     >
       {rotationEnabled ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_74%,transparent))] px-3 py-2">

@@ -418,7 +418,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
           </>
         )
 
-        if (mode === 'runtime' && onOpenImage && image) {
+        if (mode === 'runtime' && widget.settings.imageClickAction !== 'none' && onOpenImage && image) {
           return (
             <button
               key={card.key}

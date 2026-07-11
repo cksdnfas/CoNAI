@@ -134,6 +134,31 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
           {isPreviewableImageWidget ? (
             <>
+              <SettingsField label={t({ ko: '이미지 클릭', en: 'Image click' })}>
+                <Select
+                  value={selectedWidget.settings.imageClickAction ?? 'preview'}
+                  onChange={(event) => {
+                    updateWidgetSettings({ imageClickAction: event.target.value === 'none' ? 'none' : 'preview' })
+                  }}
+                >
+                  <option value="preview">{t({ ko: '확대 미리보기', en: 'Open preview' })}</option>
+                  <option value="none">{t({ ko: '동작 없음', en: 'No action' })}</option>
+                </Select>
+              </SettingsField>
+
+              {selectedWidget.type === 'group-image-view' || selectedWidget.type === 'image-showcase' ? (
+                <SettingsToggleRow>
+                  <span className="flex-1">{t({ ko: '호버 시 자동재생 일시정지', en: 'Pause autoplay on hover' })}</span>
+                  <input
+                    type="checkbox"
+                    checked={selectedWidget.settings.pauseOnHover !== false}
+                    onChange={(event) => {
+                      updateWidgetSettings({ pauseOnHover: event.target.checked })
+                    }}
+                  />
+                </SettingsToggleRow>
+              ) : null}
+
               <WallpaperPreviewOpenAnimationEditorField
                 scalePercent={selectedWidget.settings.imagePreviewOpenScalePercent}
                 durationMs={selectedWidget.settings.imagePreviewOpenDurationMs}

@@ -38,11 +38,12 @@ export function WallpaperImageWidgetEditorFields({
               <Select
                 value={selectedWidget.settings.fitMode}
                 onChange={(event) => {
-                  updateWidgetSettings({ fitMode: event.target.value === 'contain' ? 'contain' : 'cover' })
+                  updateWidgetSettings({ fitMode: event.target.value === 'contain' ? 'contain' : event.target.value === 'scale-down' ? 'scale-down' : 'cover' })
                 }}
               >
                 <option value="cover">{t({ ko: '채우기', en: 'Cover' })}</option>
                 <option value="contain">{t({ ko: '맞춤', en: 'Contain' })}</option>
+                <option value="scale-down">{t({ ko: '원본 축소', en: 'Scale down' })}</option>
               </Select>
             </SettingsField>
           </WallpaperInspectorSectionCard>
@@ -123,6 +124,18 @@ export function WallpaperImageWidgetEditorFields({
       return (
         <>
           <WallpaperInspectorSectionCard title={t({ ko: '레이아웃', en: 'Layout' })}>
+            <SettingsField label={t({ ko: '표시 방식', en: 'Display mode' })}>
+              <Select
+                value={selectedWidget.settings.layoutMode ?? 'grid'}
+                onChange={(event) => {
+                  updateWidgetSettings({ layoutMode: event.target.value === 'filmstrip' ? 'filmstrip' : 'grid' })
+                }}
+              >
+                <option value="grid">{t({ ko: '그리드', en: 'Grid' })}</option>
+                <option value="filmstrip">{t({ ko: '필름스트립', en: 'Filmstrip' })}</option>
+              </Select>
+            </SettingsField>
+
             <SettingsField label={t({ ko: '표시 개수', en: 'Visible count' })}>
               <Select
                 className="w-full"

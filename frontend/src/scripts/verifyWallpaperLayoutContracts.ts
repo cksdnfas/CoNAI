@@ -52,6 +52,9 @@ const wallpaperCanvasViewSource = readFileSync(resolve(process.cwd(), 'src/featu
 const wallpaperWidgetUtilsSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-widget-utils.ts'), 'utf8')
 const wallpaperClockSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-clock-widget-body.tsx'), 'utf8')
 const wallpaperLivelyHelpSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-lively-help-modal.tsx'), 'utf8')
+const wallpaperImageBodiesSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-image-widget-bodies.tsx'), 'utf8')
+const wallpaperInspectorSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-widget-inspector.tsx'), 'utf8')
+const viteConfigSource = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8')
 const appearanceSettingsRouteSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/settings/appearance.routes.ts'), 'utf8')
 assert(
   wallpaperWidgetUtilsSource.includes('useSyncExternalStore'),
@@ -113,6 +116,16 @@ assert(
   wallpaperRuntimePageSource.includes("searchParams.get('draft') === '1'")
     && wallpaperRuntimePageSource.includes('enabled: !isDraftPreview'),
   'wallpaper draft preview should explicitly load the local draft without waiting for server presets',
+)
+assert(
+  viteConfigSource.includes("base: '/'") && !viteConfigSource.includes("base: './'"),
+  'nested wallpaper routes must load frontend assets from the application root',
+)
+assert(
+  wallpaperImageBodiesSource.includes("layoutMode === 'filmstrip'")
+    && wallpaperImageBodiesSource.includes('pauseOnHover !== false')
+    && wallpaperInspectorSource.includes("imageClickAction: event.target.value === 'none' ? 'none' : 'preview'"),
+  'image widgets must expose additional presentation and interaction controls',
 )
 assert(
   appearanceSettingsRouteSource.includes('appearanceSettings.wallpaperActivePresetId === undefined'),

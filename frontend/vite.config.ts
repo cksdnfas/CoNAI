@@ -63,7 +63,7 @@ export default defineConfig(({ command, mode }) => {
         : []),
       tailwindcss(),
     ],
-    base: './',
+    base: '/',
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
       'process.env.NODE_ENV': JSON.stringify(command === 'build' ? 'production' : 'development'),

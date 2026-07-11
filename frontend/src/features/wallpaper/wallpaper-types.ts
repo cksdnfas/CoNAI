@@ -32,6 +32,8 @@ export interface WallpaperBaseWidgetSettings {
   imagePreviewCloseScalePercent?: number
   imagePreviewCloseDurationMs?: number
   imagePreviewCloseEasing?: WallpaperAnimationEasing
+  imageClickAction?: 'preview' | 'none'
+  pauseOnHover?: boolean
 }
 
 export type WallpaperImageTransitionStyle = 'none' | 'fade' | 'zoom' | 'slide' | 'blur' | 'flip' | 'shuffle'
@@ -86,6 +88,7 @@ export interface WallpaperGroupSourceWidgetSettings extends WallpaperBaseWidgetS
 
 export interface WallpaperGroupImageViewWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   visibleCount: number
+  layoutMode?: 'grid' | 'filmstrip'
   slideshowIntervalSec: number
   motionMode: 'static' | 'ambient' | 'pointer'
   motionStrength: number
@@ -99,7 +102,7 @@ export interface WallpaperGroupImageViewWidgetSettings extends WallpaperGroupSou
 }
 
 export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSourceWidgetSettings {
-  fitMode: 'cover' | 'contain'
+  fitMode: 'cover' | 'contain' | 'scale-down'
   slideshowIntervalSec: number
   playbackMode: 'static' | 'carousel' | 'ken-burns'
   imageTransitionStyle: WallpaperImageTransitionStyle

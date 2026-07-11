@@ -37,7 +37,7 @@ export function useWallpaperRotatingIndex(length: number, intervalMs: number, en
     }
   }, [enabled, intervalMs, length])
 
-  if (!enabled || length <= 1) {
+  if (length <= 1) {
     return 0
   }
 

@@ -54,6 +54,8 @@ interface WallpaperPreviewImageSurfaceProps {
   previewCloseScalePercent?: number
   previewCloseDurationMs?: number
   previewCloseEasing?: WallpaperAnimationEasing
+  onPointerEnter?: () => void
+  onPointerLeave?: () => void
 }
 
 /** Build one preview record from artifact metadata for wallpaper image widgets. */
@@ -151,7 +153,7 @@ function getWallpaperTransitionStateStyle(transitionStyle: WallpaperImageTransit
 }
 
 /** Render one optionally clickable wallpaper image surface. */
-export function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', transitionDurationMs: explicitTransitionDurationMs, transitionEasing = 'easeOutCubic', hoverMotion = 1, hoverEasing = 'easeOutCubic', previewOpenScalePercent, previewOpenDurationMs, previewOpenEasing, previewCloseScalePercent, previewCloseDurationMs, previewCloseEasing }: WallpaperPreviewImageSurfaceProps) {
+export function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', transitionDurationMs: explicitTransitionDurationMs, transitionEasing = 'easeOutCubic', hoverMotion = 1, hoverEasing = 'easeOutCubic', previewOpenScalePercent, previewOpenDurationMs, previewOpenEasing, previewCloseScalePercent, previewCloseDurationMs, previewCloseEasing, onPointerEnter, onPointerLeave }: WallpaperPreviewImageSurfaceProps) {
   const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ image, alt })
   const [previousImage, setPreviousImage] = useState<WallpaperWidgetPreviewImage | null>(null)
   const [isTransitionActive, setIsTransitionActive] = useState(true)
@@ -339,9 +341,11 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
         style={surfaceStyle}
         onPointerEnter={() => {
           setIsHovered(true)
+          onPointerEnter?.()
         }}
         onPointerLeave={() => {
           setIsHovered(false)
+          onPointerLeave?.()
         }}
       >
         {imageLayers}
@@ -370,9 +374,11 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
       }}
       onPointerEnter={() => {
         setIsHovered(true)
+        onPointerEnter?.()
       }}
       onPointerLeave={() => {
         setIsHovered(false)
+        onPointerLeave?.()
       }}
     >
       {imageLayers}
