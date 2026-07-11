@@ -434,7 +434,9 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
     ...appearanceSettings,
     presetSlots: appearanceSettings.presetSlots ?? currentSettings.appearance.presetSlots,
     wallpaperLayoutPresets: appearanceSettings.wallpaperLayoutPresets ?? currentSettings.appearance.wallpaperLayoutPresets,
-    wallpaperActivePresetId: appearanceSettings.wallpaperActivePresetId ?? currentSettings.appearance.wallpaperActivePresetId,
+    wallpaperActivePresetId: appearanceSettings.wallpaperActivePresetId === undefined
+      ? currentSettings.appearance.wallpaperActivePresetId
+      : appearanceSettings.wallpaperActivePresetId,
   }
 
   if (nextAppearance.accentPreset === 'custom') {

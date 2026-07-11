@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus, Save, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus, Save, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
@@ -9,10 +9,13 @@ import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
 import { getAppSettings, updateAppearanceSettings } from '@/lib/api-settings'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
 import {
   appendWallpaperWidget,
+  buildWallpaperDraftRuntimePath,
   buildWallpaperLayoutDraft,
+  buildWallpaperRuntimePath,
   buildWallpaperStarterLayout,
   clampWallpaperWidgetInstance,
   cloneWallpaperPresetToDraft,
@@ -134,7 +137,11 @@ export function WallpaperEditorPage() {
     () => getWallpaperWidgetsFrontToBack(layoutPreset.widgets),
     [layoutPreset.widgets],
   )
-  const draftRuntimePath = '/wallpaper/runtime'
+  const draftRuntimePath = buildWallpaperDraftRuntimePath()
+  const activePresetRuntimePath = activePreset ? buildWallpaperRuntimePath(activePreset) : null
+  const activePresetRuntimeUrl = activePresetRuntimePath && typeof window !== 'undefined'
+    ? new URL(activePresetRuntimePath, window.location.origin).toString()
+    : ''
 
   useEffect(() => {
     saveWallpaperLayoutDraft(layoutPreset)
@@ -235,10 +242,29 @@ export function WallpaperEditorPage() {
       return
     }
 
+    const confirmed = window.confirm(t({
+      ko: "정말 '{name}' 월페이퍼를 삭제할까? 이 작업은 되돌릴 수 없어.",
+      en: "Delete the '{name}' wallpaper? This cannot be undone.",
+    }, { name: activePreset?.name ?? layoutPreset.name }))
+    if (!confirmed) {
+      return
+    }
+
     const nextPresets = deleteWallpaperLayoutPreset(savedPresets, effectiveActivePresetId)
-    setSavedPresets(nextPresets)
-    setActivePresetId(null)
     syncWallpaperPresetState(nextPresets, null, t({ ko: '프리셋을 삭제했어.', en: 'Deleted the preset.' }))
+  }
+
+  const handleCopyRuntimeUrl = async () => {
+    if (!activePresetRuntimeUrl) {
+      return
+    }
+
+    try {
+      await copyTextToClipboard(activePresetRuntimeUrl)
+      notifyInfo(t({ ko: '월페이퍼 URL을 복사했어.', en: 'Copied the wallpaper URL.' }))
+    } catch {
+      notifyError(t({ ko: '월페이퍼 URL을 복사하지 못했어.', en: 'Failed to copy the wallpaper URL.' }))
+    }
   }
 
   const handleCreateBlankCanvas = () => {
@@ -369,6 +395,43 @@ export function WallpaperEditorPage() {
             </Button>
           </div>
         </div>
+
+        {activePresetRuntimePath ? (
+          <div className="mt-3 flex min-w-0 items-center gap-2 border-t border-border pt-3">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">
+                {t({ ko: '월페이퍼 URL', en: 'Wallpaper URL' })}
+              </div>
+              <Input
+                variant="settings"
+                value={activePresetRuntimeUrl}
+                readOnly
+                onFocus={(event) => event.currentTarget.select()}
+                aria-label={t({ ko: '월페이퍼 URL', en: 'Wallpaper URL' })}
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={handleCopyRuntimeUrl}
+              aria-label={t({ ko: '월페이퍼 URL 복사', en: 'Copy wallpaper URL' })}
+              title={t({ ko: '월페이퍼 URL 복사', en: 'Copy wallpaper URL' })}
+            >
+              <ClipboardCopy className="h-4 w-4" />
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              size="icon-sm"
+              aria-label={t({ ko: '월페이퍼 열기', en: 'Open wallpaper' })}
+              title={t({ ko: '월페이퍼 열기', en: 'Open wallpaper' })}
+            >
+              <a href={activePresetRuntimePath} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       <div className={isCanvasFocusMode ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]' : 'grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px]'}>

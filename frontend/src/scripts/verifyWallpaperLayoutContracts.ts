@@ -3,8 +3,10 @@ import { resolve } from 'node:path'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from '../features/wallpaper/wallpaper-canvas-presets'
 import {
   appendWallpaperWidget,
+  buildWallpaperDraftRuntimePath,
   buildWallpaperLayoutDraft,
   buildWallpaperPresetQueryValue,
+  buildWallpaperRuntimePath,
   buildWallpaperStarterLayout,
   cloneWallpaperPresetToDraft,
   deleteWallpaperLayoutPreset,
@@ -44,8 +46,10 @@ function assertUnique(values: string[], label: string) {
 }
 
 const wallpaperEditorPageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-editor-page.tsx'), 'utf8')
+const wallpaperRuntimePageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-runtime-page.tsx'), 'utf8')
 const wallpaperCanvasViewSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-canvas-view.tsx'), 'utf8')
 const wallpaperWidgetUtilsSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-widget-utils.ts'), 'utf8')
+const appearanceSettingsRouteSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/settings/appearance.routes.ts'), 'utf8')
 assert(
   wallpaperWidgetUtilsSource.includes('useSyncExternalStore'),
   'wallpaper motion widgets should subscribe to a shared ticker instead of owning one interval per widget',
@@ -84,6 +88,21 @@ assert(
   !wallpaperEditorPageSource.includes('layoutPreset.widgets.some((widget) => widget.id === selectedWidgetId)')
     && !wallpaperEditorPageSource.includes('layoutPreset.widgets.find((widget) => widget.id === effectiveSelectedWidgetId)'),
   'wallpaper editor selected widget lookup should use the widget id index instead of repeated array scans',
+)
+assert(
+  wallpaperEditorPageSource.includes('window.confirm')
+    && wallpaperEditorPageSource.includes('handleCopyRuntimeUrl')
+    && wallpaperEditorPageSource.includes('activePresetRuntimeUrl'),
+  'wallpaper editor should confirm deletion and expose a copyable URL for the active preset',
+)
+assert(
+  wallpaperRuntimePageSource.includes("searchParams.get('draft') === '1'")
+    && wallpaperRuntimePageSource.includes('enabled: !isDraftPreview'),
+  'wallpaper draft preview should explicitly load the local draft without waiting for server presets',
+)
+assert(
+  appearanceSettingsRouteSource.includes('appearanceSettings.wallpaperActivePresetId === undefined'),
+  'appearance updates must preserve an explicit null active wallpaper id so the active preset can be deleted',
 )
 assert(
   wallpaperCanvasViewSource.includes('const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])'),
@@ -205,6 +224,8 @@ const koreanQueryPreset = makePreset({ id: 'ko-01', name: '대표 월페이퍼' 
 const presetQueries = [queryPreset, koreanQueryPreset]
 const queryValue = buildWallpaperPresetQueryValue(queryPreset)
 assert(queryValue === 'hero-layout--hero-01', `unexpected query value: ${queryValue}`)
+assert(buildWallpaperRuntimePath(queryPreset) === '/wallpaper/runtime?preset=hero-layout--hero-01', 'saved wallpaper runtime path must include its stable preset token')
+assert(buildWallpaperDraftRuntimePath() === '/wallpaper/runtime?draft=1', 'draft wallpaper runtime path must explicitly request local draft mode')
 assert(findWallpaperPresetByQuery(presetQueries, 'hero-01')?.id === queryPreset.id, 'preset query must resolve by id case-insensitively')
 assert(findWallpaperPresetByQuery(presetQueries, 'HERO-LAYOUT')?.id === queryPreset.id, 'preset query must resolve by slug case-insensitively')
 assert(findWallpaperPresetByQuery(presetQueries, queryValue)?.id === queryPreset.id, 'preset query must resolve by slug/id token')

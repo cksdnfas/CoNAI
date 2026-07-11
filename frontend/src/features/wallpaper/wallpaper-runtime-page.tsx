@@ -2,14 +2,17 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useI18n } from '@/i18n'
 import { getWallpaperRuntimeSettings } from '@/lib/api-settings'
 import { getWallpaperCanvasPreset } from './wallpaper-canvas-presets'
 import { buildWallpaperStarterLayout, cloneWallpaperPresetToDraft, findWallpaperPresetByQuery, loadWallpaperLayoutDraft } from './wallpaper-layout-utils'
 import { WallpaperCanvasView } from './wallpaper-shared'
 
 export function WallpaperRuntimePage() {
+  const { t } = useI18n()
   const [searchParams] = useSearchParams()
   const presetQuery = searchParams.get('preset')
+  const isDraftPreview = searchParams.get('draft') === '1'
   const authStatusQuery = useAuthStatusQuery()
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
 
@@ -17,19 +20,24 @@ export function WallpaperRuntimePage() {
     queryKey: ['wallpaper-runtime-settings'],
     queryFn: getWallpaperRuntimeSettings,
     staleTime: 60_000,
+    enabled: !isDraftPreview,
   })
 
   const layoutPreset = useMemo(() => {
+    if (isDraftPreview) {
+      return loadWallpaperLayoutDraft() ?? buildWallpaperStarterLayout('landscape-1080p')
+    }
+
     const runtimeSettings = wallpaperSettingsQuery.data
     const serverPreset = runtimeSettings
       ? (runtimeSettings.wallpaperLayoutPresets.find((preset) => preset.id === runtimeSettings.wallpaperActivePresetId) ?? runtimeSettings.wallpaperLayoutPresets[0] ?? null)
       : null
 
     if (presetQuery) {
-      const matchedPreset = runtimeSettings ? findWallpaperPresetByQuery(runtimeSettings.wallpaperLayoutPresets, presetQuery) : null
-      return matchedPreset
-        ? cloneWallpaperPresetToDraft(matchedPreset)
-        : (serverPreset ? cloneWallpaperPresetToDraft(serverPreset) : buildWallpaperStarterLayout('landscape-1080p'))
+      const matchedPreset = runtimeSettings
+        ? findWallpaperPresetByQuery(runtimeSettings.wallpaperLayoutPresets, presetQuery)
+        : null
+      return matchedPreset ? cloneWallpaperPresetToDraft(matchedPreset) : null
     }
 
     if (!isAnonymousSession) {
@@ -40,7 +48,17 @@ export function WallpaperRuntimePage() {
     }
 
     return serverPreset ? cloneWallpaperPresetToDraft(serverPreset) : buildWallpaperStarterLayout('landscape-1080p')
-  }, [isAnonymousSession, presetQuery, wallpaperSettingsQuery.data])
+  }, [isAnonymousSession, isDraftPreview, presetQuery, wallpaperSettingsQuery.data])
+
+  if (!layoutPreset) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center text-sm text-muted-foreground">
+        {wallpaperSettingsQuery.isLoading
+          ? t({ ko: '월페이퍼를 불러오는 중…', en: 'Loading wallpaper…' })
+          : t({ ko: '월페이퍼를 찾을 수 없어. URL을 다시 확인해.', en: 'Wallpaper not found. Check the URL.' })}
+      </div>
+    )
+  }
 
   const canvasPreset = getWallpaperCanvasPreset(layoutPreset.canvasPresetId)
 
