@@ -9,6 +9,7 @@ import { ModuleWorkflowSchedulesPanel } from './module-workflow-schedules-panel'
 
 /** Render workflow reservations plus empty-run management content. */
 export function ModuleWorkflowEmptyRunsTab({
+  view,
   schedules,
   workflows,
   queueExecutions,
@@ -28,6 +29,7 @@ export function ModuleWorkflowEmptyRunsTab({
   onDeleteSchedule,
   onRunScheduleNow,
 }: {
+  view: 'schedules' | 'executions'
   schedules: GraphWorkflowScheduleRecord[]
   workflows: GraphWorkflowRecord[]
   queueExecutions: GraphExecutionRecord[]
@@ -72,7 +74,7 @@ export function ModuleWorkflowEmptyRunsTab({
 
   return (
     <div className="space-y-4">
-      <ModuleWorkflowSchedulesPanel
+      {view === 'schedules' ? <ModuleWorkflowSchedulesPanel
         schedules={schedules}
         workflows={workflows}
         workflowNameById={workflowNameById}
@@ -83,10 +85,10 @@ export function ModuleWorkflowEmptyRunsTab({
         onResumeSchedule={onResumeSchedule}
         onDeleteSchedule={onDeleteSchedule}
         onRunNow={onRunScheduleNow}
-      />
+      /> : null}
 
-      <SettingsSection
-        heading={t({ ko: '예약작업 · 빈 실행', en: 'Reservations · Empty runs' })}
+      {view === 'executions' ? <SettingsSection
+        heading={t({ ko: '예약 실행 현황', en: 'Reservation run status' })}
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Badge variant="outline">{formatNumber(queueExecutions.length)}</Badge>
@@ -156,7 +158,7 @@ export function ModuleWorkflowEmptyRunsTab({
             })}
           </div>
         )}
-      </SettingsSection>
+      </SettingsSection> : null}
     </div>
   )
 }

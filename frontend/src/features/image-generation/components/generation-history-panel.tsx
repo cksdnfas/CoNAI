@@ -415,7 +415,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>
       <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             {onBack ? (
               <Button
@@ -431,24 +431,27 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             ) : null}
             <div className="text-xl font-semibold tracking-tight text-foreground">{t('image-generation.components.generation.history.panel.generation.history')}</div>
           </div>
+          <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            <span>{historyLabel}</span>
+            {!isPublicView ? <span>· {isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</span> : null}
+            <span>· {t('image-generation.components.generation.history.panel.records.historyrecords.length', { historyRecords: formatNumber(historyRecords.length) })}</span>
+            {completedHistoryCount > 0 ? <span>· {t('image-generation.components.generation.history.panel.completed.value', { completedHistoryCount: formatNumber(completedHistoryCount) })}</span> : null}
+            {cancellationHistoryCount > 0 ? <span>· {t('image-generation.components.generation.history.panel.cancellation.related.value', { cancellationHistoryCount: formatNumber(cancellationHistoryCount) })}</span> : null}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{historyLabel}</Badge>
-          <Badge variant="outline">{t('image-generation.components.generation.history.panel.records.historyrecords.length', { historyRecords: formatNumber(historyRecords.length) })}</Badge>
-          {!isPublicView ? <Badge variant="outline">{isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</Badge> : null}
-          {completedHistoryCount > 0 ? <Badge variant="outline">{t('image-generation.components.generation.history.panel.completed.value', { completedHistoryCount: formatNumber(completedHistoryCount) })}</Badge> : null}
           {inFlightHistoryCount > 0 ? <Badge variant="secondary">{t('image-generation.components.generation.history.panel.processing.value', { inFlightHistoryCount: formatNumber(inFlightHistoryCount) })}</Badge> : null}
-          {cancellationHistoryCount > 0 ? <Badge variant="outline">{t('image-generation.components.generation.history.panel.cancellation.related.value', { cancellationHistoryCount: formatNumber(cancellationHistoryCount) })}</Badge> : null}
           <Button
             type="button"
-            size="sm"
+            size="icon-sm"
             variant="outline"
             onClick={handleCleanupFailed}
             disabled={isCleaningFailed || cleanupFailedHistoryCount === 0}
+            title={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
+            aria-label={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
           >
             <Trash2 className="h-4 w-4" />
-            {isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
           </Button>
           <Button type="button" size="icon-sm" variant="outline" onClick={() => void refreshHistory({ watchForNewRows: true })} title={t('image-generation.components.generation.history.panel.refresh.history')} aria-label={t('image-generation.components.generation.history.panel.refresh.history')}>
             <RefreshCw className={cn('h-4 w-4', historyQuery.isFetching && 'animate-spin')} />

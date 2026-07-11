@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsSection, SettingsValueTile } from '@/features/settings/components/settings-primitives'
@@ -22,7 +22,9 @@ import {
 import type { GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { getErrorMessage } from '../image-generation-shared'
 import { ModuleWorkflowEmptyRunsTab } from '@/features/module-graph/components/module-workflow-empty-runs-tab'
-import { isActiveReservationExecution } from './workflow-reservations-ui'
+import { getActiveWorkflowReservationScheduleCount, isActiveReservationExecution, mergeVisibleReservationExecutions, sortWorkflowReservationSchedules } from './workflow-reservations-ui'
+
+type ReservationView = 'schedules' | 'executions'
 
 /** Render the dedicated workflow reservation page inside image generation. */
 export function WorkflowReservationsPanel() {
@@ -31,16 +33,28 @@ export function WorkflowReservationsPanel() {
   const [selectedReservationExecutionIds, setSelectedReservationExecutionIds] = useState<number[]>([])
   const [isCleaningReservations, setIsCleaningReservations] = useState(false)
   const [isMutatingSchedules, setIsMutatingSchedules] = useState(false)
+  const [activeView, setActiveView] = useState<ReservationView>('schedules')
 
   const reservationsQuery = useQuery({
     queryKey: ['module-graph-browse-content', 'generation-reservations', 'root'],
     queryFn: () => getGraphWorkflowBrowseContent(null, { includeOutputs: false }),
+    refetchInterval: (query) => {
+      const content = query.state.data
+      const executions = mergeVisibleReservationExecutions(content?.empty_executions ?? [], content?.executions ?? [])
+      return executions.some((execution) => isActiveReservationExecution(execution.status)) ? 2_000 : false
+    },
   })
 
   const reservationContent = reservationsQuery.data
   const workflows = useMemo(() => reservationContent?.workflows ?? [], [reservationContent?.workflows])
-  const schedules = reservationContent?.schedules ?? []
-  const reservationExecutions = useMemo(() => reservationContent?.empty_executions ?? [], [reservationContent?.empty_executions])
+  const schedules = useMemo(() => sortWorkflowReservationSchedules(reservationContent?.schedules ?? []), [reservationContent?.schedules])
+  const reservationExecutions = useMemo(
+    () => mergeVisibleReservationExecutions(reservationContent?.empty_executions ?? [], reservationContent?.executions ?? []),
+    [reservationContent?.empty_executions, reservationContent?.executions],
+  )
+  const activeScheduleCount = useMemo(() => getActiveWorkflowReservationScheduleCount(schedules), [schedules])
+  const runningExecutionCount = useMemo(() => reservationExecutions.filter((execution) => execution.status === 'running').length, [reservationExecutions])
+  const queuedExecutionCount = useMemo(() => reservationExecutions.filter((execution) => execution.status === 'queued').length, [reservationExecutions])
 
   const workflowNameById = useMemo(
     () => new Map<number, string>(workflows.map((workflow: GraphWorkflowRecord) => [workflow.id, workflow.name])),
@@ -238,13 +252,9 @@ export function WorkflowReservationsPanel() {
       <SettingsSection
         heading={t({ ko: '예약작업', en: 'Reservation jobs' })}
         actions={(
-          <>
-            <Badge variant={schedules.length > 0 ? 'secondary' : 'outline'}>{t({ ko: '스케줄 {count}', en: 'Schedules {count}' }, { count: formatNumber(schedules.length) })}</Badge>
-            <Badge variant={reservationExecutions.length > 0 ? 'secondary' : 'outline'}>{t({ ko: '예약 실행 {count}', en: 'Reservation runs {count}' }, { count: formatNumber(reservationExecutions.length) })}</Badge>
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })} aria-label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </>
+          <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })} aria-label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         )}
       >
         {reservationsQuery.isError ? (
@@ -257,17 +267,26 @@ export function WorkflowReservationsPanel() {
         {!reservationsQuery.isError && reservationsQuery.isPending ? <div className="text-sm text-muted-foreground">{t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })}</div> : null}
 
         {!reservationsQuery.isPending && !reservationsQuery.isError && reservationContent ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SettingsValueTile label={t({ ko: '예약작업', en: 'Reservation jobs' })} value={reservationContent.scope.schedule_count} valueClassName="text-lg" />
-            <SettingsValueTile label={t({ ko: '예약 실행', en: 'Reservation runs' })} value={reservationContent.scope.empty_execution_count} valueClassName="text-lg" />
-            <SettingsValueTile label={t({ ko: '워크플로우', en: 'Workflows' })} value={reservationContent.scope.workflow_count} valueClassName="text-lg" />
-            <SettingsValueTile label={t({ ko: '실행', en: 'Executions' })} value={reservationContent.scope.execution_count} valueClassName="text-lg" />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SettingsValueTile label={t({ ko: '활성 일정', en: 'Active schedules' })} value={activeScheduleCount} valueClassName="text-lg" />
+            <SettingsValueTile label={t({ ko: '실행 중', en: 'Running' })} value={runningExecutionCount} valueClassName="text-lg" />
+            <SettingsValueTile label={t({ ko: '대기 중', en: 'Queued' })} value={queuedExecutionCount} valueClassName="text-lg" />
           </div>
         ) : null}
       </SettingsSection>
 
+      <SegmentedTabBar
+        value={activeView}
+        onChange={(value) => setActiveView(value as ReservationView)}
+        items={[
+          { value: 'schedules', label: t({ ko: '일정 {count}', en: 'Schedules {count}' }, { count: formatNumber(schedules.length) }) },
+          { value: 'executions', label: t({ ko: '실행 현황 {count}', en: 'Run status {count}' }, { count: formatNumber(reservationExecutions.length) }) },
+        ]}
+      />
+
       {reservationContent ? (
         <ModuleWorkflowEmptyRunsTab
+          view={activeView}
           schedules={schedules}
           workflows={workflows}
           queueExecutions={reservationExecutions}
@@ -301,7 +320,7 @@ export function WorkflowReservationsPanel() {
         />
       ) : null}
 
-      <SelectionActionBar
+      {activeView === 'executions' ? <SelectionActionBar
         selectedCount={selectedReservationExecutions.length}
         summary={t('image-generation.components.workflow.reservations.panel.value.reservation.executions.selected', { count: formatNumber(selectedReservationExecutions.length) })}
         description={t('image-generation.components.workflow.reservations.panel.value.cancelable.value.deletable', {
@@ -332,7 +351,7 @@ export function WorkflowReservationsPanel() {
             </Button>
           </>
         )}
-      />
+      /> : null}
     </section>
   )
 }

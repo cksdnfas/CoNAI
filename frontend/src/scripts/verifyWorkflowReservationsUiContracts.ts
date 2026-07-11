@@ -12,6 +12,7 @@ import {
   getReservationTimingLabel,
   getReservationTypeLabel,
   isActiveReservationExecution,
+  mergeVisibleReservationExecutions,
   sortWorkflowReservationSchedules,
 } from '../features/image-generation/components/workflow-reservations-ui'
 
@@ -172,6 +173,32 @@ function assertRunSummariesAndSorting() {
   assertEqual(getActiveWorkflowReservationScheduleCount(sortedSchedules), 2, 'active reservation count should only include active schedules')
 }
 
+function assertVisibleReservationExecutions() {
+  const baseExecution = {
+    id: 1,
+    graph_workflow_id: 10,
+    graph_version: 1,
+    status: 'completed',
+    trigger_type: 'schedule',
+    schedule_id: 3,
+    execution_plan: null,
+    started_at: null,
+    completed_at: null,
+    error_message: null,
+    failed_node_id: null,
+    created_date: '2026-07-11T00:00:00.000Z',
+    updated_date: '2026-07-11T00:00:00.000Z',
+    queue_position: null,
+    cancel_requested: false,
+  } as GraphExecutionRecord
+  const emptyExecution = { ...baseExecution, id: 1, schedule_id: null }
+  const activeScheduledWithOutput = { ...baseExecution, id: 2, status: 'running' as const }
+  const completedScheduledWithOutput = { ...baseExecution, id: 3 }
+
+  const visible = mergeVisibleReservationExecutions([emptyExecution], [emptyExecution, activeScheduledWithOutput, completedScheduledWithOutput])
+  assertEqual(visible.map((execution) => execution.id).join(','), '2,1', 'active scheduled runs should remain visible after output creation without adding completed output runs')
+}
+
 function assertReservationSelectionLookupPolicy() {
   const panelSource = source('features/image-generation/components/workflow-reservations-panel.tsx')
   const emptyRunsTabSource = source('features/module-graph/components/module-workflow-empty-runs-tab.tsx')
@@ -215,6 +242,7 @@ function assertReservationSelectionLookupPolicy() {
 
 assertImageGenerationTabs()
 assertActiveExecutionDetection()
+assertVisibleReservationExecutions()
 assertStatusVariants()
 assertTypeAndTimingLabels()
 assertRunSummariesAndSorting()

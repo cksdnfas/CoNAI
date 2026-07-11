@@ -52,6 +52,8 @@ export function NaiReferencesSection({
     <div className="space-y-0">
       <NaiControllerSection
         heading="References"
+        collapsible
+        defaultOpen={false}
         className="rounded-b-none border-b-0"
         actions={(
           <>

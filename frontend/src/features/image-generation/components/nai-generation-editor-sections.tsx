@@ -131,6 +131,8 @@ export function NaiGenerationEditorSections({
 
       <NaiControllerSection
         heading="Character Prompt"
+        collapsible
+        defaultOpen={false}
         actions={(
           <>
             <Badge variant="outline">{naiForm.characters.length}</Badge>
@@ -328,7 +330,7 @@ export function NaiGenerationEditorSections({
       </NaiControllerSection>
 
       {naiForm.action !== 'generate' ? (
-        <NaiControllerSection heading="Images">
+        <NaiControllerSection heading="Images" collapsible defaultOpen={false}>
           <div className="space-y-4">
             <FormField label="Source Image">
               <div className="space-y-3">

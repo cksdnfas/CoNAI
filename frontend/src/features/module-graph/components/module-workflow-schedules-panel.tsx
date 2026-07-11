@@ -320,6 +320,8 @@ export function ModuleWorkflowSchedulesPanel({
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{runSummaryLabel}</span>
+                        {(schedule.running_run_count ?? 0) > 0 ? <Badge variant="secondary">{t({ ko: '실행 중 {count}', en: 'Running {count}' }, { count: formatNumber(schedule.running_run_count ?? 0) })}</Badge> : null}
+                        {(schedule.queued_run_count ?? 0) > 0 ? <Badge variant="outline">{t({ ko: '대기 {count}', en: 'Queued {count}' }, { count: formatNumber(schedule.queued_run_count ?? 0) })}</Badge> : null}
                         {schedule.next_run_at ? <span>{t({ ko: '· 다음 등록 시도 {time}', en: '· Next enqueue attempt {time}' }, { time: formatDateTime(schedule.next_run_at) })}</span> : null}
                         {schedule.last_enqueued_at ? <span>{t({ ko: '· 최근 큐 등록 {time}', en: '· Last queued {time}' }, { time: formatDateTime(schedule.last_enqueued_at) })}</span> : null}
                       </div>

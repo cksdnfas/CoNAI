@@ -9,6 +9,23 @@ export function isActiveReservationExecution(status: GraphExecutionRecord['statu
   return status === 'queued' || status === 'running'
 }
 
+/** Keep active scheduled runs visible even after their first output is created. */
+export function mergeVisibleReservationExecutions(emptyExecutions: readonly GraphExecutionRecord[], executions: readonly GraphExecutionRecord[]) {
+  const visibleById = new Map(emptyExecutions.map((execution) => [execution.id, execution]))
+
+  for (const execution of executions) {
+    if (execution.schedule_id !== null && execution.schedule_id !== undefined && isActiveReservationExecution(execution.status)) {
+      visibleById.set(execution.id, execution)
+    }
+  }
+
+  return [...visibleById.values()].sort((left, right) => {
+    const leftActive = isActiveReservationExecution(left.status) ? 1 : 0
+    const rightActive = isActiveReservationExecution(right.status) ? 1 : 0
+    return rightActive - leftActive || right.id - left.id
+  })
+}
+
 export function formatReservationTimestamp(value: string | null | undefined, locale: string) {
   if (!value) {
     return null

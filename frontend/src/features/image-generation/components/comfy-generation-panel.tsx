@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { ChevronDown, Wrench } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import type { CustomDropdownList, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
@@ -90,6 +93,7 @@ export function ComfyGenerationPanel({
   const [moduleSaveWorkflowId, setModuleSaveWorkflowId] = useState<number | null>(null)
   const [isSavingComfyModule, setIsSavingComfyModule] = useState(false)
   const [isRefreshingDropdownLists, setIsRefreshingDropdownLists] = useState(false)
+  const [isManagementOpen, setIsManagementOpen] = useState(false)
   const [comfyModuleName, setComfyModuleName] = useState('')
   const [comfyModuleDescription, setComfyModuleDescription] = useState('')
   const [comfyExposedFieldIds, setComfyExposedFieldIds] = useState<string[]>([])
@@ -573,25 +577,45 @@ export function ComfyGenerationPanel({
               onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
             />
 
-            <ComfyDropdownListsSection
-              dropdownLists={dropdownListsQuery.data ?? []}
-              isSubmitting={isRefreshingDropdownLists}
-              onCreateManualList={(input) => handleCreateDropdownList(input)}
-              onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
-              onDeleteList={(listId) => handleDeleteDropdownList(listId)}
-              onScanAutoLists={(input) => handleScanDropdownLists(input)}
-            />
+            <div className="rounded-sm border border-border/85 bg-surface-container/30 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-sm font-medium text-foreground">{t({ ko: 'ComfyUI 관리', en: 'ComfyUI management' })}</div>
+                  <Badge variant="outline">{t({ ko: '서버 {count}', en: '{count} servers' }, { count: servers.length })}</Badge>
+                  <Badge variant="outline">{t({ ko: '목록 {count}', en: '{count} lists' }, { count: dropdownListsQuery.data?.length ?? 0 })}</Badge>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={() => setIsManagementOpen((current) => !current)} aria-expanded={isManagementOpen}>
+                  <Wrench className="h-4 w-4" />
+                  {isManagementOpen ? t({ ko: '관리 닫기', en: 'Close management' }) : t({ ko: '관리 열기', en: 'Open management' })}
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', isManagementOpen && 'rotate-180')} />
+                </Button>
+              </div>
+            </div>
 
-            <ComfyServerListSection
-              servers={servers}
-              activeServerCount={activeServers.length}
-              serverTests={comfyServerTests}
-              onOpenCreateServer={handleOpenCreateServer}
-              onEditServer={handleEditServer}
-              onDeleteServer={(serverId) => void handleDeleteServer(serverId)}
-              onTestServer={(serverId) => void handleTestComfyServer(serverId)}
-              onToggleServerActive={(serverId, isActive) => void handleToggleComfyServerActive(serverId, isActive)}
-            />
+            {servers.length === 0 || isManagementOpen ? (
+              <>
+                {isManagementOpen ? (
+                  <ComfyDropdownListsSection
+                    dropdownLists={dropdownListsQuery.data ?? []}
+                    isSubmitting={isRefreshingDropdownLists}
+                    onCreateManualList={(input) => handleCreateDropdownList(input)}
+                    onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
+                    onDeleteList={(listId) => handleDeleteDropdownList(listId)}
+                    onScanAutoLists={(input) => handleScanDropdownLists(input)}
+                  />
+                ) : null}
+                <ComfyServerListSection
+                  servers={servers}
+                  activeServerCount={activeServers.length}
+                  serverTests={comfyServerTests}
+                  onOpenCreateServer={handleOpenCreateServer}
+                  onEditServer={handleEditServer}
+                  onDeleteServer={(serverId) => void handleDeleteServer(serverId)}
+                  onTestServer={(serverId) => void handleTestComfyServer(serverId)}
+                  onToggleServerActive={(serverId, isActive) => void handleToggleComfyServerActive(serverId, isActive)}
+                />
+              </>
+            ) : null}
           </div>
         ) : selectedWorkflow ? (
           <ComfyWorkflowControllerPanel

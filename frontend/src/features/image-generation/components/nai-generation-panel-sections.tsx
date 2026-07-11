@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { ArrowUp, ExternalLink, RotateCcw, Save, Sparkles } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { ArrowUp, ChevronDown, ExternalLink, RotateCcw, Save, Sparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -57,18 +57,41 @@ type NaiControllerSectionProps = {
   children: ReactNode
   className?: string
   contentClassName?: string
+  collapsible?: boolean
+  defaultOpen?: boolean
 }
 
 /** Render one minimal NAI controller section with stronger borders and less card-heavy chrome. */
-export function NaiControllerSection({ heading, actions, children, className, contentClassName }: NaiControllerSectionProps) {
+export function NaiControllerSection({ heading, actions, children, className, contentClassName, collapsible = false, defaultOpen = true }: NaiControllerSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
   return (
     <section className={cn('overflow-hidden rounded-sm border border-border/85 bg-surface-container/30', className)}>
       <div className="px-4 py-3 border-b border-border/85">
-        <SectionHeading variant="inside" className="border-b-0 pb-0" heading={heading} actions={actions} />
+        <SectionHeading
+          variant="inside"
+          className="border-b-0 pb-0"
+          heading={heading}
+          actions={actions || collapsible ? (
+            <>
+              {actions}
+              {collapsible ? (
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => setIsOpen((current) => !current)}
+                  aria-expanded={isOpen}
+                  aria-label={isOpen ? 'Collapse section' : 'Expand section'}
+                >
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', !isOpen && '-rotate-90')} />
+                </Button>
+              ) : null}
+            </>
+          ) : undefined}
+        />
       </div>
-      <div className={cn('space-y-4 px-4 py-4', contentClassName)}>
-        {children}
-      </div>
+      {isOpen ? <div className={cn('space-y-4 px-4 py-4', contentClassName)}>{children}</div> : null}
     </section>
   )
 }

@@ -53,6 +53,8 @@ export function NaiVibesSection({
     <div className="space-y-0">
       <NaiControllerSection
         heading="Vibes"
+        collapsible
+        defaultOpen={false}
         className="rounded-b-none border-b-0"
         actions={(
           <>
