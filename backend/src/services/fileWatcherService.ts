@@ -161,6 +161,25 @@ async function waitForWatcherFileWrite(filePath: string): Promise<void> {
   }
 }
 
+/** Schedule one debounced folder scan, replacing any older timer. */
+function scheduleFolderBatchScan(
+  scanState: FileWatcherScanState,
+  folderId: number,
+  scanDebounceMs: number,
+  runBatchScan: (folderId: number) => void,
+): void {
+  const existingTimer = scanState.folderScanTimers.get(folderId);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  const timer = setTimeout(() => {
+    runBatchScan(folderId);
+  }, scanDebounceMs);
+
+  scanState.folderScanTimers.set(folderId, timer);
+}
+
 /** Queue one file for the next debounced folder scan. */
 function queueFolderBatchScan(
   scanState: FileWatcherScanState,
@@ -178,20 +197,18 @@ function queueFolderBatchScan(
     console.log(`  📝 파일 큐에 추가: ${path.basename(filePath)} (대기 중: ${scanState.pendingFiles.get(folderId)!.size}개)`);
   }
 
-  const existingTimer = scanState.folderScanTimers.get(folderId);
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-  }
-
-  const timer = setTimeout(() => {
-    runBatchScan(folderId);
-  }, scanDebounceMs);
-
-  scanState.folderScanTimers.set(folderId, timer);
+  scheduleFolderBatchScan(scanState, folderId, scanDebounceMs, runBatchScan);
 }
 
 /** Run one deferred folder scan while keeping folder-level scan locking consistent. */
-async function runQueuedFolderScan(scanState: FileWatcherScanState, folderId: number): Promise<void> {
+async function runQueuedFolderScan(
+  scanState: FileWatcherScanState,
+  folderId: number,
+  scanDebounceMs: number,
+  runBatchScan: (folderId: number) => void,
+): Promise<void> {
+  scanState.folderScanTimers.delete(folderId);
+
   if (!watchedFolderExists(folderId)) {
     console.warn(`  ⚠️  배치 스캔 취소: 폴더 삭제됨 folderId=${folderId}`);
     cleanupFolderScanState(scanState, folderId);
@@ -202,6 +219,7 @@ async function runQueuedFolderScan(scanState: FileWatcherScanState, folderId: nu
     if (isVerboseScanDebugEnabled) {
       console.log(`  ⏭️  폴더 스캔 이미 진행 중: folderId=${folderId}`);
     }
+    scheduleFolderBatchScan(scanState, folderId, scanDebounceMs, runBatchScan);
     return;
   }
 
@@ -210,56 +228,39 @@ async function runQueuedFolderScan(scanState: FileWatcherScanState, folderId: nu
     return;
   }
 
-  const fileCount = pendingFileSet.size;
+  const pendingFiles = Array.from(pendingFileSet);
+  const fileCount = pendingFiles.length;
   if (isVerboseScanDebugEnabled) {
     console.log(`  🚀 배치 스캔 시작: folderId=${folderId}, 대기 파일 ${fileCount}개`);
   }
 
+  scanState.pendingFiles.delete(folderId);
   scanState.processingFolders.add(folderId);
+  let completed = false;
 
   try {
-    const result = await FolderScanService.scanFolder(folderId, false, { quietIfNoChanges: true });
+    const result = await FolderScanService.scanFolder(folderId, false, {
+      quietIfNoChanges: true,
+      candidateFiles: pendingFiles,
+    });
 
     if (isVerboseScanDebugEnabled || result.newImages > 0 || result.updatedPaths > 0 || result.missingImages > 0 || result.errors.length > 0) {
       console.log(`  ✅ 배치 스캔 완료: 신규 ${result.newImages}개, 기존 ${result.existingImages}개, 업데이트 ${result.updatedPaths}개, 오류 ${result.errors.length}개`);
     }
 
-    scanState.pendingFiles.delete(folderId);
-    scanState.folderScanTimers.delete(folderId);
+    completed = true;
   } catch (error) {
+    const retryFiles = scanState.pendingFiles.get(folderId) ?? new Set<string>();
+    for (const filePath of pendingFiles) {
+      retryFiles.add(filePath);
+    }
+    scanState.pendingFiles.set(folderId, retryFiles);
     console.error(`  ❌ 배치 스캔 실패: folderId=${folderId}`, error);
   } finally {
     scanState.processingFolders.delete(folderId);
-  }
-}
-
-/** Run one force-rescan for a changed file when the folder is idle. */
-async function runChangeFolderScan(scanState: FileWatcherScanState, folderId: number, filePath: string): Promise<void> {
-  if (scanState.processingFolders.has(folderId)) {
-    if (isVerboseScanDebugEnabled) {
-      console.log(`  ⏭️  폴더 스캔 진행 중, 변경 이벤트 대기: ${path.basename(filePath)}`);
+    if (completed && (scanState.pendingFiles.get(folderId)?.size ?? 0) > 0) {
+      scheduleFolderBatchScan(scanState, folderId, scanDebounceMs, runBatchScan);
     }
-    return;
-  }
-
-  scanState.processingFolders.add(folderId);
-
-  try {
-    await waitForWatcherFileWrite(filePath);
-
-    if (isVerboseScanDebugEnabled) {
-      console.log(`  🔄 파일 변경 감지, 강제 재스캔: ${path.basename(filePath)}`);
-    }
-
-    const result = await FolderScanService.scanFolder(folderId, true);
-
-    if (isVerboseScanDebugEnabled || result.newImages > 0 || result.updatedPaths > 0 || result.missingImages > 0 || result.errors.length > 0) {
-      console.log(`  ✅ 파일 업데이트 완료: 신규 ${result.newImages}개, 기존 ${result.existingImages}개, 업데이트 ${result.updatedPaths}개, 오류 ${result.errors.length}개`);
-    }
-  } catch (error) {
-    console.error(`  ❌ 파일 업데이트 중 오류: ${path.basename(filePath)}`, error);
-  } finally {
-    scanState.processingFolders.delete(folderId);
   }
 }
 
@@ -534,15 +535,24 @@ export class FileWatcherService {
    * 배치 스캔 실행 (디바운스 타이머 완료 후)
    */
   private static async executeBatchScan(folderId: number): Promise<void> {
-    await runQueuedFolderScan(this.scanState, folderId);
+    await runQueuedFolderScan(this.scanState, folderId, this.SCAN_DEBOUNCE_MS, (queuedFolderId) => {
+      void this.executeBatchScan(queuedFolderId);
+    });
   }
 
   /**
    * 'change' 이벤트 처리
-   * 파일 변경 시 강제 재스캔 (폴더 단위 락킹)
+   * 변경된 파일만 다음 폴더 배치에 합류
    */
   private static async handleChangeEvent(filePath: string, folderId: number): Promise<void> {
-    await runChangeFolderScan(this.scanState, folderId, filePath);
+    try {
+      await waitForWatcherFileWrite(filePath);
+      queueFolderBatchScan(this.scanState, folderId, filePath, this.SCAN_DEBOUNCE_MS, (queuedFolderId) => {
+        void this.executeBatchScan(queuedFolderId);
+      });
+    } catch (error) {
+      console.error(`  ❌ 파일 변경 이벤트 처리 실패: ${path.basename(filePath)}`, error);
+    }
   }
 
   /**

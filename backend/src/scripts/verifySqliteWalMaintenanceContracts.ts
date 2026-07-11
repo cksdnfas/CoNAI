@@ -12,6 +12,7 @@ const walMaintenanceSource = readSource('backend/src/database/walMaintenance.ts'
 const backgroundProcessorSource = readSource('backend/src/services/backgroundProcessorService.ts');
 const autoCollectionSource = readSource('backend/src/services/autoCollection/autoCollectionOrchestrator.ts');
 const autoFolderGroupSource = readSource('backend/src/services/autoFolderGroupService.ts');
+const folderScanSource = readSource('backend/src/services/folderScan/index.ts');
 
 assert.match(
   walMaintenanceSource,
@@ -53,6 +54,11 @@ assert.match(
   autoFolderGroupSource,
   /maybeTruncateImagesWal\('auto-folder-group-rebuild'\)/,
   'explicit auto-folder rebuild should check WAL after bulk folder-group writes',
+);
+assert.match(
+  folderScanSource,
+  /if \(!options\.candidateFiles\) \{\s*maybeTruncateImagesWal\('folder-scan'\)/,
+  'whole-folder scans should check WAL after bulk file reconciliation writes',
 );
 
 console.log('✅ SQLite WAL maintenance contracts verified');

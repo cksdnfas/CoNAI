@@ -342,11 +342,6 @@ export const up = async (db: Database.Database): Promise<void> => {
     CREATE INDEX IF NOT EXISTS idx_media_auto_tag_lookup
     ON media_auto_tag_index(tag_type, search_key, score, composite_hash)
   `);
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_media_auto_tag_hash_type
-    ON media_auto_tag_index(composite_hash, tag_type)
-  `);
-
   // ============================================
   // 5. 폴더 스캔 시스템
   // ============================================
@@ -423,7 +418,6 @@ export const up = async (db: Database.Database): Promise<void> => {
     // Partial index for active files (optimized for common queries)
     "CREATE INDEX IF NOT EXISTS idx_files_status ON image_files(file_status) WHERE file_status = 'active'",
     'CREATE INDEX IF NOT EXISTS idx_files_scan_date ON image_files(scan_date)',
-    'CREATE INDEX IF NOT EXISTS idx_files_path ON image_files(original_file_path)',
     'CREATE INDEX IF NOT EXISTS idx_scan_logs_folder_id ON scan_logs(folder_id)',
     'CREATE INDEX IF NOT EXISTS idx_scan_logs_scan_date ON scan_logs(scan_date)',
     'CREATE INDEX IF NOT EXISTS idx_scan_logs_status ON scan_logs(scan_status)',

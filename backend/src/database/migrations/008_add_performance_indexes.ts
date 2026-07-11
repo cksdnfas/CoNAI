@@ -20,14 +20,6 @@ export const up = async (db: Database): Promise<void> => {
     console.warn('⚠️  Index creation warning:', error.message);
   }
 
-  // 2. image_files - original_file_path 조회 최적화
-  try {
-    db.prepare('CREATE INDEX IF NOT EXISTS idx_image_files_original_file_path ON image_files(original_file_path)').run();
-    console.log('✅ Created index: idx_image_files_original_file_path');
-  } catch (error: any) {
-    console.warn('⚠️  Index creation warning:', error.message);
-  }
-
   // 3. prompt_collection - prompt 검색 최적화
   try {
     db.prepare('CREATE INDEX IF NOT EXISTS idx_prompt_collection_prompt ON prompt_collection(prompt)').run();
@@ -68,13 +60,6 @@ export const down = async (db: Database): Promise<void> => {
     console.log('✅ Dropped index: idx_auto_folder_groups_folder_path');
   } catch (e) {
     console.warn('Failed to drop index idx_auto_folder_groups_folder_path', e);
-  }
-
-  try {
-    db.prepare('DROP INDEX IF EXISTS idx_image_files_original_file_path').run();
-    console.log('✅ Dropped index: idx_image_files_original_file_path');
-  } catch (e) {
-    console.warn('Failed to drop index idx_image_files_original_file_path', e);
   }
 
   try {

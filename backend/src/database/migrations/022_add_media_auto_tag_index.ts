@@ -156,8 +156,6 @@ function createSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_media_auto_tag_lookup
       ON media_auto_tag_index(tag_type, search_key, score, composite_hash);
 
-    CREATE INDEX IF NOT EXISTS idx_media_auto_tag_hash_type
-      ON media_auto_tag_index(composite_hash, tag_type);
   `);
 }
 
@@ -221,7 +219,6 @@ export const up = async (db: Database): Promise<void> => {
 export const down = async (db: Database): Promise<void> => {
   console.log('🔄 Rolling back migration: 022_add_media_auto_tag_index.ts');
   db.exec(`
-    DROP INDEX IF EXISTS idx_media_auto_tag_hash_type;
     DROP INDEX IF EXISTS idx_media_auto_tag_lookup;
     DROP TABLE IF EXISTS media_auto_tag_index;
   `);

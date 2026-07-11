@@ -11,6 +11,7 @@ function readSource(relativePath: string): string {
 const initialMigration = readSource('backend/src/database/migrations/000_create_all_tables.ts');
 const autoTagIndexMigration = readSource('backend/src/database/migrations/022_add_media_auto_tag_index.ts');
 const autoTagIndexPruneMigration = readSource('backend/src/database/migrations/023_prune_media_auto_tag_index_variants.ts');
+const redundantIndexPruneMigration = readSource('backend/src/database/migrations/026_prune_redundant_indexes.ts');
 const autoTagSearchTerms = readSource('backend/src/services/autoTagSearch/autoTagSearchTerms.ts');
 const autoTagIndexService = readSource('backend/src/services/autoTagIndexService.ts');
 const autoTagSql = readSource('backend/src/services/complexFilter/complexFilterAutoTagSql.ts');
@@ -38,6 +39,24 @@ for (const source of [initialMigration, autoTagIndexMigration]) {
     'auto-tag lookup index must lead with tag type and normalized search key',
   );
 }
+
+for (const source of [initialMigration, autoTagIndexMigration]) {
+  assert.doesNotMatch(
+    source,
+    /CREATE INDEX IF NOT EXISTS idx_media_auto_tag_hash_type/,
+    'new databases must not create an index already covered by the auto-tag primary key prefix',
+  );
+}
+assert.match(
+  redundantIndexPruneMigration,
+  /idx_media_auto_tag_hash_type/,
+  'existing databases must drop the redundant auto-tag hash/type index',
+);
+assert.match(
+  redundantIndexPruneMigration,
+  /ON media_auto_tag_index\(composite_hash, tag_type\)/,
+  'the storage migration rollback must be able to restore the old index',
+);
 
 assert.match(
   autoTagIndexMigration,

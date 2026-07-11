@@ -7,12 +7,14 @@ import { FastRegistrationService } from './fastRegistrationService';
 import { ScanResult } from './types';
 import { SystemMaintenanceLockService } from '../systemMaintenanceLockService';
 import { getWatcherRuntimeStatus } from '../fileWatcher/watcherRuntimeStatus';
+import { maybeTruncateImagesWal } from '../../database/walMaintenance';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 const isVerboseAutoScanLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
 interface ScanFolderOptions {
   quietIfNoChanges?: boolean;
+  candidateFiles?: string[];
 }
 
 /**
@@ -84,11 +86,13 @@ export class FolderScanService {
       await WatchedFolderService.updateScanStatus(folderId, 'in_progress');
 
       // 5. 파일 목록 수집
-      const files = await FileDiscoveryService.collectFiles(resolvedPath, {
-        recursive: folder.recursive === 1,
-        excludeExtensions: folder.exclude_extensions ? JSON.parse(folder.exclude_extensions) : [],
-        excludePatterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : null
-      });
+      const files = options.candidateFiles
+        ? Array.from(new Set(options.candidateFiles))
+        : await FileDiscoveryService.collectFiles(resolvedPath, {
+            recursive: folder.recursive === 1,
+            excludeExtensions: folder.exclude_extensions ? JSON.parse(folder.exclude_extensions) : [],
+            excludePatterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : null
+          });
 
       const quietScan = options.quietIfNoChanges === true && !fullRescan;
 
@@ -125,14 +129,11 @@ export class FolderScanService {
       await WatchedFolderService.updateScanStatus(
         folderId,
         result.errors.length > 0 ? 'error' : 'success',
-        result.newImages + result.existingImages,
+        options.candidateFiles ? undefined : result.newImages + result.existingImages,
         result.errors.length > 0 ? `${result.errors.length}개 파일 처리 실패` : undefined
       );
 
       result.duration = Date.now() - startTime;
-
-      // 9. 스캔 로그 저장
-      this.saveScanLog(folderId, result);
 
       const hasMeaningfulChanges =
         result.newImages > 0 ||
@@ -140,9 +141,18 @@ export class FolderScanService {
         result.missingImages > 0 ||
         result.errors.length > 0;
 
+      // Quiet watcher/automatic scans only keep actionable history.
+      if (!options.quietIfNoChanges || hasMeaningfulChanges) {
+        this.saveScanLog(folderId, result);
+      }
+
       if (!options.quietIfNoChanges || hasMeaningfulChanges || isVerboseScanDebugEnabled) {
         console.log(`✅ 스캔 완료: ${result.duration}ms`);
         console.log(`  📊 신규: ${result.newImages}, 기존 확인: ${result.existingImages}, 업데이트: ${result.updatedPaths}, 누락: ${result.missingImages}, 오류: ${result.errors.length}`);
+      }
+
+      if (!options.candidateFiles) {
+        maybeTruncateImagesWal('folder-scan');
       }
 
       return result;
