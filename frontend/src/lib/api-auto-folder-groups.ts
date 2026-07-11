@@ -32,6 +32,10 @@ interface AutoFolderGroupImagesApiPayload {
     pageSize: number
     total: number
     totalPages: number
+    hasMore?: boolean
+    totalKnown?: boolean
+    nextCursorDate?: string | null
+    nextCursorHash?: string | null
   }
 }
 
@@ -103,10 +107,25 @@ export async function getAutoFolderGroupBreadcrumb(groupId: number) {
   }))
 }
 
-export async function getAutoFolderGroupImages(groupId: number, params?: { page?: number; limit?: number }) {
+export async function getAutoFolderGroupImages(groupId: number, params?: {
+  page?: number
+  limit?: number
+  cursorDate?: string | null
+  cursorHash?: string | null
+  cursorOrderIndex?: number | null
+  cursorAddedDate?: string | null
+}): Promise<GroupImagesPayload> {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('pageSize', String(params?.limit ?? 40))
+  searchParams.set('pagination', 'cursor')
+  searchParams.set('include_total', params?.cursorHash ? 'false' : 'true')
+  if (params?.cursorDate) {
+    searchParams.set('cursor_date', params.cursorDate)
+  }
+  if (params?.cursorHash) {
+    searchParams.set('cursor_hash', params.cursorHash)
+  }
 
   const response = await fetchJson<ApiResponse<AutoFolderGroupImagesApiPayload>>(`/api/auto-folder-groups/${groupId}/images?${searchParams.toString()}`)
   if (!response.success) {
@@ -120,6 +139,10 @@ export async function getAutoFolderGroupImages(groupId: number, params?: { page?
       limit: response.data.pagination.pageSize,
       total: response.data.pagination.total,
       totalPages: response.data.pagination.totalPages,
+      hasMore: response.data.pagination.hasMore,
+      totalKnown: response.data.pagination.totalKnown,
+      nextCursorDate: response.data.pagination.nextCursorDate,
+      nextCursorHash: response.data.pagination.nextCursorHash,
     },
   } satisfies GroupImagesPayload
 }

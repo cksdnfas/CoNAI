@@ -129,8 +129,20 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
     const page = pageResult.value;
     const limit = limitResult.value;
     const collectionType = req.query.collection_type as 'manual' | 'auto';
+    const cursorOrderIndex = Number(req.query.cursor_order_index);
+    const cursorAddedDate = typeof req.query.cursor_added_date === 'string' ? req.query.cursor_added_date : '';
+    const cursorHash = typeof req.query.cursor_hash === 'string' ? req.query.cursor_hash : '';
+    const wantsCursor = req.query.pagination === 'cursor';
+    const cursor = wantsCursor && Number.isFinite(cursorOrderIndex) && cursorAddedDate && cursorHash
+      ? {
+          orderIndex: cursorOrderIndex,
+          addedDate: cursorAddedDate,
+          compositeHash: cursorHash,
+          includeTotal: req.query.include_total === 'true',
+        }
+      : undefined;
 
-    const result = await ImageGroupModel.findImagesByGroup(id, page, limit, collectionType);
+    const result = await ImageGroupModel.findImagesByGroup(id, page, limit, collectionType, cursor);
     const group = await GroupModel.findById(id);
 
     const enrichedImages = result.images.map(image => {
@@ -151,7 +163,12 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
           page,
           limit,
           total: result.total,
-          totalPages: Math.ceil(result.total / limit)
+          totalPages: result.totalKnown === false ? 0 : Math.ceil(result.total / limit),
+          hasMore: result.hasMore,
+          totalKnown: result.totalKnown,
+          nextCursorOrderIndex: result.nextCursorOrderIndex,
+          nextCursorAddedDate: result.nextCursorAddedDate,
+          nextCursorHash: result.nextCursorHash,
         }
       })
     );

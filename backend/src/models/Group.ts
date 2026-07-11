@@ -380,9 +380,10 @@ export class ImageGroupModel {
     groupId: number,
     page: number = 1,
     limit: number = 20,
-    collectionType?: 'manual' | 'auto'
-  ): { images: ImageWithFileView[], total: number } {
-    return findImagesByGroupQuery(groupId, page, limit, collectionType);
+    collectionType?: 'manual' | 'auto',
+    cursor?: { orderIndex: number; addedDate: string; compositeHash: string; includeTotal?: boolean },
+  ) {
+    return findImagesByGroupQuery(groupId, page, limit, collectionType, cursor);
   }
 
   /**

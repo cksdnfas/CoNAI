@@ -172,11 +172,23 @@ router.post('/search', asyncHandler(async (req: Request, res: Response) => {
       searchRequest.page,
       searchRequest.limit,
       searchRequest.sortBy,
-      searchRequest.sortOrder
+      searchRequest.sortOrder,
+      {
+        useCursor: req.body.pagination === 'cursor',
+        value: req.body.cursorValue,
+        compositeHash: req.body.cursorHash,
+        includeTotal: req.body.includeTotal !== false,
+      },
     );
 
     return res.json(
-      buildEnrichedImageListResponse(result.images, result.total, searchRequest.page, searchRequest.limit)
+      buildEnrichedImageListResponse(result.images, result.total, searchRequest.page, searchRequest.limit, {
+        hasMore: result.hasMore,
+        totalKnown: result.totalKnown,
+        nextCursorValue: result.nextCursorValue,
+        nextCursorHash: result.nextCursorHash,
+        totalPages: result.totalKnown === false ? 0 : undefined,
+      })
     );
   } catch (error) {
     console.error('Advanced search error:', error);

@@ -43,11 +43,15 @@ const CHARACTER_REFERENCE_THUMBNAIL_ROOT = path.join(CHARACTER_REFERENCE_ROOT, '
 const THUMBNAIL_DIRNAME = 'thumbnails';
 const THUMBNAIL_SIZE = 512;
 const THUMBNAIL_QUALITY = 82;
+let vibeAssetFileIndex: Map<string, string> | null = null;
+let characterAssetMetadataIndex: Map<string, string> | null = null;
 
-function ensureDirectory(targetPath: string) {
-  if (!fs.existsSync(targetPath)) {
-    fs.mkdirSync(targetPath, { recursive: true });
-  }
+async function ensureDirectory(targetPath: string) {
+  await fs.promises.mkdir(targetPath, { recursive: true });
+}
+
+async function fileExists(targetPath: string) {
+  return fs.promises.access(targetPath).then(() => true, () => false);
 }
 
 function slugifyModel(model: string) {
@@ -86,16 +90,60 @@ async function buildLetterboxedPng(imageBuffer: Buffer) {
     .toBuffer();
 }
 
-function readJsonFile<T>(filePath: string): T | null {
+async function readJsonFile<T>(filePath: string): Promise<T | null> {
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
+    return JSON.parse(await fs.promises.readFile(filePath, 'utf8')) as T;
   } catch {
     return null;
   }
 }
 
-function writeJsonFile(filePath: string, value: unknown) {
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf8');
+async function writeJsonFile(filePath: string, value: unknown) {
+  await fs.promises.writeFile(filePath, JSON.stringify(value, null, 2), 'utf8');
+}
+
+/** Build the vibe metadata path index once instead of scanning directories per request. */
+async function getVibeAssetFileIndex(): Promise<Map<string, string>> {
+  if (vibeAssetFileIndex) {
+    return vibeAssetFileIndex;
+  }
+
+  const index = new Map<string, string>();
+  const directories = await fs.promises.readdir(VIBE_ROOT, { withFileTypes: true }).catch(() => []);
+  for (const directory of directories) {
+    if (!directory.isDirectory() || directory.name === THUMBNAIL_DIRNAME) {
+      continue;
+    }
+
+    const modelDir = path.join(VIBE_ROOT, directory.name);
+    const files = await fs.promises.readdir(modelDir, { withFileTypes: true }).catch(() => []);
+    for (const file of files) {
+      if (file.isFile() && file.name.endsWith('.json')) {
+        index.set(path.basename(file.name, '.json'), path.join(modelDir, file.name));
+      }
+    }
+  }
+
+  vibeAssetFileIndex = index;
+  return index;
+}
+
+/** Build the character-reference metadata index once per process. */
+async function getCharacterAssetMetadataIndex(): Promise<Map<string, string>> {
+  if (characterAssetMetadataIndex) {
+    return characterAssetMetadataIndex;
+  }
+
+  const index = new Map<string, string>();
+  const files = await fs.promises.readdir(CHARACTER_REFERENCE_ROOT, { withFileTypes: true }).catch(() => []);
+  for (const file of files) {
+    if (file.isFile() && file.name.endsWith('.json')) {
+      index.set(path.basename(file.name, '.json'), path.join(CHARACTER_REFERENCE_ROOT, file.name));
+    }
+  }
+
+  characterAssetMetadataIndex = index;
+  return index;
 }
 
 function toSaveRelativePath(filePath: string) {
@@ -115,7 +163,7 @@ async function writePngFile(outputPath: string, input: Buffer) {
 }
 
 async function writeThumbnailFile(source: string | Buffer, outputPath: string) {
-  ensureDirectory(path.dirname(outputPath));
+  await ensureDirectory(path.dirname(outputPath));
   await sharp(source)
     .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
       fit: 'inside',
@@ -143,19 +191,19 @@ async function ensureVibeAssetFiles(record: StoredNaiVibeAsset, filePath: string
   const thumbnailPath = path.join(modelDir, THUMBNAIL_DIRNAME, `${record.id}.webp`);
   let changed = false;
 
-  if (!fs.existsSync(imagePath) && record.image_data_url) {
-    ensureDirectory(path.dirname(imagePath));
+  if (!(await fileExists(imagePath)) && record.image_data_url) {
+    await ensureDirectory(path.dirname(imagePath));
     await writePngFile(imagePath, decodeImageBuffer(record.image_data_url));
     changed = true;
   }
 
-  if (fs.existsSync(imagePath) && !fs.existsSync(thumbnailPath)) {
+  if (await fileExists(imagePath) && !(await fileExists(thumbnailPath))) {
     await writeThumbnailFile(imagePath, thumbnailPath);
     changed = true;
   }
 
-  const nextImagePath = fs.existsSync(imagePath) ? toSaveRelativePath(imagePath) : undefined;
-  const nextThumbnailPath = fs.existsSync(thumbnailPath) ? toSaveRelativePath(thumbnailPath) : undefined;
+  const nextImagePath = await fileExists(imagePath) ? toSaveRelativePath(imagePath) : undefined;
+  const nextThumbnailPath = await fileExists(thumbnailPath) ? toSaveRelativePath(thumbnailPath) : undefined;
   const nextRecord: StoredNaiVibeAsset = {
     ...record,
     image_path: nextImagePath,
@@ -172,7 +220,7 @@ async function ensureVibeAssetFiles(record: StoredNaiVibeAsset, filePath: string
   }
 
   if (changed) {
-    writeJsonFile(filePath, nextRecord);
+    await writeJsonFile(filePath, nextRecord);
   }
 
   return nextRecord;
@@ -187,19 +235,19 @@ async function ensureCharacterReferenceAssetFiles(
   const thumbnailPath = path.join(CHARACTER_REFERENCE_THUMBNAIL_ROOT, `${assetId}.webp`);
   let changed = false;
 
-  if (!fs.existsSync(imagePath) && record.image_data_url) {
-    ensureDirectory(path.dirname(imagePath));
+  if (!(await fileExists(imagePath)) && record.image_data_url) {
+    await ensureDirectory(path.dirname(imagePath));
     await writePngFile(imagePath, decodeImageBuffer(record.image_data_url));
     changed = true;
   }
 
-  if (fs.existsSync(imagePath) && !fs.existsSync(thumbnailPath)) {
+  if (await fileExists(imagePath) && !(await fileExists(thumbnailPath))) {
     await writeThumbnailFile(imagePath, thumbnailPath);
     changed = true;
   }
 
-  const nextImagePath = fs.existsSync(imagePath) ? toSaveRelativePath(imagePath) : undefined;
-  const nextThumbnailPath = fs.existsSync(thumbnailPath) ? toSaveRelativePath(thumbnailPath) : undefined;
+  const nextImagePath = await fileExists(imagePath) ? toSaveRelativePath(imagePath) : undefined;
+  const nextThumbnailPath = await fileExists(thumbnailPath) ? toSaveRelativePath(thumbnailPath) : undefined;
   const nextRecord: StoredNaiCharacterReferenceAsset = {
     ...record,
     image_path: nextImagePath,
@@ -216,7 +264,7 @@ async function ensureCharacterReferenceAssetFiles(
   }
 
   if (changed) {
-    writeJsonFile(metadataPath, nextRecord);
+    await writeJsonFile(metadataPath, nextRecord);
   }
 
   return nextRecord;
@@ -232,10 +280,10 @@ export async function saveNaiVibeAsset(input: {
   strength?: number;
   information_extracted?: number;
 }) {
-  ensureDirectory(VIBE_ROOT);
+  await ensureDirectory(VIBE_ROOT);
   const modelDir = path.join(VIBE_ROOT, slugifyModel(input.model));
-  ensureDirectory(modelDir);
-  ensureDirectory(path.join(modelDir, THUMBNAIL_DIRNAME));
+  await ensureDirectory(modelDir);
+  await ensureDirectory(path.join(modelDir, THUMBNAIL_DIRNAME));
 
   const normalizedEncoded = input.encoded.trim();
   if (!normalizedEncoded) {
@@ -257,8 +305,8 @@ export async function saveNaiVibeAsset(input: {
     label: input.label?.trim() || `vibe-${assetId.slice(0, 8)}`,
     description: input.description?.trim() || undefined,
     model: input.model,
-    image_path: fs.existsSync(imagePath) ? toSaveRelativePath(imagePath) : undefined,
-    thumbnail_path: fs.existsSync(thumbnailPath) ? toSaveRelativePath(thumbnailPath) : undefined,
+    image_path: await fileExists(imagePath) ? toSaveRelativePath(imagePath) : undefined,
+    thumbnail_path: await fileExists(thumbnailPath) ? toSaveRelativePath(thumbnailPath) : undefined,
     encoded: normalizedEncoded,
     strength: typeof input.strength === 'number' ? input.strength : 0.6,
     information_extracted: typeof input.information_extracted === 'number' ? input.information_extracted : 1,
@@ -266,32 +314,29 @@ export async function saveNaiVibeAsset(input: {
   };
 
   const filePath = path.join(modelDir, `${assetId}.json`);
-  writeJsonFile(filePath, record);
+  await writeJsonFile(filePath, record);
+  vibeAssetFileIndex?.set(assetId, filePath);
   return buildStoredAssetResponse(record);
 }
 
 /** List all stored vibe payloads, optionally scoped to one model family. */
 export async function listNaiVibeAssets(model?: string) {
-  ensureDirectory(VIBE_ROOT);
-  const targetDirs = model
-    ? [path.join(VIBE_ROOT, slugifyModel(model))]
-    : fs.readdirSync(VIBE_ROOT, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path.join(VIBE_ROOT, entry.name));
+  await ensureDirectory(VIBE_ROOT);
+  const indexedPaths = Array.from((await getVibeAssetFileIndex()).values());
+  const targetModelDir = model ? path.join(VIBE_ROOT, slugifyModel(model)) : null;
 
   const records: StoredNaiVibeAsset[] = [];
-  for (const targetDir of targetDirs) {
-    if (!fs.existsSync(targetDir)) {
+  for (const filePath of indexedPaths) {
+    if (targetModelDir && path.dirname(filePath) !== targetModelDir) {
       continue;
     }
 
-    for (const fileName of fs.readdirSync(targetDir).filter((entry) => entry.endsWith('.json'))) {
-      const filePath = path.join(targetDir, fileName);
-      const record = readJsonFile<StoredNaiVibeAsset>(filePath);
-      if (!record) {
-        continue;
-      }
-
-      records.push(await ensureVibeAssetFiles(record, filePath));
+    const record = await readJsonFile<StoredNaiVibeAsset>(filePath);
+    if (!record) {
+      continue;
     }
+
+    records.push(await ensureVibeAssetFiles(record, filePath));
   }
 
   return records
@@ -299,29 +344,17 @@ export async function listNaiVibeAssets(model?: string) {
     .map((record) => buildStoredAssetResponse(record));
 }
 
-function findVibeAssetFilePath(assetId: string) {
-  if (!fs.existsSync(VIBE_ROOT)) {
-    return null;
-  }
-
-  const directories = fs.readdirSync(VIBE_ROOT, { withFileTypes: true }).filter((entry) => entry.isDirectory());
-  for (const directory of directories) {
-    const filePath = path.join(VIBE_ROOT, directory.name, `${assetId}.json`);
-    if (fs.existsSync(filePath)) {
-      return filePath;
-    }
-  }
-
-  return null;
+async function findVibeAssetFilePath(assetId: string) {
+  return (await getVibeAssetFileIndex()).get(assetId) ?? null;
 }
 
 async function loadNaiVibeAssetRecord(assetId: string) {
-  const filePath = findVibeAssetFilePath(assetId);
+  const filePath = await findVibeAssetFilePath(assetId);
   if (!filePath) {
     return null;
   }
 
-  const record = readJsonFile<StoredNaiVibeAsset>(filePath);
+  const record = await readJsonFile<StoredNaiVibeAsset>(filePath);
   if (!record) {
     return null;
   }
@@ -336,8 +369,8 @@ export async function getNaiVibeAsset(assetId: string) {
 }
 
 /** Delete one stored vibe payload. */
-export function deleteNaiVibeAsset(assetId: string) {
-  const filePath = findVibeAssetFilePath(assetId);
+export async function deleteNaiVibeAsset(assetId: string) {
+  const filePath = await findVibeAssetFilePath(assetId);
   if (!filePath) {
     return false;
   }
@@ -351,12 +384,15 @@ export function deleteNaiVibeAsset(assetId: string) {
 
   let deleted = false;
   for (const targetPath of targets) {
-    if (fs.existsSync(targetPath)) {
-      fs.unlinkSync(targetPath);
+    if (await fileExists(targetPath)) {
+      await fs.promises.unlink(targetPath);
       deleted = true;
     }
   }
 
+  if (deleted) {
+    vibeAssetFileIndex?.delete(assetId);
+  }
   return deleted;
 }
 
@@ -365,7 +401,7 @@ export async function updateNaiVibeAsset(assetId: string, input: {
   label?: string;
   description?: string;
 }) {
-  const filePath = findVibeAssetFilePath(assetId);
+  const filePath = await findVibeAssetFilePath(assetId);
   if (!filePath) {
     return null;
   }
@@ -380,7 +416,7 @@ export async function updateNaiVibeAsset(assetId: string, input: {
     description: input.description?.trim() || undefined,
   };
 
-  writeJsonFile(filePath, nextRecord);
+  await writeJsonFile(filePath, nextRecord);
   return buildStoredAssetResponse(nextRecord);
 }
 
@@ -393,9 +429,9 @@ export async function saveNaiCharacterReferenceAsset(input: {
   strength?: number;
   fidelity?: number;
 }) {
-  ensureDirectory(CHARACTER_REFERENCE_ROOT);
-  ensureDirectory(CHARACTER_REFERENCE_LETTERBOX_ROOT);
-  ensureDirectory(CHARACTER_REFERENCE_THUMBNAIL_ROOT);
+  await ensureDirectory(CHARACTER_REFERENCE_ROOT);
+  await ensureDirectory(CHARACTER_REFERENCE_LETTERBOX_ROOT);
+  await ensureDirectory(CHARACTER_REFERENCE_THUMBNAIL_ROOT);
 
   const imageBuffer = decodeImageBuffer(input.image);
   const assetId = sha256(input.image);
@@ -406,7 +442,7 @@ export async function saveNaiCharacterReferenceAsset(input: {
 
   await writePngFile(originalPath, imageBuffer);
   await writeThumbnailFile(imageBuffer, thumbnailPath);
-  fs.writeFileSync(letterboxedPath, letterboxedPng);
+  await fs.promises.writeFile(letterboxedPath, letterboxedPng);
 
   const metadata: StoredNaiCharacterReferenceAsset = {
     id: assetId,
@@ -422,18 +458,19 @@ export async function saveNaiCharacterReferenceAsset(input: {
   };
 
   const metadataPath = path.join(CHARACTER_REFERENCE_ROOT, `${assetId}.json`);
-  writeJsonFile(metadataPath, metadata);
+  await writeJsonFile(metadataPath, metadata);
+  characterAssetMetadataIndex?.set(assetId, metadataPath);
   return buildStoredAssetResponse(metadata);
 }
 
 /** List all saved character-reference assets. */
 export async function listNaiCharacterReferenceAssets() {
-  ensureDirectory(CHARACTER_REFERENCE_ROOT);
+  await ensureDirectory(CHARACTER_REFERENCE_ROOT);
   const records: StoredNaiCharacterReferenceAsset[] = [];
 
-  for (const fileName of fs.readdirSync(CHARACTER_REFERENCE_ROOT).filter((entry) => entry.endsWith('.json'))) {
-    const metadataPath = path.join(CHARACTER_REFERENCE_ROOT, fileName);
-    const record = readJsonFile<StoredNaiCharacterReferenceAsset>(metadataPath);
+  const metadataPaths = Array.from((await getCharacterAssetMetadataIndex()).values());
+  for (const metadataPath of metadataPaths) {
+    const record = await readJsonFile<StoredNaiCharacterReferenceAsset>(metadataPath);
     if (!record) {
       continue;
     }
@@ -447,7 +484,7 @@ export async function listNaiCharacterReferenceAssets() {
 }
 
 /** Delete one stored character-reference asset and its derived files. */
-export function deleteNaiCharacterReferenceAsset(assetId: string) {
+export async function deleteNaiCharacterReferenceAsset(assetId: string) {
   const targets = [
     path.join(CHARACTER_REFERENCE_ROOT, `${assetId}.png`),
     path.join(CHARACTER_REFERENCE_ROOT, `${assetId}.json`),
@@ -457,12 +494,15 @@ export function deleteNaiCharacterReferenceAsset(assetId: string) {
 
   let deleted = false;
   for (const targetPath of targets) {
-    if (fs.existsSync(targetPath)) {
-      fs.unlinkSync(targetPath);
+    if (await fileExists(targetPath)) {
+      await fs.promises.unlink(targetPath);
       deleted = true;
     }
   }
 
+  if (deleted) {
+    characterAssetMetadataIndex?.delete(assetId);
+  }
   return deleted;
 }
 
@@ -472,11 +512,11 @@ export async function updateNaiCharacterReferenceAsset(assetId: string, input: {
   description?: string;
 }) {
   const metadataPath = path.join(CHARACTER_REFERENCE_ROOT, `${assetId}.json`);
-  if (!fs.existsSync(metadataPath)) {
+  if (!(await fileExists(metadataPath))) {
     return null;
   }
 
-  const record = readJsonFile<StoredNaiCharacterReferenceAsset>(metadataPath);
+  const record = await readJsonFile<StoredNaiCharacterReferenceAsset>(metadataPath);
   if (!record) {
     return null;
   }
@@ -488,6 +528,6 @@ export async function updateNaiCharacterReferenceAsset(assetId: string, input: {
     description: input.description?.trim() || undefined,
   };
 
-  writeJsonFile(metadataPath, nextRecord);
+  await writeJsonFile(metadataPath, nextRecord);
   return buildStoredAssetResponse(nextRecord);
 }

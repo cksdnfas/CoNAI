@@ -22,6 +22,20 @@ export class ImageFileModel {
     `).all(compositeHash) as ImageFileRecord[];
   }
 
+  /** Load active files for a fixed hash set in one query. */
+  static findActiveByHashes(compositeHashes: string[]): ImageFileRecord[] {
+    if (compositeHashes.length === 0) {
+      return [];
+    }
+
+    const placeholders = compositeHashes.map(() => '?').join(',');
+    return db.prepare(`
+      SELECT * FROM image_files
+      WHERE composite_hash IN (${placeholders}) AND file_status = 'active'
+      ORDER BY composite_hash ASC, last_verified_date DESC, id DESC
+    `).all(...compositeHashes) as ImageFileRecord[];
+  }
+
   /**
    * composite_hash로 모든 파일 조회 (상태 무관)
    */

@@ -127,6 +127,11 @@ export interface ImageListResponse {
     page: number;
     limit: number;
     totalPages: number;
+    hasMore?: boolean;
+    totalKnown?: boolean;
+    nextCursorDate?: string | null;
+    nextCursorValue?: string | number | null;
+    nextCursorHash?: string | null;
   };
   error?: string;
 }

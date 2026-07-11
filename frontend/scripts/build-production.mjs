@@ -4,6 +4,14 @@ import path from 'node:path'
 
 process.env.NODE_ENV = 'production'
 
+if (process.argv.includes('--compiler=off')) {
+  process.env.CONAI_REACT_COMPILER = 'false'
+}
+
+if (process.argv.includes('--compiler=on')) {
+  process.env.CONAI_REACT_COMPILER = 'true'
+}
+
 const require = createRequire(import.meta.url)
 
 function runBin(binPath, args) {
@@ -25,3 +33,4 @@ const viteRoot = path.resolve(path.dirname(require.resolve('vite')), '..', '..')
 
 runBin(require.resolve('typescript/bin/tsc'), ['-b'])
 runBin(path.join(viteRoot, 'bin', 'vite.js'), ['build'])
+runBin(path.resolve('scripts/verify-bundle-budget.mjs'), [])

@@ -88,8 +88,9 @@ export class ImageSearchModel {
     page: number = 1,
     limit: number = 20,
     sortBy: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height' = 'upload_date',
-    sortOrder: 'ASC' | 'DESC' = 'DESC'
-  ): Promise<{ images: any[], total: number }> {
+    sortOrder: 'ASC' | 'DESC' = 'DESC',
+    cursor?: { useCursor?: boolean; value?: string | number | null; compositeHash?: string; includeTotal?: boolean },
+  ): Promise<{ images: any[], total: number; hasMore?: boolean; totalKnown?: boolean; nextCursorValue?: string | number | null; nextCursorHash?: string | null }> {
     const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams, {
       requireCompositeHash: true,
       requireActiveFile: true,
@@ -99,16 +100,19 @@ export class ImageSearchModel {
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
     const offset = (page - 1) * limit;
 
-    // 총 개수 조회
-    const countQuery = `
-      SELECT COUNT(DISTINCT im.composite_hash) as total
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      ${groupJoinClause}
-      ${whereClause}
-    `;
-    const countRow = db.prepare(countQuery).get(...params) as any;
-    const total = countRow.total;
+    const shouldCountTotal = !cursor?.useCursor || cursor.includeTotal !== false;
+    let total = 0;
+    if (shouldCountTotal) {
+      const countQuery = `
+        SELECT COUNT(DISTINCT im.composite_hash) as total
+        FROM media_metadata im
+        LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+        ${groupJoinClause}
+        ${whereClause}
+      `;
+      const countRow = db.prepare(countQuery).get(...params) as any;
+      total = countRow.total;
+    }
 
     // 정렬 컬럼 매핑 (upload_date → first_seen_date, filename은 제거)
     let sortColumn = 'im.first_seen_date';
@@ -124,6 +128,12 @@ export class ImageSearchModel {
       // filename은 더 이상 없으므로 first_seen_date로 대체
       sortColumn = 'im.first_seen_date';
     }
+    const cursorDirection = sortOrder === 'ASC' ? '>' : '<';
+    const hasCursor = cursor?.useCursor && cursor.value !== undefined && cursor.compositeHash;
+    const cursorClause = hasCursor
+      ? `AND (${sortColumn} ${cursorDirection} ? OR (${sortColumn} = ? AND im.composite_hash ${cursorDirection} ?))`
+      : '';
+    const cursorParams = hasCursor ? [cursor.value, cursor.value, cursor.compositeHash] : [];
 
     // 데이터 조회 (그룹 정보 포함)
     const dataQuery = `
@@ -145,14 +155,32 @@ export class ImageSearchModel {
       LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
       LEFT JOIN groups g ON ig.group_id = g.id
       ${whereClause}
+      ${cursorClause}
       GROUP BY im.composite_hash
-      ORDER BY ${sortColumn} ${sortOrder}
-      LIMIT ? OFFSET ?
+      ORDER BY ${sortColumn} ${sortOrder}, im.composite_hash ${sortOrder}
+      LIMIT ?${cursor?.useCursor ? '' : ' OFFSET ?'}
     `;
 
-    const rows = db.prepare(dataQuery).all(...params, limit, offset) as any[];
+    const rows = db.prepare(dataQuery).all(
+      ...params,
+      ...cursorParams,
+      limit + (cursor?.useCursor ? 1 : 0),
+      ...(cursor?.useCursor ? [] : [offset]),
+    ) as any[];
+    const hasMore = cursor?.useCursor ? rows.length > limit : page * limit < total;
+    if (cursor?.useCursor && rows.length > limit) {
+      rows.pop();
+    }
+    const lastRow = rows.at(-1);
 
-    return { images: mapGroupedImageRows(rows), total };
+    return {
+      images: mapGroupedImageRows(rows),
+      total,
+      hasMore,
+      totalKnown: shouldCountTotal,
+      nextCursorValue: lastRow ? (sortColumn === 'if.file_size' ? lastRow.file_size : sortColumn === 'im.width' ? lastRow.width : sortColumn === 'im.height' ? lastRow.height : lastRow.first_seen_date) : null,
+      nextCursorHash: lastRow?.composite_hash ?? null,
+    };
   }
 
   /**
@@ -217,7 +245,12 @@ export class ImageSearchModel {
    * 자동 태그 기반 검색
    */
   static async searchByAutoTags(
-    searchParams: AutoTagSearchParams,
+    searchParams: AutoTagSearchParams & {
+      pagination?: 'offset' | 'cursor';
+      cursorValue?: string | number | null;
+      cursorHash?: string;
+      includeTotal?: boolean;
+    },
     basicSearchParams?: {
       search_text?: string;
       negative_text?: string;
@@ -226,12 +259,14 @@ export class ImageSearchModel {
       start_date?: string;
       end_date?: string;
     }
-  ): Promise<{ images: any[], total: number }> {
+  ): Promise<{ images: any[], total: number; hasMore: boolean; totalKnown: boolean; nextCursorValue?: string | number | null; nextCursorHash?: string | null }> {
     const page = searchParams.page || 1;
     const limit = searchParams.limit || 20;
     const sortBy = searchParams.sortBy || 'upload_date';
     const sortOrder = searchParams.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
+    const useCursor = searchParams.pagination === 'cursor';
+    const shouldCountTotal = !useCursor || searchParams.includeTotal !== false;
 
     // AutoTagSearchService가 쿼리 조건을 생성 (media_metadata 기반으로 수정 필요)
     const queryBuilder = await AutoTagSearchService.buildAutoTagSearchQuery(searchParams, basicSearchParams);
@@ -261,15 +296,17 @@ export class ImageSearchModel {
       ${whereClause}
     `;
 
-    const countCacheKey = getAutoTagSearchTotalCacheKey(safeConditions, queryBuilder.params);
-    const cachedTotal = getCachedAutoTagSearchTotal(countCacheKey);
-    let total: number;
-    if (cachedTotal !== null) {
-      total = cachedTotal;
-    } else {
-      const countRow = db.prepare(countQuery).get(...queryBuilder.params) as any;
-      total = countRow.total;
-      setCachedAutoTagSearchTotal(countCacheKey, total);
+    let total = 0;
+    if (shouldCountTotal) {
+      const countCacheKey = getAutoTagSearchTotalCacheKey(safeConditions, queryBuilder.params);
+      const cachedTotal = getCachedAutoTagSearchTotal(countCacheKey);
+      if (cachedTotal !== null) {
+        total = cachedTotal;
+      } else {
+        const countRow = db.prepare(countQuery).get(...queryBuilder.params) as any;
+        total = countRow.total;
+        setCachedAutoTagSearchTotal(countCacheKey, total);
+      }
     }
 
     // 정렬 컬럼 매핑
@@ -286,23 +323,36 @@ export class ImageSearchModel {
     const pageGroupClause = sortBy === 'file_size' ? 'GROUP BY im.composite_hash' : '';
 
     const pageSafeConditions = [...orderedConditions, getVisibleImageCondition(), getReadyImageCondition()];
+    if (useCursor && searchParams.cursorValue !== undefined && searchParams.cursorHash) {
+      const cursorDirection = sortOrder === 'ASC' ? '>' : '<';
+      pageSafeConditions.push(`(${sortColumn} ${cursorDirection} ? OR (${sortColumn} = ? AND im.composite_hash ${cursorDirection} ?))`);
+      queryBuilder.params.push(searchParams.cursorValue, searchParams.cursorValue, searchParams.cursorHash);
+    }
     const pageWhereClause = pageSafeConditions.length > 0 ? `WHERE ${pageSafeConditions.join(' AND ')}` : '';
 
     const pageHashQuery = `
-      SELECT im.composite_hash
+      SELECT im.composite_hash, ${sortColumn} as cursor_value
       FROM media_metadata im
       ${pageJoinClause}
       ${pageWhereClause}
       ${pageGroupClause}
-      ORDER BY ${sortColumn} ${sortOrder}, im.composite_hash ASC
-      LIMIT ? OFFSET ?
+      ORDER BY ${sortColumn} ${sortOrder}, im.composite_hash ${sortOrder}
+      LIMIT ?${useCursor ? '' : ' OFFSET ?'}
     `;
 
-    const pageHashRows = db.prepare(pageHashQuery).all(...queryBuilder.params, limit, offset) as Array<{ composite_hash: string }>;
+    const pageHashRows = db.prepare(pageHashQuery).all(
+      ...queryBuilder.params,
+      limit + (useCursor ? 1 : 0),
+      ...(useCursor ? [] : [offset]),
+    ) as Array<{ composite_hash: string; cursor_value: string | number | null }>;
+    const hasMore = useCursor ? pageHashRows.length > limit : page * limit < total;
+    if (useCursor && pageHashRows.length > limit) {
+      pageHashRows.pop();
+    }
     const pageHashes = pageHashRows.map((row) => row.composite_hash);
 
     if (pageHashes.length === 0) {
-      return { images: [], total };
+      return { images: [], total, hasMore: false, totalKnown: shouldCountTotal, nextCursorValue: null, nextCursorHash: null };
     }
 
     const pageHashPlaceholders = pageHashes.map(() => '?').join(', ');
@@ -333,7 +383,15 @@ export class ImageSearchModel {
 
     const rows = db.prepare(dataQuery).all(...pageHashes, ...pageHashes) as any[];
 
-    return { images: mapGroupedImageRows(rows), total };
+    const lastPageHash = pageHashRows.at(-1);
+    return {
+      images: mapGroupedImageRows(rows),
+      total,
+      hasMore,
+      totalKnown: shouldCountTotal,
+      nextCursorValue: lastPageHash?.cursor_value ?? null,
+      nextCursorHash: lastPageHash?.composite_hash ?? null,
+    };
   }
 
   /**

@@ -84,6 +84,7 @@ export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
 }
 
 export interface FilterOptions {
+  ids?: number[];
   service_type?: ServiceType;
   generation_status?: GenerationStatus;
   workflow_id?: number;             // Filter by workflow (ComfyUI only)
@@ -111,6 +112,11 @@ export class GenerationHistoryModel {
     tableAlias = '',
   ): string {
     const columnPrefix = tableAlias ? `${tableAlias}.` : '';
+
+    if (filters.ids && filters.ids.length > 0) {
+      sql += ` AND ${columnPrefix}id IN (${filters.ids.map(() => '?').join(',')})`;
+      params.push(...filters.ids);
+    }
 
     if (filters.service_type) {
       sql += ` AND ${columnPrefix}service_type = ?`;

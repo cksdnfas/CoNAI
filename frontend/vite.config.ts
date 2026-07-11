@@ -29,12 +29,12 @@ function manualChunks(id: string) {
     return undefined
   }
 
-  if (id.includes('@xyflow/react')) {
-    return 'xyflow'
+  if (/[/\\]node_modules[/\\]react(?:-dom)?[/\\]/.test(id)) {
+    return 'react-vendor'
   }
 
-  if (id.includes('react-konva') || id.includes(`${path.sep}konva${path.sep}`) || id.includes('/konva/')) {
-    return 'konva'
+  if (id.includes('@xyflow/react')) {
+    return 'xyflow'
   }
 
   if (id.includes('react-router-dom')) {
@@ -45,10 +45,6 @@ function manualChunks(id: string) {
     return 'react-query'
   }
 
-  if (id.includes('react-virtuoso') || id.includes('@virtuoso.dev/masonry') || id.includes('@viselect/vanilla')) {
-    return 'image-list-vendor'
-  }
-
   return undefined
 }
 
@@ -56,14 +52,15 @@ export default defineConfig(({ command, mode }) => {
   const envDir = path.resolve(__dirname, '..')
   const env = loadEnv(mode, envDir, '')
   const frontendPort = resolveFrontendPort(env.FRONTEND_URL)
+  const reactCompilerEnabled = env.CONAI_REACT_COMPILER === 'true'
 
   return {
     envDir,
     plugins: [
       react(),
-      babel({
-        presets: [reactCompilerPreset()],
-      }),
+      ...(reactCompilerEnabled
+        ? [babel({ presets: [reactCompilerPreset()] })]
+        : []),
       tailwindcss(),
     ],
     base: './',

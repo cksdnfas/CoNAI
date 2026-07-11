@@ -35,6 +35,12 @@ export interface GroupImagesPayload {
     limit: number
     total: number
     totalPages: number
+    hasMore?: boolean
+    totalKnown?: boolean
+    nextCursorOrderIndex?: number | null
+    nextCursorAddedDate?: string | null
+    nextCursorDate?: string | null
+    nextCursorHash?: string | null
   }
 }
 

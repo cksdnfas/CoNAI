@@ -3,7 +3,6 @@ import { resolveUploadsPath } from '../../config/runtimePaths';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import type { ImageSearchParamsInput } from '../../models/Image/ImageSearchHelpers';
-import { QueryCacheService } from '../../services/QueryCacheService';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import type { ImageFileRecord, ImageListResponse, ImageMetadataRecord } from '../../types/image';
@@ -11,6 +10,8 @@ import { enrichCompactImageWithFileView, enrichImageWithFileView } from './utils
 
 type ImageListData = NonNullable<ImageListResponse['data']>;
 type ImageListItem = ReturnType<typeof enrichCompactImageWithFileView>;
+const THUMBNAIL_EXISTENCE_CACHE_TTL_MS = 30_000;
+const thumbnailExistenceCache = new Map<string, { exists: boolean; expiresAt: number }>();
 
 export interface BatchThumbnailLookupResult {
   success: boolean;
@@ -78,6 +79,7 @@ export function buildImageListResponse(
     totalPages?: number;
     totalKnown?: boolean;
     nextCursorDate?: string | null;
+    nextCursorValue?: string | number | null;
     nextCursorHash?: string | null;
   }
 ): ImageListResponse {
@@ -97,6 +99,9 @@ export function buildImageListResponse(
   }
   if (options?.nextCursorDate !== undefined) {
     data.nextCursorDate = options.nextCursorDate;
+  }
+  if (options?.nextCursorValue !== undefined) {
+    data.nextCursorValue = options.nextCursorValue;
   }
   if (options?.nextCursorHash !== undefined) {
     data.nextCursorHash = options.nextCursorHash;
@@ -119,6 +124,7 @@ export function buildEnrichedImageListResponse(
     totalPages?: number;
     totalKnown?: boolean;
     nextCursorDate?: string | null;
+    nextCursorValue?: string | number | null;
     nextCursorHash?: string | null;
   }
 ): ImageListResponse {
@@ -148,34 +154,35 @@ export function buildBatchImageListResponse(compositeHashes: string[], items: an
   return buildImageListResponse(sortedImages, sortedImages.length, 1, sortedImages.length);
 }
 
-/** Load metadata through the existing cache path before falling back to the DB. */
-function findCachedMetadataByHash(hash: string): ImageMetadataRecord | null {
-  const cached = QueryCacheService.getMetadataCache(hash);
-  if (cached) {
-    return cached as ImageMetadataRecord;
-  }
-
-  const metadata = MediaMetadataModel.findByHash(hash);
-  if (metadata) {
-    QueryCacheService.setMetadataCache(hash, metadata);
-  }
-
-  return metadata;
-}
-
 /** Resolve the best thumbnail path for non-video files without changing fallback order. */
 function resolveThumbnailPath(metadata: ImageMetadataRecord, file: ImageFileRecord): string {
-  if (metadata.thumbnail_path && fs.existsSync(resolveUploadsPath(metadata.thumbnail_path))) {
+  if (metadata.thumbnail_path && cachedFileExists(resolveUploadsPath(metadata.thumbnail_path))) {
     return metadata.thumbnail_path;
   }
 
   return file.original_file_path;
 }
 
+/** Cache filesystem existence checks across repeated thumbnail batches. */
+function cachedFileExists(filePath: string): boolean {
+  const now = Date.now();
+  const cached = thumbnailExistenceCache.get(filePath);
+  if (cached && cached.expiresAt > now) {
+    return cached.exists;
+  }
+
+  const exists = fs.existsSync(filePath);
+  thumbnailExistenceCache.set(filePath, { exists, expiresAt: now + THUMBNAIL_EXISTENCE_CACHE_TTL_MS });
+  return exists;
+}
+
 /** Build one batch-thumbnail lookup result while keeping per-hash failures isolated. */
-function buildBatchThumbnailLookupResult(hash: string): BatchThumbnailLookupResult {
+function buildBatchThumbnailLookupResult(
+  hash: string,
+  metadata: ImageMetadataRecord | undefined,
+  file: ImageFileRecord | undefined,
+): BatchThumbnailLookupResult {
   try {
-    const metadata = findCachedMetadataByHash(hash);
     if (!metadata) {
       return { success: false, error: 'Not found' };
     }
@@ -188,12 +195,10 @@ function buildBatchThumbnailLookupResult(hash: string): BatchThumbnailLookupResu
       return { success: false, error: 'Hidden by safety policy' };
     }
 
-    const files = ImageFileModel.findActiveByHash(hash);
-    if (files.length === 0) {
+    if (!file) {
       return { success: false, error: 'File not found' };
     }
 
-    const file = files[0];
     if (file.mime_type && file.mime_type.startsWith('video/')) {
       return {
         success: true,
@@ -218,9 +223,20 @@ function buildBatchThumbnailLookupResult(hash: string): BatchThumbnailLookupResu
 /** Build the batch-thumbnail lookup payload for the full hash list. */
 export function buildBatchThumbnailLookupResults(hashes: string[]): BatchThumbnailLookupResults {
   const results: BatchThumbnailLookupResults = {};
+  const uniqueHashes = Array.from(new Set(hashes));
+  const metadataByHash = new Map(
+    MediaMetadataModel.findByHashes(uniqueHashes).map((metadata) => [metadata.composite_hash, metadata]),
+  );
+  const fileByHash = new Map<string, ImageFileRecord>();
+
+  for (const file of ImageFileModel.findActiveByHashes(uniqueHashes)) {
+    if (file.composite_hash && !fileByHash.has(file.composite_hash)) {
+      fileByHash.set(file.composite_hash, file);
+    }
+  }
 
   hashes.forEach((hash) => {
-    results[hash] = buildBatchThumbnailLookupResult(hash);
+    results[hash] = buildBatchThumbnailLookupResult(hash, metadataByHash.get(hash), fileByHash.get(hash));
   });
 
   return results;

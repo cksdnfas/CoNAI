@@ -1,25 +1,83 @@
 import { Suspense, lazy, type ReactNode } from 'react'
+import { registerTranslationCatalog, type TranslationCatalog } from '@/i18n'
 
 const LAZY_ROUTE_RELOAD_PREFIX = 'conai:lazy-route:reload:'
 
 type RouteModuleLoader<TModule = unknown> = () => Promise<TModule>
 
+type CatalogModuleLoader = () => Promise<TranslationCatalog>
+
+async function loadRouteModuleWithCatalog<TModule>(
+  routeLoader: () => Promise<TModule>,
+  catalogLoaders: CatalogModuleLoader[],
+): Promise<TModule> {
+  const [routeModule, ...catalogs] = await Promise.all([
+    routeLoader(),
+    ...catalogLoaders.map((loader) => loader()),
+  ])
+
+  for (const catalog of catalogs) {
+    registerTranslationCatalog(catalog)
+  }
+
+  return routeModule
+}
+
 const routeModuleLoaders = {
   login: () => import('@/features/auth/login-page'),
   'access-overview': () => import('@/features/auth/access-overview-page'),
-  'group-page': () => import('@/features/groups/group-page'),
-  'home-page': () => import('@/features/home/home-page'),
-  'image-generation-page': () => import('@/features/image-generation/image-generation-page'),
-  'public-comfy-workflow-page': () => import('@/features/image-generation/public-comfy-workflow-page'),
-  'wildcard-page': () => import('@/features/image-generation/wildcard-page'),
-  'image-detail-page': () => import('@/features/images/image-detail-page'),
-  'image-metadata-edit-page': () => import('@/features/metadata/image-metadata-edit-page'),
-  'prompt-page': () => import('@/features/prompts/prompt-page'),
-  'settings-page': () => import('@/features/settings/settings-page'),
-  'not-found-page': () => import('@/features/system/not-found-page'),
-  'upload-page': () => import('@/features/upload/upload-page'),
-  'wallpaper-editor-page': () => import('@/features/wallpaper/wallpaper-editor-page'),
-  'wallpaper-runtime-page': () => import('@/features/wallpaper/wallpaper-runtime-page'),
+  'group-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/groups/group-page'),
+    [() => import('@/i18n/resources/groups').then((module) => module.groupsCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog)],
+  ),
+  'home-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/home/home-page'),
+    [() => import('@/i18n/resources/home').then((module) => module.homeCatalog), () => import('@/i18n/resources/search').then((module) => module.searchCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog)],
+  ),
+  'image-generation-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/image-generation/image-generation-page'),
+    [() => import('@/i18n/resources/image-generation').then((module) => module.imageGenerationCatalog), () => import('@/i18n/resources/module-graph').then((module) => module.moduleGraphCatalog)],
+  ),
+  'public-comfy-workflow-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/image-generation/public-comfy-workflow-page'),
+    [() => import('@/i18n/resources/image-generation').then((module) => module.imageGenerationCatalog)],
+  ),
+  'wildcard-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/image-generation/wildcard-page'),
+    [() => import('@/i18n/resources/image-generation').then((module) => module.imageGenerationCatalog)],
+  ),
+  'image-detail-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/images/image-detail-page'),
+    [() => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/image-editor').then((module) => module.imageEditorCatalog)],
+  ),
+  'image-metadata-edit-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/metadata/image-metadata-edit-page'),
+    [() => import('@/i18n/resources/metadata').then((module) => module.metadataCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog)],
+  ),
+  'prompt-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/prompts/prompt-page'),
+    [() => import('@/i18n/resources/prompts').then((module) => module.promptsCatalog)],
+  ),
+  'settings-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/settings/settings-page'),
+    [() => import('@/i18n/resources/settings').then((module) => module.settingsCatalog)],
+  ),
+  'not-found-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/system/not-found-page'),
+    [() => import('@/i18n/resources/system').then((module) => module.systemCatalog)],
+  ),
+  'upload-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/upload/upload-page'),
+    [() => import('@/i18n/resources/upload').then((module) => module.uploadCatalog)],
+  ),
+  'wallpaper-editor-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/wallpaper/wallpaper-editor-page'),
+    [() => import('@/i18n/resources/wallpaper').then((module) => module.wallpaperCatalog)],
+  ),
+  'wallpaper-runtime-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/wallpaper/wallpaper-runtime-page'),
+    [() => import('@/i18n/resources/wallpaper').then((module) => module.wallpaperCatalog)],
+  ),
 } as const satisfies Record<string, RouteModuleLoader>
 
 function isRecoverableLazyImportError(error: unknown) {

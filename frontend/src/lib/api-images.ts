@@ -17,6 +17,10 @@ interface ComplexImageSearchRequest {
   limit?: number
   sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height'
   sortOrder?: 'ASC' | 'DESC'
+  pagination?: 'offset' | 'cursor'
+  cursorValue?: string | number | null
+  cursorHash?: string | null
+  includeTotal?: boolean
 }
 
 export async function getImages(params?: {
@@ -51,7 +55,7 @@ export async function getImages(params?: {
 }
 
 export async function searchImagesComplex(input: ComplexImageSearchRequest) {
-  const response = await fetchJson<ApiResponse<Omit<ImageListPayload, 'hasMore'>>>(`/api/images/search/complex`, {
+  const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images/search/complex`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -63,10 +67,7 @@ export async function searchImagesComplex(input: ComplexImageSearchRequest) {
     throw createApiFallbackError(response.error, 'images.search.load')
   }
 
-  return {
-    ...response.data,
-    hasMore: response.data.page < response.data.totalPages,
-  }
+  return response.data
 }
 
 export async function getImage(compositeHash: string, init?: RequestInit) {

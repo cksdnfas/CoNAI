@@ -472,13 +472,30 @@ class DanbooruBrowserService {
       values.push(syntax.usageFilter.max);
     }
 
-    const rows = this.getDb().prepare(`
+    const maxRow = this.getDb().prepare(`
+      SELECT MAX(tags.id) as maxId
+      FROM tags
+      WHERE ${clauses.join(' AND ')}
+    `).get(...values) as { maxId: number | null } | undefined;
+
+    if (!maxRow?.maxId) {
+      return [];
+    }
+
+    const pivot = Math.max(1, Math.floor(Math.random() * maxRow.maxId) + 1);
+    const selectFromPivot = (operator: '>=' | '<', rowLimit: number) => this.getDb().prepare(`
       SELECT tags.name, tags.post_count
       FROM tags
       WHERE ${clauses.join(' AND ')}
-      ORDER BY RANDOM()
+        AND tags.id ${operator} ?
+      ORDER BY tags.id ASC
       LIMIT ?
-    `).all(...values, limit) as PromptGroupTagRow[];
+    `).all(...values, pivot, rowLimit) as PromptGroupTagRow[];
+
+    const rows = selectFromPivot('>=', limit);
+    if (rows.length < limit) {
+      rows.push(...selectFromPivot('<', limit - rows.length));
+    }
 
     return rows.map((row) => row.name);
   }

@@ -21,6 +21,7 @@ interface UseHomePageDataOptions {
 type HomeImagesPageParam = number | {
   cursorDate?: string | null
   cursorHash?: string | null
+  cursorValue?: string | number | null
 }
 
 /** Collect Home page auth state, image feed data, selection, and group actions. */
@@ -56,17 +57,21 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
 
   const imagesQuery = useInfiniteQuery({
     queryKey: ['home-images', appliedChips],
-    initialPageParam: (isSearchMode ? 1 : {}) as HomeImagesPageParam,
+    initialPageParam: {} as HomeImagesPageParam,
     queryFn: ({ pageParam }) => {
       const typedPageParam = pageParam as HomeImagesPageParam
 
       if (isSearchMode) {
         return searchImagesComplex({
           complex_filter: buildComplexFilterPayload(appliedChips),
-          page: typeof typedPageParam === 'number' ? typedPageParam : 1,
+          page: 1,
           limit: 40,
           sortBy: 'upload_date',
           sortOrder: 'DESC',
+          pagination: 'cursor',
+          cursorValue: typeof typedPageParam === 'number' ? null : typedPageParam.cursorValue,
+          cursorHash: typeof typedPageParam === 'number' ? null : typedPageParam.cursorHash,
+          includeTotal: typeof typedPageParam !== 'number' && !typedPageParam.cursorHash,
         })
       }
 
@@ -85,7 +90,13 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       }
 
       if (isSearchMode) {
-        return lastPage.page + 1
+        if (!lastPage.nextCursorHash || lastPage.nextCursorValue === undefined) {
+          return undefined
+        }
+        return {
+          cursorValue: lastPage.nextCursorValue,
+          cursorHash: lastPage.nextCursorHash,
+        }
       }
 
       if (!lastPage.nextCursorDate || !lastPage.nextCursorHash) {

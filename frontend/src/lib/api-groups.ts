@@ -72,10 +72,28 @@ export async function getGroupBreadcrumb(groupId: number) {
   return response.data
 }
 
-export async function getGroupImages(groupId: number, params?: { page?: number; limit?: number; collectionType?: 'manual' | 'auto' | 'all' }) {
+export async function getGroupImages(groupId: number, params?: {
+  page?: number
+  limit?: number
+  collectionType?: 'manual' | 'auto' | 'all'
+  cursorOrderIndex?: number | null
+  cursorAddedDate?: string | null
+  cursorHash?: string | null
+}): Promise<GroupImagesPayload> {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('limit', String(params?.limit ?? 40))
+  searchParams.set('pagination', 'cursor')
+  searchParams.set('include_total', params?.cursorHash ? 'false' : 'true')
+  if (params?.cursorOrderIndex !== null && params?.cursorOrderIndex !== undefined) {
+    searchParams.set('cursor_order_index', String(params.cursorOrderIndex))
+  }
+  if (params?.cursorAddedDate) {
+    searchParams.set('cursor_added_date', params.cursorAddedDate)
+  }
+  if (params?.cursorHash) {
+    searchParams.set('cursor_hash', params.cursorHash)
+  }
   if (params?.collectionType && params.collectionType !== 'all') {
     searchParams.set('collection_type', params.collectionType)
   }

@@ -5,7 +5,15 @@ import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { PAGINATION } from '@conai/shared';
 
 type GroupImageCollectionType = 'manual' | 'auto';
-type GroupImageListResult = { images: ImageWithFileView[]; total: number };
+type GroupImageListResult = {
+  images: ImageWithFileView[];
+  total: number;
+  hasMore?: boolean;
+  totalKnown?: boolean;
+  nextCursorOrderIndex?: number | null;
+  nextCursorAddedDate?: string | null;
+  nextCursorHash?: string | null;
+};
 type GroupChildRecord = { id: number };
 type FindChildGroups = (groupId: number) => GroupChildRecord[];
 
@@ -15,6 +23,69 @@ function getVisibleGroupImageCondition() {
 
 function getReadyGroupImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('im');
+}
+
+function getRandomGroupMembershipPivot(groupId: number): number | null {
+  const row = db.prepare(`
+    SELECT MAX(id) as maxId
+    FROM image_groups
+    WHERE group_id = ?
+  `).get(groupId) as { maxId: number | null } | undefined;
+
+  return row?.maxId ? Math.max(1, Math.floor(Math.random() * row.maxId) + 1) : null;
+}
+
+/** Load a bounded preview slice by indexed membership id. */
+function findPreviewRowsFromPivot(
+  groupId: number,
+  pivot: number,
+  direction: '>=' | '<',
+  limit: number,
+): ImageWithFileView[] {
+  const query = `
+    SELECT
+      COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
+      im.*,
+      if.id as file_id,
+      if.original_file_path,
+      if.file_status,
+      if.file_type,
+      if.mime_type,
+      if.folder_id,
+      f.folder_name
+    FROM image_groups ig
+    LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+    LEFT JOIN image_files if ON if.id = (
+      SELECT if2.id
+      FROM image_files if2
+      WHERE if2.composite_hash = ig.composite_hash AND if2.file_status = 'active'
+      ORDER BY if2.id DESC
+      LIMIT 1
+    )
+    LEFT JOIN watched_folders f ON if.folder_id = f.id
+    WHERE ig.group_id = ?
+      AND ig.id ${direction} ?
+      AND ${getVisibleGroupImageCondition()}
+      AND ${getReadyGroupImageCondition()}
+    ORDER BY ig.id ASC
+    LIMIT ?
+  `;
+
+  return db.prepare(query).all(groupId, pivot, limit) as ImageWithFileView[];
+}
+
+/** Pick a random bounded membership slice and wrap at the end. */
+function findRandomGroupPreviewRows(groupId: number, count: number): ImageWithFileView[] {
+  const pivot = getRandomGroupMembershipPivot(groupId);
+  if (pivot === null) {
+    return [];
+  }
+
+  const rows = findPreviewRowsFromPivot(groupId, pivot, '>=', count);
+  if (rows.length < count) {
+    rows.push(...findPreviewRowsFromPivot(groupId, pivot, '<', count - rows.length));
+  }
+  return rows;
 }
 
 export function normalizeGroupImagePositiveInteger(
@@ -56,20 +127,33 @@ export function findImagesByGroupQuery(
   groupId: number,
   page: number = 1,
   limit: number = 20,
-  collectionType?: GroupImageCollectionType
+  collectionType?: GroupImageCollectionType,
+  cursor?: { orderIndex: number; addedDate: string; compositeHash: string; includeTotal?: boolean },
 ): GroupImageListResult {
   const normalizedPage = normalizeGroupImagePositiveInteger(page, 1);
   const normalizedLimit = normalizeGroupImagePositiveInteger(limit, 20);
   const offset = (normalizedPage - 1) * normalizedLimit;
-  const { whereClause, queryParams } = buildGroupImageWhereClause(groupId, collectionType);
+  const { whereClause: baseWhereClause, queryParams: baseQueryParams } = buildGroupImageWhereClause(groupId, collectionType);
+  let whereClause = baseWhereClause;
+  const queryParams = [...baseQueryParams];
 
-  const countRow = db.prepare(
+  if (cursor) {
+    whereClause += ` AND (
+      ig.order_index > ?
+      OR (ig.order_index = ? AND ig.added_date < ?)
+      OR (ig.order_index = ? AND ig.added_date = ? AND ig.composite_hash > ?)
+    )`;
+    queryParams.push(cursor.orderIndex, cursor.orderIndex, cursor.addedDate, cursor.orderIndex, cursor.addedDate, cursor.compositeHash);
+  }
+
+  const shouldCountTotal = !cursor || cursor.includeTotal !== false;
+  const countRow = shouldCountTotal ? db.prepare(
     `SELECT COUNT(*) as total
      FROM image_groups ig
      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-     ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}`
-  ).get(...queryParams) as { total: number };
-  const total = countRow.total;
+     ${baseWhereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}`
+  ).get(...baseQueryParams) as { total: number } : null;
+  const total = countRow?.total ?? 0;
 
   const query = `
     SELECT
@@ -93,17 +177,36 @@ export function findImagesByGroupQuery(
       (SELECT file_size FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
       (SELECT mime_type FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
       ig.collection_type
+      ,ig.order_index as cursor_order_index
+      ,ig.added_date as cursor_added_date
     FROM image_groups ig
     LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
     ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
     GROUP BY ig.composite_hash
-    ORDER BY ig.order_index ASC, ig.added_date DESC
-    LIMIT ? OFFSET ?
+    ORDER BY ig.order_index ASC, ig.added_date DESC, ig.composite_hash ASC
+    LIMIT ?${cursor ? '' : ' OFFSET ?'}
   `;
 
-  const rows = db.prepare(query).all(...queryParams, normalizedLimit, offset) as ImageWithFileView[];
+  const rows = db.prepare(query).all(
+    ...queryParams,
+    normalizedLimit + (cursor ? 1 : 0),
+    ...(cursor ? [] : [offset]),
+  ) as Array<ImageWithFileView & { cursor_order_index: number; cursor_added_date: string }>;
+  const hasMore = cursor ? rows.length > normalizedLimit : offset + rows.length < total;
+  if (cursor && rows.length > normalizedLimit) {
+    rows.pop();
+  }
+  const lastRow = rows.at(-1);
 
-  return { images: rows, total };
+  return {
+    images: rows,
+    total,
+    hasMore,
+    totalKnown: shouldCountTotal,
+    nextCursorOrderIndex: lastRow?.cursor_order_index ?? null,
+    nextCursorAddedDate: lastRow?.cursor_added_date ?? null,
+    nextCursorHash: lastRow?.composite_hash ?? null,
+  };
 }
 
 /** Find one page of group images together with file location fields. */
@@ -150,51 +253,7 @@ export function findImagesByGroupWithFilesQuery(
 
 /** Find one random visible image for a group. */
 export function findRandomImageForGroupQuery(groupId: number): ImageMetadataRecord | null {
-  const query = `
-    SELECT
-      COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
-      im.perceptual_hash,
-      im.dhash,
-      im.ahash,
-      im.color_histogram,
-      im.width,
-      im.height,
-      im.thumbnail_path,
-      im.ai_tool,
-      im.model_name,
-      im.lora_models,
-      im.steps,
-      im.cfg_scale,
-      im.sampler,
-      im.seed,
-      im.scheduler,
-      im.prompt,
-      im.negative_prompt,
-      im.denoise_strength,
-      im.generation_time,
-      im.batch_size,
-      im.batch_index,
-      im.auto_tags,
-      im.model_references,
-      im.character_prompt_text,
-      im.raw_nai_parameters,
-      im.duration,
-      im.fps,
-      im.video_codec,
-      im.audio_codec,
-      im.bitrate,
-      im.rating_score,
-      im.first_seen_date,
-      im.metadata_updated_date
-    FROM image_groups ig
-    LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-    WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
-    ORDER BY RANDOM()
-    LIMIT 1
-  `;
-
-  const row = db.prepare(query).get(groupId) as ImageMetadataRecord | undefined;
-  return row || null;
+  return findRandomGroupPreviewRows(groupId, 1)[0] ?? null;
 }
 
 /** Find preview images for a group and recurse into children when needed. */
@@ -205,69 +264,7 @@ export function findPreviewImagesQuery(
   findChildGroups: FindChildGroups
 ): ImageWithFileView[] {
   const normalizedCount = normalizeGroupImagePositiveInteger(count, 8, 20);
-  const query = `
-    WITH sampled_hashes AS (
-      SELECT ig.composite_hash
-      FROM image_groups ig
-      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
-      GROUP BY ig.composite_hash
-      ORDER BY RANDOM()
-      LIMIT ?
-    )
-    SELECT
-      COALESCE(im.composite_hash, sampled_hashes.composite_hash) as composite_hash,
-      im.perceptual_hash,
-      im.dhash,
-      im.ahash,
-      im.color_histogram,
-      im.width,
-      im.height,
-      im.thumbnail_path,
-      im.ai_tool,
-      im.model_name,
-      im.lora_models,
-      im.steps,
-      im.cfg_scale,
-      im.sampler,
-      im.seed,
-      im.scheduler,
-      im.prompt,
-      im.negative_prompt,
-      im.denoise_strength,
-      im.generation_time,
-      im.batch_size,
-      im.batch_index,
-      im.auto_tags,
-      im.duration,
-      im.fps,
-      im.video_codec,
-      im.audio_codec,
-      im.bitrate,
-      im.rating_score,
-      im.first_seen_date,
-      im.metadata_updated_date,
-      if.id as file_id,
-      if.original_file_path,
-      if.file_status,
-      if.file_type,
-      if.mime_type,
-      if.folder_id,
-      f.folder_name
-    FROM sampled_hashes
-    LEFT JOIN media_metadata im ON sampled_hashes.composite_hash = im.composite_hash
-    LEFT JOIN image_files if ON if.id = (
-      SELECT if2.id
-      FROM image_files if2
-      WHERE if2.composite_hash = sampled_hashes.composite_hash
-        AND if2.file_status = 'active'
-      ORDER BY if2.id DESC
-      LIMIT 1
-    )
-    LEFT JOIN watched_folders f ON if.folder_id = f.id
-  `;
-
-  const rows = db.prepare(query).all(groupId, normalizedCount) as ImageWithFileView[];
+  const rows = findRandomGroupPreviewRows(groupId, normalizedCount);
 
   if (rows.length > 0 || !includeChildren) {
     return rows;

@@ -54,7 +54,12 @@ router.get('/tagger/check', asyncHandler(async (req: Request, res: Response) => 
 
 router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const searchParams: AutoTagSearchParams = {
+    const searchParams: AutoTagSearchParams & {
+      pagination?: 'offset' | 'cursor';
+      cursorValue?: string | number | null;
+      cursorHash?: string;
+      includeTotal?: boolean;
+    } = {
       rating: req.body.rating,
       rating_score: req.body.rating_score,
       general_tags: req.body.general_tags,
@@ -64,7 +69,11 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
       page: parseInt(req.body.page) || 1,
       limit: parseInt(req.body.limit) || 20,
       sortBy: req.body.sortBy || 'upload_date',
-      sortOrder: req.body.sortOrder || 'DESC'
+      sortOrder: req.body.sortOrder || 'DESC',
+      pagination: req.body.pagination === 'cursor' ? 'cursor' : 'offset',
+      cursorValue: req.body.cursorValue,
+      cursorHash: req.body.cursorHash,
+      includeTotal: req.body.includeTotal !== false,
     };
 
     const basicSearchParams = {
@@ -94,7 +103,11 @@ router.post('/search-by-autotags', asyncHandler(async (req: Request, res: Respon
         total: result.total,
         page: searchParams.page!,
         limit: searchParams.limit!,
-        totalPages: Math.ceil(result.total / searchParams.limit!)
+        totalPages: result.totalKnown ? Math.ceil(result.total / searchParams.limit!) : 0,
+        hasMore: result.hasMore,
+        totalKnown: result.totalKnown,
+        nextCursorValue: result.nextCursorValue,
+        nextCursorHash: result.nextCursorHash,
       }
     };
 

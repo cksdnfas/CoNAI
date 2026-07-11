@@ -113,6 +113,7 @@ export interface ImageListPayload {
   totalKnown?: boolean
   nextCursorDate?: string | null
   nextCursorHash?: string | null
+  nextCursorValue?: string | number | null
 }
 
 export interface ApiResponse<T> {

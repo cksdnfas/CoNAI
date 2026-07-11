@@ -8,10 +8,16 @@ import {
 } from '@/lib/api-groups'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
-import type { GroupWithHierarchy } from '@/types/group'
+import type { GroupImagesPayload, GroupWithHierarchy } from '@/types/group'
 import { createEmptyGroupFileCounts, getDownloadCountsFromImages, type GroupSourceDefinition } from './group-page-shared'
 
 const EMPTY_GROUP_HIERARCHY_LIST: GroupWithHierarchy[] = []
+type GroupImagesPageParam = {
+  cursorOrderIndex?: number | null
+  cursorAddedDate?: string | null
+  cursorDate?: string | null
+  cursorHash?: string | null
+}
 
 /** Own query loading, invalidation helpers, and lightweight derived data for the group page. */
 export function useGroupPageQueries({
@@ -59,14 +65,22 @@ export function useGroupPageQueries({
 
   const groupImagesQuery = useInfiniteQuery({
     queryKey: ['group-images', selectedSource.key, selectedGroupId, isCustomSource ? groupImageCollectionFilter : 'all'],
-    queryFn: ({ pageParam }) =>
+    queryFn: async ({ pageParam }): Promise<GroupImagesPayload> => (
       isCustomSource
-        ? getGroupImages(selectedGroupId!, { page: pageParam, limit: 40, collectionType: groupImageCollectionFilter })
-        : selectedSource.getImages(selectedGroupId!, { page: pageParam, limit: 40 }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const { page, totalPages } = lastPage.pagination
-      return page < totalPages ? page + 1 : undefined
+        ? getGroupImages(selectedGroupId!, { ...pageParam, limit: 40, collectionType: groupImageCollectionFilter })
+        : selectedSource.getImages(selectedGroupId!, { ...pageParam, limit: 40 })
+    ),
+    initialPageParam: {} as GroupImagesPageParam,
+    getNextPageParam: (lastPage): GroupImagesPageParam | undefined => {
+      if (!lastPage.pagination.hasMore || !lastPage.pagination.nextCursorHash) {
+        return undefined
+      }
+      return {
+        cursorOrderIndex: lastPage.pagination.nextCursorOrderIndex,
+        cursorAddedDate: lastPage.pagination.nextCursorAddedDate,
+        cursorDate: lastPage.pagination.nextCursorDate,
+        cursorHash: lastPage.pagination.nextCursorHash,
+      }
     },
     enabled: Number.isFinite(selectedGroupId),
   })

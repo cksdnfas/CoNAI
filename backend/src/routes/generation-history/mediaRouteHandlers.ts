@@ -2,11 +2,11 @@ import type { Request, Response } from 'express';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
 import {
-  buildBatchDownloadArchive,
   getExistingActiveFilePathOrBlock,
   serveThumbnailOrOriginal,
   streamCacheableFile,
   streamRangeFile,
+  streamBatchDownloadArchive,
 } from '../images/query-file-helpers';
 import {
   buildMissingHistoryFileWarning,
@@ -30,9 +30,7 @@ export async function handleHistoryBatchDownload(req: Request, res: Response) {
     return;
   }
 
-  const records = uniqueHistoryIds
-    .map((historyId) => GenerationHistoryModel.findByIdWithMetadata(historyId))
-    .filter((record): record is Exclude<ReturnType<typeof GenerationHistoryModel.findByIdWithMetadata>, null> => record !== null)
+  const records = GenerationHistoryModel.findAllWithMetadata({ ids: uniqueHistoryIds, limit: uniqueHistoryIds.length })
     .filter((record) => canAccessHistoryRecord(req, record));
   const compositeHashes = Array.from(new Set(records.map(getHistoryCompositeHash).filter((hash): hash is string => Boolean(hash))));
 
@@ -41,16 +39,12 @@ export async function handleHistoryBatchDownload(req: Request, res: Response) {
     return;
   }
 
-  const archive = await buildBatchDownloadArchive(compositeHashes, downloadType, { includeHidden: true });
-  if (!archive) {
+  const streamed = await streamBatchDownloadArchive(res, compositeHashes, downloadType, { includeHidden: true });
+  if (!streamed) {
     res.status(404).json({ success: false, error: `No downloadable ${downloadType} files were found` });
     return;
   }
 
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Length', archive.zipBuffer.length);
-  res.setHeader('Content-Disposition', `attachment; filename="${archive.archiveName}"; filename*=UTF-8''${encodeURIComponent(archive.archiveName)}`);
-  res.send(archive.zipBuffer);
 }
 
 export async function handleHistoryFile(req: Request, res: Response, id: string) {

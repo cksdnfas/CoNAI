@@ -12,7 +12,6 @@ import { enrichImageWithFileView } from './utils';
 import {
   BatchDownloadLimitError,
   MAX_BATCH_DOWNLOAD_FILE_COUNT,
-  buildBatchDownloadArchive,
   getActiveFileOrBlock,
   getCompositeHashOrBlock,
   getExistingActiveFilePathOrBlock,
@@ -22,6 +21,7 @@ import {
   serveThumbnailOrOriginal,
   streamCacheableFile,
   streamRangeFile,
+  streamBatchDownloadArchive,
   type ImageDownloadType,
 } from './query-file-helpers';
 import { routeParam } from '../routeParam';
@@ -225,21 +225,21 @@ router.post('/download/batch', asyncHandler(async (req: Request, res: Response) 
   }
 
   try {
-    const archive = await buildBatchDownloadArchive(uniqueHashes, downloadType);
+    const streamed = await streamBatchDownloadArchive(res, uniqueHashes, downloadType);
 
-    if (!archive) {
+    if (!streamed) {
       return res.status(404).json({
         success: false,
         error: `No downloadable ${downloadType} files were found`
       });
     }
 
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Length', archive.zipBuffer.length);
-    res.setHeader('Content-Disposition', `attachment; filename="${archive.archiveName}"; filename*=UTF-8''${encodeURIComponent(archive.archiveName)}`);
-    res.send(archive.zipBuffer);
     return;
   } catch (error) {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
     if (error instanceof BatchDownloadLimitError) {
       return res.status(413).json({
         success: false,

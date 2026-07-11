@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getWallpaperRuntimeBrowseContent, getWallpaperRuntimeGroupPreviewImages } from '@/lib/api-wallpaper-runtime'
 import type { ImageRecord } from '@/types/image'
 
@@ -26,13 +27,46 @@ function dedupeWallpaperPreviewImages(images: ImageRecord[]) {
   })
 }
 
-/** Load shared browse-content data for wallpaper widgets with a widget-scoped refresh cadence. */
+const WALLPAPER_BROWSE_CONTENT_QUERY_KEY = ['wallpaper-widget', 'browse-content'] as const
+const browseContentRefreshIntervals = new Map<string, number>()
+let browseContentRefreshTimer: ReturnType<typeof setInterval> | null = null
+
+function syncBrowseContentRefreshTimer(refetch: () => void) {
+  if (browseContentRefreshTimer) {
+    clearInterval(browseContentRefreshTimer)
+    browseContentRefreshTimer = null
+  }
+
+  const activeIntervals = Array.from(browseContentRefreshIntervals.values())
+  if (activeIntervals.length === 0) {
+    return
+  }
+
+  browseContentRefreshTimer = setInterval(refetch, Math.min(...activeIntervals))
+}
+
+/** Load one shared browse-content query at the shortest active widget cadence. */
 export function useWallpaperBrowseContentQuery(scope: string, refreshIntervalMs: number) {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    browseContentRefreshIntervals.set(scope, refreshIntervalMs)
+    const refetch = () => {
+      void queryClient.refetchQueries({ queryKey: WALLPAPER_BROWSE_CONTENT_QUERY_KEY, type: 'active' })
+    }
+    syncBrowseContentRefreshTimer(refetch)
+
+    return () => {
+      browseContentRefreshIntervals.delete(scope)
+      syncBrowseContentRefreshTimer(refetch)
+    }
+  }, [queryClient, refreshIntervalMs, scope])
+
   return useQuery({
-    queryKey: ['wallpaper-widget', scope, 'browse-content', refreshIntervalMs],
+    queryKey: WALLPAPER_BROWSE_CONTENT_QUERY_KEY,
     queryFn: () => getWallpaperRuntimeBrowseContent(),
-    staleTime: Math.max(1_000, refreshIntervalMs - 1_000),
-    refetchInterval: refreshIntervalMs,
+    staleTime: 1_000,
+    refetchInterval: false,
   })
 }
 

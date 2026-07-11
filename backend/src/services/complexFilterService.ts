@@ -58,8 +58,12 @@ export class ComplexFilterService {
       sortBy?: 'upload_date' | 'first_seen_date' | 'filename' | 'file_size' | 'width' | 'height';
       sortOrder?: 'ASC' | 'DESC';
       includeStats?: boolean;
+      cursorValue?: string | number | null;
+      cursorHash?: string;
+      useCursor?: boolean;
+      includeTotal?: boolean;
     }
-  ): Promise<{ images: any[]; total: number; stats?: FilterExecutionStats }> {
+  ): Promise<{ images: any[]; total: number; hasMore: boolean; totalKnown: boolean; nextCursorValue?: string | number | null; nextCursorHash?: string | null; stats?: FilterExecutionStats }> {
     const includeStats = pagination?.includeStats !== false;
     const startTime = includeStats ? Date.now() : 0;
 
@@ -77,12 +81,16 @@ export class ComplexFilterService {
 
     // Count total results (composite_hash 기반)
     // Replace the main SELECT clause (im.*) with COUNT, handling whitespace and multi-line
-    const countQuery = baseQuery.replace(
-      /SELECT\s+im\.\*,[\s\S]+?FROM/i,
-      'SELECT COUNT(DISTINCT im.composite_hash) as total FROM'
-    );
-    const countRow = db.prepare(countQuery).get(...params) as any;
-    const total = countRow?.total || 0;
+    const shouldCountTotal = !pagination?.useCursor || pagination.includeTotal !== false;
+    let total = 0;
+    if (shouldCountTotal) {
+      const countQuery = baseQuery.replace(
+        /SELECT\s+im\.\*,[\s\S]+?FROM/i,
+        'SELECT COUNT(DISTINCT im.composite_hash) as total FROM'
+      );
+      const countRow = db.prepare(countQuery).get(...params) as any;
+      total = countRow?.total || 0;
+    }
 
     // Apply pagination
     const page = pagination?.page || 1;
@@ -96,25 +104,56 @@ export class ComplexFilterService {
       sortBy = 'first_seen_date';
     }
 
+    const sortExpressions = {
+      first_seen_date: `COALESCE(im.first_seen_date, '')`,
+      filename: `COALESCE(if.original_file_path, '')`,
+      file_size: 'COALESCE(if.file_size, 0)',
+      width: 'COALESCE(im.width, 0)',
+      height: 'COALESCE(im.height, 0)',
+    } as const;
+    const sortExpression = sortExpressions[sortBy];
+    const cursorDirection = sortOrder === 'ASC' ? '>' : '<';
+    const useCursor = pagination?.useCursor === true;
+    const hasCursor = useCursor && pagination?.cursorValue !== undefined && pagination.cursorHash;
+    const cursorClause = hasCursor
+      ? `AND (${sortExpression} ${cursorDirection} ? OR (${sortExpression} = ? AND im.composite_hash ${cursorDirection} ?))`
+      : '';
+    const dataParams = hasCursor
+      ? [...params, pagination.cursorValue, pagination.cursorValue, pagination.cursorHash]
+      : params;
     const dataQuery = `
       ${baseQuery}
-      ORDER BY im.${sortBy} ${sortOrder}
-      LIMIT ? OFFSET ?
+      ${cursorClause}
+      ORDER BY ${sortExpression} ${sortOrder}, im.composite_hash ${sortOrder}
+      LIMIT ?${useCursor ? '' : ' OFFSET ?'}
     `;
 
-    const rows = db.prepare(dataQuery).all(...params, limit, offset) as any[];
+    const rows = db.prepare(dataQuery).all(...dataParams, limit + (useCursor ? 1 : 0), ...(useCursor ? [] : [offset])) as any[];
+    const hasMore = useCursor ? rows.length > limit : page * limit < total;
+    if (useCursor && rows.length > limit) {
+      rows.pop();
+    }
+    const lastRow = rows.at(-1);
 
     const stats: FilterExecutionStats | undefined = includeStats
       ? {
           excluded_count: statsSources.excluded ? this.countCteRows(cteClause, cteParams, 'excluded') : 0,
           or_matched_count: statsSources.orResults ? this.countCteRows(cteClause, cteParams, 'or_results') : 0,
           and_matched_count: statsSources.andResults ? this.countCteRows(cteClause, cteParams, 'and_results') : 0,
-          final_result_count: total,
+          final_result_count: shouldCountTotal ? total : rows.length,
           execution_time_ms: Date.now() - startTime,
         }
       : undefined;
 
-    return { images: rows, total, stats };
+    return {
+      images: rows,
+      total,
+      hasMore,
+      totalKnown: shouldCountTotal,
+      nextCursorValue: lastRow ? (sortBy === 'filename' ? lastRow.original_file_path : lastRow[sortBy]) : null,
+      nextCursorHash: lastRow?.composite_hash ?? null,
+      stats,
+    };
   }
 
   /** Count one generated CTE using the same scoped parameters as the search query. */

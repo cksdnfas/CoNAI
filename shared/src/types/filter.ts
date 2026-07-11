@@ -105,6 +105,10 @@ export interface ComplexSearchResponse {
     page: number;
     limit: number;
     totalPages: number;
+    hasMore?: boolean;
+    totalKnown?: boolean;
+    nextCursorValue?: string | number | null;
+    nextCursorHash?: string | null;
   };
   error?: string;
 }

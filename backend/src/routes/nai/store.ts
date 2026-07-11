@@ -63,8 +63,8 @@ router.post('/vibes', async (req: Request<{}, {}, {
   res.status(201).json(item);
 });
 
-router.delete('/vibes/:assetId', (req: Request<{ assetId: string }>, res: Response) => {
-  const deleted = deleteNaiVibeAsset(req.params.assetId);
+router.delete('/vibes/:assetId', async (req: Request<{ assetId: string }>, res: Response) => {
+  const deleted = await deleteNaiVibeAsset(req.params.assetId);
   if (!deleted) {
     res.status(404).json({ error: 'Stored vibe not found' });
     return;
@@ -126,8 +126,8 @@ router.post('/character-references', async (req: Request<{}, {}, {
   res.status(201).json(item);
 });
 
-router.delete('/character-references/:assetId', (req: Request<{ assetId: string }>, res: Response) => {
-  const deleted = deleteNaiCharacterReferenceAsset(req.params.assetId);
+router.delete('/character-references/:assetId', async (req: Request<{ assetId: string }>, res: Response) => {
+  const deleted = await deleteNaiCharacterReferenceAsset(req.params.assetId);
   if (!deleted) {
     res.status(404).json({ error: 'Stored character reference not found' });
     return;

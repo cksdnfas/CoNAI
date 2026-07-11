@@ -18,6 +18,66 @@ function getReadyAutoFolderImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('m');
 }
 
+function getRandomAutoFolderMembershipPivot(groupId: number): number | null {
+  const row = db.prepare(`
+    SELECT MAX(id) as maxId
+    FROM auto_folder_group_images
+    WHERE group_id = ?
+  `).get(groupId) as { maxId: number | null } | undefined;
+
+  return row?.maxId ? Math.max(1, Math.floor(Math.random() * row.maxId) + 1) : null;
+}
+
+/** Load a bounded auto-folder preview slice by indexed membership id. */
+function findAutoFolderPreviewRowsFromPivot(
+  groupId: number,
+  pivot: number,
+  direction: '>=' | '<',
+  limit: number,
+): ImageWithFileView[] {
+  return db.prepare(`
+    SELECT DISTINCT
+      m.*,
+      if.id as file_id,
+      if.original_file_path,
+      if.file_status,
+      if.file_type,
+      if.mime_type,
+      if.folder_id,
+      f.folder_name
+    FROM auto_folder_group_images afgi
+    INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
+    LEFT JOIN image_files if ON if.id = (
+      SELECT if2.id
+      FROM image_files if2
+      WHERE if2.composite_hash = afgi.composite_hash AND if2.file_status = 'active'
+      ORDER BY if2.id DESC
+      LIMIT 1
+    )
+    LEFT JOIN watched_folders f ON if.folder_id = f.id
+    WHERE afgi.group_id = ?
+      AND afgi.id ${direction} ?
+      AND ${getVisibleAutoFolderImageCondition()}
+      AND ${getReadyAutoFolderImageCondition()}
+    ORDER BY afgi.id ASC
+    LIMIT ?
+  `).all(groupId, pivot, limit) as ImageWithFileView[];
+}
+
+/** Pick a random bounded auto-folder slice and wrap at the end. */
+function findRandomAutoFolderPreviewRows(groupId: number, count: number): ImageWithFileView[] {
+  const pivot = getRandomAutoFolderMembershipPivot(groupId);
+  if (pivot === null) {
+    return [];
+  }
+
+  const rows = findAutoFolderPreviewRowsFromPivot(groupId, pivot, '>=', count);
+  if (rows.length < count) {
+    rows.push(...findAutoFolderPreviewRowsFromPivot(groupId, pivot, '<', count - rows.length));
+  }
+  return rows;
+}
+
 export class AutoFolderGroupModel {
   /**
    * 새 자동 폴더 그룹 생성
@@ -200,8 +260,9 @@ export class AutoFolderGroupImageModel {
   static findImagesByGroup(
     groupId: number,
     page: number = 1,
-    pageSize: number = 50
-  ): ImageMetadataRecord[] {
+    pageSize: number = 50,
+    options?: { useCursor?: boolean; cursorDate?: string; cursorHash?: string },
+  ): { images: ImageMetadataRecord[]; hasMore: boolean; nextCursorDate: string | null; nextCursorHash: string | null } {
     const offset = Math.floor((page - 1) * pageSize);
 
     try {
@@ -214,6 +275,9 @@ export class AutoFolderGroupImageModel {
         offsetType: typeof offset
       });
 
+      const cursorClause = options?.cursorDate && options.cursorHash
+        ? 'AND (m.first_seen_date < ? OR (m.first_seen_date = ? AND m.composite_hash < ?))'
+        : '';
       const query = `
         SELECT m.*,
         (SELECT id FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as id,
@@ -223,14 +287,32 @@ export class AutoFolderGroupImageModel {
         (SELECT original_file_path FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path
         FROM auto_folder_group_images afgi
         INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-        WHERE afgi.group_id = ? AND ${getReadyAutoFolderImageCondition()}
-        ORDER BY m.first_seen_date DESC
-        LIMIT ? OFFSET ?
+        WHERE afgi.group_id = ? AND ${getReadyAutoFolderImageCondition()} ${cursorClause}
+        ORDER BY m.first_seen_date DESC, m.composite_hash DESC
+        LIMIT ?${options?.useCursor ? '' : ' OFFSET ?'}
       `;
 
-      const rows = db.prepare(query).all(groupId, pageSize, offset) as ImageMetadataRecord[];
+      const cursorParams = options?.cursorDate && options.cursorHash
+        ? [options.cursorDate, options.cursorDate, options.cursorHash]
+        : [];
+      const rows = db.prepare(query).all(
+        groupId,
+        ...cursorParams,
+        pageSize + (options?.useCursor ? 1 : 0),
+        ...(options?.useCursor ? [] : [offset]),
+      ) as ImageMetadataRecord[];
+      const hasMore = options?.useCursor ? rows.length > pageSize : rows.length === pageSize;
+      if (options?.useCursor && rows.length > pageSize) {
+        rows.pop();
+      }
+      const lastRow = rows.at(-1);
       console.log('[AutoFolderGroup] findImagesByGroup result:', { rowCount: rows.length });
-      return rows || [];
+      return {
+        images: rows,
+        hasMore,
+        nextCursorDate: lastRow?.first_seen_date ?? null,
+        nextCursorHash: lastRow?.composite_hash ?? null,
+      };
     } catch (error) {
       console.error('[AutoFolderGroup] Error in findImagesByGroup:', {
         groupId,
@@ -262,17 +344,7 @@ export class AutoFolderGroupImageModel {
    * 그룹의 랜덤 이미지 조회 (썸네일용)
    */
   static findRandomImageForGroup(groupId: number): ImageMetadataRecord | null {
-    const query = `
-      SELECT m.*
-      FROM auto_folder_group_images afgi
-      INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-      WHERE afgi.group_id = ? AND ${getVisibleAutoFolderImageCondition()} AND ${getReadyAutoFolderImageCondition()}
-      ORDER BY RANDOM()
-      LIMIT 1
-    `;
-
-    const row = db.prepare(query).get(groupId) as ImageMetadataRecord | undefined;
-    return row || null;
+    return findRandomAutoFolderPreviewRows(groupId, 1)[0] ?? null;
   }
 
   /**
@@ -284,58 +356,8 @@ export class AutoFolderGroupImageModel {
     count: number = 8,
     includeChildren: boolean = true
   ): ImageWithFileView[] {
-    // 1. 현재 그룹에서 랜덤 이미지 조회
-    const query = `
-      SELECT DISTINCT
-        COALESCE(m.composite_hash, afgi.composite_hash) as composite_hash,
-        m.perceptual_hash,
-        m.dhash,
-        m.ahash,
-        m.color_histogram,
-        m.width,
-        m.height,
-        m.thumbnail_path,
-        m.ai_tool,
-        m.model_name,
-        m.lora_models,
-        m.steps,
-        m.cfg_scale,
-        m.sampler,
-        m.seed,
-        m.scheduler,
-        m.prompt,
-        m.negative_prompt,
-        m.denoise_strength,
-        m.generation_time,
-        m.batch_size,
-        m.batch_index,
-        m.auto_tags,
-        m.duration,
-        m.fps,
-        m.video_codec,
-        m.audio_codec,
-        m.bitrate,
-        m.rating_score,
-        m.first_seen_date,
-        m.metadata_updated_date,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_status,
-        if.file_type,
-        if.mime_type,
-        if.folder_id,
-        f.folder_name
-      FROM auto_folder_group_images afgi
-      LEFT JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-      LEFT JOIN image_files if ON afgi.composite_hash = if.composite_hash
-        AND if.file_status = 'active'
-      LEFT JOIN watched_folders f ON if.folder_id = f.id
-      WHERE afgi.group_id = ? AND ${getVisibleAutoFolderImageCondition()} AND ${getReadyAutoFolderImageCondition()}
-      ORDER BY RANDOM()
-      LIMIT ?
-    `;
-
-    const rows = db.prepare(query).all(groupId, count) as ImageWithFileView[];
+    // 1. 현재 그룹에서 indexed random pivot으로 이미지 조회
+    const rows = findRandomAutoFolderPreviewRows(groupId, count);
 
     // 이미지가 충분히 있거나, 자식 검색을 안 하면 바로 반환
     if (rows.length > 0 || !includeChildren) {

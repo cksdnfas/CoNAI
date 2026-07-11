@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import AdmZip from 'adm-zip';
+import { ZipArchive } from 'archiver';
 import type { Request, Response } from 'express';
 import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
@@ -234,19 +234,33 @@ export async function resolveDownloadFileForType(
   };
 }
 
-/** Build a zip archive from visible active files for batch download. */
-export async function buildBatchDownloadArchive(
+interface BatchDownloadArchiveEntry {
+  filePath: string;
+  name: string;
+}
+
+/** Resolve batch files with two bulk DB queries before streaming the archive. */
+async function prepareBatchDownloadArchive(
   compositeHashes: string[],
   downloadType: ImageDownloadType = 'original',
   options: { includeHidden?: boolean } = {},
 ) {
-  const zip = new AdmZip();
   const usedNames = new Map<string, number>();
-  let addedCount = 0;
   let totalSourceBytes = 0;
+  const limitedHashes = compositeHashes.slice(0, MAX_BATCH_DOWNLOAD_FILE_COUNT);
+  const metadataByHash = new Map(
+    MediaMetadataModel.findByHashes(limitedHashes).map((metadata) => [metadata.composite_hash, metadata]),
+  );
+  const fileByHash = new Map<string, ImageFileRecord>();
+  for (const file of ImageFileModel.findActiveByHashes(limitedHashes)) {
+    if (file.composite_hash && !fileByHash.has(file.composite_hash)) {
+      fileByHash.set(file.composite_hash, file);
+    }
+  }
+  const entries: BatchDownloadArchiveEntry[] = [];
 
-  for (const compositeHash of compositeHashes.slice(0, MAX_BATCH_DOWNLOAD_FILE_COUNT)) {
-    const metadata = MediaMetadataModel.findByHash(compositeHash);
+  for (const compositeHash of limitedHashes) {
+    const metadata = metadataByHash.get(compositeHash);
     if (
       !metadata ||
       !MediaPostprocessVisibilityService.isReadyRecord(metadata) ||
@@ -255,18 +269,17 @@ export async function buildBatchDownloadArchive(
       continue;
     }
 
-    const files = ImageFileModel.findActiveByHash(compositeHash);
-    if (files.length === 0) {
+    const file = fileByHash.get(compositeHash);
+    if (!file) {
       continue;
     }
 
-    const file = files[0];
     const resolved = await resolveDownloadFileForType(compositeHash, metadata, file, downloadType);
     if (!resolved) {
       continue;
     }
 
-    const stats = fs.statSync(resolved.filePath);
+    const stats = await fs.promises.stat(resolved.filePath);
     totalSourceBytes += stats.size;
     if (totalSourceBytes > MAX_BATCH_DOWNLOAD_TOTAL_SOURCE_BYTES) {
       throw new BatchDownloadLimitError(`Batch download is limited to ${MAX_BATCH_DOWNLOAD_TOTAL_SOURCE_BYTES} bytes of source files`);
@@ -284,16 +297,55 @@ export async function buildBatchDownloadArchive(
       ? candidateName
       : `${baseName}-${duplicateCount}${extension}`;
 
-    zip.addLocalFile(resolved.filePath, '', finalName);
-    addedCount += 1;
+    entries.push({ filePath: resolved.filePath, name: finalName });
   }
 
-  if (addedCount === 0) {
+  if (entries.length === 0) {
     return null;
   }
 
   return {
     archiveName: `conai-images-${downloadType}-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`,
-    zipBuffer: zip.toBuffer()
+    entries,
   };
+}
+
+/** Stream a zip archive with filesystem backpressure instead of buffering it in RAM. */
+export async function streamBatchDownloadArchive(
+  res: Response,
+  compositeHashes: string[],
+  downloadType: ImageDownloadType = 'original',
+  options: { includeHidden?: boolean } = {},
+): Promise<boolean> {
+  const prepared = await prepareBatchDownloadArchive(compositeHashes, downloadType, options);
+  if (!prepared) {
+    return false;
+  }
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${prepared.archiveName}"; filename*=UTF-8''${encodeURIComponent(prepared.archiveName)}`);
+
+  await new Promise<void>((resolve, reject) => {
+    const archive = new ZipArchive({ zlib: { level: 6 } });
+    const fail = (error: Error) => reject(error);
+
+    archive.once('error', fail);
+    res.once('error', fail);
+    res.once('close', () => {
+      if (!res.writableFinished) {
+        archive.abort();
+        resolve();
+      }
+    });
+    res.once('finish', resolve);
+    archive.pipe(res);
+
+    for (const entry of prepared.entries) {
+      archive.file(entry.filePath, { name: entry.name });
+    }
+
+    void archive.finalize();
+  });
+
+  return true;
 }

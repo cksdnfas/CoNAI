@@ -19,6 +19,32 @@ export type VideoOptimizationPersistResult = {
 /** Shared H.264 MP4 transcoding helper used by upload, generated-output, and backup-import flows. */
 export class VideoOptimizationService {
   static readonly OUTPUT_EXTENSION = '.mp4';
+  private static activeEncoderCount = 0;
+  private static readonly encoderWaiters: Array<() => void> = [];
+
+  private static getEncoderConcurrency() {
+    const configured = Number.parseInt(process.env.CONAI_VIDEO_ENCODER_CONCURRENCY ?? '', 10);
+    return Number.isInteger(configured) && configured > 0 ? Math.min(configured, 8) : 1;
+  }
+
+  /** Wait for one process-wide FFmpeg encoder slot. */
+  private static async acquireEncoderSlot(): Promise<() => void> {
+    if (this.activeEncoderCount >= this.getEncoderConcurrency()) {
+      await new Promise<void>((resolve) => this.encoderWaiters.push(resolve));
+    }
+
+    this.activeEncoderCount += 1;
+    let released = false;
+
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.activeEncoderCount -= 1;
+      this.encoderWaiters.shift()?.();
+    };
+  }
 
   private static getFFmpegPath() {
     return ffmpegPath || 'ffmpeg';
@@ -77,6 +103,7 @@ export class VideoOptimizationService {
 
   static async transcodeToMp4(inputPath: string, outputPath: string, options: VideoOptimizationRunOptions) {
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
+    const releaseEncoderSlot = await this.acquireEncoderSlot();
 
     const tempOutputPath = this.buildEncodingOutputPath(outputPath);
     await fs.promises.unlink(tempOutputPath).catch(() => undefined);
@@ -134,6 +161,8 @@ export class VideoOptimizationService {
     } catch (error) {
       await fs.promises.unlink(tempOutputPath).catch(() => undefined);
       throw error;
+    } finally {
+      releaseEncoderSlot();
     }
   }
 

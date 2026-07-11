@@ -92,7 +92,12 @@ function resolveSearchFilter(requestBody: ComplexSearchRequest): { filter?: Comp
  * }
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const requestBody = req.body as ComplexSearchRequest;
+  const requestBody = req.body as ComplexSearchRequest & {
+    pagination?: 'offset' | 'cursor';
+    cursorValue?: string | number | null;
+    cursorHash?: string;
+    includeTotal?: boolean;
+  };
 
   // Extract pagination and sorting
   const page = requestBody.page || 1;
@@ -112,7 +117,17 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const result = await ComplexFilterService.executeComplexSearch(
       filter,
       buildSearchScope(requestBody),
-      { page, limit, sortBy, sortOrder, includeStats: false }
+      {
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+        includeStats: false,
+        useCursor: requestBody.pagination === 'cursor',
+        cursorValue: requestBody.cursorValue,
+        cursorHash: requestBody.cursorHash,
+        includeTotal: requestBody.includeTotal,
+      }
     );
 
     // Enrich images with URLs and structured metadata
@@ -125,7 +140,11 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
         total: result.total,
         page,
         limit,
-        totalPages: Math.ceil(result.total / limit)
+        totalPages: result.totalKnown ? Math.ceil(result.total / limit) : 0,
+        hasMore: result.hasMore,
+        totalKnown: result.totalKnown,
+        nextCursorValue: result.nextCursorValue,
+        nextCursorHash: result.nextCursorHash,
       }
     };
 

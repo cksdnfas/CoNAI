@@ -4,12 +4,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useSyncExternalStore,
   type PropsWithChildren,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getAppSettings } from '@/lib/api-settings'
 import type { GeneralSettings } from '@/types/settings'
-import { featureLocaleCatalog } from './resources'
+import { authCatalog } from './resources/auth'
+import { shellCatalog } from './resources/shell'
 
 export type AppLanguage = GeneralSettings['language']
 export type TranslationDictionary = Partial<Record<AppLanguage, string>>
@@ -19,7 +21,26 @@ export type TranslationCatalog = Record<string, TranslationDictionary>
 
 const DEFAULT_LANGUAGE: AppLanguage = 'ko'
 const LANGUAGE_STORAGE_KEY = 'conai.language'
-const DEFAULT_CATALOG: TranslationCatalog = featureLocaleCatalog
+const DEFAULT_CATALOG: TranslationCatalog = { ...shellCatalog, ...authCatalog }
+const registeredCatalog: TranslationCatalog = { ...DEFAULT_CATALOG }
+const catalogListeners = new Set<() => void>()
+let catalogVersion = 0
+
+/** Register one route catalog before its lazy page renders. */
+export function registerTranslationCatalog(catalog: TranslationCatalog): void {
+  Object.assign(registeredCatalog, catalog)
+  catalogVersion += 1
+  catalogListeners.forEach((listener) => listener())
+}
+
+function subscribeCatalog(listener: () => void) {
+  catalogListeners.add(listener)
+  return () => catalogListeners.delete(listener)
+}
+
+function getCatalogVersion() {
+  return catalogVersion
+}
 
 export const SUPPORTED_LANGUAGES: AppLanguage[] = ['ko', 'en']
 
@@ -150,6 +171,7 @@ function withDefaultDateTimeOptions(
 }
 
 export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithChildren<{ catalog?: TranslationCatalog }>) {
+  const registeredCatalogVersion = useSyncExternalStore(subscribeCatalog, getCatalogVersion, getCatalogVersion)
   const storedLanguage = useMemo(() => readStoredLanguage(), [])
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -166,9 +188,14 @@ export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithC
     writeStoredLanguage(language)
   }, [language])
 
+  const activeCatalog = useMemo(
+    () => ({ ...registeredCatalog, ...catalog }),
+    [catalog, registeredCatalogVersion],
+  )
+
   const t = useCallback<I18nContextValue['t']>(
-    (input, params) => resolveTranslation(input, language, catalog, params),
-    [catalog, language],
+    (input, params) => resolveTranslation(input, language, activeCatalog, params),
+    [activeCatalog, language],
   )
 
   const formatNumber = useCallback<I18nContextValue['formatNumber']>(

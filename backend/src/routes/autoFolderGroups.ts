@@ -138,8 +138,16 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
       Math.max(1, parseInt(req.query.pageSize as string) || PAGINATION.DEFAULT_LIMIT),
       PAGINATION.MAX_LIMIT
     );
+    const useCursor = req.query.pagination === 'cursor';
+    const cursorDate = typeof req.query.cursor_date === 'string' ? req.query.cursor_date : undefined;
+    const cursorHash = typeof req.query.cursor_hash === 'string' ? req.query.cursor_hash : undefined;
 
-    const result = await AutoFolderGroupService.getGroupImages(id, page, pageSize);
+    const result = await AutoFolderGroupService.getGroupImages(id, page, pageSize, {
+      useCursor,
+      cursorDate,
+      cursorHash,
+      includeTotal: req.query.include_total !== 'false',
+    });
 
     // 이미지 메타데이터 보강 (URL 추가)
     const enrichedImages = result.images.map(img => enrichCompactImageWithFileView(img));
@@ -150,7 +158,11 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
         page: result.page,
         pageSize: result.pageSize,
         total: result.total,
-        totalPages: result.totalPages
+        totalPages: result.totalPages,
+        hasMore: result.hasMore,
+        totalKnown: result.totalKnown,
+        nextCursorDate: result.nextCursorDate,
+        nextCursorHash: result.nextCursorHash,
       }
     }));
   } catch (error) {
