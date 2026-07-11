@@ -1,10 +1,11 @@
-import { FolderMinus, FolderPlus, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { FolderMinus, FolderPlus, FolderTree, Play, RotateCcw, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Skeleton } from '@/components/ui/skeleton'
+import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { PageHeader } from '@/components/common/page-header'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -45,6 +46,7 @@ export function GroupPage() {
   const [selectedGroupImageIds, setSelectedGroupImageIds] = useState<string[]>([])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [downloadScope, setDownloadScope] = useState<'group' | 'selection' | null>(null)
+  const [isExplorerOpen, setIsExplorerOpen] = useState(false)
   const [groupImageCollectionFilter, setGroupImageCollectionFilter] = useState<'all' | 'manual' | 'auto'>('all')
   const isWideLayout = useDesktopPageLayout()
   const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
@@ -156,6 +158,7 @@ export function GroupPage() {
     setSelectedGroupImageIds([])
     setIsAssignModalOpen(false)
     setDownloadScope(null)
+    setIsExplorerOpen(false)
     setGroupImageCollectionFilter('all')
   }, [selectedGroupId, selectedSource.key])
 
@@ -189,17 +192,29 @@ export function GroupPage() {
         onChange={(nextSourceKey) => handleSelectSource(nextSourceKey as GroupSourceKey)}
       />
 
+      {!isWideLayout ? (
+        <Button type="button" variant="outline" className="w-full justify-between" onClick={() => setIsExplorerOpen(true)}>
+          <span className="inline-flex min-w-0 items-center gap-2">
+            <FolderTree className="h-4 w-4 shrink-0" />
+            <span className="truncate">{t({ ko: '폴더 탐색', en: 'Browse folders' })}</span>
+          </span>
+          <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(allGroups.length)}</span>
+        </Button>
+      ) : null}
+
       <div className={cn('grid gap-6', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
-        <GroupExplorerSidebarPanel
-          isWideLayout={isWideLayout}
-          groups={allGroups}
-          countMaps={groupCountMaps}
-          selectedGroupId={selectedGroupId}
-          isLoading={groupsQuery.isLoading}
-          isError={groupsQuery.isError}
-          errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
-          onSelectGroup={handleOpenGroup}
-        />
+        {isWideLayout ? (
+          <GroupExplorerSidebarPanel
+            isWideLayout={isWideLayout}
+            groups={allGroups}
+            countMaps={groupCountMaps}
+            selectedGroupId={selectedGroupId}
+            isLoading={groupsQuery.isLoading}
+            isError={groupsQuery.isError}
+            errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
+            onSelectGroup={handleOpenGroup}
+          />
+        ) : null}
 
         <section className="space-y-6">
           {selectedGroupId ? (
@@ -303,6 +318,32 @@ export function GroupPage() {
           ) : null}
         </section>
       </div>
+
+      {!isWideLayout ? (
+        <BottomDrawerSheet
+          open={isExplorerOpen}
+          title={t({ ko: '폴더 탐색', en: 'Folder explorer' })}
+          subtitle={getSourceLabel(selectedSource, 'root')}
+          ariaLabel={t({ ko: '그룹 폴더 탐색', en: 'Group folder explorer' })}
+          closeLabel={t({ ko: '탐색기 닫기', en: 'Close explorer' })}
+          onClose={() => setIsExplorerOpen(false)}
+        >
+          <GroupExplorerSidebarPanel
+            embedded
+            isWideLayout={false}
+            groups={allGroups}
+            countMaps={groupCountMaps}
+            selectedGroupId={selectedGroupId}
+            isLoading={groupsQuery.isLoading}
+            isError={groupsQuery.isError}
+            errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
+            onSelectGroup={(nextGroupId) => {
+              setIsExplorerOpen(false)
+              handleOpenGroup(nextGroupId)
+            }}
+          />
+        </BottomDrawerSheet>
+      ) : null}
 
       <ImageSelectionBar
         selectedCount={selectedGroupImageIds.length}

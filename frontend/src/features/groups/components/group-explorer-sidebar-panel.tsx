@@ -18,6 +18,7 @@ interface GroupExplorerSidebarPanelProps {
   isError: boolean
   errorMessage?: string | null
   headerExtra?: ReactNode
+  embedded?: boolean
   onSelectGroup: (groupId: number) => void
 }
 
@@ -31,20 +32,13 @@ export function GroupExplorerSidebarPanel({
   isError,
   errorMessage,
   headerExtra,
+  embedded = false,
   onSelectGroup,
 }: GroupExplorerSidebarPanelProps) {
   const { t, formatNumber } = useI18n()
 
-  return (
-    <ExplorerSidebar
-      title={t({ ko: '탐색기', en: 'Explorer' })}
-      badge={<Badge variant="outline">{formatNumber(groups.length)}</Badge>}
-      floatingFrame
-      floatingLockStorageKey="conai:groups:sidebar-locked"
-      className={cn('z-20 isolate', isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
-      bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
-      headerExtra={headerExtra}
-    >
+  const content = (
+    <>
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, index) => (
@@ -63,6 +57,33 @@ export function GroupExplorerSidebarPanel({
       {!isLoading && !isError ? (
         <GroupTree groups={groups} countMaps={countMaps} selectedGroupId={selectedGroupId} onSelectGroup={onSelectGroup} />
       ) : null}
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <div className="space-y-4 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{t({ ko: '폴더 탐색', en: 'Folder explorer' })}</h2>
+          <Badge variant="outline">{formatNumber(groups.length)}</Badge>
+        </div>
+        {headerExtra}
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <ExplorerSidebar
+      title={t({ ko: '탐색기', en: 'Explorer' })}
+      badge={<Badge variant="outline">{formatNumber(groups.length)}</Badge>}
+      floatingFrame
+      floatingLockStorageKey="conai:groups:sidebar-locked"
+      className={cn('z-20 isolate', isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
+      bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
+      headerExtra={headerExtra}
+    >
+      {content}
     </ExplorerSidebar>
   )
 }
