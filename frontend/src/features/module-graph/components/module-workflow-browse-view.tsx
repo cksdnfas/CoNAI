@@ -17,12 +17,11 @@ export function ModuleWorkflowBrowseView({
   graphExecutionPanel,
   browseContentPanel,
 }: ModuleWorkflowBrowseViewProps) {
-  const hasSelectedWorkflow = Boolean(workflowRunnerPanel)
-
   return (
-    <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
+    <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
       {workflowListSidebar}
-      <div className={cn('grid gap-6', hasSelectedWorkflow && 'xl:grid-cols-[minmax(320px,0.9fr)_minmax(380px,1.1fr)]')}>
+
+      <div className="space-y-6">
         {workflowRunnerPanel}
         {graphExecutionPanel ?? browseContentPanel}
       </div>

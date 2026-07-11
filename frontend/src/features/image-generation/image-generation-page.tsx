@@ -63,8 +63,6 @@ export function ImageGenerationPage() {
     enabled: selectedComfyWorkflowId !== null,
   })
   const imageGenerationTabs = useMemo(() => getImageGenerationTabs(t), [t])
-  const generationToolTabs = useMemo(() => imageGenerationTabs.filter((tab) => tab.value === 'nai' || tab.value === 'codex' || tab.value === 'comfyui'), [imageGenerationTabs])
-  const advancedGenerationTabs = useMemo(() => imageGenerationTabs.filter((tab) => tab.value === 'workflows' || tab.value === 'reservations'), [imageGenerationTabs])
   const visibleTabs = imageGenerationTabs
   const visibleTabValues = useMemo(() => new Set(visibleTabs.map((tab) => tab.value)), [visibleTabs])
   const requestedTab = parseImageGenerationTab(searchParams.get('tab'))
@@ -187,24 +185,11 @@ export function ImageGenerationPage() {
           title={t({ ko: '이미지 생성', en: 'Image Generation' })}
         />
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">{t({ ko: '기본 도구', en: 'Basic tools' })}</div>
-            <SegmentedTabBar
-              value={generationToolTabs.some((tab) => tab.value === activeTab) ? activeTab : ''}
-              items={generationToolTabs}
-              onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">{t({ ko: '고급 도구', en: 'Advanced tools' })}</div>
-            <SegmentedTabBar
-              value={advancedGenerationTabs.some((tab) => tab.value === activeTab) ? activeTab : ''}
-              items={advancedGenerationTabs}
-              onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
-            />
-          </div>
-        </div>
+        <SegmentedTabBar
+          value={activeTab}
+          items={visibleTabs}
+          onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
+        />
       </div>
 
       {activeTab === 'workflows' ? (
