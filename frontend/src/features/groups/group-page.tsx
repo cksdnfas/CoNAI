@@ -1,4 +1,4 @@
-import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { FolderMinus, FolderPlus, Play, RotateCcw, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -164,7 +164,18 @@ export function GroupPage() {
       <PageHeader
         eyebrow={isWideLayout ? 'Image' : undefined}
         title={t({ ko: '그룹', en: 'Groups' })}
-        actions={!selectedGroupId && !isCustomSource ? (
+        actions={!selectedGroupId && isCustomSource ? (
+          <>
+            <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollectAll()} disabled={autoCollectAllMutation.isPending}>
+              <Play className="h-4 w-4" />
+              {autoCollectAllMutation.isPending ? t('groups.group.page.running.all.auto.collect.jobs') : t('groups.group.page.auto.collect.all')}
+            </Button>
+            <Button type="button" size="sm" onClick={handleOpenCreateModal}>
+              <FolderPlus className="h-4 w-4" />
+              {t('groups.group.page.new.group')}
+            </Button>
+          </>
+        ) : !selectedGroupId && !isCustomSource ? (
           <Button type="button" size="sm" variant="secondary" onClick={() => void handleRebuildAutoFolderGroups()} disabled={rebuildAutoFolderGroupsMutation.isPending}>
             <RotateCcw className="h-4 w-4" />
             {rebuildAutoFolderGroupsMutation.isPending ? t('groups.group.page.rebuilding.watched.folders') : t('groups.group.page.rebuild.watched.folders')}
@@ -187,60 +198,6 @@ export function GroupPage() {
           isLoading={groupsQuery.isLoading}
           isError={groupsQuery.isError}
           errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
-          headerExtra={isCustomSource ? (
-            <div className="flex flex-wrap justify-end gap-2 border-b border-white/5 pb-3">
-              {selectedGroupId ? (
-                <>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    className="bg-surface-low"
-                    onClick={handleOpenGroupDownloadModal}
-                    disabled={groupFileCountsQuery.isLoading || (downloadGroupArchiveMutation.isPending && downloadScope === 'group')}
-                    aria-label={t('groups.group.page.download.current.group')}
-                    title={downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? t('groups.group.page.preparing.download') : t('groups.group.page.download.current.group')}
-                  >
-                    <Download className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    className="bg-surface-low"
-                    onClick={handleOpenEditModal}
-                    aria-label={t('groups.group.page.edit.current.group')}
-                    title={t('groups.group.page.edit.current.group')}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </>
-              ) : null}
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="outline"
-                className="bg-surface-low"
-                onClick={() => void handleRunAutoCollectAll()}
-                disabled={autoCollectAllMutation.isPending}
-                aria-label={t('groups.group.page.auto.collect.all')}
-                title={autoCollectAllMutation.isPending ? t('groups.group.page.running.all.auto.collect.jobs') : t('groups.group.page.auto.collect.all')}
-              >
-                <Play className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="outline"
-                className="bg-surface-low"
-                onClick={handleOpenCreateModal}
-                aria-label={t('groups.group.page.new.group')}
-                title={t('groups.group.page.new.group')}
-              >
-                <FolderPlus className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : undefined}
           onSelectGroup={handleOpenGroup}
         />
 
@@ -282,8 +239,7 @@ export function GroupPage() {
 
           {selectedGroupId && selectedGroupQuery.data ? (
             <div className="space-y-6">
-              {isCustomSource ? null : (
-                <GroupDetailHeaderCard
+              <GroupDetailHeaderCard
                   group={selectedGroupQuery.data}
                   selectedGroupHierarchy={selectedGroupHierarchy}
                   isCustomSource={isCustomSource}
@@ -300,8 +256,7 @@ export function GroupPage() {
                   onOpenEditModal={handleOpenEditModal}
                   onRunAutoCollect={() => void handleRunAutoCollect()}
                   onDeleteGroup={() => void handleDeleteSelectedGroup()}
-                />
-              )}
+              />
 
               {childGroups.length > 0 ? (
                 <GroupNavigationGridSection

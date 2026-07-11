@@ -78,7 +78,9 @@ export function GroupDetailHeaderCard({
               </Button>
               <AnchoredPopup open={actionsOpen} anchorRef={moreButtonRef} onClose={() => setActionsOpen(false)} align="end" className="min-w-[220px]">
                 <div className={anchoredPopupBodyClassName}>
-                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Group actions</div>
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {t({ ko: '현재 그룹 작업', en: 'Current group actions' })}
+                  </div>
                   <div className="space-y-1.5">
                     <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => {
                       setActionsOpen(false)
@@ -112,8 +114,12 @@ export function GroupDetailHeaderCard({
     >
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Badge variant="secondary">{t({ ko: '이미지 {count}개', en: '{count} images' }, { count: imageCountLabel })}</Badge>
-        <Badge variant="outline">manual {formatNumber(group.manual_added_count ?? 0)}</Badge>
-        <Badge variant="outline">auto {formatNumber(group.auto_collected_count ?? 0)}</Badge>
+        {isCustomSource ? (
+          <>
+            <Badge variant="outline">{t({ ko: '직접 추가 {count}', en: 'Manual {count}' }, { count: formatNumber(group.manual_added_count ?? 0) })}</Badge>
+            <Badge variant="outline">{t({ ko: '자동 수집 {count}', en: 'Auto-collected {count}' }, { count: formatNumber(group.auto_collected_count ?? 0) })}</Badge>
+          </>
+        ) : null}
         {selectedGroupHierarchy?.has_children ? <Badge variant="outline">{t({ ko: '하위 {count}', en: 'Children {count}' }, { count: formatNumber(selectedGroupHierarchy.child_count) })}</Badge> : null}
       </div>
 
