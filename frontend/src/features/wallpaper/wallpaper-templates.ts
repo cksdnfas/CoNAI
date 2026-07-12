@@ -28,7 +28,7 @@ export const WALLPAPER_TEMPLATES: WallpaperTemplateDefinition[] = [
   {
     id: 'studio-status',
     name: { ko: '스튜디오 상태판', en: 'Studio Status' },
-    description: { ko: '시계, 워크플로 상태, 실행 흐름을 한 화면에 배치', en: 'Clock, workflow status, and activity in one view' },
+    description: { ko: '시계, 워크플로 상태, 최근 결과를 한 화면에 배치', en: 'Clock, workflow status, and recent results in one view' },
     accent: 'linear-gradient(135deg, #111827, #164e63)',
   },
   {
@@ -66,17 +66,17 @@ export function buildWallpaperTemplateLayout(templateId: WallpaperTemplateId, ca
     }
     case 'studio-status': {
       const queue = createWallpaperWidgetInstance('queue-status', canvas, 1)
-      const pulse = createWallpaperWidgetInstance('activity-pulse', canvas, 2)
+      const recentResults = createWallpaperWidgetInstance('recent-results', canvas, 2)
       widgets = isPortrait
         ? [
             withFrame({ ...clock, settings: { ...clock.settings, visualStyle: 'glass', showSeconds: false, showDate: true } }, { x: 2, y: 2, w: 14, h: 5 }),
             withFrame(queue, { x: 2, y: 9, w: 14, h: 8 }),
-            withFrame(pulse, { x: 2, y: 19, w: 14, h: 7 }),
+            withFrame(recentResults, { x: 2, y: 19, w: 14, h: 7 }),
           ]
         : [
             withFrame({ ...clock, settings: { ...clock.settings, visualStyle: 'glass', showSeconds: false, showDate: true } }, { x: 1, y: 1, w: 10, h: 4 }),
             withFrame(queue, { x: 1, y: 6, w: 10, h: 7 }),
-            withFrame(pulse, { x: 13, y: 3, w: 10, h: 8 }),
+            withFrame(recentResults, { x: 13, y: 3, w: 10, h: 8 }),
           ]
       break
     }

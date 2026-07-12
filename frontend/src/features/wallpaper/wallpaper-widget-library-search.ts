@@ -26,7 +26,7 @@ const WALLPAPER_WIDGET_LIBRARY_FOLDERS: WallpaperWidgetLibraryFolder[] = [
   {
     id: 'realtime',
     title: { ko: '실시간 정보', en: 'Realtime' },
-    widgetTypes: ['clock', 'queue-status', 'activity-pulse'],
+    widgetTypes: ['clock', 'queue-status'],
   },
   {
     id: 'images',

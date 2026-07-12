@@ -4,6 +4,7 @@ import { getImageListPreviewUrl } from '@/features/images/components/image-list/
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
+  advanceWallpaperFloatingCollageCardMotion,
   buildWallpaperFloatingCollageCardStates,
   buildWallpaperFloatingCollageSeeds,
   clampWallpaperFloatingCollageScalePercent,
@@ -24,6 +25,7 @@ import {
   resolveWallpaperFloatingCollageVisualBounds,
   resolveWallpaperFloatingCollageVisualMotion,
   resizeWallpaperFloatingCollageCard,
+  shouldSwapWallpaperFloatingCollageImage,
   type WallpaperFloatingCollageCardState,
 } from './wallpaper-floating-collage-utils'
 import type { WallpaperWidgetInstance } from './wallpaper-types'
@@ -213,43 +215,34 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
           )
           const resizedCard = resizeWallpaperFloatingCollageCard(card, currentGeometry, containerSize.width, containerSize.height, motionStrength)
 
-          let nextX = resizedCard.x + ((card.vx * deltaMs) / 1000)
-          let nextY = resizedCard.y + ((card.vy * deltaMs) / 1000)
-          let nextVx = card.vx
-          let nextVy = card.vy
-          let bounceEvents = 0
+          const motionStep = advanceWallpaperFloatingCollageCardMotion({
+            ...card,
+            x: resizedCard.x,
+            y: resizedCard.y,
+            width: resizedCard.width,
+            height: resizedCard.height,
+          }, deltaMs, containerSize.width, containerSize.height, motionStrength)
+          const {
+            x: nextX,
+            y: nextY,
+            vx: nextVx,
+            vy: nextVy,
+            rotationBase: nextRotationBase,
+            bounceEvents,
+          } = motionStep
 
-          const bounds = resolveWallpaperFloatingCollageVisualBounds({
+          const finalBounds = resolveWallpaperFloatingCollageVisualBounds({
             x: nextX,
             y: nextY,
             width: resizedCard.width,
             height: resizedCard.height,
-            rotationBase: card.rotationBase,
+            rotationBase: nextRotationBase,
             depth: card.depth,
             wobblePhase: card.wobblePhase,
           }, containerSize.width, containerSize.height, motionStrength)
-
-          if (nextX < bounds.minX) {
-            nextX = bounds.minX + (bounds.minX - nextX)
-            nextVx = Math.abs(nextVx)
-            bounceEvents += 1
-          } else if (nextX > bounds.maxX) {
-            nextX = bounds.maxX - (nextX - bounds.maxX)
-            nextVx = -Math.abs(nextVx)
-            bounceEvents += 1
-          }
-
-          if (nextY < bounds.minY) {
-            nextY = bounds.minY + (bounds.minY - nextY)
-            nextVy = Math.abs(nextVy)
-            bounceEvents += 1
-          } else if (nextY > bounds.maxY) {
-            nextY = bounds.maxY - (nextY - bounds.maxY)
-            nextVy = -Math.abs(nextVy)
-            bounceEvents += 1
-          }
-
-          const nextBounceCount = bounceEvents > 0 ? card.bounceCount + 1 : card.bounceCount
+          const boundedX = clampWallpaperMetric(nextX, finalBounds.minX, finalBounds.maxX)
+          const boundedY = clampWallpaperMetric(nextY, finalBounds.minY, finalBounds.maxY)
+          const nextBounceCount = card.bounceCount + bounceEvents
           const nextElapsedSinceSwapMs = imageSwapMode === 'time' ? card.elapsedSinceSwapMs + deltaMs : 0
           const nextTransitionElapsedMs = card.previousImageIndex === null
             ? card.transitionElapsedMs
@@ -257,23 +250,28 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
           const resolvedPreviousImageIndex = card.previousImageIndex !== null && nextTransitionElapsedMs < transitionDurationMs
             ? card.previousImageIndex
             : null
-          const shouldSwapImage = images.length > 1 && (
-            imageSwapMode === 'time'
-              ? nextElapsedSinceSwapMs >= swapIntervalMs
-              : bounceEvents > 0 && nextBounceCount >= swapBounceCount
+          const shouldSwapImage = shouldSwapWallpaperFloatingCollageImage(
+            images.length,
+            imageSwapMode,
+            nextElapsedSinceSwapMs,
+            swapIntervalMs,
+            bounceEvents,
+            nextBounceCount,
+            swapBounceCount,
           )
 
           if (!shouldSwapImage) {
             incrementWallpaperFloatingCollageImageUsage(usedImageKeys, currentImageKey)
             return {
               ...card,
-              x: nextX,
-              y: nextY,
+              x: boundedX,
+              y: boundedY,
               width: resizedCard.width,
               height: resizedCard.height,
               aspectRatio: currentAspectRatio,
               vx: nextVx,
               vy: nextVy,
+              rotationBase: nextRotationBase,
               previousImageIndex: resolvedPreviousImageIndex,
               transitionElapsedMs: resolvedPreviousImageIndex === null ? transitionDurationMs : nextTransitionElapsedMs,
               bounceCount: nextBounceCount,
@@ -297,8 +295,8 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
           const nextSizedCard = resizeWallpaperFloatingCollageCard(
             {
               ...card,
-              x: nextX,
-              y: nextY,
+              x: boundedX,
+              y: boundedY,
               width: resizedCard.width,
               height: resizedCard.height,
             },
@@ -319,6 +317,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
             aspectRatio: nextAspectRatio,
             vx: nextVx,
             vy: nextVy,
+            rotationBase: nextRotationBase,
             imageIndex: nextImageIndex,
             previousImageIndex: card.imageIndex,
             transitionElapsedMs: 0,
@@ -381,6 +380,10 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
           transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
         }
         const mediaClassName = cn('h-full w-full select-none pointer-events-none', fitMode === 'contain' ? 'object-contain' : 'object-cover')
+        const cardClassName = cn(
+          'absolute overflow-hidden rounded-2xl border border-white/15 shadow-[0_18px_48px_rgba(0,0,0,0.30)] will-change-transform',
+          widget.settings.showBackground === true ? 'bg-surface-high' : 'bg-transparent',
+        )
         const easedTransitionProgress = previousImage
           ? evaluateWallpaperAnimationEasingAtTime(swapTransitionEasing, clampWallpaperMetric(card.transitionElapsedMs / Math.max(transitionDurationMs, 1), 0, 1))
           : 1
@@ -423,7 +426,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
             <button
               key={card.key}
               type="button"
-              className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_18px_48px_rgba(0,0,0,0.30)] will-change-transform cursor-zoom-in"
+              className={cn(cardClassName, 'cursor-zoom-in')}
               style={cardStyle}
               onClick={(event) => {
                 event.stopPropagation()
@@ -447,7 +450,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
         return (
           <div
             key={card.key}
-            className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_18px_48px_rgba(0,0,0,0.30)] will-change-transform"
+            className={cardClassName}
             style={cardStyle}
           >
             {cardLayers}

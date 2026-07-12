@@ -1,6 +1,5 @@
 import { memo, useCallback, useMemo, useState } from 'react'
 import {
-  Activity,
   BarChart3,
   ChevronDown,
   ChevronRight,
@@ -46,10 +45,6 @@ function getWallpaperWidgetIcon(widgetType: WallpaperWidgetType) {
 
   if (widgetType === 'queue-status') {
     return BarChart3
-  }
-
-  if (widgetType === 'activity-pulse') {
-    return Activity
   }
 
   if (widgetType === 'recent-results') {

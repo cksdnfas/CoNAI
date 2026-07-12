@@ -24,12 +24,16 @@ import {
 } from '../features/wallpaper/wallpaper-widget-registry'
 import type { WallpaperCanvasPreset, WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from '../features/wallpaper/wallpaper-types'
 import { buildWallpaperTemplateLayout, WALLPAPER_TEMPLATES } from '../features/wallpaper/wallpaper-templates'
+import {
+  advanceWallpaperFloatingCollageCardMotion,
+  resolveWallpaperFloatingCollageVisualBounds,
+  shouldSwapWallpaperFloatingCollageImage,
+} from '../features/wallpaper/wallpaper-floating-collage-utils'
 
 const expectedWidgetTypes = [
   'clock',
   'queue-status',
   'recent-results',
-  'activity-pulse',
   'group-image-view',
   'image-showcase',
   'floating-collage',
@@ -54,6 +58,7 @@ const wallpaperWidgetUtilsSource = readFileSync(resolve(process.cwd(), 'src/feat
 const wallpaperClockSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-clock-widget-body.tsx'), 'utf8')
 const wallpaperLivelyHelpSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-lively-help-modal.tsx'), 'utf8')
 const wallpaperImageBodiesSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-image-widget-bodies.tsx'), 'utf8')
+const wallpaperFloatingCollageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-floating-collage-widget-body.tsx'), 'utf8')
 const wallpaperInspectorSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-widget-inspector.tsx'), 'utf8')
 const viteConfigSource = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8')
 const appearanceSettingsRouteSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/settings/appearance.routes.ts'), 'utf8')
@@ -101,6 +106,14 @@ assert(
     && wallpaperClockSource.includes("style === 'split'")
     && wallpaperClockSource.includes("return 'clean'"),
   'rebuilt clock must render legacy saved visual styles through safe replacements',
+)
+assert(
+  wallpaperImageBodiesSource.includes("widget.settings.showBackground === true ? 'bg-surface-low' : 'bg-transparent'"),
+  'image showcase must not leave a card surface behind when widget background is disabled',
+)
+assert(
+  wallpaperFloatingCollageSource.includes("widget.settings.showBackground === true ? 'bg-surface-high' : 'bg-transparent'"),
+  'floating collage cards must not leave a surface behind when widget background is disabled',
 )
 assert(
   wallpaperLivelyHelpSource.includes('https://github.com/rocksdanister/lively')
@@ -178,11 +191,37 @@ for (const canvasPreset of canvasPresets) {
   assert(canvasPreset.aspectRatioLabel.trim().length > 0, `${canvasPreset.id}: aspect ratio label must be visible`)
 }
 
+const floatingCard = {
+  x: 250,
+  y: 120,
+  width: 120,
+  height: 90,
+  vx: 4_000,
+  vy: -2_600,
+  rotationBase: 0,
+  depth: 2,
+  wobblePhase: 0.8,
+  bounceCount: 0,
+}
+const floatingMotionStep = advanceWallpaperFloatingCollageCardMotion(floatingCard, 120, 500, 320, 1)
+const floatingMotionBounds = resolveWallpaperFloatingCollageVisualBounds({
+  ...floatingCard,
+  ...floatingMotionStep,
+}, 500, 320, 1)
+assert(floatingMotionStep.bounceEvents >= 3, 'floating collage must preserve every wall impact during multi-bounce frames')
+assert(floatingMotionStep.x >= floatingMotionBounds.minX && floatingMotionStep.x <= floatingMotionBounds.maxX, 'floating collage must remain inside horizontal visual bounds after overshoot')
+assert(floatingMotionStep.y >= floatingMotionBounds.minY && floatingMotionStep.y <= floatingMotionBounds.maxY, 'floating collage must remain inside vertical visual bounds after overshoot')
+assert(floatingMotionStep.rotationBase !== floatingCard.rotationBase, 'floating collage wall impacts must apply a small rotation impulse')
+assert(!shouldSwapWallpaperFloatingCollageImage(8, 'bounce', 0, 12_000, 1, 2, 3), 'floating collage must keep the image before the configured wall-impact count')
+assert(shouldSwapWallpaperFloatingCollageImage(8, 'bounce', 0, 12_000, 1, 3, 3), 'floating collage must swap exactly when the configured wall-impact count is reached')
+assert(!shouldSwapWallpaperFloatingCollageImage(1, 'bounce', 0, 12_000, 1, 3, 3), 'floating collage must not swap when no alternate image exists')
+
 assert(WALLPAPER_TEMPLATES.length >= 4, 'wallpaper editor should offer multiple useful starter templates')
 for (const template of WALLPAPER_TEMPLATES) {
   for (const canvasPreset of canvasPresets) {
     const templateLayout = buildWallpaperTemplateLayout(template.id, canvasPreset.id, template.name.en)
     assert(templateLayout.widgets.length > 0, `${template.id}: template must contain widgets`)
+    assert(!templateLayout.widgets.some((widget) => widget.type === 'activity-pulse'), `${template.id}: template must not create deprecated activity pulse widgets`)
     for (const widget of templateLayout.widgets) {
       assertWidgetWithinCanvas(widget, canvasPreset, `${template.id} ${canvasPreset.id} ${widget.type}`)
     }
@@ -195,6 +234,7 @@ assert(fallbackCanvasPreset.id === canvasPresets[0].id, 'unknown canvas preset i
 const widgetDefinitions = listWallpaperWidgetDefinitions()
 assert(widgetDefinitions.length === expectedWidgetTypes.length, 'widget registry must expose exactly the supported widget definitions')
 assertUnique(widgetDefinitions.map((definition) => definition.type), 'wallpaper widget definition types')
+assert(getWallpaperWidgetDefinition('activity-pulse').type === 'activity-pulse', 'deprecated activity pulse must remain readable for saved-layout compatibility')
 
 for (const widgetType of expectedWidgetTypes) {
   const definition = getWallpaperWidgetDefinition(widgetType)

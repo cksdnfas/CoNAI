@@ -49,6 +49,15 @@ export interface WallpaperFloatingCollageCardState {
   elapsedSinceSwapMs: number
 }
 
+export interface WallpaperFloatingCollageMotionStep {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  rotationBase: number
+  bounceEvents: number
+}
+
 export function getWallpaperFloatingCollageImageKey(image: { composite_hash?: string | null; id?: number | string | null; original_file_path?: string | null; image_url?: string | null; thumbnail_url?: string | null } | null | undefined) {
   if (!image) {
     return ''
@@ -145,6 +154,25 @@ export function clampWallpaperFloatingCollageScalePercent(value: number | undefi
 
 export function clampWallpaperFloatingCollageTransitionDurationMs(value: number | undefined) {
   return getWallpaperImageTransitionDurationMs(undefined, value)
+}
+
+/** Decide whether one card reached its configured image-swap trigger. */
+export function shouldSwapWallpaperFloatingCollageImage(
+  imageCount: number,
+  imageSwapMode: 'time' | 'bounce',
+  elapsedSinceSwapMs: number,
+  swapIntervalMs: number,
+  bounceEvents: number,
+  bounceCount: number,
+  swapBounceCount: number,
+) {
+  if (imageCount <= 1) {
+    return false
+  }
+
+  return imageSwapMode === 'time'
+    ? elapsedSinceSwapMs >= swapIntervalMs
+    : bounceEvents > 0 && bounceCount >= swapBounceCount
 }
 
 export function resolveWallpaperFloatingCollageTransitionLayerStyle(
@@ -309,6 +337,82 @@ export function resolveWallpaperFloatingCollageVisualBounds(
     visualMargins.marginX,
     visualMargins.marginY,
   )
+}
+
+/** Reflect one axis until an overshooting position is back inside its legal range. */
+function reflectWallpaperFloatingCollageAxis(position: number, velocity: number, min: number, max: number) {
+  if (max - min <= 0.001) {
+    return { position: min, velocity: 0, bounceEvents: 0 }
+  }
+
+  let nextPosition = position
+  let nextVelocity = velocity
+  let bounceEvents = 0
+
+  while (nextPosition < min || nextPosition > max) {
+    if (nextPosition < min) {
+      nextPosition = min + (min - nextPosition)
+      nextVelocity = Math.abs(nextVelocity)
+    } else {
+      nextPosition = max - (nextPosition - max)
+      nextVelocity = -Math.abs(nextVelocity)
+    }
+    bounceEvents += 1
+  }
+
+  return { position: nextPosition, velocity: nextVelocity, bounceEvents }
+}
+
+/** Advance one card with bounded reflection, wall-impact counting, and a small collision rotation. */
+export function advanceWallpaperFloatingCollageCardMotion(
+  card: Pick<WallpaperFloatingCollageCardState, 'x' | 'y' | 'width' | 'height' | 'vx' | 'vy' | 'rotationBase' | 'depth' | 'wobblePhase' | 'bounceCount'>,
+  deltaMs: number,
+  containerWidth: number,
+  containerHeight: number,
+  motionStrength: number,
+): WallpaperFloatingCollageMotionStep {
+  const elapsedSec = Math.max(0, deltaMs) / 1000
+  const proposedX = card.x + (card.vx * elapsedSec)
+  const proposedY = card.y + (card.vy * elapsedSec)
+  const bounds = resolveWallpaperFloatingCollageVisualBounds({
+    ...card,
+    x: proposedX,
+    y: proposedY,
+  }, containerWidth, containerHeight, motionStrength)
+  const reflectedX = reflectWallpaperFloatingCollageAxis(proposedX, card.vx, bounds.minX, bounds.maxX)
+  const reflectedY = reflectWallpaperFloatingCollageAxis(proposedY, card.vy, bounds.minY, bounds.maxY)
+  const bounceEvents = reflectedX.bounceEvents + reflectedY.bounceEvents
+
+  if (bounceEvents === 0) {
+    return {
+      x: reflectedX.position,
+      y: reflectedY.position,
+      vx: reflectedX.velocity,
+      vy: reflectedY.velocity,
+      rotationBase: card.rotationBase,
+      bounceEvents,
+    }
+  }
+
+  const rotationDirection = Math.sin(card.wobblePhase + ((card.bounceCount + bounceEvents) * 1.7)) >= 0 ? 1 : -1
+  const rotationImpulse = rotationDirection * Math.min(4.5, (1.15 + (card.depth * 0.45)) * bounceEvents)
+  const rotationBase = clampWallpaperMetric(card.rotationBase + rotationImpulse, -16, 16)
+  const rotatedBounds = resolveWallpaperFloatingCollageVisualBounds({
+    ...card,
+    x: reflectedX.position,
+    y: reflectedY.position,
+    rotationBase,
+  }, containerWidth, containerHeight, motionStrength)
+  const position = clampWallpaperFloatingCollagePosition(reflectedX.position, reflectedY.position, rotatedBounds)
+
+  return {
+    x: position.x,
+    y: position.y,
+    vx: reflectedX.velocity,
+    vy: reflectedY.velocity,
+    rotationBase,
+    bounceEvents,
+  }
 }
 
 /** Resolve one spawn interpolation progress value from the current anchor state. */

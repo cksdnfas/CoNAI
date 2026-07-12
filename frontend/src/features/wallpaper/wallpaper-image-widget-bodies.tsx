@@ -593,7 +593,10 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
       hoverMotion={imageHoverMotion}
       hoverEasing={hoverEasing}
       {...getWallpaperPreviewOpenSettings(widget)}
-      className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-surface-low"
+      className={cn(
+        'relative h-full overflow-hidden rounded-xl border border-border/70',
+        widget.settings.showBackground === true ? 'bg-surface-low' : 'bg-transparent',
+      )}
       imageClassName={cn(
         'h-full w-full rounded-xl ease-out will-change-transform',
         widget.settings.fitMode === 'contain' ? 'object-contain' : widget.settings.fitMode === 'scale-down' ? 'object-scale-down' : 'object-cover',

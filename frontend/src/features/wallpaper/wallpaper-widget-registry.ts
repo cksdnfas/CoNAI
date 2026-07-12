@@ -216,7 +216,7 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
 
 /** Return the registered wallpaper widget types. */
 export function listWallpaperWidgetDefinitions() {
-  return WALLPAPER_WIDGET_DEFINITIONS
+  return WALLPAPER_WIDGET_DEFINITIONS.filter((definition) => definition.type !== 'activity-pulse')
 }
 
 /** Find one wallpaper widget definition by type. */
