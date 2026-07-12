@@ -51,7 +51,8 @@ export default {
       {
         text: '릴리즈 노트',
         items: [
-          { text: '최신 안정 릴리즈 · 26.7.1', link: '/RELEASE-MD/RELEASE_26.7.1' },
+          { text: '최신 안정 릴리즈 · 26.07.12', link: '/RELEASE-MD/RELEASE_26.07.12' },
+          { text: '이전 안정 릴리즈 · 26.7.1', link: '/RELEASE-MD/RELEASE_26.7.1' },
           { text: '26.6.19 작업 노트', link: '/RELEASE-MD/RELEASE_26.6.19' },
           { text: '26.6.17 작업 노트', link: '/RELEASE-MD/RELEASE_26.6.17' },
           { text: '26.6.8 작업 노트', link: '/RELEASE-MD/RELEASE_26.6.8' },

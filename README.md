@@ -5,11 +5,11 @@
 **ComfyUI · NovelAI · Stable Diffusion 결과물을 한곳에서 찾고, 정리하고, 다시 생성하는 로컬 AI 미디어 작업대**
 
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f?style=for-the-badge)](https://cksdnfas.github.io/CoNAI/)
-[![Release](https://img.shields.io/badge/release-26.7.1-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.7.1.md)
+[![Release](https://img.shields.io/badge/release-26.07.12-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.07.12.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=for-the-badge)](package.json)
 [![Docs Deploy](https://img.shields.io/github/actions/workflow/status/cksdnfas/CoNAI/docs-pages.yml?branch=main&label=pages&style=for-the-badge)](https://github.com/cksdnfas/CoNAI/actions/workflows/docs-pages.yml)
 
-[📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.7.1 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.7.1.md)
+[📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.07.12 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.07.12.md)
 
 </div>
 
@@ -25,15 +25,15 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 
 ---
 
-## 26.7.1 alpha release
+## 26.07.12 release
 
-- 워크플로우 그래프: import/export, typed random routing, 실행 readiness, recovery handoff 보강
-- 생성 이력: bulk rerun, 선택 rerun, brief snapshot/import/restore 흐름 추가
-- 릴리즈 운영: readiness history, evidence export, approval-gated operation checklist 정리
-- MCP/데모: HTTP endpoint opt-in, dry-run evidence, public demo permission 경계 보강
-- 구조 정리: backend service/route helper와 frontend module graph/image generation panel 분리
+- 그룹 탐색: 중첩 폴더 이미지 통합, 모바일 폴더 서랍, 도구 모음과 그룹 작업 정리
+- 배경화면: Lively 시작 흐름, 템플릿, 시계와 콜라주 위젯, 런타임/미리보기 안정화
+- 생성 화면: ComfyUI·NAI 작업 공간 단순화, wildcard 선택과 예약 UI 개선
+- 성능: 이미지 처리 hot path, 폴더 다운로드 스캔, DB watcher 쓰기 부하 최적화
+- 품질: 설정 구조와 번역 정리, API/큐/그래프 모듈 경계 분리, 검증 계약 강화
 
-자세한 내용은 [`docs/RELEASE-MD/RELEASE_26.7.1.md`](docs/RELEASE-MD/RELEASE_26.7.1.md)에서 확인합니다.
+자세한 내용은 [`docs/RELEASE-MD/RELEASE_26.07.12.md`](docs/RELEASE-MD/RELEASE_26.07.12.md)에서 확인합니다.
 
 ---
 
@@ -47,11 +47,12 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 | 이미지 생성 개요 | https://cksdnfas.github.io/CoNAI/GUIDE/GENERATION_OVERVIEW.html |
 | 워크플로우 편집 | https://cksdnfas.github.io/CoNAI/GUIDE/WORKFLOW_EDITOR.html |
 | MCP 가이드 | https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html |
-| 최신 안정 릴리즈 | [`docs/RELEASE-MD/RELEASE_26.7.1.md`](docs/RELEASE-MD/RELEASE_26.7.1.md) |
+| 최신 안정 릴리즈 | [`docs/RELEASE-MD/RELEASE_26.07.12.md`](docs/RELEASE-MD/RELEASE_26.07.12.md) |
+| 이전 안정 릴리즈 | [`docs/RELEASE-MD/RELEASE_26.7.1.md`](docs/RELEASE-MD/RELEASE_26.7.1.md) |
 | 26.6.19 작업 노트 | [`docs/RELEASE-MD/RELEASE_26.6.19.md`](docs/RELEASE-MD/RELEASE_26.6.19.md) |
 | 26.6.17 작업 노트 | [`docs/RELEASE-MD/RELEASE_26.6.17.md`](docs/RELEASE-MD/RELEASE_26.6.17.md) |
 | 26.6.8 작업 노트 | [`docs/RELEASE-MD/RELEASE_26.6.8.md`](docs/RELEASE-MD/RELEASE_26.6.8.md) |
-| 이전 안정 릴리즈 | [`docs/RELEASE-MD/RELEASE_26.6.3.md`](docs/RELEASE-MD/RELEASE_26.6.3.md) |
+| 26.6.3 릴리즈 | [`docs/RELEASE-MD/RELEASE_26.6.3.md`](docs/RELEASE-MD/RELEASE_26.6.3.md) |
 
 ---
 
