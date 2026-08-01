@@ -79,7 +79,8 @@ export async function attemptQueueUpstreamCancellation(jobId: number, options?: 
   const cancellationState = resolveCancellationState(result, assignedServer)
 
   // R-c: 취소 결과는 컬럼으로 승격해 기록한다(payload 전체 재작성 없이 읽을 수 있다).
-  // `_debug` 미러는 큐 상세 응답(queue-read-routes)이 아직 그 키를 읽기 때문에 함께 유지한다.
+  // 큐 상세 응답은 이제 컬럼(provider_cancel_state / cancel_requested_at / provider_job_id)을 1차 출처로 읽는다.
+  // `_debug` 미러가 남아 있는 이유는 컬럼이 없는 진단 필드(endpoint / error / 상류 원본 result) 때문뿐이다.
   if (result.interrupted || result.deleted) {
     // 상류 큐에서 우리 항목을 확인하고 지웠거나 중단시켰다 = 확인된 취소.
     // 마커로 뒤늦게 찾은 prompt id 도 함께 채워 넣어 이후 추적이 가능하게 한다.

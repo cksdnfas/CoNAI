@@ -8,6 +8,8 @@ import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { cancelGenerationQueueJob, getGenerationQueue } from '@/lib/api-image-generation-queue'
@@ -149,6 +151,8 @@ export function GenerationQueueHeaderWidget() {
   const { showSnackbar } = useSnackbar()
   const { t, locale, formatNumber } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
+  // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 기존 interval 로직이 그대로 되살아난다.
+  const { status: runtimeStreamStatus } = useRuntimeEventStream()
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<HeaderPopupTab>('jobs')
   const [pendingJobId, setPendingJobId] = useState<number | null>(null)
@@ -184,7 +188,7 @@ export function GenerationQueueHeaderWidget() {
     enabled: hasGenerationPermission,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
-      return getGenerationQueueHeaderRefetchInterval(activeCount, isOpen)
+      return resolveStreamFallbackInterval(runtimeStreamStatus, getGenerationQueueHeaderRefetchInterval(activeCount, isOpen))
     },
   })
 
@@ -198,7 +202,7 @@ export function GenerationQueueHeaderWidget() {
     enabled: isFilteredQueueQueryEnabled,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
-      return getGenerationQueueHeaderRefetchInterval(activeCount, isOpen)
+      return resolveStreamFallbackInterval(runtimeStreamStatus, getGenerationQueueHeaderRefetchInterval(activeCount, isOpen))
     },
   })
 
@@ -216,7 +220,7 @@ export function GenerationQueueHeaderWidget() {
     staleTime: 30_000,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.filter((schedule) => schedule.status === 'active').length ?? 0
-      return activeCount > 0 || isOpen ? 4000 : false
+      return resolveStreamFallbackInterval(runtimeStreamStatus, activeCount > 0 || isOpen ? 4000 : false)
     },
   })
 

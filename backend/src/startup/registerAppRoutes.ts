@@ -38,6 +38,7 @@ import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
 import { runtimeAppearanceRoutes } from '../routes/runtimeAppearance.routes';
 import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.routes';
 import publicWorkflowRoutes from '../routes/public-workflows.routes';
+import { runtimeEventStreamRoutes } from '../routes/events/event-stream.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
 import {
@@ -165,6 +166,9 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   });
 
   app.use('/api/auth', authRoutes);
+  // 런타임 이벤트 스트림은 수십 분 열려 있으므로 세션을 변조하는 공용 인증 미들웨어를 쓰지 않는다.
+  // 인증/권한은 라우트 내부의 read-only 가드(resolveEventStreamAccess)가 직접 해석한다.
+  app.use('/api/events', runtimeEventStreamRoutes);
   app.use('/api/external-api', optionalAuth, externalApiRoutes);
   app.use('/api/civitai', options.readOnlyLimiter, optionalAuth, civitaiRoutes);
   app.use('/api/wallpaper-runtime', options.readOnlyLimiter, (req, res, next) => {

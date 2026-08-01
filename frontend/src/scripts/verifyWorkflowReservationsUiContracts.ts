@@ -240,6 +240,26 @@ function assertReservationSelectionLookupPolicy() {
   )
 }
 
+function assertReservationStreamFallbackPolicy() {
+  const panelSource = source('features/image-generation/components/workflow-reservations-panel.tsx')
+
+  assertNode.match(
+    panelSource,
+    /const \{ status: runtimeStreamStatus \} = useRuntimeEventStream\(\)/,
+    'reservation panel should read the shared runtime stream status instead of opening its own connection',
+  )
+  assertNode.match(
+    panelSource,
+    /const legacyInterval = executions\.some\(\(execution\) => isActiveReservationExecution\(execution\.status\)\) \? 2_000 : false/,
+    'reservation panel should keep its 2s active polling decision reachable as a fallback',
+  )
+  assertNode.match(
+    panelSource,
+    /return resolveStreamFallbackInterval\(runtimeStreamStatus, legacyInterval\)/,
+    'reservation polling should be wrapped by the runtime stream fallback so polling returns when SSE dies',
+  )
+}
+
 assertImageGenerationTabs()
 assertActiveExecutionDetection()
 assertVisibleReservationExecutions()
@@ -247,5 +267,6 @@ assertStatusVariants()
 assertTypeAndTimingLabels()
 assertRunSummariesAndSorting()
 assertReservationSelectionLookupPolicy()
+assertReservationStreamFallbackPolicy()
 
 console.log('Workflow reservations UI contracts verified.')

@@ -419,6 +419,16 @@ function assertHeaderWidgetStorageGuards() {
     'queue header refetch intervals should share one visibility-aware policy',
   )
   assertEqual(
+    (headerWidgetSource.match(/refetchInterval: \(/g) ?? []).length,
+    (headerWidgetSource.match(/resolveStreamFallbackInterval\(runtimeStreamStatus,/g) ?? []).length,
+    'every queue header polling site should stay wrapped in the runtime stream fallback so polling returns when SSE dies',
+  )
+  assertEqual(
+    headerWidgetSource.includes('const { status: runtimeStreamStatus } = useRuntimeEventStream()'),
+    true,
+    'queue header should read the shared runtime stream status instead of opening its own connection',
+  )
+  assertEqual(
     headerWidgetSource.includes('const canManageRecord = (!isCancelRequested || canRetryCancel) && hasRecordPermission'),
     true,
     'queue header should keep a cancel retry affordance after a cancellation request (CR-3)',

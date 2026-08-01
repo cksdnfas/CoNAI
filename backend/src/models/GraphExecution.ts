@@ -2,6 +2,7 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionRecord, GraphExecutionStatus, GraphExecutionTriggerType } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 import { chunkSqliteValues, compareNewestFirst, sqliteInPlaceholders } from '../utils/sqliteBatch'
+import { publishGraphExecutionEvent } from '../services/runtime-events/runtimeEventPublishers'
 
 export type GraphExecutionStatusCounts = {
   completed: number
@@ -34,6 +35,43 @@ function createEmptyStatusCounts(): GraphExecutionStatusCounts {
     running: 0,
     failed: 0,
     cancelled: 0,
+  }
+}
+
+/**
+ * Publish one execution status event for the stored row.
+ *
+ * 상태 쓰기가 큐/실행기/복구 경로 여러 곳으로 갈라져 있어 모델 레이어에서 발행한다.
+ * 예약 패널과 그래프 페이지가 같은 이벤트를 소비한다.
+ */
+function publishExecutionStatusById(id: number) {
+  try {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT id, graph_workflow_id, status, trigger_type, schedule_id
+      FROM graph_executions
+      WHERE id = ?
+    `).get(id) as {
+      id: number
+      graph_workflow_id: number
+      status: GraphExecutionStatus
+      trigger_type: GraphExecutionTriggerType
+      schedule_id: number | null
+    } | undefined
+
+    if (!row) {
+      return
+    }
+
+    publishGraphExecutionEvent({
+      execution_id: row.id,
+      graph_workflow_id: row.graph_workflow_id,
+      status: row.status,
+      trigger_type: row.trigger_type,
+      schedule_id: row.schedule_id ?? null,
+    })
+  } catch (error) {
+    console.warn(`⚠️ Failed to publish graph execution event for execution ${id}:`, error instanceof Error ? error.message : error)
   }
 }
 
@@ -179,7 +217,10 @@ export class GraphExecutionModel {
       startedAt,
     )
 
-    return info.lastInsertRowid as number
+    const executionId = info.lastInsertRowid as number
+    // E17: enqueue(queued) / 즉시 실행(running) 모두 여기서 시작한다.
+    publishExecutionStatusById(executionId)
+    return executionId
   }
 
   static findById(id: number): GraphExecutionRecord | null {
@@ -314,7 +355,13 @@ export class GraphExecutionModel {
       return update.changes > 0 ? GraphExecutionModel.findById(row.id) : null
     })
 
-    return claimTransaction()
+    const claimed = claimTransaction()
+    if (claimed) {
+      // E16: claim 은 updateStatus 를 우회하는 raw UPDATE 라 여기서 직접 발행한다.
+      publishExecutionStatusById(claimed.id)
+    }
+
+    return claimed
   }
 
   /** Cancel queued graph executions for schedule ids without loading the whole backlog. */
@@ -327,6 +374,14 @@ export class GraphExecutionModel {
     let cancelledCount = 0
     for (const batch of chunkSqliteValues(scheduleIds)) {
       const placeholders = sqliteInPlaceholders(batch)
+      // 전이 대상 id 를 먼저 확보해야 취소된 행별 이벤트를 발행할 수 있다.
+      const cancelledIds = (db.prepare(`
+        SELECT id
+        FROM graph_executions
+        WHERE status = 'queued'
+          AND schedule_id IN (${placeholders})
+      `).all(...batch) as Array<{ id: number }>).map((row) => row.id)
+
       const result = db.prepare(`
         UPDATE graph_executions
         SET status = 'cancelled',
@@ -336,6 +391,8 @@ export class GraphExecutionModel {
           AND schedule_id IN (${placeholders})
       `).run(...batch)
       cancelledCount += result.changes
+      // E16: 예약 정리로 취소된 대기 실행도 예약 패널에 즉시 반영되어야 한다.
+      cancelledIds.forEach((executionId) => publishExecutionStatusById(executionId))
     }
     return cancelledCount
   }
@@ -421,6 +478,11 @@ export class GraphExecutionModel {
       WHERE id = ?
     `).run(status, errorMessage ?? null, failedNodeId ?? null, status, isTerminal ? 1 : 0, id)
 
+    if (info.changes > 0) {
+      // E16: 의도적 덮어쓰기 경로(재시작 복구, queued 취소, running 승격)
+      publishExecutionStatusById(id)
+    }
+
     return info.changes > 0
   }
 
@@ -443,6 +505,11 @@ export class GraphExecutionModel {
       WHERE id = ?
         AND status NOT IN ('completed', 'failed', 'cancelled')
     `).run(status, errorMessage ?? null, failedNodeId ?? null, status, isTerminal ? 1 : 0, id)
+
+    if (info.changes > 0) {
+      // E16: finalizeExecutionStatus / updateStatusIfActive 가 지나는 확정 funnel
+      publishExecutionStatusById(id)
+    }
 
     return info.changes > 0
   }

@@ -2,9 +2,50 @@ import { apiGenDb } from '../database/apiGenerationDb';
 import type { AuthAccountType } from './AuthAccount';
 import { buildUpdateQuery, filterDefined } from '../utils/dynamicUpdate';
 import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
+import { publishHistoryRecordEvent } from '../services/runtime-events/runtimeEventPublishers';
 
 export type ServiceType = 'comfyui' | 'novelai' | 'codex';
 export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * Publish one runtime history event for the stored row.
+ *
+ * 히스토리 상태 쓰기 호출부가 20곳 넘게 흩어져 있어 예외적으로 모델 레이어에서 발행한다.
+ * payload 가 전이 전 상태를 필요로 하지 않으므로 모델 내부 발행이 안전하다.
+ */
+function publishHistoryEventById(id: number, name: 'history.record.created' | 'history.record.status'): void {
+  try {
+    const row = apiGenDb.prepare(`
+      SELECT id, queue_job_id, service_type, workflow_id, generation_status, composite_hash, requested_by_account_id
+      FROM api_generation_history
+      WHERE id = ?
+    `).get(id) as {
+      id: number;
+      queue_job_id: number | null;
+      service_type: ServiceType;
+      workflow_id: number | null;
+      generation_status: GenerationStatus;
+      composite_hash: string | null;
+      requested_by_account_id: number | null;
+    } | undefined;
+
+    if (!row) {
+      return;
+    }
+
+    publishHistoryRecordEvent(name, {
+      history_id: row.id,
+      queue_job_id: row.queue_job_id ?? null,
+      service_type: row.service_type,
+      workflow_id: row.workflow_id ?? null,
+      generation_status: row.generation_status,
+      composite_hash: row.composite_hash ?? null,
+      requested_by_account_id: row.requested_by_account_id ?? null,
+    });
+  } catch (error) {
+    console.warn(`⚠️ Failed to publish generation history event for record ${id}:`, error instanceof Error ? error.message : error);
+  }
+}
 
 export interface GenerationHistoryRecord {
   id?: number;
@@ -209,7 +250,10 @@ export class GenerationHistoryModel {
       data.metadata
     );
 
-    return info.lastInsertRowid as number;
+    const historyId = info.lastInsertRowid as number;
+    // E13: 신규 히스토리 행. 서비스/라우트/MCP 의 모든 생성 경로가 이 한 곳을 지난다.
+    publishHistoryEventById(historyId, 'history.record.created');
+    return historyId;
   }
 
   /**
@@ -317,6 +361,8 @@ export class GenerationHistoryModel {
       WHERE id = ?
     `);
     stmt.run(status, status, id);
+    // E10
+    publishHistoryEventById(id, 'history.record.status');
   }
 
   /**
@@ -335,6 +381,8 @@ export class GenerationHistoryModel {
       WHERE id = ?
     `);
     stmt.run(paths.compositeHash || null, id);
+    // E11: composite_hash 확정은 히스토리 카드가 실제 미디어로 바뀌는 순간이다.
+    publishHistoryEventById(id, 'history.record.status');
   }
 
   /**
@@ -349,6 +397,8 @@ export class GenerationHistoryModel {
       WHERE id = ?
     `);
     stmt.run(errorMessage, id);
+    // E12
+    publishHistoryEventById(id, 'history.record.status');
   }
 
   /** Mark in-flight histories linked to terminal queue jobs as failed. */
@@ -359,6 +409,14 @@ export class GenerationHistoryModel {
     }
 
     const placeholders = uniqueJobIds.map(() => '?').join(',');
+    // 전이 대상 id 를 먼저 확보해야 UPDATE 이후 개별 이벤트를 발행할 수 있다.
+    const affectedIds = (apiGenDb.prepare(`
+      SELECT id
+      FROM api_generation_history
+      WHERE queue_job_id IN (${placeholders})
+        AND generation_status IN ('pending', 'processing')
+    `).all(...uniqueJobIds) as Array<{ id: number }>).map((row) => row.id);
+
     const stmt = apiGenDb.prepare(`
       UPDATE api_generation_history
       SET generation_status = 'failed',
@@ -368,6 +426,8 @@ export class GenerationHistoryModel {
         AND generation_status IN ('pending', 'processing')
     `);
     const info = stmt.run(errorMessage, ...uniqueJobIds);
+    // E12: 큐 잡 단위 일괄 실패도 행별로 알린다.
+    affectedIds.forEach((historyId) => publishHistoryEventById(historyId, 'history.record.status'));
     return info.changes;
   }
 

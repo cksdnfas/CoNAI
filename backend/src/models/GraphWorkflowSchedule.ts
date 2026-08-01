@@ -5,6 +5,45 @@ import {
   GraphWorkflowScheduleUpdateData,
 } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
+import { publishGraphScheduleEvent } from '../services/runtime-events/runtimeEventPublishers'
+
+/**
+ * Publish one schedule change event for the stored row.
+ *
+ * 스케줄 쓰기 호출부가 서비스/라우트 11곳에 흩어져 있어 모델 레이어에서 발행한다.
+ */
+function publishScheduleChangedById(id: number) {
+  try {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT id, graph_workflow_id, status, next_run_at, last_execution_id, stop_reason_code
+      FROM graph_workflow_schedules
+      WHERE id = ?
+    `).get(id) as {
+      id: number
+      graph_workflow_id: number
+      status: string
+      next_run_at: string | null
+      last_execution_id: number | null
+      stop_reason_code: string | null
+    } | undefined
+
+    if (!row) {
+      return
+    }
+
+    publishGraphScheduleEvent({
+      schedule_id: row.id,
+      graph_workflow_id: row.graph_workflow_id,
+      status: row.status,
+      next_run_at: row.next_run_at ?? null,
+      last_execution_id: row.last_execution_id ?? null,
+      stop_reason_code: row.stop_reason_code ?? null,
+    })
+  } catch (error) {
+    console.warn(`⚠️ Failed to publish workflow schedule event for schedule ${id}:`, error instanceof Error ? error.message : error)
+  }
+}
 
 function stringifyInputValues(value: Record<string, unknown> | null | undefined) {
   if (value === undefined) {
@@ -138,7 +177,10 @@ export class GraphWorkflowScheduleModel {
       data.last_enqueued_at ?? null,
     )
 
-    return info.lastInsertRowid as number
+    const scheduleId = info.lastInsertRowid as number
+    // E15: 신규 예약
+    publishScheduleChangedById(scheduleId)
+    return scheduleId
   }
 
   /** Update one schedule row. */
@@ -156,6 +198,11 @@ export class GraphWorkflowScheduleModel {
 
     const { sql, values } = buildUpdateQuery('graph_workflow_schedules', updates, { id })
     const info = db.prepare(sql).run(...values)
+    if (info.changes > 0) {
+      // E14: status / next_run_at / stop_reason 변경
+      publishScheduleChangedById(id)
+    }
+
     return info.changes > 0
   }
 

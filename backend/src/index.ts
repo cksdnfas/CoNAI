@@ -129,6 +129,12 @@ console.log(`[Config] Express trust proxy: ${String(trustProxySetting)}`);
 
 const skipAdminRateLimit = (req: Request): boolean => req.session?.accountType === 'admin';
 
+// SSE 스트림은 연결 1건이 요청 1건으로 카운트된다. 재접속 백오프가 겹치면 일반 API 예산을
+// 갉아먹으므로 스트림 경로만 레이트 리밋에서 제외한다.
+const isRuntimeEventStreamRequest = (req: Request): boolean => req.originalUrl.startsWith('/api/events/');
+
+const skipApiRateLimit = (req: Request): boolean => skipAdminRateLimit(req) || isRuntimeEventStreamRequest(req);
+
 // Rate limiting for login endpoint (prevent brute-force attacks)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15분
@@ -146,7 +152,7 @@ const apiLimiter = rateLimit({
   message: 'Too many requests from this IP',
   standardHeaders: true,
   legacyHeaders: false,
-  skip: skipAdminRateLimit,
+  skip: skipApiRateLimit,
 });
 
 // Stricter rate limiting for upload endpoints
@@ -332,6 +338,13 @@ async function startServer() {
       readOnlyLimiter,
       uploadLimiter,
     });
+
+    // 4-3. Runtime event broadcaster (SSE fan-out for queue/history/schedule/execution state)
+    // 인메모리 버스만 구독하므로 구독자가 없으면 타이머조차 뜨지 않는다.
+    const { RuntimeEventBroadcaster } = await import('./services/runtime-events/runtimeEventBroadcaster');
+    if (shouldStartHttpServer) {
+      RuntimeEventBroadcaster.start();
+    }
 
     // 5. Bind API generation history to the unified user DB
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
@@ -588,6 +601,17 @@ ${tips.join('\n')}
         process.exit(1);
       }, 10000);
       forceExitTimer.unref();
+
+      // 열린 SSE 스트림은 idle 소켓이 아니라서 서버 close 가 영원히 resolve 되지 않는다.
+      // 반드시 서버를 닫기 전에 모든 스트림을 먼저 닫아야 드레인이 제때 끝난다.
+      try {
+        const closedStreamCount = RuntimeEventBroadcaster.shutdown();
+        if (closedStreamCount > 0) {
+          console.log(`✅ Runtime event streams closed (${closedStreamCount})`);
+        }
+      } catch (error) {
+        console.warn('⚠️  Error closing runtime event streams:', error);
+      }
 
       // Stop accepting connections and drain in-flight requests first,
       // so nothing is still being served when services and databases go away.

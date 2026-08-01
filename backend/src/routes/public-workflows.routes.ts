@@ -10,6 +10,7 @@ import { GenerationHistoryModel } from '../models/GenerationHistory';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { GenerationQueueService } from '../services/generationQueueService';
+import { publishQueueJobEvent } from '../services/runtime-events/runtimeEventPublishers';
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
 import { AUTO_COLLECT_SOURCE_PATH } from '../services/comfyDropdownAutoCollectionService';
@@ -370,6 +371,8 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
     return jobId;
   });
   const records = jobIds.map((jobId) => GenerationQueueModel.findListRecordById(jobId));
+  // E8: public 워크플로 enqueue 도 같은 큐를 쓰므로 같은 이벤트를 발행한다.
+  records.forEach((record) => publishQueueJobEvent('queue.job.created', record));
   GenerationQueueService.requestDispatch();
 
   res.status(201).json({

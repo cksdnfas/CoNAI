@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
@@ -65,6 +67,8 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const { t, formatNumber } = useI18n()
   const queryClient = useQueryClient()
   const authStatusQuery = useAuthStatusQuery()
+  // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 기존 refresh cadence 가 그대로 되살아난다.
+  const { status: runtimeStreamStatus } = useRuntimeEventStream()
   const {
     columnCount: historyColumnCount,
     setColumnCount: setHistoryColumnCount,
@@ -129,15 +133,20 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     refetchInterval: (query) => {
       const pages = query.state.data?.pages ?? []
       const records = pages.flatMap((page) => page.records)
-      if (hasActiveGenerationHistory(records)) {
-        return GENERATION_HISTORY_ACTIVE_REFRESH_MS
+      // 기존 cadence 로직은 그대로 두고 스트림 상태로만 감싼다(폴백 보존).
+      const resolveLegacyHistoryInterval = (): number | false => {
+        if (hasActiveGenerationHistory(records)) {
+          return GENERATION_HISTORY_ACTIVE_REFRESH_MS
+        }
+
+        if (historyRefreshWatchUntil > Date.now()) {
+          return GENERATION_HISTORY_ACTIVE_REFRESH_MS
+        }
+
+        return hasPostprocessPendingHistory(records) ? GENERATION_HISTORY_POSTPROCESS_REFRESH_MS : false
       }
 
-      if (historyRefreshWatchUntil > Date.now()) {
-        return GENERATION_HISTORY_ACTIVE_REFRESH_MS
-      }
-
-      return hasPostprocessPendingHistory(records) ? GENERATION_HISTORY_POSTPROCESS_REFRESH_MS : false
+      return resolveStreamFallbackInterval(runtimeStreamStatus, resolveLegacyHistoryInterval())
     },
   })
   const refetchHistory = historyQuery.refetch

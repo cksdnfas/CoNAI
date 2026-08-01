@@ -5,6 +5,7 @@ import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUISer
 import { WorkflowModel } from '../../models/Workflow'
 import { GenerationQueueService } from '../../services/generationQueueService'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
+import { publishQueueJobEvent } from '../../services/runtime-events/runtimeEventPublishers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import {
   getRequesterAccountId,
@@ -304,6 +305,14 @@ export function createGenerationQueueActionRoutes() {
     }
 
     const record = GenerationQueueModel.findListRecordById(jobIds[0] ?? 0)
+
+    // E7: 사용자 enqueue. 폴링 대신 헤더 위젯이 즉시 신규 잡을 보게 하는 유일한 경로다.
+
+    for (const jobId of jobIds) {
+
+      publishQueueJobEvent('queue.job.created', GenerationQueueModel.findListRecordById(jobId))
+
+    }
 
     GenerationQueueService.requestDispatch()
 

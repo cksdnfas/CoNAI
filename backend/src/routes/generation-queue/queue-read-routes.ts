@@ -108,6 +108,8 @@ export function createGenerationQueueReadRoutes() {
 
       const snapshot = await readComfyRequestDebugSnapshot(job.id)
 
+      // Wave 2 #2 가 승격한 취소 컬럼이 이제 1차 출처다. `_debug` 미러는 컬럼 이전 행을 위한 레거시 폴백으로만 읽는다.
+
       const debugMeta = parseQueueDebugMeta(job)
 
       res.json({
@@ -118,13 +120,23 @@ export function createGenerationQueueReadRoutes() {
 
           ...snapshot,
 
-          cancellation_requested_at: typeof debugMeta?.cancellation_requested_at === 'string' ? debugMeta.cancellation_requested_at : null,
+          cancellation_requested_at: job.cancel_requested_at
+
+            ?? (typeof debugMeta?.cancellation_requested_at === 'string' ? debugMeta.cancellation_requested_at : null),
+
+          cancellation_origin: job.cancel_origin ?? null,
 
           cancellation_endpoint: typeof debugMeta?.cancellation_endpoint === 'string' ? debugMeta.cancellation_endpoint : null,
 
-          cancellation_prompt_id: typeof debugMeta?.cancellation_prompt_id === 'string' ? debugMeta.cancellation_prompt_id : null,
+          cancellation_prompt_id: job.provider_job_id
 
-          cancellation_state: typeof debugMeta?.cancellation_state === 'string' ? debugMeta.cancellation_state : null,
+            ?? (typeof debugMeta?.cancellation_prompt_id === 'string' ? debugMeta.cancellation_prompt_id : null),
+
+          cancellation_state: job.provider_cancel_state
+
+            ?? (typeof debugMeta?.cancellation_state === 'string' ? debugMeta.cancellation_state : null),
+
+          provider_submit_state: job.provider_submit_state ?? null,
 
           cancellation_error: typeof debugMeta?.cancellation_error === 'string' ? debugMeta.cancellation_error : null,
 

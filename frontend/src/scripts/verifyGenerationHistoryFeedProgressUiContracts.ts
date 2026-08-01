@@ -158,6 +158,16 @@ function assertRefreshPolicySource() {
     /hasInFlightHistory/,
     'generation history should not fast-poll forever from display-only processing status',
   )
+  match(
+    generationHistoryPanelSource,
+    /return resolveStreamFallbackInterval\(runtimeStreamStatus, resolveLegacyHistoryInterval\(\)\)/,
+    'history polling should be wrapped by the runtime stream fallback so the legacy cadence returns when SSE dies',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const \{ status: runtimeStreamStatus \} = useRuntimeEventStream\(\)/,
+    'generation history should read the shared runtime stream status instead of opening its own connection',
+  )
 }
 
 function assertImageListCallbackSourcePolicy() {

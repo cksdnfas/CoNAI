@@ -13,6 +13,7 @@ import { GenerationHistoryModel } from '../../models/GenerationHistory'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { GenerationQueueService } from '../generationQueueService'
+import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
 import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import { resolveComfyGraphOutputDescriptor, resolveComfyOutputMimeType } from './comfyArtifactOutput'
@@ -344,6 +345,9 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
     request_payload: queuePayload,
     request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
   })
+
+  // E9: 그래프 실행이 만든 잡도 사용자 큐와 같은 채널로 보여야 한다.
+  publishQueueJobEvent('queue.job.created', GenerationQueueModel.findListRecordById(jobId))
 
   GenerationQueueService.requestDispatch()
 

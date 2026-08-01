@@ -16,6 +16,7 @@ import {
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
 import { QueueServiceThrottle, type ThrottledServiceType } from './generation-queue/queueServiceThrottle'
 import { QueueTerminalJobWaiters } from './generation-queue/queueTerminalWaiters'
+import { publishQueueJobEvent } from './runtime-events/runtimeEventPublishers'
 import { ALLOWED_QUEUE_TRANSITIONS, buildQueueTransitionUpdates } from './generation-queue/queueTransitions'
 import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
@@ -176,6 +177,9 @@ export class GenerationQueueService {
     queueCancellationRegistry.abort(jobId, 'cancel_requested')
 
     const flagged = GenerationQueueModel.findById(jobId) ?? latest
+    // E4: "취소 요청 접수" 이벤트다. 확정(terminal)은 워커/스위퍼가 별도 E1 이벤트로 알린다.
+    publishQueueJobEvent('queue.job.cancel-requested', flagged, { previousStatus: latest.status })
+
     if (TERMINAL_QUEUE_STATUSES.includes(flagged.status)) {
       this.requestDispatch()
       return flagged
@@ -302,6 +306,8 @@ export class GenerationQueueService {
 
     const latest = GenerationQueueModel.findById(id)
     this.terminalJobWaiters.resolve(latest)
+    // E1: 모든 정상 전이가 이 funnel 을 지나므로 큐 상태 푸시의 주 발행 지점이다.
+    publishQueueJobEvent('queue.job.status', latest, { previousStatus: current.status })
     return latest
   }
 
@@ -362,7 +368,10 @@ export class GenerationQueueService {
       return db.prepare('SELECT * FROM generation_queue_jobs WHERE id = ?').get(record.id) as GenerationQueueJobRecord | undefined ?? null
     })
 
-    return claimTransaction(params?.serviceType, params?.assignedServerId ?? null)
+    const claimed = claimTransaction(params?.serviceType, params?.assignedServerId ?? null)
+    // E2: claim 은 transitionJob 을 우회하는 raw UPDATE 라 여기서 직접 발행한다.
+    publishQueueJobEvent('queue.job.status', claimed, { previousStatus: 'queued' })
+    return claimed
   }
 
   /** Claim one specific queued job for dispatch if it is still available. */
@@ -382,7 +391,10 @@ export class GenerationQueueService {
       return null
     }
 
-    return GenerationQueueModel.findById(id)
+    const claimed = GenerationQueueModel.findById(id)
+    // E3: 두 번째 claim 경로도 같은 raw UPDATE 라 같은 이벤트를 발행한다.
+    publishQueueJobEvent('queue.job.status', claimed, { previousStatus: 'queued' })
+    return claimed
   }
 
   /** Create a new queued retry job from one finished failed/cancelled job. */
@@ -426,8 +438,12 @@ export class GenerationQueueService {
       request_summary: retrySummary,
     })
 
+    const retryJob = GenerationQueueModel.findById(retryJobId)
+    // E5: 재시도는 신규 잡 생성이다.
+    publishQueueJobEvent('queue.job.created', retryJob)
+
     this.requestDispatch()
-    return GenerationQueueModel.findById(retryJobId)
+    return retryJob
   }
 
   /**
@@ -436,6 +452,10 @@ export class GenerationQueueService {
    * Phase 1(동기 분류, DB만 만짐): 상류에 아무 것도 없음이 증명된 잡만 확정한다.
    * 상류 작업이 남아 있을 수 있는 잡(`provider_submit_state != 'none'`)은 **확정하지 않고**
    * `orphan_suspected` 로만 마킹해 Phase 2 reconciler 가 이어받게 한다.
+   *
+   * 여기서는 런타임 이벤트를 발행하지 않는다. 이 일괄 전이는 프로세스 기동 시점에만 일어나고,
+   * 그 시점의 클라이언트는 끊긴 스트림을 재연결하며 `hello` 후 전체 무효화를 수행하기 때문이다.
+   * 수백 건을 개별 프레임으로 흘리는 것보다 재연결 무효화 한 번이 싸고 정확하다.
    */
   static recoverInterruptedJobs() {
     const db = getUserSettingsDb()

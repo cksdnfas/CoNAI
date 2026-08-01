@@ -6,6 +6,8 @@ import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { SettingsSection, SettingsValueTile } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import {
@@ -34,6 +36,8 @@ export function WorkflowReservationsPanel() {
   const [isCleaningReservations, setIsCleaningReservations] = useState(false)
   const [isMutatingSchedules, setIsMutatingSchedules] = useState(false)
   const [activeView, setActiveView] = useState<ReservationView>('schedules')
+  // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 2초 폴링이 그대로 되살아난다.
+  const { status: runtimeStreamStatus } = useRuntimeEventStream()
 
   const reservationsQuery = useQuery({
     queryKey: ['module-graph-browse-content', 'generation-reservations', 'root'],
@@ -41,7 +45,8 @@ export function WorkflowReservationsPanel() {
     refetchInterval: (query) => {
       const content = query.state.data
       const executions = mergeVisibleReservationExecutions(content?.empty_executions ?? [], content?.executions ?? [])
-      return executions.some((execution) => isActiveReservationExecution(execution.status)) ? 2_000 : false
+      const legacyInterval = executions.some((execution) => isActiveReservationExecution(execution.status)) ? 2_000 : false
+      return resolveStreamFallbackInterval(runtimeStreamStatus, legacyInterval)
     },
   })
 
