@@ -51,12 +51,14 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     }
 
     return `search:${appliedChips
-      .map((chip) => [chip.scope, chip.operator, chip.conditionType ?? '', chip.value, chip.minScore ?? '', chip.maxScore ?? ''].join('::'))
+      .map((chip) => [chip.scope, chip.operator, chip.conditionCategory ?? '', chip.conditionType ?? '', chip.value, chip.minScore ?? '', chip.maxScore ?? ''].join('::'))
       .join('|')}`
   }, [appliedChips, isAnonymousSession])
 
   const imagesQuery = useInfiniteQuery({
-    queryKey: ['home-images', appliedChips],
+    // Key on the id-free chip signature: chip ids embed Date.now()/Math.random(),
+    // so keying on the chips themselves would never hit the query cache.
+    queryKey: ['home-images', imageListResetKey],
     initialPageParam: {} as HomeImagesPageParam,
     queryFn: ({ pageParam }) => {
       const typedPageParam = pageParam as HomeImagesPageParam

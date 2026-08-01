@@ -35,6 +35,7 @@ async function main() {
         sampler TEXT,
         model_name TEXT,
         first_seen_date TEXT,
+        metadata_updated_date TEXT,
         rating_score REAL,
         postprocess_status TEXT
       );
@@ -46,7 +47,8 @@ async function main() {
         file_type TEXT,
         file_size INTEGER,
         mime_type TEXT,
-        folder_id INTEGER
+        folder_id INTEGER,
+        scan_date TEXT
       );
       CREATE TABLE watched_folders (id INTEGER PRIMARY KEY, folder_name TEXT);
       CREATE TABLE groups (id INTEGER PRIMARY KEY, parent_id INTEGER);
@@ -68,12 +70,12 @@ async function main() {
       INSERT INTO groups (id, parent_id) VALUES (1, NULL), (2, 1), (3, 2), (4, NULL);
       INSERT INTO auto_folder_groups (id, parent_id) VALUES (10, NULL), (11, 10), (12, NULL);
 
-      INSERT INTO media_metadata (composite_hash, first_seen_date, postprocess_status) VALUES
-        ('root', '2026-07-05', 'ready'),
-        ('child', '2026-07-04', 'ready'),
-        ('grandchild', '2026-07-03', 'ready'),
-        ('shared', '2026-07-02', 'ready'),
-        ('outside', '2026-07-01', 'ready');
+      INSERT INTO media_metadata (composite_hash, first_seen_date, metadata_updated_date, thumbnail_path, postprocess_status) VALUES
+        ('root', '2026-07-05', '2026-07-05', '/thumbs/root.webp', 'ready'),
+        ('child', '2026-07-04', '2026-07-04', '/thumbs/child.webp', 'ready'),
+        ('grandchild', '2026-07-03', '2026-07-03', '/thumbs/grandchild.webp', 'ready'),
+        ('shared', '2026-07-02', '2026-07-02', '/thumbs/shared.webp', 'ready'),
+        ('outside', '2026-07-01', '2026-07-01', '/thumbs/outside.webp', 'ready');
 
       INSERT INTO image_groups (group_id, composite_hash, order_index, added_date, collection_type) VALUES
         (1, 'root', 1, '2026-07-05', 'manual'),

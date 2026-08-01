@@ -76,18 +76,23 @@ export class ComplexFilterService {
       params,
       cteClause,
       cteParams,
+      fromClause,
+      whereClause,
+      groupByClause,
       statsSources,
     } = this.buildComplexQuery(filter, weights, basicParams);
 
-    // Count total results (composite_hash 기반)
-    // Replace the main SELECT clause (im.*) with COUNT, handling whitespace and multi-line
+    // Count total results (composite_hash 기반) with an explicitly composed query
+    // instead of regex-rewriting the SELECT clause.
     const shouldCountTotal = !pagination?.useCursor || pagination.includeTotal !== false;
     let total = 0;
     if (shouldCountTotal) {
-      const countQuery = baseQuery.replace(
-        /SELECT\s+im\.\*,[\s\S]+?FROM/i,
-        'SELECT COUNT(DISTINCT im.composite_hash) as total FROM'
-      );
+      const countQuery = `
+        ${cteClause}
+        SELECT COUNT(DISTINCT im.composite_hash) as total
+        ${fromClause}
+        ${whereClause}
+      `;
       const countRow = db.prepare(countQuery).get(...params) as any;
       total = countRow?.total || 0;
     }
@@ -124,6 +129,7 @@ export class ComplexFilterService {
     const dataQuery = `
       ${baseQuery}
       ${cursorClause}
+      ${groupByClause}
       ORDER BY ${sortExpression} ${sortOrder}, im.composite_hash ${sortOrder}
       LIMIT ?${useCursor ? '' : ' OFFSET ?'}
     `;
@@ -214,11 +220,13 @@ export class ComplexFilterService {
     basicParams?: ComplexSearchScope
   ): Promise<{ query: string; params: any[] }> {
     const weights = await RatingScoreService.getWeights();
-    const { query: baseQuery, params } = this.buildComplexQuery(filter, weights, basicParams);
-    const query = baseQuery.replace(
-      /SELECT\s+im\.\*,[\s\S]+?FROM/i,
-      'SELECT DISTINCT im.composite_hash FROM'
-    );
+    const { params, cteClause, fromClause, whereClause } = this.buildComplexQuery(filter, weights, basicParams);
+    const query = `
+      ${cteClause}
+      SELECT DISTINCT im.composite_hash
+      ${fromClause}
+      ${whereClause}
+    `;
 
     return { query, params };
   }

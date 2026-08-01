@@ -56,10 +56,12 @@ async function main() {
         auto_tags TEXT,
         rating_score REAL,
         first_seen_date TEXT,
+        metadata_updated_date TEXT,
         filename TEXT,
         file_size INTEGER,
         width INTEGER,
-        height INTEGER
+        height INTEGER,
+        thumbnail_path TEXT
       );
 
       CREATE TABLE image_files (
@@ -70,7 +72,8 @@ async function main() {
         file_type TEXT,
         file_size INTEGER,
         mime_type TEXT,
-        folder_id INTEGER
+        folder_id INTEGER,
+        scan_date TEXT
       );
 
       CREATE TABLE image_groups (
@@ -109,16 +112,18 @@ async function main() {
         auto_tags,
         rating_score,
         first_seen_date,
+        metadata_updated_date,
         filename,
         file_size,
         width,
-        height
-      ) VALUES (?, 'NovelAI', ?, ?, ?, ?, '', '{}', NULL, 0.1, '2026-01-01T00:00:00.000Z', ?, 100, 64, 64)
+        height,
+        thumbnail_path
+      ) VALUES (?, 'NovelAI', ?, ?, ?, ?, '', '{}', NULL, 0.1, '2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z', ?, 100, 64, 64, ?)
     `);
 
     const insertFile = db.prepare(`
-      INSERT INTO image_files (id, composite_hash, original_file_path, file_status, file_type, file_size, mime_type, folder_id)
-      VALUES (?, ?, ?, 'active', 'image', 100, 'image/png', NULL)
+      INSERT INTO image_files (id, composite_hash, original_file_path, file_status, file_type, file_size, mime_type, folder_id, scan_date)
+      VALUES (?, ?, ?, 'active', 'image', 100, 'image/png', NULL, '2026-01-01T00:00:00.000Z')
     `);
 
     function seedImage(image: SeedImage) {
@@ -128,7 +133,8 @@ async function main() {
         image.loraModels ?? '',
         image.prompt,
         image.negativePrompt ?? '',
-        `${image.hash}.png`
+        `${image.hash}.png`,
+        `/thumbs/${image.hash}.webp`
       );
       insertFile.run(image.id, image.hash, `/tmp/${image.hash}.png`);
     }

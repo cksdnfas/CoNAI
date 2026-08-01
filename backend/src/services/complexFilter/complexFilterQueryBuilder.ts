@@ -23,6 +23,12 @@ export type ComplexQueryBuildResult = {
   params: any[];
   cteClause: string;
   cteParams: any[];
+  /** FROM/JOIN clause shared by the data, count, and hash-only query variants. */
+  fromClause: string;
+  /** Final WHERE clause shared by the data, count, and hash-only query variants. */
+  whereClause: string;
+  /** GROUP BY clause that collapses duplicate active file rows per composite hash. */
+  groupByClause: string;
   statsSources: ComplexQueryStatsSources;
 };
 
@@ -152,19 +158,34 @@ export function buildComplexFilterQuery(
 
   const finalWhere = `WHERE ${finalConditions.join(' AND ')}`;
 
-  const selectClause = `
-    SELECT
-      im.*,
-      if.id,
-      if.original_file_path,
-      if.file_status,
-      if.file_type,
-      if.file_size,
-      if.mime_type
+  const fromClause = `
     FROM media_metadata im
     LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
   `;
 
+  // Compact list-feed select: search results reuse the same enrichment shape as the
+  // normal image feed, so wide columns (prompts, histograms, hashes) stay out of the payload.
+  // MIN(if.id) + GROUP BY makes SQLite pick the bare if.* columns from that same file row.
+  const selectClause = `
+    SELECT
+      im.composite_hash,
+      im.width,
+      im.height,
+      im.thumbnail_path,
+      im.rating_score,
+      im.first_seen_date,
+      im.metadata_updated_date,
+      MIN(if.id) as file_id,
+      if.original_file_path,
+      if.file_status,
+      if.file_type,
+      if.file_size,
+      if.mime_type,
+      if.scan_date
+    ${fromClause}
+  `;
+
+  const groupByClause = 'GROUP BY im.composite_hash';
   const cteClause = ctes.length > 0 ? `WITH ${ctes.join(', ')}` : '';
   const query = cteClause.length > 0
     ? `${cteClause} ${selectClause} ${finalWhere}`
@@ -175,6 +196,9 @@ export function buildComplexFilterQuery(
     params: [...cteParams, ...finalParams],
     cteClause,
     cteParams,
+    fromClause,
+    whereClause: finalWhere,
+    groupByClause,
     statsSources,
   };
 }

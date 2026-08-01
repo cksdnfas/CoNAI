@@ -119,7 +119,7 @@ assert.doesNotMatch(
 
 assert.match(
   imageFeedSafetySource,
-  /const renderItemPersistentOverlay = useCallback\(\(image: ImageRecord\) => \{/,
+  /const renderItemPersistentOverlay = useCallback\(\s*\(image: ImageRecord\) =>/,
   'Image feed safety overlay renderer should be stable between unrelated image-list renders',
 )
 assert.match(

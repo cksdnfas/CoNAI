@@ -5,7 +5,6 @@ import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { ImageListResponse } from '../../types/image';
 import { enrichCompactImageWithFileView, enrichImageWithFileView } from './utils';
 import { QueryCacheService } from '../../services/QueryCacheService';
-import { logger } from '../../utils/logger';
 import { routeParam } from '../routeParam';
 import {
   buildBatchImageListResponse,
@@ -29,9 +28,6 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const includeCursorTotal = req.query.include_total === 'true' || req.query.include_total === '1';
 
   const isCursorRequest = wantsCursorPagination || cursorDate !== undefined || cursorHash !== undefined;
-  if (isCursorRequest) {
-    logger.debug(`🔍 [QueryRoutes] Cursor request: cursorDate=${cursorDate}, cursorHash=${cursorHash?.substring(0, 8)}, limit=${limit}, includeTotal=${includeCursorTotal}`);
-  }
 
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -72,25 +68,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       sortOrder
     });
 
-    logger.debug('🔍 [QueryRoutes] Query result - first 3 records:');
-    result.items.slice(0, 3).forEach((item, idx) => {
-      logger.debug(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
-    });
-
     const enrichedImages = result.items.map(enrichCompactImageWithFileView);
-
-    logger.debug('🔍 [QueryRoutes] Enriched result - first 3 records:');
-    enrichedImages.slice(0, 3).forEach((item, idx) => {
-      logger.debug(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
-    });
-
-    if (enrichedImages.length > 0) {
-      logger.debug('[QueryRoutes] Sample image rating_score:', {
-        composite_hash: enrichedImages[0].composite_hash,
-        rating_score: enrichedImages[0].rating_score,
-        has_rating_score: 'rating_score' in enrichedImages[0],
-      });
-    }
 
     const response = buildImageListResponse(enrichedImages, result.total, page, limit, {
       hasMore: (page * limit) < result.total

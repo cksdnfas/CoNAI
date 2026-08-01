@@ -1,10 +1,11 @@
-import { type CSSProperties, type DragEventHandler, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type DragEventHandler, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { getImageListPreviewUrl } from './image-list-utils'
 
 const MAX_CONCURRENT_INITIAL_VIDEO_PREVIEW_LOADS = 3
 const VIDEO_PREVIEW_LOAD_TIMEOUT_MS = 8_000
+const MAX_STARTED_VIDEO_PREVIEW_SOURCES = 48
 
 type VideoPreviewLoadTask = {
   id: string
@@ -15,6 +16,21 @@ type VideoPreviewLoadTask = {
 const startedVideoPreviewSources = new Set<string>()
 const pendingVideoPreviewLoadTasks = new Map<string, VideoPreviewLoadTask>()
 const activeVideoPreviewLoadTaskIds = new Set<string>()
+
+/** Remember a started source with FIFO eviction so long sessions cannot grow the set unboundedly. */
+function markVideoPreviewSourceStarted(source: string) {
+  startedVideoPreviewSources.delete(source)
+  startedVideoPreviewSources.add(source)
+
+  while (startedVideoPreviewSources.size > MAX_STARTED_VIDEO_PREVIEW_SOURCES) {
+    const oldestSource = startedVideoPreviewSources.values().next().value
+    if (oldestSource === undefined) {
+      break
+    }
+
+    startedVideoPreviewSources.delete(oldestSource)
+  }
+}
 
 function pumpVideoPreviewLoadQueue() {
   while (
@@ -73,9 +89,13 @@ export function ImageListVideoPreview({
   onError,
 }: ImageListVideoPreviewProps) {
   const previewUrl = getImageListPreviewUrl(image)
+  const instanceId = useId()
+  // The queue map is keyed by this id, so it has to stay unique per mounted preview: two concurrent
+  // previews of one source would otherwise overwrite each other's task. Source-level dedupe stays in
+  // startedVideoPreviewSources, keyed by previewUrl.
   const requestId = useMemo(
-    () => `${String(image.composite_hash ?? image.id ?? 'video-preview')}:${Math.random().toString(36).slice(2)}`,
-    [image.composite_hash, image.id],
+    () => `${String(image.composite_hash ?? image.id ?? 'video-preview')}:${previewUrl ?? ''}:${instanceId}`,
+    [image.composite_hash, image.id, instanceId, previewUrl],
   )
   const [videoNode, setVideoNode] = useState<HTMLVideoElement | null>(null)
   const [hasLoadedFrame, setHasLoadedFrame] = useState(false)
@@ -125,7 +145,7 @@ export function ImageListVideoPreview({
           return
         }
 
-        startedVideoPreviewSources.add(previewUrl)
+        markVideoPreviewSourceStarted(previewUrl)
         activeLoadTimeoutRef.current = window.setTimeout(() => {
           finishActiveLoad()
         }, VIDEO_PREVIEW_LOAD_TIMEOUT_MS)

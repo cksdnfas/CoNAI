@@ -13,7 +13,13 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { useI18n } from '@/i18n'
+import type { ImageRecord } from '@/types/image'
 import { useHomePageData } from './use-home-page-data'
+
+/** Keep item href identity stable so memoized image cells skip keystroke re-renders. */
+function getHomeImageHref(image: ImageRecord) {
+  return image.composite_hash ? `/images/${image.composite_hash}` : undefined
+}
 
 /** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
@@ -157,7 +163,7 @@ export function HomePage() {
             resetKey={imageListResetKey}
             layout="masonry"
             activationMode={isAnonymousSession ? 'navigate' : 'modal'}
-            getItemHref={isAnonymousSession ? undefined : ((image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined))}
+            getItemHref={isAnonymousSession ? undefined : getHomeImageHref}
             selectable={!isAnonymousSession}
             selectedIds={selectedIds}
             onSelectedIdsChange={setSelectedIds}

@@ -284,6 +284,7 @@ export function ImageList({
               onActivate={handleActivate}
               scrollMode={scrollMode}
               viewportHeight={viewportHeight}
+              onEndReached={handleEndReached}
               renderItemOverlay={renderItemOverlay}
               renderItemPersistentOverlay={renderItemPersistentOverlay}
               showDefaultQuickActions={showDefaultQuickActions}

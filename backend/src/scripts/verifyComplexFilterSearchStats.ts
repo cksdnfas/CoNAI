@@ -53,10 +53,12 @@ async function main() {
         auto_tags TEXT,
         rating_score REAL,
         first_seen_date TEXT,
+        metadata_updated_date TEXT,
         filename TEXT,
         file_size INTEGER,
         width INTEGER,
-        height INTEGER
+        height INTEGER,
+        thumbnail_path TEXT
       );
 
       CREATE TABLE image_files (
@@ -66,7 +68,8 @@ async function main() {
         file_status TEXT NOT NULL,
         file_type TEXT,
         file_size INTEGER,
-        mime_type TEXT
+        mime_type TEXT,
+        scan_date TEXT
       );
     `);
 
@@ -93,16 +96,18 @@ async function main() {
         auto_tags,
         rating_score,
         first_seen_date,
+        metadata_updated_date,
         filename,
         file_size,
         width,
-        height
-      ) VALUES (?, ?, ?, '', ?, '', '', '{}', NULL, 0.1, ?, ?, 100, 64, 64)
+        height,
+        thumbnail_path
+      ) VALUES (?, ?, ?, '', ?, '', '', '{}', NULL, 0.1, ?, ?, ?, 100, 64, 64, ?)
     `);
 
     const insertFile = db.prepare(`
-      INSERT INTO image_files (id, composite_hash, original_file_path, file_status, file_type, file_size, mime_type)
-      VALUES (?, ?, ?, 'active', 'image', 100, 'image/png')
+      INSERT INTO image_files (id, composite_hash, original_file_path, file_status, file_type, file_size, mime_type, scan_date)
+      VALUES (?, ?, ?, 'active', 'image', 100, 'image/png', ?)
     `);
 
     function seedImage(index: number, image: SeedImage) {
@@ -112,9 +117,11 @@ async function main() {
         image.modelName,
         image.prompt,
         image.firstSeenDate,
-        `${image.hash}.png`
+        image.firstSeenDate,
+        `${image.hash}.png`,
+        `/thumbs/${image.hash}.webp`
       );
-      insertFile.run(index, image.hash, `/tmp/${image.hash}.png`);
+      insertFile.run(index, image.hash, `/tmp/${image.hash}.png`, image.firstSeenDate);
     }
 
     seedImage(1, {

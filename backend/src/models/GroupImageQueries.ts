@@ -209,6 +209,8 @@ export function findImagesByGroupQuery(
   ).get(...baseQueryParams) as { total: number } : null;
   const total = countRow?.total ?? 0;
 
+  // Join one deterministically chosen active file row per hash (instead of repeated
+  // correlated subqueries) and keep the select trimmed to what the compact enricher reads.
   const query = `
     ${cteClause}
     SELECT
@@ -216,26 +218,26 @@ export function findImagesByGroupQuery(
       im.width,
       im.height,
       im.thumbnail_path,
-      im.prompt,
-      im.negative_prompt,
-      im.seed,
-      im.steps,
-      im.cfg_scale,
-      im.sampler,
-      im.model_name as model,
-      im.first_seen_date as created_date,
       im.rating_score,
-      (SELECT id FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as id,
-      (SELECT original_file_path FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path,
-      (SELECT file_status FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_status,
-      (SELECT file_type FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_type,
-      (SELECT file_size FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
-      (SELECT mime_type FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
+      im.first_seen_date,
+      im.metadata_updated_date,
+      if.id as id,
+      if.original_file_path,
+      if.file_status,
+      if.file_type,
+      if.file_size,
+      if.mime_type,
+      if.scan_date,
       ig.collection_type
       ,ig.order_index as cursor_order_index
       ,ig.added_date as cursor_added_date
     FROM ${fromClause}
     LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+    LEFT JOIN image_files if ON if.id = (
+      SELECT MIN(if2.id)
+      FROM image_files if2
+      WHERE if2.composite_hash = ig.composite_hash AND if2.file_status = 'active'
+    )
     ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
     GROUP BY ig.composite_hash
     ORDER BY ig.order_index ASC, ig.added_date DESC, ig.composite_hash ASC

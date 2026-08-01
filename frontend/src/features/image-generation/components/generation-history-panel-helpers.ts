@@ -12,7 +12,7 @@ import {
 } from '../image-generation-shared'
 
 export const GENERATION_HISTORY_PAGE_SIZE = 40
-export const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 1_500
+export const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 3_000
 export const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000
 export const GENERATION_HISTORY_REFRESH_WATCH_MS = 30_000
 export const GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX = 'conai:image-generation:history-recovery-ack:'

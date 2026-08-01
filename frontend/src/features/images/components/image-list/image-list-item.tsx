@@ -58,6 +58,8 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const imageId = itemId ?? getImageListItemId(image)
   const displayName = getImageListDisplayName(image)
   const [hasPreviewError, setHasPreviewError] = useState(false)
+  // Mount the query-backed edit action lazily so idle cells skip its per-cell query observers.
+  const [hasRevealedQuickActions, setHasRevealedQuickActions] = useState(false)
   const mediaKind = getImageListMediaKind(image)
   const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
   const mediaFrameStyle = gridItemHeight
@@ -133,7 +135,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
-      <ImageEditAction image={image} />
+      {hasRevealedQuickActions ? <ImageEditAction image={image} /> : null}
       {renderOverlay}
     </div>
   ) : renderOverlay ? <div className="absolute right-2 top-2 z-30">{renderOverlay}</div> : null
@@ -153,8 +155,18 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       aria-pressed={selected}
       draggable={false}
       onDragStart={preventNativeDrag}
-      onPointerEnter={interactive ? (() => onPreviewIntent?.(image)) : undefined}
-      onFocus={interactive ? (() => onPreviewIntent?.(image)) : undefined}
+      onPointerEnter={() => {
+        setHasRevealedQuickActions(true)
+        if (interactive) {
+          onPreviewIntent?.(image)
+        }
+      }}
+      onFocus={() => {
+        setHasRevealedQuickActions(true)
+        if (interactive) {
+          onPreviewIntent?.(image)
+        }
+      }}
       onClick={interactive ? (() => onActivate?.(image, imageId, href)) : undefined}
       onKeyDown={handleKeyDown}
     >

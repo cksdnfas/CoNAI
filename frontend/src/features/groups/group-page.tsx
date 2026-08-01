@@ -1,5 +1,5 @@
 import { FolderMinus, FolderPlus, FolderTree, Play, RotateCcw, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -98,6 +98,12 @@ export function GroupPage() {
   const groupCountMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
   const groupPathItems = useMemo(() => buildGroupPathItems(allGroups, selectedGroupId), [allGroups, selectedGroupId])
   const selectedGroupImageTotalCount = groupImagesQuery.data?.pages[0]?.pagination.total ?? selectedGroupQuery.data?.image_count ?? 0
+  const fetchNextGroupImagesPage = groupImagesQuery.fetchNextPage
+  // Keep the load-more identity stable so the list's IntersectionObserver is not rebuilt every render.
+  const handleLoadMoreGroupImages = useCallback(() => {
+    void fetchNextGroupImagesPage()
+  }, [fetchNextGroupImagesPage])
+  const groupImageListResetKey = `${selectedSource.key}:${selectedGroupId ?? 'root'}:${isCustomSource ? groupImageCollectionFilter : 'all'}`
 
   const {
     createGroupMutation,
@@ -267,13 +273,14 @@ export function GroupPage() {
               <GroupImageSection
                 group={selectedGroupQuery.data}
                 groupImages={groupImages}
+                resetKey={groupImageListResetKey}
                 isLoading={groupImagesQuery.isLoading}
                 isError={groupImagesQuery.isError}
                 errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
                 hasMore={Boolean(groupImagesQuery.hasNextPage)}
                 isLoadingMore={groupImagesQuery.isFetchingNextPage}
                 totalCount={selectedGroupImageTotalCount}
-                onLoadMore={() => void groupImagesQuery.fetchNextPage()}
+                onLoadMore={handleLoadMoreGroupImages}
                 preferredColumnCount={groupColumnCount}
                 defaultColumnCount={defaultGroupColumnCount}
                 minColumnCount={minGroupColumnCount}

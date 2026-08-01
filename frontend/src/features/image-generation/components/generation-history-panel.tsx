@@ -39,7 +39,6 @@ import {
   collectRetryableHistoryRecords,
   dedupeHistoryRecords,
   getGenerationHistorySelectionId,
-  getHistoryMediaVersion,
   getHistoryRecordStatusSummary,
   getHistoryRecoveryDetail,
   getHistoryRecoveryLabel,
@@ -121,9 +120,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             })
     ),
     enabled: !authStatusQuery.isPending,
-    getNextPageParam: (lastPage, allPages) => {
-      const loadedCount = allPages.reduce((sum, page) => sum + page.records.length, 0)
-      return loadedCount < lastPage.total ? loadedCount : undefined
+    // Keep every loaded page: the active-generation refetch has to restart at offset 0 so newly
+    // completed generations appear, and selection/visible-count state is derived from all pages.
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      const nextOffset = lastPageParam + lastPage.records.length
+      return nextOffset < lastPage.total ? nextOffset : undefined
     },
     refetchInterval: (query) => {
       const pages = query.state.data?.pages ?? []
@@ -187,12 +188,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     visibleCount: historyImages.length,
     totalCount: historyTotalCount,
   }), [historyImages.length, historyRecords.length, historyTotalCount])
-  const historyListLayoutKey = useMemo(
-    () => historyRecords
-      .map((record) => `${record.id}:${getHistoryMediaVersion(record)}`)
-      .join('|'),
-    [historyRecords],
-  )
   const {
     shouldBlurItemPreview,
   } = useImageFeedSafety({
@@ -574,7 +569,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             </PageInset>
 
             <ImageList
-              key={historyListLayoutKey}
               items={historyImages}
               layout="masonry"
               activationMode="modal"

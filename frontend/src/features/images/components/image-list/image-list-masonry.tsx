@@ -1,8 +1,11 @@
-import { useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type ReactNode, type UIEvent } from 'react'
 import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListScrollMode } from './image-list-types'
 import { ImageListItem } from './image-list-item'
+
+const CONTAINER_SCROLL_END_REACHED_THRESHOLD_PX = 800
+const CONTAINER_UNFILLED_PANE_CHECK_MS = 300
 
 interface ImageListMasonryProps {
   items: ImageRecord[]
@@ -16,6 +19,7 @@ interface ImageListMasonryProps {
   onActivate: (image: ImageRecord, imageId: string, href?: string) => void
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
+  onEndReached?: () => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
   showDefaultQuickActions?: boolean
@@ -79,6 +83,7 @@ export function ImageListMasonry({
   onActivate,
   scrollMode,
   viewportHeight,
+  onEndReached,
   renderItemOverlay,
   renderItemPersistentOverlay,
   showDefaultQuickActions,
@@ -87,6 +92,67 @@ export function ImageListMasonry({
   onPreviewIntent,
 }: ImageListMasonryProps) {
   const usesWindowScroll = scrollMode === 'window'
+  const itemCount = items.length
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const onEndReachedRef = useRef(onEndReached)
+  const endReachedItemCountRef = useRef(-1)
+
+  useEffect(() => {
+    onEndReachedRef.current = onEndReached
+  }, [onEndReached])
+
+  /**
+   * Fire once per loaded item count. Masonry republishes column heights while items are measured,
+   * so scrollHeight is not a stable dedupe key and would restart the in-flight page request.
+   */
+  const fireContainerEndReached = useCallback(() => {
+    if (endReachedItemCountRef.current === itemCount) {
+      return
+    }
+
+    endReachedItemCountRef.current = itemCount
+    onEndReachedRef.current?.()
+  }, [itemCount])
+
+  /** Mirror VirtuosoGrid endReached for container scrolling since VirtuosoMasonry has no endReached API. */
+  const handleContainerScrollCapture = useCallback((event: UIEvent<HTMLDivElement>) => {
+    const scroller = event.target
+    if (!(scroller instanceof HTMLElement) || scroller.parentElement !== event.currentTarget) {
+      return
+    }
+
+    const distanceToEnd = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    if (distanceToEnd > CONTAINER_SCROLL_END_REACHED_THRESHOLD_PX) {
+      return
+    }
+
+    fireContainerEndReached()
+  }, [fireContainerEndReached])
+
+  /**
+   * A page that does not fill the split pane never emits a scroll event, so auto-pagination would
+   * never start. Re-check once the masonry settled; fireContainerEndReached changes per item count.
+   */
+  useEffect(() => {
+    if (usesWindowScroll) {
+      return
+    }
+
+    const settleTimeout = window.setTimeout(() => {
+      const scroller = containerRef.current?.firstElementChild
+      if (!(scroller instanceof HTMLElement) || scroller.scrollHeight === 0) {
+        return
+      }
+
+      if (scroller.scrollHeight > scroller.clientHeight) {
+        return
+      }
+
+      fireContainerEndReached()
+    }, CONTAINER_UNFILLED_PANE_CHECK_MS)
+
+    return () => window.clearTimeout(settleTimeout)
+  }, [fireContainerEndReached, usesWindowScroll])
   const resolvedContainerHeight = usesWindowScroll
     ? undefined
     : typeof viewportHeight === 'number'
@@ -122,7 +188,7 @@ export function ImageListMasonry({
     onPreviewIntent,
   ])
 
-  return (
+  const masonry = (
     <VirtuosoMasonry<ImageRecord, ImageListMasonryContext>
       data={items}
       context={masonryContext}
@@ -140,5 +206,15 @@ export function ImageListMasonry({
       }}
       ItemContent={MasonryItemContent}
     />
+  )
+
+  if (usesWindowScroll) {
+    return masonry
+  }
+
+  return (
+    <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden" onScrollCapture={handleContainerScrollCapture}>
+      {masonry}
+    </div>
   )
 }

@@ -6,7 +6,7 @@ import {
   ComplexSearchResponse,
   ComplexFilter,
 } from '@conai/shared';
-import { enrichImageRecord } from './utils';
+import { enrichCompactImageWithFileView } from './utils';
 
 const router = Router();
 
@@ -130,8 +130,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       }
     );
 
-    // Enrich images with URLs and structured metadata
-    const enrichedImages = result.images.map(enrichImageRecord);
+    // Enrich with the compact list-feed shape shared with the normal image feed
+    const enrichedImages = result.images.map(enrichCompactImageWithFileView);
 
     const response: ComplexSearchResponse = {
       success: true,

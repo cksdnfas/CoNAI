@@ -104,12 +104,40 @@ function assertStatusSummarySourcePolicy() {
   )
 }
 
+function readRefreshConstantMs(constantName: string) {
+  const declaration = new RegExp(`const ${constantName} = ([0-9_]+)\\b`).exec(generationHistoryPanelHelpersSource)
+
+  if (!declaration) {
+    throw new Error(`generation history should declare ${constantName} as a numeric refresh cadence`)
+  }
+
+  const parsed = Number(declaration[1].replace(/_/g, ''))
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${constantName} should be a positive refresh interval, got ${declaration[1]}`)
+  }
+
+  return parsed
+}
+
+function assertActiveRefreshStaysBelowPostprocessRefresh() {
+  const activeRefreshMs = readRefreshConstantMs('GENERATION_HISTORY_ACTIVE_REFRESH_MS')
+  const postprocessRefreshMs = readRefreshConstantMs('GENERATION_HISTORY_POSTPROCESS_REFRESH_MS')
+
+  if (activeRefreshMs >= postprocessRefreshMs) {
+    throw new Error(
+      `active generation refresh (${activeRefreshMs}ms) should stay faster than the postprocess-only wait refresh (${postprocessRefreshMs}ms)`,
+    )
+  }
+}
+
 function assertRefreshPolicySource() {
   match(
     generationHistoryPanelHelpersSource,
-    /const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 1_500[\s\S]*?const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000/,
+    /const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 3_000[\s\S]*?const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000/,
     'generation history should use separate refresh cadences for active generation and postprocess-only waits',
   )
+  assertActiveRefreshStaysBelowPostprocessRefresh()
   match(
     generationHistoryPanelHelpersSource,
     /function hasActiveGenerationHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?const displayStatus = resolveHistoryDisplayStatus\(record\)[\s\S]*?displayStatus === 'failed' \|\| isHistoryPostprocessPending\(record\)[\s\S]*?return displayStatus === 'pending' \|\| displayStatus === 'processing'/,

@@ -125,9 +125,45 @@ assert.match(
 
 assert.match(
   imageListItemSource,
-  /onPointerEnter=\{interactive \? \(\(\) => onPreviewIntent\?\.\(image\)\) : undefined\}[\s\S]*?onFocus=\{interactive \? \(\(\) => onPreviewIntent\?\.\(image\)\) : undefined\}/,
-  'image list cards should warm detail data from pointer and keyboard preview intent',
+  /onPointerEnter=\{\(\) => \{\s*setHasRevealedQuickActions\(true\)\s*if \(interactive\) \{\s*onPreviewIntent\?\.\(image\)\s*\}\s*\}\}/,
+  'image list cards should reveal hover quick actions and warm detail data from pointer preview intent',
 )
+
+assert.match(
+  imageListItemSource,
+  /onFocus=\{\(\) => \{\s*setHasRevealedQuickActions\(true\)\s*if \(interactive\) \{\s*onPreviewIntent\?\.\(image\)\s*\}\s*\}\}/,
+  'image list cards should reveal hover quick actions and warm detail data from keyboard preview intent',
+)
+
+assert.match(
+  imageListItemSource,
+  /\{hasRevealedQuickActions \? <ImageEditAction image=\{image\} \/> : null\}/,
+  'image list cards should mount the edit quick action only after the card has been hovered or focused',
+)
+
+assertPreviewIntentAlwaysGuardedByInteractive()
+
+/**
+ * The preview-intent prefetch is only safe for interactive cards, so every call site must sit
+ * inside an `if (interactive)` guard regardless of how the handlers are formatted.
+ */
+function assertPreviewIntentAlwaysGuardedByInteractive() {
+  const callSites = [...imageListItemSource.matchAll(/onPreviewIntent\?\.\(/g)]
+
+  assert.ok(
+    callSites.length >= 2,
+    'image list cards should invoke preview intent from both pointer and keyboard entry points',
+  )
+
+  for (const callSite of callSites) {
+    const precedingSource = imageListItemSource.slice(0, callSite.index)
+    assert.match(
+      precedingSource,
+      /if \(interactive\) \{\s*$/,
+      'preview-intent prefetch must only run behind the interactive guard',
+    )
+  }
+}
 
 assert.match(
   imageDetailViewSource,

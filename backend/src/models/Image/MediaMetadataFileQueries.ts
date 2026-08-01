@@ -57,6 +57,9 @@ const ACTIVE_FILE_WITH_METADATA_SELECT = `
   LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
 `;
 
+// Join the single oldest active file per metadata row through a correlated MIN(if2.id) subquery.
+// This keeps one row per composite_hash without a GROUP BY, so the first_seen cursor index can
+// still satisfy ORDER BY and LIMIT can short-circuit instead of materializing the whole library.
 const METADATA_FIRST_SEEN_WITH_ACTIVE_FILE_SELECT = `
   SELECT
     mm.composite_hash,
@@ -100,9 +103,11 @@ const METADATA_FIRST_SEEN_WITH_ACTIVE_FILE_SELECT = `
     if.scan_date,
     if.file_type
   FROM media_metadata mm INDEXED BY idx_metadata_first_seen_hash_desc
-  INNER JOIN image_files if INDEXED BY idx_image_files_hash_status_verified
-    ON if.composite_hash = mm.composite_hash
-   AND if.file_status = 'active'
+  INNER JOIN image_files if ON if.id = (
+    SELECT MIN(if2.id)
+    FROM image_files if2
+    WHERE if2.composite_hash = mm.composite_hash AND if2.file_status = 'active'
+  )
 `;
 
 /** Build joined media-metadata queries that require the currently active file row. */
@@ -123,7 +128,7 @@ export class MediaMetadataFileQueries {
     const readyCondition = getReadyMediaMetadataCondition();
 
     const countRow = db.prepare(`
-      SELECT COUNT(*) as total
+      SELECT COUNT(DISTINCT if.composite_hash) as total
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
       WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
@@ -200,7 +205,7 @@ export class MediaMetadataFileQueries {
 
     const total = options.includeTotal === true
       ? (db.prepare(`
-          SELECT COUNT(*) as total
+          SELECT COUNT(DISTINCT if.composite_hash) as total
           FROM image_files if
           LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
           WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}

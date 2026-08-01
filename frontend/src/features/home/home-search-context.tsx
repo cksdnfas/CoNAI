@@ -125,6 +125,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setDraftChips(nextChips)
     setAppliedChips(nextChips)
     setSearchInputState('')
+    // 동일 칩을 다시 적용하면 appliedChips 참조가 그대로라 쿼리 키가 안 바뀐다.
+    // staleTime(30s) 안에서는 네트워크 요청이 아예 안 나가므로 명시적으로 무효화한다.
+    void queryClient.invalidateQueries({ queryKey: ['home-images'] })
 
     if (nextChips.length === 0) {
       showSnackbar({ message: t('homeSearchContext.noSearchChipsAreActive'), tone: 'info' })
@@ -139,7 +142,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       }),
       chips: nextChips,
     })
-  }, [navigate, saveHistoryEntryMutation, showSnackbar, t])
+  }, [navigate, queryClient, saveHistoryEntryMutation, showSnackbar, t])
 
   const addTextChip = useCallback(() => {
     if (searchScope === 'rating' || searchScope === 'tool') {
@@ -251,10 +254,12 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setDraftChips(entry.chips)
     setAppliedChips(entry.chips)
     setSearchInputState('')
+    // commitSearchChips 와 같은 이유로, 같은 저장 검색을 다시 고르면 키가 안 바뀐다.
+    void queryClient.invalidateQueries({ queryKey: ['home-images'] })
     openDrawer()
     navigate('/')
     showSnackbar({ message: t('homeSearchContext.savedSearchReapplied'), tone: 'info' })
-  }, [navigate, openDrawer, showSnackbar, t])
+  }, [navigate, openDrawer, queryClient, showSnackbar, t])
 
   const deleteHistoryEntry = useCallback(async (entryId: string) => {
     await deleteHistoryEntryMutation(entryId)

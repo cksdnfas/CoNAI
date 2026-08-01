@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getRatingTiers } from '@/lib/api-search'
 import type { ImageRecord } from '@/types/image'
@@ -59,14 +59,23 @@ export function useImageFeedSafety({
     void onLoadMore()
   }, [hasMore, isError, isLoading, isLoadingMore, items.length, onLoadMore, visibleItems.length])
 
-  const renderItemPersistentOverlay = useCallback((image: ImageRecord) => {
-    const safety = itemSafetyById.get(getImageFeedSafetyKey(image))
-    if (!safety?.tier) {
-      return null
-    }
+  // Cache overlay elements per item so memoized list cells keep stable props across re-renders.
+  const persistentOverlayByKey = useMemo(() => {
+    const overlays = new Map<string, ReactNode>()
+    for (const [key, safety] of itemSafetyById) {
+      if (!safety?.tier) {
+        continue
+      }
 
-    return <ImageRatingSafetyBadge tier={safety.tier} visibility={visibilityMode === 'badge-only' ? 'show' : safety.visibility} />
+      overlays.set(key, <ImageRatingSafetyBadge tier={safety.tier} visibility={visibilityMode === 'badge-only' ? 'show' : safety.visibility} />)
+    }
+    return overlays
   }, [itemSafetyById, visibilityMode])
+
+  const renderItemPersistentOverlay = useCallback(
+    (image: ImageRecord) => persistentOverlayByKey.get(getImageFeedSafetyKey(image)) ?? null,
+    [persistentOverlayByKey],
+  )
 
   const shouldBlurItemPreview = useCallback((image: ImageRecord) => visibilityMode === 'badge-only'
     ? false

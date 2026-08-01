@@ -16,6 +16,7 @@ import { getGroupImageFeedProgressSummary } from '../group-image-feed-progress'
 interface GroupImageSectionProps {
   group: GroupRecord
   groupImages: ImageRecord[]
+  resetKey?: string
   isLoading: boolean
   isError: boolean
   errorMessage: string | null
@@ -49,6 +50,7 @@ const COLLECTION_FILTER_OPTIONS = [
 export function GroupImageSection({
   group,
   groupImages,
+  resetKey,
   isLoading,
   isError,
   errorMessage,
@@ -224,6 +226,7 @@ export function GroupImageSection({
         <>
           <ImageList
             items={visibleGroupImages}
+            resetKey={resetKey}
             layout="masonry"
             activationMode="modal"
             getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
