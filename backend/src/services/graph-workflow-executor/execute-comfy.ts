@@ -393,9 +393,10 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
   })
 
   const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui')
-  const resolvedPromptData = await reconcileComfyModelSelectionValues(JSON.stringify(workflowJson), markedFields, parsedPromptData, comfyService, { strict: true })
+  const workflowJsonText = JSON.stringify(workflowJson)
+  const resolvedPromptData = await reconcileComfyModelSelectionValues(workflowJsonText, markedFields, parsedPromptData, comfyService, { strict: true })
   const substitutedWorkflow = comfyService.substitutePromptData(
-    JSON.stringify(workflowJson),
+    workflowJsonText,
     markedFields,
     resolvedPromptData,
   )

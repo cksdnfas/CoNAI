@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import { GripVertical, Play, RotateCcw } from 'lucide-react'
@@ -143,7 +143,7 @@ function summarizeLlmPresetContent(value: string) {
 }
 
 /** Render a cleaner module graph node card with source-node specific layout. */
-export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGraphNode>) {
+function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGraphNode>) {
   const { t } = useI18n()
   const { module } = data
   const updateNodeInternals = useUpdateNodeInternals()
@@ -803,3 +803,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     </div>
   )
 }
+
+/** Memoized so position-only canvas updates skip re-rendering unchanged node cards. */
+export const ModuleGraphNodeCard = memo(ModuleGraphNodeCardComponent)

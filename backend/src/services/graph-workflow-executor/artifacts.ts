@@ -12,8 +12,10 @@ import {
 } from '../../types/moduleGraph'
 import {
   bufferToDataUrl,
+  getExecutionGraphIndex,
   isExecutionDebugModeEnabled,
   parseJson,
+  resolveSystemOperationKey,
   sanitizeFileSegment,
   type ExecutionContext,
   type ParsedModuleDefinition,
@@ -211,7 +213,7 @@ export function getSourceArtifact(context: ExecutionContext, edge: GraphWorkflow
 export async function getIncomingArtifacts(context: ExecutionContext, nodeId: string) {
   const incomingArtifacts: Record<string, RuntimeArtifact> = {}
 
-  for (const edge of context.workflow.graph.edges.filter((candidate) => candidate.target_node_id === nodeId)) {
+  for (const edge of getExecutionGraphIndex(context).edgesByTarget.get(nodeId) ?? []) {
     const artifact = getSourceArtifact(context, edge)
     if (artifact) {
       incomingArtifacts[edge.target_port_key] = await resolveArtifactForTarget(context, edge, artifact)
@@ -222,13 +224,13 @@ export async function getIncomingArtifacts(context: ExecutionContext, nodeId: st
 }
 
 function getTargetModuleForEdge(context: ExecutionContext, edge: GraphWorkflowEdge) {
-  const targetNode = context.workflow.graph.nodes.find((candidate) => candidate.id === edge.target_node_id)
+  const targetNode = getExecutionGraphIndex(context).nodeById.get(edge.target_node_id)
   return targetNode ? context.modulesById.get(targetNode.module_id) ?? null : null
 }
 
 function isFinalResultTarget(context: ExecutionContext, edge: GraphWorkflowEdge) {
   const targetModule = getTargetModuleForEdge(context, edge)
-  return targetModule?.internal_fixed_values?.operation_key === 'system.final_result'
+  return targetModule ? resolveSystemOperationKey(targetModule) === 'system.final_result' : false
 }
 
 function canTargetConsumeFileReference(context: ExecutionContext, edge: GraphWorkflowEdge, artifactType: ModulePortDataType | 'file') {
@@ -327,7 +329,8 @@ export function shouldMaterializeRuntimeArtifactValue(
   outputPortKey: string,
   artifactType: ModulePortDataType | 'file',
 ) {
-  const outgoingEdges = context.workflow.graph.edges.filter((edge) => edge.source_node_id === nodeId && edge.source_port_key === outputPortKey)
+  const outgoingEdges = (getExecutionGraphIndex(context).edgesBySource.get(nodeId) ?? [])
+    .filter((edge) => edge.source_port_key === outputPortKey)
   if (outgoingEdges.length === 0) {
     return false
   }

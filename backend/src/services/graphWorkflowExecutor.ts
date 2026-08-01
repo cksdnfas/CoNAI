@@ -20,7 +20,9 @@ import {
   parseModuleDefinition,
   parseJson,
   GraphWorkflowStoppedError,
+  getExecutionGraphIndex,
   isWorkflowDebugModeEnabled,
+  resolveSystemOperationKey,
   setExecutionDebugMode,
   writeExecutionLog,
   type ExecutionContext,
@@ -247,24 +249,12 @@ async function runReadyGraphNodes(params: {
   }
 }
 
-function getSystemOperationKey(moduleDefinition: { internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
-  if (typeof moduleDefinition.internal_fixed_values?.operation_key === 'string') {
-    return moduleDefinition.internal_fixed_values.operation_key
-  }
-
-  if (typeof moduleDefinition.template_defaults?.operation_key === 'string') {
-    return moduleDefinition.template_defaults.operation_key
-  }
-
-  return null
-}
-
 function isVolatileSystemModule(moduleDefinition: { engine_type: string; internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
   if (moduleDefinition.engine_type !== 'system') {
     return false
   }
 
-  const operationKey = getSystemOperationKey(moduleDefinition)
+  const operationKey = resolveSystemOperationKey(moduleDefinition)
   return Boolean(operationKey && VOLATILE_SYSTEM_OPERATION_KEYS.has(operationKey))
 }
 
@@ -315,7 +305,7 @@ function isExternalGenerationModule(moduleDefinition: { engine_type: string; int
     return false
   }
 
-  const operationKey = getSystemOperationKey(moduleDefinition)
+  const operationKey = resolveSystemOperationKey(moduleDefinition)
   return operationKey === 'system.generate_image_nai' || operationKey === 'system.generate_image_codex'
 }
 
@@ -324,12 +314,12 @@ function getNodeThrottleLane(moduleDefinition: { engine_type: string; internal_f
 }
 
 function isIfBranchModule(moduleDefinition: { internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
-  return getSystemOperationKey(moduleDefinition) === 'system.logic_if_branch'
+  return resolveSystemOperationKey(moduleDefinition) === 'system.logic_if_branch'
 }
 
 function findInactiveBranchInputReasons(context: ExecutionContext, nodeId: string) {
-  return context.workflow.graph.edges
-    .filter((edge) => edge.target_node_id === nodeId)
+  const { nodeById, edgesByTarget } = getExecutionGraphIndex(context)
+  return (edgesByTarget.get(nodeId) ?? [])
     .flatMap((edge) => {
       if (context.skippedNodeIds?.has(edge.source_node_id)) {
         return [{ ...edge, reason: 'source_node_skipped' }]
@@ -339,7 +329,7 @@ function findInactiveBranchInputReasons(context: ExecutionContext, nodeId: strin
         return [{ ...edge, reason: 'source_output_disabled' }]
       }
 
-      const sourceNode = context.workflow.graph.nodes.find((item) => item.id === edge.source_node_id)
+      const sourceNode = nodeById.get(edge.source_node_id)
       const sourceModule = sourceNode ? context.modulesById.get(sourceNode.module_id) : null
       const sourceArtifacts = context.artifactsByNode.get(edge.source_node_id)
       if (sourceModule && isIfBranchModule(sourceModule) && sourceArtifacts && !sourceArtifacts[edge.source_port_key]) {
@@ -383,6 +373,8 @@ function markNodeSkippedForInactiveBranch(
       })),
       disabledOutputKeys: moduleDefinition.output_ports.map((port) => port.key),
     },
+    // The frontend derives skip/branch UI state from this row, so persist it outside debug mode too.
+    always: true,
   })
 }
 
@@ -511,71 +503,76 @@ export class GraphWorkflowExecutor {
       reusedNodeIds: reusedArtifacts.reusedNodeIds,
     }
 
-    const executionId = options?.executionId ?? GraphExecutionModel.create({
-      graph_workflow_id: workflow.id,
-      graph_version: workflow.version,
-      status: 'running',
-      execution_plan: JSON.stringify(executionPlan),
-    })
-
-    if (options?.executionId) {
+    const executionPlanJson = JSON.stringify(executionPlan)
+    let executionId: number
+    if (options?.executionId !== undefined) {
+      executionId = options.executionId
       GraphExecutionModel.update(executionId, {
-        execution_plan: JSON.stringify(executionPlan),
+        execution_plan: executionPlanJson,
+      })
+    } else {
+      executionId = GraphExecutionModel.create({
+        graph_workflow_id: workflow.id,
+        graph_version: workflow.version,
+        status: 'running',
+        execution_plan: executionPlanJson,
       })
     }
 
     const debugMode = isWorkflowDebugModeEnabled(workflow)
-    setExecutionDebugMode(executionId, debugMode)
-
-    writeExecutionLog({
-      executionId,
-      eventType: 'execution_start',
-      message: targetNodeId ? `Node execution started: ${workflow.name} -> ${targetNodeId}` : `Graph execution started: ${workflow.name}`,
-      details: {
-        workflowId: workflow.id,
-        version: workflow.version,
-        orderedNodeIds,
-        targetNodeId: targetNodeId ?? null,
-        runtimeInputKeys: Object.keys(runtimeInputValues),
-        runtimeInputSignature,
-        forceRerun,
-        reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
-        reusedNodeIds: reusedArtifacts.reusedNodeIds,
-      },
-    })
-
-    const context: ExecutionContext = {
-      executionId,
-      workflow,
-      modulesById,
-      artifactsByNode: reusedArtifacts.artifactsByNode,
-      debugMode,
-      disabledOutputPorts: new Set<string>(),
-      skippedNodeIds: new Set<string>(),
-      shouldCancel: options?.shouldCancel,
-    }
-
     let failedNodeIdHint: string | null = null
 
     try {
+      // Register the debug flag as the first statement inside the try, so the finally below always
+      // releases it even when the execution_start log write or the graph index build throws.
+      setExecutionDebugMode(executionId, debugMode)
+
+      writeExecutionLog({
+        executionId,
+        eventType: 'execution_start',
+        message: targetNodeId ? `Node execution started: ${workflow.name} -> ${targetNodeId}` : `Graph execution started: ${workflow.name}`,
+        details: {
+          workflowId: workflow.id,
+          version: workflow.version,
+          orderedNodeIds,
+          targetNodeId: targetNodeId ?? null,
+          runtimeInputKeys: Object.keys(runtimeInputValues),
+          runtimeInputSignature,
+          forceRerun,
+          reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
+          reusedNodeIds: reusedArtifacts.reusedNodeIds,
+        },
+      })
+
+      const context: ExecutionContext = {
+        executionId,
+        workflow,
+        modulesById,
+        artifactsByNode: reusedArtifacts.artifactsByNode,
+        debugMode,
+        disabledOutputPorts: new Set<string>(),
+        skippedNodeIds: new Set<string>(),
+        shouldCancel: options?.shouldCancel,
+      }
+
+      const { nodeById } = getExecutionGraphIndex(context)
       const dependenciesByNode = buildNodeDependencies(workflow.graph, orderedNodeIds)
       await runReadyGraphNodes({
         orderedNodeIds,
         dependenciesByNode,
         shouldCancel: options?.shouldCancel,
         getNodeThrottleLane: (nodeId) => {
-          const node = workflow.graph.nodes.find((item) => item.id === nodeId)
-          const moduleDefinition = node ? modulesById.get(node.module_id) : null
+          const moduleDefinition = moduleByNodeId.get(nodeId)
           return moduleDefinition ? getNodeThrottleLane(moduleDefinition) : null
         },
         executeNode: async (nodeId) => {
           try {
-            const node = workflow.graph.nodes.find((item) => item.id === nodeId)
+            const node = nodeById.get(nodeId)
             if (!node) {
               throw new Error(`Node ${nodeId} not found during execution`)
             }
 
-            const moduleDefinition = modulesById.get(node.module_id)
+            const moduleDefinition = moduleByNodeId.get(nodeId)
             if (!moduleDefinition) {
               throw new Error(`Module ${node.module_id} not found during execution`)
             }
@@ -590,6 +587,8 @@ export class GraphWorkflowExecutor {
                 details: {
                   disabledOutputKeys: moduleDefinition.output_ports.map((port) => port.key),
                 },
+                // The frontend derives skip UI state from this row, so persist it outside debug mode too.
+                always: true,
               })
               return
             }
@@ -666,7 +665,10 @@ export class GraphWorkflowExecutor {
               },
             })
           } catch (error) {
-            failedNodeIdHint = nodeId
+            // With parallel nodes, the first failure's message is what gets persisted; keep its hint.
+            if (failedNodeIdHint === null) {
+              failedNodeIdHint = nodeId
+            }
             throw error
           }
         },
@@ -742,6 +744,9 @@ export class GraphWorkflowExecutor {
       })
       GraphExecutionModel.updateStatus(executionId, 'failed', errorMessage, failedNodeId)
       throw error
+    } finally {
+      // The debug flag lives in a module-level set; clear it so finished execution ids do not leak.
+      setExecutionDebugMode(executionId, false)
     }
   }
 }

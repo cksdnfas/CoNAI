@@ -8,6 +8,16 @@ import {
 } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 
+const MAX_VERSION_SNAPSHOTS_PER_WORKFLOW = 50
+
+// 그래프에서 파생된 캐시(예: 예약 실행 레인)가 저장 편집을 놓치지 않도록 쓰기마다 올리는 리비전 값.
+let graphWorkflowRevision = 0
+
+/** Revision counter that changes whenever a stored graph workflow row is written. */
+export function getGraphWorkflowRevision() {
+  return graphWorkflowRevision
+}
+
 function stringifyGraph(value: unknown) {
   return JSON.stringify(value ?? { nodes: [], edges: [] })
 }
@@ -92,6 +102,7 @@ export class GraphWorkflowModel {
     )
 
     const workflowId = info.lastInsertRowid as number
+    graphWorkflowRevision += 1
     this.createVersionSnapshot(workflowId, workflowData.version ?? 1, workflowData.graph, 'Initial version')
     return workflowId
   }
@@ -128,28 +139,33 @@ export class GraphWorkflowModel {
       .map((record, index) => summarizeVersionRecord(record, records[index + 1]))
   }
 
-  static update(id: number, workflowData: GraphWorkflowUpdateData): boolean {
+  static update(id: number, workflowData: GraphWorkflowUpdateData): { updated: boolean; versionChanged: boolean } {
     const db = getUserSettingsDb()
     const current = this.findById(id)
     if (!current) {
-      return false
+      return { updated: false, versionChanged: false }
     }
+
+    // Byte-identical graph saves (editor auto-saves) must not bump the version or write a snapshot,
+    // otherwise partial-run reuse caches are invalidated and schedules get paused for review.
+    const incomingGraphJson = workflowData.graph !== undefined ? stringifyGraph(workflowData.graph) : undefined
+    const graphChanged = incomingGraphJson !== undefined && incomingGraphJson !== current.graph_json
 
     const cleanData: Record<string, unknown> = {
       name: workflowData.name,
       description: workflowData.description,
       version: workflowData.version,
-      graph_json: workflowData.graph !== undefined ? stringifyGraph(workflowData.graph) : undefined,
+      graph_json: graphChanged ? incomingGraphJson : undefined,
       folder_id: workflowData.folder_id,
       is_active: workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : undefined,
     }
 
     const updates = filterDefined(cleanData)
     if (Object.keys(updates).length === 0) {
-      return false
+      return { updated: false, versionChanged: false }
     }
 
-    const nextVersion = workflowData.graph ? (workflowData.version ?? current.version + 1) : (workflowData.version ?? current.version)
+    const nextVersion = graphChanged ? (workflowData.version ?? current.version + 1) : (workflowData.version ?? current.version)
     const finalUpdates = {
       ...updates,
       version: nextVersion,
@@ -158,18 +174,26 @@ export class GraphWorkflowModel {
 
     const { sql, values } = buildUpdateQuery('graph_workflows', finalUpdates, { id })
     const info = db.prepare(sql).run(...values)
+    const updated = info.changes > 0
+    if (updated) {
+      graphWorkflowRevision += 1
+    }
 
-    if (info.changes > 0 && workflowData.graph) {
+    if (updated && graphChanged && workflowData.graph !== undefined) {
       this.createVersionSnapshot(id, nextVersion, workflowData.graph, 'Workflow updated')
     }
 
-    return info.changes > 0
+    return { updated, versionChanged: updated && nextVersion !== current.version }
   }
 
   static delete(id: number): boolean {
     const db = getUserSettingsDb()
     const info = db.prepare('DELETE FROM graph_workflows WHERE id = ?').run(id)
-    return info.changes > 0
+    const deleted = info.changes > 0
+    if (deleted) {
+      graphWorkflowRevision += 1
+    }
+    return deleted
   }
 
   static createVersionSnapshot(workflowId: number, version: number, graph: unknown, changelog?: string) {
@@ -184,5 +208,16 @@ export class GraphWorkflowModel {
       stringifyGraph(graph),
       changelog || null,
     )
+
+    db.prepare(`
+      DELETE FROM graph_workflow_versions
+      WHERE workflow_id = ?
+        AND id NOT IN (
+          SELECT id FROM graph_workflow_versions
+          WHERE workflow_id = ?
+          ORDER BY version DESC, id DESC
+          LIMIT ?
+        )
+    `).run(workflowId, workflowId, MAX_VERSION_SNAPSHOTS_PER_WORKFLOW)
   }
 }

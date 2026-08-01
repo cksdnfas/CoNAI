@@ -1,5 +1,6 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import {
+  resolveSystemOperationKey,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
@@ -101,19 +102,6 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
 /** List the built-in system operation keys that the workflow executor can run. */
 export function getSupportedSystemOperationKeys() {
   return Object.keys(SYSTEM_OPERATION_HANDLERS)
-}
-
-/** Resolve the stable system operation key from module defaults. */
-function resolveSystemOperationKey(moduleDefinition: ParsedModuleDefinition) {
-  if (typeof moduleDefinition.template_defaults?.operation_key === 'string') {
-    return moduleDefinition.template_defaults.operation_key
-  }
-
-  if (typeof moduleDefinition.internal_fixed_values?.operation_key === 'string') {
-    return moduleDefinition.internal_fixed_values.operation_key
-  }
-
-  return null
 }
 
 /** Execute a CoNAI system-native module node through a stable operation key. */

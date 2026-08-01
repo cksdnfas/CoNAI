@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { seedBuiltinSystemModuleDefinitions, type UpsertBuiltinSystemModule } from '../database/userSettingsBuiltinModuleDefinitions'
-import { getSupportedSystemOperationKeys } from '../services/graph-workflow-executor/execute-system'
 import type { ModulePortDataType, ModulePortDirection } from '../types/moduleGraph'
 
 type BuiltinSystemModuleDefinition = {
@@ -175,9 +175,9 @@ function validateUiSchema(params: {
   }
 }
 
-function validateBuiltinSystemModules() {
+function validateBuiltinSystemModules(supportedOperationKeyList: string[]) {
   const definitions = collectBuiltinSystemModules()
-  const supportedOperationKeys = new Set(getSupportedSystemOperationKeys())
+  const supportedOperationKeys = new Set(supportedOperationKeyList)
   const failures: string[] = []
   const names = new Set<string>()
   const operationKeys = new Set<string>()
@@ -251,9 +251,73 @@ function validateBuiltinSystemModules() {
     throw new Error('Built-in system module definitions should live in the dedicated data file')
   }
 
-  console.log(
-    `✅ Built-in system module definitions verified (${definitions.length} modules, ${operationKeys.size} operation handlers matched)`,
-  )
+  return { moduleCount: definitions.length, operationKeyCount: operationKeys.size }
 }
 
-validateBuiltinSystemModules()
+type SeededModuleNameRow = { name: string }
+type UserSettingsDatabase = ReturnType<typeof import('../database/userSettingsDb').getUserSettingsDb>
+
+/**
+ * The executor resolves operation_key with internal_fixed_values winning over template_defaults, so no
+ * stored system module may hide an operation_key in template_defaults. This is a seeded-database check
+ * because the seeder writes template_defaults directly ('{}'), never through the definition table.
+ */
+function verifySeededSystemModuleTemplateDefaults(db: UserSettingsDatabase) {
+  const findOffendingRows = () => db.prepare(`
+    SELECT name FROM module_definitions
+    WHERE engine_type = 'system'
+      AND json_valid(template_defaults)
+      AND json_extract(template_defaults, '$.operation_key') IS NOT NULL
+  `).all() as SeededModuleNameRow[]
+
+  const offendingRows = findOffendingRows()
+  if (offendingRows.length > 0) {
+    throw new Error(
+      `Seeded system modules must keep operation_key out of template_defaults: ${offendingRows.map((row) => row.name).join(', ')}`,
+    )
+  }
+
+  // 검사식이 실제로 위반을 잡는지 확인해서 이 가드가 다시 죽은 코드가 되지 않게 한다.
+  const probeName = '__template_defaults_operation_key_probe__'
+  db.prepare(`
+    INSERT INTO module_definitions (name, engine_type, authoring_source, template_defaults, exposed_inputs, output_ports)
+    VALUES (?, 'system', 'manual', ?, '[]', '[]')
+  `).run(probeName, JSON.stringify({ operation_key: 'system.probe' }))
+  const probeDetected = findOffendingRows().some((row) => row.name === probeName)
+  db.prepare('DELETE FROM module_definitions WHERE name = ?').run(probeName)
+
+  if (!probeDetected) {
+    throw new Error('template_defaults operation_key detection query is not working; the invariant would go unchecked')
+  }
+}
+
+async function main() {
+  const tempBasePath = mkdtempSync(join(tmpdir(), 'conai-builtin-system-modules-'))
+  process.env.RUNTIME_BASE_PATH = tempBasePath
+  let closeUserSettingsDb: (() => void) | null = null
+
+  try {
+    // Import after RUNTIME_BASE_PATH is set so the seeded database lands in the temp directory.
+    const { getSupportedSystemOperationKeys } = await import('../services/graph-workflow-executor/execute-system')
+    const userSettings = await import('../database/userSettingsDb')
+    userSettings.initializeUserSettingsDb()
+    closeUserSettingsDb = userSettings.closeUserSettingsDb
+
+    const { moduleCount, operationKeyCount } = validateBuiltinSystemModules(getSupportedSystemOperationKeys())
+    verifySeededSystemModuleTemplateDefaults(userSettings.getUserSettingsDb())
+
+    console.log(
+      `✅ Built-in system module definitions verified (${moduleCount} modules, ${operationKeyCount} operation handlers matched, seeded template_defaults clean)`,
+    )
+  } finally {
+    closeUserSettingsDb?.()
+    // 실행기 모듈이 붙잡은 로그 스트림 때문에 Windows에서 삭제가 막힐 수 있으니, 정리 실패로 검증을 깨지 않는다.
+    try {
+      rmSync(tempBasePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+    } catch {
+      console.warn(`Temporary runtime directory left behind: ${tempBasePath}`)
+    }
+  }
+}
+
+void main()

@@ -77,6 +77,7 @@ export async function executeCallLlmNode(
     maxTokens: normalizeOptionalNumber(resolvedInputs.max_tokens),
     responseMode,
     structuredOutputJson,
+    includeRawResponseMetadata: context.debugMode,
     onDebugEvent: (event) => {
       writeExecutionLog({
         executionId: context.executionId,

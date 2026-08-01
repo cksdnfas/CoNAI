@@ -1,9 +1,12 @@
 import crypto from 'crypto'
 import { GraphExecutionLogModel } from '../../models/GraphExecutionLog'
 export { normalizeOptionalString, parsePositiveIntegerish } from '../../utils/valueNormalization'
+export { resolveSystemOperationKey } from './operation-key'
 import {
   type GraphWorkflowDocument,
+  type GraphWorkflowEdge,
   type GraphWorkflowExposedInput,
+  type GraphWorkflowNode,
   type ModuleDefinitionRecord,
   type ModulePortDefinition,
   type ModulePortDataType,
@@ -32,6 +35,12 @@ export type RuntimeArtifact = {
   metadata?: Record<string, unknown>
 }
 
+export type ExecutionGraphIndex = {
+  nodeById: Map<string, GraphWorkflowNode>
+  edgesByTarget: Map<string, GraphWorkflowEdge[]>
+  edgesBySource: Map<string, GraphWorkflowEdge[]>
+}
+
 export type ExecutionContext = {
   executionId: number
   workflow: ParsedGraphWorkflow
@@ -41,6 +50,37 @@ export type ExecutionContext = {
   disabledOutputPorts?: Set<string>
   skippedNodeIds?: Set<string>
   shouldCancel?: () => boolean
+  graphIndex?: ExecutionGraphIndex
+}
+
+/** Build once per execution and reuse node/edge lookup maps for hot-loop graph traversal. */
+export function getExecutionGraphIndex(context: ExecutionContext): ExecutionGraphIndex {
+  if (context.graphIndex) {
+    return context.graphIndex
+  }
+
+  const nodeById = new Map(context.workflow.graph.nodes.map((node) => [node.id, node]))
+  const edgesByTarget = new Map<string, GraphWorkflowEdge[]>()
+  const edgesBySource = new Map<string, GraphWorkflowEdge[]>()
+
+  for (const edge of context.workflow.graph.edges) {
+    const targetEdges = edgesByTarget.get(edge.target_node_id)
+    if (targetEdges) {
+      targetEdges.push(edge)
+    } else {
+      edgesByTarget.set(edge.target_node_id, [edge])
+    }
+
+    const sourceEdges = edgesBySource.get(edge.source_node_id)
+    if (sourceEdges) {
+      sourceEdges.push(edge)
+    } else {
+      edgesBySource.set(edge.source_node_id, [edge])
+    }
+  }
+
+  context.graphIndex = { nodeById, edgesByTarget, edgesBySource }
+  return context.graphIndex
 }
 
 const debugEnabledExecutionIds = new Set<number>()

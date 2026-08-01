@@ -13,6 +13,57 @@ type ExistingBuiltinModuleRow = {
 
 /** Seed built-in system-native workflow modules that should always be available. */
 export function ensureBuiltinSystemModules(db: Database.Database): void {
+  // Load candidate rows once; per-definition table scans made seeding O(N^2) in module count.
+  const existingRows = db.prepare(`
+    SELECT id, name, category, engine_type, authoring_source, internal_fixed_values, external_key
+    FROM module_definitions
+    WHERE engine_type = 'system' AND authoring_source = 'manual'
+  `).all() as ExistingBuiltinModuleRow[];
+
+  const rowsByExternalKey = new Map<string, ExistingBuiltinModuleRow>();
+  const rowsByOperationKey = new Map<string, ExistingBuiltinModuleRow>();
+  const rowsByName = new Map<string, ExistingBuiltinModuleRow>();
+
+  for (const row of existingRows) {
+    if (row.external_key && !rowsByExternalKey.has(row.external_key)) {
+      rowsByExternalKey.set(row.external_key, row);
+    }
+
+    if (row.internal_fixed_values) {
+      try {
+        const parsed = JSON.parse(row.internal_fixed_values) as { operation_key?: string };
+        if (typeof parsed.operation_key === 'string' && !rowsByOperationKey.has(parsed.operation_key)) {
+          rowsByOperationKey.set(parsed.operation_key, row);
+        }
+      } catch {
+        // rows with unparsable fixed values can still match by name below
+      }
+    }
+
+    if (!rowsByName.has(row.name)) {
+      rowsByName.set(row.name, row);
+    }
+  }
+
+  // Each definition may claim at most one row so a rename cannot make two definitions share one row.
+  const claimedRowIds = new Set<number>();
+  const findExistingRow = (stableExternalKey: string, name: string, legacyNames: string[]) => {
+    const candidates = [
+      rowsByExternalKey.get(stableExternalKey),
+      rowsByOperationKey.get(stableExternalKey),
+      rowsByName.get(name),
+      ...legacyNames.map((legacyName) => rowsByName.get(legacyName)),
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate && !claimedRowIds.has(candidate.id)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  };
+
   /** Upsert one built-in module using operation_key as the stable identity. */
   const upsertBuiltinModule = (
     name: string,
@@ -26,32 +77,10 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     legacyNames: string[] = [],
   ) => {
     const stableExternalKey = internalFixedValues.operation_key;
-    const existingRows = db.prepare(`
-      SELECT id, name, category, engine_type, authoring_source, internal_fixed_values, external_key
-      FROM module_definitions
-      WHERE engine_type = 'system' AND authoring_source = 'manual'
-    `).all() as ExistingBuiltinModuleRow[];
-
-    const existing = existingRows.find((row) => {
-      if (row.external_key === stableExternalKey) {
-        return true;
-      }
-
-      if (row.internal_fixed_values) {
-        try {
-          const parsed = JSON.parse(row.internal_fixed_values) as { operation_key?: string };
-          if (parsed.operation_key === stableExternalKey) {
-            return true;
-          }
-        } catch {
-          // fall through to legacy name-based match
-        }
-      }
-
-      return row.name === name || legacyNames.includes(row.name);
-    });
+    const existing = findExistingRow(stableExternalKey, name, legacyNames);
 
     if (existing) {
+      claimedRowIds.add(existing.id);
       db.prepare(`
         UPDATE module_definitions
         SET

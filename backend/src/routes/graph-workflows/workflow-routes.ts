@@ -441,13 +441,14 @@ export function createGraphWorkflowCrudRoutes() {
         is_active: req.body.is_active,
       }
 
-      const updated = GraphWorkflowModel.update(id, updateData)
-      const shouldPauseSchedulesForReview = Boolean(updateData.graph !== undefined || updateData.version !== undefined)
-      const scheduleMaintenance = updated && shouldPauseSchedulesForReview
+      const { updated, versionChanged } = GraphWorkflowModel.update(id, updateData)
+      // Schedules only need review when the stored version actually changed; identical-graph
+      // auto-saves must not pause schedules or cancel queued runs.
+      const scheduleMaintenance = versionChanged
         ? GraphWorkflowScheduleService.pauseSchedulesForWorkflowChange(id)
         : null
       return res.json({
-        success: updated,
+        success: true,
         data: {
           id,
           message: updated ? 'Graph workflow updated successfully' : 'No changes applied',

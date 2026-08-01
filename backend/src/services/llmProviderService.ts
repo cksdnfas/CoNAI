@@ -22,6 +22,7 @@ export type ExecuteLlmTextRequest = {
   maxTokens?: number | null
   responseMode?: LlmResponseMode | null
   structuredOutputJson?: string | null
+  includeRawResponseMetadata?: boolean
   onDebugEvent?: (event: LlmDebugEvent) => void
 }
 
@@ -36,6 +37,68 @@ export type ExecuteLlmTextResponse = {
 }
 
 const MAX_DEBUG_TEXT_LENGTH = 20_000
+// 두 프로바이더 모두 비스트리밍이라 이 값은 "전체 생성 시간" 상한이야. 로컬 대형 모델은 몇 분씩 걸리니 넉넉하게 잡는다.
+const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 600_000
+
+/** 연결별 설정 > 환경변수 > 기본값 순으로 요청 전체 제한 시간을 정한다. */
+function resolveLlmRequestTimeoutMs(additionalConfig: Record<string, any> | null | undefined) {
+  const providerTimeoutMs = normalizeOptionalNumber(additionalConfig?.request_timeout_ms)
+    ?? normalizeOptionalNumber(additionalConfig?.timeout_ms)
+  if (providerTimeoutMs !== null && providerTimeoutMs > 0) {
+    return Math.floor(providerTimeoutMs)
+  }
+
+  const configured = Number(process.env.CONAI_LLM_REQUEST_TIMEOUT_MS)
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.floor(configured)
+  }
+
+  return DEFAULT_LLM_REQUEST_TIMEOUT_MS
+}
+
+function isFetchTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+    return true
+  }
+
+  return isFetchTimeoutError((error as { cause?: unknown }).cause)
+}
+
+type LlmHttpResponse = {
+  ok: boolean
+  status: number
+  statusText: string
+  bodyText: string
+}
+
+/** POST + 본문 읽기를 하나의 timeout 안에서 끝내서, 멈춘 프로바이더가 실행을 영원히 붙잡지 못하게 한다. */
+async function postWithTimeout(endpoint: string, init: RequestInit, timeoutMs: number): Promise<LlmHttpResponse> {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  // 호출자 signal을 덮어쓰지 않고 합쳐서 둘 중 어느 쪽이 끊겨도 요청이 취소되게 한다.
+  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal
+
+  try {
+    const response = await fetch(endpoint, { ...init, signal })
+    // 본문 읽기도 같은 signal 아래에 있으니 같은 try 안에서 끝내야 timeout 메시지로 매핑된다.
+    const bodyText = await response.text()
+    return {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      bodyText,
+    }
+  } catch (error) {
+    if (timeoutSignal.aborted || isFetchTimeoutError(error)) {
+      throw new Error(`LLM provider request timed out after ${timeoutMs}ms: ${endpoint}`)
+    }
+
+    throw error
+  }
+}
 
 function normalizeOptionalNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -230,15 +293,14 @@ function extractOpenAiCompatibleText(responseJson: any) {
   throw new Error('LLM provider returned no text content')
 }
 
-async function parseJsonResponse(response: Response) {
-  const responseText = await response.text()
+function parseJsonResponseText(responseText: string) {
   if (!responseText) {
     return null
   }
 
   try {
     return JSON.parse(responseText)
-  } catch (error) {
+  } catch {
     throw new Error(`Provider response was not valid JSON: ${responseText.slice(0, 300)}`)
   }
 }
@@ -255,6 +317,7 @@ async function executeOpenAiCompatibleRequest(params: {
   maxTokens: number | null
   responseMode: LlmResponseMode
   structuredOutputJson: string | null
+  timeoutMs: number
 }) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -288,33 +351,31 @@ async function executeOpenAiCompatibleRequest(params: {
   }
 
   const endpoint = `${params.baseUrl.replace(/\/+$/, '')}/chat/completions`
-  let response = await fetch(endpoint, {
+  let response = await postWithTimeout(endpoint, {
     method: 'POST',
     headers,
     body: JSON.stringify(buildBody('data_url')),
-  })
+  }, params.timeoutMs)
 
   let retriedRawBase64Image = false
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '')
-    if (params.imageDataUrl && shouldRetryOpenAiCompatibleImageAsRawBase64(response.status, errorText)) {
+    if (params.imageDataUrl && shouldRetryOpenAiCompatibleImageAsRawBase64(response.status, response.bodyText)) {
       retriedRawBase64Image = true
-      response = await fetch(endpoint, {
+      response = await postWithTimeout(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(buildBody('raw_base64')),
-      })
+      }, params.timeoutMs)
     } else {
-      throw new Error(`OpenAI-compatible provider request failed (${response.status}): ${errorText || response.statusText}`)
+      throw new Error(`OpenAI-compatible provider request failed (${response.status}): ${response.bodyText || response.statusText}`)
     }
   }
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '')
-    throw new Error(`OpenAI-compatible provider request failed (${response.status}): ${errorText || response.statusText}`)
+    throw new Error(`OpenAI-compatible provider request failed (${response.status}): ${response.bodyText || response.statusText}`)
   }
 
-  const responseJson = await parseJsonResponse(response)
+  const responseJson = parseJsonResponseText(response.bodyText)
   const text = extractOpenAiCompatibleText(responseJson)
 
   return {
@@ -336,6 +397,7 @@ async function executeOllamaRequest(params: {
   maxTokens: number | null
   responseMode: LlmResponseMode
   structuredOutputJson: string | null
+  timeoutMs: number
 }) {
   const jsonInstruction = buildJsonInstruction(params.responseMode, params.structuredOutputJson)
   const systemBlock = [params.systemPrompt, jsonInstruction].filter((value): value is string => Boolean(value)).join('\n\n')
@@ -365,20 +427,19 @@ async function executeOllamaRequest(params: {
     body.options = options
   }
 
-  const response = await fetch(`${params.baseUrl.replace(/\/+$/, '')}/api/generate`, {
+  const response = await postWithTimeout(`${params.baseUrl.replace(/\/+$/, '')}/api/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
-  })
+  }, params.timeoutMs)
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '')
-    throw new Error(`Ollama request failed (${response.status}): ${errorText || response.statusText}`)
+    throw new Error(`Ollama request failed (${response.status}): ${response.bodyText || response.statusText}`)
   }
 
-  const responseJson = await parseJsonResponse(response)
+  const responseJson = parseJsonResponseText(response.bodyText)
   const text = normalizeOptionalString(responseJson?.response)
   if (!text) {
     throw new Error('Ollama returned no text response')
@@ -390,6 +451,27 @@ async function executeOllamaRequest(params: {
     model: normalizeOptionalString(responseJson?.model) ?? params.model,
     imagePayloadFormat: params.imageDataUrl ? 'ollama_images_base64' : null,
   }
+}
+
+function buildCompactUsageMetadata(raw: any) {
+  if (raw && typeof raw === 'object' && raw.usage && typeof raw.usage === 'object') {
+    return raw.usage as Record<string, unknown>
+  }
+
+  // Ollama reports token counts at the top level of the response body.
+  if (raw && typeof raw === 'object' && (typeof raw.eval_count === 'number' || typeof raw.prompt_eval_count === 'number')) {
+    return {
+      prompt_eval_count: raw.prompt_eval_count ?? null,
+      eval_count: raw.eval_count ?? null,
+    }
+  }
+
+  return null
+}
+
+function buildCompactFinishReason(raw: any) {
+  const finishReason = Array.isArray(raw?.choices) ? raw.choices[0]?.finish_reason : raw?.done_reason
+  return normalizeOptionalString(finishReason)
 }
 
 function tryParseJsonText(text: string) {
@@ -514,19 +596,41 @@ function extractBalancedJsonAt(text: string, startIndex: number) {
   return null
 }
 
+const EMBEDDED_JSON_SCAN_MAX_LENGTH = 4_000_000
+const EMBEDDED_JSON_SCAN_MAX_CANDIDATES = 500
+const EMBEDDED_JSON_SCAN_MAX_WORK = 8_000_000
+
 function extractFirstParseableJson(text: string) {
-  for (let index = 0; index < text.length; index += 1) {
-    const candidate = extractBalancedJsonAt(text, index)
-    if (!candidate) {
+  // Only opening braces/brackets can start a JSON document. Prose can hold plenty of them, so the guard
+  // is on actual work (balanced candidates parsed + characters walked), not on how many braces appear.
+  const scanLength = Math.min(text.length, EMBEDDED_JSON_SCAN_MAX_LENGTH)
+  let candidateCount = 0
+  let scannedLength = 0
+
+  for (let index = 0; index < scanLength; index += 1) {
+    const char = text[index]
+    if (char !== '{' && char !== '[') {
       continue
     }
 
-    const parsed = tryParseJsonTextWithInvalidEscapeRepair(candidate)
-    if (parsed.ok) {
-      return {
-        value: parsed.value,
-        repaired: parsed.repaired,
+    const candidate = extractBalancedJsonAt(text, index)
+    // An unbalanced opener walks to the end of the text before failing, so charge that to the budget too.
+    scannedLength += candidate ? candidate.length : text.length - index
+
+    if (candidate) {
+      const parsed = tryParseJsonTextWithInvalidEscapeRepair(candidate)
+      if (parsed.ok) {
+        return {
+          value: parsed.value,
+          repaired: parsed.repaired,
+        }
       }
+
+      candidateCount += 1
+    }
+
+    if (candidateCount >= EMBEDDED_JSON_SCAN_MAX_CANDIDATES || scannedLength >= EMBEDDED_JSON_SCAN_MAX_WORK) {
+      return undefined
     }
   }
 
@@ -610,6 +714,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
   const imageDataUrl = await normalizeVisionImageDataUrl(request.image)
   const temperature = normalizeOptionalNumber(request.temperature) ?? parseProviderDefaultTemperature(provider.additional_config)
   const maxTokens = normalizeOptionalNumber(request.maxTokens) ?? parseProviderDefaultMaxTokens(provider.additional_config)
+  const timeoutMs = resolveLlmRequestTimeoutMs(provider.additional_config)
 
   let result: Awaited<ReturnType<typeof executeOpenAiCompatibleRequest>> | Awaited<ReturnType<typeof executeOllamaRequest>>
   if (provider.provider_type === 'llm_ollama') {
@@ -624,6 +729,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       maxTokens,
       responseMode,
       structuredOutputJson,
+      timeoutMs,
     })
   } else if (provider.provider_type === 'llm_openai_compatible') {
     result = await executeOpenAiCompatibleRequest({
@@ -638,6 +744,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       maxTokens,
       responseMode,
       structuredOutputJson,
+      timeoutMs,
     })
   } else {
     throw new Error(`이 연결은 LLM 실행용 타입이 아니야: ${provider.display_name}`)
@@ -675,7 +782,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
     throw error
   }
 
-  const metadata = {
+  const metadata: Record<string, unknown> = {
     provider_name: provider.provider_name,
     provider_display_name: provider.display_name,
     provider_type: provider.provider_type,
@@ -687,7 +794,13 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
     structured_output_json: structuredOutputJson,
     has_image: Boolean(imageDataUrl),
     image_payload_format: result.imagePayloadFormat,
-    raw_response: result.raw,
+    usage: buildCompactUsageMetadata(result.raw),
+    finish_reason: buildCompactFinishReason(result.raw),
+  }
+
+  // Full provider payloads are persisted with artifacts, so only keep them for debug runs.
+  if (request.includeRawResponseMetadata) {
+    metadata.raw_response = result.raw
   }
 
   return {

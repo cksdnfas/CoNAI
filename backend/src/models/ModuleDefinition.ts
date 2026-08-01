@@ -13,6 +13,18 @@ function stringifyJson(value: unknown) {
   return JSON.stringify(value ?? null)
 }
 
+// 모듈 정의에서 파생된 캐시(예: 예약 실행 레인)가 편집을 놓치지 않도록 쓰기마다 올리는 리비전 값.
+let moduleDefinitionRevision = 0
+
+/** Revision counter that changes whenever any module definition row is created, updated or deleted. */
+export function getModuleDefinitionRevision() {
+  return moduleDefinitionRevision
+}
+
+function bumpModuleDefinitionRevision() {
+  moduleDefinitionRevision += 1
+}
+
 export type ModuleDefinitionGraphReconcileResult = {
   graph: GraphWorkflowDocument
   changed: boolean
@@ -151,7 +163,8 @@ function reconcileSavedGraphWorkflowsForModuleDefinitionUpdate(
       continue
     }
 
-    if (GraphWorkflowModel.update(workflow.id, { graph: result.graph })) {
+    // GraphWorkflowModel.update는 객체를 돌려주니 updated 플래그를 봐야 실제 반영된 건만 센다.
+    if (GraphWorkflowModel.update(workflow.id, { graph: result.graph }).updated) {
       updatedCount += 1
     }
   }
@@ -188,6 +201,7 @@ export class ModuleDefinitionModel {
       moduleData.source_hash || null,
     )
 
+    bumpModuleDefinitionRevision()
     return info.lastInsertRowid as number
   }
 
@@ -239,6 +253,7 @@ export class ModuleDefinitionModel {
     const info = db.prepare(sql).run(...values)
     const updated = info.changes > 0
     if (updated) {
+      bumpModuleDefinitionRevision()
       reconcileSavedGraphWorkflowsForModuleDefinitionUpdate(id, moduleData)
     }
     return updated
@@ -247,7 +262,11 @@ export class ModuleDefinitionModel {
   static delete(id: number): boolean {
     const db = getUserSettingsDb()
     const info = db.prepare('DELETE FROM module_definitions WHERE id = ?').run(id)
-    return info.changes > 0
+    const deleted = info.changes > 0
+    if (deleted) {
+      bumpModuleDefinitionRevision()
+    }
+    return deleted
   }
 
   static existsByName(name: string, excludeId?: number): boolean {

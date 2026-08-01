@@ -2,17 +2,18 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { GraphExecutionModel } from '../models/GraphExecution'
-import { GraphWorkflowModel } from '../models/GraphWorkflow'
-import { ModuleDefinitionModel } from '../models/ModuleDefinition'
+import { GraphWorkflowModel, getGraphWorkflowRevision } from '../models/GraphWorkflow'
+import { ModuleDefinitionModel, getModuleDefinitionRevision } from '../models/ModuleDefinition'
 import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
 import { settingsService } from './settingsService'
 import { getGenerationQueueServerCapacity } from './generationQueueRouting'
-import { parseGraphWorkflowRecord, parseModuleDefinition, writeExecutionLog, type ParsedModuleDefinition } from './graph-workflow-executor/shared'
+import { parseGraphWorkflowRecord, parseModuleDefinition, resolveSystemOperationKey, writeExecutionLog, type ParsedModuleDefinition } from './graph-workflow-executor/shared'
 import { encodeQueuedExecutionMetadata, parseQueuedExecutionMetadata } from './graphWorkflowExecutionQueueMetadata'
 
 type QueuedExecutionJob = {
   executionId: number
   workflowId: number
+  graphVersion?: number
   inputValues?: Record<string, unknown>
   targetNodeId?: string
   forceRerun?: boolean
@@ -46,6 +47,7 @@ const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph ex
 const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
 const SCHEDULE_DISPATCH_SCAN_LIMIT = 200
+const RESERVATION_LANE_CACHE_MAX_ENTRIES = 300
 
 function formatExecutionError(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown execution error'
@@ -56,24 +58,13 @@ function buildQueuedJobFromExecution(execution: NonNullable<ReturnType<typeof Gr
   return {
     executionId: execution.id,
     workflowId: execution.graph_workflow_id,
+    graphVersion: execution.graph_version,
     inputValues: metadata.inputValues,
     targetNodeId: metadata.targetNodeId,
     forceRerun: metadata.forceRerun,
     triggerType: execution.trigger_type === 'schedule' ? 'schedule' : 'manual',
     scheduleId: execution.schedule_id ?? null,
   }
-}
-
-function getSystemOperationKey(moduleDefinition: Pick<ParsedModuleDefinition, 'internal_fixed_values' | 'template_defaults'>) {
-  if (typeof moduleDefinition.internal_fixed_values?.operation_key === 'string') {
-    return moduleDefinition.internal_fixed_values.operation_key
-  }
-
-  if (typeof moduleDefinition.template_defaults?.operation_key === 'string') {
-    return moduleDefinition.template_defaults.operation_key
-  }
-
-  return null
 }
 
 function addReservationLaneForModule(lanes: Set<ReservationLane>, moduleDefinition: ParsedModuleDefinition) {
@@ -96,7 +87,7 @@ function addReservationLaneForModule(lanes: Set<ReservationLane>, moduleDefiniti
     return
   }
 
-  const operationKey = getSystemOperationKey(moduleDefinition)
+  const operationKey = resolveSystemOperationKey(moduleDefinition)
   if (operationKey === 'system.generate_image_nai') {
     lanes.add('novelai')
   } else if (operationKey === 'system.generate_image_codex') {
@@ -140,6 +131,7 @@ export class GraphWorkflowExecutionQueue {
   private static cancelRequestedExecutionIds = new Set<number>()
   private static processRetryTimer: NodeJS.Timeout | null = null
   private static lastStartupRecovery: StartupRecoverySnapshot | null = null
+  private static reservationLaneCache = new Map<string, Set<ReservationLane>>()
 
   /** Apply one conservative startup recovery pass before new executions are queued. */
   static start() {
@@ -196,7 +188,7 @@ export class GraphWorkflowExecutionQueue {
     executionMeta?: EnqueueExecutionMetadata,
   ) {
     const triggerType = executionMeta?.triggerType ?? 'manual'
-    const job = { executionId: 0, workflowId: workflow.id, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null }
+    const job = { executionId: 0, workflowId: workflow.id, graphVersion: workflow.version, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null }
     const executionId = GraphExecutionModel.create({
       graph_workflow_id: workflow.id,
       graph_version: workflow.version,
@@ -492,14 +484,29 @@ export class GraphWorkflowExecutionQueue {
 
   /** Claim the oldest queued reservation whose generation lane still has capacity. */
   private static claimNextDispatchableScheduleExecution(scheduleLimit: number) {
-    if (scheduleLimit <= 0) {
+    if (scheduleLimit <= 0 || this.countRunningJobs('schedule') >= scheduleLimit) {
       return null
     }
 
     const queuedExecutions = GraphExecutionModel.findQueuedByTriggerType('schedule', SCHEDULE_DISPATCH_SCAN_LIMIT)
+    if (queuedExecutions.length === 0) {
+      return null
+    }
+
+    // Settings, lane limits, and running-lane occupancy stay constant across one dispatch scan.
+    const generationThrottle = settingsService.loadSettings().generationThrottle
+    const laneLimits = new Map<ReservationLane, number | null>()
+    const resolveLaneLimit = (lane: ReservationLane) => {
+      if (!laneLimits.has(lane)) {
+        laneLimits.set(lane, this.resolveReservationLaneLimit(lane, generationThrottle))
+      }
+      return laneLimits.get(lane) ?? null
+    }
+    const runningLaneCounts = this.countRunningScheduleLanes()
+
     for (const execution of queuedExecutions) {
       const job = buildQueuedJobFromExecution(execution)
-      if (!this.canDispatchScheduleJob(job, scheduleLimit)) {
+      if (!this.canDispatchScheduleJob(job, resolveLaneLimit, runningLaneCounts)) {
         continue
       }
 
@@ -513,14 +520,14 @@ export class GraphWorkflowExecutionQueue {
   }
 
   /** Check lane occupancy before a reservation run starts waiting on the generation queue. */
-  private static canDispatchScheduleJob(job: QueuedExecutionJob, scheduleLimit: number) {
-    if (this.countRunningJobs('schedule') >= scheduleLimit) {
-      return false
-    }
-
+  private static canDispatchScheduleJob(
+    job: QueuedExecutionJob,
+    resolveLaneLimit: (lane: ReservationLane) => number | null,
+    runningLaneCounts: ReadonlyMap<ReservationLane, number>,
+  ) {
     for (const lane of this.resolveReservationLanesForJob(job)) {
-      const laneLimit = this.resolveReservationLaneLimit(lane)
-      if (laneLimit !== null && this.countRunningScheduleLane(lane) >= laneLimit) {
+      const laneLimit = resolveLaneLimit(lane)
+      if (laneLimit !== null && (runningLaneCounts.get(lane) ?? 0) >= laneLimit) {
         return false
       }
     }
@@ -528,8 +535,10 @@ export class GraphWorkflowExecutionQueue {
     return true
   }
 
-  private static resolveReservationLaneLimit(lane: ReservationLane) {
-    const generationThrottle = settingsService.loadSettings().generationThrottle
+  private static resolveReservationLaneLimit(
+    lane: ReservationLane,
+    generationThrottle: ReturnType<typeof settingsService.loadSettings>['generationThrottle'],
+  ) {
     if (lane === 'novelai') {
       return Math.max(1, generationThrottle.novelai.maxConcurrentJobs)
     }
@@ -546,20 +555,36 @@ export class GraphWorkflowExecutionQueue {
     return null
   }
 
-  private static countRunningScheduleLane(lane: ReservationLane) {
-    let count = 0
+  private static countRunningScheduleLanes() {
+    const counts = new Map<ReservationLane, number>()
     for (const runningJob of this.runningJobs.values()) {
       if (runningJob.triggerType !== 'schedule') {
         continue
       }
-      if (this.resolveReservationLanesForJob(runningJob).has(lane)) {
-        count += 1
+      for (const lane of this.resolveReservationLanesForJob(runningJob)) {
+        counts.set(lane, (counts.get(lane) ?? 0) + 1)
       }
     }
-    return count
+    return counts
   }
 
   private static resolveReservationLanesForJob(job: QueuedExecutionJob) {
+    // Lane sets are derived from the stored graph AND its module rows, so both revisions join the key:
+    // editing a module (engine_type, operation_key) never touches the graph version, and a graph edit
+    // never touches the queued row's graph version either. Without them a stale lane set would stick
+    // for the process lifetime and bypass the reservation concurrency caps.
+    const cacheKey = [
+      job.workflowId,
+      job.graphVersion ?? '',
+      job.targetNodeId ?? '',
+      getGraphWorkflowRevision(),
+      getModuleDefinitionRevision(),
+    ].join(':')
+    const cachedLanes = this.reservationLaneCache.get(cacheKey)
+    if (cachedLanes) {
+      return cachedLanes
+    }
+
     const lanes = new Set<ReservationLane>()
     const workflowRecord = GraphWorkflowModel.findById(job.workflowId)
     if (!workflowRecord) {
@@ -567,6 +592,7 @@ export class GraphWorkflowExecutionQueue {
       return lanes
     }
 
+    let resolvedCleanly = true
     try {
       const workflow = parseGraphWorkflowRecord(workflowRecord)
       const executableNodeIds = collectExecutionNodeIds(workflow.graph, job.targetNodeId)
@@ -582,11 +608,22 @@ export class GraphWorkflowExecutionQueue {
         addReservationLaneForModule(lanes, parseModuleDefinition(moduleRecord))
       }
     } catch (error) {
+      resolvedCleanly = false
       console.warn(`Could not resolve reservation generation lanes for workflow ${job.workflowId}:`, formatExecutionError(error))
     }
 
     if (lanes.size === 0) {
       lanes.add('other')
+    }
+
+    if (resolvedCleanly) {
+      if (this.reservationLaneCache.size >= RESERVATION_LANE_CACHE_MAX_ENTRIES) {
+        const oldestKey = this.reservationLaneCache.keys().next().value
+        if (oldestKey !== undefined) {
+          this.reservationLaneCache.delete(oldestKey)
+        }
+      }
+      this.reservationLaneCache.set(cacheKey, lanes)
     }
 
     return lanes

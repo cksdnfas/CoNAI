@@ -2,6 +2,9 @@ import {
   type GraphWorkflowDocument,
   type GraphWorkflowNode,
 } from '../../types/moduleGraph'
+// Import the operation-key leaf directly: shared.ts pulls in database modules at load time,
+// and validate.ts must stay side-effect free for contract scripts that set env overrides first.
+import { resolveSystemOperationKey } from './operation-key'
 import { type ParsedModuleDefinition } from './shared'
 
 function resolveInputPort(moduleDefinition: ParsedModuleDefinition, portKey: string) {
@@ -10,7 +13,7 @@ function resolveInputPort(moduleDefinition: ParsedModuleDefinition, portKey: str
     return directPort
   }
 
-  const operationKey = moduleDefinition.internal_fixed_values?.operation_key
+  const operationKey = resolveSystemOperationKey(moduleDefinition)
 
   if (operationKey === 'system.random_text_choice') {
     const parentPort = moduleDefinition.exposed_inputs.find((port) => port.key === 'options')
@@ -146,9 +149,10 @@ export function buildExecutionOrder(graph: GraphWorkflowDocument, targetNodeId?:
 
 /** Validate graph edge references and port data-type compatibility. */
 export function validateGraphTypes(graph: GraphWorkflowDocument, modulesById: Map<number, ParsedModuleDefinition>) {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]))
   for (const edge of graph.edges) {
-    const sourceNode = graph.nodes.find((node) => node.id === edge.source_node_id)
-    const targetNode = graph.nodes.find((node) => node.id === edge.target_node_id)
+    const sourceNode = nodeById.get(edge.source_node_id)
+    const targetNode = nodeById.get(edge.target_node_id)
     if (!sourceNode || !targetNode) {
       throw new Error(`Invalid edge ${edge.id}: source or target node not found`)
     }
