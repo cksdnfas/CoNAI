@@ -200,6 +200,13 @@ export class GenerationQueueModel {
     return row ?? null
   }
 
+  /** Check cancellation flag without hydrating the heavyweight request payload (hot polling path). */
+  static isCancelRequested(id: number) {
+    const db = getUserSettingsDb()
+    const row = db.prepare('SELECT cancel_requested FROM generation_queue_jobs WHERE id = ?').get(id) as { cancel_requested: number } | undefined
+    return (row?.cancel_requested ?? 0) > 0
+  }
+
   /** Find one queue job for API responses without hydrating heavyweight request payloads. */
   static findListRecordById(id: number) {
     const db = getUserSettingsDb()
@@ -311,12 +318,12 @@ export class GenerationQueueModel {
   }
 
   /** List lean recent completed queue jobs for ETA sampling without scanning or hydrating whole history. */
-  static findRecentCompleted(input: number | GenerationQueueRecentCompletedFilters = 240) {
+  static findRecentCompleted(input: number | GenerationQueueRecentCompletedFilters = 60) {
     const db = getUserSettingsDb()
     const filters: GenerationQueueRecentCompletedFilters = typeof input === 'number'
       ? { limit: input }
       : input
-    const limit = Math.max(1, Math.floor(filters.limit ?? 240))
+    const limit = Math.max(1, Math.floor(filters.limit ?? 60))
     const clauses = ['status = ?']
     const values: Array<string | number> = ['completed']
     appendQueueFilterClauses(clauses, values, filters, { includeStatuses: false })

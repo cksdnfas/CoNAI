@@ -33,6 +33,7 @@ export class GenerationQueueService {
   private static activeWorkerKeys = new Set<string>()
   private static terminalJobWaiters = new QueueTerminalJobWaiters()
   private static serviceThrottle = new QueueServiceThrottle()
+  private static comfyDispatchSkipStateByServerId = new Map<number, 'unreachable' | 'busy'>()
 
   /** Start queue recovery hooks and dispatcher once per process. */
   static start() {
@@ -70,6 +71,7 @@ export class GenerationQueueService {
     this.activeWorkerKeys.clear()
     this.terminalJobWaiters.resolve(null)
     this.serviceThrottle.reset()
+    this.comfyDispatchSkipStateByServerId.clear()
     return true
   }
 
@@ -87,7 +89,9 @@ export class GenerationQueueService {
     this.dispatchTickScheduled = true
     queueMicrotask(() => {
       this.dispatchTickScheduled = false
-      void this.runDispatchTick()
+      this.runDispatchTick().catch((error) => {
+        console.error('❌ Generation queue dispatch tick failed:', error)
+      })
     })
 
     return true
@@ -312,6 +316,10 @@ export class GenerationQueueService {
     }
 
     const requestPayload = parseStoredRequestPayload(existing)
+    if (requestPayload.pruned === true) {
+      throw new Error(`Queue job ${id} request payload was pruned by retention cleanup, so it can no longer be retried`)
+    }
+
     const retrySummary = existing.request_summary
       ? `${existing.request_summary} (retry)`
       : `Retry of queue job ${existing.id}`
@@ -566,7 +574,11 @@ export class GenerationQueueService {
         ? { is_connected: true, is_idle: true, running_count: 0, pending_count: 0 }
         : statusByServerId.get(server.id)
       if (!runtimeStatus?.is_connected) {
-        console.log(`⏭️ Skipping ComfyUI server ${server.name} (${server.id}), unreachable`)
+        // Log only on state change so the 3s dispatch tick does not repeat skip lines.
+        if (this.comfyDispatchSkipStateByServerId.get(server.id) !== 'unreachable') {
+          this.comfyDispatchSkipStateByServerId.set(server.id, 'unreachable')
+          console.log(`⏭️ Skipping ComfyUI server ${server.name} (${server.id}), unreachable`)
+        }
         continue
       }
 
@@ -578,11 +590,16 @@ export class GenerationQueueService {
       }
 
       if (server.backend_type !== 'modal' && runtimeStatus.is_idle !== true) {
-        console.log(
-          `⏭️ Skipping ComfyUI server ${server.name} (${server.id}), busy (running=${runtimeStatus.running_count ?? 0}, pending=${runtimeStatus.pending_count ?? 0})`,
-        )
+        if (this.comfyDispatchSkipStateByServerId.get(server.id) !== 'busy') {
+          this.comfyDispatchSkipStateByServerId.set(server.id, 'busy')
+          console.log(
+            `⏭️ Skipping ComfyUI server ${server.name} (${server.id}), busy (running=${runtimeStatus.running_count ?? 0}, pending=${runtimeStatus.pending_count ?? 0})`,
+          )
+        }
         continue
       }
+
+      this.comfyDispatchSkipStateByServerId.delete(server.id)
 
       for (let slotIndex = 0; slotIndex < availableLocalSlots; slotIndex += 1) {
         const candidateJob = takeNextRunnableJobForServer(server.id)

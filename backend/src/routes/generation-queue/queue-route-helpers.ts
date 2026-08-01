@@ -128,10 +128,9 @@ export function buildQueueRequesterUsernameMap(records: Array<Pick<GenerationQue
       .filter((accountId): accountId is number => typeof accountId === 'number' && accountId > 0),
   ))
 
-  for (const accountId of accountIds) {
-    const account = AuthAccount.findById(accountId)
-    if (account?.username) {
-      usernameByAccountId.set(accountId, account.username)
+  for (const account of AuthAccount.findByIds(accountIds)) {
+    if (account.username) {
+      usernameByAccountId.set(account.id, account.username)
     }
   }
 

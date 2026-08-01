@@ -25,6 +25,13 @@ import { substituteComfyPromptData } from './comfyui/workflowSubstitution';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
 
+const HISTORY_POLL_TIMEOUT_MS = 10000;
+// 연속 실패 5회까지는 재시도하고, 그 다음(6회째) 실패에서 생성을 포기한다.
+const TOLERATED_CONSECUTIVE_HISTORY_POLL_FAILURES = 5;
+const HISTORY_POLL_BACKOFF_MAX_MS = 30000;
+// 취소 요청은 워커 슬롯을 붙잡고 있으므로 인스턴스 기본 타임아웃(30분)을 쓰면 안 된다.
+const CANCEL_REQUEST_TIMEOUT_MS = 10000;
+
 type WaitForCompletionOptions = {
   shouldCancel?: () => boolean | Promise<boolean>;
   onCancelRequested?: (promptId: string) => void | Promise<void>;
@@ -41,6 +48,8 @@ export type ComfyUICancelPromptResult = {
   matchedPending: boolean;
   interrupted: boolean;
   deleted: boolean;
+  /** 상류 큐가 실행 중이라고 보고했지만 prompt id를 확인할 수 없어 /interrupt를 건너뛴 경우 */
+  runningIdsUnresolved: boolean;
 };
 
 /**
@@ -138,9 +147,12 @@ export class ComfyUIService {
    * @param promptId ComfyUI 프롬프트 ID
    * @returns 히스토리 데이터
    */
-  async getHistory(promptId: string): Promise<ComfyUIHistoryResponse> {
+  async getHistory(promptId: string, timeoutMs?: number): Promise<ComfyUIHistoryResponse> {
     try {
-      const response = await this.axiosInstance.get<ComfyUIHistoryResponse>(`/history/${promptId}`);
+      const response = await this.axiosInstance.get<ComfyUIHistoryResponse>(
+        `/history/${promptId}`,
+        timeoutMs !== undefined ? { timeout: timeoutMs } : undefined,
+      );
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -182,10 +194,28 @@ export class ComfyUIService {
       throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE);
     };
 
+    let consecutivePollFailures = 0;
     for (let i = 0; i < maxAttempts; i++) {
       await maybeCancel();
 
-      const history = await this.getHistory(promptId);
+      let history: ComfyUIHistoryResponse;
+      try {
+        // Short per-poll timeout so a transient stall fails this poll, not the whole generation.
+        history = await this.getHistory(promptId, HISTORY_POLL_TIMEOUT_MS);
+        consecutivePollFailures = 0;
+      } catch (pollError) {
+        consecutivePollFailures += 1;
+        if (consecutivePollFailures > TOLERATED_CONSECUTIVE_HISTORY_POLL_FAILURES) {
+          await this.cancelPromptBestEffort(promptId);
+          throw new Error(
+            `ComfyUI history polling failed ${consecutivePollFailures} times in a row: ${pollError instanceof Error ? pollError.message : String(pollError)}`,
+          );
+        }
+
+        const backoffMs = Math.min(intervalMs * 2 ** consecutivePollFailures, HISTORY_POLL_BACKOFF_MAX_MS);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        continue;
+      }
 
       if (history[promptId]) {
         const item = history[promptId];
@@ -204,7 +234,20 @@ export class ComfyUIService {
       await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
 
+    await this.cancelPromptBestEffort(promptId);
     throw new Error(`ComfyUI execution timeout after ${maxAttempts * intervalMs / 1000} seconds`);
+  }
+
+  /** Best-effort upstream cancellation so an abandoned prompt does not keep generating orphaned output. */
+  private async cancelPromptBestEffort(promptId: string): Promise<void> {
+    try {
+      await this.cancelPrompt(promptId);
+    } catch (cancelError) {
+      console.warn(
+        `⚠️ Failed best-effort ComfyUI cancellation for prompt ${promptId}:`,
+        cancelError instanceof Error ? cancelError.message : cancelError,
+      );
+    }
   }
 
   /**
@@ -314,6 +357,7 @@ export class ComfyUIService {
         matchedPending: false,
         interrupted: false,
         deleted: false,
+        runningIdsUnresolved: false,
       };
     }
 
@@ -322,20 +366,30 @@ export class ComfyUIService {
       const pendingPromptIds = queueState.pending_prompt_ids ?? [];
       const runningPromptIds = queueState.running_prompt_ids ?? [];
       const matchedPending = pendingPromptIds.includes(normalizedPromptId);
-      const matchedRunning = runningPromptIds.includes(normalizedPromptId)
-        || (queueState.running_count > 0 && runningPromptIds.length === 0);
+      // Only interrupt when our prompt id is confirmed running; a blind /interrupt on a
+      // shared or capacity>1 server would kill someone else's prompt.
+      const matchedRunning = runningPromptIds.includes(normalizedPromptId);
+      // 프록시/포크 서버가 prompt id 없는 queue_running 항목을 돌려주면 우리 잡인지 확인할 수 없다.
+      // 이때도 /interrupt는 보내지 않지만(타인 잡 중단 위험), 상류 생성이 그대로 완주해 산출물이
+      // 고아가 되므로 별도 상태로 남겨 추적할 수 있게 한다.
+      const runningIdsUnresolved = runningPromptIds.length === 0 && queueState.running_count > 0;
+      if (runningIdsUnresolved) {
+        console.warn(
+          `⚠️ ComfyUI queue reports ${queueState.running_count} running prompt(s) without resolvable prompt ids; skipping /interrupt for ${normalizedPromptId} (upstream generation may finish and orphan its output)`,
+        );
+      }
 
       let deleted = false;
       if (matchedPending) {
         await this.axiosInstance.post('/queue', {
           delete: [normalizedPromptId],
-        });
+        }, { timeout: CANCEL_REQUEST_TIMEOUT_MS });
         deleted = true;
       }
 
       let interrupted = false;
       if (matchedRunning) {
-        await this.axiosInstance.post('/interrupt', {});
+        await this.axiosInstance.post('/interrupt', {}, { timeout: CANCEL_REQUEST_TIMEOUT_MS });
         interrupted = true;
       }
 
@@ -345,6 +399,7 @@ export class ComfyUIService {
         matchedPending,
         interrupted,
         deleted,
+        runningIdsUnresolved,
       };
     } catch (error) {
       throw new Error(`ComfyUI prompt cancellation error: ${resolveAxiosErrorMessage(error)}`);

@@ -160,7 +160,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       workflow: substitutedWorkflow,
       imageSaveOptions: payload.imageSaveOptions,
       artifactWorkflow: workflow.result_view_mode === 'artifact_explorer' ? workflow : null,
-      shouldCancel: () => (GenerationQueueModel.findById(job.id)?.cancel_requested ?? 0) > 0,
+      shouldCancel: () => GenerationQueueModel.isCancelRequested(job.id),
       onCancelRequested: async (promptId) => {
         await context.attemptUpstreamCancellation(job.id, {
           assignedServer,
@@ -319,6 +319,13 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
         }
       },
     })
+
+    // 업스트림 호출 내내 running 상태라 취소 요청은 cancel_requested 플래그로만 남는다.
+    // 라이브러리에 이미지를 올리기 전에 확인하지 않으면 취소가 사실상 무시된다.
+    if (GenerationQueueModel.isCancelRequested(job.id)) {
+      throw new Error(GENERATION_QUEUE_CANCELLATION_MESSAGE)
+    }
+
     if (imageBuffers.length === 0) {
       throw new Error(`Queue job ${job.id} returned no NovelAI images`)
     }
@@ -405,6 +412,13 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
     }
 
     const result = await executeCodexGeneration(payload)
+
+    // Codex도 comfyui가 아니라 업스트림 취소 경로가 없다. 산출물을 라이브러리에 올리기 전에
+    // cancel_requested를 확인해야 취소가 무시되지 않는다.
+    if (GenerationQueueModel.isCancelRequested(job.id)) {
+      throw new Error(GENERATION_QUEUE_CANCELLATION_MESSAGE)
+    }
+
     if (result.outputFiles.length === 0) {
       throw new Error(`Queue job ${job.id} finished Codex execution but no outputs were discovered`)
     }

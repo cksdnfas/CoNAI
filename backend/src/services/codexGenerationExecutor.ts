@@ -2,7 +2,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { randomUUID } from 'crypto'
-import { spawn } from 'child_process'
+import { spawn, type ChildProcess } from 'child_process'
 import { runtimePaths } from '../config/runtimePaths'
 import { normalizeBase64ImageData } from '../utils/nai/requestBuilder'
 
@@ -43,6 +43,12 @@ export type CodexAvailabilityStatus = {
   message: string
   exitCode: number | null
 }
+
+// Hung Codex processes would otherwise hold their queue concurrency slot forever.
+const CODEX_AVAILABILITY_TIMEOUT_MS = 10000
+const CODEX_EXEC_TIMEOUT_MS = 30 * 60 * 1000
+// SIGTERM으로 래퍼가 스스로 정리할 시간을 준 뒤 트리를 강제 종료한다.
+const CODEX_KILL_GRACE_MS = 5000
 
 const SUPPORTED_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp'])
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
@@ -215,6 +221,81 @@ export function resolveCodexCommand() {
   }
 }
 
+/**
+ * spawn 내장 timeout은 직계 자식만 SIGKILL 해서, win32 래퍼(node codex.js)가 띄운 실제
+ * codex.exe가 고아로 남는다. 프로세스 트리 전체를 종료한다.
+ */
+function killCodexProcessTree(child: ChildProcess, signal: 'SIGTERM' | 'SIGKILL') {
+  const pid = child.pid
+  if (typeof pid !== 'number' || child.exitCode !== null || child.signalCode !== null) {
+    return
+  }
+
+  const killDirectChild = () => {
+    try {
+      child.kill(signal)
+    } catch {
+      // 이미 종료된 프로세스는 무시
+    }
+  }
+
+  if (process.platform === 'win32') {
+    // Windows는 시그널 전달이 없어 SIGTERM/SIGKILL 모두 TerminateProcess다.
+    // 래퍼의 핸들러가 돌 수 없으니 taskkill /T /F로 자식까지 함께 정리한다.
+    try {
+      const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      })
+      killer.once('error', killDirectChild)
+    } catch {
+      killDirectChild()
+    }
+    return
+  }
+
+  try {
+    // detached로 띄웠기 때문에 음수 pid는 프로세스 그룹 전체를 가리킨다.
+    process.kill(-pid, signal)
+  } catch {
+    killDirectChild()
+  }
+}
+
+type CodexProcessTimeout = {
+  readonly timedOut: boolean
+  clear: () => void
+}
+
+/** 지정 시간이 지나면 SIGTERM → 유예 후 강제 종료 순으로 codex 프로세스 트리를 정리한다. */
+function scheduleCodexProcessTimeout(child: ChildProcess, timeoutMs: number): CodexProcessTimeout {
+  let timedOut = false
+  let escalationTimer: NodeJS.Timeout | null = null
+
+  const timeoutTimer = setTimeout(() => {
+    timedOut = true
+    killCodexProcessTree(child, 'SIGTERM')
+    escalationTimer = setTimeout(() => {
+      killCodexProcessTree(child, 'SIGKILL')
+    }, CODEX_KILL_GRACE_MS)
+    escalationTimer.unref()
+  }, timeoutMs)
+  timeoutTimer.unref()
+
+  return {
+    get timedOut() {
+      return timedOut
+    },
+    clear: () => {
+      clearTimeout(timeoutTimer)
+      if (escalationTimer) {
+        clearTimeout(escalationTimer)
+        escalationTimer = null
+      }
+    },
+  }
+}
+
 function parseCodexAvailabilityOutput(rawOutput: string, exitCode: number | null, command: string): CodexAvailabilityStatus {
   const authenticatedMatch = rawOutput.match(CODEX_AUTHENTICATED_PATTERN)
   const explicitlyUnauthenticated = CODEX_UNAUTHENTICATED_PATTERNS.some((pattern) => pattern.test(rawOutput))
@@ -252,7 +333,10 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
       windowsHide: true,
+      // POSIX에서는 프로세스 그룹째 종료하려고 detached로 띄운다.
+      detached: process.platform !== 'win32',
     })
+    const processTimeout = scheduleCodexProcessTimeout(child, CODEX_AVAILABILITY_TIMEOUT_MS)
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString()
@@ -263,6 +347,7 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
     })
 
     child.once('error', (error) => {
+      processTimeout.clear()
       resolve({
         installed: false,
         authenticated: false,
@@ -275,7 +360,25 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
       })
     })
 
-    child.once('close', (code) => {
+    child.once('close', (code, signal) => {
+      processTimeout.clear()
+
+      if (processTimeout.timedOut || signal) {
+        resolve({
+          installed: true,
+          authenticated: false,
+          available: false,
+          authMode: null,
+          command: resolvedCommand.command,
+          rawOutput: `${stdout}\n${stderr}`.trim(),
+          message: processTimeout.timedOut
+            ? `Codex login status check timed out after ${CODEX_AVAILABILITY_TIMEOUT_MS / 1000}s and its process tree was killed`
+            : `Codex login status check was killed (${signal})`,
+          exitCode: null,
+        })
+        return
+      }
+
       const rawOutput = `${stdout}\n${stderr}`.trim()
       resolve(parseCodexAvailabilityOutput(rawOutput, code, resolvedCommand.command))
     })
@@ -326,7 +429,10 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
       windowsHide: true,
+      // POSIX에서는 프로세스 그룹째 종료하려고 detached로 띄운다.
+      detached: process.platform !== 'win32',
     })
+    const processTimeout = scheduleCodexProcessTimeout(child, CODEX_EXEC_TIMEOUT_MS)
 
     const stdoutStream = fs.createWriteStream(stdoutPath)
     const stderrStream = fs.createWriteStream(stderrPath)
@@ -337,6 +443,7 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
         return
       }
       settled = true
+      processTimeout.clear()
       stdoutStream.end()
       stderrStream.end()
       if (error) {
@@ -358,8 +465,10 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
       finalize(new Error(`Failed to launch codex exec: ${error.message}`))
     })
 
-    child.once('close', async (code) => {
-      if (code === 0) {
+    child.once('close', async (code, signal) => {
+      processTimeout.clear()
+
+      if (code === 0 && !signal && !processTimeout.timedOut) {
         finalize()
         return
       }
@@ -378,8 +487,15 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
         stderrTail = ''
       }
 
+      // taskkill로 트리를 정리하면 signal 없이 종료 코드만 남으므로 타임아웃 플래그로 판별한다.
+      const failureSummary = processTimeout.timedOut
+        ? `codex exec timed out after ${CODEX_EXEC_TIMEOUT_MS / 60000} minutes and its process tree was killed (${signal ?? `exit code ${code ?? 'unknown'}`})`
+        : signal
+          ? `codex exec was killed (${signal})`
+          : `codex exec failed with exit code ${code ?? 'unknown'}`
+
       finalize(new Error([
-        `codex exec failed with exit code ${code ?? 'unknown'}`,
+        failureSummary,
         lastMessage.trim() ? `last message: ${lastMessage.trim()}` : null,
         stderrTail.trim() ? `stderr: ${stderrTail.trim().slice(-1200)}` : null,
       ].filter(Boolean).join('\n')))

@@ -3,7 +3,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { WorkflowModel } from '../../models/Workflow'
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer'
 import type { GenerationQueueJobRecord } from '../../types/generationQueue'
-import { createComfyUIService } from '../comfyuiService'
+import { createComfyUIService, type ComfyUICancelPromptResult } from '../comfyuiService'
 import { updateQueueRequestDebugMeta } from './queueDebugMeta'
 
 export type QueueUpstreamCancellationOptions = {
@@ -33,6 +33,24 @@ function resolveComfyCancellationEndpoint(job: GenerationQueueJobRecord, assigne
   return null
 }
 
+function resolveCancellationState(result: ComfyUICancelPromptResult, assignedServer?: ComfyUIServerRecord | null) {
+  if (assignedServer?.backend_type === 'modal') {
+    return 'unsupported'
+  }
+
+  if (result.interrupted || result.deleted) {
+    return 'requested'
+  }
+
+  // 상류는 실행 중이라는데 prompt id를 확인할 수 없어 /interrupt를 건너뛴 경우.
+  // 큐 행은 cancelled로 바뀌지만 상류 생성은 완주하므로 not_found와 구분해서 기록한다.
+  if (result.runningIdsUnresolved) {
+    return 'running_ids_unresolved'
+  }
+
+  return 'not_found'
+}
+
 export async function attemptQueueUpstreamCancellation(jobId: number, options?: QueueUpstreamCancellationOptions) {
   const latest = GenerationQueueModel.findById(jobId)
   if (!latest || latest.service_type !== 'comfyui') {
@@ -60,7 +78,7 @@ export async function attemptQueueUpstreamCancellation(jobId: number, options?: 
     cancellation_requested_at: requestedAt,
     cancellation_endpoint: endpoint,
     cancellation_prompt_id: promptId,
-    cancellation_state: assignedServer?.backend_type === 'modal' ? 'unsupported' : result.interrupted || result.deleted ? 'requested' : 'not_found',
+    cancellation_state: resolveCancellationState(result, assignedServer),
     cancellation_result: result,
   })
   return result

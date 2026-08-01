@@ -58,7 +58,7 @@ export function ImageGenerationPage() {
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const isWideLayout = useDesktopPageLayout()
   const selectedComfyWorkflowQuery = useQuery({
-    queryKey: ['image-generation-selected-comfy-workflow', selectedComfyWorkflowId, historyRefreshNonce],
+    queryKey: ['image-generation-selected-comfy-workflow', selectedComfyWorkflowId],
     queryFn: () => getGenerationWorkflow(selectedComfyWorkflowId as number),
     enabled: selectedComfyWorkflowId !== null,
   })

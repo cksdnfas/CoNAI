@@ -110,6 +110,9 @@ export async function executeNaiGeneration(
   const metadata = preprocessMetadata(input)
   const requestBody = await buildNaiRequestBody(metadata)
 
+  // Mark the job as running before the upstream call so started_at reflects the real runtime.
+  await options?.onUpstreamAccepted?.()
+
   const response = await axios.post('https://image.novelai.net/ai/generate-image', requestBody, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -120,8 +123,6 @@ export async function executeNaiGeneration(
     responseType: 'arraybuffer',
     timeout: 120000,
   })
-
-  await options?.onUpstreamAccepted?.()
 
   const contentTypeHeader = response.headers['content-type']
   const imageBuffers = decodeNaiImageResponse(
