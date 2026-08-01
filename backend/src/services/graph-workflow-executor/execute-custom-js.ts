@@ -4,6 +4,7 @@ import { spawn } from 'child_process'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
 import { type GraphWorkflowNode, type ModulePortDefinition, type ModulePortDataType } from '../../types/moduleGraph'
 import { saveArtifactBuffer } from './artifacts'
+import { GraphAbortError } from './execution-abort'
 import {
   bufferToDataUrl,
   writeExecutionLog,
@@ -321,8 +322,13 @@ function normalizeCustomNodeExecutionResult(processResponse: CustomNodeProcessRe
 }
 
 /** Run one custom JS entry in a separate Node.js child process for stability. */
-async function runCustomNodeProcess(payload: CustomNodeProcessPayload): Promise<CustomNodeProcessResponse> {
+async function runCustomNodeProcess(payload: CustomNodeProcessPayload, signal?: AbortSignal): Promise<CustomNodeProcessResponse> {
   return await new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new GraphAbortError({ kind: 'user_cancel', message: 'Custom node was aborted before start' }))
+      return
+    }
+
     const child = spawn(process.execPath, ['-e', CUSTOM_NODE_CHILD_RUNNER_SOURCE], {
       cwd: path.dirname(payload.entryPath),
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -337,9 +343,23 @@ async function runCustomNodeProcess(payload: CustomNodeProcessPayload): Promise<
       }
 
       settled = true
+      signal?.removeEventListener('abort', onAbort)
       child.kill()
       reject(new Error(`Custom node timed out after ${CUSTOM_NODE_TIMEOUT_MS}ms`))
     }, CUSTOM_NODE_TIMEOUT_MS)
+
+    // 실행이 abort 되면 자식 프로세스를 그대로 두지 않는다. 타임아웃 kill 과 같은 처리를 쓴다.
+    const onAbort = () => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      clearTimeout(timeout)
+      child.kill()
+      reject(new GraphAbortError({ kind: 'user_cancel', message: 'Custom node was aborted' }))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString()
@@ -356,6 +376,7 @@ async function runCustomNodeProcess(payload: CustomNodeProcessPayload): Promise<
 
       settled = true
       clearTimeout(timeout)
+      signal?.removeEventListener('abort', onAbort)
       reject(error)
     })
 
@@ -366,6 +387,7 @@ async function runCustomNodeProcess(payload: CustomNodeProcessPayload): Promise<
 
       settled = true
       clearTimeout(timeout)
+      signal?.removeEventListener('abort', onAbort)
 
       try {
         const parsed = JSON.parse(stdout || '{}') as CustomNodeProcessResponse
@@ -397,6 +419,7 @@ export async function runCustomJsModuleOnce(params: {
     name: string
     executionId: number
   }
+  signal?: AbortSignal
 }) {
   const entry = typeof params.moduleDefinition.template_defaults?.entry === 'string' ? params.moduleDefinition.template_defaults.entry : null
   const folderPath = typeof params.moduleDefinition.source_path === 'string' ? params.moduleDefinition.source_path : null
@@ -411,7 +434,7 @@ export async function runCustomJsModuleOnce(params: {
     inputs: params.resolvedInputs,
     node: params.node,
     workflow: params.workflow,
-  })
+  }, params.signal)
 
   if (!processResponse.success) {
     throw new Error(processResponse.error || `Custom JS module failed: ${params.moduleDefinition.name}`)
@@ -475,6 +498,7 @@ export async function executeCustomJsModule(
       name: context.workflow.name,
       executionId: context.executionId,
     },
+    signal: context.signal,
   })
 
   const nodeArtifacts: Record<string, RuntimeArtifact> = {}

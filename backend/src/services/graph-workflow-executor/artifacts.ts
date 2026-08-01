@@ -4,6 +4,7 @@ import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact
 import { runtimePaths } from '../../config/runtimePaths'
 import { ImageMetadataWriteService, type ImageOutputFormat } from '../imageMetadataWriteService'
 import { settingsService } from '../settingsService'
+import { isGraphExecutionAborted, throwIfGraphExecutionAborted } from './execution-abort'
 import {
   type GraphExecutionArtifactRecord,
   type GraphWorkflowEdge,
@@ -76,6 +77,9 @@ export async function saveArtifactBuffer(
   buffer: Buffer,
   options?: SaveArtifactBufferOptions,
 ) {
+  // abort 이후의 아티팩트 INSERT 는 terminal 로 확정된 실행을 오염시키는 late write 다.
+  throwIfGraphExecutionAborted(executionId, nodeId)
+
   const executionDir = path.join(runtimePaths.tempDir, 'graph-executions', String(executionId))
   await fs.promises.mkdir(executionDir, { recursive: true })
 
@@ -175,6 +179,9 @@ export async function saveCanonicalMediaArtifactReference(
   storagePath: string,
   options?: SaveCanonicalMediaArtifactReferenceOptions,
 ) {
+  // abort 이후의 아티팩트 INSERT 는 terminal 로 확정된 실행을 오염시키는 late write 다.
+  throwIfGraphExecutionAborted(executionId, nodeId)
+
   const metadata = {
     kind: 'canonical-generated-media',
     originalFileName: options?.originalFileName ?? path.basename(storagePath),
@@ -372,7 +379,8 @@ export function resolveNodeInputs(node: GraphWorkflowNode, moduleDefinition: Par
 
 /** Create the standard metadata artifact row for a node execution. */
 export function saveMetadataArtifact(executionId: number, nodeId: string, metadataValue: Record<string, unknown>) {
-  if (!isExecutionDebugModeEnabled(executionId)) {
+  // 디버그 메타데이터는 실패시켜야 할 만큼 중요하지 않다. abort 이후에는 조용히 쓰지 않는다.
+  if (isGraphExecutionAborted(executionId) || !isExecutionDebugModeEnabled(executionId)) {
     return
   }
 

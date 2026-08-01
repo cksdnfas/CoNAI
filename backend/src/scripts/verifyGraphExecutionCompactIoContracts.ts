@@ -57,7 +57,7 @@ assert.match(
 
 const persistIndex = executorSource.indexOf('persistCompactGraphExecutionNodeIo(context)')
 const compactIndex = executorSource.indexOf('compactCompletedGraphExecutionArtifacts(context)')
-const completeIndex = executorSource.indexOf("GraphExecutionModel.updateStatus(executionId, 'completed')")
+const completeIndex = executorSource.indexOf("finalizeExecutionStatus('completed')")
 assert.ok(persistIndex > -1, 'executor should persist compact node IO after node execution')
 assert.ok(compactIndex > persistIndex, 'executor should compact transient artifacts after node IO persistence')
 assert.ok(completeIndex > compactIndex, 'executor should mark completed after compacting execution outputs')

@@ -6,6 +6,7 @@ import {
   loadRuntimeArtifactsByNode,
   shouldMaterializeRuntimeArtifactValue,
 } from '../services/graph-workflow-executor/artifacts'
+import { createExecutionAbortHandle } from '../services/graph-workflow-executor/execution-abort'
 import type {
   ExecutionContext,
   ParsedModuleDefinition,
@@ -36,9 +37,13 @@ function moduleDefinition(overrides: Partial<ParsedModuleDefinition> & Pick<Pars
 }
 
 function buildContext(targetModule: ParsedModuleDefinition): ExecutionContext {
+  const abortHandle = createExecutionAbortHandle(1)
   return {
     executionId: 1,
     debugMode: false,
+    signal: abortHandle.signal,
+    abort: abortHandle.abort,
+    getAbortReason: abortHandle.getReason,
     artifactsByNode: new Map(),
     modulesById: new Map([[targetModule.id, targetModule]]),
     workflow: {

@@ -120,8 +120,8 @@ function verifyBackgroundQueueFailureIsTerminal() {
   const source = fs.readFileSync(path.resolve(process.cwd(), 'src/services/graphWorkflowExecutionQueue.ts'), 'utf8')
   assert.match(
     source,
-    /try\s*{[\s\S]*await GraphWorkflowExecutor\.execute\(job\.workflowId,[\s\S]*}\s*catch \(error\)\s*{[\s\S]*GraphExecutionModel\.updateStatus\(job\.executionId, 'failed'/,
-    'background graph queue must mark pre-execution validator errors as failed instead of leaving rows running',
+    /try\s*{[\s\S]*await GraphWorkflowExecutor\.execute\(job\.workflowId,[\s\S]*}\s*catch \(error\)\s*{[\s\S]*GraphExecutionModel\.updateStatusIfActive\(job\.executionId, 'failed'/,
+    'background graph queue must mark pre-execution validator errors as failed without overwriting a terminal row',
   )
   assert.match(
     source,
@@ -130,8 +130,8 @@ function verifyBackgroundQueueFailureIsTerminal() {
   )
   assert.match(
     source,
-    /if \(execution\.status === 'running'\) \{[\s\S]*GraphExecutionModel\.updateStatus\(executionId, 'failed', STRANDED_RUNNING_EXECUTION_MESSAGE\)/,
-    'cancel on stranded running execution should mark it failed instead of returning already running',
+    /if \(execution\.status === 'running'\) \{[\s\S]*GraphExecutionModel\.updateStatusIfActive\(executionId, 'failed', STRANDED_RUNNING_EXECUTION_MESSAGE\)/,
+    'cancel on stranded running execution should mark it failed without overwriting a terminal row',
   )
 }
 

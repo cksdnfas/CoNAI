@@ -78,9 +78,11 @@ function verifyDebugLoggingContracts() {
   )
 
   const graphExecutorSource = source('services/graphWorkflowExecutor.ts')
+  // The ready-node scheduler now lives in its own leaf module, so the diagnostic is built there and persisted here.
+  const graphNodeSchedulerSource = source('services/graph-workflow-executor/node-scheduler.ts')
   assert(
     graphExecutorSource.includes('GraphExecutionNoRunnableNodesError')
-      && graphExecutorSource.includes('blockedDependencies')
+      && graphNodeSchedulerSource.includes('blockedDependencies')
       && graphExecutorSource.includes('always: error instanceof GraphExecutionNoRunnableNodesError'),
     'graph executor should persist no-runnable dependency diagnostics even outside debug mode',
   )

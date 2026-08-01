@@ -2,6 +2,7 @@ import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import fs from 'fs'
 import path from 'path'
 import { resolveUploadsPath } from '../../config/runtimePaths'
+import { throwIfExecutionAborted } from './execution-abort'
 import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
 import {
   bufferToDataUrl,
@@ -609,6 +610,8 @@ export async function executeApiRequestNode(
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  // 요청 타임아웃을 대체하지 않고 실행 abort 와 합성한다. 둘 중 어느 쪽이 끊겨도 요청이 취소된다.
+  const requestSignal = AbortSignal.any([controller.signal, context.signal])
   const requestPayload = buildApiRequestPayload({
     method,
     bodyMode: bodyMode === 'json' || bodyMode === 'form' ? bodyMode : 'auto',
@@ -617,11 +620,12 @@ export async function executeApiRequestNode(
   })
 
   try {
+    throwIfExecutionAborted(context, node.id)
     const response = await fetch(url, {
       method,
       headers: requestPayload.headers,
       body: requestPayload.body,
-      signal: controller.signal,
+      signal: requestSignal,
     })
     const responseValue = await parseApiResponse(response)
 
@@ -640,6 +644,10 @@ export async function executeApiRequestNode(
         contentType: response.headers.get('content-type') ?? undefined,
       }),
     })
+  } catch (error) {
+    // 실행 취소로 끊긴 요청은 노드 실패가 아니라 협조적 중단이다.
+    throwIfExecutionAborted(context, node.id)
+    throw error
   } finally {
     clearTimeout(timeoutId)
   }

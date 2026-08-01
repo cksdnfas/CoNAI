@@ -16,6 +16,7 @@ import { GenerationQueueService } from '../generationQueueService'
 import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import { resolveComfyGraphOutputDescriptor, resolveComfyOutputMimeType } from './comfyArtifactOutput'
+import { createGraphCancelHooks, throwIfExecutionAborted } from './execution-abort'
 import {
   bufferToDataUrl,
   normalizeOptionalString,
@@ -401,8 +402,41 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
     resolvedPromptData,
   )
 
+  // 업로드/모델 정합까지 끝난 뒤 abort 됐다면 새 prompt 를 밀어넣지 않는다.
+  throwIfExecutionAborted(context, node.id)
+
   const promptId = await comfyService.submitPrompt(substitutedWorkflow)
-  const collectedOutputs = await comfyService.collectGeneratedOutputs(promptId)
+  // 서비스의 취소 훅은 옵션이 없으면 완전한 no-op 이라, 훅을 넘기지 않으면 최대 1시간(1800 × 2s) 폴링이 취소 불가였다.
+  const cancelHooks = createGraphCancelHooks(context, async () => {
+    writeExecutionLog({
+      executionId: context.executionId,
+      nodeId: node.id,
+      level: 'warn',
+      eventType: 'node_comfy_cancel_requested',
+      message: `ComfyUI prompt cancellation requested for graph node ${node.id}`,
+      details: { promptId },
+      always: true,
+    })
+
+    try {
+      await comfyService.cancelPrompt(promptId)
+    } catch (cancelError) {
+      console.warn(`⚠️ Failed best-effort ComfyUI cancellation for prompt ${promptId}:`, cancelError)
+    }
+  })
+
+  let collectedOutputs: Awaited<ReturnType<typeof comfyService.collectGeneratedOutputs>>
+  try {
+    collectedOutputs = await comfyService.collectGeneratedOutputs(promptId, {
+      shouldCancel: cancelHooks.shouldCancel,
+      onCancelRequested: cancelHooks.onCancelRequested,
+    })
+  } catch (error) {
+    // 취소로 끊긴 폴링은 노드 실패가 아니라 협조적 중단이다.
+    throwIfExecutionAborted(context, node.id)
+    throw error
+  }
+
   const primaryOutput = collectedOutputs[0]
   if (!primaryOutput) {
     throw new Error('ComfyUI module execution returned no outputs')

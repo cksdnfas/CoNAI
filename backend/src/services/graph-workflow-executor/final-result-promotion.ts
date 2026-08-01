@@ -6,6 +6,7 @@ import { GenerationHistoryModel, type ServiceType } from '../../models/Generatio
 import { GenerationHistoryService } from '../generationHistoryService'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
+import { throwIfGraphExecutionAborted } from './execution-abort'
 import type { RuntimeArtifact } from './shared'
 
 type ArtifactMetadata = Record<string, unknown>
@@ -380,6 +381,9 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
 
 /** Promote one explicit final-result visual artifact into the shared image-generation result list. */
 export async function promoteFinalResultArtifactToGenerationHistory(params: FinalResultPromotionParams) {
+  // abort 된 실행은 생성 히스토리에 결과를 만들지 않는다. 여기가 late write 차단의 핵심 지점이다.
+  throwIfGraphExecutionAborted(params.executionId, params.finalNodeId)
+
   const candidate = resolveFinalResultPromotionCandidate(params.sourceArtifact)
   if (!candidate.shouldPromote) {
     return candidate

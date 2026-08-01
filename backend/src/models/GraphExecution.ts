@@ -423,4 +423,27 @@ export class GraphExecutionModel {
 
     return info.changes > 0
   }
+
+  /**
+   * 이미 terminal 인 실행은 절대 덮어쓰지 않는 상태 전이.
+   * 협조적 취소로 abort 된 고아 노드나 다른 프로세스의 늦은 쓰기가 확정된 결과를 되돌리지 못하게 막는다.
+   * 의도적 덮어쓰기(재시작 복구, queued 취소)는 기존 updateStatus 를 그대로 쓴다.
+   */
+  static updateStatusIfActive(id: number, status: GraphExecutionStatus, errorMessage?: string | null, failedNodeId?: string | null) {
+    const db = getUserSettingsDb()
+    const isTerminal = status === 'completed' || status === 'failed' || status === 'cancelled'
+    const info = db.prepare(`
+      UPDATE graph_executions
+      SET status = ?,
+          error_message = ?,
+          failed_node_id = ?,
+          updated_date = CURRENT_TIMESTAMP,
+          started_at = CASE WHEN ? = 'running' AND started_at IS NULL THEN CURRENT_TIMESTAMP ELSE started_at END,
+          completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE completed_at END
+      WHERE id = ?
+        AND status NOT IN ('completed', 'failed', 'cancelled')
+    `).run(status, errorMessage ?? null, failedNodeId ?? null, status, isTerminal ? 1 : 0, id)
+
+    return info.changes > 0
+  }
 }

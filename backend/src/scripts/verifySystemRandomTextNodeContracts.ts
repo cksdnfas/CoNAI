@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { createExecutionAbortHandle } from '../services/graph-workflow-executor/execution-abort'
 import type { ExecutionContext, ParsedModuleDefinition } from '../services/graph-workflow-executor/shared'
 import { executeRandomTextChoiceNode } from '../services/graph-workflow-executor/system-text-operations'
 import { validateGraphTypes } from '../services/graph-workflow-executor/validate'
@@ -10,6 +11,7 @@ import type { GraphWorkflowNode } from '../types/moduleGraph'
 let executionId = 1
 
 function createExecutionContext(): ExecutionContext {
+  const abortHandle = createExecutionAbortHandle(executionId)
   return {
     executionId,
     workflow: {
@@ -21,6 +23,9 @@ function createExecutionContext(): ExecutionContext {
     modulesById: new Map(),
     artifactsByNode: new Map(),
     debugMode: false,
+    signal: abortHandle.signal,
+    abort: abortHandle.abort,
+    getAbortReason: abortHandle.getReason,
   }
 }
 

@@ -1,5 +1,6 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { executeLlmTextRequest } from '../llmProviderService'
+import { throwIfExecutionAborted } from './execution-abort'
 import { buildRuntimeArtifact } from './system-module-artifacts'
 import {
   normalizeOptionalString,
@@ -66,34 +67,45 @@ export async function executeCallLlmNode(
     },
   })
 
-  const result = await executeLlmTextRequest({
-    providerName: providerName ?? '',
-    prompt,
-    systemPrompt,
-    context: contextValue,
-    image: imageDataUrl,
-    model: null,
-    temperature: normalizeOptionalNumber(resolvedInputs.temperature),
-    maxTokens: normalizeOptionalNumber(resolvedInputs.max_tokens),
-    responseMode,
-    structuredOutputJson,
-    includeRawResponseMetadata: context.debugMode,
-    onDebugEvent: (event) => {
-      writeExecutionLog({
-        executionId: context.executionId,
-        nodeId: node.id,
-        level: event.eventType === 'json_parse_failed' ? 'error' : 'info',
-        eventType: event.eventType === 'json_parse_failed' ? 'llm_json_parse_failed' : 'llm_provider_response',
-        message: event.eventType === 'json_parse_failed'
-          ? `LLM JSON parse failed: ${moduleDefinition.name}`
-          : `LLM provider response received: ${moduleDefinition.name}`,
-        details: {
-          operationKey: 'system.call_llm',
-          ...event.details,
-        },
-      })
-    },
-  })
+  throwIfExecutionAborted(context, node.id)
+
+  let result: Awaited<ReturnType<typeof executeLlmTextRequest>>
+  try {
+    result = await executeLlmTextRequest({
+      providerName: providerName ?? '',
+      prompt,
+      systemPrompt,
+      context: contextValue,
+      image: imageDataUrl,
+      model: null,
+      temperature: normalizeOptionalNumber(resolvedInputs.temperature),
+      maxTokens: normalizeOptionalNumber(resolvedInputs.max_tokens),
+      responseMode,
+      structuredOutputJson,
+      includeRawResponseMetadata: context.debugMode,
+      // 실행 abort 는 프로바이더 요청 타임아웃과 합성된다. 타임아웃 상한은 그대로 유지된다.
+      signal: context.signal,
+      onDebugEvent: (event) => {
+        writeExecutionLog({
+          executionId: context.executionId,
+          nodeId: node.id,
+          level: event.eventType === 'json_parse_failed' ? 'error' : 'info',
+          eventType: event.eventType === 'json_parse_failed' ? 'llm_json_parse_failed' : 'llm_provider_response',
+          message: event.eventType === 'json_parse_failed'
+            ? `LLM JSON parse failed: ${moduleDefinition.name}`
+            : `LLM provider response received: ${moduleDefinition.name}`,
+          details: {
+            operationKey: 'system.call_llm',
+            ...event.details,
+          },
+        })
+      },
+    })
+  } catch (error) {
+    // 취소로 끊긴 요청은 노드 실패가 아니라 협조적 중단이다. 첫 실패 노드 힌트를 빼앗지 않도록 abort 에러로 바꾼다.
+    throwIfExecutionAborted(context, node.id)
+    throw error
+  }
 
   const metadataValue = {
     ...result.metadata,

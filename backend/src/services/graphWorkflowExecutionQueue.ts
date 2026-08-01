@@ -8,6 +8,7 @@ import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
 import { settingsService } from './settingsService'
 import { getGenerationQueueServerCapacity } from './generationQueueRouting'
 import { parseGraphWorkflowRecord, parseModuleDefinition, resolveSystemOperationKey, writeExecutionLog, type ParsedModuleDefinition } from './graph-workflow-executor/shared'
+import { requestGraphExecutionAbort } from './graph-workflow-executor/execution-abort'
 import { encodeQueuedExecutionMetadata, parseQueuedExecutionMetadata } from './graphWorkflowExecutionQueueMetadata'
 
 type QueuedExecutionJob = {
@@ -45,6 +46,7 @@ type ReservationLane = 'novelai' | 'codex' | 'comfyui' | 'other'
 
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
 const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
+const OTHER_PROCESS_RUNNING_EXECUTION_MESSAGE = 'Execution is running in another process. Cancel it from the worker process.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
 const SCHEDULE_DISPATCH_SCAN_LIMIT = 200
 const RESERVATION_LANE_CACHE_MAX_ENTRIES = 300
@@ -303,6 +305,9 @@ export class GraphWorkflowExecutionQueue {
 
     if (this.runningJobs.has(executionId)) {
       this.cancelRequestedExecutionIds.add(executionId)
+      // 플래그만 세우면 스케줄러가 다음에 깨어날 때까지 기다린다.
+      // 실행 중인 노드의 signal 을 바로 끊어야 긴 노드(LLM/ComfyUI) 도중에도 취소가 즉시 반영된다.
+      requestGraphExecutionAbort(executionId, { kind: 'user_cancel' })
       writeExecutionLog({
         executionId,
         level: 'warn',
@@ -317,7 +322,26 @@ export class GraphWorkflowExecutionQueue {
     }
 
     if (execution.status === 'running') {
-      GraphExecutionModel.updateStatus(executionId, 'failed', STRANDED_RUNNING_EXECUTION_MESSAGE)
+      if (!this.initialized) {
+        // 큐를 시작하지 않은 프로세스(CONAI_RUNTIME_ROLE=api)에서는 워커가 정상 실행 중일 수 있다.
+        // 남의 프로세스에서 도는 실행을 failed 로 오염시키지 않는다.
+        return {
+          success: false,
+          status: 'running',
+          message: OTHER_PROCESS_RUNNING_EXECUTION_MESSAGE,
+        }
+      }
+
+      // terminal 로 이미 확정된 행은 건드리지 않는다(read-then-write TOCTOU 제거).
+      if (!GraphExecutionModel.updateStatusIfActive(executionId, 'failed', STRANDED_RUNNING_EXECUTION_MESSAGE)) {
+        const latest = GraphExecutionModel.findById(executionId)
+        return {
+          success: false,
+          status: latest?.status ?? 'not_found',
+          message: latest ? `Execution is already ${latest.status}` : 'Execution not found',
+        }
+      }
+
       writeExecutionLog({
         executionId,
         level: 'error',
@@ -687,10 +711,9 @@ export class GraphWorkflowExecutionQueue {
         shouldCancel: () => this.cancelRequestedExecutionIds.has(job.executionId),
       })
     } catch (error) {
-      const execution = GraphExecutionModel.findById(job.executionId)
-      if (execution?.status === 'queued' || execution?.status === 'running') {
-        const errorMessage = formatExecutionError(error)
-        GraphExecutionModel.updateStatus(job.executionId, 'failed', errorMessage)
+      // 실행기가 이미 terminal 을 확정했으면 이 백스톱은 아무것도 덮어쓰지 않는다(원자 가드).
+      const errorMessage = formatExecutionError(error)
+      if (GraphExecutionModel.updateStatusIfActive(job.executionId, 'failed', errorMessage)) {
         writeExecutionLog({
           executionId: job.executionId,
           level: 'error',

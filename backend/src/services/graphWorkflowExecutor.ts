@@ -30,79 +30,20 @@ import {
   type RuntimeArtifact,
 } from './graph-workflow-executor/shared'
 import { buildExecutionOrder, validateGraphTypes, validateRequiredInputs } from './graph-workflow-executor/validate'
+import {
+  createExecutionAbortHandle,
+  isGraphCancellationError,
+  registerExecutionAbortHandle,
+  unregisterExecutionAbortHandle,
+  GraphAbortError,
+} from './graph-workflow-executor/execution-abort'
+import {
+  runReadyGraphNodes,
+  GraphExecutionNoRunnableNodesError,
+  type GraphNodeThrottleLane,
+} from './graph-workflow-executor/node-scheduler'
 
 /** Execute a saved module graph workflow from validation through node engines. */
-const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
-const DEFAULT_MAX_PARALLEL_READY_NODES = 8
-const DEFAULT_EXTERNAL_GENERATION_NODE_CONCURRENCY = 4
-
-type GraphNodeThrottleLane = 'external_generation'
-
-const graphNodeThrottleState: Record<GraphNodeThrottleLane, { activeCount: number; waiters: Set<() => void> }> = {
-  external_generation: {
-    activeCount: 0,
-    waiters: new Set<() => void>(),
-  },
-}
-
-function parsePositiveIntegerEnv(name: string, fallback: number) {
-  const rawValue = process.env[name]
-  const numericValue = Number(rawValue)
-  if (Number.isFinite(numericValue) && numericValue > 0) {
-    return Math.floor(numericValue)
-  }
-
-  return fallback
-}
-
-function getMaxParallelReadyNodes() {
-  return parsePositiveIntegerEnv('CONAI_GRAPH_READY_NODE_CONCURRENCY', DEFAULT_MAX_PARALLEL_READY_NODES)
-}
-
-function getGraphNodeThrottleLimit(lane: GraphNodeThrottleLane) {
-  if (lane === 'external_generation') {
-    return parsePositiveIntegerEnv('CONAI_GRAPH_EXTERNAL_GENERATION_NODE_CONCURRENCY', DEFAULT_EXTERNAL_GENERATION_NODE_CONCURRENCY)
-  }
-
-  return 1
-}
-
-function tryAcquireGraphNodeThrottleSlot(lane: GraphNodeThrottleLane) {
-  const state = graphNodeThrottleState[lane]
-  if (state.activeCount >= getGraphNodeThrottleLimit(lane)) {
-    return false
-  }
-
-  state.activeCount += 1
-  return true
-}
-
-function releaseGraphNodeThrottleSlot(lane: GraphNodeThrottleLane) {
-  const state = graphNodeThrottleState[lane]
-  state.activeCount = Math.max(0, state.activeCount - 1)
-  const waiters = Array.from(state.waiters)
-  state.waiters.clear()
-  for (const waiter of waiters) {
-    waiter()
-  }
-}
-
-function waitForGraphNodeThrottleAvailability(lane: GraphNodeThrottleLane) {
-  const state = graphNodeThrottleState[lane]
-  return new Promise<void>((resolve) => {
-    let timeout: ReturnType<typeof setTimeout>
-    const waiter = () => {
-      clearTimeout(timeout)
-      resolve()
-    }
-    timeout = setTimeout(() => {
-      state.waiters.delete(waiter)
-      resolve()
-    }, 250)
-    state.waiters.add(waiter)
-  })
-}
-
 type GraphExecutionPlan = {
   orderedNodeIds: string[]
   targetNodeId?: string | null
@@ -111,24 +52,6 @@ type GraphExecutionPlan = {
   forceRerun?: boolean
   reusedFromExecutionId?: number | null
   reusedNodeIds?: string[]
-}
-
-type NoRunnableNodesDiagnostic = {
-  pendingNodeIds: string[]
-  completedNodeIds: string[]
-  runningNodeIds: string[]
-  readyNodeIds: string[]
-  blockedDependencies: Array<{
-    nodeId: string
-    waitingFor: string[]
-  }>
-}
-
-class GraphExecutionNoRunnableNodesError extends Error {
-  constructor(public readonly diagnostic: NoRunnableNodesDiagnostic) {
-    super('Graph execution could not make progress because no runnable nodes were available')
-    this.name = 'GraphExecutionNoRunnableNodesError'
-  }
 }
 
 const VOLATILE_SYSTEM_OPERATION_KEYS = new Set([
@@ -160,93 +83,6 @@ function buildNodeDependencies(graph: { edges: Array<{ source_node_id: string; t
   }
 
   return dependenciesByNode
-}
-
-async function runReadyGraphNodes(params: {
-  orderedNodeIds: string[]
-  dependenciesByNode: Map<string, Set<string>>
-  shouldCancel?: () => boolean
-  getNodeThrottleLane?: (nodeId: string) => GraphNodeThrottleLane | null
-  executeNode: (nodeId: string) => Promise<void>
-}) {
-  const pendingNodeIds = new Set(params.orderedNodeIds)
-  const completedNodeIds = new Set<string>()
-  const runningNodes = new Map<string, Promise<void>>()
-
-  while (pendingNodeIds.size > 0 || runningNodes.size > 0) {
-    if (params.shouldCancel?.()) {
-      throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
-    }
-
-    const readyNodeIds = params.orderedNodeIds.filter((nodeId) => {
-      if (!pendingNodeIds.has(nodeId) || runningNodes.has(nodeId)) {
-        return false
-      }
-
-      const dependencies = params.dependenciesByNode.get(nodeId) ?? new Set<string>()
-      for (const dependencyNodeId of dependencies) {
-        if (!completedNodeIds.has(dependencyNodeId)) {
-          return false
-        }
-      }
-
-      return true
-    })
-
-    let startedNode = false
-    let throttleBlockedLane: GraphNodeThrottleLane | null = null
-    const maxParallelReadyNodes = getMaxParallelReadyNodes()
-
-    for (const nodeId of readyNodeIds) {
-      if (runningNodes.size >= maxParallelReadyNodes) {
-        break
-      }
-
-      const throttleLane = params.getNodeThrottleLane?.(nodeId) ?? null
-      if (throttleLane && !tryAcquireGraphNodeThrottleSlot(throttleLane)) {
-        throttleBlockedLane = throttleLane
-        continue
-      }
-
-      pendingNodeIds.delete(nodeId)
-      startedNode = true
-      const runPromise = params.executeNode(nodeId)
-        .then(() => {
-          completedNodeIds.add(nodeId)
-        })
-        .finally(() => {
-          if (throttleLane) {
-            releaseGraphNodeThrottleSlot(throttleLane)
-          }
-          runningNodes.delete(nodeId)
-        })
-      runningNodes.set(nodeId, runPromise)
-    }
-
-    if (runningNodes.size === 0) {
-      if (!startedNode && throttleBlockedLane && readyNodeIds.length > 0) {
-        await waitForGraphNodeThrottleAvailability(throttleBlockedLane)
-        continue
-      }
-
-      const pendingNodeIdList = Array.from(pendingNodeIds)
-      throw new GraphExecutionNoRunnableNodesError({
-        pendingNodeIds: pendingNodeIdList,
-        completedNodeIds: Array.from(completedNodeIds),
-        runningNodeIds: Array.from(runningNodes.keys()),
-        readyNodeIds,
-        blockedDependencies: pendingNodeIdList.map((nodeId) => {
-          const dependencies = params.dependenciesByNode.get(nodeId) ?? new Set<string>()
-          return {
-            nodeId,
-            waitingFor: Array.from(dependencies).filter((dependencyNodeId) => !completedNodeIds.has(dependencyNodeId)),
-          }
-        }),
-      })
-    }
-
-    await Promise.race(runningNodes.values())
-  }
 }
 
 function isVolatileSystemModule(moduleDefinition: { engine_type: string; internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
@@ -521,11 +357,30 @@ export class GraphWorkflowExecutor {
 
     const debugMode = isWorkflowDebugModeEnabled(workflow)
     let failedNodeIdHint: string | null = null
+    let terminalStatusWritten = false
+    const abortHandle = createExecutionAbortHandle(executionId)
+
+    // 종료 상태는 실행당 한 번만 쓴다. 드레인을 넘긴 고아 노드나 큐 백스톱이 확정된 결과를 되돌리지 못하게 한다.
+    const finalizeExecutionStatus = (
+      status: 'completed' | 'cancelled' | 'failed',
+      errorMessage?: string | null,
+      failedNodeId?: string | null,
+    ) => {
+      if (terminalStatusWritten) {
+        console.warn(`⚠️ Ignored duplicate terminal status write for graph execution ${executionId}: ${status}`)
+        return false
+      }
+
+      terminalStatusWritten = true
+      return GraphExecutionModel.updateStatusIfActive(executionId, status, errorMessage ?? null, failedNodeId ?? null)
+    }
 
     try {
       // Register the debug flag as the first statement inside the try, so the finally below always
       // releases it even when the execution_start log write or the graph index build throws.
       setExecutionDebugMode(executionId, debugMode)
+      // 실행 컨텍스트는 지역 변수라 외부에서 도달할 수 없다. abort 핸들만 레지스트리에 올려 두고 finally 에서 해제한다.
+      registerExecutionAbortHandle(abortHandle)
 
       writeExecutionLog({
         executionId,
@@ -552,7 +407,11 @@ export class GraphWorkflowExecutor {
         debugMode,
         disabledOutputPorts: new Set<string>(),
         skippedNodeIds: new Set<string>(),
-        shouldCancel: options?.shouldCancel,
+        signal: abortHandle.signal,
+        abort: abortHandle.abort,
+        getAbortReason: abortHandle.getReason,
+        // 기존 폴링 소비처(queue-wait, codexMessageService)를 그대로 살리려고 signal 과 OR 로 합성한다.
+        shouldCancel: () => abortHandle.signal.aborted || options?.shouldCancel?.() === true,
       }
 
       const { nodeById } = getExecutionGraphIndex(context)
@@ -560,10 +419,41 @@ export class GraphWorkflowExecutor {
       await runReadyGraphNodes({
         orderedNodeIds,
         dependenciesByNode,
+        signal: abortHandle.signal,
+        abort: abortHandle.abort,
         shouldCancel: options?.shouldCancel,
         getNodeThrottleLane: (nodeId) => {
           const moduleDefinition = moduleByNodeId.get(nodeId)
           return moduleDefinition ? getNodeThrottleLane(moduleDefinition) : null
+        },
+        onNodeSettled: (nodeId, error) => {
+          if (!(error instanceof GraphAbortError)) {
+            return
+          }
+
+          writeExecutionLog({
+            executionId,
+            nodeId,
+            level: 'warn',
+            eventType: 'node_aborted',
+            message: `Node aborted: ${nodeId}`,
+            details: {
+              abortKind: error.reason.kind,
+              abortSourceNodeId: error.reason.nodeId ?? null,
+            },
+            // The frontend shows an "aborted" node badge from this row, so persist it outside debug mode too.
+            always: true,
+          })
+        },
+        onDrainTimeout: (drainingNodeIds) => {
+          writeExecutionLog({
+            executionId,
+            level: 'warn',
+            eventType: 'execution_abort_drain_timeout',
+            message: `Aborted graph nodes did not settle before the drain timeout: ${drainingNodeIds.join(', ')}`,
+            details: { drainingNodeIds },
+            always: true,
+          })
         },
         executeNode: async (nodeId) => {
           try {
@@ -666,7 +556,8 @@ export class GraphWorkflowExecutor {
             })
           } catch (error) {
             // With parallel nodes, the first failure's message is what gets persisted; keep its hint.
-            if (failedNodeIdHint === null) {
+            // Siblings killed by that first failure raise GraphAbortError, so they must not steal the hint.
+            if (failedNodeIdHint === null && !(error instanceof GraphAbortError)) {
               failedNodeIdHint = nodeId
             }
             throw error
@@ -676,7 +567,7 @@ export class GraphWorkflowExecutor {
 
       persistCompactGraphExecutionNodeIo(context)
       const compactionResult = await compactCompletedGraphExecutionArtifacts(context)
-      GraphExecutionModel.updateStatus(executionId, 'completed')
+      finalizeExecutionStatus('completed')
       writeExecutionLog({
         executionId,
         eventType: 'execution_complete',
@@ -707,7 +598,7 @@ export class GraphWorkflowExecutor {
         .at(-1)?.node_id ?? null
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown execution error'
-      if (errorMessage === GRAPH_EXECUTION_CANCELLED_MESSAGE || error instanceof GraphWorkflowStoppedError) {
+      if (isGraphCancellationError(error) || error instanceof GraphWorkflowStoppedError) {
         const stoppedReason = error instanceof GraphWorkflowStoppedError ? error.reason ?? null : null
         writeExecutionLog({
           executionId,
@@ -719,7 +610,7 @@ export class GraphWorkflowExecutor {
             : 'Execution cancelled',
           details: error instanceof GraphWorkflowStoppedError ? { reason: stoppedReason } : undefined,
         })
-        GraphExecutionModel.updateStatus(executionId, 'cancelled', stoppedReason, failedNodeId)
+        finalizeExecutionStatus('cancelled', stoppedReason, failedNodeId)
         return {
           executionId,
           status: 'cancelled' as const,
@@ -742,11 +633,13 @@ export class GraphWorkflowExecutor {
           : undefined,
         always: error instanceof GraphExecutionNoRunnableNodesError,
       })
-      GraphExecutionModel.updateStatus(executionId, 'failed', errorMessage, failedNodeId)
+      finalizeExecutionStatus('failed', errorMessage, failedNodeId)
       throw error
     } finally {
       // The debug flag lives in a module-level set; clear it so finished execution ids do not leak.
       setExecutionDebugMode(executionId, false)
+      // The abort registry is module-level too; release it in the same place so no execution id leaks.
+      unregisterExecutionAbortHandle(executionId)
     }
   }
 }

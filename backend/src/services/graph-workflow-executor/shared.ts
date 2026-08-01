@@ -1,7 +1,10 @@
 import crypto from 'crypto'
 import { GraphExecutionLogModel } from '../../models/GraphExecutionLog'
+import { type GraphAbortReason } from './execution-abort'
 export { normalizeOptionalString, parsePositiveIntegerish } from '../../utils/valueNormalization'
 export { resolveSystemOperationKey } from './operation-key'
+// abort 타입은 leaf 모듈이 원본이다. 노드 엔진이 shared 하나만 import 해도 되도록 여기서 재노출한다.
+export { GraphAbortError, type GraphAbortReason, type GraphAbortReasonKind } from './execution-abort'
 import {
   type GraphWorkflowDocument,
   type GraphWorkflowEdge,
@@ -49,6 +52,13 @@ export type ExecutionContext = {
   debugMode: boolean
   disabledOutputPorts?: Set<string>
   skippedNodeIds?: Set<string>
+  /** 실행 단위 abort 신호. 모든 노드 엔진이 공유한다. */
+  signal: AbortSignal
+  /** 노드 엔진은 abort 하지 않는다. 스케줄러/레지스트리 전용. */
+  abort: (reason: GraphAbortReason) => void
+  /** abort 사유(관측용). abort 전에는 null. */
+  getAbortReason: () => GraphAbortReason | null
+  /** 폴링형 취소 채널. 실행기에서 signal 과 OR 합성되어 하위 호환을 유지한다. */
   shouldCancel?: () => boolean
   graphIndex?: ExecutionGraphIndex
 }

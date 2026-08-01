@@ -23,6 +23,8 @@ export type ExecuteLlmTextRequest = {
   responseMode?: LlmResponseMode | null
   structuredOutputJson?: string | null
   includeRawResponseMetadata?: boolean
+  /** 호출자(그래프 실행 등)의 취소 신호. 요청 타임아웃과 합성되며, 미지정 시 동작은 이전과 완전히 같다. */
+  signal?: AbortSignal
   onDebugEvent?: (event: LlmDebugEvent) => void
 }
 
@@ -75,11 +77,35 @@ type LlmHttpResponse = {
   bodyText: string
 }
 
+/**
+ * 취소와 타임아웃이 동시에 발화 가능할 때 어느 쪽으로 기록할지 정한다.
+ * `isFetchTimeoutError` 는 `AbortError` 도 true 로 보기 때문에, 외부 취소를 먼저 판정하지 않으면
+ * 사용자 취소가 "타임아웃"으로 오분류된다.
+ */
+export function resolveLlmRequestFailure(params: {
+  error: unknown
+  endpoint: string
+  timeoutMs: number
+  externalAborted: boolean
+  timeoutAborted: boolean
+}): unknown {
+  if (params.externalAborted) {
+    return params.error
+  }
+
+  if (params.timeoutAborted || isFetchTimeoutError(params.error)) {
+    return new Error(`LLM provider request timed out after ${params.timeoutMs}ms: ${params.endpoint}`)
+  }
+
+  return params.error
+}
+
 /** POST + 본문 읽기를 하나의 timeout 안에서 끝내서, 멈춘 프로바이더가 실행을 영원히 붙잡지 못하게 한다. */
-async function postWithTimeout(endpoint: string, init: RequestInit, timeoutMs: number): Promise<LlmHttpResponse> {
+async function postWithTimeout(endpoint: string, init: RequestInit, timeoutMs: number, requestSignal?: AbortSignal): Promise<LlmHttpResponse> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs)
   // 호출자 signal을 덮어쓰지 않고 합쳐서 둘 중 어느 쪽이 끊겨도 요청이 취소되게 한다.
-  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal
+  const externalSignal = requestSignal ?? init.signal ?? undefined
+  const signal = externalSignal ? AbortSignal.any([externalSignal, timeoutSignal]) : timeoutSignal
 
   try {
     const response = await fetch(endpoint, { ...init, signal })
@@ -92,11 +118,13 @@ async function postWithTimeout(endpoint: string, init: RequestInit, timeoutMs: n
       bodyText,
     }
   } catch (error) {
-    if (timeoutSignal.aborted || isFetchTimeoutError(error)) {
-      throw new Error(`LLM provider request timed out after ${timeoutMs}ms: ${endpoint}`)
-    }
-
-    throw error
+    throw resolveLlmRequestFailure({
+      error,
+      endpoint,
+      timeoutMs,
+      externalAborted: externalSignal?.aborted === true,
+      timeoutAborted: timeoutSignal.aborted,
+    })
   }
 }
 
@@ -318,6 +346,7 @@ async function executeOpenAiCompatibleRequest(params: {
   responseMode: LlmResponseMode
   structuredOutputJson: string | null
   timeoutMs: number
+  signal?: AbortSignal
 }) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -355,7 +384,7 @@ async function executeOpenAiCompatibleRequest(params: {
     method: 'POST',
     headers,
     body: JSON.stringify(buildBody('data_url')),
-  }, params.timeoutMs)
+  }, params.timeoutMs, params.signal)
 
   let retriedRawBase64Image = false
   if (!response.ok) {
@@ -365,7 +394,7 @@ async function executeOpenAiCompatibleRequest(params: {
         method: 'POST',
         headers,
         body: JSON.stringify(buildBody('raw_base64')),
-      }, params.timeoutMs)
+      }, params.timeoutMs, params.signal)
     } else {
       throw new Error(`OpenAI-compatible provider request failed (${response.status}): ${response.bodyText || response.statusText}`)
     }
@@ -398,6 +427,7 @@ async function executeOllamaRequest(params: {
   responseMode: LlmResponseMode
   structuredOutputJson: string | null
   timeoutMs: number
+  signal?: AbortSignal
 }) {
   const jsonInstruction = buildJsonInstruction(params.responseMode, params.structuredOutputJson)
   const systemBlock = [params.systemPrompt, jsonInstruction].filter((value): value is string => Boolean(value)).join('\n\n')
@@ -433,7 +463,7 @@ async function executeOllamaRequest(params: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
-  }, params.timeoutMs)
+  }, params.timeoutMs, params.signal)
 
   if (!response.ok) {
     throw new Error(`Ollama request failed (${response.status}): ${response.bodyText || response.statusText}`)
@@ -730,6 +760,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       responseMode,
       structuredOutputJson,
       timeoutMs,
+      signal: request.signal,
     })
   } else if (provider.provider_type === 'llm_openai_compatible') {
     result = await executeOpenAiCompatibleRequest({
@@ -745,6 +776,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       responseMode,
       structuredOutputJson,
       timeoutMs,
+      signal: request.signal,
     })
   } else {
     throw new Error(`이 연결은 LLM 실행용 타입이 아니야: ${provider.display_name}`)
