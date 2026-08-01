@@ -10,12 +10,22 @@
 import { AutoCollectCondition } from '@conai/shared';
 import { ConditionEvaluator, EvaluableImage } from '../types';
 
+// Typed require mirrors QueryCacheService: the legacy ambient declaration in
+// src/types/lru-cache.d.ts does not match the installed lru-cache v11 API.
+const { LRUCache } = require('lru-cache') as {
+  LRUCache: new <K, V>(options: { max: number }) => {
+    get(key: K): V | undefined;
+    set(key: K, value: V): void;
+  };
+};
+
 export class RegexEvaluator implements ConditionEvaluator {
   /**
    * Regex compilation cache to avoid repeated compilation
    * Key format: "pattern|flags"
+   * Bounded because patterns come from user-defined conditions.
    */
-  private static regexCache = new Map<string, RegExp>();
+  private static regexCache = new LRUCache<string, RegExp>({ max: 200 });
 
   /**
    * Get or compile regex with caching
@@ -152,6 +162,8 @@ export class RegexEvaluator implements ConditionEvaluator {
     try {
       const flags = caseSensitive ? 'g' : 'gi';
       const regex = RegexEvaluator.getRegex(pattern, flags);
+      // Cached sticky/global regexes keep lastIndex between calls; reset for a full-text test.
+      regex.lastIndex = 0;
       return regex.test(targetText);
     } catch (err) {
       console.warn('Invalid regex pattern:', pattern, err);

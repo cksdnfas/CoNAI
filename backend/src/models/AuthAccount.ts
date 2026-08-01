@@ -1,5 +1,6 @@
 import { getAuthDb } from '../database/authDb';
 import { AuthService } from '../services/authService';
+import { invalidateResolvedAuthAccessCache } from '../services/authAccessControlService';
 
 export type AuthAccountType = 'admin' | 'guest';
 export type AuthAccountStatus = 'active' | 'disabled';
@@ -45,6 +46,19 @@ export class AuthAccount {
     const db = getAuthDb();
     const row = db.prepare('SELECT * FROM auth_accounts WHERE id = ?').get(accountId) as AuthAccountRecord | undefined;
     return row ?? null;
+  }
+
+  /** Find multiple auth accounts by id in one query. */
+  static findByIds(accountIds: number[]): AuthAccountRecord[] {
+    const uniqueIds = Array.from(new Set(accountIds)).filter((id) => Number.isInteger(id) && id > 0);
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+
+    const db = getAuthDb();
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = db.prepare(`SELECT * FROM auth_accounts WHERE id IN (${placeholders})`).all(...uniqueIds) as AuthAccountRecord[];
+    return rows;
   }
 
   /** Find one auth account by its username. */
@@ -196,6 +210,7 @@ export class AuthAccount {
     });
 
     updateTransaction();
+    invalidateResolvedAuthAccessCache();
 
     const updatedAccount = this.findById(accountId);
     if (!updatedAccount) {
@@ -254,6 +269,7 @@ export class AuthAccount {
     });
 
     deleteTransaction();
+    invalidateResolvedAuthAccessCache();
   }
 
   /** Count active admin accounts for lockout protection. */

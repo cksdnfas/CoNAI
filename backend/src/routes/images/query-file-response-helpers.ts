@@ -3,7 +3,9 @@ import fs from 'fs';
 import type { Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 
-const IMMUTABLE_FILE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+// Thumbnails and media keep stable URLs across in-place regeneration, so clients
+// must revalidate via the ETag/Last-Modified validators instead of caching forever.
+const FILE_CACHE_CONTROL = 'public, max-age=86400, must-revalidate';
 
 /** Build a stable ETag from file mtime and size. */
 function generateETag(stats: fs.Stats): string {
@@ -79,11 +81,11 @@ function shouldHonorRangeRequest(req: Request, stats: fs.Stats, etag: string) {
   return ifRangeDate !== null && isSameOrOlderThanHeaderDate(stats, ifRangeDate);
 }
 
-function setImmutableCacheHeaders(
+function setFileCacheHeaders(
   res: Response,
   validators: ReturnType<typeof getFileCacheValidators>,
 ) {
-  res.setHeader('Cache-Control', IMMUTABLE_FILE_CACHE_CONTROL);
+  res.setHeader('Cache-Control', FILE_CACHE_CONTROL);
   res.setHeader('ETag', validators.etag);
   res.setHeader('Last-Modified', validators.lastModified);
 }
@@ -103,7 +105,7 @@ export function getCompositeHashOrBlock(req: Request, res: Response) {
   return compositeHash;
 }
 
-/** Stream a video-like file with range support and long-lived caching headers. */
+/** Stream a video-like file with range support and revalidated caching headers. */
 export function streamRangeFile(req: Request, res: Response, filePath: string, mimeType: string) {
   const stats = fs.statSync(filePath);
   const fileSize = stats.size;
@@ -113,7 +115,7 @@ export function streamRangeFile(req: Request, res: Response, filePath: string, m
 
   res.setHeader('Content-Type', mimeType);
   res.setHeader('Accept-Ranges', 'bytes');
-  setImmutableCacheHeaders(res, validators);
+  setFileCacheHeaders(res, validators);
 
   if (!range) {
     if (shouldReturnNotModified(req, stats, etag)) {
@@ -178,7 +180,7 @@ export function streamRangeFile(req: Request, res: Response, filePath: string, m
   fs.createReadStream(filePath, { start, end }).pipe(res);
 }
 
-/** Stream one static file with ETag handling and immutable cache headers. */
+/** Stream one static file with ETag handling and revalidated cache headers. */
 export async function streamCacheableFile(
   req: Request,
   res: Response,
@@ -190,7 +192,7 @@ export async function streamCacheableFile(
   const { etag } = validators;
   const isNotModified = shouldReturnNotModified(req, stats, etag);
 
-  setImmutableCacheHeaders(res, validators);
+  setFileCacheHeaders(res, validators);
 
   if (isNotModified) {
     res.status(304).end();

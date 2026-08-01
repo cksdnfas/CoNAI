@@ -73,12 +73,14 @@ function registerRuntimeStaticDirectory(app: Express, mountPath: string, directo
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
       if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filePath)) {
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        // Files under /uploads, /temp, and /save can be replaced in place at the
+        // same URL, so clients must revalidate instead of caching immutably.
+        res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
       }
     },
     etag: true,
     lastModified: true,
-    maxAge: '1y',
+    maxAge: '1d',
   }));
 }
 

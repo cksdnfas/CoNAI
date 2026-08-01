@@ -5,10 +5,14 @@ import { gzipSync } from 'node:zlib'
 const distDir = path.resolve(process.cwd(), 'dist')
 const indexHtml = readFileSync(path.join(distDir, 'index.html'), 'utf8')
 const initialAssetMatches = [
-  ...indexHtml.matchAll(/<script[^>]+src="\.\/assets\/([^"]+\.js)"/g),
-  ...indexHtml.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="\.\/assets\/([^"]+\.js)"/g),
+  ...indexHtml.matchAll(/<script[^>]+src="\.?\/assets\/([^"]+\.js)"/g),
+  ...indexHtml.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="\.?\/assets\/([^"]+\.js)"/g),
 ]
 const initialAssets = Array.from(new Set(initialAssetMatches.map((match) => match[1])))
+
+if (initialAssets.length === 0) {
+  throw new Error('No initial JS assets detected in dist/index.html — asset detection no longer matches the build output')
+}
 const initialGzipBytes = initialAssets.reduce(
   (total, fileName) => total + gzipSync(readFileSync(path.join(distDir, 'assets', fileName))).byteLength,
   0,

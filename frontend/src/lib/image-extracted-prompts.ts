@@ -1,4 +1,4 @@
-import { shellCatalog } from '@/i18n/resources'
+import { shellCatalog } from '@/i18n/resources/shell'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { ImageAiRawNaiParameters, ImageRecord } from '@/types/image'
 import type { PromptGroupResolveItem } from '@/types/prompt'

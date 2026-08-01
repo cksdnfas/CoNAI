@@ -11,5 +11,7 @@ declare module 'express-session' {
     permissionKeys?: string[];
     accessCacheAccountId?: number;
     accessCacheUpdatedAt?: number;
+    /** Access epoch captured when groupKeys/permissionKeys were last cached into the session. */
+    accessCacheEpoch?: number;
   }
 }

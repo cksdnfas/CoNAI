@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getAuthDb } from '../database/authDb';
+import { invalidateResolvedAuthAccessCache } from '../services/authAccessControlService';
 
 export type BuiltInPermissionGroupKey = 'anonymous' | 'guest' | 'admin';
 
@@ -223,6 +224,7 @@ export class AuthPermissionGroup {
     });
 
     updateTransaction();
+    invalidateResolvedAuthAccessCache();
 
     const updatedGroup = this.findGroupById(groupId);
     if (!updatedGroup) {
@@ -238,6 +240,7 @@ export class AuthPermissionGroup {
     const group = this.requireGroupById(groupId);
     this.assertCustomGroupEditable(group);
     db.prepare('DELETE FROM auth_permission_groups WHERE id = ?').run(groupId);
+    invalidateResolvedAuthAccessCache();
   }
 
   /** List the current account members of one permission group. */
@@ -264,6 +267,7 @@ export class AuthPermissionGroup {
       INSERT OR IGNORE INTO auth_account_group_memberships (account_id, group_id, created_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
     `).run(accountId, groupId);
+    invalidateResolvedAuthAccessCache();
   }
 
   /** Remove one account membership from one custom permission group. */
@@ -277,6 +281,7 @@ export class AuthPermissionGroup {
       DELETE FROM auth_account_group_memberships
       WHERE account_id = ? AND group_id = ?
     `).run(accountId, groupId);
+    invalidateResolvedAuthAccessCache();
   }
 
   /** Normalize and validate one direct page-permission list for custom groups. */
@@ -305,6 +310,9 @@ export class AuthPermissionGroup {
     }
 
     this.syncDirectBuiltInPermissions(groupRow.id, normalizedPermissionKeys);
+    // The anonymous/guest rows back the memoized `group:*` resolutions, so drop them here
+    // instead of at the call sites; a missed invalidation would keep revoked page access alive.
+    invalidateResolvedAuthAccessCache();
 
     const updatedGroup = this.listBuiltInPageAccess([groupKey])[0];
     if (!updatedGroup) {

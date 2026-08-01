@@ -35,6 +35,7 @@ if (isProductionEnvironment || isPackagedRuntime()) {
 
 import https from 'https';
 import express, { type Request, type Response as ExpressResponse } from 'express';
+import sharp from 'sharp';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -65,6 +66,23 @@ import {
   resolveRuntimeSideEffectRole,
   shouldSkipHttpServerForRuntimeRole,
 } from './startup/runtimeRole';
+import { logger } from './utils/logger';
+
+// Crash safety: the scheduler layer fires floating promises, and a single rejection
+// must not take down the whole process (Node >= 15 exits by default).
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection:', reason instanceof Error ? reason : new Error(String(reason)));
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception, exiting:', error);
+  logger.close(() => process.exit(1));
+  // Fallback in case the log stream never flushes
+  setTimeout(() => process.exit(1), 2000).unref();
+});
+
+// Keep libvips' worker pool modest so background image processing does not starve API requests.
+sharp.concurrency(2);
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
@@ -72,6 +90,8 @@ const isDevelopment = isDevelopmentEnvironment;
 const isSafeSmokeMode = process.env.SAFE_SMOKE_MODE === 'true';
 const runtimeRole = resolveRuntimeSideEffectRole();
 const shouldStartHttpServer = !shouldSkipHttpServerForRuntimeRole(runtimeRole);
+// 종료 시 진행 중인 요청을 기다려 주는 상한. 이 시간이 지나면 남은 소켓을 끊고 정리 단계로 넘어간다.
+const SHUTDOWN_DRAIN_TIMEOUT_MS = 3000;
 
 /** Resolve the Express trust-proxy setting for direct and proxied deployments. */
 function resolveTrustProxySetting() {
@@ -195,6 +215,14 @@ app.use(cors({
 }));
 app.use(compression({
   threshold: 1024,
+  filter: (req, res) => {
+    // SSE responses must never be buffered by compression
+    const contentType = String(res.getHeader('Content-Type') ?? '');
+    if (contentType.includes('event-stream')) {
+      return false;
+    }
+    return compression.filter(req, res);
+  },
 }));
 app.use(express.json({ limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb`, strict: false }));
 app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb` }));
@@ -273,8 +301,9 @@ async function startServer() {
     // 4. Initialize session middleware (User Settings DB + Session configuration)
     await initializeSessionMiddleware();
 
-    // Apply global API throttling after sessions are available so admins can bypass UI browsing limits.
-    app.use(apiLimiter);
+    // Apply API throttling after sessions are available so admins can bypass UI browsing limits.
+    // Scoped to /api so static assets, image bytes, and the SPA shell are never rate limited.
+    app.use('/api', apiLimiter);
 
     // 4-1. Sync file-based custom nodes into the module registry.
     const customNodeSyncSkipped = !shouldRunWorkerStartupTasks;
@@ -540,6 +569,34 @@ ${tips.join('\n')}
       isShuttingDown = true;
       console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
 
+      // Force exit after 10 seconds
+      const forceExitTimer = setTimeout(() => {
+        console.error('❌ Forced shutdown after timeout');
+        process.exit(1);
+      }, 10000);
+      forceExitTimer.unref();
+
+      // Stop accepting connections and drain in-flight requests first,
+      // so nothing is still being served when services and databases go away.
+      const activeServer = server;
+      if (activeServer) {
+        // 스트리밍/장시간 요청 하나가 드레인을 무한정 붙잡으면 강제 종료 타이머(10초)가 먼저 터져
+        // DB조차 닫지 못한 채 종료된다. 드레인을 제한하고 남은 소켓은 직접 끊는다.
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            activeServer.close(() => resolve());
+            activeServer.closeIdleConnections?.();
+          }),
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, SHUTDOWN_DRAIN_TIMEOUT_MS).unref();
+          }),
+        ]);
+        activeServer.closeAllConnections?.();
+        console.log('✅ Server closed');
+      } else {
+        console.log('✅ Server was not running or already closed');
+      }
+
       if (!isSafeSmokeMode) {
         // Stop file watcher service (first to prevent new events)
         try {
@@ -627,7 +684,7 @@ ${tips.join('\n')}
         console.warn('⚠️  Error stopping job tracker:', error);
       }
 
-      // Close database connections
+      // Close database connections last so drained requests never hit closed handles
       try {
         const { closeDatabase } = await import('./database/init');
         closeDatabase();
@@ -652,27 +709,7 @@ ${tips.join('\n')}
         console.warn('⚠️  Error closing API generation database:', error);
       }
 
-      // Close server
-      if (server) {
-        try {
-          server.close(() => {
-            console.log('✅ Server closed');
-            process.exit(0);
-          });
-        } catch (error) {
-          console.error('⚠️  Error closing server:', error);
-          process.exit(1);
-        }
-      } else {
-        console.log('✅ Server was not running or already closed');
-        process.exit(0);
-      }
-
-      // Force exit after 10 seconds
-      setTimeout(() => {
-        console.error('❌ Forced shutdown after timeout');
-        process.exit(1);
-      }, 10000);
+      process.exit(0);
     };
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));

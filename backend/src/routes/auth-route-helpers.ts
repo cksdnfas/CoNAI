@@ -1,10 +1,17 @@
 import type { Request } from 'express';
 import { AuthCredentials } from '../models/AuthCredentials';
 import { AuthAccount, type AuthAccountRecord } from '../models/AuthAccount';
-import { AuthAccessControlService } from '../services/authAccessControlService';
+import {
+  AuthAccessControlService,
+  getResolvedAuthAccessEpoch,
+  invalidateResolvedAuthAccessCache,
+} from '../services/authAccessControlService';
 
 let configuredAuthCache: boolean | null = null;
 const TRUSTED_BOOTSTRAP_USERNAME = 'Bootstrap';
+
+/** Shared freshness window for session-cached access data. */
+export const SESSION_ACCESS_CACHE_TTL_MS = 60_000;
 
 export type SessionAuthAccount = Pick<AuthAccountRecord, 'id' | 'username' | 'account_type'>;
 
@@ -28,6 +35,7 @@ export interface AuthStatusPayload {
 /** Clear the cached configured-auth flag after bootstrap/auth mutations. */
 export function invalidateConfiguredAuthCache(): void {
   configuredAuthCache = null;
+  invalidateResolvedAuthAccessCache();
 }
 
 /** Check whether local auth has a usable administrator configured. */
@@ -50,11 +58,29 @@ export function setAuthenticatedSession(req: Request, account: SessionAuthAccoun
   req.session.groupKeys = resolvedAccess.groupKeys;
   req.session.permissionKeys = resolvedAccess.permissionKeys;
   req.session.accessCacheAccountId = account.id;
+  req.session.accessCacheEpoch = getResolvedAuthAccessEpoch();
   req.session.accessCacheUpdatedAt = Date.now();
 }
 
 /** Populate the current session as the trusted personal-mode admin when auth is not configured. */
 export function setTrustedBootstrapSession(req: Request, resolvedAccess: { groupKeys: string[]; permissionKeys: string[] }): void {
+  // Leave a still-fresh bootstrap session untouched so express-session skips its per-request save.
+  const cacheUpdatedAt = req.session.accessCacheUpdatedAt;
+  const isFreshBootstrapSession = req.session.authenticated === true
+    && req.session.username === TRUSTED_BOOTSTRAP_USERNAME
+    && req.session.accountId === undefined
+    && req.session.accountType === 'admin'
+    && req.session.accessCacheAccountId === undefined
+    && Array.isArray(req.session.groupKeys)
+    && Array.isArray(req.session.permissionKeys)
+    && req.session.accessCacheEpoch === getResolvedAuthAccessEpoch()
+    && typeof cacheUpdatedAt === 'number'
+    && Date.now() - cacheUpdatedAt < SESSION_ACCESS_CACHE_TTL_MS;
+
+  if (isFreshBootstrapSession) {
+    return;
+  }
+
   req.session.authenticated = true;
   req.session.username = TRUSTED_BOOTSTRAP_USERNAME;
   delete req.session.accountId;
@@ -62,6 +88,7 @@ export function setTrustedBootstrapSession(req: Request, resolvedAccess: { group
   req.session.groupKeys = resolvedAccess.groupKeys;
   req.session.permissionKeys = resolvedAccess.permissionKeys;
   delete req.session.accessCacheAccountId;
+  req.session.accessCacheEpoch = getResolvedAuthAccessEpoch();
   req.session.accessCacheUpdatedAt = Date.now();
 }
 

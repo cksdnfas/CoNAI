@@ -1,9 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthAccount } from '../models/AuthAccount';
-import { hasConfiguredAuth, setTrustedBootstrapSession } from '../routes/auth-route-helpers';
-import { AuthAccessControlService } from '../services/authAccessControlService';
-
-const SESSION_ACCESS_CACHE_TTL_MS = 60_000;
+import { SESSION_ACCESS_CACHE_TTL_MS, hasConfiguredAuth, setTrustedBootstrapSession } from '../routes/auth-route-helpers';
+import { AuthAccessControlService, getResolvedAuthAccessEpoch } from '../services/authAccessControlService';
 
 /**
  * Require authentication middleware.
@@ -66,12 +64,16 @@ function refreshSessionAccess(req: Request): string[] {
   }
 
   const now = Date.now();
+  // The TTL is the steady-state optimization; the epoch makes explicit permission
+  // revocations invalidate an already-open session on its very next request.
+  const accessEpoch = getResolvedAuthAccessEpoch();
   const cachedPermissionKeys = req.session.permissionKeys;
   const cachedGroupKeys = req.session.groupKeys;
   const cacheUpdatedAt = req.session.accessCacheUpdatedAt;
   const isFreshSessionAccessCache = Array.isArray(cachedPermissionKeys)
     && Array.isArray(cachedGroupKeys)
     && req.session.accessCacheAccountId === accountId
+    && req.session.accessCacheEpoch === accessEpoch
     && typeof cacheUpdatedAt === 'number'
     && now - cacheUpdatedAt < SESSION_ACCESS_CACHE_TTL_MS;
 
@@ -83,6 +85,7 @@ function refreshSessionAccess(req: Request): string[] {
   req.session.groupKeys = resolvedAccess.groupKeys;
   req.session.permissionKeys = resolvedAccess.permissionKeys;
   req.session.accessCacheAccountId = accountId;
+  req.session.accessCacheEpoch = accessEpoch;
   req.session.accessCacheUpdatedAt = now;
   return resolvedAccess.permissionKeys;
 }
