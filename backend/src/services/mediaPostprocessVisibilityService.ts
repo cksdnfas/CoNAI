@@ -13,7 +13,9 @@ export type ImmediatePostprocessRequirements = {
   hasPendingWork: boolean;
 };
 
-let hasPostprocessStatusColumnCache: boolean | null = null;
+// undefined = 아직 probe 안 함, false = probe 완료·컬럼 없음 (음성 결과도 캐시해
+// 호출마다 PRAGMA table_info가 재실행되지 않도록 함)
+let hasPostprocessStatusColumnCache: boolean | undefined;
 
 function hasMediaMetadataColumn(columnName: string): boolean {
   try {
@@ -25,13 +27,11 @@ function hasMediaMetadataColumn(columnName: string): boolean {
 }
 
 function hasPostprocessStatusColumn(): boolean {
-  if (hasPostprocessStatusColumnCache === true) {
-    return true;
+  if (hasPostprocessStatusColumnCache === undefined) {
+    hasPostprocessStatusColumnCache = hasMediaMetadataColumn('postprocess_status');
   }
 
-  const hasColumn = hasMediaMetadataColumn('postprocess_status');
-  hasPostprocessStatusColumnCache = hasColumn ? true : null;
-  return hasColumn;
+  return hasPostprocessStatusColumnCache;
 }
 
 function assertSafeSqlAlias(alias: string): void {

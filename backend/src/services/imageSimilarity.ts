@@ -1,3 +1,4 @@
+import fs from 'fs';
 import sharp from 'sharp';
 import { ColorDescriptor, ColorHistogram } from '../types/similarity';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
@@ -15,6 +16,9 @@ const DCT_COSINES = Array.from({ length: PHASH_LOW_FREQUENCY_SIZE }, (_unused, f
 const DCT_COEFFICIENTS = Array.from({ length: PHASH_LOW_FREQUENCY_SIZE }, (_unused, frequency) =>
   frequency === 0 ? INV_SQRT_2 : 1
 );
+// 파생 파이프라인이 공유할 입력을 메모리에 올릴 수 있는 상한.
+// 동시 처리 수만큼 곱해져 상주하므로 큰 파일은 경로 입력을 그대로 쓴다.
+const MAX_BUFFERED_SOURCE_BYTES = 64 * 1024 * 1024;
 
 /**
  * 이미지 유사도 검색 서비스
@@ -524,10 +528,36 @@ export class ImageSimilarityService {
   }
 
   /**
-   * 복합 해시 및 컬러 히스토그램 동시 생성 - 최적화 버전
-   * pHash/aHash, dHash, RGB descriptor를 병렬 생성
+   * clone() 파생 파이프라인들이 공유할 sharp 입력 생성
+   *
+   * 파일 경로를 입력으로 주면 clone()은 입력 디스크립터만 복사하므로 파생 파이프라인
+   * 마다 파일을 다시 연다. 적당한 크기의 파일은 한 번만 읽어 버퍼로 넘겨 재읽기를
+   * 없앤다. 상한을 넘거나 읽기에 실패하면 기존 경로 입력으로 폴백해
+   * sharp의 오류 메시지/분류(unsupported image format 등)를 그대로 유지한다.
+   *
+   * @param knownFileSize 이미 알고 있는 파일 크기 (있으면 stat 재호출을 생략)
    */
-  static async generateHashAndHistogram(imagePath: string): Promise<{
+  static async createSharedSourceImage(imagePath: string, knownFileSize?: number): Promise<sharp.Sharp> {
+    const resolvedPath = toWindowsLongPathIfNeeded(imagePath);
+
+    try {
+      const fileSize = knownFileSize ?? (await fs.promises.stat(resolvedPath)).size;
+      if (fileSize > 0 && fileSize <= MAX_BUFFERED_SOURCE_BYTES) {
+        return sharp(await fs.promises.readFile(resolvedPath));
+      }
+    } catch {
+      // 크기 확인/읽기 실패 → 경로 입력으로 폴백
+    }
+
+    return sharp(resolvedPath);
+  }
+
+  /**
+   * 복합 해시 및 컬러 히스토그램 동시 생성 - 최적화 버전
+   * 단일 sharp 인스턴스를 clone()해 파생 파이프라인 생성 (원본 메타데이터 포함)
+   * @param sourceImage 재사용할 sharp 인스턴스 (없으면 imagePath로 생성)
+   */
+  static async generateHashAndHistogram(imagePath: string, sourceImage?: sharp.Sharp): Promise<{
     hashes: {
       compositeHash: string;
       perceptualHash: string;
@@ -535,26 +565,31 @@ export class ImageSimilarityService {
       aHash: string;
     };
     colorHistogram: ColorHistogram;
+    metadata: {
+      width: number | null;
+      height: number | null;
+    };
   }> {
     try {
-      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
+      const source = sourceImage ?? sharp(toWindowsLongPathIfNeeded(imagePath));
 
-      // 병렬 처리: 그레이스케일 해시 + RGB 히스토그램
-      const [grayBuffer, dHashBuffer, rgbBuffer] = await Promise.all([
+      // 병렬 처리: 원본 메타데이터 + 그레이스케일 해시 + RGB 히스토그램
+      const [imageMetadata, grayBuffer, dHashBuffer, rgbBuffer] = await Promise.all([
+        source.metadata(),
         // 1. 32x32 그레이스케일 버퍼 (pHash/aHash용)
-        sharp(sharpPath)
+        source.clone()
           .resize(32, 32, { fit: 'fill' })
           .greyscale()
           .raw()
           .toBuffer(),
         // 2. canonical 9x8 그레이스케일 버퍼 (dHash용)
-        sharp(sharpPath)
+        source.clone()
           .resize(9, 8, { fit: 'fill' })
           .greyscale()
           .raw()
           .toBuffer(),
         // 3. 32x32 RGB 버퍼 (히스토그램/descriptor용)
-        sharp(sharpPath)
+        source.clone()
           .resize(32, 32, { fit: 'fill' })
           .removeAlpha()  // 알파 채널 제거하여 RGB 강제 변환
           .toColourspace('srgb')  // RGB 색공간 명시
@@ -649,7 +684,11 @@ export class ImageSimilarityService {
           dHash,
           aHash
         },
-        colorHistogram: this.withColorDescriptor(histogram)
+        colorHistogram: this.withColorDescriptor(histogram),
+        metadata: {
+          width: imageMetadata.width ?? null,
+          height: imageMetadata.height ?? null
+        }
       };
     } catch (error) {
       console.error('Failed to generate hash and histogram:', error);

@@ -150,9 +150,12 @@ export class ThumbnailRegenerationService {
         WHERE composite_hash = ?
       `);
 
-      for (const hash of validHashes) {
-        deleteStmt.run(hash);
-      }
+      const clearThumbnailPaths = db.transaction((hashes: Iterable<string>) => {
+        for (const hash of hashes) {
+          deleteStmt.run(hash);
+        }
+      });
+      clearThumbnailPaths(validHashes);
 
       console.log(`✅ Phase 2: 썸네일 삭제 및 DB 정리 완료 (삭제: ${thumbnailsDeleted}개)`);
 

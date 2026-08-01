@@ -12,6 +12,10 @@ import { normalizeFilename } from './pathResolver';
 const RECYCLE_BIN_PATH = runtimePaths.recycleBinDir;
 const RETRYABLE_UNLINK_ERROR_CODES = new Set(['EBUSY', 'EPERM']);
 const UNLINK_RETRY_DELAYS_MS = [100, 250, 500, 1000, 2000, 4000, 8000];
+// rename 실패 중 복사+삭제로 되살릴 수 있는 코드들.
+// EXDEV는 다른 볼륨, 나머지는 Windows에서 다른 핸들(탐색기 미리보기, 백신,
+// 진행 중인 sharp 읽기)이 파일을 잡고 있을 때 흔히 나온다.
+const RENAME_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EBUSY', 'EACCES', 'ENOTSUP']);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -88,7 +92,35 @@ export async function copyToRecycleBin(filePath: string): Promise<string> {
 }
 
 async function moveToRecycleBin(filePath: string): Promise<string> {
-  const recycleBinFilePath = await copyToRecycleBin(filePath);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`);
+  }
+
+  const stats = await fs.promises.stat(filePath);
+  if (!stats.isFile()) {
+    throw new Error(`Not a file: ${filePath}`);
+  }
+
+  const recycleBinFileName = generateRecycleBinFileName(filePath);
+  const recycleBinFilePath = path.join(RECYCLE_BIN_PATH, recycleBinFileName);
+  await fs.promises.mkdir(RECYCLE_BIN_PATH, { recursive: true });
+
+  // 같은 볼륨이면 rename이 복사+삭제보다 훨씬 빠르므로 rename을 먼저 시도.
+  // 다른 볼륨(EXDEV)이거나 잠금성 오류(EPERM/EBUSY/EACCES/ENOTSUP)면
+  // 복사 후 재시도 unlink 경로로 폴백한다.
+  try {
+    await fs.promises.rename(filePath, recycleBinFilePath);
+    console.log(`♻️ Moved to RecycleBin: ${path.basename(filePath)} → ${path.basename(recycleBinFilePath)}`);
+    return recycleBinFilePath;
+  } catch (renameError) {
+    const renameErrorCode = String((renameError as NodeJS.ErrnoException).code);
+    if (!RENAME_FALLBACK_ERROR_CODES.has(renameErrorCode)) {
+      console.error(`❌ Failed to move file to RecycleBin:`, renameError);
+      throw renameError;
+    }
+  }
+
+  await fs.promises.copyFile(filePath, recycleBinFilePath);
 
   try {
     await unlinkWithTransientLockRetry(filePath);

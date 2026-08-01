@@ -141,6 +141,8 @@ async function collectExistingSupportedFiles(rootPath: string, recursive: boolea
 export class BackupSourceWatcherService {
   private static watcherRegistry = new Map<number, BackupWatcherEntry>();
   private static pendingImports = new Set<string>();
+  // 초기 임포트는 오래 걸릴 수 있으므로 이 간격마다 소스 활성 여부를 다시 읽는다.
+  private static readonly INITIAL_IMPORT_ACTIVE_RECHECK_INTERVAL = 100;
 
   /** Start all enabled backup source watchers on boot. */
   static async initialize(): Promise<void> {
@@ -263,6 +265,27 @@ export class BackupSourceWatcherService {
     return `${sourceId}:${normalizeBackupComparePath(filePath)}`;
   }
 
+  /**
+   * 초기 임포트 중단 여부 확인
+   * 소스 조회는 루프 밖에서 1회만 하되(파일당 조회 제거), 사용자가 도중에 소스를
+   * 끄는 경우를 위해 인메모리 워처 상태는 매 파일, is_active는 N개마다 재확인한다.
+   */
+  private static async isInitialImportStillActive(sourceId: number, processedCount: number): Promise<boolean> {
+    const entry = this.watcherRegistry.get(sourceId);
+    if (!entry || entry.state !== 'watching') {
+      return false;
+    }
+
+    if (processedCount > 0 && processedCount % this.INITIAL_IMPORT_ACTIVE_RECHECK_INTERVAL === 0) {
+      const latest = await BackupSourceService.getSource(sourceId);
+      if (!latest || latest.is_active !== 1) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   /** Scan the current source tree once so existing files are imported too. */
   private static async runInitialImport(sourceId: number): Promise<void> {
     const source = await BackupSourceService.getSource(sourceId);
@@ -287,8 +310,14 @@ export class BackupSourceWatcherService {
         failed: 0,
       };
 
-      for (const filePath of files) {
-        const result = await this.handleAddEvent(sourceId, filePath, { skipIfTargetExists: true, skipStabilityCheck: true });
+      for (let index = 0; index < files.length; index += 1) {
+        if (!(await this.isInitialImportStillActive(sourceId, index))) {
+          summary.scanned = index;
+          console.warn(`⏹️ [BackupSource] Initial scan cancelled: ${source.display_name || source.source_path} (${index}/${files.length})`);
+          break;
+        }
+
+        const result = await this.handleAddEvent(sourceId, files[index], { skipIfTargetExists: true, skipStabilityCheck: true, source });
         if (result === 'imported') {
           summary.imported += 1;
         } else if (result === 'skipped') {
@@ -312,7 +341,7 @@ export class BackupSourceWatcherService {
   private static async handleAddEvent(
     sourceId: number,
     filePath: string,
-    options?: { skipIfTargetExists?: boolean; skipStabilityCheck?: boolean },
+    options?: { skipIfTargetExists?: boolean; skipStabilityCheck?: boolean; source?: BackupSource },
   ): Promise<'imported' | 'skipped' | 'failed'> {
     const pendingKey = this.buildPendingImportKey(sourceId, filePath);
     if (this.pendingImports.has(pendingKey)) {
@@ -326,7 +355,8 @@ export class BackupSourceWatcherService {
         return 'skipped';
       }
 
-      const source = await BackupSourceService.getSource(sourceId);
+      // 초기 일괄 임포트는 소스를 한 번만 조회해 재사용 (파일당 조회 제거)
+      const source = options?.source ?? await BackupSourceService.getSource(sourceId);
       if (!source || source.is_active !== 1) {
         return 'skipped';
       }

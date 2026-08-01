@@ -2,6 +2,7 @@ import path from 'path';
 import fg from 'fast-glob';
 import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension } from '../../constants/supportedExtensions';
 import { normalizeWindowsDriveLetter } from '../../utils/pathResolver';
+import { EXCLUDE_PATTERN_CASE_SENSITIVE, normalizeExcludeGlobPatterns } from './excludePatternUtils';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
@@ -24,12 +25,15 @@ export class FileDiscoveryService {
     const normalizedPath = dirPath.replace(/\\/g, '/');
 
     // 지원하는 확장자로 fast-glob 패턴 생성 (성능 최적화)
+    // 패턴/ignore 모두 스캔 루트(cwd) 기준 상대 경로를 사용한다. 절대 경로 패턴을
+    // 쓰면 `**/{name}/**` 형태의 제외 패턴이 루트 위쪽 경로 요소까지 매칭해
+    // (예: 루트가 D:/Photos/temp, 제외 패턴이 "temp") 스캔 결과가 통째로 사라진다.
     const exts = ALL_SUPPORTED_EXTENSIONS
       .map(ext => ext.startsWith('.') ? ext.substring(1) : ext)
       .join(',');
     const patterns = options.recursive
-      ? [`${normalizedPath}/**/*.{${exts}}`]
-      : [`${normalizedPath}/*.{${exts}}`];
+      ? [`**/*.{${exts}}`]
+      : [`*.{${exts}}`];
 
     if (isVerboseScanDebugEnabled) {
       console.log(`Fast-glob 패턴:`, patterns);
@@ -40,12 +44,15 @@ export class FileDiscoveryService {
 
     try {
       // Step 1: 지원하는 확장자 파일 모두 스캔
+      // 제외 패턴의 bare name은 스캔 루트 기준 **/{name}/** 형태로 정규화
       const allFiles = await fg(patterns, {
-        ignore: options.excludePatterns || [],
+        cwd: normalizedPath,
+        ignore: normalizeExcludeGlobPatterns(options.excludePatterns, normalizedPath),
         absolute: true,
         onlyFiles: true,
         concurrency: 256,
-        caseSensitiveMatch: false,
+        // chokidar matcher와 동일한 대소문자 규칙을 공유 (excludePatternUtils 참고)
+        caseSensitiveMatch: EXCLUDE_PATTERN_CASE_SENSITIVE,
         suppressErrors: true  // 권한 문제 등의 에러 무시
       });
 

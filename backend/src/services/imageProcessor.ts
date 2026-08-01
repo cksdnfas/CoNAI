@@ -68,11 +68,13 @@ export class ImageProcessor {
 
   /**
    * 썸네일 생성
+   * @param sourceImage 재사용할 sharp 인스턴스 (없으면 inputPath로 생성)
    */
   static async generateThumbnail(
     inputPath: string,
     outputPath: string,
-    customSize?: number
+    customSize?: number,
+    sourceImage?: sharp.Sharp
   ): Promise<void> {
     // Load settings
     const settings = settingsService.loadSettings();
@@ -89,8 +91,9 @@ export class ImageProcessor {
       targetSize = parseInt(sizeOption, 10);
     }
 
-    const sharpInputPath = toWindowsLongPathIfNeeded(inputPath);
-    const pipeline = sharp(sharpInputPath);
+    const pipeline = sourceImage
+      ? sourceImage.clone()
+      : sharp(toWindowsLongPathIfNeeded(inputPath));
 
     // Only resize if targetSize is specified
     if (targetSize !== undefined) {

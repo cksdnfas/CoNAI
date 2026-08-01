@@ -34,6 +34,7 @@ import {
   setWatcherRuntimeStatus,
   type WatcherRuntimeState,
 } from './fileWatcher/watcherRuntimeStatus';
+import { createExcludePatternMatcher } from './folderScan/excludePatternUtils';
 import { sleep, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
@@ -98,7 +99,10 @@ function buildChokidarOptions(
   }
 
   return {
-    ignored: watcherOptions.excludePatterns,
+    // chokidar compares string matchers with exact equality, so bare exclude
+    // names must be applied through a MatchFunction instead. 판정은 감시 루트
+    // 기준 상대 경로로만 수행한다 (루트 자신이 패턴과 겹쳐 통째로 무시되는 것 방지).
+    ignored: createExcludePatternMatcher(watcherOptions.excludePatterns, resolvedPath),
     persistent: true,
     ignoreInitial: true,
     awaitWriteFinish: {
@@ -133,31 +137,6 @@ function cleanupFolderScanState(scanState: FileWatcherScanState, folderId: numbe
 
   if (isVerboseScanDebugEnabled) {
     console.log(`  🧹 상태 정리 완료: folderId=${folderId}`);
-  }
-}
-
-/** Wait for a new or changed file to stop changing size before scanning it. */
-async function waitForWatcherFileWrite(filePath: string): Promise<void> {
-  let previousSize = -1;
-  let stableCount = 0;
-
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      const currentSize = fs.statSync(filePath).size;
-      if (currentSize === previousSize) {
-        stableCount += 1;
-        if (stableCount >= 3) {
-          return;
-        }
-      } else {
-        stableCount = 0;
-      }
-      previousSize = currentSize;
-    } catch {
-      // 파일 접근 오류 → 대기
-    }
-
-    await sleep(500);
   }
 }
 
@@ -466,7 +445,7 @@ export class FileWatcherService {
     const { watcher, folderName } = entry;
 
     watcher.on('add', async (filePath: string) => {
-      if (!this.shouldProcessFile(filePath, excludeExtensions)) return;
+      if (!this.shouldProcessExistingFile(filePath, excludeExtensions)) return;
 
       recordWatcherEvent(entry, this.updateLastEventTime.bind(this));
       this.syncRuntimeStatus(entry);
@@ -479,7 +458,7 @@ export class FileWatcherService {
     });
 
     watcher.on('change', async (filePath: string) => {
-      if (!this.shouldProcessFile(filePath, excludeExtensions)) return;
+      if (!this.shouldProcessExistingFile(filePath, excludeExtensions)) return;
 
       recordWatcherEvent(entry, this.updateLastEventTime.bind(this));
       this.syncRuntimeStatus(entry);
@@ -522,7 +501,7 @@ export class FileWatcherService {
    */
   private static async handleAddEvent(filePath: string, folderId: number): Promise<void> {
     try {
-      await waitForWatcherFileWrite(filePath);
+      // 쓰기 완료 대기는 chokidar awaitWriteFinish(stabilityThreshold)가 담당
       queueFolderBatchScan(this.scanState, folderId, filePath, this.SCAN_DEBOUNCE_MS, (queuedFolderId) => {
         void this.executeBatchScan(queuedFolderId);
       });
@@ -546,7 +525,6 @@ export class FileWatcherService {
    */
   private static async handleChangeEvent(filePath: string, folderId: number): Promise<void> {
     try {
-      await waitForWatcherFileWrite(filePath);
       queueFolderBatchScan(this.scanState, folderId, filePath, this.SCAN_DEBOUNCE_MS, (queuedFolderId) => {
         void this.executeBatchScan(queuedFolderId);
       });
@@ -686,9 +664,28 @@ export class FileWatcherService {
   }
 
   /**
-   * 파일 처리 여부 확인
+   * 파일 처리 여부 확인 (확장자 필터만)
+   * unlink 이벤트처럼 경로가 이미 사라진 경우에도 판정 가능해야 한다.
    */
   private static shouldProcessFile(filePath: string, excludeExtensions: string[]): boolean {
+    const ext = path.extname(filePath).toLowerCase();
+    return shouldProcessFileExtension(ext, excludeExtensions);
+  }
+
+  /**
+   * add/change 이벤트 처리 여부 확인 (확장자 필터 + 심볼릭 링크 스킵)
+   *
+   * chokidar가 넘겨주는 stats는 followSymlinks 기본값(true) 때문에 링크를 따라간
+   * fs.stat 결과라 isSymbolicLink()가 항상 false다. 링크 판정은 lstat로만 가능하므로
+   * 심볼릭 링크 검사는 lstat 프로브로 되돌린다. followSymlinks를 끄면 링크 디렉토리
+   * traversal까지 사라져 감시 범위 자체가 바뀌므로 chokidar 옵션은 건드리지 않는다.
+   * 대신 확장자 필터를 먼저 통과한 파일에 대해서만 lstat를 호출해 호출 횟수를 줄인다.
+   */
+  private static shouldProcessExistingFile(filePath: string, excludeExtensions: string[]): boolean {
+    if (!this.shouldProcessFile(filePath, excludeExtensions)) {
+      return false;
+    }
+
     try {
       if (fs.lstatSync(filePath).isSymbolicLink()) {
         if (isVerboseScanDebugEnabled) {
@@ -697,11 +694,11 @@ export class FileWatcherService {
         return false;
       }
     } catch {
+      // 이벤트 직후 삭제/이동된 경로 → 다음 스캔에 맡기고 이번엔 스킵
       return false;
     }
 
-    const ext = path.extname(filePath).toLowerCase();
-    return shouldProcessFileExtension(ext, excludeExtensions);
+    return true;
   }
 
   /**

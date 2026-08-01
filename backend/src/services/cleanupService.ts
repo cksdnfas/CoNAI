@@ -1,6 +1,6 @@
+import { db } from '../database/init';
 import { GenerationHistoryModel, GenerationHistoryRecord, GenerationStatus } from '../models/GenerationHistory';
 import { GenerationQueueModel } from '../models/GenerationQueue';
-import { ImageFileModel } from '../models/Image/ImageFileModel';
 
 export interface CleanupDetail {
   id: number;
@@ -82,15 +82,39 @@ export class CleanupService {
       generation_status: 'completed'
     }).filter(record => record.composite_hash);
 
-    const orphaned: GenerationHistoryRecord[] = [];
+    if (allRecords.length === 0) {
+      return [];
+    }
 
-    for (const record of allRecords) {
-      if (record.composite_hash && !ImageFileModel.hasActiveFiles(record.composite_hash)) {
-        orphaned.push(record);
+    // 히스토리는 apiGenDb, image_files는 메인 DB라 단일 NOT EXISTS 쿼리가
+    // 불가능 → 해시를 청크 IN 조회로 일괄 확인 (per-row 쿼리 N+1 제거)
+    const uniqueHashes = Array.from(new Set(allRecords.map(record => record.composite_hash!)));
+    const activeHashes = this.findHashesWithActiveFiles(uniqueHashes);
+
+    return allRecords.filter(record => !activeHashes.has(record.composite_hash!));
+  }
+
+  /** Resolve which of the given hashes still have active main-DB files, in chunked IN lookups. */
+  private static findHashesWithActiveFiles(hashes: string[]): Set<string> {
+    const CHUNK_SIZE = 500;
+    const active = new Set<string>();
+
+    for (let i = 0; i < hashes.length; i += CHUNK_SIZE) {
+      const chunk = hashes.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = db.prepare(
+        `SELECT DISTINCT composite_hash
+         FROM image_files
+         WHERE file_status = 'active'
+           AND composite_hash IN (${placeholders})`
+      ).all(...chunk) as Array<{ composite_hash: string }>;
+
+      for (const row of rows) {
+        active.add(row.composite_hash);
       }
     }
 
-    return orphaned;
+    return active;
   }
 
   /**

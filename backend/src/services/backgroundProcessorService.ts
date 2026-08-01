@@ -19,7 +19,6 @@ import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityS
 import { QueryCacheService } from './QueryCacheService';
 import { MetadataExtractionError } from '../types/errors';
 import type { FileType } from '../types/image';
-import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 import { maybeTruncateImagesWal } from '../database/walMaintenance';
 
 interface UnhashedFile {
@@ -202,9 +201,15 @@ function yieldToHttpRequests(): Promise<void> {
 export class BackgroundProcessorService {
   private static processing = false;
   private static lockRetryScheduled = false;
+  private static consecutiveFailedBatches = 0;
   private static readonly BATCH_SIZE = 50;
   private static readonly CONCURRENCY = resolveBackgroundMediaConcurrency();
   private static readonly LOCK_RETRY_DELAY_MS = 5000;
+  private static readonly NEXT_BATCH_DELAY_MS = 1000;
+  // 배치 전체가 실패하면(예: SMB 공유 단절) 1초 간격 재시도가 무한 로그 폭풍이
+  // 되므로 지수 백오프로 늦춘다. ENOENT가 아닌 오류는 행을 지우지 않으므로
+  // 파일은 남아 있다가 접근이 복구되면 다음 시도에서 정상 처리된다.
+  private static readonly MAX_FAILED_BATCH_BACKOFF_MS = 60_000;
 
   /**
    * Register and process a media file that this backend just saved.
@@ -306,6 +311,10 @@ export class BackgroundProcessorService {
     if (compositeHash) {
       this.triggerAutoTagProcessing(compositeHash, resolvedPath, options);
     }
+
+    // 즉시 처리 경로는 processBatch 밖이라 배치 단위 WAL 정리에 포함되지 않는다.
+    // 게이팅(256MB/30초)은 그대로 두고 경로당 1회만 확인.
+    maybeTruncateImagesWal('background-image-processed');
 
     if (!options.quiet) {
       console.log(`  ⚡ Immediate media processing complete: ${path.basename(resolvedPath)}`);
@@ -439,6 +448,8 @@ export class BackgroundProcessorService {
       // Process in parallel with concurrency limit
       const limit = pLimit(this.CONCURRENCY);
 
+      const batchCounts = { images: 0, videos: 0 };
+
       const tasks = unhashedFiles.map((file) =>
         limit(async () => {
           try {
@@ -449,6 +460,11 @@ export class BackgroundProcessorService {
             await this.processFile(file);
             await yieldToHttpRequests();
             result.processed++;
+            if (file.file_type === 'video' || file.file_type === 'animated') {
+              batchCounts.videos++;
+            } else {
+              batchCounts.images++;
+            }
           } catch (error) {
             console.error(
               `  ❌ Failed to process: ${path.basename(file.original_file_path)}`,
@@ -461,6 +477,14 @@ export class BackgroundProcessorService {
 
       await Promise.all(tasks);
 
+      // WAL 정리는 파일 단위가 아닌 배치 단위로 1회만 수행
+      if (batchCounts.images > 0) {
+        maybeTruncateImagesWal('background-image-processed');
+      }
+      if (batchCounts.videos > 0) {
+        maybeTruncateImagesWal('background-video-processed');
+      }
+
       if (SystemMaintenanceLockService.isExclusiveActive() && this.getUnprocessedCount() > 0) {
         this.scheduleHashGenerationAfterMaintenanceLock(options);
         this.processing = false;
@@ -470,17 +494,29 @@ export class BackgroundProcessorService {
         return result;
       }
 
+      // 진척이 전혀 없는 배치(전부 오류)는 백오프 대상으로 집계
+      const madeNoProgress = result.processed === 0 && result.errors === unhashedFiles.length;
+      this.consecutiveFailedBatches = madeNoProgress ? this.consecutiveFailedBatches + 1 : 0;
+
       console.log(
         `✅ Batch complete: ${result.processed} processed, ${result.errors} errors`
       );
 
       // Continue processing if more images remain
       if (unhashedFiles.length === this.BATCH_SIZE) {
-        console.log('📋 More images to process, scheduling next batch...');
+        const nextBatchDelay = this.getNextBatchDelayMs();
+        if (nextBatchDelay > this.NEXT_BATCH_DELAY_MS) {
+          console.warn(
+            `⏳ Batch made no progress (${this.consecutiveFailedBatches} in a row), backing off ${nextBatchDelay}ms before retry...`
+          );
+        } else {
+          console.log('📋 More images to process, scheduling next batch...');
+        }
+
         setTimeout(() => {
           this.processing = false;
           this.processUnhashedImages(options);
-        }, 1000);
+        }, nextBatchDelay);
       } else {
         this.processing = false;
       }
@@ -494,6 +530,21 @@ export class BackgroundProcessorService {
   }
 
   /**
+   * 다음 배치까지의 대기 시간
+   * 연속으로 진척 없는 배치가 이어지면(공유 폴더 단절 등) 지수 백오프로 늦춘다.
+   */
+  private static getNextBatchDelayMs(): number {
+    if (this.consecutiveFailedBatches === 0) {
+      return this.NEXT_BATCH_DELAY_MS;
+    }
+
+    return Math.min(
+      this.NEXT_BATCH_DELAY_MS * Math.pow(2, this.consecutiveFailedBatches),
+      this.MAX_FAILED_BATCH_BACKOFF_MS
+    );
+  }
+
+  /**
    * Process a single file: generate hash, check duplicates, create thumbnail
    */
   private static async processFile(file: UnhashedFile & { file_type: string }, options: ProcessFileOptions = {}): Promise<void> {
@@ -502,6 +553,8 @@ export class BackgroundProcessorService {
     // Check if file still exists and is readable
     const access = await checkFileAccess(file.original_file_path);
 
+    // 진짜 ENOENT일 때만 DB 행 삭제. 일시적 오류(EBUSY/EPERM/네트워크 단절)는
+    // exists=true + readable=false로 보고되어 아래 재시도 경로로 넘어감.
     if (!access.exists) {
       console.log(`  ⚠️  File not found, deleting DB record: ${fileName}`);
       db.prepare(
@@ -537,26 +590,40 @@ export class BackgroundProcessorService {
       return;
     }
 
-    // 일반 이미지: perceptual hash 생성
-    await this.processImageFile(file, options);
+    // 일반 이미지: perceptual hash 생성 (위에서 확인한 크기를 재사용)
+    await this.processImageFile(file, options, stats.size);
   }
 
   /**
    * Process image file: generate hash, check duplicates, create thumbnail
    */
-  private static async processImageFile(file: UnhashedFile, options: ProcessFileOptions = {}): Promise<void> {
+  private static async processImageFile(
+    file: UnhashedFile,
+    options: ProcessFileOptions = {},
+    fileSize?: number
+  ): Promise<void> {
     const fileName = path.basename(file.original_file_path);
 
-    // Generate hashes and color histogram
+    // 해시/메타데이터/썸네일 파이프라인이 sharp 인스턴스 하나를 clone()으로 공유.
+    // 상한 이하 파일은 입력을 버퍼로 올려 파생 파이프라인마다 파일을 다시 열지 않게 함.
+    const sourceImage = await ImageSimilarityService.createSharedSourceImage(
+      file.original_file_path,
+      fileSize
+    );
+
+    // Generate hashes, color histogram, and source dimensions
     let hashes: Awaited<ReturnType<typeof ImageSimilarityService.generateHashAndHistogram>>['hashes'];
     let colorHistogram: Awaited<ReturnType<typeof ImageSimilarityService.generateHashAndHistogram>>['colorHistogram'];
+    let imageInfo: Awaited<ReturnType<typeof ImageSimilarityService.generateHashAndHistogram>>['metadata'];
 
     try {
       const result = await ImageSimilarityService.generateHashAndHistogram(
-        file.original_file_path
+        file.original_file_path,
+        sourceImage
       );
       hashes = result.hashes;
       colorHistogram = result.colorHistogram;
+      imageInfo = result.metadata;
     } catch (error) {
       if (isUnsupportedImageFormatError(error)) {
         markFileAsProcessingFailed(file.id, file.original_file_path, 'unsupported image format');
@@ -594,13 +661,12 @@ export class BackgroundProcessorService {
     }
 
     // Unique image - create full metadata record
-    const sharpInputPath = toWindowsLongPathIfNeeded(file.original_file_path);
-    const imageInfo = await sharp(sharpInputPath).metadata();
 
-    // Generate thumbnail
+    // Generate thumbnail (shares the sharp instance created for hashing)
     const thumbnailPath = await this.generateThumbnail(
       file.original_file_path,
-      hashes.compositeHash
+      hashes.compositeHash,
+      sourceImage
     );
 
     // Insert media_metadata record
@@ -618,8 +684,8 @@ export class BackgroundProcessorService {
       hashes.dHash,
       hashes.aHash,
       JSON.stringify(colorHistogram),
-      imageInfo.width || null,
-      imageInfo.height || null,
+      imageInfo.width,
+      imageInfo.height,
       thumbnailPath
     );
 
@@ -659,7 +725,6 @@ export class BackgroundProcessorService {
     );
 
     console.log(`  ✨ Processed image: ${fileName}`);
-    maybeTruncateImagesWal('background-image-processed');
   }
 
   /**
@@ -756,7 +821,6 @@ export class BackgroundProcessorService {
     }
 
     console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
-    maybeTruncateImagesWal('background-video-processed');
   }
 
   /**
@@ -765,9 +829,10 @@ export class BackgroundProcessorService {
    */
   private static async generateThumbnail(
     inputPath: string,
-    compositeHash: string
+    compositeHash: string,
+    sourceImage?: sharp.Sharp
   ): Promise<string> {
-    return ThumbnailGenerator.generateThumbnail(inputPath, compositeHash);
+    return ThumbnailGenerator.generateThumbnail(inputPath, compositeHash, sourceImage);
   }
 
   /**

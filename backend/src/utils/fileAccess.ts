@@ -14,6 +14,11 @@ export interface FileAccessResult {
 /**
  * 파일의 존재 여부 및 읽기/쓰기 권한을 체크합니다.
  *
+ * exists=false는 진짜 ENOENT일 때만 보고합니다. UNC/SMB 폴더의 일시적 오류
+ * (EBUSY/EPERM/ENETUNREACH 등)를 "없음"으로 취급하면 호출부가 DB 행을 영구
+ * 삭제할 수 있으므로, 그 외 오류는 exists=true + readable=false로 보고해
+ * 재시도 경로로 넘깁니다.
+ *
  * @param filePath 체크할 파일 경로
  * @returns 파일 접근 권한 정보
  */
@@ -40,7 +45,7 @@ export async function checkFileAccess(filePath: string): Promise<FileAccessResul
   } catch (error) {
     const errno = (error as NodeJS.ErrnoException).code;
     return {
-      exists: false,
+      exists: errno !== 'ENOENT',
       readable: false,
       writable: false,
       error: (error as Error).message,
@@ -98,8 +103,11 @@ export async function assertFileReadable(filePath: string): Promise<void> {
   }
 
   if (!access.readable) {
-    const error: NodeJS.ErrnoException = new Error(`Permission denied (read): ${filePath}`);
-    error.code = 'EACCES';
+    // 일시적 접근 오류(EBUSY 등)는 원래 코드 그대로 전달해 재시도 판단에 사용
+    const error: NodeJS.ErrnoException = new Error(
+      access.error ?? `Permission denied (read): ${filePath}`
+    );
+    error.code = access.errorCode ?? 'EACCES';
     throw error;
   }
 }

@@ -141,6 +141,12 @@ export class StealthPngExtractor {
                 console.log(`✅ [StealthPNG] Signature found: ${decodedSig} (mode: rgb, compressed: ${compressed})`);
                 bufferRgb = '';
                 indexRgb = 0;
+              } else if (!hasAlpha) {
+                // 3채널 이미지는 RGB 시그니처가 유일한 후보이므로 즉시 종료.
+                // (4채널은 이후 픽셀에서 알파 시그니처 확인이 남아 있어 계속 진행)
+                console.log(`❌ [StealthPNG] No valid signature in RGB channels: ${decodedSig}`);
+                readEnd = true;
+                break;
               }
             }
           } else if (readingParamLen) {

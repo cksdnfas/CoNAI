@@ -4,6 +4,7 @@ import path from 'path';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 import type { FileType } from '../types/image';
+import { checkFileAccess } from '../utils/fileAccess';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 
 /**
@@ -204,7 +205,19 @@ export class FileVerificationService {
   private static async verifyFile(file: ImageFileRecord): Promise<FileVerificationOutcome> {
     try {
       const originalPath = resolveUploadsPath(file.original_file_path);
-      const originalExists = fs.existsSync(originalPath);
+
+      // 원본 부재 판정은 진짜 ENOENT일 때만. UNC/SMB 일시 장애(EACCES/EPERM/
+      // ENETUNREACH 등)는 exists=true + readable=false로 보고되므로, 그 경우
+      // DB 행을 지우지 않고 이번 스윕을 건너뛴 뒤 다음 검증에서 재시도한다.
+      const originalAccess = await checkFileAccess(originalPath);
+      if (originalAccess.exists && !originalAccess.readable) {
+        console.warn(
+          `  ⏭️  원본 접근 실패(${originalAccess.errorCode || 'unknown'}), 이번 검증 건너뜀: ${file.original_file_path}`
+        );
+        return { hasIssue: false, deleted: false };
+      }
+
+      const originalExists = originalAccess.exists;
       const thumbnailExists = this.thumbnailExists(file.thumbnail_path);
 
       if (this.isVideoLike(file)) {
