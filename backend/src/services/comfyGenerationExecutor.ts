@@ -17,9 +17,17 @@ export interface ExecuteComfyGenerationInput {
   workflow: Record<string, any>
   imageSaveOptions?: GeneratedImageSaveOptions
   artifactWorkflow?: WorkflowRecord | null
+  /** 디버그 스냅샷/히스토리 갱신 전용. 상태 전이 책임은 onPromptAccepted 가 가진다. */
   onPromptSubmitted?: (promptId: string) => void | Promise<void>
+  /** PJ-1: POST 직전에 "제출 의사"를 durable 하게 커밋한다. */
+  onUpstreamSubmitting?: () => void | Promise<void>
+  /** PJ-2: 응답 파싱과 같은 tick 에서 핸들을 지속시킨다(동기 콜백이어야 한다). */
+  onPromptAccepted?: (promptId: string) => void
   shouldCancel?: () => boolean | Promise<boolean>
   onCancelRequested?: (promptId: string) => void | Promise<void>
+  /** PJ-3: `/queue` 역매칭용 CoNAI 잡 마커 */
+  queueJobId?: number | null
+  signal?: AbortSignal
 }
 
 export interface ComfyGenerationSavedArtifact {
@@ -100,13 +108,39 @@ function normalizeCoNaiArtifactFileOutputNodes(workflow: Record<string, any>) {
 export async function executeComfyGeneration(
   input: ExecuteComfyGenerationInput,
 ): Promise<ExecuteComfyGenerationResult> {
-  const { comfyService, workflow, imageSaveOptions, artifactWorkflow, onPromptSubmitted, shouldCancel, onCancelRequested } = input
+  const {
+    comfyService,
+    workflow,
+    imageSaveOptions,
+    artifactWorkflow,
+    onPromptSubmitted,
+    onUpstreamSubmitting,
+    onPromptAccepted,
+    shouldCancel,
+    onCancelRequested,
+    queueJobId,
+    signal,
+  } = input
   const normalizedWorkflow = normalizeCoNaiArtifactFileOutputNodes(workflow)
 
   const isArtifactWorkflow = artifactWorkflow?.result_view_mode === 'artifact_explorer'
-  const promptId = comfyService.isModalBackend()
-    ? comfyService.createProviderJobId()
-    : await comfyService.submitPrompt(normalizedWorkflow)
+
+  // PJ-1: 제출 의사를 먼저 커밋해야 프로세스가 죽어도 orphan 복구 근거가 남는다.
+  await onUpstreamSubmitting?.()
+
+  let promptId: string
+  if (comfyService.isModalBackend()) {
+    // modal 핸들은 클라이언트가 만들기 때문에 POST 전에 곧바로 지속시킬 수 있다(PJ-4).
+    promptId = comfyService.createProviderJobId()
+    onPromptAccepted?.(promptId)
+  } else {
+    promptId = await comfyService.submitPrompt(normalizedWorkflow, {
+      signal,
+      queueJobId,
+      onAccepted: onPromptAccepted,
+    })
+  }
+
   await onPromptSubmitted?.(promptId)
 
   if (await shouldCancel?.()) {
@@ -118,11 +152,13 @@ export async function executeComfyGeneration(
     ? await comfyService.runModalWorkflowAndCollectOutputs(normalizedWorkflow, promptId, {
       shouldCancel,
       onCancelRequested,
+      signal,
       onlyFinalOutput: !isArtifactWorkflow,
     })
     : await comfyService.collectGeneratedOutputs(promptId, {
       shouldCancel,
       onCancelRequested,
+      signal,
       onlyFinalOutput: !isArtifactWorkflow,
     })
 

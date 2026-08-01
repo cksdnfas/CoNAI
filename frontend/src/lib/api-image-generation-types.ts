@@ -1,5 +1,15 @@
 export type GenerationServiceType = 'novelai' | 'codex' | 'comfyui'
 export type GenerationQueueJobStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
+/** status와 직교하는 축: 업스트림에 작업을 만들었을 가능성 (백엔드 타입 미러) */
+export type GenerationQueueProviderSubmitState =
+  | 'none'
+  | 'in_flight'
+  | 'accepted'
+  | 'orphan_suspected'
+  | 'orphan_unresolved'
+  | 'cancel_sent'
+  | 'cancel_confirmed'
+  | 'cancel_unsupported'
 
 export interface GenerationQueueJobRecord {
   id: number
@@ -20,6 +30,12 @@ export interface GenerationQueueJobRecord {
   failure_code?: string | null
   failure_message?: string | null
   cancel_requested: number
+  cancel_requested_at?: string | null
+  cancel_origin?: 'user' | 'graph' | 'system' | 'reconcile' | null
+  provider_submit_state?: GenerationQueueProviderSubmitState
+  provider_submit_started_at?: string | null
+  provider_cancel_state?: string | null
+  submit_attempt_count?: number
   queued_at: string
   started_at?: string | null
   completed_at?: string | null

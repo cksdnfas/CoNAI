@@ -8,6 +8,7 @@ import { createComfyUIService } from '../comfyuiService'
 import { prepareComfyPromptData } from '../prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { executeComfyGeneration, isComfyGenerationCancelledError } from '../comfyGenerationExecutor'
+import { resolveComfyAbandonedCancelResult } from '../comfyuiService'
 import { executeNaiGeneration } from '../naiGenerationExecutor'
 import { executeCodexGeneration } from '../codexGenerationExecutor'
 import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
@@ -24,6 +25,13 @@ import {
   resolveFailureMessage,
 } from './queuePayloads'
 import { updateQueueRequestDebugMeta, writeQueueComfyDebugSnapshot } from './queueDebugMeta'
+import { classifySubmitFailure } from './queueSubmitFailureClassifier'
+import {
+  handleComfySubmitFailure,
+  markNaiSubmitAmbiguous,
+  NAI_SUBMIT_AMBIGUOUS_FAILURE_CODE,
+  NAI_SUBMIT_AMBIGUOUS_MESSAGE,
+} from './queueOrphanReconciler'
 
 const GENERATION_QUEUE_CANCELLATION_MESSAGE = '__GENERATION_QUEUE_CANCELLATION__'
 
@@ -45,10 +53,47 @@ export type QueueJobExecutorContext = {
     assignedServer?: ComfyUIServerRecord | null
     providerJobId?: string | null
   }) => Promise<unknown>
+  /** 소유 워커의 취소 시그널. 프로세스 로컬 지연 최적화이고, 정확성은 DB 폴링이 보증한다. */
+  signal?: AbortSignal
 }
 
 export function isGenerationQueueCancellationError(error: unknown) {
   return error instanceof Error && error.message === GENERATION_QUEUE_CANCELLATION_MESSAGE
+}
+
+type QueueFailureCodeCarrier = {
+  queueFailureCode?: string
+  queueFailureMessage?: string
+}
+
+/** 실행기가 결정한 실패 코드를 원본 에러에 그대로 실어 보낸다(스택/원인 보존). */
+export function stampQueueFailureCode(error: unknown, failureCode: string, failureMessage?: string) {
+  if (error && typeof error === 'object') {
+    const carrier = error as QueueFailureCodeCarrier
+    carrier.queueFailureCode = failureCode
+    if (failureMessage) {
+      carrier.queueFailureMessage = failureMessage
+    }
+  }
+
+  return error
+}
+
+/** Read the executor-provided failure code, if any. */
+export function resolveQueueFailureCode(error: unknown) {
+  const carrier = error && typeof error === 'object' ? error as QueueFailureCodeCarrier : null
+  return typeof carrier?.queueFailureCode === 'string' ? carrier.queueFailureCode : null
+}
+
+/** Read the executor-provided failure message, if any. */
+export function resolveQueueFailureMessage(error: unknown) {
+  const carrier = error && typeof error === 'object' ? error as QueueFailureCodeCarrier : null
+  return typeof carrier?.queueFailureMessage === 'string' ? carrier.queueFailureMessage : null
+}
+
+/** 취소 폴링 hot path. `readCancelState`로 컬럼 3~4개만 읽고 payload는 건드리지 않는다. */
+function isQueueCancelRequested(jobId: number) {
+  return GenerationQueueModel.readCancelState(jobId)?.cancelRequested === true
 }
 
 export async function executeGenerationQueueJob(
@@ -160,20 +205,29 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       workflow: substitutedWorkflow,
       imageSaveOptions: payload.imageSaveOptions,
       artifactWorkflow: workflow.result_view_mode === 'artifact_explorer' ? workflow : null,
-      shouldCancel: () => GenerationQueueModel.isCancelRequested(job.id),
+      queueJobId: job.id,
+      signal: context.signal,
+      shouldCancel: () => isQueueCancelRequested(job.id),
       onCancelRequested: async (promptId) => {
         await context.attemptUpstreamCancellation(job.id, {
           assignedServer,
           providerJobId: promptId,
         })
       },
-      onPromptSubmitted: async (promptId) => {
-        context.transitionJob(job.id, 'running', {
+      // PJ-1: POST 직전에 "제출 의사"를 커밋한다. 프로세스가 여기서 죽어도 orphan 복구 근거가 남는다.
+      onUpstreamSubmitting: () => {
+        GenerationQueueModel.markProviderSubmitState(job.id, 'in_flight', {
+          providerSubmitStartedAt: new Date().toISOString(),
           assignedServerId: assignedServer?.id ?? job.assigned_server_id ?? null,
-          expectedCurrentStatuses: ['dispatching'],
-          providerJobId: promptId,
+          incrementSubmitAttempt: true,
+          expectedStatuses: ['dispatching'],
         })
-
+      },
+      // PJ-2: 응답 파싱과 같은 tick 에서 핸들 + running 전이를 한 번의 UPDATE 로 커밋한다.
+      onPromptAccepted: (promptId) => {
+        GenerationQueueModel.markProviderAccepted(job.id, promptId)
+      },
+      onPromptSubmitted: async (promptId) => {
         await writeQueueComfyDebugSnapshot(job, {
           ...debugSnapshotBase,
           stage: 'submitted',
@@ -249,13 +303,35 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       console.log(`✅ Queue job ${job.id} completed via ComfyUI (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`)
     }
   } catch (error) {
-    const cancellationRequested = isComfyGenerationCancelledError(error) || (GenerationQueueModel.findById(job.id)?.cancel_requested ?? 0) > 0
+    const cancelState = GenerationQueueModel.readCancelState(job.id)
+
+    // CC-1/CC-2: 제출 단계(in_flight)에서 끝난 실패는 상류에 작업이 남았을 수 있다.
+    // 분류가 ambiguous 면 마커 기반 보상 취소가 여기서 돈다(취소로 abort 된 요청도 ambiguous 다).
+    if (cancelState?.providerSubmitState === 'in_flight') {
+      try {
+        await handleComfySubmitFailure(job.id, error, { assignedServer })
+      } catch (compensationError) {
+        console.warn(`⚠️ Failed compensating ComfyUI cancellation for queue job ${job.id}:`, compensationError)
+      }
+    }
+
+    // GEN-8: 폴링 포기/타임아웃으로 살아 있는 프롬프트를 버린 경우, 취소 확인 여부를 컬럼에 남긴다.
+    // 확인되지 않았으면 상류가 그대로 완주하므로 reconciler 가 이어받게 orphan 후보로 남긴다.
+    const abandonedCancelResult = resolveComfyAbandonedCancelResult(error)
+    if (abandonedCancelResult !== undefined) {
+      const cancelConfirmed = abandonedCancelResult?.deleted === true || abandonedCancelResult?.interrupted === true
+      GenerationQueueModel.markProviderSubmitState(job.id, cancelConfirmed ? 'cancel_confirmed' : 'orphan_suspected', {
+        providerCancelState: cancelConfirmed ? 'abandoned_cancel_confirmed' : 'abandoned_cancel_unconfirmed',
+      })
+    }
+
+    const cancellationRequested = isComfyGenerationCancelledError(error) || cancelState?.cancelRequested === true
     if (cancellationRequested) {
       await writeQueueComfyDebugSnapshot(job, {
         ...debugSnapshotBase,
         stage: 'cancelled',
         captured_at: new Date().toISOString(),
-        prompt_id: GenerationQueueModel.findById(job.id)?.provider_job_id ?? null,
+        prompt_id: GenerationQueueModel.readCancelState(job.id)?.providerJobId ?? null,
         error_message: 'Queue job cancelled before ComfyUI output handoff completed',
       })
 
@@ -309,7 +385,15 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
 
   try {
     const { metadata, imageBuffers } = await executeNaiGeneration(requestInput, token, {
-      onUpstreamAccepted: async () => {
+      signal: context.signal,
+      // PJ-1: 전송 직전 지점(GEN-2가 만든 자리). 여기서부터 상류 작업이 생겼을 수 있다.
+      onUpstreamSubmitting: async () => {
+        GenerationQueueModel.markProviderSubmitState(job.id, 'in_flight', {
+          providerSubmitStartedAt: new Date().toISOString(),
+          incrementSubmitAttempt: true,
+          expectedStatuses: ['dispatching'],
+        })
+
         context.transitionJob(job.id, 'running', {
           expectedCurrentStatuses: ['dispatching'],
         })
@@ -318,11 +402,16 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
           GenerationHistoryModel.updateStatus(placeholderHistoryId, 'processing')
         }
       },
+      onUpstreamAccepted: () => {
+        // NovelAI 는 업스트림 핸들 개념이 없어 provider_job_id 는 계속 null 이다(PJ-4).
+        GenerationQueueModel.markProviderSubmitState(job.id, 'accepted')
+      },
     })
 
     // 업스트림 호출 내내 running 상태라 취소 요청은 cancel_requested 플래그로만 남는다.
+    // 인메모리 abort 는 같은 프로세스에서만 닿으므로, 분리 모드 정확성은 이 DB 확인이 보증한다.
     // 라이브러리에 이미지를 올리기 전에 확인하지 않으면 취소가 사실상 무시된다.
-    if (GenerationQueueModel.isCancelRequested(job.id)) {
+    if (isQueueCancelRequested(job.id)) {
       throw new Error(GENERATION_QUEUE_CANCELLATION_MESSAGE)
     }
 
@@ -369,9 +458,17 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
 
     console.log(`✅ Queue job ${job.id} completed via NovelAI (${historyIds.length} histories)`)
   } catch (error) {
+    const cancelState = GenerationQueueModel.readCancelState(job.id)
+
+    // CC-3: NovelAI 는 업스트림 취소 API 가 없어 보상이 불가능하다.
+    // 접수 여부가 모호하면 Anlas 소모 가능성을 남기고 자동 재시도를 차단한다.
+    if (cancelState?.providerSubmitState === 'in_flight' && classifySubmitFailure(error) === 'ambiguous') {
+      markNaiSubmitAmbiguous(job.id)
+      stampQueueFailureCode(error, NAI_SUBMIT_AMBIGUOUS_FAILURE_CODE, NAI_SUBMIT_AMBIGUOUS_MESSAGE)
+    }
+
     if (placeholderHistoryId) {
-      const latestQueue = GenerationQueueModel.findById(job.id)
-      const failureMessage = latestQueue?.status === 'cancelled' || (latestQueue?.cancel_requested ?? 0) > 0
+      const failureMessage = cancelState?.status === 'cancelled' || cancelState?.cancelRequested === true
         ? 'Cancelled by user'
         : resolveFailureMessage(error)
       const placeholderHistory = GenerationHistoryModel.findById(placeholderHistoryId)
@@ -411,11 +508,24 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
       GenerationHistoryModel.updateStatus(placeholderHistoryId, 'processing')
     }
 
-    const result = await executeCodexGeneration(payload)
+    GenerationQueueModel.markProviderSubmitState(job.id, 'in_flight', {
+      providerSubmitStartedAt: new Date().toISOString(),
+      incrementSubmitAttempt: true,
+    })
+
+    const result = await executeCodexGeneration(payload, {
+      signal: context.signal,
+      onProcessSpawned: (pid) => {
+        // PJ-4: Codex 핸들은 로컬 프로세스다. 재시작 후에는 pid 재사용 위험 때문에 kill 하지 않는다.
+        GenerationQueueModel.markProviderSubmitState(job.id, 'accepted', {
+          providerJobId: `pid:${pid}@${new Date().toISOString()}`,
+        })
+      },
+    })
 
     // Codex도 comfyui가 아니라 업스트림 취소 경로가 없다. 산출물을 라이브러리에 올리기 전에
-    // cancel_requested를 확인해야 취소가 무시되지 않는다.
-    if (GenerationQueueModel.isCancelRequested(job.id)) {
+    // cancel_requested를 확인해야 취소가 무시되지 않는다(인메모리 abort 는 같은 프로세스 전용).
+    if (isQueueCancelRequested(job.id)) {
       throw new Error(GENERATION_QUEUE_CANCELLATION_MESSAGE)
     }
 
@@ -499,9 +609,12 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
 
     console.log(`✅ Queue job ${job.id} completed via Codex (${historyIds.length} histories)`)
   } catch (error) {
+    // CC-4: 로컬 프로세스뿐이라 프로바이더 측 잔재가 없다. 트리 kill + 디렉터리 정리로 완결된다.
+    GenerationQueueModel.markProviderSubmitState(job.id, 'none', { providerCancelState: 'codex_local_only' })
+
     if (placeholderHistoryId) {
-      const latestQueue = GenerationQueueModel.findById(job.id)
-      const failureMessage = latestQueue?.status === 'cancelled' || (latestQueue?.cancel_requested ?? 0) > 0
+      const cancelState = GenerationQueueModel.readCancelState(job.id)
+      const failureMessage = cancelState?.status === 'cancelled' || cancelState?.cancelRequested === true
         ? 'Cancelled by user'
         : resolveFailureMessage(error)
       const placeholderHistory = GenerationHistoryModel.findById(placeholderHistoryId)

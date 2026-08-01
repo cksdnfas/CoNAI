@@ -1,5 +1,7 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import type {
+  GenerationQueueCancelOrigin,
+  GenerationQueueCancelState,
   GenerationQueueDispatchCandidateRecord,
   GenerationQueueDurationSample,
   GenerationQueueJobCreateData,
@@ -7,6 +9,8 @@ import type {
   GenerationQueueJobRecord,
   GenerationQueueJobStatus,
   GenerationQueueJobUpdateData,
+  GenerationQueueProviderSubmitState,
+  GenerationQueueReconcileCandidate,
 } from '../types/generationQueue'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 
@@ -60,9 +64,22 @@ const GENERATION_QUEUE_LIST_COLUMNS = `
   requested_group_id, requested_server_id, requested_server_tag,
   assigned_server_id, provider_job_id,
   request_summary, failure_code, failure_message,
-  cancel_requested, queued_at, started_at, completed_at,
+  cancel_requested, cancel_requested_at, cancel_origin,
+  provider_submit_state, provider_submit_started_at,
+  provider_cancel_state, submit_attempt_count,
+  queued_at, started_at, completed_at,
   created_date, updated_date
 `
+
+const GENERATION_QUEUE_RECONCILE_COLUMNS = `
+  id, service_type, status, workflow_id, assigned_server_id,
+  provider_job_id, provider_submit_state, provider_submit_started_at,
+  cancel_requested
+`
+
+/** 상류에 작업이 남아 있을 수 있어 reconcile 대상이 되는 제출 상태들. */
+const ORPHAN_RECONCILE_SUBMIT_STATES: GenerationQueueProviderSubmitState[] = ['orphan_suspected', 'orphan_unresolved', 'cancel_sent']
+const ORPHAN_RECONCILE_SUBMIT_STATE_PLACEHOLDERS = ORPHAN_RECONCILE_SUBMIT_STATES.map(() => '?').join(', ')
 
 const GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS = `
   id, service_type, status, priority,
@@ -165,8 +182,11 @@ export class GenerationQueueModel {
         provider_job_id,
         request_payload, request_summary,
         failure_code, failure_message,
-        cancel_requested, queued_at, started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        cancel_requested, cancel_requested_at, cancel_origin,
+        provider_submit_state, provider_submit_started_at,
+        provider_cancel_state, submit_attempt_count,
+        queued_at, started_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.service_type,
       data.status ?? 'queued',
@@ -185,6 +205,12 @@ export class GenerationQueueModel {
       data.failure_code ?? null,
       data.failure_message ?? null,
       data.cancel_requested ? 1 : 0,
+      data.cancel_requested_at ?? null,
+      data.cancel_origin ?? null,
+      data.provider_submit_state ?? 'none',
+      data.provider_submit_started_at ?? null,
+      data.provider_cancel_state ?? null,
+      data.submit_attempt_count ?? 0,
       queuedAt,
       data.started_at ?? null,
       data.completed_at ?? null,
@@ -200,11 +226,38 @@ export class GenerationQueueModel {
     return row ?? null
   }
 
+  /**
+   * Read the whole cancellation decision state in one lean SELECT (hot polling path).
+   * Executors poll this every 2s, so it must never hydrate the request payload.
+   */
+  static readCancelState(id: number): GenerationQueueCancelState | null {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT status, cancel_requested, provider_submit_state, provider_job_id
+      FROM generation_queue_jobs
+      WHERE id = ?
+    `).get(id) as {
+      status: GenerationQueueJobStatus
+      cancel_requested: number
+      provider_submit_state: GenerationQueueProviderSubmitState | null
+      provider_job_id: string | null
+    } | undefined
+
+    if (!row) {
+      return null
+    }
+
+    return {
+      status: row.status,
+      cancelRequested: (row.cancel_requested ?? 0) > 0,
+      providerSubmitState: row.provider_submit_state ?? 'none',
+      providerJobId: row.provider_job_id ?? null,
+    }
+  }
+
   /** Check cancellation flag without hydrating the heavyweight request payload (hot polling path). */
   static isCancelRequested(id: number) {
-    const db = getUserSettingsDb()
-    const row = db.prepare('SELECT cancel_requested FROM generation_queue_jobs WHERE id = ?').get(id) as { cancel_requested: number } | undefined
-    return (row?.cancel_requested ?? 0) > 0
+    return this.readCancelState(id)?.cancelRequested ?? false
   }
 
   /** Find one queue job for API responses without hydrating heavyweight request payloads. */
@@ -434,6 +487,153 @@ export class GenerationQueueModel {
   /** Mark a queue job as cancellation-requested only if its status still matches. */
   static requestCancelIfCurrentStatus(id: number, expectedStatuses: GenerationQueueJobStatus[]) {
     return this.updateIfCurrentStatus(id, expectedStatuses, { cancel_requested: true })
+  }
+
+  /**
+   * CR-1: 취소의 유일한 진입점인 원자 UPDATE.
+   * 업스트림 호출·상태 전이·인메모리 abort 그 어떤 것보다 먼저 실행되어야 한다.
+   * `false` 는 실패가 아니라 "이미 terminal 이거나 없는 잡" 이라는 뜻이다(멱등).
+   */
+  static markCancelRequested(id: number, origin: GenerationQueueCancelOrigin, nowIso = new Date().toISOString()) {
+    const db = getUserSettingsDb()
+    const info = db.prepare(`
+      UPDATE generation_queue_jobs
+      SET cancel_requested = 1,
+          cancel_requested_at = COALESCE(cancel_requested_at, ?),
+          cancel_origin = COALESCE(cancel_origin, ?),
+          updated_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+        AND status IN ('queued', 'dispatching', 'running')
+    `).run(nowIso, origin, id)
+
+    return info.changes > 0
+  }
+
+  /**
+   * PJ-1/PJ-2: 상류 제출 상태를 한 번의 UPDATE로 커밋한다.
+   * `expectedStatuses` 를 주면 그 상태일 때만 반영되므로 레이스 중에도 안전하다.
+   */
+  static markProviderSubmitState(
+    id: number,
+    state: GenerationQueueProviderSubmitState,
+    patch: {
+      providerJobId?: string | null
+      providerSubmitStartedAt?: string | null
+      providerCancelState?: string | null
+      assignedServerId?: number | null
+      incrementSubmitAttempt?: boolean
+      expectedStatuses?: GenerationQueueJobStatus[]
+    } = {},
+  ) {
+    const db = getUserSettingsDb()
+    const setClauses = ['provider_submit_state = ?', 'updated_date = CURRENT_TIMESTAMP']
+    const values: Array<string | number | null> = [state]
+
+    if (patch.providerJobId !== undefined) {
+      setClauses.push('provider_job_id = ?')
+      values.push(patch.providerJobId)
+    }
+
+    if (patch.providerSubmitStartedAt !== undefined) {
+      setClauses.push('provider_submit_started_at = ?')
+      values.push(patch.providerSubmitStartedAt)
+    }
+
+    if (patch.providerCancelState !== undefined) {
+      setClauses.push('provider_cancel_state = ?')
+      values.push(patch.providerCancelState)
+    }
+
+    if (patch.assignedServerId !== undefined) {
+      setClauses.push('assigned_server_id = ?')
+      values.push(patch.assignedServerId)
+    }
+
+    if (patch.incrementSubmitAttempt) {
+      setClauses.push('submit_attempt_count = submit_attempt_count + 1')
+    }
+
+    const statusClause = patch.expectedStatuses && patch.expectedStatuses.length > 0
+      ? ` AND status IN (${patch.expectedStatuses.map(() => '?').join(', ')})`
+      : ''
+
+    values.push(id)
+    if (patch.expectedStatuses && patch.expectedStatuses.length > 0) {
+      values.push(...patch.expectedStatuses)
+    }
+
+    const info = db.prepare(`
+      UPDATE generation_queue_jobs
+      SET ${setClauses.join(', ')}
+      WHERE id = ?${statusClause}
+    `).run(...values)
+
+    return info.changes > 0
+  }
+
+  /**
+   * PJ-2: 상류 응답에서 핸들을 읽은 즉시, await 홉 없이 running/accepted 를 한 번에 커밋한다.
+   * 이 UPDATE 가 "상류 작업이 실제로 존재한다"는 유일한 durable 증거다.
+   */
+  static markProviderAccepted(id: number, providerJobId: string | null, nowIso = new Date().toISOString()) {
+    const db = getUserSettingsDb()
+    const info = db.prepare(`
+      UPDATE generation_queue_jobs
+      SET provider_job_id = COALESCE(?, provider_job_id),
+          provider_submit_state = 'accepted',
+          status = 'running',
+          started_at = COALESCE(started_at, ?),
+          completed_at = NULL,
+          updated_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+        AND status = 'dispatching'
+    `).run(providerJobId && providerJobId.length > 0 ? providerJobId : null, nowIso, id)
+
+    return info.changes > 0
+  }
+
+  /** Record the last upstream cancellation outcome without rewriting the request payload. */
+  static markProviderCancelState(id: number, cancelState: string) {
+    const db = getUserSettingsDb()
+    const info = db.prepare(`
+      UPDATE generation_queue_jobs
+      SET provider_cancel_state = ?,
+          updated_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(cancelState, id)
+
+    return info.changes > 0
+  }
+
+  /** List jobs whose upstream work may still exist so the orphan reconciler can chase them. */
+  static findOrphanReconcileCandidates(limit = 50) {
+    const db = getUserSettingsDb()
+    const safeLimit = Math.max(1, Math.floor(limit))
+    return db.prepare(`
+      SELECT ${GENERATION_QUEUE_RECONCILE_COLUMNS}
+      FROM generation_queue_jobs
+      WHERE provider_submit_state IN (${ORPHAN_RECONCILE_SUBMIT_STATE_PLACEHOLDERS})
+      LIMIT ?
+    `).all(...ORPHAN_RECONCILE_SUBMIT_STATES, safeLimit) as GenerationQueueReconcileCandidate[]
+  }
+
+  /**
+   * List cancel-requested jobs that no worker confirmed within the grace period.
+   * CR-2 로 라우트가 `dispatching`/`running` 을 확정하지 않게 된 이상, 이 스위퍼가 안전망이다.
+   */
+  static findAbandonedCancellations(staleSeconds: number, limit = 50) {
+    const db = getUserSettingsDb()
+    const safeStaleSeconds = Math.max(0, Math.floor(staleSeconds))
+    const safeLimit = Math.max(1, Math.floor(limit))
+    return db.prepare(`
+      SELECT ${GENERATION_QUEUE_RECONCILE_COLUMNS}
+      FROM generation_queue_jobs
+      WHERE cancel_requested = 1
+        AND status IN ('dispatching', 'running')
+        AND updated_date <= datetime('now', ?)
+      ORDER BY id ASC
+      LIMIT ?
+    `).all(`-${safeStaleSeconds} seconds`, safeLimit) as GenerationQueueReconcileCandidate[]
   }
 
   /** Check whether a user-submitted generation queue job is waiting or running. */

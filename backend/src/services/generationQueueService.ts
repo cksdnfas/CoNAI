@@ -4,8 +4,15 @@ import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { getComfyUIServerRuntimeStatuses } from './comfyui/runtimeStatusService'
 import { createGenerationQueueRoutingContext, getGenerationQueueEligibleServerIds, getGenerationQueueServerCapacity } from './generationQueueRouting'
 import { attemptQueueUpstreamCancellation, type QueueUpstreamCancellationOptions } from './generation-queue/queueUpstreamCancellation'
+import { queueCancellationRegistry } from './generation-queue/queueCancellationRegistry'
+import { NAI_SUBMIT_AMBIGUOUS_FAILURE_CODE, reconcileOrphanedProviderJobs } from './generation-queue/queueOrphanReconciler'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
-import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
+import {
+  executeGenerationQueueJob,
+  isGenerationQueueCancellationError,
+  resolveQueueFailureCode,
+  resolveQueueFailureMessage,
+} from './generation-queue/queueJobExecutors'
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
 import { QueueServiceThrottle, type ThrottledServiceType } from './generation-queue/queueServiceThrottle'
 import { QueueTerminalJobWaiters } from './generation-queue/queueTerminalWaiters'
@@ -13,6 +20,7 @@ import { ALLOWED_QUEUE_TRANSITIONS, buildQueueTransitionUpdates } from './genera
 import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type {
+  GenerationQueueCancelOrigin,
   GenerationQueueDispatchCandidateRecord,
   GenerationQueueJobRecord,
   GenerationQueueJobStatus,
@@ -23,6 +31,12 @@ const COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT = 24
 const COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT = 240
 const NAI_WORKER_KEY = 'novelai'
 const CODEX_WORKER_KEY = 'codex'
+// 소유 워커가 사라진 취소 요청을 확정하기까지의 유예. CR-2(라우트가 확정하지 않음)의 안전망이다.
+const ABANDONED_CANCELLATION_GRACE_SECONDS = 30
+const ORPHAN_RECONCILE_INTERVAL_MS = 5 * 60 * 1000
+// 이 시간이 지나도록 상류 핸들을 확인하지 못한 제출은 회수 가망이 없다고 본다.
+const ORPHAN_RECOVERY_DEADLINE_HOURS = 24
+const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
 
 export class GenerationQueueService {
   private static started = false
@@ -34,6 +48,7 @@ export class GenerationQueueService {
   private static terminalJobWaiters = new QueueTerminalJobWaiters()
   private static serviceThrottle = new QueueServiceThrottle()
   private static comfyDispatchSkipStateByServerId = new Map<number, 'unreachable' | 'busy'>()
+  private static orphanReconcileHandle: ReturnType<typeof setInterval> | null = null
 
   /** Start queue recovery hooks and dispatcher once per process. */
   static start() {
@@ -46,10 +61,16 @@ export class GenerationQueueService {
     this.dispatcherHandle = setInterval(() => {
       this.requestDispatch()
     }, DISPATCH_INTERVAL_MS)
+    // Phase 2: 상류 orphan 정리. 이게 돌아야 orphan 프롬프트가 is_idle 판정을 막아 큐를 세우는 일이 풀린다.
+    this.orphanReconcileHandle = setInterval(() => {
+      this.runOrphanReconcile()
+    }, ORPHAN_RECONCILE_INTERVAL_MS)
+    this.orphanReconcileHandle.unref?.()
+    this.runOrphanReconcile()
     this.requestDispatch()
 
     console.log(
-      `📬 Generation queue service ready (cancelled=${recovery.cancelledBeforeDispatch}, failed_dispatching=${recovery.failedDispatching}, failed_running=${recovery.failedRunning})`,
+      `📬 Generation queue service ready (cancelled=${recovery.cancelledBeforeDispatch}, failed_dispatching=${recovery.failedDispatching}, failed_running=${recovery.failedRunning}, orphan_suspected=${recovery.orphanSuspected})`,
     )
     return true
   }
@@ -68,11 +89,22 @@ export class GenerationQueueService {
       clearInterval(this.dispatcherHandle)
       this.dispatcherHandle = null
     }
+    if (this.orphanReconcileHandle) {
+      clearInterval(this.orphanReconcileHandle)
+      this.orphanReconcileHandle = null
+    }
     this.activeWorkerKeys.clear()
+    queueCancellationRegistry.abortAll('queue_service_stopped')
     this.terminalJobWaiters.resolve(null)
     this.serviceThrottle.reset()
     this.comfyDispatchSkipStateByServerId.clear()
     return true
+  }
+
+  private static runOrphanReconcile() {
+    void reconcileOrphanedProviderJobs().catch((error) => {
+      console.error('❌ Generation queue orphan reconcile failed:', error)
+    })
   }
 
   /** Schedule one dispatcher pass without waiting for the next poll interval. */
@@ -118,63 +150,112 @@ export class GenerationQueueService {
     return attemptQueueUpstreamCancellation(jobId, options)
   }
 
-  static async requestCancellation(jobId: number) {
+  /**
+   * Request cancellation for one queue job.
+   *
+   * 반환값은 **"취소 완료"가 아니라 "취소 요청 접수"** 다. `queued` 만 여기서 즉시 확정되고,
+   * `dispatching`/`running` 은 플래그만 세운 뒤 소유 워커(없으면 스테일 스위퍼)가 확정한다.
+   * 확정을 기다려야 하는 호출부는 `waitForTerminalJob` 을 써야 한다.
+   */
+  static async requestCancellation(jobId: number, options?: { origin?: GenerationQueueCancelOrigin }) {
     const latest = GenerationQueueModel.findById(jobId)
     if (!latest) {
       throw new Error(`Queue job ${jobId} not found`)
     }
 
-    if (latest.status === 'completed' || latest.status === 'failed' || latest.status === 'cancelled') {
+    if (TERMINAL_QUEUE_STATUSES.includes(latest.status)) {
       return latest
     }
 
-    if (latest.status === 'running') {
-      const changed = GenerationQueueModel.requestCancelIfCurrentStatus(jobId, ['running'])
-      if (!changed) {
-        throw new Error(`Queue job ${jobId} changed state before cancellation request could be applied`)
-      }
+    // CR-1: 이 원자 UPDATE 가 취소의 유일한 진입점이고, 업스트림 호출·전이·abort 보다 먼저 실행된다.
+    // 이후 어떤 경로로도 이 잡이 새로 claim 되지 않음이 claim 가드로 보장된다.
+    // changes === 0 은 에러가 아니라 "이미 terminal" 이라는 뜻이므로 멱등 성공으로 다룬다.
+    GenerationQueueModel.markCancelRequested(jobId, options?.origin ?? 'user')
 
-      try {
-        await this.attemptUpstreamCancellation(jobId)
-      } catch (error) {
-        updateQueueRequestDebugMeta(latest, {
-          cancellation_requested_at: new Date().toISOString(),
-          cancellation_prompt_id: latest.provider_job_id ?? null,
-          cancellation_state: 'error',
-          cancellation_error: resolveFailureMessage(error),
-        })
-        console.warn(`⚠️ Failed to request upstream ComfyUI cancellation for queue job ${jobId}:`, error)
-      }
+    // 인메모리 시그널은 지연 최적화다. 소유 워커가 다른 프로세스면 false 를 받고 폴링/스위퍼에 위임한다.
+    queueCancellationRegistry.abort(jobId, 'cancel_requested')
 
+    const flagged = GenerationQueueModel.findById(jobId) ?? latest
+    if (TERMINAL_QUEUE_STATUSES.includes(flagged.status)) {
       this.requestDispatch()
-      return GenerationQueueModel.findById(jobId)
+      return flagged
     }
 
-    if (latest.provider_job_id) {
+    // CR-2: `queued` 는 claim 가드가 재클레임을 막아 주므로 라우트가 바로 확정해도 안전하다.
+    if (flagged.status === 'queued') {
       try {
-        await this.attemptUpstreamCancellation(jobId)
-      } catch (error) {
-        updateQueueRequestDebugMeta(latest, {
-          cancellation_requested_at: new Date().toISOString(),
-          cancellation_prompt_id: latest.provider_job_id ?? null,
-          cancellation_state: 'error',
-          cancellation_error: resolveFailureMessage(error),
+        const updated = this.transitionJob(jobId, 'cancelled', {
+          expectedCurrentStatuses: ['queued'],
         })
-        console.warn(`⚠️ Failed to request upstream ComfyUI cancellation for queue job ${jobId}:`, error)
+
+        this.requestDispatch()
+        return updated
+      } catch (transitionError) {
+        // 플래그 세팅과 확정 사이에 다른 프로세스가 claim 했다면 워커 확정 경로로 넘어간다.
+        console.warn(`⚠️ Queue job ${jobId} left the queued state before cancellation could be finalized:`, transitionError)
       }
-    } else {
-      updateQueueRequestDebugMeta(latest, {
-        cancellation_requested_at: new Date().toISOString(),
-        cancellation_state: 'pre_submit',
-      })
     }
 
-    const updated = this.transitionJob(jobId, 'cancelled', {
-      expectedCurrentStatuses: [latest.status],
-    })
+    // `dispatching`/`running` 은 여기서 확정하지 않는다. 업스트림 취소만 시도하고
+    // 실제 terminal 확정은 소유 워커(또는 finalizeAbandonedCancellations)가 맡는다.
+    try {
+      await this.attemptUpstreamCancellation(jobId)
+    } catch (error) {
+      GenerationQueueModel.markProviderCancelState(jobId, 'error')
+      updateQueueRequestDebugMeta(flagged, {
+        cancellation_requested_at: new Date().toISOString(),
+        cancellation_prompt_id: flagged.provider_job_id ?? null,
+        cancellation_state: 'error',
+        cancellation_error: resolveFailureMessage(error),
+      })
+      console.warn(`⚠️ Failed to request upstream ComfyUI cancellation for queue job ${jobId}:`, error)
+    }
 
     this.requestDispatch()
-    return updated
+    return GenerationQueueModel.findById(jobId)
+  }
+
+  /**
+   * Finalize cancel-requested jobs whose owning worker is gone.
+   * CR-2 로 라우트가 `dispatching`/`running` 을 확정하지 않게 된 이상 이 스위퍼가 필수 안전망이다.
+   */
+  static finalizeAbandonedCancellations(options?: { staleSeconds?: number }) {
+    const staleSeconds = Math.max(0, Math.floor(options?.staleSeconds ?? ABANDONED_CANCELLATION_GRACE_SECONDS))
+    const candidates = GenerationQueueModel.findAbandonedCancellations(staleSeconds)
+    if (candidates.length === 0) {
+      return 0
+    }
+
+    const ownedJobIds = new Set(queueCancellationRegistry.ownedJobIds())
+    let finalized = 0
+
+    for (const candidate of candidates) {
+      if (ownedJobIds.has(candidate.id)) {
+        // 이 프로세스 워커가 아직 정리 중이다. 워커 확정을 우선한다.
+        continue
+      }
+
+      const submitState = candidate.provider_submit_state ?? 'none'
+      if (submitState !== 'none') {
+        // 상류에 작업이 남아 있을 수 있으므로 reconcile 대상으로 승격시킨 뒤 terminal 로 보낸다.
+        GenerationQueueModel.markProviderSubmitState(candidate.id, 'orphan_suspected')
+      }
+
+      try {
+        this.transitionJob(candidate.id, 'cancelled', {
+          expectedCurrentStatuses: [candidate.status],
+        })
+        finalized += 1
+      } catch (transitionError) {
+        console.warn(`⚠️ Failed to finalize abandoned cancellation for queue job ${candidate.id}:`, transitionError)
+      }
+    }
+
+    if (finalized > 0) {
+      console.log(`🧹 Finalized ${finalized} abandoned queue cancellation(s) with no owning worker`)
+    }
+
+    return finalized
   }
 
   /** Wait for a queue job to reach a terminal state without per-consumer DB polling. */
@@ -305,7 +386,7 @@ export class GenerationQueueService {
   }
 
   /** Create a new queued retry job from one finished failed/cancelled job. */
-  static retryJob(id: number) {
+  static retryJob(id: number, options?: { force?: boolean }) {
     const existing = GenerationQueueModel.findById(id)
     if (!existing) {
       throw new Error(`Queue job ${id} not found`)
@@ -318,6 +399,13 @@ export class GenerationQueueService {
     const requestPayload = parseStoredRequestPayload(existing)
     if (requestPayload.pruned === true) {
       throw new Error(`Queue job ${id} request payload was pruned by retention cleanup, so it can no longer be retried`)
+    }
+
+    // CC-3: NovelAI 는 접수 시점에 Anlas 가 빠지므로 모호한 실패의 자동 재시도는 이중 과금이 된다.
+    const isAmbiguousNaiSubmit = existing.failure_code === NAI_SUBMIT_AMBIGUOUS_FAILURE_CODE
+      || (existing.service_type === 'novelai' && existing.provider_submit_state === 'orphan_unresolved')
+    if (isAmbiguousNaiSubmit && options?.force !== true) {
+      throw new Error(`Queue job ${id} may already have consumed NovelAI Anlas, so it cannot be retried without an explicit force flag`)
     }
 
     const retrySummary = existing.request_summary
@@ -342,10 +430,17 @@ export class GenerationQueueService {
     return GenerationQueueModel.findById(retryJobId)
   }
 
-  /** Recover interrupted jobs after backend restart without silently re-running them. */
+  /**
+   * Recover interrupted jobs after backend restart without silently re-running them.
+   *
+   * Phase 1(동기 분류, DB만 만짐): 상류에 아무 것도 없음이 증명된 잡만 확정한다.
+   * 상류 작업이 남아 있을 수 있는 잡(`provider_submit_state != 'none'`)은 **확정하지 않고**
+   * `orphan_suspected` 로만 마킹해 Phase 2 reconciler 가 이어받게 한다.
+   */
   static recoverInterruptedJobs() {
     const db = getUserSettingsDb()
     const nowIso = new Date().toISOString()
+    const orphanDeadlineHours = `-${ORPHAN_RECOVERY_DEADLINE_HOURS} hours`
 
     const recoveryTransaction = db.transaction(() => {
       const cancelledBeforeDispatchJobIds = db.prepare(`
@@ -354,16 +449,27 @@ export class GenerationQueueService {
         WHERE status = 'queued'
           AND cancel_requested = 1
       `).all().map((row) => (row as { id: number }).id)
+      // 상류 흔적이 없는(=제출 전에 죽은) 잡만 실패 확정 대상이다.
       const interruptedDispatchingJobIds = db.prepare(`
         SELECT id
         FROM generation_queue_jobs
         WHERE status = 'dispatching'
+          AND provider_submit_state = 'none'
       `).all().map((row) => (row as { id: number }).id)
       const interruptedRunningJobIds = db.prepare(`
         SELECT id
         FROM generation_queue_jobs
         WHERE status = 'running'
+          AND provider_submit_state = 'none'
       `).all().map((row) => (row as { id: number }).id)
+      // 24시간이 지나도록 회수되지 않은 제출은 가망이 없다고 보고 함께 실패 확정한다.
+      const expiredOrphanJobIds = db.prepare(`
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status IN ('dispatching', 'running')
+          AND provider_submit_state != 'none'
+          AND COALESCE(provider_submit_started_at, started_at, queued_at) < datetime('now', ?)
+      `).all(orphanDeadlineHours).map((row) => (row as { id: number }).id)
 
       const cancelledBeforeDispatch = db.prepare(`
         UPDATE generation_queue_jobs
@@ -382,6 +488,7 @@ export class GenerationQueueService {
             completed_at = COALESCE(completed_at, ?),
             updated_date = CURRENT_TIMESTAMP
         WHERE status = 'dispatching'
+          AND provider_submit_state = 'none'
       `).run(nowIso).changes
 
       const failedRunning = db.prepare(`
@@ -392,8 +499,35 @@ export class GenerationQueueService {
             completed_at = COALESCE(completed_at, ?),
             updated_date = CURRENT_TIMESTAMP
         WHERE status = 'running'
+          AND provider_submit_state = 'none'
       `).run(nowIso).changes
 
+      const failedExpiredOrphans = db.prepare(`
+        UPDATE generation_queue_jobs
+        SET status = 'failed',
+            failure_code = COALESCE(failure_code, 'process_restarted_orphan'),
+            failure_message = COALESCE(failure_message, 'Backend restarted while upstream work may have been running, and it could not be recovered in time.'),
+            provider_submit_state = 'orphan_unresolved',
+            completed_at = COALESCE(completed_at, ?),
+            updated_date = CURRENT_TIMESTAMP
+        WHERE status IN ('dispatching', 'running')
+          AND provider_submit_state != 'none'
+          AND COALESCE(provider_submit_started_at, started_at, queued_at) < datetime('now', ?)
+      `).run(nowIso, orphanDeadlineHours).changes
+
+      // 아직 회수 가능성이 있는 잡은 status 를 유지한 채 취소 요청 + orphan 후보로만 마킹한다.
+      const orphanSuspected = db.prepare(`
+        UPDATE generation_queue_jobs
+        SET cancel_requested = 1,
+            cancel_requested_at = COALESCE(cancel_requested_at, ?),
+            cancel_origin = COALESCE(cancel_origin, 'reconcile'),
+            provider_submit_state = 'orphan_suspected',
+            updated_date = CURRENT_TIMESTAMP
+        WHERE status IN ('dispatching', 'running')
+          AND provider_submit_state IN ('in_flight', 'accepted', 'orphan_suspected', 'cancel_sent')
+      `).run(nowIso).changes
+
+      // 아직 확정하지 않은 잡의 history 를 미리 error 로 만들지 않는다.
       const cancelledHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
         cancelledBeforeDispatchJobIds,
         'Cancelled before dispatch.',
@@ -406,12 +540,21 @@ export class GenerationQueueService {
         interruptedRunningJobIds,
         'Backend restarted while this queue job was running. Retry is required.',
       )
+      const expiredOrphanHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+        expiredOrphanJobIds,
+        'Backend restarted while upstream work may have been running, and it could not be recovered in time.',
+      )
 
       return {
         cancelledBeforeDispatch,
         failedDispatching,
         failedRunning,
-        failedHistoryRecords: cancelledHistoryRecords + failedDispatchingHistoryRecords + failedRunningHistoryRecords,
+        failedExpiredOrphans,
+        orphanSuspected,
+        failedHistoryRecords: cancelledHistoryRecords
+          + failedDispatchingHistoryRecords
+          + failedRunningHistoryRecords
+          + expiredOrphanHistoryRecords,
       }
     })
 
@@ -421,6 +564,12 @@ export class GenerationQueueService {
   private static async dispatchTick() {
     if (!this.started) {
       return
+    }
+
+    try {
+      this.finalizeAbandonedCancellations()
+    } catch (error) {
+      console.error('❌ Failed to finalize abandoned queue cancellations:', error)
     }
 
     this.tryStartNovelAiWorker()
@@ -629,19 +778,25 @@ export class GenerationQueueService {
   }
 
   private static async runClaimedJob(job: GenerationQueueJobRecord, assignedServer?: ComfyUIServerRecord | null) {
+    // 이 워커가 잡의 취소 시그널 소유자다. 스테일 스위퍼도 이 소유권으로 확정 주체를 가른다.
+    const controller = queueCancellationRegistry.register(job.id)
+
     try {
       await executeGenerationQueueJob(job, assignedServer ?? null, {
         transitionJob: (id, nextStatus, options) => this.transitionJob(id, nextStatus, options),
         attemptUpstreamCancellation: (jobId, options) => this.attemptUpstreamCancellation(jobId, options),
+        signal: controller.signal,
       })
     } catch (error) {
-      if (isGenerationQueueCancellationError(error) || (GenerationQueueModel.findById(job.id)?.cancel_requested ?? 0) > 0) {
+      if (isGenerationQueueCancellationError(error) || GenerationQueueModel.readCancelState(job.id)?.cancelRequested === true) {
         await this.cancelJobIfActive(job.id)
         return
       }
 
       await this.failJobIfActive(job.id, error)
       throw error
+    } finally {
+      queueCancellationRegistry.release(job.id)
     }
   }
 
@@ -677,8 +832,9 @@ export class GenerationQueueService {
     try {
       this.transitionJob(jobId, 'failed', {
         expectedCurrentStatuses: [latest.status],
-        failureCode: 'execution_failed',
-        failureMessage: resolveFailureMessage(error),
+        // 실행기가 특정한 실패 코드(예: nai_submit_ambiguous)를 붙였으면 그대로 보존한다.
+        failureCode: resolveQueueFailureCode(error) ?? 'execution_failed',
+        failureMessage: resolveQueueFailureMessage(error) ?? resolveFailureMessage(error),
       })
     } catch (transitionError) {
       console.warn(`⚠️ Failed to mark queue job ${jobId} as failed:`, transitionError)

@@ -405,17 +405,17 @@ export function createGenerationQueueActionRoutes() {
 
         record: responseRecord,
 
-        message: existing.status === 'running' ? 'Cancellation requested' : 'Queue job cancelled',
+        // CR-2: `queued` 만 여기서 확정된다. dispatching/running 은 워커(또는 스테일 스위퍼)가 확정한다.
+        message: existing.status === 'queued' ? 'Queue job cancelled' : 'Cancellation requested',
 
       })
 
     } catch (error) {
 
+      // 취소 요청은 CR-1 이후 멱등이라 상태 충돌(409)로 실패하지 않는다.
       const message = error instanceof Error ? error.message : 'Queue cancellation failed'
 
-      const isConflict = typeof message === 'string' && message.includes('changed state before')
-
-      res.status(isConflict ? 409 : 400).json({
+      res.status(400).json({
 
         success: false,
 

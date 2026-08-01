@@ -57,6 +57,26 @@ export function getGenerationQueueHeaderRefreshTargets({
   return targets
 }
 
+const TERMINAL_QUEUE_STATUSES: GenerationQueueJobRecord['status'][] = ['completed', 'failed', 'cancelled']
+
+/**
+ * CR-3: 취소는 재요청 가능하다.
+ * `queued` 는 라우트가 즉시 확정하므로 재시도 대상이 아니고, 아직 확정되지 않은
+ * `dispatching`/`running` 만 "취소 재시도" 로 남는다.
+ */
+export function canRetryGenerationQueueCancellation(record: GenerationQueueJobRecord) {
+  return record.cancel_requested > 0
+    && !TERMINAL_QUEUE_STATUSES.includes(record.status)
+    && record.status !== 'queued'
+}
+
+/** 취소가 확정됐는데도 업스트림 정리가 끝나지 않은 잡인지 판별한다. */
+export function hasUnresolvedGenerationQueueUpstreamWork(record: GenerationQueueJobRecord) {
+  return record.provider_submit_state === 'orphan_suspected'
+    || record.provider_submit_state === 'orphan_unresolved'
+    || record.provider_submit_state === 'cancel_unsupported'
+}
+
 /** Render the shared localized status label for queue rows and widgets. */
 export function getGenerationQueueStatusLabel(record: GenerationQueueJobRecord, t: Translate) {
   if (record.cancel_requested > 0 && record.status === 'completed') {
@@ -65,6 +85,11 @@ export function getGenerationQueueStatusLabel(record: GenerationQueueJobRecord, 
 
   if (record.cancel_requested > 0 && record.status === 'failed') {
     return t('image-generation.components.generation.queue.ui.failed.after.cancel.request')
+  }
+
+  // 취소는 됐지만 상류 작업이 남아 있을 수 있는 잡은 일반 취소와 구분해서 보여 준다.
+  if (record.status === 'cancelled' && hasUnresolvedGenerationQueueUpstreamWork(record)) {
+    return t({ ko: '취소됨 (업스트림 정리 중)', en: 'Cancelled (cleaning up upstream)' })
   }
 
   switch (record.status) {

@@ -39,7 +39,7 @@ function resolveCancellationState(result: ComfyUICancelPromptResult, assignedSer
   }
 
   if (result.interrupted || result.deleted) {
-    return 'requested'
+    return result.matchedByMarker ? 'requested_by_marker' : 'requested'
   }
 
   // 상류는 실행 중이라는데 prompt id를 확인할 수 없어 /interrupt를 건너뛴 경우.
@@ -62,23 +62,46 @@ export async function attemptQueueUpstreamCancellation(jobId: number, options?: 
   const endpoint = resolveComfyCancellationEndpoint(latest, assignedServer)
   const requestedAt = new Date().toISOString()
 
-  if (!promptId || !endpoint) {
+  // prompt id 가 없어도 PJ-3 마커로 `/queue` 를 역매칭할 수 있으므로 엔드포인트만 있으면 진행한다.
+  if (!endpoint) {
+    GenerationQueueModel.markProviderCancelState(jobId, 'missing_endpoint')
     updateQueueRequestDebugMeta(latest, {
       cancellation_requested_at: requestedAt,
       cancellation_endpoint: endpoint,
       cancellation_prompt_id: promptId,
-      cancellation_state: promptId ? 'missing_endpoint' : 'missing_prompt_id',
+      cancellation_state: 'missing_endpoint',
     })
     return null
   }
 
   const comfyService = createComfyUIService(endpoint, assignedServer)
-  const result = await comfyService.cancelPrompt(promptId)
+  const result = await comfyService.cancelPrompt(promptId ?? '', { queueJobId: jobId })
+  const cancellationState = resolveCancellationState(result, assignedServer)
+
+  // R-c: 취소 결과는 컬럼으로 승격해 기록한다(payload 전체 재작성 없이 읽을 수 있다).
+  // `_debug` 미러는 큐 상세 응답(queue-read-routes)이 아직 그 키를 읽기 때문에 함께 유지한다.
+  if (result.interrupted || result.deleted) {
+    // 상류 큐에서 우리 항목을 확인하고 지웠거나 중단시켰다 = 확인된 취소.
+    // 마커로 뒤늦게 찾은 prompt id 도 함께 채워 넣어 이후 추적이 가능하게 한다.
+    GenerationQueueModel.markProviderSubmitState(jobId, 'cancel_confirmed', {
+      providerCancelState: cancellationState,
+      providerJobId: result.resolvedPromptId ?? undefined,
+    })
+  } else if (cancellationState === 'unsupported') {
+    // modal 백엔드는 취소 API 가 없다. 로컬 슬롯만 회수되고 상류 과금은 계속된다.
+    GenerationQueueModel.markProviderSubmitState(jobId, 'cancel_unsupported', { providerCancelState: cancellationState })
+  } else if (result.runningIdsUnresolved) {
+    // 상류는 실행 중인데 우리 잡인지 입증할 수 없다. 주기 reconciler 가 마커로 재시도한다.
+    GenerationQueueModel.markProviderSubmitState(jobId, 'orphan_suspected', { providerCancelState: cancellationState })
+  } else {
+    GenerationQueueModel.markProviderCancelState(jobId, cancellationState)
+  }
+
   updateQueueRequestDebugMeta(latest, {
     cancellation_requested_at: requestedAt,
     cancellation_endpoint: endpoint,
-    cancellation_prompt_id: promptId,
-    cancellation_state: resolveCancellationState(result, assignedServer),
+    cancellation_prompt_id: result.resolvedPromptId ?? promptId,
+    cancellation_state: cancellationState,
     cancellation_result: result,
   })
   return result

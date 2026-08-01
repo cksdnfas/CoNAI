@@ -33,6 +33,15 @@ export type CodexGenerationResult = {
   stderrPath: string
 }
 
+export type CodexCancellationOptions = {
+  signal?: AbortSignal
+}
+
+export type CodexGenerationOptions = CodexCancellationOptions & {
+  /** PJ-4: `pid:<pid>@<ISO>` 형태의 로컬 핸들을 spawn 직후 지속시키기 위한 훅 */
+  onProcessSpawned?: (pid: number) => void
+}
+
 export type CodexAvailabilityStatus = {
   installed: boolean
   authenticated: boolean
@@ -83,6 +92,15 @@ function buildRequestedOutputFileNames(count: number | undefined, outputFormat: 
 
 export function resolveCodexJobRoot() {
   return path.join(runtimePaths.tempDir, 'codex-jobs')
+}
+
+/** Best-effort cleanup for a cancelled Codex job directory. */
+async function removeCodexJobDirectory(jobDirectory: string) {
+  try {
+    await fs.promises.rm(jobDirectory, { recursive: true, force: true })
+  } catch (cleanupError) {
+    console.warn(`⚠️ Failed to remove cancelled Codex job directory ${jobDirectory}:`, cleanupError)
+  }
 }
 
 function resolveImageMimeType(extension: string) {
@@ -296,6 +314,57 @@ function scheduleCodexProcessTimeout(child: ChildProcess, timeoutMs: number): Co
   }
 }
 
+type CodexProcessAbort = {
+  readonly aborted: boolean
+  clear: () => void
+}
+
+/**
+ * 취소 시그널이 오면 타임아웃과 **같은 방식**으로 프로세스 트리를 정리한다.
+ * spawn 내장 `signal` 옵션은 직계 자식만 죽여서 win32 손자 프로세스가 고아로 남으므로 쓰지 않는다.
+ */
+function bindCodexProcessAbort(child: ChildProcess, signal?: AbortSignal): CodexProcessAbort {
+  let aborted = false
+  let escalationTimer: NodeJS.Timeout | null = null
+
+  if (!signal) {
+    return {
+      get aborted() {
+        return aborted
+      },
+      clear: () => {},
+    }
+  }
+
+  const onAbort = () => {
+    aborted = true
+    killCodexProcessTree(child, 'SIGTERM')
+    escalationTimer = setTimeout(() => {
+      killCodexProcessTree(child, 'SIGKILL')
+    }, CODEX_KILL_GRACE_MS)
+    escalationTimer.unref()
+  }
+
+  if (signal.aborted) {
+    onAbort()
+  } else {
+    signal.addEventListener('abort', onAbort, { once: true })
+  }
+
+  return {
+    get aborted() {
+      return aborted
+    },
+    clear: () => {
+      signal.removeEventListener('abort', onAbort)
+      if (escalationTimer) {
+        clearTimeout(escalationTimer)
+        escalationTimer = null
+      }
+    },
+  }
+}
+
 function parseCodexAvailabilityOutput(rawOutput: string, exitCode: number | null, command: string): CodexAvailabilityStatus {
   const authenticatedMatch = rawOutput.match(CODEX_AUTHENTICATED_PATTERN)
   const explicitlyUnauthenticated = CODEX_UNAUTHENTICATED_PATTERNS.some((pattern) => pattern.test(rawOutput))
@@ -320,7 +389,7 @@ function parseCodexAvailabilityOutput(rawOutput: string, exitCode: number | null
   }
 }
 
-export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilityStatus> {
+export async function getCodexAvailabilityStatus(options?: CodexCancellationOptions): Promise<CodexAvailabilityStatus> {
   const resolvedCommand = resolveCodexCommand()
 
   return await new Promise<CodexAvailabilityStatus>((resolve) => {
@@ -337,6 +406,8 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
       detached: process.platform !== 'win32',
     })
     const processTimeout = scheduleCodexProcessTimeout(child, CODEX_AVAILABILITY_TIMEOUT_MS)
+    // 10초 프로브 도중 취소가 오면 그대로 붙잡히지 않도록 함께 끊는다.
+    const processAbort = bindCodexProcessAbort(child, options?.signal)
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString()
@@ -348,6 +419,7 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
 
     child.once('error', (error) => {
       processTimeout.clear()
+      processAbort.clear()
       resolve({
         installed: false,
         authenticated: false,
@@ -362,8 +434,9 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
 
     child.once('close', (code, signal) => {
       processTimeout.clear()
+      processAbort.clear()
 
-      if (processTimeout.timedOut || signal) {
+      if (processTimeout.timedOut || processAbort.aborted || signal) {
         resolve({
           installed: true,
           authenticated: false,
@@ -373,7 +446,9 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
           rawOutput: `${stdout}\n${stderr}`.trim(),
           message: processTimeout.timedOut
             ? `Codex login status check timed out after ${CODEX_AVAILABILITY_TIMEOUT_MS / 1000}s and its process tree was killed`
-            : `Codex login status check was killed (${signal})`,
+            : processAbort.aborted
+              ? 'Codex login status check was cancelled and its process tree was killed'
+              : `Codex login status check was killed (${signal})`,
           exitCode: null,
         })
         return
@@ -385,8 +460,12 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
   })
 }
 
-export async function assertCodexAvailable(actionLabel = 'Codex'): Promise<CodexAvailabilityStatus> {
-  const status = await getCodexAvailabilityStatus()
+export async function assertCodexAvailable(actionLabel = 'Codex', options?: CodexCancellationOptions): Promise<CodexAvailabilityStatus> {
+  const status = await getCodexAvailabilityStatus(options)
+
+  if (options?.signal?.aborted) {
+    throw new Error(`${actionLabel} 실행 취소: 가용성 확인 도중 취소됐어.`)
+  }
 
   if (!status.installed) {
     throw new Error(`${actionLabel} 실행 실패: 이 서버에서 Codex CLI를 찾지 못했어.`)
@@ -399,7 +478,7 @@ export async function assertCodexAvailable(actionLabel = 'Codex'): Promise<Codex
   return status
 }
 
-async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: string[]) {
+async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: string[], options?: CodexGenerationOptions) {
   const stdoutPath = path.join(jobDirectory, 'codex-output.jsonl')
   const stderrPath = path.join(jobDirectory, 'codex-stderr.log')
   const lastMessagePath = path.join(jobDirectory, 'codex-last-message.txt')
@@ -433,6 +512,13 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
       detached: process.platform !== 'win32',
     })
     const processTimeout = scheduleCodexProcessTimeout(child, CODEX_EXEC_TIMEOUT_MS)
+    // 취소 시 워커 슬롯이 최대 30분(GEN-9 타임아웃)까지 묶이지 않도록 같은 트리 kill 을 앞당긴다.
+    const processAbort = bindCodexProcessAbort(child, options?.signal)
+
+    if (typeof child.pid === 'number') {
+      // PJ-4: 로컬 프로세스 핸들을 spawn 직후에 지속시킨다.
+      options?.onProcessSpawned?.(child.pid)
+    }
 
     const stdoutStream = fs.createWriteStream(stdoutPath)
     const stderrStream = fs.createWriteStream(stderrPath)
@@ -444,6 +530,7 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
       }
       settled = true
       processTimeout.clear()
+      processAbort.clear()
       stdoutStream.end()
       stderrStream.end()
       if (error) {
@@ -467,8 +554,9 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
 
     child.once('close', async (code, signal) => {
       processTimeout.clear()
+      processAbort.clear()
 
-      if (code === 0 && !signal && !processTimeout.timedOut) {
+      if (code === 0 && !signal && !processTimeout.timedOut && !processAbort.aborted) {
         finalize()
         return
       }
@@ -487,12 +575,14 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
         stderrTail = ''
       }
 
-      // taskkill로 트리를 정리하면 signal 없이 종료 코드만 남으므로 타임아웃 플래그로 판별한다.
+      // taskkill로 트리를 정리하면 signal 없이 종료 코드만 남으므로 타임아웃/취소 플래그로 판별한다.
       const failureSummary = processTimeout.timedOut
         ? `codex exec timed out after ${CODEX_EXEC_TIMEOUT_MS / 60000} minutes and its process tree was killed (${signal ?? `exit code ${code ?? 'unknown'}`})`
-        : signal
-          ? `codex exec was killed (${signal})`
-          : `codex exec failed with exit code ${code ?? 'unknown'}`
+        : processAbort.aborted
+          ? `codex exec was cancelled and its process tree was killed (${signal ?? `exit code ${code ?? 'unknown'}`})`
+          : signal
+            ? `codex exec was killed (${signal})`
+            : `codex exec failed with exit code ${code ?? 'unknown'}`
 
       finalize(new Error([
         failureSummary,
@@ -543,8 +633,8 @@ async function discoverOutputFiles(jobDirectory: string, requestedFileNames: str
     }))
 }
 
-export async function executeCodexGeneration(payload: CodexGenerationPayload): Promise<CodexGenerationResult> {
-  await assertCodexAvailable('Codex 이미지 생성')
+export async function executeCodexGeneration(payload: CodexGenerationPayload, options?: CodexGenerationOptions): Promise<CodexGenerationResult> {
+  await assertCodexAvailable('Codex 이미지 생성', options)
 
   if (typeof payload.prompt !== 'string' || payload.prompt.trim().length === 0) {
     throw new Error('Codex queue payload requires a non-empty prompt')
@@ -575,7 +665,17 @@ export async function executeCodexGeneration(payload: CodexGenerationPayload): P
   const prompt = buildCodexPrompt(payload, requestedFileNames)
   await fs.promises.writeFile(path.join(jobDirectory, 'request-prompt.txt'), `${prompt}\n`, 'utf8')
 
-  const runResult = await runCodexExec(jobDirectory, prompt, attachedImages)
+  let runResult
+  try {
+    runResult = await runCodexExec(jobDirectory, prompt, attachedImages, options)
+  } catch (error) {
+    // 취소로 끝난 실행은 산출물이 없으므로 job 디렉터리를 남겨 둘 이유가 없다.
+    if (options?.signal?.aborted) {
+      await removeCodexJobDirectory(jobDirectory)
+    }
+    throw error
+  }
+
   const outputFiles = await discoverOutputFiles(jobDirectory, requestedFileNames, ignoredBasenames)
 
   if (outputFiles.length === 0) {

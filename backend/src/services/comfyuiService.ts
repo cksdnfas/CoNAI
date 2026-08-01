@@ -6,6 +6,10 @@ import { resolveAxiosErrorMessage } from './comfyui/errors';
 import { downloadComfyOutputFile, uploadComfyInputImage } from './comfyui/fileTransfer';
 import {
   buildComfyUIQueueState,
+  extractComfyQueueEntries,
+  COMFY_QUEUE_JOB_MARKER_KEY,
+  type ComfyUIQueueEntries,
+  type ComfyUIQueueEntry,
   type ComfyUIQueueResponse,
 } from './comfyui/queueState';
 import {
@@ -35,6 +39,8 @@ const CANCEL_REQUEST_TIMEOUT_MS = 10000;
 type WaitForCompletionOptions = {
   shouldCancel?: () => boolean | Promise<boolean>;
   onCancelRequested?: (promptId: string) => void | Promise<void>;
+  /** 취소 시 폴링/백오프 대기(최대 30초)에 갇히지 않도록 하는 인메모리 시그널 */
+  signal?: AbortSignal;
 };
 
 type ComfyUIServiceOptions = {
@@ -42,15 +48,77 @@ type ComfyUIServiceOptions = {
   capacity?: number;
 };
 
+export type ComfySubmitPromptOptions = {
+  signal?: AbortSignal;
+  /** PJ-3: `/queue` 역매칭용 CoNAI 잡 마커 */
+  queueJobId?: number | null;
+  /**
+   * PJ-2: 응답에서 prompt_id 를 읽은 **바로 그 tick**에 호출된다.
+   * await 홉이 끼면 핸들 미지속 창이 다시 열리므로 반드시 동기 콜백이어야 한다.
+   */
+  onAccepted?: (promptId: string) => void;
+};
+
+export type ComfyCancelPromptOptions = {
+  /** prompt id 가 유실됐거나 큐 항목과 어긋날 때 쓰는 CoNAI 잡 마커 */
+  queueJobId?: number | null;
+};
+
 export type ComfyUICancelPromptResult = {
   promptId: string;
+  /** 마커 역매칭으로 뒤늦게 확인한 실제 prompt id (없으면 요청에 쓴 값) */
+  resolvedPromptId: string | null;
   matchedRunning: boolean;
   matchedPending: boolean;
+  matchedByMarker: boolean;
   interrupted: boolean;
   deleted: boolean;
   /** 상류 큐가 실행 중이라고 보고했지만 prompt id를 확인할 수 없어 /interrupt를 건너뛴 경우 */
   runningIdsUnresolved: boolean;
 };
+
+type ComfyAbandonedCancelCarrier = {
+  comfyAbandonedCancelResult?: ComfyUICancelPromptResult | null
+}
+
+/**
+ * GEN-8 의 give-up/timeout 경로는 살아 있는 프롬프트를 버린다.
+ * best-effort 취소 결과를 에러에 실어 보내야 호출부가 `provider_cancel_state` 로 남기고,
+ * 확인되지 않은 경우 orphan reconciler 에 넘길 수 있다(예전에는 console.warn 후 유실됐다).
+ */
+function attachComfyAbandonedCancelResult(error: Error, result: ComfyUICancelPromptResult | null) {
+  (error as Error & ComfyAbandonedCancelCarrier).comfyAbandonedCancelResult = result;
+  return error;
+}
+
+/** Read the best-effort cancellation outcome recorded when a live prompt was abandoned. */
+export function resolveComfyAbandonedCancelResult(error: unknown): ComfyUICancelPromptResult | null | undefined {
+  const carrier = error && typeof error === 'object' ? error as ComfyAbandonedCancelCarrier : null;
+  return carrier && 'comfyAbandonedCancelResult' in carrier ? carrier.comfyAbandonedCancelResult : undefined;
+}
+
+/** 취소 시그널이 오면 남은 대기를 즉시 포기한다(대기 자체는 실패로 처리하지 않는다). */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  if (signal.aborted) {
+    return Promise.resolve();
+  }
+
+  return new Promise(resolve => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 /**
  * ComfyUI API 서비스
@@ -121,22 +189,44 @@ export class ComfyUIService {
   /**
    * ComfyUI에 프롬프트 제출
    * @param workflow 치환된 워크플로우 객체
+   * @param options 취소 시그널 / 잡 마커 / 접수 즉시 콜백
    * @returns ComfyUI 프롬프트 ID
    */
-  async submitPrompt(workflow: any): Promise<string> {
+  async submitPrompt(workflow: any, options?: ComfySubmitPromptOptions): Promise<string> {
+    const queueJobId = options?.queueJobId ?? null;
+    const requestBody: Record<string, unknown> = {
+      prompt: workflow
+    };
+
+    if (queueJobId !== null && queueJobId !== undefined) {
+      // PJ-3: prompt_id 를 못 받아도 /queue 에서 우리 잡을 되찾을 수 있게 마커를 각인한다.
+      requestBody.client_id = `conai-job-${queueJobId}`;
+      requestBody.extra_data = {
+        [COMFY_QUEUE_JOB_MARKER_KEY]: queueJobId,
+      };
+    }
+
     try {
-      const response = await this.axiosInstance.post<ComfyUIPromptResponse>('/prompt', {
-        prompt: workflow
+      const response = await this.axiosInstance.post<ComfyUIPromptResponse>('/prompt', requestBody, {
+        signal: options?.signal,
       });
+
+      const promptId = response.data.prompt_id;
+      // PJ-2: 파싱과 지속 사이에 await 홉을 두지 않는다. node_errors 검사보다도 먼저 커밋한다.
+      // (node_errors 로 실패하더라도 이미 accepted 라 정상 정리 대상이 되므로 그 편이 안전하다.)
+      options?.onAccepted?.(promptId);
 
       if (response.data.node_errors && Object.keys(response.data.node_errors).length > 0) {
         throw new Error(`ComfyUI node errors: ${JSON.stringify(response.data.node_errors)}`);
       }
 
-      return response.data.prompt_id;
+      return promptId;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`ComfyUI API error: ${resolveAxiosErrorMessage(error)}`);
+        // 실패 분류기가 code/status 를 볼 수 있도록 원인을 붙여서 감싼다.
+        const apiError = new Error(`ComfyUI API error: ${resolveAxiosErrorMessage(error)}`) as Error & { cause?: unknown };
+        apiError.cause = error;
+        throw apiError;
       }
       throw error;
     }
@@ -147,11 +237,14 @@ export class ComfyUIService {
    * @param promptId ComfyUI 프롬프트 ID
    * @returns 히스토리 데이터
    */
-  async getHistory(promptId: string, timeoutMs?: number): Promise<ComfyUIHistoryResponse> {
+  async getHistory(promptId: string, timeoutMs?: number, signal?: AbortSignal): Promise<ComfyUIHistoryResponse> {
     try {
       const response = await this.axiosInstance.get<ComfyUIHistoryResponse>(
         `/history/${promptId}`,
-        timeoutMs !== undefined ? { timeout: timeoutMs } : undefined,
+        {
+          ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
+          ...(signal ? { signal } : {}),
+        },
       );
       return response.data;
     } catch (error) {
@@ -201,19 +294,28 @@ export class ComfyUIService {
       let history: ComfyUIHistoryResponse;
       try {
         // Short per-poll timeout so a transient stall fails this poll, not the whole generation.
-        history = await this.getHistory(promptId, HISTORY_POLL_TIMEOUT_MS);
+        history = await this.getHistory(promptId, HISTORY_POLL_TIMEOUT_MS, options?.signal);
         consecutivePollFailures = 0;
       } catch (pollError) {
+        // 취소로 끊긴 폴링은 실패 카운트가 아니라 취소 확정 경로로 보낸다.
+        if (options?.signal?.aborted) {
+          await maybeCancel();
+          throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE);
+        }
+
         consecutivePollFailures += 1;
         if (consecutivePollFailures > TOLERATED_CONSECUTIVE_HISTORY_POLL_FAILURES) {
-          await this.cancelPromptBestEffort(promptId);
-          throw new Error(
-            `ComfyUI history polling failed ${consecutivePollFailures} times in a row: ${pollError instanceof Error ? pollError.message : String(pollError)}`,
+          const cancelResult = await this.cancelPromptBestEffort(promptId);
+          throw attachComfyAbandonedCancelResult(
+            new Error(
+              `ComfyUI history polling failed ${consecutivePollFailures} times in a row: ${pollError instanceof Error ? pollError.message : String(pollError)}`,
+            ),
+            cancelResult,
           );
         }
 
         const backoffMs = Math.min(intervalMs * 2 ** consecutivePollFailures, HISTORY_POLL_BACKOFF_MAX_MS);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        await abortableSleep(backoffMs, options?.signal);
         continue;
       }
 
@@ -231,22 +333,29 @@ export class ComfyUIService {
       await maybeCancel();
 
       // 대기
-      await new Promise(resolve => setTimeout(resolve, intervalMs));
+      await abortableSleep(intervalMs, options?.signal);
     }
 
-    await this.cancelPromptBestEffort(promptId);
-    throw new Error(`ComfyUI execution timeout after ${maxAttempts * intervalMs / 1000} seconds`);
+    const timeoutCancelResult = await this.cancelPromptBestEffort(promptId);
+    throw attachComfyAbandonedCancelResult(
+      new Error(`ComfyUI execution timeout after ${maxAttempts * intervalMs / 1000} seconds`),
+      timeoutCancelResult,
+    );
   }
 
-  /** Best-effort upstream cancellation so an abandoned prompt does not keep generating orphaned output. */
-  private async cancelPromptBestEffort(promptId: string): Promise<void> {
+  /**
+   * Best-effort upstream cancellation so an abandoned prompt does not keep generating orphaned output.
+   * 결과를 돌려주어 호출부가 `provider_cancel_state` 로 승격 기록할 수 있게 한다(실패는 orphan 으로 남는다).
+   */
+  async cancelPromptBestEffort(promptId: string, options?: ComfyCancelPromptOptions): Promise<ComfyUICancelPromptResult | null> {
     try {
-      await this.cancelPrompt(promptId);
+      return await this.cancelPrompt(promptId, options);
     } catch (cancelError) {
       console.warn(
         `⚠️ Failed best-effort ComfyUI cancellation for prompt ${promptId}:`,
         cancelError instanceof Error ? cancelError.message : cancelError,
       );
+      return null;
     }
   }
 
@@ -310,6 +419,7 @@ export class ComfyUIService {
       response = await axios.post<ModalComfyGenerateResponse>(this.apiEndpoint, { workflow }, {
         timeout: 1800000,
         headers: { 'Content-Type': 'application/json' },
+        signal: options?.signal,
       });
     } catch (error) {
       throw new Error(`Modal ComfyUI request failed: ${resolveAxiosErrorMessage(error)}`);
@@ -344,17 +454,20 @@ export class ComfyUIService {
    * Try to cancel one submitted prompt on the upstream ComfyUI server.
    * Pending prompts are removed from the queue and running prompts trigger /interrupt.
    */
-  async cancelPrompt(promptId: string): Promise<ComfyUICancelPromptResult> {
+  async cancelPrompt(promptId: string, options?: ComfyCancelPromptOptions): Promise<ComfyUICancelPromptResult> {
     const normalizedPromptId = typeof promptId === 'string' ? promptId.trim() : '';
-    if (!normalizedPromptId) {
-      throw new Error('ComfyUI prompt cancellation requires a prompt id');
+    const queueJobId = options?.queueJobId ?? null;
+    if (!normalizedPromptId && queueJobId === null) {
+      throw new Error('ComfyUI prompt cancellation requires a prompt id or a CoNAI queue job marker');
     }
 
     if (this.isModalBackend()) {
       return {
         promptId: normalizedPromptId,
+        resolvedPromptId: normalizedPromptId || null,
         matchedRunning: false,
         matchedPending: false,
+        matchedByMarker: false,
         interrupted: false,
         deleted: false,
         runningIdsUnresolved: false,
@@ -362,27 +475,36 @@ export class ComfyUIService {
     }
 
     try {
-      const queueState = await this.getQueueState();
-      const pendingPromptIds = queueState.pending_prompt_ids ?? [];
-      const runningPromptIds = queueState.running_prompt_ids ?? [];
-      const matchedPending = pendingPromptIds.includes(normalizedPromptId);
-      // Only interrupt when our prompt id is confirmed running; a blind /interrupt on a
-      // shared or capacity>1 server would kill someone else's prompt.
-      const matchedRunning = runningPromptIds.includes(normalizedPromptId);
+      const entries = await this.getQueueEntries();
+      // GEN-6 불변식: prompt id 또는 우리 마커로 "확실히 우리 잡"임을 입증한 항목만 건드린다.
+      const matchesOurJob = (entry: ComfyUIQueueEntry) =>
+        (normalizedPromptId.length > 0 && entry.promptId === normalizedPromptId)
+        || (queueJobId !== null && entry.conaiQueueJobId === queueJobId);
+
+      const pendingMatch = entries.pending.find(matchesOurJob) ?? null;
+      const runningMatch = entries.running.find(matchesOurJob) ?? null;
+      const matchedPending = pendingMatch !== null;
+      const matchedRunning = runningMatch !== null;
+      const matchedByMarker = (pendingMatch !== null && pendingMatch.promptId !== normalizedPromptId)
+        || (runningMatch !== null && runningMatch.promptId !== normalizedPromptId);
+      const resolvedPromptId = pendingMatch?.promptId ?? runningMatch?.promptId ?? (normalizedPromptId || null);
+
       // 프록시/포크 서버가 prompt id 없는 queue_running 항목을 돌려주면 우리 잡인지 확인할 수 없다.
       // 이때도 /interrupt는 보내지 않지만(타인 잡 중단 위험), 상류 생성이 그대로 완주해 산출물이
       // 고아가 되므로 별도 상태로 남겨 추적할 수 있게 한다.
-      const runningIdsUnresolved = runningPromptIds.length === 0 && queueState.running_count > 0;
+      const runningIdsUnresolved = !matchedRunning
+        && entries.running.length > 0
+        && entries.running.every((entry) => entry.promptId === null && entry.conaiQueueJobId === null);
       if (runningIdsUnresolved) {
         console.warn(
-          `⚠️ ComfyUI queue reports ${queueState.running_count} running prompt(s) without resolvable prompt ids; skipping /interrupt for ${normalizedPromptId} (upstream generation may finish and orphan its output)`,
+          `⚠️ ComfyUI queue reports ${entries.running.length} running prompt(s) without resolvable prompt ids; skipping /interrupt for ${normalizedPromptId || `job ${queueJobId}`} (upstream generation may finish and orphan its output)`,
         );
       }
 
       let deleted = false;
-      if (matchedPending) {
+      if (matchedPending && resolvedPromptId) {
         await this.axiosInstance.post('/queue', {
-          delete: [normalizedPromptId],
+          delete: [resolvedPromptId],
         }, { timeout: CANCEL_REQUEST_TIMEOUT_MS });
         deleted = true;
       }
@@ -395,8 +517,10 @@ export class ComfyUIService {
 
       return {
         promptId: normalizedPromptId,
+        resolvedPromptId,
         matchedRunning,
         matchedPending,
+        matchedByMarker,
         interrupted,
         deleted,
         runningIdsUnresolved,
@@ -448,6 +572,18 @@ export class ComfyUIService {
     try {
       const response = await this.axiosInstance.get<ComfyUIQueueResponse>('/queue', { timeout });
       return buildComfyUIQueueState(response.data);
+    } catch (error) {
+      throw new Error(`ComfyUI queue API error: ${resolveAxiosErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * Read upstream queue entries with their CoNAI job markers so a lost prompt id can still be matched.
+   */
+  async getQueueEntries(timeout: number = 5000): Promise<ComfyUIQueueEntries> {
+    try {
+      const response = await this.axiosInstance.get<ComfyUIQueueResponse>('/queue', { timeout });
+      return extractComfyQueueEntries(response.data);
     } catch (error) {
       throw new Error(`ComfyUI queue API error: ${resolveAxiosErrorMessage(error)}`);
     }

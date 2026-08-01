@@ -19,7 +19,11 @@ export interface ExecuteNaiGenerationResult {
 }
 
 export interface ExecuteNaiGenerationOptions {
+  /** PJ-1: 요청 전송 직전에 "제출 의사"를 커밋한다(GEN-2가 만든 post 앞 지점을 계승). */
+  onUpstreamSubmitting?: () => void | Promise<void>
+  /** 응답 수신 뒤의 확정 지점. 여기서부터는 상류 작업이 확실히 존재한다. */
   onUpstreamAccepted?: () => void | Promise<void>
+  signal?: AbortSignal
 }
 
 function isZipBuffer(buffer: Buffer) {
@@ -110,8 +114,13 @@ export async function executeNaiGeneration(
   const metadata = preprocessMetadata(input)
   const requestBody = await buildNaiRequestBody(metadata)
 
+  // 요청을 아직 보내지 않았으므로 여기서 끊기면 Anlas 소모가 없는 깨끗한 취소다.
+  if (options?.signal?.aborted) {
+    throw new Error('NovelAI generation was cancelled before the upstream request was sent')
+  }
+
   // Mark the job as running before the upstream call so started_at reflects the real runtime.
-  await options?.onUpstreamAccepted?.()
+  await options?.onUpstreamSubmitting?.()
 
   const response = await axios.post('https://image.novelai.net/ai/generate-image', requestBody, {
     headers: {
@@ -122,7 +131,11 @@ export async function executeNaiGeneration(
     },
     responseType: 'arraybuffer',
     timeout: 120000,
+    signal: options?.signal,
   })
+
+  // 응답을 받은 시점부터는 상류 작업이 확실히 존재한다.
+  await options?.onUpstreamAccepted?.()
 
   const contentTypeHeader = response.headers['content-type']
   const imageBuffers = decodeNaiImageResponse(

@@ -353,6 +353,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
       workflow_name TEXT,
       requested_group_id INTEGER,
       requested_server_id INTEGER,
+      requested_server_tag TEXT,
       assigned_server_id INTEGER,
       provider_job_id TEXT,
       request_payload TEXT NOT NULL,
@@ -360,6 +361,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
       failure_code TEXT,
       failure_message TEXT,
       cancel_requested INTEGER NOT NULL DEFAULT 0,
+      cancel_requested_at TEXT,
+      cancel_origin TEXT,
+      provider_submit_state TEXT NOT NULL DEFAULT 'none',
+      provider_submit_started_at TEXT,
+      provider_cancel_state TEXT,
+      submit_attempt_count INTEGER NOT NULL DEFAULT 0,
       queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       started_at DATETIME,
       completed_at DATETIME,
@@ -620,6 +627,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
         failure_code TEXT,
         failure_message TEXT,
         cancel_requested INTEGER NOT NULL DEFAULT 0,
+        cancel_requested_at TEXT,
+        cancel_origin TEXT,
+        provider_submit_state TEXT NOT NULL DEFAULT 'none',
+        provider_submit_started_at TEXT,
+        provider_cancel_state TEXT,
+        submit_attempt_count INTEGER NOT NULL DEFAULT 0,
         queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         started_at DATETIME,
         completed_at DATETIME,
@@ -640,6 +653,40 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('generation_queue_jobs', 'provider_job_id')) {
     console.log('  Migrating generation_queue_jobs: adding provider_job_id column');
     db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN provider_job_id TEXT');
+  }
+
+  // 취소 프로토콜 컬럼들. 아래 CHECK 재구축 블록이 이 컬럼들을 그대로 복사하므로
+  // 재구축보다 반드시 먼저 추가되어야 한다 (누락 시 재구축에서 데이터가 사라진다).
+  if (!hasColumn('generation_queue_jobs', 'cancel_requested_at')) {
+    console.log('  Migrating generation_queue_jobs: adding cancel_requested_at column');
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN cancel_requested_at TEXT');
+  }
+
+  if (!hasColumn('generation_queue_jobs', 'cancel_origin')) {
+    console.log('  Migrating generation_queue_jobs: adding cancel_origin column');
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN cancel_origin TEXT');
+  }
+
+  if (!hasColumn('generation_queue_jobs', 'provider_submit_state')) {
+    console.log('  Migrating generation_queue_jobs: adding provider_submit_state column');
+    db.exec("ALTER TABLE generation_queue_jobs ADD COLUMN provider_submit_state TEXT NOT NULL DEFAULT 'none'");
+    // 기존 행은 상류 제출 여부를 provider_job_id 유무로만 추정할 수 있다.
+    db.exec("UPDATE generation_queue_jobs SET provider_submit_state = 'accepted' WHERE provider_job_id IS NOT NULL AND provider_job_id != ''");
+  }
+
+  if (!hasColumn('generation_queue_jobs', 'provider_submit_started_at')) {
+    console.log('  Migrating generation_queue_jobs: adding provider_submit_started_at column');
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN provider_submit_started_at TEXT');
+  }
+
+  if (!hasColumn('generation_queue_jobs', 'provider_cancel_state')) {
+    console.log('  Migrating generation_queue_jobs: adding provider_cancel_state column');
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN provider_cancel_state TEXT');
+  }
+
+  if (!hasColumn('generation_queue_jobs', 'submit_attempt_count')) {
+    console.log('  Migrating generation_queue_jobs: adding submit_attempt_count column');
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN submit_attempt_count INTEGER NOT NULL DEFAULT 0');
   }
 
   const generationQueueTableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='generation_queue_jobs'").get() as { sql?: string } | undefined;
@@ -668,6 +715,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
           failure_code TEXT,
           failure_message TEXT,
           cancel_requested INTEGER NOT NULL DEFAULT 0,
+          cancel_requested_at TEXT,
+          cancel_origin TEXT,
+          provider_submit_state TEXT NOT NULL DEFAULT 'none',
+          provider_submit_started_at TEXT,
+          provider_cancel_state TEXT,
+          submit_attempt_count INTEGER NOT NULL DEFAULT 0,
           queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           started_at DATETIME,
           completed_at DATETIME,
@@ -686,6 +739,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
           requested_server_id, requested_server_tag, assigned_server_id,
           provider_job_id, request_payload, request_summary,
           failure_code, failure_message, cancel_requested,
+          cancel_requested_at, cancel_origin,
+          provider_submit_state, provider_submit_started_at,
+          provider_cancel_state, submit_attempt_count,
           queued_at, started_at, completed_at, created_date, updated_date
         )
         SELECT
@@ -695,6 +751,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
           requested_server_id, requested_server_tag, assigned_server_id,
           provider_job_id, request_payload, request_summary,
           failure_code, failure_message, cancel_requested,
+          cancel_requested_at, cancel_origin,
+          provider_submit_state, provider_submit_started_at,
+          provider_cancel_state, submit_attempt_count,
           queued_at, started_at, completed_at, created_date, updated_date
         FROM generation_queue_jobs_legacy_codex
       `);
@@ -786,6 +845,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_assigned_server_id ON generation_queue_jobs(assigned_server_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_workflow_id ON generation_queue_jobs(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_cancel_requested ON generation_queue_jobs(cancel_requested)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_orphan_reconcile ON generation_queue_jobs(provider_submit_state, status)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_id ON graph_execution_artifacts(execution_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_created ON graph_execution_artifacts(execution_id, created_date DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_created_id ON graph_execution_artifacts(created_date DESC, id DESC)',

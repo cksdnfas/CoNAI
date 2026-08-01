@@ -18,6 +18,7 @@ import { getErrorMessage } from '../image-generation-shared'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '@/features/module-graph/module-graph-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
+  canRetryGenerationQueueCancellation,
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueHeaderRefreshTargets,
@@ -422,7 +423,10 @@ export function GenerationQueueHeaderWidget() {
                     const durationLabel = getGenerationQueueDurationLabel(record, t, formatNumber)
                     const progressPercent = getGenerationQueueProgressPercent(record)
                     const shownProgressPercent = progressPercent == null ? null : Math.min(100, Math.max(progressPercent, progressPercent > 0 ? 8 : 0))
-                    const canManageRecord = !isCancelRequested && (authStatusQuery.data?.isAdmin === true || record.is_mine === true)
+                    // CR-3: 업스트림 취소가 실패했을 때 사용자가 재시도할 수 있어야 한다.
+                    const canRetryCancel = canRetryGenerationQueueCancellation(record)
+                    const hasRecordPermission = authStatusQuery.data?.isAdmin === true || record.is_mine === true
+                    const canManageRecord = (!isCancelRequested || canRetryCancel) && hasRecordPermission
                     const isRunning = record.status === 'running'
                     const startTimeLabel = formatQueueCompactStartTime(record.started_at ?? record.queued_at, locale)
                     const elapsedLabel = getGenerationQueueElapsedLabel(record, t, formatNumber)
@@ -468,10 +472,16 @@ export function GenerationQueueHeaderWidget() {
                                 className="shrink-0"
                                 onClick={() => void handleCancel(record.id)}
                                 disabled={isBusy}
-                                aria-label={isRunning
-                                  ? t('image-generation.components.generation.queue.header.widget.queue.job.value.request.stop', { id: record.id })
-                                  : t('image-generation.components.generation.queue.header.widget.queue.job.value.delete', { id: record.id })}
-                                title={isRunning ? t('image-generation.components.generation.queue.header.widget.request.stop') : t('image-generation.components.generation.queue.header.widget.delete')}
+                                aria-label={canRetryCancel
+                                  ? t({ ko: '큐 작업 {id} 취소 재시도', en: 'Retry cancelling queue job {id}' }, { id: record.id })
+                                  : isRunning
+                                    ? t('image-generation.components.generation.queue.header.widget.queue.job.value.request.stop', { id: record.id })
+                                    : t('image-generation.components.generation.queue.header.widget.queue.job.value.delete', { id: record.id })}
+                                title={canRetryCancel
+                                  ? t({ ko: '취소 재시도', en: 'Retry cancel' })
+                                  : isRunning
+                                    ? t('image-generation.components.generation.queue.header.widget.request.stop')
+                                    : t('image-generation.components.generation.queue.header.widget.delete')}
                               >
                                 {isRunning ? <Square className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </Button>

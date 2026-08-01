@@ -28,6 +28,12 @@ function buildQueueRecord(overrides: Partial<GenerationQueueJobRecord> = {}): Ge
     failure_code: null,
     failure_message: null,
     cancel_requested: 0,
+    cancel_requested_at: null,
+    cancel_origin: null,
+    provider_submit_state: 'none',
+    provider_submit_started_at: null,
+    provider_cancel_state: null,
+    submit_attempt_count: 0,
     queued_at: '2026-07-08T00:00:00.000Z',
     started_at: null,
     completed_at: null,
@@ -39,7 +45,23 @@ function buildQueueRecord(overrides: Partial<GenerationQueueJobRecord> = {}): Ge
 
 function assertTransitionContracts() {
   assert.deepEqual(
-    buildQueueTransitionUpdates(buildQueueRecord({ status: 'running', started_at: 'old', assigned_server_id: 7, provider_job_id: 'prompt-1', cancel_requested: 1 }), 'queued', NOW_ISO),
+    buildQueueTransitionUpdates(
+      buildQueueRecord({
+        status: 'running',
+        started_at: 'old',
+        assigned_server_id: 7,
+        provider_job_id: 'prompt-1',
+        cancel_requested: 1,
+        cancel_requested_at: 'old-cancel-time',
+        cancel_origin: 'user',
+        provider_submit_state: 'accepted',
+        provider_submit_started_at: 'old-submit-time',
+        provider_cancel_state: 'requested',
+        submit_attempt_count: 2,
+      }),
+      'queued',
+      NOW_ISO,
+    ),
     {
       status: 'queued',
       started_at: null,
@@ -47,6 +69,12 @@ function assertTransitionContracts() {
       assigned_server_id: null,
       provider_job_id: null,
       cancel_requested: false,
+      cancel_requested_at: null,
+      cancel_origin: null,
+      provider_submit_state: 'none',
+      provider_submit_started_at: null,
+      provider_cancel_state: null,
+      submit_attempt_count: 0,
       failure_code: null,
       failure_message: null,
     },
@@ -80,6 +108,28 @@ function assertTransitionContracts() {
   assert.deepEqual(
     buildQueueTransitionUpdates(buildQueueRecord({ status: 'running' }), 'cancelled', NOW_ISO),
     { status: 'cancelled', completed_at: NOW_ISO, cancel_requested: true },
+  )
+
+  // 상류에 작업이 남았을 수 있는 채로 terminal 이 되면 정리 미완료로 승격시켜 reconciler 에 넘긴다.
+  assert.deepEqual(
+    buildQueueTransitionUpdates(buildQueueRecord({ status: 'dispatching', provider_submit_state: 'in_flight' }), 'cancelled', NOW_ISO),
+    { status: 'cancelled', completed_at: NOW_ISO, cancel_requested: true, provider_submit_state: 'orphan_unresolved' },
+  )
+
+  assert.deepEqual(
+    buildQueueTransitionUpdates(buildQueueRecord({ status: 'running', provider_submit_state: 'orphan_suspected' }), 'cancelled', NOW_ISO),
+    { status: 'cancelled', completed_at: NOW_ISO, cancel_requested: true, provider_submit_state: 'orphan_unresolved' },
+  )
+
+  // 이미 확인된 취소는 승격 대상이 아니다.
+  assert.deepEqual(
+    buildQueueTransitionUpdates(buildQueueRecord({ status: 'running', provider_submit_state: 'cancel_confirmed' }), 'cancelled', NOW_ISO),
+    { status: 'cancelled', completed_at: NOW_ISO, cancel_requested: true },
+  )
+
+  assert.deepEqual(
+    buildQueueTransitionUpdates(buildQueueRecord({ status: 'dispatching' }), 'running', NOW_ISO, { providerSubmitState: 'accepted', providerJobId: 'prompt-9' }),
+    { status: 'running', started_at: NOW_ISO, completed_at: null, provider_job_id: 'prompt-9', provider_submit_state: 'accepted' },
   )
 }
 

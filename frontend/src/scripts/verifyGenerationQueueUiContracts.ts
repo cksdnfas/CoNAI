@@ -5,6 +5,8 @@ import type { GenerationHistoryRecord, GenerationQueueJobRecord } from '../lib/a
 import { canRetryHistoryQueueJob, getHistoryRunRecoveryState, getRetryableHistoryQueueJobId } from '../features/image-generation/image-generation-shared'
 import { getUniqueRetryableHistoryQueueJobIds } from '../features/image-generation/components/generation-history-retry-actions'
 import {
+  canRetryGenerationQueueCancellation,
+  hasUnresolvedGenerationQueueUpstreamWork,
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueHeaderRefreshTargets,
@@ -102,6 +104,49 @@ function assertStatusLabels() {
     getGenerationQueueStatusLabel(makeQueueRecord({ status: 'future-status' as GenerationQueueJobRecord['status'] }), translate),
     'future-status',
     'unknown future statuses should be shown without throwing',
+  )
+  assertEqual(
+    getGenerationQueueStatusLabel(makeQueueRecord({ status: 'cancelled', cancel_requested: 1, provider_submit_state: 'orphan_unresolved' }), translate),
+    '취소됨 (업스트림 정리 중)',
+    'cancelled jobs with unresolved upstream work should be distinguished from clean cancellations',
+  )
+}
+
+function assertCancelRetryAffordance() {
+  assertEqual(
+    canRetryGenerationQueueCancellation(makeQueueRecord({ status: 'running', cancel_requested: 1 })),
+    true,
+    'running jobs awaiting worker confirmation should still expose a cancel retry (CR-3)',
+  )
+  assertEqual(
+    canRetryGenerationQueueCancellation(makeQueueRecord({ status: 'dispatching', cancel_requested: 1 })),
+    true,
+    'dispatching jobs awaiting worker confirmation should still expose a cancel retry (CR-3)',
+  )
+  assertEqual(
+    canRetryGenerationQueueCancellation(makeQueueRecord({ status: 'queued', cancel_requested: 1 })),
+    false,
+    'queued cancellations are finalized by the route, so they need no retry affordance',
+  )
+  assertEqual(
+    canRetryGenerationQueueCancellation(makeQueueRecord({ status: 'cancelled', cancel_requested: 1 })),
+    false,
+    'terminal jobs should not expose a cancel retry',
+  )
+  assertEqual(
+    canRetryGenerationQueueCancellation(makeQueueRecord({ status: 'running', cancel_requested: 0 })),
+    false,
+    'jobs without a pending cancellation should use the normal cancel action',
+  )
+  assertEqual(
+    hasUnresolvedGenerationQueueUpstreamWork(makeQueueRecord({ provider_submit_state: 'orphan_suspected' })),
+    true,
+    'suspected orphans should be surfaced as unresolved upstream work',
+  )
+  assertEqual(
+    hasUnresolvedGenerationQueueUpstreamWork(makeQueueRecord({ provider_submit_state: 'cancel_confirmed' })),
+    false,
+    'confirmed cancellations should not be surfaced as unresolved upstream work',
   )
 }
 
@@ -373,6 +418,11 @@ function assertHeaderWidgetStorageGuards() {
     true,
     'queue header refetch intervals should share one visibility-aware policy',
   )
+  assertEqual(
+    headerWidgetSource.includes('const canManageRecord = (!isCancelRequested || canRetryCancel) && hasRecordPermission'),
+    true,
+    'queue header should keep a cancel retry affordance after a cancellation request (CR-3)',
+  )
 }
 
 function assertHistoryRecoveryState() {
@@ -429,6 +479,7 @@ function assertHistoryRetryBoundary() {
 }
 
 assertStatusLabels()
+assertCancelRetryAffordance()
 assertWorkflowLabels()
 assertRequesterLabels()
 assertRemainingLabels()

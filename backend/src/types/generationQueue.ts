@@ -3,6 +3,23 @@ import type { ServiceType } from '../models/GenerationHistory'
 
 export type GenerationQueueJobStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
 
+/**
+ * `status`와 직교하는 축: "업스트림에 작업을 만들었을 가능성".
+ * DB CHECK 없이 앱 레벨 enum으로만 강제하므로 상수 배열/컨트랙트로 정합을 지킨다.
+ */
+export type GenerationQueueProviderSubmitState =
+  | 'none'
+  | 'in_flight'
+  | 'accepted'
+  | 'orphan_suspected'
+  | 'orphan_unresolved'
+  | 'cancel_sent'
+  | 'cancel_confirmed'
+  | 'cancel_unsupported'
+
+/** 취소 요청의 출처. 스테일 스위퍼/기동 reconcile 이 만든 취소를 사용자 취소와 구분한다. */
+export type GenerationQueueCancelOrigin = 'user' | 'graph' | 'system' | 'reconcile'
+
 export interface GenerationQueueJobRecord {
   id: number
   service_type: ServiceType
@@ -23,6 +40,12 @@ export interface GenerationQueueJobRecord {
   failure_code?: string | null
   failure_message?: string | null
   cancel_requested: number
+  cancel_requested_at?: string | null
+  cancel_origin?: GenerationQueueCancelOrigin | null
+  provider_submit_state?: GenerationQueueProviderSubmitState
+  provider_submit_started_at?: string | null
+  provider_cancel_state?: string | null
+  submit_attempt_count?: number
   queued_at: string
   started_at?: string | null
   completed_at?: string | null
@@ -88,6 +111,12 @@ export interface GenerationQueueJobCreateData {
   failure_code?: string | null
   failure_message?: string | null
   cancel_requested?: boolean
+  cancel_requested_at?: string | null
+  cancel_origin?: GenerationQueueCancelOrigin | null
+  provider_submit_state?: GenerationQueueProviderSubmitState
+  provider_submit_started_at?: string | null
+  provider_cancel_state?: string | null
+  submit_attempt_count?: number
   queued_at?: string | null
   started_at?: string | null
   completed_at?: string | null
@@ -110,7 +139,35 @@ export interface GenerationQueueJobUpdateData {
   failure_code?: string | null
   failure_message?: string | null
   cancel_requested?: boolean
+  cancel_requested_at?: string | null
+  cancel_origin?: GenerationQueueCancelOrigin | null
+  provider_submit_state?: GenerationQueueProviderSubmitState
+  provider_submit_started_at?: string | null
+  provider_cancel_state?: string | null
+  submit_attempt_count?: number
   queued_at?: string | null
   started_at?: string | null
   completed_at?: string | null
 }
+
+/** 취소 폴링 hot path 전용 경량 스냅샷 (request_payload 를 읽지 않는다). */
+export type GenerationQueueCancelState = {
+  status: GenerationQueueJobStatus
+  cancelRequested: boolean
+  providerSubmitState: GenerationQueueProviderSubmitState
+  providerJobId: string | null
+}
+
+/** orphan reconcile / 스테일 스위퍼가 다루는 최소 필드 집합. */
+export type GenerationQueueReconcileCandidate = Pick<
+  GenerationQueueJobRecord,
+  | 'id'
+  | 'service_type'
+  | 'status'
+  | 'workflow_id'
+  | 'assigned_server_id'
+  | 'provider_job_id'
+  | 'provider_submit_state'
+  | 'provider_submit_started_at'
+  | 'cancel_requested'
+>
