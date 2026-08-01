@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  isSplitRuntimeOptIn,
   normalizeRuntimeSideEffectRole,
   resolveRuntimeSideEffectRole,
   shouldServeHttpForRuntimeRole,
   shouldSkipHttpServerForRuntimeRole,
+  wasSplitRuntimeRoleDemoted,
 } from '../startup/runtimeRole';
 
 assert.equal(normalizeRuntimeSideEffectRole('all'), 'all');
@@ -15,8 +17,33 @@ assert.equal(normalizeRuntimeSideEffectRole(' WORKER '), 'worker');
 assert.equal(normalizeRuntimeSideEffectRole('bad-role'), null);
 
 assert.equal(resolveRuntimeSideEffectRole({}), 'all');
-assert.equal(resolveRuntimeSideEffectRole({ CONAI_SIDE_EFFECT_ROLE: 'api' }), 'api');
-assert.equal(resolveRuntimeSideEffectRole({ CONAI_RUNTIME_ROLE: 'worker', CONAI_SIDE_EFFECT_ROLE: 'api' }), 'worker');
+
+// Split roles are unsupported and demote to 'all' unless the operator opted in.
+assert.equal(resolveRuntimeSideEffectRole({ CONAI_RUNTIME_ROLE: 'worker' }), 'all');
+assert.equal(resolveRuntimeSideEffectRole({ CONAI_RUNTIME_ROLE: 'api' }), 'all');
+assert.equal(resolveRuntimeSideEffectRole({ CONAI_SIDE_EFFECT_ROLE: 'api' }), 'all');
+assert.equal(resolveRuntimeSideEffectRole({ CONAI_RUNTIME_ROLE: 'worker', CONAI_SIDE_EFFECT_ROLE: 'api' }), 'all');
+assert.equal(wasSplitRuntimeRoleDemoted({ CONAI_RUNTIME_ROLE: 'worker' }), true);
+assert.equal(wasSplitRuntimeRoleDemoted({}), false);
+assert.equal(wasSplitRuntimeRoleDemoted({ CONAI_RUNTIME_ROLE: 'all' }), false);
+assert.equal(wasSplitRuntimeRoleDemoted({ CONAI_RUNTIME_ROLE: 'worker', CONAI_ALLOW_SPLIT_RUNTIME: 'true' }), false);
+
+// The opt-in restores the requested split role, and CONAI_RUNTIME_ROLE still wins over CONAI_SIDE_EFFECT_ROLE.
+assert.equal(isSplitRuntimeOptIn({ CONAI_ALLOW_SPLIT_RUNTIME: 'true' }), true);
+assert.equal(isSplitRuntimeOptIn({ CONAI_ALLOW_SPLIT_RUNTIME: '1' }), true);
+assert.equal(isSplitRuntimeOptIn({ CONAI_ALLOW_SPLIT_RUNTIME: ' YES ' }), true);
+assert.equal(isSplitRuntimeOptIn({ CONAI_ALLOW_SPLIT_RUNTIME: 'false' }), false);
+assert.equal(isSplitRuntimeOptIn({}), false);
+assert.equal(resolveRuntimeSideEffectRole({ CONAI_RUNTIME_ROLE: 'worker', CONAI_ALLOW_SPLIT_RUNTIME: 'true' }), 'worker');
+assert.equal(resolveRuntimeSideEffectRole({ CONAI_SIDE_EFFECT_ROLE: 'api', CONAI_ALLOW_SPLIT_RUNTIME: 'true' }), 'api');
+assert.equal(
+  resolveRuntimeSideEffectRole({
+    CONAI_RUNTIME_ROLE: 'worker',
+    CONAI_SIDE_EFFECT_ROLE: 'api',
+    CONAI_ALLOW_SPLIT_RUNTIME: 'true',
+  }),
+  'worker',
+);
 
 assert.equal(shouldServeHttpForRuntimeRole('all', {}), true);
 assert.equal(shouldServeHttpForRuntimeRole('api', {}), true);
@@ -37,6 +64,7 @@ const splitLauncherSource = fs.readFileSync(path.join(projectRoot, 'RUN_CoNAI.ba
 const buildAndRunLauncherSource = fs.readFileSync(path.join(projectRoot, 'RUN_CoNAI_BUILD_AND_RUN.bat'), 'utf8');
 const manualApiLauncherSource = fs.readFileSync(path.join(projectRoot, 'runtime-tools', 'manual', 'RUN_CoNAI_API_ONLY.bat'), 'utf8');
 const manualWorkerLauncherSource = fs.readFileSync(path.join(projectRoot, 'runtime-tools', 'manual', 'RUN_CoNAI_WORKER_ONLY.bat'), 'utf8');
+const graphQueueSource = fs.readFileSync(path.join(projectRoot, 'backend', 'src', 'services', 'graphWorkflowExecutionQueue.ts'), 'utf8');
 
 assert.match(runnerSource, /--split/);
 assert.match(runnerSource, /--api/);
@@ -49,14 +77,24 @@ assert.match(runnerSource, /hasExplicitSingleRoleArg/);
 assert.match(runnerSource, /startsWith\('--runtime-role='/);
 assert.match(runnerSource, /process\.execPath/);
 assert.match(runnerSource, /\[BACKEND_ENTRY\]/);
+// The launcher gates the unsupported split runtime behind an explicit opt-in.
+assert.match(runnerSource, /CONAI_ALLOW_SPLIT_RUNTIME/);
+assert.match(runnerSource, /assertSplitRuntimeOptIn/);
 assert.match(indexSource, /shouldSkipHttpServerForRuntimeRole/);
 assert.match(indexSource, /HTTP server disabled/);
 assert.match(indexSource, /const customNodeSyncSkipped = !shouldRunWorkerStartupTasks/);
 assert.match(indexSource, /Custom node filesystem sync skipped in API\/smoke runtime/);
 assert.match(indexSource, /Custom node sync: skipped in API\/smoke runtime/);
+assert.match(indexSource, /wasSplitRuntimeRoleDemoted/);
+assert.match(indexSource, /Split runtime role demoted to "all"/);
+assert.match(indexSource, /shouldOwnTempFileLifecycle/);
 assert.match(dockerfileSource, /CONAI_RUNTIME_ROLE=all/);
 assert.doesNotMatch(dockerfileSource, /CONAI_RUNTIME_ROLE=api/);
-assert.match(rootPackageJson.scripts['start:built'], /--split/);
+// The default built-runtime entry point is single-process.
+assert.match(rootPackageJson.scripts['start:built'], /--all/);
+assert.doesNotMatch(rootPackageJson.scripts['start:built'], /--split/);
+assert.match(rootPackageJson.scripts['start:built:api'], /--api/);
+assert.match(rootPackageJson.scripts['start:built:worker'], /--worker/);
 
 assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI.bat')), true);
 assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI_API.bat')), false);
@@ -67,10 +105,16 @@ assert.equal(fs.existsSync(path.join(projectRoot, 'scripts', 'stop-existing-runt
 assert.equal(fs.existsSync(path.join(projectRoot, 'scripts', 'checkpoint-runtime-databases.js')), true);
 assert.match(splitLauncherSource, /stop-existing-runtime\.js/);
 assert.match(splitLauncherSource, /checkpoint-runtime-databases\.js/);
-assert.match(splitLauncherSource, /--split/);
+assert.match(splitLauncherSource, /--all/);
+assert.doesNotMatch(splitLauncherSource, /--split/);
 assert.match(splitLauncherSource, /"%~dp0scripts\\run-built-if-needed\.js"/);
+// The manual split launchers stay, but they must opt in and warn that split is unsupported.
 assert.match(manualApiLauncherSource, /--api/);
+assert.match(manualApiLauncherSource, /CONAI_ALLOW_SPLIT_RUNTIME/);
+assert.match(manualApiLauncherSource, /UNSUPPORTED/i);
 assert.match(manualWorkerLauncherSource, /--worker/);
+assert.match(manualWorkerLauncherSource, /CONAI_ALLOW_SPLIT_RUNTIME/);
+assert.match(manualWorkerLauncherSource, /UNSUPPORTED/i);
 assert.match(stopExistingRuntimeSource, /Get-NetTCPConnection/);
 assert.match(stopExistingRuntimeSource, /taskkill\.exe/);
 assert.match(stopExistingRuntimeSource, /scripts\/run-built-if-needed\.js/);
@@ -85,5 +129,7 @@ assert.doesNotMatch(stopExistingRuntimeSource, /hasBackendEntry/);
 assert.match(checkpointRuntimeDatabasesSource, /wal_checkpoint\(TRUNCATE\)/);
 assert.match(checkpointRuntimeDatabasesSource, /RUNTIME_DATABASE_DIR/);
 assert.match(buildAndRunLauncherSource, /RUN_CoNAI\.bat/);
+// A process that never started the graph workflow queue must not claim jobs (A-1 regression guard).
+assert.match(graphQueueSource, /private static processQueue\(\)\s*\{\s*if \(!this\.initialized\)/);
 
 console.log('✅ Runtime role contracts verified');

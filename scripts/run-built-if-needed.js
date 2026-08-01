@@ -9,12 +9,14 @@ const BACKEND_DIR = path.join(ROOT_DIR, 'backend');
 const BACKEND_ENTRY = path.join(BACKEND_DIR, 'dist', 'backend', 'src', 'index.js');
 const FRONTEND_INDEX = path.join(BACKEND_DIR, 'dist', 'frontend', 'index.html');
 
+const SPLIT_OPT_IN_ENV = 'CONAI_ALLOW_SPLIT_RUNTIME';
+
 const cliArgs = process.argv.slice(2);
 const args = new Set(cliArgs);
 const isCheckOnly = args.has('--check');
 const isBuildOnly = args.has('--build-only');
 const isSkipBuild = args.has('--skip-build');
-const isSplitRuntime = args.has('--split');
+let isSplitRuntime = args.has('--split');
 
 function parseRuntimeRole() {
   if (isSplitRuntime) {
@@ -48,7 +50,38 @@ function parseRuntimeRole() {
   process.exit(1);
 }
 
-const runtimeRole = parseRuntimeRole();
+let runtimeRole = parseRuntimeRole();
+
+function isSplitRuntimeOptIn(env = process.env) {
+  const raw = env[SPLIT_OPT_IN_ENV];
+  const normalized = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+/**
+ * Gate the unsupported split runtime behind an explicit opt-in.
+ * --split demotes to --all so existing shortcuts keep working, while an explicit
+ * --api / --worker / --runtime-role=api|worker fails loudly instead of being rewritten.
+ */
+function assertSplitRuntimeOptIn() {
+  if (isSplitRuntimeOptIn()) {
+    return;
+  }
+
+  if (isSplitRuntime) {
+    console.warn('⚠️  Split runtime is unsupported (see docs/Work_Plan/wave2/04-split-mode-consistency.md).');
+    console.warn(`    Falling back to single-process --all. Set ${SPLIT_OPT_IN_ENV}=true to force it.`);
+    isSplitRuntime = false;
+    runtimeRole = 'all';
+    return;
+  }
+
+  if (runtimeRole === 'api' || runtimeRole === 'worker') {
+    console.error(`❌ Runtime role "${runtimeRole}" is unsupported without ${SPLIT_OPT_IN_ENV}=true.`);
+    console.error('   Known-broken: graph execution cancel, settings propagation, temp cleanup, tagger daemon duplication.');
+    process.exit(1);
+  }
+}
 
 const SOURCE_TARGETS = [
   path.join(ROOT_DIR, 'package.json'),
@@ -222,6 +255,8 @@ function startRuntimeChild(label, role, extraEnv = {}) {
       ...process.env,
       NODE_ENV: 'production',
       CONAI_RUNTIME_ROLE: role,
+      // 자식도 격하 게이트를 통과해야 하므로 opt-in 을 그대로 전달한다.
+      [SPLIT_OPT_IN_ENV]: 'true',
       ...extraEnv,
     },
   });
@@ -299,6 +334,8 @@ function main() {
     process.exit(1);
   }
 
+  assertSplitRuntimeOptIn();
+
   const status = isBuildStale();
 
   console.log('');
@@ -354,6 +391,11 @@ function main() {
   const runtimeEnv = {};
   if (runtimeRole) {
     runtimeEnv.CONAI_RUNTIME_ROLE = runtimeRole;
+  }
+
+  if (runtimeRole === 'api' || runtimeRole === 'worker') {
+    // 여기까지 왔다면 opt-in 이 있다는 뜻이므로 자식에게도 그대로 넘긴다.
+    runtimeEnv[SPLIT_OPT_IN_ENV] = 'true';
   }
 
   if (runtimeRole === 'worker' && process.env.CONAI_WORKER_HTTP === undefined) {

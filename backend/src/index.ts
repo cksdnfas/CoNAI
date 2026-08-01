@@ -65,6 +65,7 @@ import { startRuntimeSideEffectServices } from './startup/startRuntimeSideEffect
 import {
   resolveRuntimeSideEffectRole,
   shouldSkipHttpServerForRuntimeRole,
+  wasSplitRuntimeRoleDemoted,
 } from './startup/runtimeRole';
 import { logger } from './utils/logger';
 
@@ -89,7 +90,10 @@ const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
 const isDevelopment = isDevelopmentEnvironment;
 const isSafeSmokeMode = process.env.SAFE_SMOKE_MODE === 'true';
 const runtimeRole = resolveRuntimeSideEffectRole();
+const splitRuntimeRoleDemoted = wasSplitRuntimeRoleDemoted();
 const shouldStartHttpServer = !shouldSkipHttpServerForRuntimeRole(runtimeRole);
+// split 런타임은 프로세스 간 상태를 공유하지 못한다. temp/canvas 정리는 워커 역할 프로세스만 담당한다.
+const shouldOwnTempFileLifecycle = runtimeRole !== 'api';
 // 종료 시 진행 중인 요청을 기다려 주는 상한. 이 시간이 지나면 남은 소켓을 끊고 정리 단계로 넘어간다.
 const SHUTDOWN_DRAIN_TIMEOUT_MS = 3000;
 
@@ -270,6 +274,9 @@ async function startServer() {
   try {
     console.log('🚀 CoNAI starting...\n');
     console.log(`🧩 Runtime role: ${runtimeRole}${shouldStartHttpServer ? '' : ' (HTTP disabled)'}`);
+    if (splitRuntimeRoleDemoted) {
+      console.warn('⚠️  Split runtime role demoted to "all": set CONAI_ALLOW_SPLIT_RUNTIME=true to force the unsupported split runtime');
+    }
     const shouldRunWorkerStartupTasks = !isSafeSmokeMode && runtimeRole !== 'api';
 
     // 0. Initialize i18n (language settings)
@@ -349,8 +356,14 @@ async function startServer() {
     QueryCacheService.initialize();
 
     // 6-1. 임시 이미지 서비스 초기화
-    const { TempImageService } = await import('./services/tempImageService');
-    await TempImageService.initialize();
+    // temp/canvas 를 소유하지 않는 API 역할 프로세스가 startup cleanup 을 돌리면
+    // 먼저 떠 있던 프로세스의 편집 중 파일까지 지워진다. 단일 프로세스에서는 항상 실행된다.
+    if (shouldOwnTempFileLifecycle) {
+      const { TempImageService } = await import('./services/tempImageService');
+      await TempImageService.initialize();
+    } else {
+      console.log('🧩 Temp image startup cleanup skipped in API runtime');
+    }
 
     // 6-2. ComfyUI model preview negative cache cleanup
     if (shouldRunWorkerStartupTasks) {
@@ -652,18 +665,21 @@ ${tips.join('\n')}
       }
 
       // Cleanup all temp files on shutdown
-      try {
-        const { TempImageService } = await import('./services/tempImageService');
-        const { settingsService } = await import('./services/settingsService');
+      // API 역할 프로세스는 공유 temp/canvas 디렉터리의 소유자가 아니므로 정리하지 않는다.
+      if (shouldOwnTempFileLifecycle) {
+        try {
+          const { TempImageService } = await import('./services/tempImageService');
+          const { settingsService } = await import('./services/settingsService');
 
-        // Check user setting for canvas cleanup
-        const settings = settingsService.loadSettings();
-        const shouldCleanupCanvas = settings.general.autoCleanupCanvasOnShutdown ?? false;
+          // Check user setting for canvas cleanup
+          const settings = settingsService.loadSettings();
+          const shouldCleanupCanvas = settings.general.autoCleanupCanvasOnShutdown ?? false;
 
-        await TempImageService.cleanupAll(!shouldCleanupCanvas);  // skipCanvas = !shouldCleanup
-        console.log('✅ All temp files cleaned up');
-      } catch (error) {
-        console.warn('⚠️  Error cleaning up temp files:', error);
+          await TempImageService.cleanupAll(!shouldCleanupCanvas);  // skipCanvas = !shouldCleanup
+          console.log('✅ All temp files cleaned up');
+        } catch (error) {
+          console.warn('⚠️  Error cleaning up temp files:', error);
+        }
       }
 
       if (!isSafeSmokeMode) {

@@ -428,6 +428,11 @@ export class GraphWorkflowExecutionQueue {
 
   /** Start queued executions while manual and reservation policies allow it. */
   private static processQueue() {
+    if (!this.initialized) {
+      // start() 하지 않은 프로세스는 잡을 claim 하지 않는다. 실행은 큐를 소유한 프로세스에서만 일어난다.
+      return
+    }
+
     this.clearProcessRetry()
 
     let startedAny = false

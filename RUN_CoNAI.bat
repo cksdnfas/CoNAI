@@ -38,8 +38,8 @@ if not "%EXIT_CODE%"=="0" (
 )
 
 echo.
-echo [3/3] Starting API + worker under one supervisor...
-node "%~dp0scripts\run-built-if-needed.js" --split
+echo [3/3] Starting single-process runtime...
+node "%~dp0scripts\run-built-if-needed.js" --all
 set EXIT_CODE=%ERRORLEVEL%
 
 if not "%EXIT_CODE%"=="0" (

@@ -3,10 +3,15 @@ chcp 65001 > nul
 title CoNAI API Only Runtime
 cd /d "%~dp0..\.."
 
-echo Manual API-only launcher.
-echo Normal startup: RUN_CoNAI.bat
-echo Use this only when intentionally separating API and worker.
+echo [UNSUPPORTED] Split runtime has known state-consistency defects:
+echo   - Graph workflow cancel marks a still-running execution as failed
+echo   - Settings changes never reach the worker process
+echo   - Temp/canvas files are never expired, and tagger daemons load twice
 echo.
+echo Normal startup: RUN_CoNAI.bat (single-process runtime)
+echo.
+
+set CONAI_ALLOW_SPLIT_RUNTIME=true
 
 node scripts\run-built-if-needed.js --api %*
 set EXIT_CODE=%ERRORLEVEL%
