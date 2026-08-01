@@ -25,7 +25,8 @@ import {
   validateWatchedFolderPath,
 } from '@/lib/api-folders'
 import { runFileVerification } from '@/lib/api-settings'
-import type { BackupSourceUpdateInput, WatchedFolderUpdateInput } from '@/types/folder'
+import { useRuntimeJobAction } from '@/lib/use-runtime-job'
+import type { BackupSourceUpdateInput, ScanAllSummary, WatchedFolderUpdateInput } from '@/types/folder'
 import { createNewBackupSourceDraft, createNewWatchedFolderDraft, normalizeBackupTargetPath, parseCommaSeparatedInput } from './settings-utils'
 import { useI18n } from '@/i18n'
 
@@ -158,14 +159,31 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
     },
   })
 
-  const handleScanAllFolders = async () => {
-    try {
-      const summary = await scanAllWatchedFolders()
-      notifyInfo(t({ ko: '전체 스캔 완료: 폴더 {folders}개, 신규 {newCount}개, 기존 {existing}개', en: 'Full scan complete: {folders} folders, {newCount} new, {existing} existing' }, { folders: formatNumber(summary.totalFolders), newCount: formatNumber(summary.totalNew), existing: formatNumber(summary.totalExisting) }))
-      await refreshFolderQueries()
-    } catch (error) {
+  /**
+   * 전체 스캔은 이제 잡이다.
+   * 시작 응답은 202 + 잡 레코드이고, 완료 요약 토스트는 잡이 종료될 때 그대로 뜬다.
+   */
+  const scanAllJob = useRuntimeJobAction<ScanAllSummary>(scanAllWatchedFolders, {
+    onCompleted: (job) => {
+      const summary = job.result
+      notifyInfo(t({ ko: '전체 스캔 완료: 폴더 {folders}개, 신규 {newCount}개, 기존 {existing}개', en: 'Full scan complete: {folders} folders, {newCount} new, {existing} existing' }, { folders: formatNumber(summary?.totalFolders ?? 0), newCount: formatNumber(summary?.totalNew ?? 0), existing: formatNumber(summary?.totalExisting ?? 0) }))
+      void refreshFolderQueries()
+    },
+    onCancelled: (job) => {
+      notifyInfo(t({ ko: '전체 스캔을 {processed}개 폴더 처리 후 중단했어.', en: 'Full scan stopped after {processed} folders.' }, { processed: formatNumber(job.progress.processed) }))
+      void refreshFolderQueries()
+    },
+    onFailed: (job) => {
+      notifyError(job.failureMessage ?? t({ ko: '전체 스캔에 실패했어.', en: 'Full scan failed.' }))
+      void refreshFolderQueries()
+    },
+    onStartError: (error) => {
       notifyError(error instanceof Error ? error.message : t({ ko: '전체 스캔에 실패했어.', en: 'Full scan failed.' }))
-    }
+    },
+  })
+
+  const handleScanAllFolders = async () => {
+    await scanAllJob.run()
   }
 
   const handleWatcherAction = async (folderId: number, action: 'start' | 'stop' | 'restart') => {
@@ -271,6 +289,10 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
       onVerifyAllFiles: () => void verifyAllFilesMutation.mutateAsync(),
       isVerifyingAllFiles: verifyAllFilesMutation.isPending,
       onScanAll: () => void handleScanAllFolders(),
+      scanAllJob: scanAllJob.job,
+      isScanningAll: scanAllJob.isStarting || scanAllJob.isRunning,
+      onCancelScanAll: () => void scanAllJob.cancel(),
+      isCancellingScanAll: scanAllJob.isCancelling,
       folders: foldersQuery.data ?? [],
       foldersLoading: foldersQuery.isLoading,
       foldersError:

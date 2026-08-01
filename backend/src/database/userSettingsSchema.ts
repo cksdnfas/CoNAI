@@ -378,6 +378,41 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // 19. Generic long-running runtime jobs (thumbnail regenerate / group rematch / folder scan ...)
+  // 진행률·취소·재시작 복구의 정본. images.db 는 스캔이 두들기는 hot DB 라 하트비트 쓰기를 얹지 않는다.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_jobs (
+      job_id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'queued',
+      phase TEXT,
+      params TEXT NOT NULL DEFAULT '{}',
+      total INTEGER NOT NULL DEFAULT 0,
+      processed INTEGER NOT NULL DEFAULT 0,
+      succeeded INTEGER NOT NULL DEFAULT 0,
+      failed INTEGER NOT NULL DEFAULT 0,
+      skipped INTEGER NOT NULL DEFAULT 0,
+      current_label TEXT,
+      message TEXT,
+      result TEXT,
+      errors TEXT NOT NULL DEFAULT '[]',
+      warnings TEXT NOT NULL DEFAULT '[]',
+      failure_code TEXT,
+      failure_message TEXT,
+      cancel_requested INTEGER NOT NULL DEFAULT 0,
+      singleton_key TEXT,
+      owner_role TEXT,
+      owner_pid INTEGER,
+      requested_by_account_id INTEGER,
+      heartbeat_at DATETIME,
+      queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      started_at DATETIME,
+      completed_at DATETIME,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // ===== MIGRATION: Add missing columns BEFORE creating indexes =====
   // Helper function to check if column exists
   const hasColumn = (tableName: string, columnName: string): boolean => {
@@ -846,6 +881,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_workflow_id ON generation_queue_jobs(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_cancel_requested ON generation_queue_jobs(cancel_requested)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_orphan_reconcile ON generation_queue_jobs(provider_submit_state, status)',
+    'CREATE INDEX IF NOT EXISTS idx_runtime_jobs_status_created ON runtime_jobs(status, created_date DESC, job_id DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_runtime_jobs_kind_status ON runtime_jobs(kind, status, created_date DESC)',
+    // 부분 유니크 인덱스가 "실행 중인지 먼저 확인하고 시작" 의 TOCTOU 창을 DB 제약으로 대체한다.
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_runtime_jobs_singleton_live ON runtime_jobs(singleton_key) WHERE singleton_key IS NOT NULL AND status IN ('queued', 'running')",
+    'CREATE INDEX IF NOT EXISTS idx_runtime_jobs_cleanup ON runtime_jobs(status, completed_at)',
+    'CREATE INDEX IF NOT EXISTS idx_runtime_jobs_heartbeat ON runtime_jobs(status, heartbeat_at)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_id ON graph_execution_artifacts(execution_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_created ON graph_execution_artifacts(execution_id, created_date DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_created_id ON graph_execution_artifacts(created_date DESC, id DESC)',
@@ -873,6 +914,6 @@ export function createUserSettingsSchema(db: Database.Database): void {
     VALUES (?, ?, ?)
   `).run('civitai', 'Civitai', 1);
 
-  console.log('  ✅ User settings tables created (18 tables + indexes)');
+  console.log('  ✅ User settings tables created (19 tables + indexes)');
 
 }

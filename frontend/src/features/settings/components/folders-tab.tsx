@@ -3,7 +3,7 @@ import { Plus, RefreshCcw, ScanSearch, ShieldCheck } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
+import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, ScanAllSummary, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
 import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
 import { SettingsSection, SettingsValueTile } from './settings-primitives'
 import { SettingsResourceTable } from './settings-resource-shared'
@@ -14,6 +14,8 @@ import { BackupSourceCard } from './backup-source-card'
 import { BackupSourceListItem } from './backup-source-list-item'
 import { BackupSourceCreateForm } from './backup-source-create-form'
 import { SettingsModal } from './settings-modal'
+import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
+import type { RuntimeJobRecord } from '@/types/runtime-job'
 import { useI18n } from '@/i18n'
 
 const WATCHED_FOLDER_TABLE_GRID = 'grid-cols-[minmax(180px,1.05fr)_minmax(420px,2.4fr)_72px_72px_56px] gap-3'
@@ -39,6 +41,11 @@ interface FoldersTabProps {
   onVerifyAllFiles: () => void
   isVerifyingAllFiles: boolean
   onScanAll: () => void
+  /** 진행 중인 전체 스캔 잡. 없으면 진행률 블록을 렌더하지 않는다. */
+  scanAllJob: RuntimeJobRecord<ScanAllSummary> | undefined
+  isScanningAll: boolean
+  onCancelScanAll: () => void
+  isCancellingScanAll: boolean
   folders: WatchedFolder[]
   foldersLoading: boolean
   foldersError: string | null
@@ -81,6 +88,10 @@ export function FoldersTab({
   onVerifyAllFiles,
   isVerifyingAllFiles,
   onScanAll,
+  scanAllJob,
+  isScanningAll,
+  onCancelScanAll,
+  isCancellingScanAll,
   folders,
   foldersLoading,
   foldersError,
@@ -168,7 +179,13 @@ export function FoldersTab({
               >
                 <ShieldCheck className="h-4 w-4" />
               </Button>
-              <Button size="icon-sm" onClick={onScanAll} aria-label={t({ ko: '전체 스캔', en: 'Full scan' })} title={t({ ko: '전체 스캔', en: 'Full scan' })}>
+              <Button
+                size="icon-sm"
+                onClick={onScanAll}
+                disabled={isScanningAll}
+                aria-label={t({ ko: '전체 스캔', en: 'Full scan' })}
+                title={t({ ko: '전체 스캔', en: 'Full scan' })}
+              >
                 <ScanSearch className="h-4 w-4" />
               </Button>
             </>
@@ -182,6 +199,14 @@ export function FoldersTab({
             <SettingsValueTile label={t({ ko: '24시간 이벤트', en: 'Events 24h' })} value={formatNumber(watchersHealth?.totalEvents24h ?? 0)} valueClassName="text-xl" />
             <SettingsValueTile label={t({ ko: '최근 스캔 로그', en: 'Latest scan log' })} value={scanLogs[0]?.folder_name ?? '—'} />
           </div>
+
+          {/* 전체 스캔은 60초를 훌쩍 넘기므로, 응답을 기다리는 대신 잡 진행률을 그대로 보여준다. */}
+          <RuntimeJobProgress
+            job={scanAllJob}
+            cancel={onCancelScanAll}
+            isCancelling={isCancellingScanAll}
+            className="mt-4"
+          />
         </SettingsSection>
 
         <section className="space-y-4">

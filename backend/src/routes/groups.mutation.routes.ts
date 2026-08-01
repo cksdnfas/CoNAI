@@ -25,6 +25,11 @@ function parseRequiredRouteParam(value: string | string[] | undefined) {
   return routeParam(value);
 }
 
+/** Read the session account id so started jobs carry an owner for `/api/jobs` access control. */
+function resolveJobRequesterAccountId(req: Request): number | null {
+  return typeof req.session?.accountId === 'number' ? req.session.accountId : null;
+}
+
 function validateAutoCollectConditions(conditions: AutoCollectCondition[] | ComplexFilter): { valid: boolean; errors: string[] } {
   const isComplexFilter = conditions && typeof conditions === 'object' && !Array.isArray(conditions);
 
@@ -101,7 +106,10 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
     if (auto_collect_enabled && auto_collect_conditions) {
       try {
-        GroupRematchJobService.startJobProcess('group-auto-collect', { groupId });
+        GroupRematchJobService.startJobProcess('group-auto-collect', {
+          groupId,
+          requestedByAccountId: resolveJobRequesterAccountId(req),
+        });
       } catch (autoCollectError) {
         console.warn('Auto collection job failed to start for new group:', autoCollectError);
       }
@@ -157,7 +165,10 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
     if (auto_collect_enabled && auto_collect_conditions) {
       try {
-        GroupRematchJobService.startJobProcess('group-auto-collect', { groupId: id });
+        GroupRematchJobService.startJobProcess('group-auto-collect', {
+          groupId: id,
+          requestedByAccountId: resolveJobRequesterAccountId(req),
+        });
       } catch (autoCollectError) {
         console.warn('Auto collection job failed to start after group update:', autoCollectError);
       }
@@ -371,7 +382,10 @@ router.get('/auto-collect-jobs/:jobId', asyncHandler(async (req: Request, res: R
 router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = parseRouteId(req.params.id);
-    const job = GroupRematchJobService.startJobProcess('group-auto-collect', { groupId: id });
+    const job = GroupRematchJobService.startJobProcess('group-auto-collect', {
+      groupId: id,
+      requestedByAccountId: resolveJobRequesterAccountId(req),
+    });
     return res.status(202).json(successResponse(job));
   } catch (error) {
     console.error('Error running auto collection:', error);
@@ -383,7 +397,9 @@ router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response
 
 router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const job = GroupRematchJobService.startJobProcess('all-auto-collect');
+    const job = GroupRematchJobService.startJobProcess('all-auto-collect', {
+      requestedByAccountId: resolveJobRequesterAccountId(req),
+    });
     return res.status(202).json(successResponse(job));
   } catch (error) {
     console.error('Error running auto collection for all groups:', error);

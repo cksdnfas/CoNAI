@@ -11,6 +11,7 @@ export type RuntimeEventTopic =
   | 'generation-history'
   | 'graph-schedule'
   | 'graph-execution'
+  | 'runtime-job'
 
 export type RuntimeEventName =
   | 'queue.job.created'
@@ -20,12 +21,14 @@ export type RuntimeEventName =
   | 'history.record.status'
   | 'graph.schedule.changed'
   | 'graph.execution.status'
+  | 'job.status'
 
 export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'generation-queue',
   'generation-history',
   'graph-schedule',
   'graph-execution',
+  'runtime-job',
 ]
 
 /** 모든 토픽이 요구하는 권한 키. 토픽별로 갈라질 때까지는 하나로 유지한다. */
@@ -103,6 +106,19 @@ export interface GraphExecutionEventPayload {
   status: string
   trigger_type: string
   schedule_id: number | null
+}
+
+/**
+ * 장기 실행 잡의 **무효화 힌트**. 진행률 수치는 절대 싣지 않는다.
+ *
+ * 정본은 `runtime_jobs` 테이블이고 조회 경로는 `GET /api/jobs/:jobId` 폴링이다.
+ * 이 이벤트는 "지금 다시 읽어라" 는 신호일 뿐이라, 유실되어도 폴링이 스스로 회복한다.
+ */
+export interface RuntimeJobHintPayload {
+  job_id: string
+  kind: string
+  status: string
+  updated_at: string
 }
 
 /** 제어 이벤트: 데이터 이벤트와 달리 연결별로만 발행되고 재생 버퍼에 남지 않는다. */

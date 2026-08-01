@@ -200,7 +200,9 @@ router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) =
  */
 router.post('/rebuild', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const job = GroupRematchJobService.startJobProcess('auto-folder-rebuild');
+    const job = GroupRematchJobService.startJobProcess('auto-folder-rebuild', {
+      requestedByAccountId: typeof req.session?.accountId === 'number' ? req.session.accountId : null,
+    });
     return res.status(202).json(successResponse(job));
   } catch (error) {
     console.error('Error rebuilding groups:', error);

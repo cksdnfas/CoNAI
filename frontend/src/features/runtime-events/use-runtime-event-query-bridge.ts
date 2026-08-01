@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
-import type { QueueJobEventPayload, RuntimeEventEnvelope } from '@/lib/runtime-events-types'
+import type { QueueJobEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
+import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
 
 /**
  * 런타임 이벤트 → react-query 캐시 반영 브리지.
@@ -142,6 +143,15 @@ export function useRuntimeEventQueryBridge() {
         scheduleInvalidate([GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX], GRAPH_INVALIDATE_DEBOUNCE_MS)
         return
       }
+      case 'job.status': {
+        // 힌트에는 진행률 수치가 없다(정본은 `GET /api/jobs/:jobId`). 해당 잡 쿼리만 무효화한다.
+        const payload = envelope.payload as RuntimeJobHintPayload
+        void queryClient.invalidateQueries({
+          queryKey: [RUNTIME_JOB_QUERY_KEY, payload.job_id],
+          refetchType: 'active',
+        })
+        return
+      }
       default:
         return
     }
@@ -154,6 +164,7 @@ export function useRuntimeEventQueryBridge() {
       HISTORY_QUERY_KEY_PREFIX,
       GRAPH_SCHEDULE_QUERY_KEY_PREFIX,
       GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX,
+      RUNTIME_JOB_QUERY_KEY,
     ].forEach((prefix) => {
       void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active' })
     })

@@ -77,6 +77,7 @@
     "verify:group-descendant-image-contracts": "tsx src/scripts/verifyGroupDescendantImageContracts.ts",
     "verify:group-wal-hot-path-contracts": "tsx src/scripts/verifyGroupWalHotPathContracts.ts",
     "verify:group-rematch-job-contracts": "tsx src/scripts/verifyGroupRematchJobContracts.ts",
+    "verify:runtime-job-contracts": "tsx src/scripts/verifyRuntimeJobContracts.ts",
     "verify:supported-extension-contracts": "tsx src/scripts/verifySupportedExtensionContracts.ts",
     "verify:recycle-bin-deletion-contracts": "tsx src/scripts/verifyRecycleBinDeletionContracts.ts",
     "verify:deletion-lock-contracts": "tsx src/scripts/verifyDeletionLockContracts.ts",

@@ -28,6 +28,7 @@ import imageEditorRoutes from '../routes/image-editor.routes';
 import { authRoutes } from '../routes/auth.routes';
 import fileVerificationRoutes from '../routes/fileVerification';
 import { thumbnailRoutes } from '../routes/thumbnails';
+import { runtimeJobRoutes } from '../routes/runtime-jobs.routes';
 import externalApiRoutes from '../routes/externalApi.routes';
 import civitaiRoutes from '../routes/civitai.routes';
 import searchHistoryRoutes from '../routes/search-history.routes';
@@ -244,6 +245,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/image-editor', options.uploadLimiter, optionalAuth, imageEditorRoutes);
   app.use('/api/file-verification', optionalAuth, fileVerificationRoutes);
   app.use('/api/thumbnails', optionalAuth, thumbnailRoutes);
+  // 장기 실행 잡의 진행률/취소 공용 라우트. 잡을 시작하는 라우트는 각자의 기존 권한을 유지한다.
+  app.use('/api/jobs', optionalAuth, runtimeJobRoutes);
 
   app.use('/', mcpRoutes);
 

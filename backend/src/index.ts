@@ -346,6 +346,11 @@ async function startServer() {
       RuntimeEventBroadcaster.start();
     }
 
+    // 4-4. Runtime job runner (long-running operations: 202 + jobId + progress + cancel)
+    // 역할과 무관하게 1회 실행한다. 복구가 단일 트랜잭션이라 두 프로세스가 동시에 돌아도 안전하다.
+    const { bootstrapRuntimeJobs } = await import('./services/runtimeJobs');
+    bootstrapRuntimeJobs();
+
     // 5. Bind API generation history to the unified user DB
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
 
@@ -722,6 +727,18 @@ ${tips.join('\n')}
         JobTracker.shutdown();
       } catch (error) {
         console.warn('⚠️  Error stopping job tracker:', error);
+      }
+
+      // Mark in-flight runtime jobs as interrupted while user.db is still open.
+      // 이걸 건너뛰면 다음 기동의 복구 루틴이 돌 때까지 잡이 running 으로 남아 클라이언트가 계속 폴링한다.
+      try {
+        const { RuntimeJobRunner } = await import('./services/runtimeJobs/runtimeJobRunner');
+        const interruptedJobCount = RuntimeJobRunner.shutdown();
+        if (interruptedJobCount > 0) {
+          console.log(`✅ Runtime jobs marked as interrupted (${interruptedJobCount})`);
+        }
+      } catch (error) {
+        console.warn('⚠️  Error closing runtime jobs:', error);
       }
 
       // Close database connections last so drained requests never hit closed handles

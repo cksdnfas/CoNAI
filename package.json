@@ -149,6 +149,8 @@
     "verify:group-wal-hot-path-contracts": "cd backend && npm run verify:group-wal-hot-path-contracts",
     "verify:group-rematch-job-contracts": "cd backend && npm run verify:group-rematch-job-contracts",
     "verify:group-rematch-polling-contracts": "cd frontend && npm run verify:group-rematch-polling-contracts",
+    "verify:runtime-job-contracts": "cd backend && npm run verify:runtime-job-contracts",
+    "verify:runtime-job-ui-contracts": "cd frontend && npm run verify:runtime-job-ui-contracts",
     "verify:supported-extension-contracts": "cd backend && npm run verify:supported-extension-contracts",
     "verify:recycle-bin-deletion-contracts": "cd backend && npm run verify:recycle-bin-deletion-contracts",
     "verify:deletion-lock-contracts": "cd backend && npm run verify:deletion-lock-contracts",

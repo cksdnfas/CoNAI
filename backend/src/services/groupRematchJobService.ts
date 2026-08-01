@@ -1,8 +1,14 @@
-import fs from 'fs';
-import path from 'path';
-import { randomUUID } from 'crypto';
-import { spawn } from 'child_process';
-import { runtimePaths } from '../config/runtimePaths';
+import { RuntimeJobRunner } from './runtimeJobs/runtimeJobRunner';
+import { RuntimeJobConflictError, RuntimeJobStore } from './runtimeJobs/runtimeJobStore';
+import type { RuntimeJobRecord } from '../types/runtimeJob';
+
+/**
+ * 그룹 재매칭 잡 어댑터.
+ *
+ * 실행/상태 저장은 전부 `RuntimeJobRunner` + `runtime_jobs` 로 넘어갔고, 이 클래스에는
+ * **레거시 응답 형태로 되돌리는 변환만** 남는다. `GET /api/groups/auto-collect-jobs/:jobId`
+ * 와 프론트의 `GroupRematchJobRecord` 를 한 릴리스 동안 그대로 유지하기 위한 얇은 층이다.
+ */
 
 export type GroupRematchJobKind = 'group-auto-collect' | 'all-auto-collect' | 'auto-folder-rebuild';
 export type GroupRematchJobStatus = 'queued' | 'running' | 'completed' | 'failed';
@@ -29,204 +35,98 @@ export interface GroupRematchJobRecord {
   completed_at?: string | null;
 }
 
-const JOB_DIR = path.join(runtimePaths.tempDir, 'group-rematch-jobs');
-const JOB_TTL_MS = 24 * 60 * 60 * 1000;
-
-function ensureJobDir(): void {
-  if (!fs.existsSync(JOB_DIR)) {
-    fs.mkdirSync(JOB_DIR, { recursive: true });
+/**
+ * 레거시 상태 매핑.
+ * `cancelled` 는 예전 계약에 없던 상태이므로 `failed` 로 접는다 — 레거시 폴링 루프
+ * (`waitForGroupRematchJob`)가 종료를 인지할 수 있어야 무한 대기가 생기지 않는다.
+ */
+function toLegacyStatus(status: RuntimeJobRecord['status']): GroupRematchJobStatus {
+  if (status === 'completed') {
+    return 'completed';
   }
-}
-
-function resolveJobPath(jobId: string): string {
-  if (!/^[a-f0-9-]{36}$/i.test(jobId)) {
-    throw new Error('Invalid group rematch job id');
+  if (status === 'failed' || status === 'cancelled') {
+    return 'failed';
   }
-  return path.join(JOB_DIR, `${jobId}.json`);
+  return status;
 }
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function normalizeProgress(progress: Partial<GroupRematchJobProgress> | undefined): GroupRematchJobProgress {
-  const total = Math.max(0, Math.floor(progress?.total ?? 0));
-  const completed = Math.max(0, Math.floor(progress?.completed ?? 0));
-  const failed = Math.max(0, Math.floor(progress?.failed ?? 0));
-  const denominator = total > 0 ? total : Math.max(1, completed + failed);
-  const percentage = total > 0
-    ? Math.min(100, Math.round(((completed + failed) / denominator) * 100))
-    : 0;
-
+function toLegacyProgress(job: RuntimeJobRecord): GroupRematchJobProgress {
   return {
-    total,
-    completed,
-    failed,
-    percentage,
-    current_label: progress?.current_label ?? null,
+    total: job.progress.total,
+    completed: job.progress.succeeded,
+    failed: job.progress.failed,
+    percentage: job.progress.percentage,
+    current_label: job.progress.currentLabel,
+  };
+}
+
+/** Convert one runtime job record into the legacy group rematch payload. */
+export function toGroupRematchJobRecord(job: RuntimeJobRecord, groupId?: number | null): GroupRematchJobRecord {
+  return {
+    job_id: job.jobId,
+    kind: job.kind as GroupRematchJobKind,
+    status: toLegacyStatus(job.status),
+    progress: toLegacyProgress(job),
+    group_id: groupId ?? null,
+    result: job.result ?? undefined,
+    error: job.failureMessage,
+    created_at: job.queuedAt,
+    updated_at: job.updatedAt,
+    started_at: job.startedAt,
+    completed_at: job.completedAt,
   };
 }
 
 export class GroupRematchJobService {
-  static createJob(kind: GroupRematchJobKind, input: { groupId?: number | null; total?: number } = {}): GroupRematchJobRecord {
-    ensureJobDir();
-    this.cleanupExpiredJobs();
+  /**
+   * Start (or join) one group rematch job.
+   *
+   * 같은 대상의 잡이 이미 살아 있으면 **새 잡을 만들지 않고 그 잡을 돌려준다.**
+   * 레거시 호출부는 응답의 job_id 를 완료까지 await 하므로, 409 를 던지는 대신 붙여 주는 쪽이
+   * 기존 동작(눌린 만큼 다 실행됨)에 더 가깝고 사용자에게도 정확하다.
+   */
+  static startJobProcess(
+    kind: GroupRematchJobKind,
+    input: { groupId?: number | null; requestedByAccountId?: number | null } = {},
+  ): GroupRematchJobRecord {
+    const groupId = input.groupId ?? null;
+    const params = kind === 'group-auto-collect' ? { groupId } : {};
 
-    const timestamp = nowIso();
-    const job: GroupRematchJobRecord = {
-      job_id: randomUUID(),
-      kind,
-      status: 'queued',
-      progress: normalizeProgress({ total: input.total ?? 0 }),
-      group_id: input.groupId ?? null,
-      error: null,
-      created_at: timestamp,
-      updated_at: timestamp,
-      started_at: null,
-      completed_at: null,
-    };
-
-    this.writeJob(job);
-    return job;
+    try {
+      const job = RuntimeJobRunner.start(kind, params, {
+        requestedByAccountId: input.requestedByAccountId ?? null,
+      });
+      return toGroupRematchJobRecord(job, groupId);
+    } catch (error) {
+      if (error instanceof RuntimeJobConflictError && error.liveJob) {
+        return toGroupRematchJobRecord(error.liveJob, groupId);
+      }
+      throw error;
+    }
   }
 
+  /** Read one job in the legacy shape. `/auto-collect-jobs/:jobId` alias 가 쓴다. */
   static readJob(jobId: string): GroupRematchJobRecord | null {
-    const jobPath = resolveJobPath(jobId);
-    if (!fs.existsSync(jobPath)) {
+    const job = RuntimeJobStore.get(jobId);
+    if (!job) {
       return null;
     }
 
-    const parsed = JSON.parse(fs.readFileSync(jobPath, 'utf8')) as GroupRematchJobRecord;
-    parsed.progress = normalizeProgress(parsed.progress);
-    return parsed;
+    return toGroupRematchJobRecord(job, resolveGroupIdFromParams(jobId));
+  }
+}
+
+/** Recover the group id a job was started with, so the legacy record keeps its `group_id`. */
+function resolveGroupIdFromParams(jobId: string): number | null {
+  const raw = RuntimeJobStore.getParamsJson(jobId);
+  if (!raw) {
+    return null;
   }
 
-  static writeJob(job: GroupRematchJobRecord): void {
-    ensureJobDir();
-    const nextJob = {
-      ...job,
-      progress: normalizeProgress(job.progress),
-      updated_at: nowIso(),
-    };
-    fs.writeFileSync(resolveJobPath(nextJob.job_id), JSON.stringify(nextJob, null, 2));
-  }
-
-  static updateJob(jobId: string, updater: (job: GroupRematchJobRecord) => GroupRematchJobRecord): GroupRematchJobRecord {
-    const current = this.readJob(jobId);
-    if (!current) {
-      throw new Error(`Group rematch job not found: ${jobId}`);
-    }
-    const next = updater(current);
-    this.writeJob(next);
-    return next;
-  }
-
-  static startJobProcess(kind: GroupRematchJobKind, input: { groupId?: number | null } = {}): GroupRematchJobRecord {
-    const job = this.createJob(kind, { groupId: input.groupId ?? null });
-    const runner = this.resolveRunnerCommand();
-    const args = [...runner.args, '--job-id', job.job_id, '--kind', kind];
-
-    if (input.groupId !== undefined && input.groupId !== null) {
-      args.push('--group-id', String(input.groupId));
-    }
-
-    const outFd = fs.openSync(path.join(JOB_DIR, `${job.job_id}.out.log`), 'a');
-    const errFd = fs.openSync(path.join(JOB_DIR, `${job.job_id}.err.log`), 'a');
-
-    try {
-      const child = spawn(runner.command, args, {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          CONAI_GROUP_REMATCH_JOB_ID: job.job_id,
-          CONAI_RUNTIME_ROLE: 'group-rematch-job',
-        },
-        windowsHide: true,
-        detached: false,
-        stdio: ['ignore', outFd, errFd],
-      });
-
-      child.unref();
-      fs.closeSync(outFd);
-      fs.closeSync(errFd);
-      child.on('error', (error) => {
-        this.markFailed(job.job_id, error.message);
-      });
-      child.on('exit', (code) => {
-        if (code === 0) {
-          return;
-        }
-        const current = this.readJob(job.job_id);
-        if (current && current.status !== 'completed' && current.status !== 'failed') {
-          this.markFailed(job.job_id, `Group rematch job exited with code ${code ?? 'unknown'}`);
-        }
-      });
-    } catch (error) {
-      fs.closeSync(outFd);
-      fs.closeSync(errFd);
-      this.markFailed(job.job_id, error instanceof Error ? error.message : 'Failed to start group rematch job');
-      throw error;
-    }
-
-    return job;
-  }
-
-  static markRunning(jobId: string, progress?: Partial<GroupRematchJobProgress>): void {
-    this.updateJob(jobId, (job) => ({
-      ...job,
-      status: 'running',
-      started_at: job.started_at ?? nowIso(),
-      progress: normalizeProgress({ ...job.progress, ...progress }),
-    }));
-  }
-
-  static markCompleted(jobId: string, result: unknown, progress?: Partial<GroupRematchJobProgress>): void {
-    this.updateJob(jobId, (job) => ({
-      ...job,
-      status: 'completed',
-      result,
-      completed_at: nowIso(),
-      progress: normalizeProgress({ ...job.progress, ...progress, completed: progress?.completed ?? job.progress.total }),
-    }));
-  }
-
-  static markFailed(jobId: string, error: string, progress?: Partial<GroupRematchJobProgress>): void {
-    this.updateJob(jobId, (job) => ({
-      ...job,
-      status: 'failed',
-      error,
-      completed_at: nowIso(),
-      progress: normalizeProgress({ ...job.progress, ...progress }),
-    }));
-  }
-
-  private static resolveRunnerCommand(): { command: string; args: string[] } {
-    const compiledScript = path.resolve(__dirname, '../scripts/runGroupRematchJob.js');
-    if (fs.existsSync(compiledScript)) {
-      return { command: process.execPath, args: [compiledScript] };
-    }
-
-    const sourceScript = path.resolve(__dirname, '../scripts/runGroupRematchJob.ts');
-    if (fs.existsSync(sourceScript)) {
-      return { command: process.execPath, args: [path.resolve(process.cwd(), 'node_modules/tsx/dist/cli.mjs'), sourceScript] };
-    }
-
-    throw new Error('Group rematch job runner script not found');
-  }
-
-  private static cleanupExpiredJobs(): void {
-    ensureJobDir();
-    const cutoff = Date.now() - JOB_TTL_MS;
-
-    for (const entry of fs.readdirSync(JOB_DIR)) {
-      if (!entry.endsWith('.json')) {
-        continue;
-      }
-      const jobPath = path.join(JOB_DIR, entry);
-      const stat = fs.statSync(jobPath);
-      if (stat.mtimeMs < cutoff) {
-        fs.rmSync(jobPath, { force: true });
-      }
-    }
+  try {
+    const parsed = JSON.parse(raw) as { groupId?: unknown };
+    return typeof parsed.groupId === 'number' ? parsed.groupId : null;
+  } catch {
+    return null;
   }
 }

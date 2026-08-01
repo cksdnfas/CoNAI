@@ -10,6 +10,7 @@ export type RuntimeEventTopic =
   | 'generation-history'
   | 'graph-schedule'
   | 'graph-execution'
+  | 'runtime-job'
 
 export type RuntimeEventName =
   | 'queue.job.created'
@@ -19,12 +20,14 @@ export type RuntimeEventName =
   | 'history.record.status'
   | 'graph.schedule.changed'
   | 'graph.execution.status'
+  | 'job.status'
 
 export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'generation-queue',
   'generation-history',
   'graph-schedule',
   'graph-execution',
+  'runtime-job',
 ]
 
 /** 모든 토픽이 요구하는 권한 키. 서버 가드(`RUNTIME_EVENT_TOPIC_PERMISSION_KEY`)와 같아야 한다. */
@@ -87,6 +90,17 @@ export interface GraphExecutionEventPayload {
   status: string
   trigger_type: string
   schedule_id: number | null
+}
+
+/**
+ * 장기 실행 잡의 **무효화 힌트**. 진행률 수치는 싣지 않는다.
+ * 브리지는 이 이벤트를 받으면 해당 잡 쿼리를 무효화만 하고, 값은 `GET /api/jobs/:jobId` 가 준다.
+ */
+export interface RuntimeJobHintPayload {
+  job_id: string
+  kind: string
+  status: string
+  updated_at: string
 }
 
 /** 제어 이벤트: 데이터 이벤트와 달리 연결별로만 발행된다. */

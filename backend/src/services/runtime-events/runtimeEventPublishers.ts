@@ -5,6 +5,7 @@ import type {
   HistoryRecordEventPayload,
   QueueJobEventPayload,
   QueueJobEventStatus,
+  RuntimeJobHintPayload,
 } from '../../types/runtimeEvents'
 import type { GenerationQueueJobRecord } from '../../types/generationQueue'
 
@@ -115,6 +116,21 @@ export function publishGraphExecutionEvent(payload: GraphExecutionEventPayload):
   publishRuntimeEvent({
     name: 'graph.execution.status',
     topic: 'graph-execution',
+    visibility: 'all',
+    payload,
+  })
+}
+
+/**
+ * Publish one long-running job hint.
+ *
+ * 잡은 라이브러리 전역 상태(스캔/재매칭/삭제)를 바꾸므로 가시성은 `all` 이다.
+ * 힌트를 놓쳐도 `GET /api/jobs/:jobId` 폴링이 정본을 다시 읽으므로 전달 보장은 필요 없다.
+ */
+export function publishRuntimeJobHintEvent(payload: RuntimeJobHintPayload): void {
+  publishRuntimeEvent({
+    name: 'job.status',
+    topic: 'runtime-job',
     visibility: 'all',
     payload,
   })

@@ -12,6 +12,8 @@ import {
 import { WatchedFolderService } from '../services/watchedFolderService';
 import { FolderScanService } from '../services/folderScan';
 import { FileWatcherService } from '../services/fileWatcherService';
+import { RuntimeJobRunner } from '../services/runtimeJobs/runtimeJobRunner';
+import { RuntimeJobConflictError } from '../services/runtimeJobs/runtimeJobStore';
 import { successResponse, errorResponse } from '@conai/shared';
 
 const router = Router();
@@ -121,23 +123,28 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * POST /api/folders/scan-all
- * 모든 활성 폴더 스캔
+ * 모든 활성 폴더 스캔 — 202 + 잡 레코드
+ *
+ * 예전에는 폴더를 순차 스캔하는 동안 소켓을 붙잡고 있었고, `server.setTimeout(60000)` 때문에
+ * 폴더가 몇 개만 되어도 소켓이 먼저 끊겼다. 그러면 클라이언트는 실패로 보는데 서버는 스캔을
+ * 계속하는 불일치가 남았다. 기존 `ScanAllSummary` 는 잡 `result` 에 그대로 담긴다.
  */
 router.post('/scan-all', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const results = await FolderScanService.scanAllFolders();
+    const job = RuntimeJobRunner.start('folder-scan-all', {}, {
+      requestedByAccountId: typeof req.session?.accountId === 'number' ? req.session.accountId : null,
+    });
 
-    const summary = {
-      totalFolders: results.length,
-      totalScanned: results.reduce((sum, r) => sum + r.totalScanned, 0),
-      totalNew: results.reduce((sum, r) => sum + r.newImages, 0),
-      totalExisting: results.reduce((sum, r) => sum + r.existingImages, 0),
-      totalErrors: results.reduce((sum, r) => sum + r.errors.length, 0),
-      results
-    };
-
-    return res.json(successResponse(summary));
+    return res.status(202).json(successResponse(job));
   } catch (error) {
+    if (error instanceof RuntimeJobConflictError) {
+      return res.status(409).json({
+        ...errorResponse('전체 스캔이 이미 실행 중입니다'),
+        code: 'JOB_ALREADY_RUNNING',
+        data: error.liveJob,
+      });
+    }
+
     const message = error instanceof Error ? error.message : '전체 스캔 실패';
     return res.status(500).json(errorResponse(message));
   }

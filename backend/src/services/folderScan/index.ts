@@ -8,6 +8,8 @@ import { ScanResult } from './types';
 import { SystemMaintenanceLockService } from '../systemMaintenanceLockService';
 import { getWatcherRuntimeStatus } from '../fileWatcher/watcherRuntimeStatus';
 import { maybeTruncateImagesWal } from '../../database/walMaintenance';
+// 타입 전용 임포트라 런타임 의존성이 생기지 않는다(잡 핸들러 → 스캔 서비스 방향만 유지).
+import type { RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 const isVerboseAutoScanLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
@@ -169,18 +171,38 @@ export class FolderScanService {
 
   /**
    * 모든 활성 폴더 스캔
+   *
+   * `ctx` 가 주어지면 폴더 경계마다 진행률을 보고하고 취소 요청을 확인한다.
+   * 취소 지점이 **폴더 경계뿐인 이유**: 폴더 스캔 내부는 청크 트랜잭션 구조라
+   * 트랜잭션 도중 빠져나오면 부분 커밋 상태가 꼬인다.
    */
-  static async scanAllFolders(): Promise<ScanResult[]> {
+  static async scanAllFolders(ctx?: RuntimeJobContext): Promise<ScanResult[]> {
     const folders = await WatchedFolderService.listFolders({ active_only: true });
     const results: ScanResult[] = [];
 
+    ctx?.flush({
+      total: folders.length,
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      currentLabel: folders[0]?.folder_name ?? null,
+    });
+
+    let succeeded = 0;
+    let failed = 0;
+
     for (const folder of folders) {
+      ctx?.throwIfCancelled();
+      ctx?.report({ currentLabel: folder.folder_name });
+
       try {
         console.log(`\n🔍 폴더 스캔 시작: ${folder.folder_name} (${folder.folder_path})`);
         const result = await this.scanFolder(folder.id);
         results.push(result);
+        succeeded++;
       } catch (error) {
         console.error(`❌ 폴더 스캔 실패: ${folder.folder_path}`, error);
+        ctx?.recordError(folder.folder_path, error);
         results.push({
           folderId: folder.id,
           totalScanned: 0,
@@ -196,8 +218,19 @@ export class FolderScanService {
           thumbnailsGenerated: 0,
           backgroundTasks: 0
         });
+        failed++;
       }
+
+      ctx?.report({
+        processed: succeeded + failed,
+        succeeded,
+        failed,
+        currentLabel: folder.folder_name,
+      });
+      await ctx?.yield();
     }
+
+    ctx?.flush({ processed: succeeded + failed, succeeded, failed, currentLabel: null });
 
     return results;
   }

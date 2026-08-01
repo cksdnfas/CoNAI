@@ -10,6 +10,7 @@ import type {
   WatchedFolderUpdateInput,
   WatchersHealthSummary,
 } from '@/types/folder'
+import type { RuntimeJobRecord } from '@/types/runtime-job'
 
 type FolderFallbackKey = Parameters<typeof createApiFallbackError>[1]
 
@@ -76,8 +77,14 @@ export async function scanWatchedFolder(folderId: number, full = false) {
   })
 }
 
+/**
+ * Start the scan-all job.
+ *
+ * 202 + 잡 레코드를 돌려준다. 요약(`ScanAllSummary`)은 잡이 끝난 뒤 `result` 로 온다 —
+ * 예전처럼 응답을 기다리면 폴더 몇 개만 되어도 60초 소켓 타임아웃에 걸렸다.
+ */
 export async function scanAllWatchedFolders() {
-  return requestFolderData<ScanAllSummary>('/api/folders/scan-all', 'folders.scanAll.run', {
+  return requestFolderData<RuntimeJobRecord<ScanAllSummary>>('/api/folders/scan-all', 'folders.scanAll.run', {
     method: 'POST',
   })
 }
