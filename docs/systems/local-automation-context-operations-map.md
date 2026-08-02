@@ -16,7 +16,6 @@ This document is the M1-CU1 baseline for the `local-automation-context-operation
 | --- | --- | --- |
 | Settings release readiness | `frontend/src/features/settings/components/release-readiness-tab.tsx` and `release-readiness-history.ts` | Records local review evidence and exports Markdown only; does not call backend action endpoints. |
 | Workflow runtime observability | `frontend/src/features/module-graph/components/workflow-runner-panel.tsx` and `workflow-runtime-observability.ts` | Presents queue/retry/recovery/retention signals; does not restart services or mutate live queues outside user actions. |
-| Media review intelligence | `frontend/src/features/media-review/media-review-page.tsx` and `media-review-utils.ts` | Builds review/quality/similarity/cleanup guidance; destructive cleanup remains approval-owned. |
 | MCP and automation | `backend/src/mcp/*` and `docs/GUIDE/MCP_GUIDE.md` | MCP HTTP remains opt-in and must not be broadened without approval. |
 | Release/runbook evidence | `docs/systems/26.6.9-*.md` and release readiness exports | Push, deploy, restart, live smoke, package version bump, tags, and public release actions remain user decisions. |
 

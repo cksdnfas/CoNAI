@@ -37,7 +37,6 @@ This document records the final local evidence packet for the `local-automation-
 | Context map | `docs/systems/local-automation-context-operations-map.md`, `docs/systems/index.md` | Roadmap surfaces and boundaries are discoverable from the system index. |
 | Handoff/export contracts | `frontend/src/features/settings/release-readiness-history.ts`, `frontend/src/scripts/verifyReleaseReadinessHistoryContracts.ts`, `frontend/src/scripts/verifyReleaseReadinessWorkspaceContracts.ts` | Local readiness snapshots and Markdown exports can carry automation/workflow/media/MCP context. |
 | Workflow recovery | `frontend/src/features/module-graph/workflow-runtime-observability.ts`, `frontend/src/features/module-graph/components/workflow-runner-panel.tsx`, `docs/systems/workflow-recovery-runbook-evidence.md` | Recovery decisions are visible as local evidence cards and threshold guidance. |
-| Media continuity | `frontend/src/features/media-review/media-review-utils.ts`, `frontend/src/features/media-review/media-review-page.tsx`, `frontend/src/scripts/verifyMediaRuntimeObservabilityContracts.ts` | Review session state, similarity decisions, and cleanup staging can be preserved/restored locally. |
 | Approval boundaries | `PROJECT.md`, this document, roadmap state | Push/deploy/restart/version/auth/security/data/public API/destructive cleanup/credentials/external effects remain outside agent-owned work. |
 
 ## Verification baseline
