@@ -42,6 +42,7 @@
     "verify:route-validation-foundation": "tsx src/scripts/verifyRouteValidationFoundation.ts",
     "verify:upload-metadata-utilities": "tsx src/scripts/verifyUploadMetadataUtilityContracts.ts",
     "verify:upload-response-contracts": "tsx src/scripts/verifyUploadResponseContracts.ts",
+    "verify:upload-security-contracts": "tsx src/scripts/verifyUploadSecurityContracts.ts",
     "verify:auth-db-bootstrap": "tsx src/scripts/verifyAuthDbBootstrap.ts",
     "verify:anonymous-image-demo-access-contracts": "tsx src/scripts/verifyAnonymousImageDemoAccessContracts.ts",
     "verify:header-navigation-settings-contracts": "tsx src/scripts/verifyHeaderNavigationSettingsContracts.ts",

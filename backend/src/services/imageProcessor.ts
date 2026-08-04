@@ -144,6 +144,7 @@ export class ImageProcessor {
     logger.debug(`⏱️ [ImageProcessor] Starting image upload: ${file.originalname}`);
 
     let tempFilePath: string | undefined;
+    let storedFilePath: string | undefined;
 
     try {
       // 폴더 구조 생성
@@ -154,6 +155,7 @@ export class ImageProcessor {
       // 고유한 파일명 생성
       const filename = this.generateUniqueFilename(file.originalname);
       const originalPath = path.join(folders.targetFolder, filename);
+      storedFilePath = originalPath;
 
       // diskStorage 사용: file.path에서 임시 파일 읽기
       // memoryStorage 사용: file.buffer 사용 (하위 호환성)
@@ -194,6 +196,15 @@ export class ImageProcessor {
       };
     } catch (error) {
       logger.error(`⏱️ [ImageProcessor] ❌ Failed after ${Date.now() - startTime}ms:`, error);
+      if (storedFilePath) {
+        try {
+          await fs.promises.unlink(storedFilePath);
+        } catch (cleanupError) {
+          if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') {
+            logger.warn('Failed to cleanup invalid stored image:', storedFilePath, cleanupError);
+          }
+        }
+      }
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Image upload failed: ${message}`);
     } finally {

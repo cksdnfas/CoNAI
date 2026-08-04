@@ -5,7 +5,7 @@ import { AuthCredentials } from '../models/AuthCredentials';
 import { AuthAccount, type AssignableSystemGroupKey } from '../models/AuthAccount';
 import { AuthPermissionGroup } from '../models/AuthPermissionGroup';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { requireAdmin, requireAuth } from '../middleware/authMiddleware';
+import { allowAnonymousPermission, requireAdmin, requireAuth } from '../middleware/authMiddleware';
 import { getAuthDbPath, syncLegacyAuthCredentialToAccessControl } from '../database/authDb';
 import {
   buildAuthStatusPayload,
@@ -24,6 +24,16 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
+});
+
+const guestAccountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({ error: 'Too many guest account creation attempts, please try again later' });
+  },
 });
 
 /** Send the auth route's legacy 400 payload shape without changing response contracts. */
@@ -75,6 +85,14 @@ function formatSqliteUtcTimestamp(value: string | null | undefined) {
 
 /** Format one editable built-in permission into the current UI label shape. */
 function formatBuiltInPermissionLabel(permissionKey: string, resource: string): string {
+  if (permissionKey === 'auth.guest.create') {
+    return 'Guest Account Signup';
+  }
+
+  if (permissionKey === 'upload.create') {
+    return 'Upload Files';
+  }
+
   if (permissionKey === 'wildcards.edit') {
     return 'Wildcard Edit';
   }
@@ -666,7 +684,7 @@ router.post('/login', loginLimiter, asyncHandler(handleLogin));
 router.post('/logout', asyncHandler(handleLogout));
 router.post('/setup', asyncHandler(handleSetup));
 router.put('/credentials', requireAdmin, asyncHandler(handleUpdateCredentials));
-router.post('/guest-accounts', asyncHandler(handleGuestAccountCreate));
+router.post('/guest-accounts', guestAccountLimiter, allowAnonymousPermission('auth.guest.create'), asyncHandler(handleGuestAccountCreate));
 router.get('/accounts', requireAdmin, asyncHandler(handleAccountsList));
 router.get('/permission-groups', requireAdmin, asyncHandler(handlePermissionGroups));
 router.post('/permission-groups', requireAdmin, asyncHandler(handlePermissionGroupCreate));

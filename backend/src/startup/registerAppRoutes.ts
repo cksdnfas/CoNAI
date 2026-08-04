@@ -2,6 +2,7 @@ import express, { type Express, type Request, type RequestHandler, type Response
 import fs from 'fs';
 import path from 'path';
 import { imageRoutes } from '../routes/images/index';
+import { isImageUploadPayloadRequest } from '../routes/images/uploadSecurity';
 import promptCollectionRoutes from '../routes/promptCollection';
 import promptGroupRoutes from '../routes/promptGroups';
 import negativePromptGroupRoutes from '../routes/negativePromptGroups';
@@ -195,6 +196,20 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     allowAnonymousPermission('page.wallpaper.runtime.view')(req, res, next);
   }, wallpaperRuntimeRoutes);
   app.use('/api/images', options.readOnlyLimiter, (req, res, next) => {
+    if (isImageUploadPayloadRequest(req)) {
+      options.uploadLimiter(req, res, next);
+      return;
+    }
+
+    next();
+  }, (req, res, next) => {
+    // Multipart routes own their exact operation permission before Multer writes
+    // any bytes. Let those route-local guards produce auditable 401/403 results.
+    if (isImageUploadPayloadRequest(req)) {
+      next();
+      return;
+    }
+
     const isWallpaperRuntimeThumbnailRequest = (req.method === 'GET' || req.method === 'HEAD')
       && /^\/[^/]+\/thumbnail$/.test(req.path);
 

@@ -344,7 +344,7 @@ export function useSecurityTabData() {
     const editingCustomGroup = permissionGroupEditorMode === 'create'
       || (activePermissionGroup !== null && !activePermissionGroup.systemGroup)
     if (editingCustomGroup) {
-      return catalog.filter((permission) => permission.permissionKey.startsWith('page.'))
+      return catalog.filter((permission) => permission.permissionKey.startsWith('page.') || permission.permissionKey === 'upload.create')
     }
     return catalog
   }, [activePermissionGroup, pageAccessQuery.data?.permissions, permissionGroupEditorMode])

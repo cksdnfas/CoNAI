@@ -2,6 +2,7 @@ import type { Router, Request, Response } from 'express';
 import { successResponse, errorResponse } from '@conai/shared';
 import { uploadSingle } from '../../middleware/upload';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { requirePermission } from '../../middleware/authMiddleware';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { imageTaggerService } from '../../services/imageTaggerService';
 import { kaloscopeTaggerService } from '../../services/kaloscopeTaggerService';
@@ -15,11 +16,12 @@ import {
   setDownloadResponseHeaders,
   withValidatedUploadedImageFile,
 } from './uploadRouteHelpers';
+import { auditUploadRequest } from './uploadSecurity';
 
 /** Register metadata-only utility routes that work without saving uploads into the library. */
 export function registerUploadMetadataUtilityRoutes(router: Router): void {
   /** Convert one uploaded image to WebP without storing it in the library. */
-  router.post('/convert-webp', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  router.post('/convert-webp', auditUploadRequest('utility.convert-webp'), requirePermission('page.upload.view'), uploadSingle, asyncHandler(async (req: Request, res: Response) => {
     return withValidatedUploadedImageFile(req, res, 'Only image files can be converted to WebP', async (file) => {
       try {
         const conversion = await WebPConversionService.convertFileToWebPBuffer(file.path, {
@@ -41,7 +43,7 @@ export function registerUploadMetadataUtilityRoutes(router: Router): void {
   }));
 
   /** Rewrite image metadata without saving the upload to the library. */
-  router.post('/rewrite-metadata', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  router.post('/rewrite-metadata', auditUploadRequest('utility.rewrite-metadata'), requirePermission('page.upload.view'), uploadSingle, asyncHandler(async (req: Request, res: Response) => {
     return withValidatedUploadedImageFile(req, res, 'Only image files can be rewritten without upload', async (file) => {
       const outputFormat = resolveOutputFormat(req.body?.format, file);
 
@@ -73,7 +75,7 @@ export function registerUploadMetadataUtilityRoutes(router: Router): void {
   }));
 
   /** Extract metadata and prompt preview information from one uploaded image. */
-  router.post('/extract-metadata', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  router.post('/extract-metadata', auditUploadRequest('utility.extract-metadata'), requirePermission('page.upload.view'), uploadSingle, asyncHandler(async (req: Request, res: Response) => {
     return withValidatedUploadedImageFile(req, res, 'Only image files can be extracted without upload', async (file) => {
       try {
         const [metadata, imageInfo] = await Promise.all([
@@ -90,7 +92,7 @@ export function registerUploadMetadataUtilityRoutes(router: Router): void {
   }));
 
   /** Extract tagger results from one uploaded image without saving it. */
-  router.post('/extract-tagger', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  router.post('/extract-tagger', auditUploadRequest('utility.extract-tagger'), requirePermission('page.upload.view'), uploadSingle, asyncHandler(async (req: Request, res: Response) => {
     return withValidatedUploadedImageFile(req, res, 'Only image files can be tag-extracted without upload', async (file) => {
       try {
         const result = await imageTaggerService.tagImage(file.path);
@@ -108,7 +110,7 @@ export function registerUploadMetadataUtilityRoutes(router: Router): void {
   }));
 
   /** Extract kaloscope artist results from one uploaded image without saving it. */
-  router.post('/extract-kaloscope', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+  router.post('/extract-kaloscope', auditUploadRequest('utility.extract-kaloscope'), requirePermission('page.upload.view'), uploadSingle, asyncHandler(async (req: Request, res: Response) => {
     return withValidatedUploadedImageFile(req, res, 'Only image files can be artist-extracted without upload', async (file) => {
       try {
         const result = await kaloscopeTaggerService.tagImage(file.path);

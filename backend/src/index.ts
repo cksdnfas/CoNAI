@@ -157,11 +157,26 @@ const apiLimiter = rateLimit({
 // Stricter rate limiting for upload endpoints
 const uploadLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1분
-  max: 50, // 최대 50 업로드 요청
-  message: 'Too many upload requests, please slow down',
+  max: 10, // 권한 보유 비관리자 기준 최대 10 업로드 요청
   standardHeaders: true,
   legacyHeaders: false,
   skip: skipAdminRateLimit,
+  handler: (req, res) => {
+    logger.warn(`[UploadAudit] ${JSON.stringify({
+      event: 'upload.denied',
+      scope: 'rate-limit',
+      method: req.method,
+      path: req.originalUrl.split('?')[0],
+      statusCode: 429,
+      accountId: req.session?.accountId ?? null,
+      accountType: req.session?.accountType ?? (req.session?.authenticated ? 'bootstrap' : 'anonymous'),
+      ip: req.ip,
+      fileCount: 0,
+      totalBytes: 0,
+      reason: 'rate_limit',
+    })}`);
+    res.status(429).json({ error: 'Too many upload requests, please slow down' });
+  },
 });
 
 // Lenient rate limiting for read-only endpoints (metadata, groups, etc.)

@@ -5,6 +5,15 @@ import { errorResponse } from '@conai/shared';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { AIMetadata } from '../../services/metadata';
 import { ImageMetadataWriteService, ImageOutputFormat } from '../../services/imageMetadataWriteService';
+import {
+  UploadValidationError,
+  cleanupStoredUpload,
+  cleanupTemporaryUploads,
+  listRequestUploadFiles,
+  setUploadAuditMetrics,
+  setUploadAuditReason,
+  validateUploadedMediaFile,
+} from './uploadSecurity';
 
 export type UploadedImageFile = Express.Multer.File & { path: string };
 
@@ -170,6 +179,9 @@ export async function processImageUploadWithSettings(
       colorHistogram: undefined,
       mimeType: buildOutputMimeType(targetFormat),
     };
+  } catch (error) {
+    await cleanupStoredUpload(baseUploadPath, path.relative(baseUploadPath, outputPath));
+    throw error;
   } finally {
     await cleanupTemporaryUpload(file);
   }
@@ -307,18 +319,22 @@ function getValidatedUploadedImageFile(
   invalidImageMessage: string,
 ): UploadedImageFile | null {
   const file = getSingleUploadedFile(req);
+  setUploadAuditMetrics(res, file ? [file] : []);
 
   if (!file) {
+    setUploadAuditReason(res, 'missing_file');
     sendUploadBadRequest(res, 'No file uploaded');
     return null;
   }
 
   if (!isImageFile(file.mimetype)) {
+    setUploadAuditReason(res, 'unsupported_media_type');
     sendUploadBadRequest(res, invalidImageMessage);
     return null;
   }
 
   if (!file.path) {
+    setUploadAuditReason(res, 'missing_temp_path');
     res.status(500).json(errorResponse('Temporary upload path is missing'));
     return null;
   }
@@ -333,13 +349,24 @@ export async function withValidatedUploadedImageFile<T>(
   invalidImageMessage: string,
   handler: (file: UploadedImageFile) => Promise<T>,
 ): Promise<T | void> {
+  const stagedFiles = listRequestUploadFiles(req);
   const file = getValidatedUploadedImageFile(req, res, invalidImageMessage);
   if (!file) {
+    await cleanupTemporaryUploads(stagedFiles);
     return;
   }
 
   try {
+    await validateUploadedMediaFile(file);
     return await handler(file);
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      setUploadAuditReason(res, 'content_type_mismatch');
+      res.status(error.statusCode).json(errorResponse(error.message));
+      return;
+    }
+
+    throw error;
   } finally {
     await cleanupTemporaryUpload(file);
   }
@@ -356,13 +383,9 @@ export function setDownloadResponseHeaders(res: Response, originalName: string, 
 
 /** Best-effort cleanup for one temporary uploaded file. */
 async function cleanupTemporaryUpload(file: Express.Multer.File | null) {
-  if (!file?.path || !fs.existsSync(file.path)) {
+  if (!file) {
     return;
   }
 
-  try {
-    await fs.promises.unlink(file.path);
-  } catch (cleanupError) {
-    console.warn('Failed to cleanup temp extraction file:', file.path, cleanupError);
-  }
+  await cleanupTemporaryUploads([file]);
 }

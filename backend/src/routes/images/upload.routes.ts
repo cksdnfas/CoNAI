@@ -2,6 +2,7 @@ import path from 'path';
 import { Router, Request, Response } from 'express';
 import { uploadSingle, uploadMultiple } from '../../middleware/upload';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { requirePermission } from '../../middleware/authMiddleware';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { VideoProcessor } from '../../services/videoProcessor';
 import { BackgroundProcessorService } from '../../services/backgroundProcessorService';
@@ -15,6 +16,18 @@ import {
 } from './uploadRouteHelpers';
 import { buildUploadResponseData } from './uploadResponseHelpers';
 import { registerUploadMetadataUtilityRoutes } from './uploadMetadataUtilityRoutes';
+import {
+  UploadValidationError,
+  auditUploadRequest,
+  cleanupStoredUpload,
+  cleanupTemporaryUploads,
+  enforceMultipleUploadLimits,
+  listRequestUploadFiles,
+  rejectOversizedMultipleUploadRequest,
+  setUploadAuditMetrics,
+  setUploadAuditReason,
+  validateUploadedMediaFile,
+} from './uploadSecurity';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
@@ -67,25 +80,42 @@ async function processUploadFile(file: Express.Multer.File, imageSaveOptions: Re
   throw new Error(`Unsupported file type: ${file.mimetype}`);
 }
 
-async function buildUploadResult(file: Express.Multer.File, imageSaveOptions: ReturnType<typeof parseUploadImageSaveOptions>): Promise<NonNullable<UploadResponse['data']>> {
-  const processedData = await processUploadFile(file, imageSaveOptions);
-  const mimeType = processedData.mimeType || file.mimetype;
-  const mediaProcessing = await processSavedUploadMedia(processedData.originalPath, mimeType);
+async function buildUploadResult(file: Express.Multer.File, imageSaveOptions: ReturnType<typeof parseUploadImageSaveOptions>) {
+  let processedData: ProcessedUploadData | null = null;
 
-  return buildUploadResponseData({
-    file,
-    processedData,
-    mediaProcessing,
-    mimeType,
-  });
+  try {
+    await validateUploadedMediaFile(file);
+    processedData = await processUploadFile(file, imageSaveOptions);
+    const mimeType = processedData.mimeType || file.mimetype;
+    const mediaProcessing = await processSavedUploadMedia(processedData.originalPath, mimeType);
+
+    return {
+      data: buildUploadResponseData({
+        file,
+        processedData,
+        mediaProcessing,
+        mimeType,
+      }),
+      originalPath: processedData.originalPath,
+      compositeHash: mediaProcessing.compositeHash,
+    };
+  } catch (error) {
+    if (processedData) {
+      await cleanupStoredUpload(UPLOAD_BASE_PATH, processedData.originalPath);
+    }
+    throw error;
+  } finally {
+    await cleanupTemporaryUploads([file]);
+  }
 }
 
 /**
  * 단일 파일 업로드 (단순화: 파일 저장만)
  */
-router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+router.post('/upload', auditUploadRequest('library.single'), requirePermission('upload.create'), uploadSingle, asyncHandler(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   const file = files?.['image']?.[0] || files?.['file']?.[0];
+  setUploadAuditMetrics(res, file ? [file] : []);
 
   console.log('📤 Upload request received:', {
     file: file ? {
@@ -96,6 +126,7 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
   });
 
   if (!file) {
+    setUploadAuditReason(res, 'missing_file');
     console.log('❌ No file in request');
     return res.status(400).json({
       success: false,
@@ -109,14 +140,16 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
 
     const response: UploadResponse = {
       success: true,
-      data: uploadResult
+      data: uploadResult.data
     };
 
-    console.log('📨 Upload complete, file saved to:', uploadResult.filename);
+    console.log('📨 Upload complete, file saved to:', uploadResult.data.filename);
     return res.status(201).json(response);
   } catch (error) {
     console.error('❌ Upload error:', error);
-    return res.status(500).json({
+    const statusCode = error instanceof UploadValidationError ? error.statusCode : 500;
+    setUploadAuditReason(res, error instanceof UploadValidationError ? 'content_type_mismatch' : 'processing_failed');
+    return res.status(statusCode).json({
       success: false,
       error: error instanceof Error ? error.message : 'Upload failed'
     } as UploadResponse);
@@ -126,9 +159,8 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
 /**
  * 다중 파일 업로드 (단순화: 파일 저장만)
  */
-router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request, res: Response) => {
-  const filesObj = req.files as { [fieldname: string]: Express.Multer.File[] };
-  const files = filesObj?.['images'] || filesObj?.['files'] || [];
+router.post('/upload-multiple', auditUploadRequest('library.multiple'), requirePermission('upload.create'), rejectOversizedMultipleUploadRequest, uploadMultiple, enforceMultipleUploadLimits, asyncHandler(async (req: Request, res: Response) => {
+  const files = listRequestUploadFiles(req);
 
   if (!files || files.length === 0) {
     return res.status(400).json({
@@ -146,7 +178,8 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
 
     for (const file of files) {
       try {
-        results.push(await buildUploadResult(file, imageSaveOptions));
+        const uploadResult = await buildUploadResult(file, imageSaveOptions);
+        results.push(uploadResult.data);
 
         console.log(`✅ ${file.originalname} saved`);
       } catch (error) {
@@ -159,6 +192,9 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
     }
 
     console.log(`📨 Multiple upload complete: ${results.length}/${files.length} successful`);
+    if (errors.length > 0) {
+      setUploadAuditReason(res, results.length > 0 ? 'partial_failure' : 'all_files_failed');
+    }
 
     return res.status(201).json({
       success: true,
@@ -183,9 +219,8 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
  * 다중 파일 업로드 (스트리밍) - 단순화 버전
  * SSE로 진행 상황만 전송
  */
-router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res: Response) => {
-  const filesObj = req.files as { [fieldname: string]: Express.Multer.File[] };
-  const files = filesObj?.['images'] || filesObj?.['files'] || [];
+router.post('/upload-multiple-stream', auditUploadRequest('library.multiple-stream'), requirePermission('upload.create'), rejectOversizedMultipleUploadRequest, uploadMultiple, enforceMultipleUploadLimits, async (req: Request, res: Response) => {
+  const files = listRequestUploadFiles(req);
 
   if (!files || files.length === 0) {
     return res.status(400).json({
@@ -205,6 +240,7 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
   };
 
   console.log(`📤 Stream upload request: ${files.length} files`);
+  const imageSaveOptions = parseUploadImageSaveOptions(req.body);
 
   // 파일 처리 루프
   for (let i = 0; i < files.length; i++) {
@@ -221,34 +257,7 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         timestamp: new Date().toISOString()
       });
 
-      let processedData: {
-        filename: string;
-        originalPath: string;
-        mimeType?: string;
-      };
-
-      if (isVideoFile(file.mimetype)) {
-        const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
-        processedData = {
-          filename: processedVideo.filename,
-          originalPath: processedVideo.originalPath,
-          mimeType: file.mimetype
-        };
-      } else if (isImageFile(file.mimetype)) {
-        const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
-        processedData = {
-          filename: processedImage.filename,
-          originalPath: processedImage.originalPath,
-          mimeType: file.mimetype
-        };
-      } else {
-        throw new Error(`Unsupported file type: ${file.mimetype}`);
-      }
-
-      const mediaProcessing = await processSavedUploadMedia(
-        processedData.originalPath,
-        processedData.mimeType || file.mimetype,
-      );
+      const uploadResult = await buildUploadResult(file, imageSaveOptions);
 
       // 완료 이벤트
       sendProgress({
@@ -257,13 +266,14 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         totalFiles: files.length,
         filename: file.originalname,
         message: '파일 저장 및 즉시 처리 완료',
-        path: processedData.originalPath,
-        compositeHash: mediaProcessing.compositeHash,
+        path: uploadResult.originalPath,
+        compositeHash: uploadResult.compositeHash,
         timestamp: new Date().toISOString()
       });
 
       console.log(`✅ Stream: ${file.originalname} saved`);
     } catch (error) {
+      setUploadAuditReason(res, 'partial_failure');
       sendProgress({
         type: 'error',
         currentFile,

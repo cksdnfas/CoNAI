@@ -12,6 +12,7 @@ export interface PagePermissionRecord {
 }
 
 const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
+  'auth.guest.create',
   'page.home.view',
   'page.groups.view',
   'page.prompts.view',
@@ -23,6 +24,7 @@ const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
   'page.settings.view',
   'page.wallpaper.view',
   'page.wallpaper.runtime.view',
+  'upload.create',
   'wildcards.edit',
   'wildcards.delete',
 ] as const;
@@ -97,7 +99,7 @@ export class AuthPermissionGroup {
       LEFT JOIN auth_group_permissions gp ON gp.group_id = g.id AND gp.allowed = 1
       LEFT JOIN auth_permissions p ON p.id = gp.permission_id AND (
         p.permission_key LIKE 'page.%'
-        OR p.permission_key IN ('wildcards.edit', 'wildcards.delete')
+        OR p.permission_key IN ('auth.guest.create', 'upload.create', 'wildcards.edit', 'wildcards.delete')
       )
       LEFT JOIN auth_account_group_memberships agm ON agm.group_id = g.id
       GROUP BY g.id
@@ -172,7 +174,7 @@ export class AuthPermissionGroup {
     const db = getAuthDb();
     const normalizedName = input.name.trim();
     const description = input.description?.trim() || null;
-    const normalizedPermissionKeys = this.normalizePagePermissionKeys(input.permissionKeys ?? []);
+    const normalizedPermissionKeys = this.normalizeCustomPermissionKeys(input.permissionKeys ?? []);
 
     if (!normalizedName) {
       throw new Error('Group name is required');
@@ -186,7 +188,7 @@ export class AuthPermissionGroup {
       `).run(this.buildCustomGroupKey(normalizedName), normalizedName, description);
 
       const groupId = insertResult.lastInsertRowid as number;
-      this.syncDirectPagePermissions(groupId, normalizedPermissionKeys);
+      this.syncDirectCustomPermissions(groupId, normalizedPermissionKeys);
       return groupId;
     });
 
@@ -207,7 +209,7 @@ export class AuthPermissionGroup {
 
     const normalizedName = input.name.trim();
     const description = input.description?.trim() || null;
-    const normalizedPermissionKeys = this.normalizePagePermissionKeys(input.permissionKeys ?? []);
+    const normalizedPermissionKeys = this.normalizeCustomPermissionKeys(input.permissionKeys ?? []);
 
     if (!normalizedName) {
       throw new Error('Group name is required');
@@ -220,7 +222,7 @@ export class AuthPermissionGroup {
         WHERE id = ?
       `).run(normalizedName, description, groupId);
 
-      this.syncDirectPagePermissions(groupId, normalizedPermissionKeys);
+      this.syncDirectCustomPermissions(groupId, normalizedPermissionKeys);
     });
 
     updateTransaction();
@@ -284,19 +286,19 @@ export class AuthPermissionGroup {
     invalidateResolvedAuthAccessCache();
   }
 
-  /** Normalize and validate one direct page-permission list for custom groups. */
-  private static normalizePagePermissionKeys(permissionKeys: string[]): string[] {
+  /** Normalize and validate one direct permission list for custom groups. */
+  private static normalizeCustomPermissionKeys(permissionKeys: string[]): string[] {
     return this.normalizePermissionKeys(
       permissionKeys,
-      this.listPagePermissions().map((permission) => permission.permission_key),
+      this.getCustomEditablePermissionKeys(),
       'One or more permission keys are invalid',
     );
   }
 
-  /** Replace the direct page-permission rows for one custom group. */
-  private static syncDirectPagePermissions(groupId: number, permissionKeys: string[]): void {
-    const pagePermissionIds = this.listPermissionIdsByKeys(this.listPagePermissions().map((permission) => permission.permission_key));
-    this.syncDirectPermissions(groupId, pagePermissionIds, permissionKeys);
+  /** Replace the direct editable permission rows for one custom group. */
+  private static syncDirectCustomPermissions(groupId: number, permissionKeys: string[]): void {
+    const editablePermissionIds = this.listPermissionIdsByKeys(this.getCustomEditablePermissionKeys());
+    this.syncDirectPermissions(groupId, editablePermissionIds, permissionKeys);
   }
 
   /** Replace the directly assigned editable permissions for one built-in group. */
@@ -384,6 +386,14 @@ export class AuthPermissionGroup {
   /** Resolve the editable built-in permission keys shared by anonymous and guest. */
   private static getBuiltInEditablePermissionKeys(): string[] {
     return [...BUILT_IN_EDITABLE_PERMISSION_KEYS];
+  }
+
+  /** Resolve custom-group permissions without exposing public guest signup control. */
+  private static getCustomEditablePermissionKeys(): string[] {
+    return [
+      ...this.listPagePermissions().map((permission) => permission.permission_key),
+      'upload.create',
+    ];
   }
 
   /** Load one or more permissions in stable caller-defined key order. */

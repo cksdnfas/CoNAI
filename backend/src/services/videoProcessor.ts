@@ -313,6 +313,7 @@ export class VideoProcessor {
     thumbnailOptions?: ThumbnailOptions
   ): Promise<ProcessedVideo> {
     let tempFilePath: string | undefined;
+    let storedFilePath: string | undefined;
 
     try {
       // FFmpeg 사용 가능 확인 (메타데이터 추출용)
@@ -334,6 +335,7 @@ export class VideoProcessor {
       const initialPath = path.join(folders.originFolder, filename);
       const targetBasePath = path.join(folders.originFolder, path.parse(filename).name);
       let finalPath = initialPath;
+      storedFilePath = finalPath;
 
       // diskStorage: 임시 파일 사용 또는 memoryStorage 버퍼 임시 저장
       if (file.path) {
@@ -345,6 +347,7 @@ export class VideoProcessor {
             logLabel: 'upload',
           });
           finalPath = optimizationResult.outputPath;
+          storedFilePath = finalPath;
         } else {
           await fs.promises.copyFile(file.path, finalPath);
         }
@@ -359,6 +362,7 @@ export class VideoProcessor {
             logLabel: 'upload',
           });
           finalPath = optimizationResult.outputPath;
+          storedFilePath = finalPath;
         } else {
           await fs.promises.writeFile(finalPath, file.buffer);
         }
@@ -396,6 +400,15 @@ export class VideoProcessor {
       };
     } catch (error) {
       console.error('Video processing failed:', error);
+      if (storedFilePath) {
+        try {
+          await fs.promises.unlink(storedFilePath);
+        } catch (cleanupError) {
+          if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') {
+            console.warn('Failed to cleanup invalid stored video:', storedFilePath, cleanupError);
+          }
+        }
+      }
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Video processing failed: ${message}`);
     } finally {

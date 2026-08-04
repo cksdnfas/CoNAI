@@ -104,6 +104,7 @@ export function LoginPage() {
   }
 
   const hasCredentials = authStatusQuery.data?.hasCredentials === true
+  const canCreateGuestAccount = authStatusQuery.data?.permissionKeys.includes('auth.guest.create') === true
 
   if (!hasCredentials) {
     return <Navigate to={nextPath} replace />
@@ -156,11 +157,13 @@ export function LoginPage() {
                   <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
                 </SettingsField>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <Button type="button" variant="outline" onClick={() => setIsGuestModalOpen(true)}>
-                    <UserPlus className="h-4 w-4" />
-                    {t('loginPage.createGuestAccount')}
-                  </Button>
-                  <Button type="submit" disabled={loginMutation.isPending || username.trim().length === 0 || password.length === 0}>
+                  {canCreateGuestAccount ? (
+                    <Button type="button" variant="outline" onClick={() => setIsGuestModalOpen(true)}>
+                      <UserPlus className="h-4 w-4" />
+                      {t('loginPage.createGuestAccount')}
+                    </Button>
+                  ) : null}
+                  <Button className="ml-auto" type="submit" disabled={loginMutation.isPending || username.trim().length === 0 || password.length === 0}>
                     {loginMutation.isPending ? t('loginPage.signingIn') : t('loginPage.signIn')}
                   </Button>
                 </div>
