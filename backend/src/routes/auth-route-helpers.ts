@@ -5,6 +5,7 @@ import {
   AuthAccessControlService,
   getResolvedAuthAccessEpoch,
   invalidateResolvedAuthAccessCache,
+  type ResolvedAuthAccessRecord,
 } from '../services/authAccessControlService';
 
 let configuredAuthCache: boolean | null = null;
@@ -92,18 +93,35 @@ export function setTrustedBootstrapSession(req: Request, resolvedAccess: { group
   req.session.accessCacheUpdatedAt = Date.now();
 }
 
+/**
+ * Shared freshness probe for the group/permission data cached inside a session.
+ *
+ * This reads only; it never writes to the session, so each caller decides on its own whether a
+ * miss is worth re-stamping the cache. The TTL is the steady-state optimization, but the access
+ * epoch is what makes the cache safe: every group/permission mutation bumps it (see
+ * `invalidateResolvedAuthAccessCache`), so a session carrying an older epoch is never reported as
+ * fresh and its permissions are re-resolved on the very next request. Anything the probe cannot
+ * positively confirm — missing arrays, a different account, an unknown timestamp — is reported
+ * stale so the caller falls back to a full re-resolve.
+ */
+export function hasFreshSessionAccessCache(req: Request, expectedAccountId: number | undefined): boolean {
+  const cacheUpdatedAt = req.session?.accessCacheUpdatedAt;
+  return Array.isArray(req.session?.groupKeys)
+    && Array.isArray(req.session?.permissionKeys)
+    && req.session?.accessCacheAccountId === expectedAccountId
+    && req.session?.accessCacheEpoch === getResolvedAuthAccessEpoch()
+    && typeof cacheUpdatedAt === 'number'
+    && Date.now() - cacheUpdatedAt < SESSION_ACCESS_CACHE_TTL_MS;
+}
+
 /** Build the current auth-status payload while keeping additive compatibility. */
 export function buildAuthStatusPayload(req: Request): AuthStatusPayload {
   const hasCredentials = hasConfiguredAuth();
   const accountId = req.session?.accountId;
-  const resolvedAccess = typeof accountId === 'number'
-    ? AuthAccessControlService.resolveForAccountId(accountId)
-    : hasCredentials
-      ? AuthAccessControlService.resolveForGroupKey('anonymous')
-      : AuthAccessControlService.resolveBootstrapAccess();
 
   if (!hasCredentials) {
-    setTrustedBootstrapSession(req, resolvedAccess);
+    const bootstrapAccess = AuthAccessControlService.resolveBootstrapAccess();
+    setTrustedBootstrapSession(req, bootstrapAccess);
     return {
       hasCredentials,
       authenticated: true,
@@ -111,13 +129,38 @@ export function buildAuthStatusPayload(req: Request): AuthStatusPayload {
       accountId: null,
       accountType: 'admin',
       isAdmin: true,
-      groupKeys: resolvedAccess.groupKeys,
-      permissionKeys: resolvedAccess.permissionKeys,
+      groupKeys: bootstrapAccess.groupKeys,
+      permissionKeys: bootstrapAccess.permissionKeys,
     };
   }
 
-  req.session.groupKeys = resolvedAccess.groupKeys;
-  req.session.permissionKeys = resolvedAccess.permissionKeys;
+  // The SPA shell embeds this payload on every full page load, so the previous unconditional
+  // rewrite re-ran the (unmemoized) account resolution and re-serialized the session on every one
+  // of those requests. When the session still carries the access cache the permission middleware
+  // stamped, that work is redundant, so reuse it and leave the session untouched.
+  //
+  // Nothing below advances the cache stamp: this builder only ever consumes the window the
+  // middleware owns. A miss therefore behaves exactly as before (resolve, then write the resolved
+  // values) and this path can never introduce a session write that did not already happen.
+  const canReuseSessionAccessCache = typeof accountId === 'number'
+    ? hasFreshSessionAccessCache(req, accountId)
+    // An authenticated session without an account id is legacy bootstrap residue, never a cached
+    // anonymous session, so it always re-resolves and is downgraded to anonymous access.
+    : req.session?.authenticated !== true && hasFreshSessionAccessCache(req, undefined);
+
+  let resolvedAccess: ResolvedAuthAccessRecord;
+  if (canReuseSessionAccessCache) {
+    resolvedAccess = {
+      groupKeys: req.session.groupKeys ?? [],
+      permissionKeys: req.session.permissionKeys ?? [],
+    };
+  } else {
+    resolvedAccess = typeof accountId === 'number'
+      ? AuthAccessControlService.resolveForAccountId(accountId)
+      : AuthAccessControlService.resolveForGroupKey('anonymous');
+    req.session.groupKeys = resolvedAccess.groupKeys;
+    req.session.permissionKeys = resolvedAccess.permissionKeys;
+  }
 
   return {
     hasCredentials,

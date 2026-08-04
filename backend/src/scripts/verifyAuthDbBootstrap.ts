@@ -382,6 +382,108 @@ function assertAnonymousSessionAccessIsNotRewrittenPerRequest() {
 }
 
 /**
+ * The SPA shell embeds the auth-status payload on every full page load, so the payload builder
+ * must not rewrite an unchanged session. It reuses the access cache the permission middleware
+ * stamped and never advances that stamp itself, so it can never introduce a session store write
+ * of its own. The access epoch still makes grants and revocations land on the very next request.
+ */
+function assertAuthStatusPayloadReusesSessionAccessCache(authDbModule: AuthDbModule) {
+  const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
+  const accessControl = require('../services/authAccessControlService') as typeof import('../services/authAccessControlService')
+  const db = authDbModule.getAuthDb()
+
+  authHelpers.invalidateConfiguredAuthCache()
+  assert.equal(authHelpers.hasConfiguredAuth(), true, 'the auth-status cache path only applies once auth is configured')
+
+  const guestAccount = getRequiredRow<{ id: number; username: string }>(
+    db,
+    'SELECT id, username FROM auth_accounts WHERE username = ?',
+    'orphan-guest',
+  )
+
+  // express-session runs with resave:false, so the row is written only when the serialized
+  // session (cookie excluded) differs from the one loaded at the start of the request.
+  const serializeSession = (session: Record<string, unknown>) =>
+    JSON.stringify(session, (key, value) => (key === 'cookie' ? undefined : value))
+
+  const session = {} as Record<string, unknown>
+  const request = { session }
+  authHelpers.setAuthenticatedSession(request as any, {
+    id: guestAccount.id,
+    username: guestAccount.username,
+    account_type: 'guest',
+  })
+
+  const firstPayload = authHelpers.buildAuthStatusPayload(request as any)
+  assert.equal(firstPayload.accountId, guestAccount.id)
+  assert.ok(firstPayload.permissionKeys.includes('page.home.view'), 'the guest account must inherit anonymous page access')
+
+  const freshSignature = serializeSession(session)
+  const stampedAt = session.accessCacheUpdatedAt
+  const cachedPermissionKeys = session.permissionKeys
+
+  const cachedPayload = authHelpers.buildAuthStatusPayload(request as any)
+  assert.equal(
+    serializeSession(session),
+    freshSignature,
+    'a still-fresh session must not be rewritten by the auth-status payload builder',
+  )
+  assert.equal(session.accessCacheUpdatedAt, stampedAt, 'the payload builder must never advance the access cache stamp')
+  assert.equal(session.permissionKeys, cachedPermissionKeys, 'cached permissionKeys must be reused as-is')
+  assert.deepEqual(cachedPayload.permissionKeys, firstPayload.permissionKeys)
+
+  grantDirectPermission(db, 'guest', 'page.generation.view')
+  accessControl.invalidateResolvedAuthAccessCache()
+
+  const grantedPayload = authHelpers.buildAuthStatusPayload(request as any)
+  assert.ok(
+    grantedPayload.permissionKeys.includes('page.generation.view'),
+    'an access epoch bump must re-resolve the auth-status payload on the very next request',
+  )
+  assert.ok(
+    (session.permissionKeys as string[]).includes('page.generation.view'),
+    'the epoch bump must also refresh the session-cached permissionKeys',
+  )
+
+  db.prepare(`
+    UPDATE auth_group_permissions SET allowed = 0
+    WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'guest')
+      AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'page.generation.view')
+  `).run()
+  accessControl.invalidateResolvedAuthAccessCache()
+
+  const revokedPayload = authHelpers.buildAuthStatusPayload(request as any)
+  assert.equal(
+    revokedPayload.permissionKeys.includes('page.generation.view'),
+    false,
+    'a revoked permission must disappear from the auth-status payload on the very next request',
+  )
+  assert.equal(
+    (session.permissionKeys as string[]).includes('page.generation.view'),
+    false,
+    'a revoked permission must also be dropped from the session cache',
+  )
+
+  // Legacy bootstrap residue: authenticated with no account id must never keep bootstrap access.
+  const residueSession = {
+    authenticated: true,
+    username: 'Bootstrap',
+    accountType: 'admin',
+    groupKeys: ['bootstrap'],
+    permissionKeys: ['page.settings.view'],
+    accessCacheEpoch: accessControl.getResolvedAuthAccessEpoch(),
+    accessCacheUpdatedAt: Date.now(),
+  } as Record<string, unknown>
+  const residuePayload = authHelpers.buildAuthStatusPayload({ session: residueSession } as any)
+  assert.equal(
+    residuePayload.permissionKeys.includes('page.settings.view'),
+    false,
+    'a legacy bootstrap session must not keep admin access once auth is configured',
+  )
+  assert.deepEqual(residueSession.groupKeys, ['anonymous'], 'bootstrap residue must be downgraded to anonymous access')
+}
+
+/**
  * Session touch writes must be throttled without changing login persistence or expiry renewal.
  * express-session calls store.touch() on every request, which is a synchronous auth.db UPDATE on
  * the shared event loop; only redundant writes inside the drift window may be skipped.
@@ -472,6 +574,7 @@ function main() {
     assertTrustedBootstrapAdminMode()
     assertAuthConfigurationRequiresUsableAdmin(authDbModule)
     assertAnonymousSessionAccessIsNotRewrittenPerRequest()
+    assertAuthStatusPayloadReusesSessionAccessCache(authDbModule)
     assertSessionTouchThrottleContracts()
   } finally {
     authDbModule.getAuthDb().close()
