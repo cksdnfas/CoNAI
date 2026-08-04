@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
-import { getImage } from '@/lib/api-images'
+import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import type { ImageRecord } from '@/types/image'
 const ImageListGridLazy = lazy(async () => {
   const module = await import('./image-list-grid')
@@ -173,8 +173,8 @@ export function ImageList({
     }
 
     void queryClient.prefetchQuery({
-      queryKey: ['image-detail', compositeHash],
-      queryFn: ({ signal }) => getImage(compositeHash, { signal }),
+      queryKey: getImageDetailQueryKey(compositeHash, image),
+      queryFn: ({ signal }) => getImage(compositeHash, { signal }, image),
       staleTime: 30_000,
     })
   }, [activationMode, isDraggingSelection, onPreviewIntent, queryClient, selectionMode])

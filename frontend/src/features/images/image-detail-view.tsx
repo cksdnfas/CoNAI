@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { getImage, getImageDuplicates, getPromptSimilarImages, getSimilarImages } from '@/lib/api-images'
+import { getImage, getImageDetailQueryKey, getImageDuplicates, getPromptSimilarImages, getSimilarImages } from '@/lib/api-images'
 import { getAppSettings, getRuntimeSimilaritySettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
 import { useI18n } from '@/i18n'
@@ -153,13 +153,23 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const [isPromptSimilarityInspectionRequested, setIsPromptSimilarityInspectionRequested] = useState(false)
   const [stableSimilarityInspectionCompositeHash, setStableSimilarityInspectionCompositeHash] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  const detailUrl = initialImage?.detail_url
+  const detailScopeKey = initialImage?.detail_scope_key
+  const imageDetailSource = useMemo(
+    () => ({ detail_url: detailUrl, detail_scope_key: detailScopeKey }),
+    [detailScopeKey, detailUrl],
+  )
+  const imageDetailQueryKey = useMemo(
+    () => getImageDetailQueryKey(compositeHash, imageDetailSource),
+    [compositeHash, imageDetailSource],
+  )
 
   const cachedInitialImage = useMemo(() => {
     if (initialImage?.composite_hash === compositeHash) {
       return initialImage
     }
 
-    const prefetchedImage = queryClient.getQueryData<ImageRecord>(['image-detail', compositeHash])
+    const prefetchedImage = queryClient.getQueryData<ImageRecord>(imageDetailQueryKey)
     if (prefetchedImage?.composite_hash === compositeHash) {
       return prefetchedImage
     }
@@ -175,7 +185,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     }
 
     return undefined
-  }, [compositeHash, initialImage, presentation, queryClient])
+  }, [compositeHash, imageDetailQueryKey, initialImage, presentation, queryClient])
 
   useEffect(() => {
     if (presentation === 'page') {
@@ -224,8 +234,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const activeRelatedImageColumns = usesDesktopRelatedImageColumns ? relatedImageDesktopColumns : relatedImageMobileColumns
 
   const imageQuery = useQuery({
-    queryKey: ['image-detail', compositeHash],
-    queryFn: ({ signal }) => getImage(compositeHash, { signal }),
+    queryKey: imageDetailQueryKey,
+    queryFn: ({ signal }) => getImage(compositeHash, { signal }, imageDetailSource),
     enabled: Boolean(compositeHash),
     placeholderData: cachedInitialImage,
     staleTime: 0,

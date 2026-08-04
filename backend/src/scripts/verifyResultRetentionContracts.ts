@@ -16,21 +16,60 @@ async function main() {
     const userSettings = await import('../database/userSettingsDb')
     const { initializeApiGenerationDb } = await import('../database/apiGenerationDb')
     const { GenerationHistoryModel } = await import('../models/GenerationHistory')
-    const { pruneGenerationResultRetention } = await import('../services/generationResultRetentionService')
+    const {
+      pruneGenerationResultRetention,
+      pruneGenerationResultRetentionBatch,
+    } = await import('../services/generationResultRetentionService')
+    const { MediaMetadataFileQueries } = await import('../models/Image/MediaMetadataFileQueries')
     const {
       findGraphWorkflowRetentionOverflowArtifactIds,
       pruneGraphWorkflowOutputRetention,
     } = await import('../services/graphWorkflowOutputRetentionService')
     const graphWorkflowExecutorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/graphWorkflowExecutor.ts'), 'utf8')
     const graphWorkflowRetentionScannerSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/graphWorkflowRetentionScanner.ts'), 'utf8')
+    const generationHistoryModelSource = fs.readFileSync(path.resolve(process.cwd(), 'src/models/GenerationHistory.ts'), 'utf8')
+    const generationHistoryRetentionSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationResultRetentionService.ts'), 'utf8')
 
     closeUserSettingsDb = userSettings.closeUserSettingsDb
     closeMainDatabase = mainDatabase.closeDatabase
     ensureRuntimeDirectories()
+    await mainDatabase.initializeDatabase()
     userSettings.initializeUserSettingsDb()
     initializeApiGenerationDb()
 
     const db = userSettings.getUserSettingsDb()
+    const mediaDb = mainDatabase.db
+    const retainedMediaHash = 'retention-media-hash'
+    const retainedMediaPath = path.join(runtimePaths.uploadsDir, 'retention-test', 'retention-media.mp4')
+    fs.mkdirSync(path.dirname(retainedMediaPath), { recursive: true })
+    fs.writeFileSync(retainedMediaPath, Buffer.from('retained-video'))
+    mediaDb.prepare("UPDATE rating_tiers SET feed_visibility = 'hide' WHERE tier_name = 'NSFW'").run()
+    const watchedFolderId = Number(mediaDb.prepare(`
+      INSERT INTO watched_folders (folder_path, folder_name, is_active)
+      VALUES (?, 'retention-test', 1)
+    `).run(path.dirname(retainedMediaPath)).lastInsertRowid)
+    mediaDb.prepare(`
+      INSERT INTO media_metadata (
+        composite_hash, width, height, rating_score, postprocess_status, postprocess_completed_at
+      ) VALUES (?, 16, 16, 99, 'ready', CURRENT_TIMESTAMP)
+    `).run(retainedMediaHash)
+    mediaDb.prepare(`
+      INSERT INTO image_files (
+        composite_hash, file_type, original_file_path, folder_id, file_status, file_size, mime_type
+      ) VALUES (?, 'video', ?, ?, 'active', ?, 'video/mp4')
+    `).run(retainedMediaHash, retainedMediaPath, watchedFolderId, fs.statSync(retainedMediaPath).size)
+
+    assert.equal(
+      MediaMetadataFileQueries.findByHashWithFile(retainedMediaHash),
+      null,
+      'ordinary gallery detail queries must keep hidden-rated media blocked',
+    )
+    assert.equal(
+      MediaMetadataFileQueries.findByHashWithFile(retainedMediaHash, { includeHidden: true })?.composite_hash,
+      retainedMediaHash,
+      'authorized generation-history detail queries must be able to resolve hidden-rated media',
+    )
+
     const historyIds: number[] = []
     for (let index = 0; index < 4; index += 1) {
       historyIds.push(GenerationHistoryModel.create({
@@ -45,14 +84,53 @@ async function main() {
       generation_status: 'pending',
       nai_model: 'codex',
     })
+    const failedHistoryId = GenerationHistoryModel.create({
+      service_type: 'codex',
+      generation_status: 'failed',
+      nai_model: 'codex',
+    })
+    GenerationHistoryModel.updateImagePaths(historyIds[0], { compositeHash: retainedMediaHash })
 
-    const historyRetention = pruneGenerationResultRetention(2)
-    assert.deepEqual(historyRetention.deleted_history_ids, [historyIds[1], historyIds[0]])
-    assert.equal(GenerationHistoryModel.findById(historyIds[0]), null)
-    assert.equal(GenerationHistoryModel.findById(historyIds[1]), null)
-    assert.notEqual(GenerationHistoryModel.findById(historyIds[2]), null)
-    assert.notEqual(GenerationHistoryModel.findById(historyIds[3]), null)
+    const firstHistoryRetentionBatch = pruneGenerationResultRetentionBatch(2, 2)
+    assert.equal(firstHistoryRetentionBatch.deleted_count, 2)
+    assert.equal(firstHistoryRetentionBatch.remaining_overflow_count, 2)
+    const historyRetention = await pruneGenerationResultRetention(2)
+    assert.equal(historyRetention.deleted_count, 2)
+    assert.equal(historyRetention.remaining_overflow_count, 0)
+    historyIds.forEach((historyId) => assert.equal(GenerationHistoryModel.findById(historyId), null))
     assert.notEqual(GenerationHistoryModel.findById(pendingHistoryId), null)
+    assert.notEqual(GenerationHistoryModel.findById(failedHistoryId), null)
+    assert.equal(fs.existsSync(retainedMediaPath), true, 'history retention must not delete generated media files')
+    assert.equal(
+      (mediaDb.prepare('SELECT COUNT(*) as total FROM media_metadata WHERE composite_hash = ?').get(retainedMediaHash) as { total: number }).total,
+      1,
+      'history retention must not delete media metadata',
+    )
+    assert.equal(
+      (mediaDb.prepare('SELECT COUNT(*) as total FROM image_files WHERE composite_hash = ?').get(retainedMediaHash) as { total: number }).total,
+      1,
+      'history retention must not delete image-file rows',
+    )
+    assert.match(
+      generationHistoryRetentionSource,
+      /DELETE FROM api_generation_history[\s\S]*?WHERE generation_status IN \('completed', 'failed'\)[\s\S]*?ORDER BY id ASC[\s\S]*?LIMIT \?/,
+      'history retention should delete only bounded batches of oldest terminal DB rows',
+    )
+    assert.doesNotMatch(
+      generationHistoryRetentionSource,
+      /unlink|rmSync|recycle|DELETE FROM (?:media_metadata|image_files)/,
+      'history retention must not include generated-media deletion paths',
+    )
+    assert.match(
+      generationHistoryModelSource,
+      /static updateStatus[\s\S]*?requestGenerationResultRetentionPrune\(\)[\s\S]*?static updateImagePaths/,
+      'terminal status updates should request the shared retention pass',
+    )
+    assert.match(
+      generationHistoryModelSource,
+      /static recordError[\s\S]*?requestGenerationResultRetentionPrune\(\)[\s\S]*?static recordErrorByQueueJobIds/,
+      'failed histories should request the same retention pass',
+    )
 
     const workflowId = (db.prepare(`
       INSERT INTO graph_workflows (name, graph_json, version, is_active)

@@ -89,6 +89,10 @@ export function getImageDetailDownloadUrl(image?: ImageRecord | null) {
     return null
   }
 
+  if (image.generation_history_id) {
+    return image.image_url || image.thumbnail_url || null
+  }
+
   if (image.composite_hash) {
     return buildImageDownloadUrl(image.composite_hash, 'original')
   }

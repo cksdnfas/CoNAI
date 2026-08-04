@@ -2,7 +2,6 @@ import { GenerationHistoryModel, GenerationHistoryRecord, GenerationHistoryListR
 import type { AuthAccountType } from '../models/AuthAccount';
 import { APIImageProcessor } from './APIImageProcessor';
 import { BackgroundProcessorService } from './backgroundProcessorService';
-import { pruneGenerationResultRetention } from './generationResultRetentionService';
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
 
 const SLOW_GENERATION_POSTPROCESS_MS = 3000;
@@ -163,7 +162,6 @@ export class GenerationHistoryService {
 
       // Step 4: Update status to completed (file save complete)
       GenerationHistoryModel.updateStatus(historyId, 'completed');
-      pruneGenerationResultRetention();
 
       console.log(`✅ ${serviceType.toUpperCase()} image saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
@@ -221,7 +219,6 @@ export class GenerationHistoryService {
       });
 
       GenerationHistoryModel.updateStatus(historyId, 'completed');
-      pruneGenerationResultRetention();
 
       console.log(`✅ ${serviceType.toUpperCase()} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);

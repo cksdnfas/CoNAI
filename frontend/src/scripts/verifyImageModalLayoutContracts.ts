@@ -284,7 +284,7 @@ function verifyModalNeighborPreviewWarmupUsesSourceItems() {
 
   match(
     neighborPrefetchSource,
-    /for \(const neighborHash of neighborHashes\) \{[\s\S]*?warmImagePreviewSource\(modalState\.sourceItemsByHash\[neighborHash\]\)[\s\S]*?queryClient\.prefetchQuery/,
+    /for \(const neighborHash of neighborHashes\) \{[\s\S]*?const neighborImage = modalState\.sourceItemsByHash\[neighborHash\][\s\S]*?warmImagePreviewSource\(neighborImage\)[\s\S]*?queryClient\.prefetchQuery\(\{[\s\S]*?queryKey: getImageDetailQueryKey\(neighborHash, neighborImage\)/,
     'modal previous/next navigation should warm neighboring preview image URLs from the current source-item index before detail fetches resolve',
   )
   match(

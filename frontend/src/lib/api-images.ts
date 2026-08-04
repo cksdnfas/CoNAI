@@ -70,8 +70,20 @@ export async function searchImagesComplex(input: ComplexImageSearchRequest) {
   return response.data
 }
 
-export async function getImage(compositeHash: string, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<ImageRecord>>(`/api/images/${compositeHash}`, init)
+type ImageDetailRequestSource = Pick<ImageRecord, 'detail_url' | 'detail_scope_key'>
+
+/** Keep gallery and authorized scoped-detail caches separate while preserving hash-prefix invalidation. */
+export function getImageDetailQueryKey(compositeHash: string, source?: ImageDetailRequestSource | null) {
+  return ['image-detail', compositeHash, source?.detail_scope_key || 'gallery'] as const
+}
+
+/** Resolve the authorized detail endpoint carried by a feed item, or use the normal gallery endpoint. */
+export function getImageDetailRequestUrl(compositeHash: string, source?: ImageDetailRequestSource | null) {
+  return source?.detail_url || `/api/images/${compositeHash}`
+}
+
+export async function getImage(compositeHash: string, init?: RequestInit, source?: ImageDetailRequestSource | null) {
+  const response = await fetchJson<ApiResponse<ImageRecord>>(getImageDetailRequestUrl(compositeHash, source), init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.detail.load')
   }

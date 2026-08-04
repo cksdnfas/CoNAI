@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { getGenerationHistoryFeedProgressSummary } from '../features/image-generation/generation-history-feed-progress'
 import { getImageListPreviewUrl } from '../features/images/components/image-list/image-list-utils'
+import { getImageDetailQueryKey, getImageDetailRequestUrl } from '../lib/api-images'
 
 const generationHistoryPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel.tsx'),
@@ -41,6 +42,14 @@ const publicWorkflowRoutesSource = readFileSync(resolve(process.cwd(), '../backe
 const frontendSettingsTypesSource = readFileSync(resolve(process.cwd(), 'src/types/settings.ts'), 'utf8')
 const apiSettingsSource = readFileSync(resolve(process.cwd(), 'src/lib/api-settings.ts'), 'utf8')
 const generalPreferencesSource = readFileSync(resolve(process.cwd(), 'src/features/settings/components/general-preferences-sections.tsx'), 'utf8')
+const generationHistoryRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/generation-history.routes.ts'), 'utf8')
+const generationHistoryMediaHandlersSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/generation-history/mediaRouteHandlers.ts'), 'utf8')
+const mediaMetadataFileQueriesSource = readFileSync(resolve(process.cwd(), '../backend/src/models/Image/MediaMetadataFileQueries.ts'), 'utf8')
+const imageListSource = readFileSync(resolve(process.cwd(), 'src/features/images/components/image-list/image-list.tsx'), 'utf8')
+const imageModalProviderSource = readFileSync(resolve(process.cwd(), 'src/features/images/components/detail/image-view-modal-provider.tsx'), 'utf8')
+const imageDetailViewSource = readFileSync(resolve(process.cwd(), 'src/features/images/image-detail-view.tsx'), 'utf8')
+const imageDetailUtilsSource = readFileSync(resolve(process.cwd(), 'src/features/images/components/detail/image-detail-utils.ts'), 'utf8')
+const imageDownloadTriggerSource = readFileSync(resolve(process.cwd(), 'src/features/images/components/image-download-trigger-button.tsx'), 'utf8')
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -328,6 +337,31 @@ function assertHistoryRatingSafetySettingSourcePolicy() {
     'frontend general settings should type the generation history rating-safety option',
   )
   match(
+    backendSettingsTypesSource,
+    /generationHistoryMaxItems: number/,
+    'backend general settings should type the generation history row limit',
+  )
+  match(
+    frontendSettingsTypesSource,
+    /generationHistoryMaxItems: number/,
+    'frontend general settings should type the generation history row limit',
+  )
+  match(
+    backendSettingsDefaultsSource,
+    /generationHistoryMaxItems: normalizeGenerationHistoryMaxItems\([\s\S]*?CONAI_GENERATION_RESULT_RETENTION_LIMIT/,
+    'generation history retention should default from the normalized 10,000-item setting',
+  )
+  match(
+    backendSettingsRoutesSource,
+    /validateIntegerInRangeIfDefined\([\s\S]*?generalSettings\.generationHistoryMaxItems[\s\S]*?MIN_GENERATION_HISTORY_MAX_ITEMS[\s\S]*?MAX_GENERATION_HISTORY_MAX_ITEMS/,
+    'general settings updates should validate the generation history row limit',
+  )
+  match(
+    generalPreferencesSource,
+    /생성 히스토리 최대 항목 수[\s\S]*?value=\{generalDraft\.generationHistoryMaxItems \?\? 10_000\}[\s\S]*?onPatchGeneral\(\{ generationHistoryMaxItems: nextValue \}\)/,
+    'safety and cleanup settings should expose the configurable generation history row limit',
+  )
+  match(
     backendSettingsDefaultsSource,
     /applyRatingSafetyToGenerationHistory: false/,
     'generation history rating safety should default off to preserve private-history behavior',
@@ -424,17 +458,90 @@ function assertHistoryVideoSourcePolicy() {
     '/api/images/gallery-video-hash/file',
     'ordinary gallery videos should keep using the canonical hash streaming route',
   )
+
+  const historyDetailSource = {
+    detail_url: '/api/generation-history/7/image',
+    detail_scope_key: 'generation-history:7',
+  }
+  assertEqual(
+    getImageDetailRequestUrl('history-video-hash', historyDetailSource),
+    historyDetailSource.detail_url,
+    'history modal detail should use its authorized history endpoint',
+  )
+  assertEqual(
+    getImageDetailQueryKey('history-video-hash', historyDetailSource).join('|'),
+    'image-detail|history-video-hash|generation-history:7',
+    'history and gallery detail caches should not share a query key',
+  )
+  assertEqual(
+    getImageDetailQueryKey('history-video-hash').join('|'),
+    'image-detail|history-video-hash|gallery',
+    'ordinary gallery detail should retain its own cache scope',
+  )
+}
+
+function assertHistoryScopedDetailSourcePolicy() {
+  match(
+    generationHistoryPanelHelpersSource,
+    /detail_url: hasLinkedImage \? `\$\{historyMediaBaseUrl\}\/image` : null[\s\S]*?detail_scope_key: `generation-history:\$\{record\.id\}`[\s\S]*?generation_history_id: record\.id/,
+    'history cards should carry their scoped detail and download identity',
+  )
+  match(
+    generationHistoryRoutesSource,
+    /'\/:id\/image'[\s\S]*?handleHistoryImageDetail/,
+    'generation history should expose a scoped image-detail endpoint before the compatibility id route',
+  )
+  match(
+    generationHistoryMediaHandlersSource,
+    /findByHashWithFile\(media\.compositeHash, \{ includeHidden: true \}\)[\s\S]*?detail_scope_key:[\s\S]*?thumbnail_url:[\s\S]*?image_url:/,
+    'authorized history detail should include hidden media while returning only history-scoped URLs',
+  )
+  match(
+    mediaMetadataFileQueriesSource,
+    /findByHashWithFile\(compositeHash: string, options: \{ includeHidden\?: boolean \} = \{\}\)[\s\S]*?options\.includeHidden \? '1=1' : getVisibleMediaMetadataCondition\(\)/,
+    'single-image metadata lookup should bypass rating visibility only when an authorized caller opts in',
+  )
+  match(
+    imageListSource,
+    /getImageDetailQueryKey\(compositeHash, image\)[\s\S]*?getImage\(compositeHash, \{ signal \}, image\)/,
+    'history hover prefetch should retain the item detail scope',
+  )
+  match(
+    imageModalProviderSource,
+    /getImageDetailQueryKey\(neighborHash, neighborImage\)[\s\S]*?getImage\(neighborHash, undefined, neighborImage\)[\s\S]*?getImageDetailQueryKey\(input\.compositeHash, activeInputImage\)/,
+    'modal active and neighbor prefetches should retain each source item scope',
+  )
+  match(
+    imageDetailViewSource,
+    /const imageDetailSource = useMemo\([\s\S]*?detail_url: detailUrl, detail_scope_key: detailScopeKey[\s\S]*?getImageDetailQueryKey\(compositeHash, imageDetailSource\)[\s\S]*?queryKey: imageDetailQueryKey[\s\S]*?getImage\(compositeHash, \{ signal \}, imageDetailSource\)/,
+    'the visible modal detail query should stay in the same authorized scope as its initial history item',
+  )
+  match(
+    imageDetailUtilsSource,
+    /if \(image\.generation_history_id\) \{[\s\S]*?return image\.image_url \|\| image\.thumbnail_url \|\| null[\s\S]*?buildImageDownloadUrl/,
+    'history detail controls should not construct a gallery-only download URL',
+  )
+  match(
+    generationHistoryPanelSource,
+    /modalAccessOptions=\{\{[\s\S]*?allowDetailNavigation: false[\s\S]*?allowEditAction: !isPublicView/,
+    'history modals should not navigate hidden results into the gallery-only detail route',
+  )
+  match(
+    imageDownloadTriggerSource,
+    /generation_history_id[\s\S]*?downloadGenerationHistorySelection\(\[generationHistoryId\], type\)[\s\S]*?downloadImageSelection\(\[compositeHash\], type\)/,
+    'history modal downloads should keep the authorized history scope while gallery downloads stay unchanged',
+  )
 }
 
 function assertHistoryTranslationCatalogSourcePolicy() {
   match(
     lazyRoutesSource,
-    /'image-generation-page': \(\) => loadRouteModuleWithCatalog\([\s\S]*?imageGenerationCatalog[\s\S]*?moduleGraphCatalog[\s\S]*?imagesCatalog[\s\S]*?\n  \),/,
+    /'image-generation-page': \(\) => loadRouteModuleWithCatalog\([\s\S]*?imageGenerationCatalog[\s\S]*?moduleGraphCatalog[\s\S]*?imagesCatalog[\s\S]*?\n {2}\),/,
     'private generation history should preload the shared images catalog used by image-list fallback states',
   )
   match(
     lazyRoutesSource,
-    /'public-comfy-workflow-page': \(\) => loadRouteModuleWithCatalog\([\s\S]*?imageGenerationCatalog[\s\S]*?imagesCatalog[\s\S]*?\n  \),/,
+    /'public-comfy-workflow-page': \(\) => loadRouteModuleWithCatalog\([\s\S]*?imageGenerationCatalog[\s\S]*?imagesCatalog[\s\S]*?\n {2}\),/,
     'public workflow history should preload the shared images catalog used by image-list fallback states',
   )
 }
@@ -452,6 +559,7 @@ assertSelectionRecoverySourcePolicy()
 assertNoImageBadgeOverlaySourcePolicy()
 assertHistoryRatingSafetySettingSourcePolicy()
 assertHistoryVideoSourcePolicy()
+assertHistoryScopedDetailSourcePolicy()
 assertHistoryTranslationCatalogSourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

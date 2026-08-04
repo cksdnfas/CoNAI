@@ -215,9 +215,9 @@ export class MediaMetadataFileQueries {
     return { items, total, hasMore };
   }
 
-  /** Load one active visible image by composite hash with metadata and file columns in a single query. */
-  static findByHashWithFile(compositeHash: string): any | null {
-    const visibleCondition = getVisibleMediaMetadataCondition();
+  /** Load one active image by composite hash with metadata and file columns in a single query. */
+  static findByHashWithFile(compositeHash: string, options: { includeHidden?: boolean } = {}): any | null {
+    const visibleCondition = options.includeHidden ? '1=1' : getVisibleMediaMetadataCondition();
     const readyCondition = getReadyMediaMetadataCondition();
     const query = `
       ${ACTIVE_FILE_WITH_METADATA_SELECT}

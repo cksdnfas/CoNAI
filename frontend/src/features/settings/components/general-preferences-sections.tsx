@@ -152,6 +152,22 @@ export function GeneralPreferencesSections({
                 placeholder="RecycleBin"
               />
             </SettingsField>
+            <SettingsField label={t({ ko: '생성 히스토리 최대 항목 수', en: 'Generation history maximum items' })}>
+              <Input
+                variant="settings"
+                type="number"
+                min={1}
+                max={1_000_000}
+                step={1}
+                value={generalDraft.generationHistoryMaxItems ?? 10_000}
+                onChange={(event) => {
+                  const nextValue = Number.parseInt(event.target.value, 10)
+                  if (Number.isFinite(nextValue)) {
+                    onPatchGeneral({ generationHistoryMaxItems: nextValue })
+                  }
+                }}
+              />
+            </SettingsField>
             <SettingsToggleRow className="md:col-span-2">
               <input type="checkbox" checked={generalDraft.deleteProtection.enabled} onChange={(event) => onPatchDeleteProtection({ enabled: event.target.checked })} />
               {t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}

@@ -7,6 +7,7 @@ import { requireAdmin } from '../middleware/authMiddleware';
 import {
   applyHistoryAccessScope,
   buildHistoryQueryFilters,
+  canAccessHistoryRecord,
 } from './generation-history/historyRouteHelpers';
 import {
   handleFailedGenerationHistoryCleanup,
@@ -15,6 +16,7 @@ import {
 import {
   handleHistoryBatchDownload,
   handleHistoryFile,
+  handleHistoryImageDetail,
   handleHistoryImageUpload,
   handleHistoryThumbnail,
 } from './generation-history/mediaRouteHandlers';
@@ -134,6 +136,17 @@ router.get(
 );
 
 /**
+ * GET /api/generation-history/:id/image
+ * Return authorized image detail without switching to the gallery safety scope.
+ */
+router.get(
+  '/:id/image',
+  asyncHandler(async (req: Request, res: Response) => {
+    await handleHistoryImageDetail(req, res, routeParam(req.params.id));
+  })
+);
+
+/**
  * GET /api/generation-history/:id
  * Get one detail/compat generation-history record by ID.
  * This is not the primary list surface used by the image-generation UI and should not grow into a new UI contract.
@@ -148,6 +161,14 @@ router.get(
       res.status(404).json({
         success: false,
         error: 'Generation history not found'
+      });
+      return;
+    }
+
+    if (!canAccessHistoryRecord(req, record)) {
+      res.status(403).json({
+        success: false,
+        error: 'Not allowed to access this generation history item'
       });
       return;
     }

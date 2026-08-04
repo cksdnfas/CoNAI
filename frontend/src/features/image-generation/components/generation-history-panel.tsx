@@ -605,11 +605,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                 getItemHref={getHistoryImageHref}
                 getItemId={getHistoryItemId}
                 selectable
-                modalAccessOptions={isPublicView ? {
+                modalAccessOptions={{
                   allowDetailNavigation: false,
-                  allowEditAction: false,
-                  allowGroupAssignAction: false,
-                } : undefined}
+                  allowEditAction: !isPublicView,
+                  allowGroupAssignAction: !isPublicView,
+                }}
                 selectedIds={selectedHistoryIds}
                 onSelectedIdsChange={setSelectedHistoryIds}
                 minColumnWidth={220}

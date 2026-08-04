@@ -35,6 +35,11 @@ import {
   CONAI_HELPER_CUSTOM_NODE_PACKAGE_FILENAME,
 } from '../services/conaiHelperCustomNodePackageService';
 import { normalizeLlmPresetCollectionPayload } from './settings/llmPresetPayload';
+import {
+  MAX_GENERATION_HISTORY_MAX_ITEMS,
+  MIN_GENERATION_HISTORY_MAX_ITEMS,
+} from '../constants/generationHistory';
+import { requestGenerationResultRetentionPrune } from '../services/generationResultRetentionService';
 
 const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
@@ -140,6 +145,13 @@ router.put(
     if (!validateStringEnumIfDefined(res, generalSettings.language, validLanguages, `Invalid language. Must be one of: ${validLanguages.join(', ')}`)) return;
     if (!validateStringEnumIfDefined(res, generalSettings.imageSimilarityCheckMode, validImageSimilarityCheckModes, `Invalid image similarity check mode. Must be one of: ${validImageSimilarityCheckModes.join(', ')}`)) return;
     if (!validateBooleanIfDefined(res, generalSettings.applyRatingSafetyToGenerationHistory, 'applyRatingSafetyToGenerationHistory must be a boolean')) return;
+    if (!validateIntegerInRangeIfDefined(
+      res,
+      generalSettings.generationHistoryMaxItems,
+      MIN_GENERATION_HISTORY_MAX_ITEMS,
+      MAX_GENERATION_HISTORY_MAX_ITEMS,
+      `generationHistoryMaxItems must be an integer between ${MIN_GENERATION_HISTORY_MAX_ITEMS} and ${MAX_GENERATION_HISTORY_MAX_ITEMS}`,
+    )) return;
 
     if (generalSettings.deleteProtection !== undefined) {
       if (generalSettings.deleteProtection && typeof generalSettings.deleteProtection !== 'object') {
@@ -185,6 +197,9 @@ router.put(
 
     // Update settings
     const updatedSettings = settingsService.updateGeneralSettings(generalSettings);
+    if (generalSettings.generationHistoryMaxItems !== undefined) {
+      requestGenerationResultRetentionPrune(updatedSettings.general.generationHistoryMaxItems);
+    }
 
     res.json({
       success: true,

@@ -88,6 +88,9 @@ export interface ImageRecord {
   original_file_path?: string | null
   thumbnail_url?: string | null
   image_url?: string | null
+  detail_url?: string | null
+  detail_scope_key?: string | null
+  generation_history_id?: number | null
   width?: number | null
   height?: number | null
   mime_type?: string | null

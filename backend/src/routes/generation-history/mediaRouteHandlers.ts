@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
+import { MediaMetadataFileQueries } from '../../models/Image/MediaMetadataFileQueries';
 import {
   getExistingActiveFilePathOrBlock,
   serveThumbnailOrOriginal,
@@ -8,6 +9,7 @@ import {
   streamRangeFile,
   streamBatchDownloadArchive,
 } from '../images/query-file-helpers';
+import { enrichImageWithFileView } from '../images/utils';
 import {
   buildMissingHistoryFileWarning,
   canAccessHistoryRecord,
@@ -78,6 +80,33 @@ export async function handleHistoryThumbnail(req: Request, res: Response, id: st
   }
 
   await serveThumbnailOrOriginal(req, res, media.compositeHash, media.metadata, media.file);
+}
+
+/** Return full image detail through the authorized history scope, including hidden-rated media. */
+export async function handleHistoryImageDetail(req: Request, res: Response, id: string) {
+  const media = await getAccessibleHistoryMediaOrBlock(req, res, id);
+  if (!media) {
+    return;
+  }
+
+  const image = MediaMetadataFileQueries.findByHashWithFile(media.compositeHash, { includeHidden: true });
+  if (!image) {
+    res.status(404).json({ success: false, error: 'Generation history image not found' });
+    return;
+  }
+
+  const historyMediaBaseUrl = `/api/generation-history/${media.record.id}`;
+  res.json({
+    success: true,
+    data: {
+      ...enrichImageWithFileView(image),
+      generation_history_id: media.record.id,
+      detail_scope_key: `generation-history:${media.record.id}`,
+      detail_url: `${historyMediaBaseUrl}/image`,
+      thumbnail_url: `${historyMediaBaseUrl}/thumbnail`,
+      image_url: `${historyMediaBaseUrl}/file`,
+    },
+  });
 }
 
 export async function handleHistoryImageUpload(req: Request, res: Response, id: string) {

@@ -31,6 +31,7 @@ export interface GeneralSettings {
   showRatingBadges?: boolean;
   imageSimilarityCheckMode?: ImageSimilarityCheckMode;
   applyRatingSafetyToGenerationHistory: boolean;
+  generationHistoryMaxItems: number;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';

@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ImageRecord } from '@/types/image'
 import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
-import { getImage } from '@/lib/api-images'
+import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 
 type ImageViewModalOverlayModule = typeof import('./image-view-modal-overlay')
 type ImageViewModalOverlayComponent = ImageViewModalOverlayModule['ImageViewModalOverlay']
@@ -204,10 +204,11 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       .filter((value): value is string => typeof value === 'string' && value.length > 0)
 
     for (const neighborHash of neighborHashes) {
-      warmImagePreviewSource(modalState.sourceItemsByHash[neighborHash])
+      const neighborImage = modalState.sourceItemsByHash[neighborHash]
+      warmImagePreviewSource(neighborImage)
       void queryClient.prefetchQuery({
-        queryKey: ['image-detail', neighborHash],
-        queryFn: () => getImage(neighborHash),
+        queryKey: getImageDetailQueryKey(neighborHash, neighborImage),
+        queryFn: () => getImage(neighborHash, undefined, neighborImage),
         staleTime: 0,
       })
     }
@@ -230,8 +231,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     void loadImageViewModalOverlay()
     warmImagePreviewSource(activeInputImage)
     void queryClient.prefetchQuery({
-      queryKey: ['image-detail', input.compositeHash],
-      queryFn: () => getImage(input.compositeHash),
+      queryKey: getImageDetailQueryKey(input.compositeHash, activeInputImage),
+      queryFn: () => getImage(input.compositeHash, undefined, activeInputImage),
       staleTime: 0,
     })
 

@@ -95,7 +95,7 @@ assert.match(
 
 assert.match(
   imageListSource,
-  /const handlePreviewIntent = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?if \(activationMode === 'none' \|\| selectionMode \|\| isDraggingSelection\) \{[\s\S]*?queryClient\.prefetchQuery\(\{[\s\S]*?queryKey: \['image-detail', compositeHash\][\s\S]*?queryFn: \(\{ signal \}\) => getImage\(compositeHash, \{ signal \}\)[\s\S]*?staleTime: 30_000/,
+  /const handlePreviewIntent = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?if \(activationMode === 'none' \|\| selectionMode \|\| isDraggingSelection\) \{[\s\S]*?queryClient\.prefetchQuery\(\{[\s\S]*?queryKey: getImageDetailQueryKey\(compositeHash, image\)[\s\S]*?queryFn: \(\{ signal \}\) => getImage\(compositeHash, \{ signal \}, image\)[\s\S]*?staleTime: 30_000/,
   'ImageList should prefetch image detail on hover/focus while avoiding selection-drag paths',
 )
 
@@ -167,7 +167,7 @@ function assertPreviewIntentAlwaysGuardedByInteractive() {
 
 assert.match(
   imageDetailViewSource,
-  /const prefetchedImage = queryClient\.getQueryData<ImageRecord>\(\['image-detail', compositeHash\]\)[\s\S]*?if \(prefetchedImage\?\.composite_hash === compositeHash\) \{[\s\S]*?return prefetchedImage/,
+  /const prefetchedImage = queryClient\.getQueryData<ImageRecord>\(imageDetailQueryKey\)[\s\S]*?if \(prefetchedImage\?\.composite_hash === compositeHash\) \{[\s\S]*?return prefetchedImage/,
   'image detail views should consume prefetched detail records before scanning broader feed caches',
 )
 

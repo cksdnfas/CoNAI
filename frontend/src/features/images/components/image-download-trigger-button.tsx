@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { downloadImageSelection, type ImageDownloadType } from '@/lib/api-images'
+import { downloadGenerationHistorySelection } from '@/lib/api-image-generation-history'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { getErrorMessage } from '@/lib/error-message'
 import type { ImageRecord } from '@/types/image'
@@ -64,6 +65,7 @@ export function ImageDownloadTriggerButton({
   const [isDownloading, setIsDownloading] = useState(false)
   const containerRef = useRef<HTMLSpanElement | null>(null)
   const compositeHash = typeof image?.composite_hash === 'string' && image.composite_hash.length > 0 ? image.composite_hash : null
+  const generationHistoryId = typeof image?.generation_history_id === 'number' ? image.generation_history_id : null
   const filteredDownloadMode = image && getImageListMediaKind(image) === 'image' && hasActivePixelPreviewDownloadOption() ? getVisibleDownloadMode(image) : null
 
   const handleSelect = async (type: 'thumbnail' | 'original') => {
@@ -73,7 +75,11 @@ export function ImageDownloadTriggerButton({
 
     try {
       setIsDownloading(true)
-      await downloadImageSelection([compositeHash], type)
+      if (generationHistoryId) {
+        await downloadGenerationHistorySelection([generationHistoryId], type)
+      } else {
+        await downloadImageSelection([compositeHash], type)
+      }
       setIsOpen(false)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('images.components.image.download.trigger.button.image.download.failed')), tone: 'error' })

@@ -15,6 +15,10 @@ import {
   WallpaperWidgetInstance,
   WallpaperWidgetType,
 } from '../types/settings';
+import {
+  DEFAULT_GENERATION_HISTORY_MAX_ITEMS,
+  normalizeGenerationHistoryMaxItems,
+} from '../constants/generationHistory';
 
 export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -395,6 +399,10 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       showRatingBadges: true,
       imageSimilarityCheckMode: 'manual',
       applyRatingSafetyToGenerationHistory: false,
+      generationHistoryMaxItems: normalizeGenerationHistoryMaxItems(
+        process.env.CONAI_GENERATION_RESULT_RETENTION_LIMIT,
+        DEFAULT_GENERATION_HISTORY_MAX_ITEMS,
+      ),
     },
     tagger: {
       enabled: process.env.TAGGER_ENABLED === 'true',

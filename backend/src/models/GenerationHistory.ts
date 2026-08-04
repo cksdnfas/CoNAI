@@ -3,6 +3,7 @@ import type { AuthAccountType } from './AuthAccount';
 import { buildUpdateQuery, filterDefined } from '../utils/dynamicUpdate';
 import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import { publishHistoryRecordEvent } from '../services/runtime-events/runtimeEventPublishers';
+import { requestGenerationResultRetentionPrune } from '../services/generationResultRetentionService';
 
 export type ServiceType = 'comfyui' | 'novelai' | 'codex';
 export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -348,6 +349,10 @@ export class GenerationHistoryModel {
     const { sql, values } = buildUpdateQuery('api_generation_history', updates, { id });
     const stmt = apiGenDb.prepare(sql);
     stmt.run(...values);
+
+    if (updates.generation_status === 'completed' || updates.generation_status === 'failed') {
+      requestGenerationResultRetentionPrune();
+    }
   }
 
   /**
@@ -363,6 +368,9 @@ export class GenerationHistoryModel {
     stmt.run(status, status, id);
     // E10
     publishHistoryEventById(id, 'history.record.status');
+    if (status === 'completed' || status === 'failed') {
+      requestGenerationResultRetentionPrune();
+    }
   }
 
   /**
@@ -399,6 +407,7 @@ export class GenerationHistoryModel {
     stmt.run(errorMessage, id);
     // E12
     publishHistoryEventById(id, 'history.record.status');
+    requestGenerationResultRetentionPrune();
   }
 
   /** Mark in-flight histories linked to terminal queue jobs as failed. */
@@ -428,6 +437,9 @@ export class GenerationHistoryModel {
     const info = stmt.run(errorMessage, ...uniqueJobIds);
     // E12: 큐 잡 단위 일괄 실패도 행별로 알린다.
     affectedIds.forEach((historyId) => publishHistoryEventById(historyId, 'history.record.status'));
+    if (info.changes > 0) {
+      requestGenerationResultRetentionPrune();
+    }
     return info.changes;
   }
 
@@ -824,21 +836,4 @@ export class GenerationHistoryModel {
     return info.changes;
   }
 
-  /** Find completed history rows outside the retained recent-result window. */
-  static findCompletedOverflowIds(retentionLimit: number): number[] {
-    const safeLimit = Math.max(0, Math.floor(retentionLimit));
-    if (safeLimit === 0) {
-      return [];
-    }
-
-    const stmt = apiGenDb.prepare(`
-      SELECT id
-      FROM api_generation_history
-      WHERE generation_status = 'completed'
-      ORDER BY COALESCE(completed_at, created_at) DESC, id DESC
-      LIMIT -1 OFFSET ?
-    `);
-
-    return (stmt.all(safeLimit) as Array<{ id: number }>).map((row) => row.id);
-  }
 }

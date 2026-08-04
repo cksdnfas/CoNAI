@@ -1,6 +1,7 @@
 import { db } from '../database/init';
 import { GenerationHistoryModel, GenerationHistoryRecord, GenerationStatus } from '../models/GenerationHistory';
 import { GenerationQueueModel } from '../models/GenerationQueue';
+import { requestGenerationResultRetentionPrune } from './generationResultRetentionService';
 
 export interface CleanupDetail {
   id: number;
@@ -225,6 +226,7 @@ export class CleanupService {
 
     if (!dryRun) {
       this.pruneOldGenerationQueuePayloads();
+      requestGenerationResultRetentionPrune();
     }
 
     return {

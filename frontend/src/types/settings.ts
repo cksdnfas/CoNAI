@@ -51,6 +51,7 @@ export interface GeneralSettings {
   showRatingBadges?: boolean
   imageSimilarityCheckMode?: ImageSimilarityCheckMode
   applyRatingSafetyToGenerationHistory: boolean
+  generationHistoryMaxItems: number
 }
 
 export interface TaggerSettings {
