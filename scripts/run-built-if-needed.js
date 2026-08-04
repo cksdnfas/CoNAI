@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const { ensureWorkspaceDependencies } = require('./ensure-workspace-dependencies');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const BACKEND_DIR = path.join(ROOT_DIR, 'backend');
@@ -335,6 +336,10 @@ function main() {
   }
 
   assertSplitRuntimeOptIn();
+
+  if (!isCheckOnly) {
+    ensureWorkspaceDependencies();
+  }
 
   const status = isBuildStale();
 

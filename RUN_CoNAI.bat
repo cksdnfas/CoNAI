@@ -8,7 +8,7 @@ echo ========================================
 echo CoNAI Runtime Supervisor
 echo ========================================
 echo.
-echo [1/3] Stopping existing runtime processes...
+echo [1/4] Stopping existing runtime processes...
 node "%~dp0scripts\stop-existing-runtime.js"
 set EXIT_CODE=%ERRORLEVEL%
 
@@ -23,7 +23,22 @@ if not "%EXIT_CODE%"=="0" (
 )
 
 echo.
-echo [2/3] Truncating SQLite WAL files...
+echo [2/4] Synchronizing workspace dependencies...
+node "%~dp0scripts\ensure-workspace-dependencies.js"
+set EXIT_CODE=%ERRORLEVEL%
+
+if not "%EXIT_CODE%"=="0" (
+    echo.
+    echo ================================================================
+    echo  ERROR: dependency synchronization failed with code %EXIT_CODE%
+    echo ================================================================
+    echo.
+    pause
+    exit /b %EXIT_CODE%
+)
+
+echo.
+echo [3/4] Truncating SQLite WAL files...
 node "%~dp0scripts\checkpoint-runtime-databases.js"
 set EXIT_CODE=%ERRORLEVEL%
 
@@ -38,7 +53,7 @@ if not "%EXIT_CODE%"=="0" (
 )
 
 echo.
-echo [3/3] Starting single-process runtime...
+echo [4/4] Starting single-process runtime...
 node "%~dp0scripts\run-built-if-needed.js" --all
 set EXIT_CODE=%ERRORLEVEL%
 

@@ -60,6 +60,8 @@ const checkpointRuntimeDatabasesSource = fs.readFileSync(path.join(projectRoot, 
 const indexSource = fs.readFileSync(path.join(projectRoot, 'backend', 'src', 'index.ts'), 'utf8');
 const dockerfileSource = fs.readFileSync(path.join(projectRoot, 'Dockerfile'), 'utf8');
 const rootPackageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+const rootPackageLock = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package-lock.json'), 'utf8'));
+const backendPackageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'backend', 'package.json'), 'utf8'));
 const splitLauncherSource = fs.readFileSync(path.join(projectRoot, 'RUN_CoNAI.bat'), 'utf8');
 const buildAndRunLauncherSource = fs.readFileSync(path.join(projectRoot, 'RUN_CoNAI_BUILD_AND_RUN.bat'), 'utf8');
 const manualApiLauncherSource = fs.readFileSync(path.join(projectRoot, 'runtime-tools', 'manual', 'RUN_CoNAI_API_ONLY.bat'), 'utf8');
@@ -95,6 +97,10 @@ assert.match(rootPackageJson.scripts['start:built'], /--all/);
 assert.doesNotMatch(rootPackageJson.scripts['start:built'], /--split/);
 assert.match(rootPackageJson.scripts['start:built:api'], /--api/);
 assert.match(rootPackageJson.scripts['start:built:worker'], /--worker/);
+assert.equal(rootPackageJson.dependencies['better-sqlite3'], '^13.0.2');
+assert.equal(backendPackageJson.dependencies['better-sqlite3'], '^13.0.2');
+assert.equal(rootPackageLock.packages[''].dependencies['better-sqlite3'], '^13.0.2');
+assert.equal(rootPackageLock.packages.backend.dependencies['better-sqlite3'], '^13.0.2');
 
 assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI.bat')), true);
 assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI_API.bat')), false);
@@ -104,10 +110,21 @@ assert.equal(fs.existsSync(path.join(projectRoot, 'runtime-tools', 'manual', 'RU
 assert.equal(fs.existsSync(path.join(projectRoot, 'scripts', 'stop-existing-runtime.js')), true);
 assert.equal(fs.existsSync(path.join(projectRoot, 'scripts', 'checkpoint-runtime-databases.js')), true);
 assert.match(splitLauncherSource, /stop-existing-runtime\.js/);
+assert.match(splitLauncherSource, /ensure-workspace-dependencies\.js/);
 assert.match(splitLauncherSource, /checkpoint-runtime-databases\.js/);
 assert.match(splitLauncherSource, /--all/);
 assert.doesNotMatch(splitLauncherSource, /--split/);
 assert.match(splitLauncherSource, /"%~dp0scripts\\run-built-if-needed\.js"/);
+assert.ok(
+  splitLauncherSource.indexOf('stop-existing-runtime.js')
+    < splitLauncherSource.indexOf('ensure-workspace-dependencies.js'),
+);
+assert.ok(
+  splitLauncherSource.indexOf('ensure-workspace-dependencies.js')
+    < splitLauncherSource.indexOf('checkpoint-runtime-databases.js'),
+);
+assert.match(runnerSource, /ensureWorkspaceDependencies/);
+assert.ok(runnerSource.indexOf('ensureWorkspaceDependencies();') < runnerSource.indexOf('const status = isBuildStale();'));
 // The manual split launchers stay, but they must opt in and warn that split is unsupported.
 assert.match(manualApiLauncherSource, /--api/);
 assert.match(manualApiLauncherSource, /CONAI_ALLOW_SPLIT_RUNTIME/);

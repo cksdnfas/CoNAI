@@ -210,6 +210,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.2",
     "exif-parser": "^0.1.12",
     "png-chunks-extract": "^1.0.0"
   }
