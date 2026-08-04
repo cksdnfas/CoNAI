@@ -86,6 +86,7 @@
     "verify:data-rematch-contracts": "tsx src/scripts/verifyDataRematchContracts.ts",
     "verify:thumbnail-default-settings-contracts": "tsx src/scripts/verifyThumbnailDefaultSettingsContracts.ts",
     "verify:comfy-server-default-contracts": "tsx src/scripts/verifyComfyServerDefaultContracts.ts",
+    "verify:workflow-numeric-bounds-contracts": "tsx src/scripts/verifyWorkflowNumericBoundsContracts.ts",
     "verify:module-definition-reconcile-contracts": "tsx src/scripts/verifyModuleDefinitionReconcileContracts.ts",
     "verify:comfy-dropdown-auto-collect-api-contracts": "tsx src/scripts/verifyComfyDropdownAutoCollectApiContracts.ts",
     "verify:comfy-model-thumbnail-startup-cleanup": "tsx src/scripts/verifyComfyModelThumbnailStartupCleanup.ts",

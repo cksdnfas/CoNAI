@@ -300,6 +300,45 @@ export function hasWorkflowFieldValue(value: WorkflowFieldDraftValue | undefined
   return Object.keys(value).length > 0
 }
 
+/** Check whether one populated number draft can be submitted as a finite number. */
+export function isValidWorkflowNumberDraftValue(value: WorkflowFieldDraftValue | undefined) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return false
+  }
+
+  return Number.isFinite(Number(value))
+}
+
+/** Find the first populated number field whose draft cannot be submitted. */
+export function findInvalidWorkflowNumberField(
+  fields: WorkflowMarkedField[],
+  draft: Record<string, WorkflowFieldDraftValue>,
+) {
+  return fields.find((field) => (
+    field.type === 'number'
+    && hasWorkflowFieldValue(draft[field.id])
+    && !isValidWorkflowNumberDraftValue(draft[field.id])
+  ))
+}
+
+/** Parse and clamp one workflow number without aligning it to the configured step. */
+export function normalizeWorkflowNumberPromptValue(field: WorkflowMarkedField, value: string) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) {
+    throw new Error(`Invalid numeric workflow field: ${field.id}`)
+  }
+
+  let normalizedValue = numericValue
+  if (typeof field.min === 'number' && Number.isFinite(field.min)) {
+    normalizedValue = Math.max(field.min, normalizedValue)
+  }
+  if (typeof field.max === 'number' && Number.isFinite(field.max)) {
+    normalizedValue = Math.min(field.max, normalizedValue)
+  }
+
+  return normalizedValue
+}
+
 /** Convert workflow field input strings into the payload expected by the backend. */
 export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>) {
   return fields.reduce<Record<string, unknown>>((payload, field) => {
@@ -323,7 +362,7 @@ export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Re
     }
 
     if (field.type === 'number') {
-      payload[field.id] = Number(value)
+      payload[field.id] = normalizeWorkflowNumberPromptValue(field, value)
       return payload
     }
 

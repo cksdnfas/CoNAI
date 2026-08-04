@@ -27,6 +27,8 @@ export function ScrubbableNumberInput({
   scrubRatio = 0.3,
   className,
   variant,
+  onBlur,
+  onKeyDown,
   ...props
 }: ScrubbableNumberInputProps) {
   const { t } = useI18n()
@@ -43,6 +45,18 @@ export function ScrubbableNumberInput({
     return result
   }
 
+  const commitValue = () => {
+    const parsedValue = Number(String(value))
+    if (!Number.isFinite(parsedValue)) {
+      return
+    }
+
+    const normalizedValue = String(clampValue(parsedValue))
+    if (normalizedValue !== String(value)) {
+      onChange(normalizedValue)
+    }
+  }
+
   return (
     <Input
       {...props}
@@ -55,6 +69,17 @@ export function ScrubbableNumberInput({
       className={`${className ?? 'cursor-ew-resize'} touch-none select-none appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
       title={t({ ko: '좌우로 드래그해서 값 조절', en: 'Drag left or right to adjust the value' })}
       onChange={(event) => onChange(event.target.value)}
+      onBlur={(event) => {
+        commitValue()
+        onBlur?.(event)
+      }}
+      onKeyDown={(event) => {
+        onKeyDown?.(event)
+        if (!event.defaultPrevented && event.key === 'Enter') {
+          commitValue()
+          event.currentTarget.blur()
+        }
+      }}
       onWheel={(event) => {
         event.currentTarget.blur()
       }}

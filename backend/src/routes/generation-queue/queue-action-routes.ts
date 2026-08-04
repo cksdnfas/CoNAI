@@ -6,6 +6,10 @@ import { WorkflowModel } from '../../models/Workflow'
 import { GenerationQueueService } from '../../services/generationQueueService'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
 import { publishQueueJobEvent } from '../../services/runtime-events/runtimeEventPublishers'
+import {
+  normalizeWorkflowNumericPromptValues,
+  WorkflowNumericFieldValidationError,
+} from '../../services/workflowNumericFieldPolicy'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import {
   getRequesterAccountId,
@@ -100,6 +104,8 @@ export function createGenerationQueueActionRoutes() {
 
     let workflowHasServerLinks = false
 
+    let workflowMarkedFields: Array<{ id: string; type?: string; default_value?: unknown; min?: unknown; max?: unknown; step?: unknown }> = []
+
     if (workflow_id !== undefined && workflow_id !== null) {
 
       workflowIdNumber = parsePositiveInteger(workflow_id)
@@ -121,6 +127,8 @@ export function createGenerationQueueActionRoutes() {
         return
 
       }
+
+      workflowMarkedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
 
       workflowHasServerLinks = WorkflowServerModel.findServersByWorkflow(workflowIdNumber, false).length > 0
 
@@ -232,6 +240,46 @@ export function createGenerationQueueActionRoutes() {
 
     }
 
+    let normalizedRequestPayload = request_payload
+
+    if (service_type === 'comfyui') {
+
+      const promptData = request_payload.prompt_data
+
+      if (!promptData || typeof promptData !== 'object' || Array.isArray(promptData)) {
+
+        sendRouteBadRequest(res, 'request_payload.prompt_data must be an object')
+
+        return
+
+      }
+
+      try {
+
+        normalizedRequestPayload = {
+
+          ...request_payload,
+
+          prompt_data: normalizeWorkflowNumericPromptValues(workflowMarkedFields, promptData),
+
+        }
+
+      } catch (error) {
+
+        if (error instanceof WorkflowNumericFieldValidationError) {
+
+          sendRouteBadRequest(res, error.message)
+
+          return
+
+        }
+
+        throw error
+
+      }
+
+    }
+
     const requesterAccountId = getRequesterAccountId(req)
 
     const normalizedRequestSummary = typeof request_summary === 'string' && request_summary.trim().length > 0 ? request_summary.trim() : null
@@ -286,7 +334,7 @@ export function createGenerationQueueActionRoutes() {
 
           }
 
-        : request_payload
+        : normalizedRequestPayload
 
       jobIds.push(GenerationQueueModel.create({
 

@@ -3,6 +3,7 @@ import { routeParam } from '../routeParam';
 import { WorkflowModel } from '../../models/Workflow';
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
 
 const router = Router();
 
@@ -144,6 +145,11 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     } as WorkflowResponse);
   }
 
+  const markedFieldError = getWorkflowNumericFieldDefinitionError(marked_fields);
+  if (markedFieldError) {
+    return res.status(400).json({ success: false, error: markedFieldError } as WorkflowResponse);
+  }
+
   try {
     // workflow_json 유효성 검사
     JSON.parse(workflow_json);
@@ -231,6 +237,11 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       success: false,
       error: 'Invalid workflow ID'
     } as WorkflowResponse);
+  }
+
+  const markedFieldError = getWorkflowNumericFieldDefinitionError(marked_fields);
+  if (markedFieldError) {
+    return res.status(400).json({ success: false, error: markedFieldError } as WorkflowResponse);
   }
 
   // workflow_json 유효성 검사 (제공된 경우)

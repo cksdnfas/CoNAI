@@ -6,6 +6,7 @@ import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { prepareComfyPromptData } from '../prepareComfyPromptData'
 import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
+import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy'
 import { settingsService } from '../settingsService'
 import { WorkflowModel } from '../../models/Workflow'
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer'
@@ -28,6 +29,7 @@ import {
   type RuntimeArtifact,
 } from './shared'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
+import { type MarkedField } from '../../types/workflow'
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
 
 const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
@@ -128,7 +130,7 @@ function buildQueuePromptData(
   workflow: { marked_fields?: string | null },
   resolvedInputs: Record<string, any>,
 ) {
-  const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) as Array<{ id?: unknown }> : []
+  const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) as MarkedField[] : []
   const explicitInputs = node.input_values ?? {}
   const connectedInputKeys = new Set(
     context.workflow.graph.edges
@@ -149,7 +151,7 @@ function buildQueuePromptData(
     }
   }
 
-  return promptData
+  return normalizeWorkflowNumericPromptValues(markedFields, promptData)
 }
 
 function validateQueueTarget(workflowId: number, target: GraphComfyExecutionTarget) {

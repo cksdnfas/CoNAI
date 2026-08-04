@@ -17,6 +17,10 @@ import { GenerationHistoryModel } from '../../models/GenerationHistory';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
 import { reconcileComfyModelSelectionValues } from '../../services/comfyModelSelectionResolver';
 import { resolveWorkflowPromptValues } from '../../services/workflowPromptValueResolver';
+import {
+  normalizeWorkflowNumericPromptValues,
+  WorkflowNumericFieldValidationError,
+} from '../../services/workflowNumericFieldPolicy';
 
 const router = Router();
 
@@ -76,7 +80,16 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
 
     const comfyService = createComfyUIService(apiEndpoint);
     const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
-    const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, prompt_data);
+    let normalizedPromptData: Record<string, any>;
+    try {
+      normalizedPromptData = normalizeWorkflowNumericPromptValues(markedFields, prompt_data);
+    } catch (error) {
+      if (error instanceof WorkflowNumericFieldValidationError) {
+        return res.status(400).json({ success: false, error: error.message } as WorkflowResponse);
+      }
+      throw error;
+    }
+    const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, normalizedPromptData);
     const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui');
     const resolvedPromptData = await reconcileComfyModelSelectionValues(workflow.workflow_json, markedFields, parsedPromptData, comfyService, { strict: true });
     const substitutedWorkflow = comfyService.substitutePromptData(

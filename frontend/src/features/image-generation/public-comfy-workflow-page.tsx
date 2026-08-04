@@ -27,6 +27,7 @@ import {
   buildWorkflowDraft,
   buildWorkflowPromptData,
   clearPersistedComfyWorkflowDraft,
+  findInvalidWorkflowNumberField,
   hasWorkflowFieldValue,
   loadPersistedComfyWorkflowDraft,
   persistComfyWorkflowDraft,
@@ -170,6 +171,18 @@ export function PublicComfyWorkflowPage() {
         message: t(
           { ko: '필수 필드가 비어 있어: {label}', en: 'Required field is empty: {label}' },
           { label: missingRequiredField.label },
+        ),
+        tone: 'error',
+      })
+      return
+    }
+
+    const invalidNumberField = findInvalidWorkflowNumberField(workflowFields as WorkflowMarkedField[], workflowDraft)
+    if (invalidNumberField) {
+      showSnackbar({
+        message: t(
+          { ko: '숫자 필드 값이 올바르지 않아: {label}', en: 'Invalid numeric field value: {label}' },
+          { label: invalidNumberField.label },
         ),
         tone: 'error',
       })

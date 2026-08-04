@@ -1,6 +1,7 @@
 import { CustomDropdownListModel } from '../models/CustomDropdownList'
 import { stripPromptPresetComments } from '../utils/promptComments'
 import { WildcardService } from './wildcardService'
+import { normalizeWorkflowNumericPromptValues } from './workflowNumericFieldPolicy'
 
 export type WorkflowPromptFieldLike = {
   id: string
@@ -72,7 +73,7 @@ export function resolveWorkflowPromptValues<T extends Record<string, any>>(
   tool: 'comfyui' | 'nai' = 'comfyui',
   options: { modelPathSeparator?: 'windows' | 'posix' } = {},
 ): T {
-  const resolvedPromptData: Record<string, any> = { ...promptData }
+  const resolvedPromptData: Record<string, any> = normalizeWorkflowNumericPromptValues(markedFields, promptData)
 
   for (const field of markedFields) {
     if (field.type === 'image' || field.type === 'number') {

@@ -5,6 +5,7 @@ import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import {
   buildWorkflowPromptData,
+  findInvalidWorkflowNumberField,
   hasWorkflowFieldValue,
 } from '../image-generation-drafts'
 import {
@@ -83,6 +84,12 @@ export function useComfyGenerationActions({
     const missingField = selectedWorkflowFields.find((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id]))
     if (missingField) {
       showSnackbar({ message: `필수 필드가 비어 있어: ${missingField.label}`, tone: 'error' })
+      return false
+    }
+
+    const invalidNumberField = findInvalidWorkflowNumberField(selectedWorkflowFields, workflowDraft)
+    if (invalidNumberField) {
+      showSnackbar({ message: `숫자 필드 값이 올바르지 않아: ${invalidNumberField.label}`, tone: 'error' })
       return false
     }
 

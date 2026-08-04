@@ -82,6 +82,27 @@ function clampPublicQueueMaxCount(value: string) {
   return Math.min(32, Math.max(1, parsed))
 }
 
+function getMarkedFieldNumericDefinitionError(markedFields: WorkflowMarkedField[]) {
+  for (const field of markedFields) {
+    if (field.type !== 'number') {
+      continue
+    }
+
+    const constraints = [field.min, field.max, field.step].filter((value) => value !== undefined)
+    if (constraints.some((value) => typeof value !== 'number' || !Number.isFinite(value))) {
+      return `숫자 필드 제한값이 올바르지 않아: ${field.label || field.id}`
+    }
+    if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+      return `숫자 필드의 최소값은 최대값보다 클 수 없어: ${field.label || field.id}`
+    }
+    if (field.step !== undefined && field.step <= 0) {
+      return `숫자 필드의 증감값은 0보다 커야 해: ${field.label || field.id}`
+    }
+  }
+
+  return null
+}
+
 export function ComfyWorkflowAuthoringModal({
   open,
   mode = 'create',
@@ -406,6 +427,12 @@ export function ComfyWorkflowAuthoringModal({
 
     if (workflowJson.trim().length === 0 || jsonError) {
       showSnackbar({ message: t({ ko: '유효한 workflow JSON이 필요해.', en: 'A valid workflow JSON is required.' }), tone: 'error' })
+      return
+    }
+
+    const markedFieldNumericError = getMarkedFieldNumericDefinitionError(markedFields)
+    if (markedFieldNumericError) {
+      showSnackbar({ message: markedFieldNumericError, tone: 'error' })
       return
     }
 

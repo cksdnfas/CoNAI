@@ -1,4 +1,5 @@
 import type { MarkedField } from '../../types/workflow';
+import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy';
 
 function setValueByPath(obj: any, path: string, value: any): void {
   const keys = path.split('.');
@@ -21,9 +22,10 @@ export function substituteComfyPromptData(
   promptData: Record<string, any>
 ): any {
   const workflow = JSON.parse(workflowJson);
+  const normalizedPromptData = normalizeWorkflowNumericPromptValues(markedFields, promptData);
 
   for (const field of markedFields) {
-    const value = promptData[field.id];
+    const value = normalizedPromptData[field.id];
     if (value !== undefined && value !== null) {
       setValueByPath(workflow, field.jsonPath, value);
     } else if (field.default_value !== undefined) {

@@ -14,6 +14,10 @@ import { publishQueueJobEvent } from '../services/runtime-events/runtimeEventPub
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
 import { AUTO_COLLECT_SOURCE_PATH } from '../services/comfyDropdownAutoCollectionService';
+import {
+  normalizeWorkflowNumericPromptValues,
+  WorkflowNumericFieldValidationError,
+} from '../services/workflowNumericFieldPolicy';
 import type { MarkedField, WorkflowRecord } from '../types/workflow';
 import { applyHistoryAccessScope } from './generation-history/historyRouteHelpers';
 import { getRequesterAccountId } from './requester-session-helpers';
@@ -344,7 +348,19 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
   }
 
   const imageSaveSettings = settingsService.loadSettings().imageSave;
-  const normalizedRequestPayload = { ...request_payload } as Record<string, unknown>;
+  let normalizedRequestPayload: Record<string, unknown>;
+  try {
+    normalizedRequestPayload = {
+      ...request_payload,
+      prompt_data: normalizeWorkflowNumericPromptValues(parseMarkedFields(workflow.marked_fields), promptData as Record<string, unknown>),
+    };
+  } catch (error) {
+    if (error instanceof WorkflowNumericFieldValidationError) {
+      res.status(400).json({ success: false, error: error.message });
+      return;
+    }
+    throw error;
+  }
 
   if (normalizedRequestPayload.imageSaveOptions === undefined && imageSaveSettings.applyToWorkflowOutputs) {
     normalizedRequestPayload.imageSaveOptions = {
