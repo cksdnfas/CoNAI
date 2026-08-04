@@ -2,6 +2,7 @@ import { doesNotMatch, match } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { getGenerationHistoryFeedProgressSummary } from '../features/image-generation/generation-history-feed-progress'
+import { getImageListPreviewUrl } from '../features/images/components/image-list/image-list-utils'
 
 const generationHistoryPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel.tsx'),
@@ -398,6 +399,33 @@ function assertHistoryRatingSafetySettingSourcePolicy() {
   )
 }
 
+function assertHistoryVideoSourcePolicy() {
+  const historyVideoUrl = '/api/generation-history/7/file?v=history-version'
+  const historyPreviewUrl = getImageListPreviewUrl({
+    id: 'generation-history-7',
+    composite_hash: 'history-video-hash',
+    image_url: historyVideoUrl,
+    mime_type: 'video/mp4',
+  })
+  const galleryPreviewUrl = getImageListPreviewUrl({
+    id: 8,
+    composite_hash: 'gallery-video-hash',
+    image_url: '/custom/video-source',
+    mime_type: 'video/mp4',
+  })
+
+  assertEqual(
+    historyPreviewUrl,
+    historyVideoUrl,
+    'generation history videos should keep the authorized history media route instead of switching to gallery safety',
+  )
+  assertEqual(
+    galleryPreviewUrl,
+    '/api/images/gallery-video-hash/file',
+    'ordinary gallery videos should keep using the canonical hash streaming route',
+  )
+}
+
 function assertHistoryTranslationCatalogSourcePolicy() {
   match(
     lazyRoutesSource,
@@ -423,6 +451,7 @@ assertDownloadReadinessSourcePolicy()
 assertSelectionRecoverySourcePolicy()
 assertNoImageBadgeOverlaySourcePolicy()
 assertHistoryRatingSafetySettingSourcePolicy()
+assertHistoryVideoSourcePolicy()
 assertHistoryTranslationCatalogSourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

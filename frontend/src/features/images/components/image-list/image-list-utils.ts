@@ -29,11 +29,15 @@ export function getImageListMediaKind(image: ImageRecord): ImageListMediaKind {
   return 'image'
 }
 
-/** Return the preferred display URL for web rendering. Videos use the canonical streaming route so list/detail share one stable in-app source. */
+/** Return the preferred display URL for web rendering. Videos keep scoped history routes before falling back to the canonical gallery stream. */
 export function getImageListPreviewUrl(image: ImageRecord): string | null {
   const mediaKind = getImageListMediaKind(image)
 
   if (mediaKind === 'video') {
+    if (image.image_url?.startsWith('/api/generation-history/')) {
+      return image.image_url
+    }
+
     if (image.composite_hash) {
       return `/api/images/${image.composite_hash}/file`
     }
