@@ -1,5 +1,5 @@
 # CoNAI Coolify deployment image.
-FROM node:20-bookworm-slim AS build
+FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN npm pkg delete devDependencies.lightningcss-win32-x64-msvc \
   && NODE_ENV=development npm install --include=dev --no-audit --no-fund lightningcss-linux-x64-gnu@1.32.0 \
   && npm run build:integrated
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 
 WORKDIR /app/backend
 

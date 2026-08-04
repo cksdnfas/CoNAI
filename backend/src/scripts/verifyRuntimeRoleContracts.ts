@@ -90,6 +90,9 @@ assert.match(indexSource, /Custom node sync: skipped in API\/smoke runtime/);
 assert.match(indexSource, /wasSplitRuntimeRoleDemoted/);
 assert.match(indexSource, /Split runtime role demoted to "all"/);
 assert.match(indexSource, /shouldOwnTempFileLifecycle/);
+assert.match(dockerfileSource, /^FROM node:24-bookworm-slim AS build$/m);
+assert.match(dockerfileSource, /^FROM node:24-bookworm-slim AS runtime$/m);
+assert.doesNotMatch(dockerfileSource, /^FROM node:20-/m);
 assert.match(dockerfileSource, /CONAI_RUNTIME_ROLE=all/);
 assert.doesNotMatch(dockerfileSource, /CONAI_RUNTIME_ROLE=api/);
 // The default built-runtime entry point is single-process.
