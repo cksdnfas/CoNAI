@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { PageInset } from '@/components/common/page-surface'
@@ -47,9 +47,11 @@ import {
   getHistoryRecoveryLabel,
   hasActiveGenerationHistory,
   hasPostprocessPendingHistory,
+  hasStableHistoryPageBoundary,
   isHistoryRecordDownloadReady,
   mapHistoryRecordToImageRecord,
   readAcknowledgedRecoveryIds,
+  readCachedHistoryPage,
   writeAcknowledgedRecoveryIds,
 } from './generation-history-panel-helpers'
 
@@ -105,27 +107,49 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     [historyQueryKey],
   )
   const [acknowledgedRecoveryIds, setAcknowledgedRecoveryIds] = useState<Set<number>>(() => readAcknowledgedRecoveryIds(recoveryAckStorageKey))
+  // QLIST-4: 사용자가 명시적으로 요청한 새로고침만 로드된 전 페이지를 다시 읽는다.
+  const isFullHistoryRefreshRef = useRef(false)
+  // 첫 페이지 경계가 밀린 리프레시는(신규 행 유입) 뒤 페이지 캐시를 재사용할 수 없다.
+  const hasHistoryPageBoundaryShiftRef = useRef(false)
+  const fetchHistoryPage = useCallback((offset: number) => (
+    isPublicView && publicWorkflowSlug
+      ? getPublicGenerationWorkflowHistory(publicWorkflowSlug, {
+          limit: GENERATION_HISTORY_PAGE_SIZE,
+          offset,
+        })
+      : serviceType === 'comfyui' && workflowId
+        ? getGenerationWorkflowHistory(workflowId, {
+            limit: GENERATION_HISTORY_PAGE_SIZE,
+            offset,
+            ...(isAdmin ? {} : { mine: true }),
+          })
+        : getGenerationHistory(serviceType, {
+            limit: GENERATION_HISTORY_PAGE_SIZE,
+            offset,
+            ...(isAdmin ? {} : { mine: true }),
+          })
+  ), [isAdmin, isPublicView, publicWorkflowSlug, serviceType, workflowId])
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     initialPageParam: 0,
-    queryFn: ({ pageParam }) => (
-      isPublicView && publicWorkflowSlug
-        ? getPublicGenerationWorkflowHistory(publicWorkflowSlug, {
-            limit: GENERATION_HISTORY_PAGE_SIZE,
-            offset: pageParam,
-          })
-        : serviceType === 'comfyui' && workflowId
-          ? getGenerationWorkflowHistory(workflowId, {
-              limit: GENERATION_HISTORY_PAGE_SIZE,
-              offset: pageParam,
-              ...(isAdmin ? {} : { mine: true }),
-            })
-          : getGenerationHistory(serviceType, {
-              limit: GENERATION_HISTORY_PAGE_SIZE,
-              offset: pageParam,
-              ...(isAdmin ? {} : { mine: true }),
-            })
-    ),
+    queryFn: async ({ pageParam }) => {
+      // 활성 리프레시(폴링/SSE 무효화)는 첫 페이지만 서버에서 다시 읽고, 뒤 페이지는 캐시 사본을 그대로 쓴다.
+      // 종전에는 로드된 페이지 수만큼 무거운 히스토리 쿼리가 매 리프레시마다 반복됐다.
+      if (pageParam > 0 && !isFullHistoryRefreshRef.current && !hasHistoryPageBoundaryShiftRef.current) {
+        const cachedPage = readCachedHistoryPage(queryClient, historyQueryKey, pageParam)
+        if (cachedPage) {
+          return cachedPage
+        }
+      }
+
+      const previousFirstPage = pageParam === 0 ? readCachedHistoryPage(queryClient, historyQueryKey, 0) : undefined
+      const page = await fetchHistoryPage(pageParam)
+      if (pageParam === 0) {
+        hasHistoryPageBoundaryShiftRef.current = !hasStableHistoryPageBoundary(previousFirstPage, page)
+      }
+
+      return page
+    },
     enabled: !authStatusQuery.isPending,
     // Keep every loaded page: the active-generation refetch has to restart at offset 0 so newly
     // completed generations appear, and selection/visible-count state is derived from all pages.
@@ -164,8 +188,21 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       setHistoryRefreshWatchUntil(Date.now() + GENERATION_HISTORY_REFRESH_WATCH_MS)
     }
 
-    await refetchHistory()
+    // 명시적 새로고침(버튼/삭제/재실행/부모 nonce)만 전 페이지를 다시 읽는다.
+    isFullHistoryRefreshRef.current = true
+    try {
+      await refetchHistory()
+    } finally {
+      isFullHistoryRefreshRef.current = false
+    }
   }, [refetchHistory])
+  const isFetchingHistory = historyQuery.isFetching
+  useEffect(() => {
+    if (!isFetchingHistory) {
+      // 경계 밀림으로 강제된 전 페이지 재조회가 끝났으면 다음 리프레시는 다시 첫 페이지만 읽는다.
+      hasHistoryPageBoundaryShiftRef.current = false
+    }
+  }, [isFetchingHistory])
 
   useEffect(() => {
     setAcknowledgedRecoveryIds(readAcknowledgedRecoveryIds(recoveryAckStorageKey))

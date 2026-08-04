@@ -3,6 +3,7 @@ import { ComfyUIServerModel } from '../../models/ComfyUIServer'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { computeQueueEtas, computeQueuePositions } from './queue-eta'
+import { buildQueueListSnapshotCacheKey, readQueueListSnapshot } from './queue-list-snapshot-cache'
 import {
   ACTIVE_QUEUE_STATUSES,
   buildQueueRequesterUsernameMap,
@@ -84,8 +85,13 @@ function readActiveEtaWindowRecords(filters: QueueListFilters, records: Generati
     })
 }
 
-export function buildGenerationQueueListResponse(req: Request) {
-  const { requesterAccountId, limit, offset, filters } = buildQueueListFilters(req)
+/**
+ * Compute one permission-neutral queue list snapshot.
+ *
+ * 요청자에 따라 달라지는 값은 여기에 **절대** 들어가지 않는다. `is_mine` 은
+ * `buildGenerationQueueListResponse` 가 스냅샷을 읽은 뒤에만 얹는다.
+ */
+function buildQueueListSnapshot(filters: QueueListFilters, limit: number, offset: number) {
   const total = GenerationQueueModel.countListRecords(filters)
   const records = total === 0
     ? []
@@ -109,7 +115,6 @@ export function buildGenerationQueueListResponse(req: Request) {
   const requesterUsernames = buildQueueRequesterUsernameMap(records)
 
   return {
-    success: true,
     records: records.map((record) => {
       const queuePosition = queuePositions.get(record.id)
       const queueEta = queueEtas.get(record.id)
@@ -125,11 +130,44 @@ export function buildGenerationQueueListResponse(req: Request) {
         estimated_wait_seconds: queueEta?.waitSeconds ?? null,
         estimated_total_seconds: queueEta?.totalSeconds ?? null,
         estimated_duration_seconds: queueEta?.durationSeconds ?? null,
-        is_mine: requesterAccountId !== null && record.requested_by_account_id === requesterAccountId,
       }
     }),
     total,
     limit,
     offset,
+  }
+}
+
+export type GenerationQueueListSnapshot = ReturnType<typeof buildQueueListSnapshot>
+
+/**
+ * Read the shared queue list snapshot and decorate it for this requester.
+ *
+ * N 명이 동시에 폴링해도 스냅샷 계산은 TTL 당 1회다. 요청자별 필드(`is_mine`)만
+ * 캐시 **밖에서** 계산되므로 다른 사용자의 소유 표시가 새어 나갈 수 없다.
+ */
+export function buildGenerationQueueListResponse(req: Request) {
+  const { requesterAccountId, limit, offset, filters } = buildQueueListFilters(req)
+  const snapshot = readQueueListSnapshot(
+    buildQueueListSnapshotCacheKey({
+      statuses: filters.statuses,
+      serviceType: filters.serviceType,
+      workflowId: filters.workflowId,
+      requesterAccountId: filters.requesterAccountId,
+      limit,
+      offset,
+    }),
+    () => buildQueueListSnapshot(filters, limit, offset),
+  )
+
+  return {
+    success: true,
+    records: snapshot.records.map((record) => ({
+      ...record,
+      is_mine: requesterAccountId !== null && record.requested_by_account_id === requesterAccountId,
+    })),
+    total: snapshot.total,
+    limit: snapshot.limit,
+    offset: snapshot.offset,
   }
 }

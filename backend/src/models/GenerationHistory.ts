@@ -125,6 +125,86 @@ export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
   provider_job_id?: string | null;
 }
 
+/**
+ * 히스토리 목록 카운트 캐시 TTL.
+ *
+ * `countListRecords` 는 페이지 요청마다 `COUNT(*) + LEFT JOIN workflows` 를 돌린다.
+ * 큐 활성 구간에서 N명이 3초 폴링하면 그대로 N배가 되므로 짧은 TTL 로 상수화한다.
+ * 히스토리 쓰기(생성/상태 전이/삭제)는 즉시 무효화하므로 TTL 은 "쓰기 없이 흐른 시간"에만 적용된다.
+ */
+const HISTORY_LIST_COUNT_CACHE_TTL_MS = 3_000;
+const HISTORY_LIST_COUNT_CACHE_MAX_ENTRIES = 64;
+/** `IN (...)` 바인딩 상한(SQLite 기본 999)보다 넉넉히 낮게 자른다. */
+const HISTORY_RESULT_MEDIA_LOOKUP_CHUNK_SIZE = 400;
+
+type HistoryListCountCacheEntry = { expiresAt: number; total: number };
+const historyListCountCache = new Map<string, HistoryListCountCacheEntry>();
+let historyListCountCacheStats = { hits: 0, misses: 0, invalidations: 0 };
+
+/** Drop every cached history list count. Called from every history write path. */
+function invalidateHistoryListCountCache(): void {
+  if (historyListCountCache.size > 0) {
+    historyListCountCache.clear();
+  }
+
+  historyListCountCacheStats.invalidations += 1;
+}
+
+/** Report history count cache effectiveness for diagnostics and smoke runs. */
+export function getGenerationHistoryListCountCacheStats() {
+  return { ...historyListCountCacheStats, entries: historyListCountCache.size, ttl_ms: HISTORY_LIST_COUNT_CACHE_TTL_MS };
+}
+
+/** Reset history count cache state for contract smoke runs. */
+export function resetGenerationHistoryListCountCacheForTests(): void {
+  historyListCountCache.clear();
+  historyListCountCacheStats = { hits: 0, misses: 0, invalidations: 0 };
+}
+
+/**
+ * Resolved main-image view for one history row.
+ * `findAllWithMetadata` 가 행별 상관 서브쿼리 대신 한 번의 사전 조회로 채운다.
+ */
+type HistoryResultMediaView = {
+  actual_composite_hash: string | null;
+  actual_width: number | null;
+  actual_height: number | null;
+  actual_mime_type: string | null;
+  result_file_status: 'active' | 'missing' | 'deleted' | null;
+  rating_score: number | null;
+};
+
+const EMPTY_HISTORY_RESULT_MEDIA_VIEW: HistoryResultMediaView = {
+  actual_composite_hash: null,
+  actual_width: null,
+  actual_height: null,
+  actual_mime_type: null,
+  result_file_status: null,
+  rating_score: null,
+};
+
+type HistoryResultMediaRow = {
+  composite_hash: string;
+  file_id: number;
+  file_status: 'active' | 'missing' | 'deleted' | null;
+  mime_type: string | null;
+  media_composite_hash: string | null;
+  media_width: number | null;
+  media_height: number | null;
+  media_rating_score: number | null;
+};
+
+/** Replicate `ORDER BY (file_status = 'active') DESC, id DESC LIMIT 1` in memory. */
+function isPreferredResultFile(candidate: HistoryResultMediaRow, current: HistoryResultMediaRow): boolean {
+  const candidateRank = candidate.file_status === 'active' ? 0 : 1;
+  const currentRank = current.file_status === 'active' ? 0 : 1;
+  if (candidateRank !== currentRank) {
+    return candidateRank < currentRank;
+  }
+
+  return candidate.file_id > current.file_id;
+}
+
 export interface FilterOptions {
   ids?: number[];
   service_type?: ServiceType;
@@ -252,6 +332,7 @@ export class GenerationHistoryModel {
     );
 
     const historyId = info.lastInsertRowid as number;
+    invalidateHistoryListCountCache();
     // E13: 신규 히스토리 행. 서비스/라우트/MCP 의 모든 생성 경로가 이 한 곳을 지난다.
     publishHistoryEventById(historyId, 'history.record.created');
     return historyId;
@@ -349,6 +430,7 @@ export class GenerationHistoryModel {
     const { sql, values } = buildUpdateQuery('api_generation_history', updates, { id });
     const stmt = apiGenDb.prepare(sql);
     stmt.run(...values);
+    invalidateHistoryListCountCache();
 
     if (updates.generation_status === 'completed' || updates.generation_status === 'failed') {
       requestGenerationResultRetentionPrune();
@@ -366,6 +448,7 @@ export class GenerationHistoryModel {
       WHERE id = ?
     `);
     stmt.run(status, status, id);
+    invalidateHistoryListCountCache();
     // E10
     publishHistoryEventById(id, 'history.record.status');
     if (status === 'completed' || status === 'failed') {
@@ -389,6 +472,7 @@ export class GenerationHistoryModel {
       WHERE id = ?
     `);
     stmt.run(paths.compositeHash || null, id);
+    invalidateHistoryListCountCache();
     // E11: composite_hash 확정은 히스토리 카드가 실제 미디어로 바뀌는 순간이다.
     publishHistoryEventById(id, 'history.record.status');
   }
@@ -405,6 +489,7 @@ export class GenerationHistoryModel {
       WHERE id = ?
     `);
     stmt.run(errorMessage, id);
+    invalidateHistoryListCountCache();
     // E12
     publishHistoryEventById(id, 'history.record.status');
     requestGenerationResultRetentionPrune();
@@ -435,6 +520,7 @@ export class GenerationHistoryModel {
         AND generation_status IN ('pending', 'processing')
     `);
     const info = stmt.run(errorMessage, ...uniqueJobIds);
+    invalidateHistoryListCountCache();
     // E12: 큐 잡 단위 일괄 실패도 행별로 알린다.
     affectedIds.forEach((historyId) => publishHistoryEventById(historyId, 'history.record.status'));
     if (info.changes > 0) {
@@ -449,6 +535,7 @@ export class GenerationHistoryModel {
   static delete(id: number): void {
     const stmt = apiGenDb.prepare('DELETE FROM api_generation_history WHERE id = ?');
     stmt.run(id);
+    invalidateHistoryListCountCache();
   }
 
   /**
@@ -459,6 +546,7 @@ export class GenerationHistoryModel {
   static deleteByCompositeHash(compositeHash: string): number {
     const stmt = apiGenDb.prepare('DELETE FROM api_generation_history WHERE composite_hash = ?');
     const info = stmt.run(compositeHash);
+    invalidateHistoryListCountCache();
     return info.changes;
   }
 
@@ -480,6 +568,25 @@ export class GenerationHistoryModel {
    * Count rows visible in compact history-list surfaces.
    */
   static countListRecords(filters: Omit<FilterOptions, 'limit' | 'offset'> = {}): number {
+    const cacheKey = JSON.stringify([
+      filters.ids ?? null,
+      filters.service_type ?? null,
+      filters.generation_status ?? null,
+      filters.workflow_id ?? null,
+      filters.queue_job_id ?? null,
+      filters.requested_by_account_id ?? null,
+      filters.requested_by_account_type ?? null,
+      filters.server_id ?? null,
+    ]);
+    const now = Date.now();
+    const cached = historyListCountCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      historyListCountCacheStats.hits += 1;
+      return cached.total;
+    }
+
+    historyListCountCacheStats.misses += 1;
+
     let sql = `
       SELECT COUNT(*) as total
       FROM api_generation_history gh
@@ -493,7 +600,17 @@ export class GenerationHistoryModel {
 
     const stmt = apiGenDb.prepare(sql);
     const result = stmt.get(...params) as { total: number } | undefined;
-    return result?.total || 0;
+    const total = result?.total || 0;
+
+    if (historyListCountCache.size >= HISTORY_LIST_COUNT_CACHE_MAX_ENTRIES) {
+      const oldestKey = historyListCountCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        historyListCountCache.delete(oldestKey);
+      }
+    }
+
+    historyListCountCache.set(cacheKey, { expiresAt: now + HISTORY_LIST_COUNT_CACHE_TTL_MS, total });
+    return total;
   }
 
   /**
@@ -648,30 +765,12 @@ export class GenerationHistoryModel {
         assigned_server.name as assigned_server_name,
         qj.status as queue_status,
         qj.cancel_requested as queue_cancel_requested,
-        qj.provider_job_id,
-        CASE WHEN matched_file.file_status = 'active' THEN im.composite_hash ELSE NULL END as actual_composite_hash,
-        CASE WHEN matched_file.file_status = 'active' THEN im.width ELSE NULL END as actual_width,
-        CASE WHEN matched_file.file_status = 'active' THEN im.height ELSE NULL END as actual_height,
-        CASE WHEN matched_file.file_status = 'active' THEN matched_file.mime_type ELSE NULL END as actual_mime_type,
-        matched_file.file_status as result_file_status,
-        CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score
+        qj.provider_job_id
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
       LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
       LEFT JOIN comfyui_servers assigned_server ON assigned_server.id = qj.assigned_server_id
-      LEFT JOIN main_db.image_files matched_file ON matched_file.id = (
-        SELECT if2.id
-        FROM main_db.image_files if2
-        WHERE gh.composite_hash IS NOT NULL
-          AND if2.composite_hash = gh.composite_hash
-        ORDER BY
-          CASE WHEN if2.file_status = 'active' THEN 0 ELSE 1 END,
-          if2.id DESC
-        LIMIT 1
-      )
-      LEFT JOIN main_db.media_metadata im ON im.composite_hash = matched_file.composite_hash
-        AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -696,7 +795,80 @@ export class GenerationHistoryModel {
     }
 
     const stmt = apiGenDb.prepare(sql);
-    return stmt.all(...params) as any[];
+    const rows = stmt.all(...params) as GenerationHistoryListRecord[];
+    return this.attachResultMediaViews(rows);
+  }
+
+  /**
+   * Resolve display media for one page of history rows in a single indexed lookup.
+   *
+   * 종전에는 `LEFT JOIN main_db.image_files ON id = (상관 서브쿼리)` 가 **행마다** 실행돼
+   * 20만행 `image_files` 를 반복 탐색했다. 페이지의 composite_hash 집합을 모아 한 번만
+   * 조회하고(`idx_files_composite_hash` SEARCH), 우선순위(active 우선 → id 내림차순)를
+   * 메모리에서 적용해 종전 SQL 과 동일한 결과를 만든다.
+   */
+  private static attachResultMediaViews(rows: GenerationHistoryListRecord[]): GenerationHistoryListRecord[] {
+    const compositeHashes = Array.from(new Set(
+      rows
+        .map((row) => row.composite_hash)
+        .filter((hash): hash is string => typeof hash === 'string' && hash.length > 0),
+    ));
+
+    const views = this.readResultMediaViews(compositeHashes);
+    return rows.map((row) => Object.assign(
+      row,
+      (row.composite_hash ? views.get(row.composite_hash) : undefined) ?? EMPTY_HISTORY_RESULT_MEDIA_VIEW,
+    ));
+  }
+
+  /** Read the preferred backing file + ready media metadata for each composite hash. */
+  private static readResultMediaViews(compositeHashes: string[]): Map<string, HistoryResultMediaView> {
+    const views = new Map<string, HistoryResultMediaView>();
+    if (compositeHashes.length === 0) {
+      return views;
+    }
+
+    const preferredRowByHash = new Map<string, HistoryResultMediaRow>();
+
+    for (let start = 0; start < compositeHashes.length; start += HISTORY_RESULT_MEDIA_LOOKUP_CHUNK_SIZE) {
+      const chunk = compositeHashes.slice(start, start + HISTORY_RESULT_MEDIA_LOOKUP_CHUNK_SIZE);
+      const chunkRows = apiGenDb.prepare(`
+        SELECT
+          matched_file.composite_hash as composite_hash,
+          matched_file.id as file_id,
+          matched_file.file_status as file_status,
+          matched_file.mime_type as mime_type,
+          im.composite_hash as media_composite_hash,
+          im.width as media_width,
+          im.height as media_height,
+          im.rating_score as media_rating_score
+        FROM main_db.image_files matched_file
+        LEFT JOIN main_db.media_metadata im ON im.composite_hash = matched_file.composite_hash
+          AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}
+        WHERE matched_file.composite_hash IN (${chunk.map(() => '?').join(',')})
+      `).all(...chunk) as HistoryResultMediaRow[];
+
+      for (const chunkRow of chunkRows) {
+        const current = preferredRowByHash.get(chunkRow.composite_hash);
+        if (!current || isPreferredResultFile(chunkRow, current)) {
+          preferredRowByHash.set(chunkRow.composite_hash, chunkRow);
+        }
+      }
+    }
+
+    preferredRowByHash.forEach((row, hash) => {
+      const isActiveFile = row.file_status === 'active';
+      views.set(hash, {
+        actual_composite_hash: isActiveFile ? row.media_composite_hash ?? null : null,
+        actual_width: isActiveFile ? row.media_width ?? null : null,
+        actual_height: isActiveFile ? row.media_height ?? null : null,
+        actual_mime_type: isActiveFile ? row.mime_type ?? null : null,
+        result_file_status: row.file_status ?? null,
+        rating_score: isActiveFile ? row.media_rating_score ?? null : null,
+      });
+    });
+
+    return views;
   }
 
   /**
@@ -832,6 +1004,7 @@ export class GenerationHistoryModel {
     const sql = `DELETE FROM api_generation_history WHERE id IN (${placeholders})`;
     const stmt = apiGenDb.prepare(sql);
     const info = stmt.run(...ids);
+    invalidateHistoryListCountCache();
 
     return info.changes;
   }

@@ -1,3 +1,4 @@
+import type { InfiniteData, QueryClient } from '@tanstack/react-query'
 import type { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
@@ -46,6 +47,49 @@ export function dedupeHistoryRecords(records: GenerationHistoryResponse['records
     seenIds.add(record.id)
     return true
   })
+}
+
+/**
+ * Read one already-cached history page for a stored page param.
+ *
+ * QLIST-4: 활성 리프레시(폴링/SSE 무효화)는 로드된 전 페이지를 다시 읽는 대신 첫 페이지만
+ * 서버에서 가져온다. 나머지 페이지는 이 함수가 캐시 사본을 그대로 돌려주므로 요청이 나가지 않는다.
+ */
+export function readCachedHistoryPage(
+  queryClient: QueryClient,
+  queryKey: readonly unknown[],
+  pageParam: number,
+): GenerationHistoryResponse | undefined {
+  const cached = queryClient.getQueryData<InfiniteData<GenerationHistoryResponse, number>>(queryKey)
+  if (!cached) {
+    return undefined
+  }
+
+  const pageIndex = cached.pageParams.findIndex((param) => param === pageParam)
+  return pageIndex >= 0 ? cached.pages[pageIndex] : undefined
+}
+
+/**
+ * Decide whether cached later pages still line up after the first page was refetched.
+ *
+ * 첫 페이지의 경계(행 수 + 마지막 행 id)가 그대로면 뒤 페이지의 offset 의미도 그대로다.
+ * 신규 행이 끼어들어 경계가 밀리면 캐시 재사용을 포기하고 전 페이지를 다시 읽어야 행이 사라지지 않는다.
+ */
+export function hasStableHistoryPageBoundary(
+  previousFirstPage: GenerationHistoryResponse | undefined,
+  nextFirstPage: GenerationHistoryResponse,
+) {
+  if (!previousFirstPage) {
+    return false
+  }
+
+  if (previousFirstPage.records.length !== nextFirstPage.records.length) {
+    return false
+  }
+
+  const previousLastId = previousFirstPage.records[previousFirstPage.records.length - 1]?.id ?? null
+  const nextLastId = nextFirstPage.records[nextFirstPage.records.length - 1]?.id ?? null
+  return previousLastId === nextLastId
 }
 
 export function readAcknowledgedRecoveryIds(storageKey: string) {
