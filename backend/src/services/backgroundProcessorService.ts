@@ -334,7 +334,9 @@ export class BackgroundProcessorService {
     }
 
     setTimeout(() => {
-      autoTagScheduler.triggerManualProcessing().catch((error) => {
+      // Pass the hash we just saved so the scheduler tags that row directly instead
+      // of re-scanning every media_metadata row for pending work (ATAG-3).
+      autoTagScheduler.triggerManualProcessing(compositeHash).catch((error) => {
         console.warn(
           `  ⚠️  Immediate auto-tag trigger failed for ${path.basename(filePath)} (${compositeHash.substring(0, 16)}...):`,
           error instanceof Error ? error.message : error

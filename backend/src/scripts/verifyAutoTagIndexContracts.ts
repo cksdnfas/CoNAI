@@ -11,6 +11,9 @@ function readSource(relativePath: string): string {
 const initialMigration = readSource('backend/src/database/migrations/000_create_all_tables.ts');
 const autoTagIndexMigration = readSource('backend/src/database/migrations/022_add_media_auto_tag_index.ts');
 const autoTagIndexPruneMigration = readSource('backend/src/database/migrations/023_prune_media_auto_tag_index_variants.ts');
+const autoTagStateMigration = readSource('backend/src/database/migrations/028_add_media_auto_tag_state.ts');
+const autoTagStateService = readSource('backend/src/services/autoTagStateService.ts');
+const backgroundProcessorService = readSource('backend/src/services/backgroundProcessorService.ts');
 const redundantIndexPruneMigration = readSource('backend/src/database/migrations/026_prune_redundant_indexes.ts');
 const autoTagSearchTerms = readSource('backend/src/services/autoTagSearch/autoTagSearchTerms.ts');
 const autoTagIndexService = readSource('backend/src/services/autoTagIndexService.ts');
@@ -230,6 +233,126 @@ assert.match(
   dataRematchService,
   /this\.remapHashRefTableRows\('media_auto_tag_index', oldHash, newHash\)/,
   'hash regeneration must preserve auto-tag index rows when hashes change',
+);
+
+// --- Auto-tag pending state (migration 028 / ATAG-1..3) ---------------------------
+// The scheduler must find work through the partial index instead of the json_extract
+// full scan, and the state must stay a superset of the original condition.
+
+assert.match(
+  autoTagStateMigration,
+  /ADD COLUMN auto_tag_state TEXT DEFAULT NULL/,
+  'migration 028 must add the auto_tag_state column without rewriting existing wide rows',
+);
+assert.match(
+  autoTagStateMigration,
+  /CREATE INDEX IF NOT EXISTS idx_media_metadata_auto_tag_pending\s*\n\s*ON media_metadata\(auto_tag_state, composite_hash\)\s*\n\s*WHERE auto_tag_state = 'pending'/,
+  'migration 028 must create the partial pending index keyed by auto_tag_state',
+);
+assert.match(
+  autoTagStateMigration,
+  /CREATE TABLE IF NOT EXISTS auto_tag_state_meta/,
+  'migration 028 must record which taggers the stored state was computed for',
+);
+assert.match(
+  autoTagStateMigration,
+  /UPDATE media_metadata\s*\n\s*SET auto_tag_state = 'pending'\s*\n\s*WHERE auto_tag_state IS NOT 'pending'/,
+  'migration 028 must backfill pending rows with a single UPDATE (no per-row loop)',
+);
+for (const triggerName of [
+  'trg_media_metadata_auto_tag_state_insert',
+  'trg_media_metadata_auto_tag_state_promote',
+  'trg_media_metadata_auto_tag_state_settle',
+  'trg_image_files_auto_tag_state_insert',
+  'trg_image_files_auto_tag_state_link',
+]) {
+  assert.match(
+    autoTagStateMigration,
+    new RegExp(`CREATE TRIGGER ${triggerName}`),
+    `migration 028 must keep auto_tag_state accurate for every writer via ${triggerName}`,
+  );
+}
+
+// Migration 028 cannot import project modules (portable builds ship the compiled
+// migrations directory standalone), so the runtime copy must not drift.
+for (const source of [autoTagStateMigration, autoTagStateService]) {
+  assert.match(
+    source,
+    /COALESCE\(\(SELECT tagger_enabled FROM auto_tag_state_meta WHERE id = 1\), 1\) = 1/,
+    'auto-tag state expressions must read the recorded tagger capability',
+  );
+  assert.match(
+    source,
+    /COALESCE\(\(SELECT kaloscope_enabled FROM auto_tag_state_meta WHERE id = 1\), 1\) = 1/,
+    'auto-tag state expressions must read the recorded kaloscope capability',
+  );
+  assert.match(
+    source,
+    /json_extract\(\$\{autoTagsExpr\}, '\$\.tagger'\) IS NULL/,
+    'auto-tag state expressions must keep the tagger term of the original pending condition',
+  );
+  assert.match(
+    source,
+    /json_extract\(\$\{autoTagsExpr\}, '\$\.kaloscope'\) IS NULL/,
+    'auto-tag state expressions must keep the kaloscope term of the original pending condition',
+  );
+  assert.match(
+    source,
+    /f\.original_file_path IS NOT NULL\s*\n\s*AND f\.file_status = 'active'/,
+    'auto-tag state expressions must keep the original active-file eligibility filter',
+  );
+}
+
+assert.match(
+  autoTagStateService,
+  /buildPendingStatePrefix\(alias: string\): string/,
+  'auto-tag state service must expose the pending-state SQL prefix for the scheduler',
+);
+assert.match(
+  autoTagStateService,
+  /syncCapabilityState\(capabilities: AutoTagStateCapabilities\): void/,
+  'auto-tag state service must recompute stored state when the enabled tagger set changes',
+);
+
+assert.match(
+  autoTagScheduler,
+  /WHERE \$\{AutoTagStateService\.buildPendingStatePrefix\('mm'\)\}\(/,
+  'pending media lookup must be narrowed by the indexed auto_tag_state before the json filter',
+);
+assert.match(
+  autoTagScheduler,
+  /mm\.auto_tags IS NULL\s*\n\s*OR \(\? = 1 AND json_extract\(mm\.auto_tags, '\$\.tagger'\) IS NULL\)\s*\n\s*OR \(\? = 1 AND json_extract\(mm\.auto_tags, '\$\.kaloscope'\) IS NULL\)/,
+  'pending media lookup must keep the dual tagger condition as the residual filter',
+);
+assert.match(
+  autoTagScheduler,
+  /AutoTagStateService\.syncCapabilityState\(capabilities\)/,
+  'pending lookups must sync the recorded capabilities before reading the indexed state',
+);
+assert.match(
+  autoTagScheduler,
+  /AutoTagStateService\.refreshForHash\(compositeHash\)/,
+  'auto-tag persistence must settle the pending state after tagging finishes',
+);
+assert.match(
+  autoTagScheduler,
+  /AutoTagStateService\.pruneIneligiblePending\(\)/,
+  'idle polls must park pending rows whose media file disappeared',
+);
+assert.match(
+  autoTagScheduler,
+  /async triggerManualProcessing\(compositeHash\?: string\): Promise<void>/,
+  'manual auto-tag triggers must accept the composite hash that was just saved',
+);
+assert.match(
+  autoTagScheduler,
+  /findPendingMediaByHash\(compositeHash: string, capabilities: AutoTagCapabilities\)/,
+  'saved-media tagging must look up one row instead of re-scanning for pending work',
+);
+assert.match(
+  backgroundProcessorService,
+  /autoTagScheduler\.triggerManualProcessing\(compositeHash\)/,
+  'background processing must hand the saved composite hash to the auto-tag scheduler',
 );
 
 console.log('✅ Auto-tag index contracts verified');
