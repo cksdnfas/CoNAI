@@ -35,7 +35,6 @@ if (isProductionEnvironment || isPackagedRuntime()) {
 
 import https from 'https';
 import express, { type Request, type Response as ExpressResponse } from 'express';
-import sharp from 'sharp';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -44,6 +43,7 @@ import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import BetterSqlite3Store from 'better-sqlite3-session-store';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
+import { configureSharpRuntime } from './config/sharpRuntime';
 import { resolveSessionSecret } from './utils/sessionSecret';
 import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
@@ -82,8 +82,7 @@ process.on('uncaughtException', (error) => {
   setTimeout(() => process.exit(1), 2000).unref();
 });
 
-// Keep libvips' worker pool modest so background image processing does not starve API requests.
-sharp.concurrency(2);
+configureSharpRuntime();
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;

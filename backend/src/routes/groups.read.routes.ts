@@ -7,6 +7,7 @@ import { GroupDownloadService, DownloadType, CaptionMode } from '../services/gro
 import { PAGINATION, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { enrichCompactImageWithFileView, enrichImageRecord, enrichImageWithFileView } from './images/utils';
+import { pipeFileToResponse } from './images/query-file-response-helpers';
 import { parsePositiveIntegerQuery } from './routeValidation';
 
 const GROUP_PREVIEW_IMAGE_COUNT_MAX = 20;
@@ -259,20 +260,12 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
     );
     res.setHeader('X-File-Count', result.fileCount.toString());
 
-    const fileStream = fs.createReadStream(result.zipPath);
-
-    fileStream.on('error', (error) => {
-      console.error('Error streaming zip file:', error);
-      if (!res.headersSent) {
-        res.status(500).json(errorResponse('Failed to download zip file'));
-      }
+    // 중단된 다운로드도 임시 zip을 남기지 않도록 스트림이 실제로 닫힌 뒤 정리한다.
+    return pipeFileToResponse(res, fs.createReadStream(result.zipPath), () => {
+      void GroupDownloadService.cleanupTempFile(result.zipPath).catch((error) => {
+        console.error('Error cleaning up zip file:', error);
+      });
     });
-
-    fileStream.on('end', async () => {
-      await GroupDownloadService.cleanupTempFile(result.zipPath);
-    });
-
-    return fileStream.pipe(res);
   } catch (error) {
     console.error('Error downloading group images:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to download group images';

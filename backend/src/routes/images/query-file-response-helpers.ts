@@ -90,6 +90,48 @@ function setFileCacheHeaders(
   res.setHeader('Last-Modified', validators.lastModified);
 }
 
+/**
+ * Stream a file to the response and always release its descriptor.
+ *
+ * `readable.pipe(res)` does not destroy the source when the response goes away, so a
+ * cancelled media request (gallery scroll, unmounted <img>, closed tab) leaves the file
+ * open for the lifetime of the process. On Windows that handle locks the file and a later
+ * delete fails with `EBUSY: resource busy or locked, unlink`.
+ *
+ * @param onClosed - invoked once after the descriptor is actually closed, on both
+ *                   completion and abort (used for temp-file cleanup)
+ */
+export function pipeFileToResponse(
+  res: Response,
+  stream: fs.ReadStream,
+  onClosed?: () => void,
+) {
+  const destroyStream = () => {
+    if (!stream.destroyed) {
+      stream.destroy();
+    }
+  };
+
+  res.on('close', destroyStream);
+
+  stream.on('error', (error) => {
+    console.error('File stream error:', error);
+    destroyStream();
+
+    if (!res.headersSent) {
+      res.status(500).end();
+    } else {
+      res.destroy(error);
+    }
+  });
+
+  if (onClosed) {
+    stream.once('close', onClosed);
+  }
+
+  stream.pipe(res);
+}
+
 /** Validate the composite-hash route param and send the shared 400 response when invalid. */
 export function getCompositeHashOrBlock(req: Request, res: Response) {
   const compositeHash = routeParam(routeParam(req.params.compositeHash));
@@ -125,14 +167,14 @@ export function streamRangeFile(req: Request, res: Response, filePath: string, m
 
     res.status(200);
     res.setHeader('Content-Length', fileSize);
-    fs.createReadStream(filePath).pipe(res);
+    pipeFileToResponse(res, fs.createReadStream(filePath));
     return;
   }
 
   if (!shouldHonorRangeRequest(req, stats, etag)) {
     res.status(200);
     res.setHeader('Content-Length', fileSize);
-    fs.createReadStream(filePath).pipe(res);
+    pipeFileToResponse(res, fs.createReadStream(filePath));
     return;
   }
 
@@ -177,7 +219,7 @@ export function streamRangeFile(req: Request, res: Response, filePath: string, m
   res.status(206);
   res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
   res.setHeader('Content-Length', chunkSize);
-  fs.createReadStream(filePath, { start, end }).pipe(res);
+  pipeFileToResponse(res, fs.createReadStream(filePath, { start, end }));
 }
 
 /** Stream one static file with ETag handling and revalidated cache headers. */
@@ -201,7 +243,7 @@ export async function streamCacheableFile(
 
   res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Length', stats.size);
-  fs.createReadStream(filePath).pipe(res);
+  pipeFileToResponse(res, fs.createReadStream(filePath));
 }
 
 /** Resolve the content type for path-based file serving. */

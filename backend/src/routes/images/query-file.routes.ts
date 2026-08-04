@@ -17,6 +17,7 @@ import {
   getExistingActiveFilePathOrBlock,
   getMimeTypeFromFilePath,
   getVisibleMetadataOrBlock,
+  pipeFileToResponse,
   resolveDownloadFileForType,
   serveThumbnailOrOriginal,
   streamCacheableFile,
@@ -71,8 +72,7 @@ async function handleTypedImageDownload(req: Request, res: Response, forcedType?
   );
   res.setHeader('Content-Type', contentType);
 
-  const fileStream = fs.createReadStream(resolved.filePath);
-  fileStream.pipe(res);
+  pipeFileToResponse(res, fs.createReadStream(resolved.filePath));
 }
 
 router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
@@ -318,8 +318,7 @@ router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Respo
     res.setHeader('Content-Type', getMimeTypeFromFilePath(filePath));
     res.setHeader('Cache-Control', 'public, max-age=3600');
 
-    const fileStream = fs.createReadStream(resolvedPath);
-    fileStream.pipe(res);
+    pipeFileToResponse(res, fs.createReadStream(resolvedPath));
     return;
   } catch (error) {
     console.error('Path-based image error:', error);
@@ -345,8 +344,7 @@ router.get('/placeholder', asyncHandler(async (req: Request, res: Response) => {
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
 
-    const fileStream = fs.createReadStream(placeholderPath);
-    fileStream.pipe(res);
+    pipeFileToResponse(res, fs.createReadStream(placeholderPath));
     return;
   } catch (error) {
     console.error('Placeholder image error:', error);

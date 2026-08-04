@@ -81,6 +81,7 @@
     "verify:supported-extension-contracts": "tsx src/scripts/verifySupportedExtensionContracts.ts",
     "verify:recycle-bin-deletion-contracts": "tsx src/scripts/verifyRecycleBinDeletionContracts.ts",
     "verify:deletion-lock-contracts": "tsx src/scripts/verifyDeletionLockContracts.ts",
+    "verify:file-handle-release-contracts": "tsx src/scripts/verifyFileHandleReleaseContracts.ts",
     "verify:data-rematch-contracts": "tsx src/scripts/verifyDataRematchContracts.ts",
     "verify:thumbnail-default-settings-contracts": "tsx src/scripts/verifyThumbnailDefaultSettingsContracts.ts",
     "verify:comfy-server-default-contracts": "tsx src/scripts/verifyComfyServerDefaultContracts.ts",

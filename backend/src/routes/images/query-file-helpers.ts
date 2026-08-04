@@ -12,11 +12,12 @@ import type { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
 import {
   getCompositeHashOrBlock,
   getMimeTypeFromFilePath,
+  pipeFileToResponse,
   streamCacheableFile,
   streamRangeFile,
 } from './query-file-response-helpers';
 
-export { getCompositeHashOrBlock, getMimeTypeFromFilePath, streamCacheableFile, streamRangeFile };
+export { getCompositeHashOrBlock, getMimeTypeFromFilePath, pipeFileToResponse, streamCacheableFile, streamRangeFile };
 
 export type ImageDownloadType = 'original' | 'thumbnail';
 

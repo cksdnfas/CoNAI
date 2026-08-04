@@ -154,6 +154,7 @@
     "verify:supported-extension-contracts": "cd backend && npm run verify:supported-extension-contracts",
     "verify:recycle-bin-deletion-contracts": "cd backend && npm run verify:recycle-bin-deletion-contracts",
     "verify:deletion-lock-contracts": "cd backend && npm run verify:deletion-lock-contracts",
+    "verify:file-handle-release-contracts": "cd backend && npm run verify:file-handle-release-contracts",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",

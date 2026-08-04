@@ -23,10 +23,14 @@ import { initializeDatabase } from '../database/init';
 import { initializeUserSettingsDb } from '../database/userSettingsDb';
 import { initializeApiGenerationDb } from '../database/apiGenerationDb';
 import { ensureRuntimeDirectories } from '../config/runtimePaths';
+import { configureSharpRuntime } from '../config/sharpRuntime';
 
 async function main() {
   // 런타임 디렉토리 확인
   ensureRuntimeDirectories();
+
+  // sharp/libvips 설정 (열린 파일 캐시 비활성화 → Windows 삭제 잠금 방지)
+  configureSharpRuntime();
 
   // 데이터베이스 초기화 (동기)
   await initializeDatabase();

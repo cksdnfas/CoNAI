@@ -118,16 +118,21 @@ export async function prepareComfyPromptData(
       : sanitizeUploadSegment(field.id)
 
     const uploadName = buildComfyImageUploadName(uploadInput.fileName, fallbackBase)
-    const imageInput = uploadInput.filePath
-      ? fs.createReadStream(uploadInput.filePath)
-      : uploadInput.buffer
+    // 업로드가 실패하면 소비되지 않은 스트림이 파일을 계속 열어 둬서,
+    // Windows에서 해당 이미지 삭제가 EBUSY로 막힌다. 항상 닫는다.
+    const fileStream = uploadInput.filePath ? fs.createReadStream(uploadInput.filePath) : null
+    const imageInput = fileStream ?? uploadInput.buffer
 
     if (!imageInput) {
       continue
     }
 
-    const uploadedName = await comfyService.uploadInputImage(uploadName, imageInput, { contentType: uploadInput.mimeType })
-    preparedPromptData[field.id] = uploadedName
+    try {
+      const uploadedName = await comfyService.uploadInputImage(uploadName, imageInput, { contentType: uploadInput.mimeType })
+      preparedPromptData[field.id] = uploadedName
+    } finally {
+      fileStream?.destroy()
+    }
   }
 
   return preparedPromptData
