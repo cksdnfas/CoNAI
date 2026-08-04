@@ -22,6 +22,16 @@ assert.ok(
   'home search drawer content should remain split behind a dynamic import',
 )
 assert.ok(
+  homeSearchUi.includes("import('@/i18n/resources/home')")
+    && homeSearchUi.includes("import('@/i18n/resources/search')"),
+  'global home search should lazy-load every feature catalog it uses',
+)
+assert.ok(
+  homeSearchUi.includes('registerTranslationCatalog(homeCatalog)')
+    && homeSearchUi.includes('registerTranslationCatalog(searchCatalog)'),
+  'global home search should register its feature catalogs before rendering the drawer',
+)
+assert.ok(
   homeSearchUi.includes('homeSearchDrawerContentLoadPromise = null'),
   'home search drawer loader should reset after chunk-load failures so retries still work',
 )

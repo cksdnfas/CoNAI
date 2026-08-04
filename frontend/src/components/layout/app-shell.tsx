@@ -10,7 +10,7 @@ import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
-import { useI18n } from '@/i18n'
+import { registerTranslationCatalog, useI18n } from '@/i18n'
 import { getPublicHeaderNavigationSettings } from '@/lib/api-settings'
 import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
@@ -18,7 +18,11 @@ import { DEFAULT_HEADER_NAVIGATION_SETTINGS, type HeaderNavigationItemKey } from
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
 
 const GenerationQueueHeaderWidgetLazy = lazy(async () => {
-  const module = await import('@/features/image-generation/components/generation-queue-header-widget')
+  const [module, imageGenerationCatalog] = await Promise.all([
+    import('@/features/image-generation/components/generation-queue-header-widget'),
+    import('@/i18n/resources/image-generation').then((catalogModule) => catalogModule.imageGenerationCatalog),
+  ])
+  registerTranslationCatalog(imageGenerationCatalog)
   return { default: module.GenerationQueueHeaderWidget }
 })
 

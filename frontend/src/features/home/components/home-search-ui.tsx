@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useHomeSearch } from '@/features/home/home-search-context'
-import { useI18n } from '@/i18n'
+import { registerTranslationCatalog, useI18n } from '@/i18n'
 
 type HomeSearchDrawerContentModule = typeof import('./home-search-drawer-content')
 type HomeSearchDrawerContentComponent = HomeSearchDrawerContentModule['HomeSearchDrawerContent']
@@ -13,8 +13,16 @@ type IdlePreloadWindow = Window & {
 let homeSearchDrawerContentLoadPromise: Promise<{ default: HomeSearchDrawerContentComponent }> | null = null
 
 function loadHomeSearchDrawerContent() {
-  homeSearchDrawerContentLoadPromise ??= import('./home-search-drawer-content')
-    .then((module) => ({ default: module.HomeSearchDrawerContent }))
+  homeSearchDrawerContentLoadPromise ??= Promise.all([
+    import('./home-search-drawer-content'),
+    import('@/i18n/resources/home').then((catalogModule) => catalogModule.homeCatalog),
+    import('@/i18n/resources/search').then((catalogModule) => catalogModule.searchCatalog),
+  ])
+    .then(([module, homeCatalog, searchCatalog]) => {
+      registerTranslationCatalog(homeCatalog)
+      registerTranslationCatalog(searchCatalog)
+      return { default: module.HomeSearchDrawerContent }
+    })
     .catch((error: unknown) => {
       homeSearchDrawerContentLoadPromise = null
       throw error

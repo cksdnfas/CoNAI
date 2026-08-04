@@ -58,6 +58,8 @@ assertIncludes(apiSettings, 'getPublicHeaderNavigationSettings', 'frontend publi
 assertIncludes(appShell, 'getPublicHeaderNavigationSettings', 'app shell public header navigation query');
 assertIncludes(appShell, 'headerNavigation[item.id] !== false', 'app shell nav item visibility gate');
 assertIncludes(appShell, 'headerNavigation.queue !== false', 'app shell queue visibility gate');
+assertIncludes(appShell, "import('@/i18n/resources/image-generation')", 'queue widget translation catalog lazy load');
+assertIncludes(appShell, 'registerTranslationCatalog(imageGenerationCatalog)', 'queue widget translation catalog registration');
 assertIncludes(appShell, 'headerNavigation.search !== false', 'app shell search visibility gate');
 assertIncludes(appShell, 'headerNavigation.account !== false', 'app shell account visibility gate');
 assertIncludes(generalPreferences, 'HEADER_NAVIGATION_OPTIONS.map', 'appearance checklist rendering');
