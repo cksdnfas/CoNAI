@@ -32,6 +32,8 @@ const QUEUE_QUERY_KEY_PREFIX = 'image-generation-queue'
 const HISTORY_QUERY_KEY_PREFIX = 'image-generation-history'
 const GRAPH_SCHEDULE_QUERY_KEY_PREFIX = 'graph-workflow-schedules'
 const GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX = 'module-graph-browse-content'
+/** WF-2: 예약 탭이 browse-content 대신 전용 경량 스냅샷을 폴링하므로 그 표면도 함께 무효화한다. */
+const GRAPH_RESERVATION_QUERY_KEY_PREFIX = 'graph-workflow-reservations'
 
 type QueueListResponse = { success: boolean; records: GenerationQueueJobRecord[]; total: number }
 
@@ -172,13 +174,16 @@ export function useRuntimeEventQueryBridge() {
       }
       case 'graph.schedule.changed': {
         scheduleInvalidate(
-          [GRAPH_SCHEDULE_QUERY_KEY_PREFIX, GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX],
+          [GRAPH_SCHEDULE_QUERY_KEY_PREFIX, GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX, GRAPH_RESERVATION_QUERY_KEY_PREFIX],
           GRAPH_INVALIDATE_DEBOUNCE_MS,
         )
         return
       }
       case 'graph.execution.status': {
-        scheduleInvalidate([GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX], GRAPH_INVALIDATE_DEBOUNCE_MS)
+        scheduleInvalidate(
+          [GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX, GRAPH_RESERVATION_QUERY_KEY_PREFIX],
+          GRAPH_INVALIDATE_DEBOUNCE_MS,
+        )
         return
       }
       case 'job.status': {
@@ -202,6 +207,7 @@ export function useRuntimeEventQueryBridge() {
       HISTORY_QUERY_KEY_PREFIX,
       GRAPH_SCHEDULE_QUERY_KEY_PREFIX,
       GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX,
+      GRAPH_RESERVATION_QUERY_KEY_PREFIX,
       RUNTIME_JOB_QUERY_KEY,
     ].forEach((prefix) => {
       void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active' })

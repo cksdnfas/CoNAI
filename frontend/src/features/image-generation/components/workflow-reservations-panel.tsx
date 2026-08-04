@@ -14,14 +14,14 @@ import {
   cleanupGraphWorkflowEmptyExecutions,
   createGraphWorkflowSchedule,
   deleteGraphWorkflowSchedule,
-  getGraphWorkflowBrowseContent,
+  getGraphWorkflowReservations,
   pauseGraphWorkflowSchedule,
   resumeGraphWorkflowSchedule,
   runGraphWorkflowScheduleNow,
   updateGraphWorkflowSchedule,
   cancelGraphExecution,
 } from '@/lib/api-module-graph'
-import type { GraphWorkflowRecord } from '@/lib/api-module-graph'
+import type { GraphWorkflowNameRecord } from '@/lib/api-module-graph'
 import { getErrorMessage } from '../image-generation-shared'
 import { ModuleWorkflowEmptyRunsTab } from '@/features/module-graph/components/module-workflow-empty-runs-tab'
 import { getActiveWorkflowReservationScheduleCount, isActiveReservationExecution, mergeVisibleReservationExecutions, sortWorkflowReservationSchedules } from './workflow-reservations-ui'
@@ -39,9 +39,10 @@ export function WorkflowReservationsPanel() {
   // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 2초 폴링이 그대로 되살아난다.
   const { status: runtimeStreamStatus } = useRuntimeEventStream()
 
+  // WF-2: 예약 탭은 browse-content 전체 덤프 대신 예약 전용 경량 스냅샷을 폴링한다.
   const reservationsQuery = useQuery({
-    queryKey: ['module-graph-browse-content', 'generation-reservations', 'root'],
-    queryFn: () => getGraphWorkflowBrowseContent(null, { includeOutputs: false }),
+    queryKey: ['graph-workflow-reservations', 'generation-reservations'],
+    queryFn: () => getGraphWorkflowReservations(),
     refetchInterval: (query) => {
       const content = query.state.data
       const executions = mergeVisibleReservationExecutions(content?.empty_executions ?? [], content?.executions ?? [])
@@ -62,7 +63,7 @@ export function WorkflowReservationsPanel() {
   const queuedExecutionCount = useMemo(() => reservationExecutions.filter((execution) => execution.status === 'queued').length, [reservationExecutions])
 
   const workflowNameById = useMemo(
-    () => new Map<number, string>(workflows.map((workflow: GraphWorkflowRecord) => [workflow.id, workflow.name])),
+    () => new Map<number, string>(workflows.map((workflow: GraphWorkflowNameRecord) => [workflow.id, workflow.name])),
     [workflows],
   )
   const reservationExecutionIdSet = useMemo(() => new Set(reservationExecutions.map((execution) => execution.id)), [reservationExecutions])

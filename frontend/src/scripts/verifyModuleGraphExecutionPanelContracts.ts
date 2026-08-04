@@ -419,12 +419,30 @@ function assertExecutionPanelLookupPolicy() {
     'workflow runner latest-result area should only wait for final-result detail when the latest execution is completed',
   )
   assert(
-    pageViewModelSource.includes('const latestExecutionDetailQueryIndex = useMemo(')
-      && pageViewModelSource.includes("latestExecution?.status === 'completed'")
-      && pageViewModelSource.includes('previewExecutionCandidates.findIndex((execution) => execution.id === latestExecution.id)')
+    pageViewModelSource.includes("const latestCompletedExecutionId = latestExecution?.status === 'completed' ? latestExecution.id : null")
+      && pageViewModelSource.includes("queryKey: ['module-graph-execution-detail', latestCompletedExecutionId]")
+      && pageViewModelSource.includes('enabled: latestCompletedExecutionId !== null')
       && pageViewModelSource.includes('const latestExecutionDetailIsLoading = latestExecution?.status === \'completed\'')
-      && pageViewModelSource.includes('const latestExecutionDetailError = latestExecution?.status === \'completed\' && latestExecutionDetailQuery?.isError'),
+      && pageViewModelSource.includes('const latestExecutionDetailError = latestExecution?.status === \'completed\' && latestExecutionDetailQuery.isError'),
     'workflow runner latest-result detail state should be derived from the matching latest completed execution query',
+  )
+  // WF-4: 완료 실행 미리보기는 실행마다 상세를 긁는 N+1 이 아니라 배치 1회로 받아야 한다.
+  assert(
+    pageViewModelSource.includes("queryKey: ['module-graph-execution-previews', previewExecutionIds]")
+      && pageViewModelSource.includes('queryFn: () => getGraphExecutionPreviews(previewExecutionIds)')
+      && !pageViewModelSource.includes('useQueries('),
+    'module graph previews must be fetched as one batch request instead of one detail request per execution',
+  )
+  assert(
+    apiModuleGraphSource.includes('export async function getGraphExecutionPreviews')
+      && apiModuleGraphSource.includes('/api/graph-workflows/executions/previews?')
+      && apiModuleGraphTypesSource.includes('export interface GraphExecutionPreviewBatchRecord'),
+    'module graph API client should expose the batch execution preview endpoint',
+  )
+  assert(
+    pageQueriesSource.includes('resolveStreamFallbackInterval(')
+      && pageQueriesSource.includes("hasActiveGraphExecution(query.state.data) ? 5_000 : false"),
+    'module graph execution polling must stay under the shared runtime stream fallback gate',
   )
   assert(
     pageSectionsSource.includes('latestExecutionDetailIsLoading={latestExecutionDetailIsLoading}')
@@ -567,10 +585,13 @@ function assertExecutionPanelLookupPolicy() {
       && workflowRunnerSource.includes('localizeGraphWorkflowErrorMessage(latestExecution.error_message'),
     'workflow runner latest-result status and failure copy should use localized status/error helpers',
   )
+  // WF-4: 5초 폴링 결정은 그대로 살아 있어야 하고(스트림이 죽으면 폴백으로 되살아난다),
+  // 다만 SSE 가 살아 있는 동안에는 공유 스트림 게이트가 폴링을 눌러 준다.
   assert(
     pageQueriesSource.includes('function hasActiveGraphExecution(executions: GraphExecutionRecord[] | undefined)')
       && pageQueriesSource.includes("execution.status")
-      && pageQueriesSource.includes('refetchInterval: (query) => hasActiveGraphExecution(query.state.data) ? 5_000 : false'),
+      && pageQueriesSource.includes('hasActiveGraphExecution(query.state.data) ? 5_000 : false')
+      && pageQueriesSource.includes('refetchInterval: (query) => resolveStreamFallbackInterval('),
     'workflow execution list should poll while the selected workflow has queued/running executions so latest-result status can reach terminal detail loading',
   )
   assert(
@@ -579,23 +600,19 @@ function assertExecutionPanelLookupPolicy() {
       && apiModuleGraphSource.includes('/api/graph-workflows/${workflowId}/versions?${searchParams.toString()}'),
     'module graph API client should expose compact saved workflow version summaries',
   )
+  // 워크플로우 버전 리뷰 블록은 b1ffb043 "fix(generation): simplify workflow interface" 에서
+  // 러너 패널 밖으로 걷어냈다(그때 이 스크립트가 함께 갱신되지 않아 계약이 낡아 있었다).
+  // 버전 요약 API 자체는 위 어서션이 계속 지키므로, 여기서는 러너 패널이 그 UI 를 되살리지
+  // 않았다는 사실만 확인한다.
   assert(
-    workflowRunnerSource.includes("queryKey: ['module-graph-workflow-versions', selectedGraph?.id ?? null]")
-      && workflowRunnerSource.includes('getGraphWorkflowVersionSummaries(selectedGraph?.id as number)')
-      && workflowRunnerSource.includes('WorkflowVersionReviewBlock'),
-    'workflow runner should query and render saved workflow version review context',
+    !workflowRunnerSource.includes('WorkflowVersionReviewBlock'),
+    'workflow runner no longer owns the saved workflow version review block',
   )
+  // 런타임 입력 diff 와 그래프 버전 경고도 같은 커밋(b1ffb043)에서 러너 패널에서 제거됐다.
   assert(
-    workflowRunnerSource.includes('function buildWorkflowRuntimeInputDiffEntries')
-      && workflowRunnerSource.includes('previousEntries: latestExecutionInputEntries')
-      && workflowRunnerSource.includes("entry.status !== 'unchanged'"),
-    'workflow runner should diff current runtime inputs against the latest execution input preset',
-  )
-  assert(
-    workflowRunnerSource.includes('latestExecution?.graph_version')
-      && workflowRunnerSource.includes('latestExecutionVersion === selectedGraph.version')
-      && workflowRunnerSource.includes('최근 실행은 이전 그래프 버전이야. 재실행 전에 변경 내용을 확인해줘.'),
-    'workflow runner should warn when the latest run used an older saved workflow version',
+    !workflowRunnerSource.includes('buildWorkflowRuntimeInputDiffEntries')
+      && !workflowRunnerSource.includes('latestExecutionVersion === selectedGraph.version'),
+    'workflow runner no longer owns runtime input diffing or the stale graph version warning',
   )
   assert(
     pageViewModelSource.includes('const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])'),

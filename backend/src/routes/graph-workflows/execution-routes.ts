@@ -14,6 +14,9 @@ import { sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
 import { parseGraphExecutionInputValues, parseGraphRouteInteger } from './route-helpers'
 
+/** Upper bound for one batch preview request; the page only previews the newest completed runs. */
+const MAX_EXECUTION_PREVIEW_IDS = 24
+
 export function createGraphWorkflowExecutionRoutes() {
   const router = Router()
 
@@ -61,6 +64,44 @@ export function createGraphWorkflowExecutionRoutes() {
     } catch (error) {
       console.error('Error getting graph execution status:', error)
       return res.status(500).json({ success: false, error: 'Failed to get graph execution status' } as ModuleGraphResponse)
+    }
+  }))
+
+  /**
+   * WF-4: batch artifact preview for the module-graph page.
+   *
+   * 종전에는 완료된 실행 8건마다 `GET /executions/:id` 를 병렬로 때려 로그/node_io 까지 전부
+   * 받아왔다(N+1). 여기서는 한 번의 요청으로 아티팩트와 최종 결과만 모아 준다. 로그·node_io 가
+   * 필요한 최신 실행 1건은 기존 상세 라우트를 그대로 쓴다.
+   * `/executions/:executionId` 보다 먼저 등록해야 `previews` 가 실행 id 로 파싱되지 않는다.
+   */
+  router.get('/executions/previews', asyncHandler(async (req: Request, res: Response) => {
+    const rawIds = typeof req.query.execution_ids === 'string' ? req.query.execution_ids : ''
+    const executionIds = Array.from(new Set(
+      rawIds
+        .split(',')
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    )).slice(0, MAX_EXECUTION_PREVIEW_IDS)
+
+    if (executionIds.length === 0) {
+      return sendRouteBadRequest(res, 'execution_ids is required')
+    }
+
+    try {
+      const executions = decorateGraphExecutionRecords(GraphExecutionModel.findByIds(executionIds))
+      const resolvedIds = executions.map((execution) => execution.id)
+      return res.json({
+        success: true,
+        data: {
+          executions,
+          artifacts: GraphExecutionArtifactModel.findByExecutionIds(resolvedIds),
+          final_results: GraphExecutionFinalResultModel.findByExecutionIds(resolvedIds),
+        },
+      } as ModuleGraphResponse)
+    } catch (error) {
+      console.error('Error getting graph execution previews:', error)
+      return res.status(500).json({ success: false, error: 'Failed to get graph execution previews' } as ModuleGraphResponse)
     }
   }))
 

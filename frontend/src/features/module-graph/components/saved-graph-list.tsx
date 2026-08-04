@@ -7,20 +7,19 @@ import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import type { GraphWorkflowFolderRecord, GraphWorkflowSummaryRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
-import { isFinalResultModule } from '../module-graph-shared'
-import { countGraphWorkflowFinalResultNodes, hasAssignedFinalResult, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
+import { hasAssignedFinalResult, resolveSavedGraphWorkflowFinalResultNodeCount, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-locked'
 
 type SavedGraphListProps = {
-  graphs: GraphWorkflowRecord[]
+  graphs: GraphWorkflowSummaryRecord[]
   folders: GraphWorkflowFolderRecord[]
   selectedGraphId: number | null
   selectedFolderId: number | null
   moduleDefinitionById: Map<number, ModuleDefinitionRecord>
-  onLoadGraph: (graph: GraphWorkflowRecord) => void
+  onLoadGraph: (graph: GraphWorkflowSummaryRecord) => void
   onSelectFolder: (folderId: number | null) => void
   leftToolbar?: ReactNode
   rightToolbar?: ReactNode
@@ -28,7 +27,7 @@ type SavedGraphListProps = {
 
 type TreeEntry =
   | { type: 'folder'; label: string; folder: GraphWorkflowFolderRecord }
-  | { type: 'workflow'; label: string; workflow: GraphWorkflowRecord }
+  | { type: 'workflow'; label: string; workflow: GraphWorkflowSummaryRecord }
 
 function normalizeFolderKey(folderId: number | null | undefined) {
   return folderId ?? null
@@ -46,7 +45,7 @@ function sortTreeEntries(left: TreeEntry, right: TreeEntry, locale: string) {
   return compareTreeLabels(left.label, right.label, locale)
 }
 
-function buildWorkflowSearchText(workflow: GraphWorkflowRecord) {
+function buildWorkflowSearchText(workflow: GraphWorkflowSummaryRecord) {
   return `${workflow.name} ${workflow.description ?? ''}`.toLowerCase()
 }
 
@@ -88,7 +87,7 @@ export function SavedGraphList({
   }, [folders, locale])
 
   const workflowsByFolder = useMemo(() => {
-    const nextMap = new Map<number | null, GraphWorkflowRecord[]>()
+    const nextMap = new Map<number | null, GraphWorkflowSummaryRecord[]>()
     for (const graph of graphs) {
       const folderId = normalizeFolderKey(graph.folder_id)
       const bucket = nextMap.get(folderId) ?? []
@@ -103,17 +102,16 @@ export function SavedGraphList({
     return nextMap
   }, [graphs, locale])
 
+  // WF-1: 목록 응답에 그래프 문서가 없으므로 최종 결과 노드 수는 서버 계산 값을 그대로 쓴다.
   const finalResultNodeCountByWorkflowId = useMemo(() => {
     const nextMap = new Map<number, number>()
 
     for (const graph of graphs) {
-      const finalResultCount = countGraphWorkflowFinalResultNodes(graph, moduleDefinitionById, isFinalResultModule)
-
-      nextMap.set(graph.id, finalResultCount)
+      nextMap.set(graph.id, resolveSavedGraphWorkflowFinalResultNodeCount(graph))
     }
 
     return nextMap
-  }, [graphs, moduleDefinitionById])
+  }, [graphs])
 
   const folderSearchTextById = useMemo(() => {
     const nextMap = new Map<number, string>()
@@ -143,7 +141,7 @@ export function SavedGraphList({
 
     const nextVisible = new Set<number>()
     const matchesFolder = (folder: GraphWorkflowFolderRecord) => (folderSearchTextById.get(folder.id) ?? '').includes(query)
-    const matchesWorkflow = (workflow: GraphWorkflowRecord) => (workflowSearchTextById.get(workflow.id) ?? '').includes(query)
+    const matchesWorkflow = (workflow: GraphWorkflowSummaryRecord) => (workflowSearchTextById.get(workflow.id) ?? '').includes(query)
 
     const visit = (folderId: number | null): boolean => {
       let hasMatch = false
@@ -187,7 +185,7 @@ export function SavedGraphList({
     setCollapsedFolderIds((current) => (current.includes(folderId) ? current.filter((item) => item !== folderId) : [...current, folderId]))
   }
 
-  const renderWorkflowRow = (graph: GraphWorkflowRecord, depth: number) => {
+  const renderWorkflowRow = (graph: GraphWorkflowSummaryRecord, depth: number) => {
     const finalResultNodeCount = finalResultNodeCountByWorkflowId.get(graph.id) ?? 0
     const summary = resolveSavedGraphWorkflowSummary(graph, finalResultNodeCount)
     const summaryLine = [

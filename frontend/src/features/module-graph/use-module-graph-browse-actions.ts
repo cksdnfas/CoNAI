@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { Dispatch, SetStateAction } from 'react'
 import {
   createGraphWorkflow,
@@ -6,6 +7,7 @@ import {
   deleteGraphWorkflow,
   deleteGraphWorkflowFolder,
   exportGraphWorkflow,
+  getGraphWorkflow,
   importGraphWorkflow,
   updateGraphWorkflow,
   updateGraphWorkflowFolder,
@@ -14,6 +16,7 @@ import {
   type GraphWorkflowFolderDeleteMode,
   type GraphWorkflowFolderRecord,
   type GraphWorkflowRecord,
+  type GraphWorkflowSummaryRecord,
   type ModuleDefinitionRecord,
 } from '@/lib/api-module-graph'
 import { buildFlowFromGraphRecord, buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
@@ -65,7 +68,7 @@ export function useModuleGraphBrowseActions({
   folderDeleteTarget: GraphWorkflowFolderRecord | null
   workflowView: 'browse' | 'edit'
   modules: ModuleDefinitionRecord[]
-  graphWorkflows: GraphWorkflowRecord[]
+  graphWorkflows: GraphWorkflowSummaryRecord[]
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
   setNodes: Dispatch<SetStateAction<ModuleGraphNode[]>>
   setEdges: Dispatch<SetStateAction<ModuleGraphEdge[]>>
@@ -94,6 +97,8 @@ export function useModuleGraphBrowseActions({
   enterWorkflowEditor: (section?: EditorSupportSectionKey) => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const queryClient = useQueryClient()
+
   /** Apply one saved workflow record into the current editor state. */
   const applyGraphRecordToEditor = useCallback((graph: GraphWorkflowRecord) => {
     const { nodes: nextNodes, edges: nextEdges } = buildFlowFromGraphRecord(graph, modules)
@@ -131,13 +136,37 @@ export function useModuleGraphBrowseActions({
     )
   }, [modules, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
 
-  /** Load one saved workflow into the editor, optionally opening editor mode immediately. */
-  const handleLoadGraph = useCallback((graph: GraphWorkflowRecord, options?: { openEditor?: boolean; silent?: boolean }) => {
+  /**
+   * Load one saved workflow into the editor, optionally opening editor mode immediately.
+   *
+   * WF-1: 탐색기 목록 항목에는 그래프 문서가 없다. 요약만 넘어오면 여기서 by-id 로 전체 그래프를
+   * 받아 편집기에 반영한다(이미 전체 레코드를 들고 있는 호출자는 추가 요청 없이 그대로 쓴다).
+   */
+  const handleLoadGraph = useCallback(async (
+    graph: GraphWorkflowSummaryRecord | GraphWorkflowRecord,
+    options?: { openEditor?: boolean; silent?: boolean },
+  ) => {
     if (!confirmDiscardUnsavedChanges()) {
       return false
     }
 
-    applyGraphRecordToEditor(graph)
+    let fullGraph: GraphWorkflowRecord
+    if ('graph' in graph) {
+      fullGraph = graph
+    } else {
+      try {
+        // 선택 상세 쿼리와 같은 키로 받아 두면 선택 직후의 by-id 재조회가 캐시에 흡수된다.
+        fullGraph = await queryClient.fetchQuery({
+          queryKey: ['module-graph-workflow-detail', graph.id],
+          queryFn: () => getGraphWorkflow(graph.id),
+        })
+      } catch (error) {
+        showSnackbar({ message: error instanceof Error ? error.message : '워크플로우를 불러오지 못했어.', tone: 'error' })
+        return false
+      }
+    }
+
+    applyGraphRecordToEditor(fullGraph)
     if (options?.openEditor) {
       enterWorkflowEditor('setup')
     }
@@ -146,7 +175,7 @@ export function useModuleGraphBrowseActions({
     }
 
     return true
-  }, [applyGraphRecordToEditor, confirmDiscardUnsavedChanges, enterWorkflowEditor, showSnackbar])
+  }, [applyGraphRecordToEditor, confirmDiscardUnsavedChanges, enterWorkflowEditor, queryClient, showSnackbar])
 
   /** Start one fresh workflow draft from the current folder context. */
   const handleCreateWorkflow = useCallback(() => {

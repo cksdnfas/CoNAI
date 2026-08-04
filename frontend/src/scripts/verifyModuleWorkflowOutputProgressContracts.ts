@@ -64,6 +64,9 @@ const workflow: GraphWorkflowRecord = {
   graph: { nodes: [], edges: [] },
   version: 1,
   is_active: true,
+  node_count: 0,
+  edge_count: 0,
+  final_result_node_count: 0,
   created_date: '2026-05-30T02:00:00.000Z',
   updated_date: '2026-05-30T02:00:00.000Z',
 }

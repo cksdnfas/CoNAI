@@ -14,7 +14,7 @@ import { useI18n } from '@/i18n'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { cancelGenerationQueueJob, getGenerationQueue } from '@/lib/api-image-generation-queue'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
-import { getGraphWorkflowSchedules, getGraphWorkflows } from '@/lib/api-module-graph'
+import { getGraphWorkflowNames, getGraphWorkflowSchedules } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '@/features/module-graph/module-graph-shared'
@@ -206,9 +206,10 @@ export function GenerationQueueHeaderWidget() {
     },
   })
 
+  // WF-1: 헤더 위젯은 예약 라벨만 필요하므로 이름 전용 소스를 쓴다(그래프 문서를 받지 않는다).
   const reservationWorkflowQuery = useQuery({
-    queryKey: ['graph-workflows', 'header-widget'],
-    queryFn: () => getGraphWorkflows(true),
+    queryKey: ['graph-workflows', 'header-widget', 'names'],
+    queryFn: () => getGraphWorkflowNames(true),
     enabled: isOpen && hasGenerationPermission,
     staleTime: 60_000,
   })

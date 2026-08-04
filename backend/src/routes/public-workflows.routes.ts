@@ -1,8 +1,9 @@
 import { Router, type Request, type Response } from 'express';
-import AdmZip from 'adm-zip';
+import { ZipArchive } from 'archiver';
 import fs from 'fs';
 import path from 'path';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { userSettingsDb } from '../database/userSettingsDb';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
 import { CustomDropdownListModel, type CustomDropdownListWithParsedItems } from '../models/CustomDropdownList';
@@ -45,10 +46,51 @@ function parseMarkedFields(markedFieldsJson?: string | null): MarkedField[] {
   }
 }
 
+/**
+ * WF-6: 드롭다운 목록 맵 캐시.
+ *
+ * 공용 워크플로 응답마다 390개 목록(≈190KB 의 items JSON)을 전부 다시 읽고 파싱하고 있었다.
+ * 여기서는 행 수·최대 id·최신 `updated_date` 로 만든 리비전이 같으면 파싱 결과를 재사용한다.
+ * `updated_date` 는 초 단위라 같은 초 안의 연속 편집을 놓칠 수 있으므로 최대 수명도 함께 둔다.
+ */
+const DROPDOWN_LIST_CACHE_MAX_AGE_MS = 30_000;
+
+let cachedDropdownListMap: {
+  revision: string;
+  builtAt: number;
+  map: Map<string, CustomDropdownListWithParsedItems>;
+} | null = null;
+
+function readCustomDropdownListRevision() {
+  const row = userSettingsDb.prepare(`
+    SELECT COUNT(*) AS total, COALESCE(MAX(id), 0) AS max_id, COALESCE(MAX(updated_date), '') AS latest
+    FROM custom_dropdown_lists
+  `).get() as { total: number; max_id: number; latest: string };
+
+  return `${row.total}|${row.max_id}|${row.latest}`;
+}
+
+/** Reset the shared dropdown list cache (tests and contract verification). */
+export function resetPublicWorkflowDropdownListCache() {
+  cachedDropdownListMap = null;
+}
+
 function buildCustomDropdownListMap() {
-  return new Map(
+  const revision = readCustomDropdownListRevision();
+  const now = Date.now();
+  if (
+    cachedDropdownListMap
+    && cachedDropdownListMap.revision === revision
+    && now - cachedDropdownListMap.builtAt < DROPDOWN_LIST_CACHE_MAX_AGE_MS
+  ) {
+    return cachedDropdownListMap.map;
+  }
+
+  const map = new Map(
     CustomDropdownListModel.findAll().map((list) => [list.name, list]),
   );
+  cachedDropdownListMap = { revision, builtAt: now, map };
+  return map;
 }
 
 function resolveComfyModelPreviewFolder(dropdownList: CustomDropdownListWithParsedItems) {
@@ -224,17 +266,39 @@ router.get('/:slug/artifacts/archive', asyncHandler(async (req: Request, res: Re
       return res.status(404).json({ success: false, error: 'Artifact directory not found' });
     }
 
-    const archiveName = `${path.basename(resolved.target) || 'artifacts'}.zip`;
-    const zip = new AdmZip();
-    zip.addLocalFolder(resolved.target, path.basename(resolved.target) || 'artifacts');
-    const archiveBuffer = zip.toBuffer();
+    const rootName = path.basename(resolved.target) || 'artifacts';
+    const archiveName = `${rootName}.zip`;
 
+    // WF-6: 종전에는 아카이브 전체를 메모리 버퍼로 만든 뒤 한 번에 보냈다(대용량 산출물 디렉터리에서
+    // 이벤트 루프 정지 + 힙 스파이크). 이제 응답 스트림으로 곧바로 흘려보낸다.
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', contentDispositionValue('attachment', archiveName));
-    res.setHeader('Content-Length', archiveBuffer.length);
-    return res.send(archiveBuffer);
+
+    await new Promise<void>((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 6 } });
+      const fail = (streamError: Error) => reject(streamError);
+
+      archive.once('error', fail);
+      res.once('error', fail);
+      res.once('close', () => {
+        if (!res.writableFinished) {
+          archive.abort();
+          resolve();
+        }
+      });
+      res.once('finish', resolve);
+      archive.pipe(res);
+      archive.directory(resolved.target, rootName);
+      void archive.finalize();
+    });
+
+    return;
   } catch (error) {
     console.error('Error archiving public workflow artifacts:', error);
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
     return res.status(404).json({ success: false, error: 'Artifact directory not found' });
   }
 }));
