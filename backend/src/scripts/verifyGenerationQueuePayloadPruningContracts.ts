@@ -4,6 +4,7 @@ import path from 'node:path'
 
 const generationQueueSource = fs.readFileSync(path.resolve(process.cwd(), 'src/models/GenerationQueue.ts'), 'utf8')
 const cleanupServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/cleanupService.ts'), 'utf8')
+const queueDebugMetaSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generation-queue/queueDebugMeta.ts'), 'utf8')
 
 assert.match(
   generationQueueSource,
@@ -57,6 +58,47 @@ assert.match(
   cleanupServiceSource,
   /if \(!dryRun\) \{[\s\S]*pruneOldGenerationQueuePayloads\(\)/,
   'cleanup service should skip queue payload pruning during dry runs',
+)
+
+/** Comments explain the legacy fallback by name, so contracts about code must ignore them. */
+function stripComments(source: string) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+}
+
+// PAYLOAD-2: debug bookkeeping moved to its own columns, so it must never rewrite the payload blob.
+assert.doesNotMatch(
+  stripComments(queueDebugMetaSource),
+  /request_payload/,
+  'queue debug metadata must never read or rewrite request_payload (PAYLOAD-2)',
+)
+
+assert.match(
+  queueDebugMetaSource,
+  /GenerationQueueModel\.updateDebugMeta\(record\.id, meta\)/,
+  'queue debug metadata writes should go through the dedicated debug_meta column update',
+)
+
+const updateDebugMetaBody = generationQueueSource.slice(
+  generationQueueSource.indexOf('static updateDebugMeta('),
+  generationQueueSource.indexOf('/** Find one queue job for API responses'),
+)
+assert.match(
+  updateDebugMetaBody,
+  /UPDATE generation_queue_jobs\s*SET debug_meta = \?,\s*debug_enabled = \?/,
+  'debug metadata updates must write only the debug columns, never request_payload (PAYLOAD-2)',
+)
+assert.doesNotMatch(
+  stripComments(updateDebugMetaBody),
+  /request_payload/,
+  'debug metadata updates must not touch request_payload (PAYLOAD-2)',
+)
+
+// Pruning compacts request_payload only, so debug_meta survives for already-finished jobs
+// that graph executors still resolve results from.
+assert.doesNotMatch(
+  generationQueueSource.match(/static pruneTerminalRequestPayloads[\s\S]*?^  }/m)?.[0] ?? '',
+  /debug_meta|debug_enabled/,
+  'terminal payload pruning must leave debug_meta intact so completed graph jobs stay resolvable',
 )
 
 console.log('Generation queue payload pruning contracts verified.')

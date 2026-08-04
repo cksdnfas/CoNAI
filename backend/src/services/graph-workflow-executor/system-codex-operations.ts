@@ -17,6 +17,7 @@ import {
   type RuntimeArtifact,
 } from './shared'
 import { GenerationQueueService } from '../generationQueueService'
+import { readQueueDebugMeta } from '../generation-queue/queueDebugMeta'
 import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
 import { assertCodexAvailable } from '../codexGenerationExecutor'
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
@@ -104,17 +105,6 @@ function resolveMimeTypeFromPath(filePath: string) {
   return 'image/png'
 }
 
-function parseStoredQueuePayload(record: { request_payload: string }) {
-  try {
-    const parsed = JSON.parse(record.request_payload) as unknown
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {}
-  } catch {
-    return {}
-  }
-}
-
 function resolveQueueHistoryId(debug: Record<string, unknown>) {
   const directHistoryId = parsePositiveIntegerish(debug.history_id)
   if (directHistoryId) {
@@ -181,15 +171,13 @@ async function resolveQueueBackedCodexOutput(params: {
   completedJobId: number
   requestedSize: ReturnType<typeof resolveCodexRequestedSize>
 }) {
-  const completedJob = GenerationQueueModel.findById(params.completedJobId)
+  // PAYLOAD-1/2: 결과 좌표는 `debug_meta` 컬럼에서 온다(029 이전 잡은 모델이 폴백 처리).
+  const completedJob = GenerationQueueModel.findListRecordById(params.completedJobId)
   if (!completedJob) {
     throw new Error(`Completed queue job ${params.completedJobId} is no longer available`)
   }
 
-  const storedPayload = parseStoredQueuePayload(completedJob)
-  const debug = storedPayload._debug && typeof storedPayload._debug === 'object' && !Array.isArray(storedPayload._debug)
-    ? storedPayload._debug as Record<string, unknown>
-    : {}
+  const debug = readQueueDebugMeta(completedJob.id) ?? {}
 
   const historyId = resolveQueueHistoryId(debug)
   const preferredHistoryRecord = historyId ? GenerationHistoryModel.findById(historyId) : null

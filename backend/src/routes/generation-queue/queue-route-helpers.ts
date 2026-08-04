@@ -3,7 +3,8 @@ import { AuthAccount } from '../../models/AuthAccount'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../../services/generationQueueRouting'
 import { AuthAccessControlService } from '../../services/authAccessControlService'
-import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
+import { readQueueDebugMeta } from '../../services/generation-queue/queueDebugMeta'
+import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 
@@ -14,15 +15,12 @@ export const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed',
 const ALL_QUEUE_STATUSES: GenerationQueueJobStatus[] = [...ACTIVE_QUEUE_STATUSES, ...TERMINAL_QUEUE_STATUSES]
 const ALL_QUEUE_STATUS_SET = new Set<GenerationQueueJobStatus>(ALL_QUEUE_STATUSES)
 
-export function parseQueueDebugMeta(job: GenerationQueueJobRecord) {
-  try {
-    const parsed = JSON.parse(job.request_payload) as { _debug?: Record<string, unknown> }
-    return parsed?._debug && typeof parsed._debug === 'object' && !Array.isArray(parsed._debug)
-      ? parsed._debug
-      : null
-  } catch {
-    return null
-  }
+/**
+ * PAYLOAD-2: 디버그 메타는 `debug_meta` 컬럼에서 읽는다.
+ * 029 이전 행만 모델의 SQL 폴백이 인라인 `request_payload._debug` 를 대신 꺼내 준다.
+ */
+export function parseQueueDebugMeta(job: Pick<GenerationQueueJobRecord, 'id'>) {
+  return readQueueDebugMeta(job.id)
 }
 
 export function parseStatusList(value: unknown): GenerationQueueJobStatus[] | undefined {
@@ -85,7 +83,7 @@ export function parseRequestedServerTag(value: unknown) {
   return normalized
 }
 
-function canAccessJob(req: Request, job: GenerationQueueJobRecord) {
+function canAccessJob(req: Request, job: Pick<GenerationQueueJobRecord, 'requested_by_account_id'>) {
   if (isAdminRequest(req)) {
     return true
   }
@@ -94,14 +92,20 @@ function canAccessJob(req: Request, job: GenerationQueueJobRecord) {
   return accountId !== null && job.requested_by_account_id === accountId
 }
 
-export function resolveAccessibleQueueJob(req: Request, res: Response) {
+/**
+ * Resolve one queue job the requester may act on.
+ *
+ * PAYLOAD-1: 접근 판정과 라우트 응답 모두 페이로드를 쓰지 않으므로 경량 조회로 읽는다.
+ * 페이로드가 필요한 유일한 액션(재시도)은 서비스 계층이 따로 하이드레이트한다.
+ */
+export function resolveAccessibleQueueJob(req: Request, res: Response): { jobId: number; job: GenerationQueueJobListRecord } | null {
   const jobId = parsePositiveInteger(req.params.id)
   if (jobId === null) {
     sendRouteBadRequest(res, 'Invalid queue job id')
     return null
   }
 
-  const job = GenerationQueueModel.findById(jobId)
+  const job = GenerationQueueModel.findListRecordById(jobId)
   if (!job) {
     res.status(404).json({ success: false, error: 'Generation queue job not found' })
     return null

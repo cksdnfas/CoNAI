@@ -8,6 +8,89 @@ process.env.RUNTIME_BASE_PATH = runtimeBase
 
 type QueryPlanRow = { detail: string }
 
+/**
+ * QLIST-1: 큐 목록 스냅샷 캐시가 권한 중립인지, 그리고 폴링 비용이 상수인지 검사한다.
+ *
+ * 최대 리스크는 캐시 키에 요청자 권한 차원이 섞여 다른 사용자의 큐가 보이는 것이다.
+ * 그래서 (1) 스냅샷 빌더가 `is_mine` 을 만들지 않고, (2) `is_mine` 이 캐시 **밖에서만** 붙고,
+ * (3) 키가 필터/페이지 차원만으로 구성되는지를 소스와 런타임 양쪽에서 단언한다.
+ */
+async function assertQueueListSnapshotCacheContracts(queueListServiceSource: string) {
+  const {
+    buildQueueListSnapshotCacheKey,
+    getQueueListSnapshotCacheStats,
+    invalidateQueueListSnapshots,
+    readQueueListSnapshot,
+    resetQueueListSnapshotCacheForTests,
+    QUEUE_LIST_SNAPSHOT_TTL_MS,
+  } = await import('../routes/generation-queue/queue-list-snapshot-cache')
+
+  assert.ok(
+    QUEUE_LIST_SNAPSHOT_TTL_MS >= 1_000 && QUEUE_LIST_SNAPSHOT_TTL_MS <= 2_000,
+    `queue list snapshots must stay on a 1~2s TTL so 30 pollers share one computation, got ${QUEUE_LIST_SNAPSHOT_TTL_MS}ms`,
+  )
+
+  const snapshotBuilder = /function buildQueueListSnapshot\([\s\S]*?\n\}/.exec(queueListServiceSource)?.[0] ?? ''
+  assert.ok(snapshotBuilder.length > 0, 'queue list service must expose a dedicated permission-neutral snapshot builder')
+  assert.doesNotMatch(
+    snapshotBuilder,
+    /is_mine/,
+    'the cached queue list snapshot must never contain requester-scoped fields such as is_mine',
+  )
+  assert.match(
+    queueListServiceSource,
+    /const snapshot = readQueueListSnapshot\([\s\S]*?buildQueueListSnapshotCacheKey\(\{[\s\S]*?\}\),[\s\S]*?\(\) => buildQueueListSnapshot\(filters, limit, offset\),[\s\S]*?\)[\s\S]*?is_mine: requesterAccountId !== null && record\.requested_by_account_id === requesterAccountId/,
+    'is_mine must be applied to the shared snapshot per request, never computed inside the cached value',
+  )
+
+  // 요청자 계정이 결과 집합을 바꾸는 `mine=true` 만 키에 들어간다. 그 외 요청자 차원은 키에 없다.
+  const sharedKey = buildQueueListSnapshotCacheKey({ statuses: ['running', 'queued'], limit: 200, offset: 0 })
+  assert.equal(
+    buildQueueListSnapshotCacheKey({ statuses: ['queued', 'running'], limit: 200, offset: 0 }),
+    sharedKey,
+    'status filter order must not fragment the shared snapshot key',
+  )
+  assert.notEqual(
+    buildQueueListSnapshotCacheKey({ statuses: ['running', 'queued'], requesterAccountId: 7, limit: 200, offset: 0 }),
+    sharedKey,
+    'a mine=true scope filter must never share a snapshot with the unscoped queue list',
+  )
+  assert.notEqual(
+    buildQueueListSnapshotCacheKey({ statuses: ['running', 'queued'], requesterAccountId: 7, limit: 200, offset: 0 }),
+    buildQueueListSnapshotCacheKey({ statuses: ['running', 'queued'], requesterAccountId: 9, limit: 200, offset: 0 }),
+    'two accounts scoping to their own queue must never share a snapshot',
+  )
+  for (const [label, changed] of [
+    ['service type', buildQueueListSnapshotCacheKey({ statuses: ['running', 'queued'], serviceType: 'comfyui', limit: 200, offset: 0 })],
+    ['workflow id', buildQueueListSnapshotCacheKey({ statuses: ['running', 'queued'], workflowId: 7, limit: 200, offset: 0 })],
+    ['limit', buildQueueListSnapshotCacheKey({ statuses: ['running', 'queued'], limit: 50, offset: 0 })],
+    ['offset', buildQueueListSnapshotCacheKey({ statuses: ['running', 'queued'], limit: 200, offset: 200 })],
+  ] as const) {
+    assert.notEqual(changed, sharedKey, `${label} must be part of the snapshot cache key`)
+  }
+
+  resetQueueListSnapshotCacheForTests()
+  let computations = 0
+  const compute = () => {
+    computations += 1
+    return { records: [], total: computations, limit: 200, offset: 0 }
+  }
+
+  // 30 클라이언트가 같은 필터로 동시에 폴링하는 상황: 계산은 1회, 나머지는 캐시 히트여야 한다.
+  const responses = Array.from({ length: 30 }, () => readQueueListSnapshot(sharedKey, compute))
+  assert.equal(computations, 1, 'a TTL window must compute the queue list snapshot exactly once for concurrent pollers')
+  assert.ok(responses.every((response) => response === responses[0]), 'concurrent pollers must share one snapshot instance')
+
+  const stats = getQueueListSnapshotCacheStats()
+  assert.equal(stats.hits, 29)
+  assert.equal(stats.misses, 1)
+  assert.ok(stats.hits / (stats.hits + stats.misses) >= 0.9, 'shared snapshot hit rate must stay at or above 90%')
+
+  invalidateQueueListSnapshots()
+  assert.equal(getQueueListSnapshotCacheStats().invalidations, 1, 'queue runtime events must be able to shorten snapshot lifetime')
+  resetQueueListSnapshotCacheForTests()
+}
+
 async function main() {
   const { initializeUserSettingsDb, getUserSettingsDb, closeUserSettingsDb } = await import('../database/userSettingsDb')
   const { GenerationQueueModel } = await import('../models/GenerationQueue')
@@ -113,6 +196,73 @@ async function main() {
       /findQueuedComfyDispatchCandidates\(limit = 200\)[\s\S]*SELECT \$\{GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS\}[\s\S]*LIMIT \?/,
       'queued ComfyUI dispatch candidates should use a lean explicit column set with a bounded LIMIT',
     )
+    // PAYLOAD-1: only the dispatch claim may hydrate the multi-MB request payload.
+    // Everything else on the job lifecycle reads the lean list projection.
+    const queueRouteHelperSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-route-helpers.ts'), 'utf8')
+    const stripComments = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+    const sliceMethod = (source: string, start: string, end: string) => {
+      const startIndex = source.indexOf(start)
+      assert.ok(startIndex >= 0, `expected queue service source to contain ${start}`)
+      const endIndex = source.indexOf(end, startIndex)
+      assert.ok(endIndex > startIndex, `expected queue service source to contain ${end} after ${start}`)
+      return stripComments(source.slice(startIndex, endIndex))
+    }
+
+    const transitionJobBody = sliceMethod(queueServiceSource, 'static transitionJob(', 'static claimNextDispatchableJob(')
+    assert.doesNotMatch(
+      transitionJobBody,
+      /GenerationQueueModel\.findById\(/,
+      'queue transitions must read lean list records, not hydrate request payloads (PAYLOAD-1)',
+    )
+    assert.equal(
+      (transitionJobBody.match(/GenerationQueueModel\.findListRecordById\(/g) ?? []).length,
+      2,
+      'queue transitions should read the lean record before and after the guarded UPDATE (PAYLOAD-1)',
+    )
+
+    const requestCancellationBody = sliceMethod(queueServiceSource, 'static async requestCancellation(', 'static finalizeAbandonedCancellations(')
+    assert.doesNotMatch(
+      requestCancellationBody,
+      /GenerationQueueModel\.findById\(/,
+      'cancellation requests must not hydrate request payloads (PAYLOAD-1)',
+    )
+
+    assert.doesNotMatch(
+      sliceMethod(queueServiceSource, 'private static async cancelJobIfActive(', 'private static async failJobIfActive('),
+      /GenerationQueueModel\.findById\(/,
+      'worker cancel finalization must not hydrate request payloads (PAYLOAD-1)',
+    )
+
+    assert.doesNotMatch(
+      stripComments(queueRouteHelperSource),
+      /GenerationQueueModel\.findById\(/,
+      'queue route access resolution must not hydrate request payloads (PAYLOAD-1)',
+    )
+    assert.match(
+      queueRouteHelperSource,
+      /GenerationQueueModel\.findListRecordById\(jobId\)/,
+      'queue route access resolution should read the lean list record (PAYLOAD-1)',
+    )
+
+    const claimTransactionBody = sliceMethod(queueServiceSource, 'static claimNextDispatchableJob(', 'static claimQueuedJobForDispatch(')
+    assert.doesNotMatch(
+      claimTransactionBody,
+      /SELECT \* FROM generation_queue_jobs\s*WHERE \$\{whereClauses/,
+      'dispatch candidate selection must not hydrate the payload before the claim succeeds (PAYLOAD-1)',
+    )
+    assert.equal(
+      (claimTransactionBody.match(/SELECT \* FROM generation_queue_jobs/g) ?? []).length,
+      1,
+      'the claim transaction should hydrate the payload exactly once, after the claim UPDATE lands (PAYLOAD-1)',
+    )
+
+    // PAYLOAD-2: the debug flag/metadata live in their own columns behind a covering index.
+    assert.match(
+      generationQueueModelSource,
+      /FROM generation_queue_jobs INDEXED BY \$\{GENERATION_QUEUE_DEBUG_STATE_INDEX\}/,
+      'debug state reads must be pinned to the covering index; a rowid seek walks the payload overflow chain (PAYLOAD-2)',
+    )
+
     assert.match(
       queueReadRoutesSource,
       /buildGenerationQueueListResponse\(req\)/,
@@ -133,6 +283,7 @@ async function main() {
       /QUEUE_ETA_WINDOW_LIMIT/,
       'queue list service should compute ETA over a bounded active window instead of the entire waiting backlog',
     )
+    await assertQueueListSnapshotCacheContracts(queueListServiceSource)
     assert.doesNotMatch(
       publicWorkflowRoutesSource,
       /GenerationQueueModel\.findById\(jobId\)/,
@@ -311,7 +462,72 @@ async function main() {
       'ETA samples must not hydrate heavyweight request payload/summary columns',
     )
 
-    console.log('✅ Generation queue hot-path contracts passed (SQL filters, recent-completed index, lean ETA samples)')
+    // PAYLOAD-2 runtime contract: debug state must be answered from the covering index,
+    // never from a rowid seek that has to walk the request_payload overflow pages.
+    assert.ok(
+      (db.prepare(`PRAGMA index_list('generation_queue_jobs')`).all() as Array<{ name: string }>)
+        .some((index) => index.name === 'idx_generation_queue_jobs_debug_state'),
+      'migration 029 must create the queue debug-state covering index',
+    )
+
+    const debugStatePlan = db.prepare(`
+      EXPLAIN QUERY PLAN
+      SELECT debug_enabled, debug_meta
+      FROM generation_queue_jobs INDEXED BY idx_generation_queue_jobs_debug_state
+      WHERE id = ?
+    `).all(1) as QueryPlanRow[]
+    assert.ok(
+      debugStatePlan.some((row) => row.detail.includes('COVERING INDEX idx_generation_queue_jobs_debug_state')),
+      `queue debug state read should be covered by its index, got: ${debugStatePlan.map((row) => row.detail).join(' | ')}`,
+    )
+
+    const debugJobId = GenerationQueueModel.create({
+      service_type: 'comfyui',
+      workflow_id: 7,
+      request_payload: { prompt_data: {}, _debug: { detailed_snapshots: true, graph_execution_id: 5 } },
+    })
+    assert.equal(
+      GenerationQueueModel.isDetailedDebugEnabled(debugJobId),
+      true,
+      'detailed snapshot requests must be readable from the debug_enabled column',
+    )
+    GenerationQueueModel.updateDebugMeta(debugJobId, { history_id: 3 })
+    assert.deepEqual(
+      GenerationQueueModel.readDebugMeta(debugJobId),
+      { detailed_snapshots: true, graph_execution_id: 5, history_id: 3 },
+      'debug metadata patches must merge into debug_meta',
+    )
+    assert.deepEqual(
+      JSON.parse(GenerationQueueModel.findById(debugJobId)!.request_payload)._debug,
+      { detailed_snapshots: true, graph_execution_id: 5 },
+      'debug metadata writes must leave request_payload untouched (PAYLOAD-2)',
+    )
+
+    // Rows written before migration 029 keep both columns NULL and must still resolve (plan §1-8).
+    const legacyJobId = GenerationQueueModel.create({
+      service_type: 'comfyui',
+      workflow_id: 7,
+      request_payload: { prompt_data: {}, _debug: { workflow_debug_mode: true, history_id: 12 } },
+    })
+    db.prepare('UPDATE generation_queue_jobs SET debug_enabled = NULL, debug_meta = NULL WHERE id = ?').run(legacyJobId)
+    assert.equal(
+      GenerationQueueModel.isDetailedDebugEnabled(legacyJobId),
+      true,
+      'pre-029 rows must still resolve their debug flag from the inline payload _debug',
+    )
+    assert.deepEqual(
+      GenerationQueueModel.readDebugMeta(legacyJobId),
+      { workflow_debug_mode: true, history_id: 12 },
+      'pre-029 rows must still resolve their debug metadata from the inline payload _debug',
+    )
+    GenerationQueueModel.updateDebugMeta(legacyJobId, { result_prompt_id: 'p1' })
+    assert.deepEqual(
+      db.prepare('SELECT debug_enabled FROM generation_queue_jobs WHERE id = ?').get(legacyJobId),
+      { debug_enabled: 1 },
+      'the first debug write must promote a pre-029 row onto the columns so later reads skip the payload fallback',
+    )
+
+    console.log('✅ Generation queue hot-path contracts passed (SQL filters, recent-completed index, lean ETA samples, lean lifecycle reads, covered debug state)')
   } finally {
     closeUserSettingsDb()
     fs.rmSync(runtimeBase, { recursive: true, force: true })

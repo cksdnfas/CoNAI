@@ -15,7 +15,7 @@ import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolv
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer'
-import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
+import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import type { NAIMetadataInputParams } from '../../utils/nai/metadata'
 import {
   buildCodexMetadataPatch,
@@ -48,7 +48,8 @@ export type QueueJobExecutorContext = {
       expectedCurrentStatuses?: GenerationQueueJobStatus[]
       providerJobId?: string | null
     },
-  ) => GenerationQueueJobRecord | null | undefined
+    // PAYLOAD-1: 전이는 경량 레코드를 돌려준다(실행기는 반환값을 쓰지 않는다).
+  ) => GenerationQueueJobListRecord | null | undefined
   attemptUpstreamCancellation: (jobId: number, options?: {
     assignedServer?: ComfyUIServerRecord | null
     providerJobId?: string | null

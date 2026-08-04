@@ -14,6 +14,7 @@ import { GenerationHistoryModel } from '../../models/GenerationHistory'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { GenerationQueueService } from '../generationQueueService'
+import { readQueueDebugMeta } from '../generation-queue/queueDebugMeta'
 import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
 import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
@@ -35,17 +36,6 @@ import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from '
 const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
 const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
 const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
-
-function parseStoredQueuePayload(record: { request_payload: string }) {
-  try {
-    const parsed = JSON.parse(record.request_payload) as unknown
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {}
-  } catch {
-    return {}
-  }
-}
 
 type GraphComfyExecutionTarget = {
   mode: 'auto' | 'tag' | 'server'
@@ -202,15 +192,14 @@ async function resolveQueueBackedOutput(params: {
   completedJobId: number
   target: GraphComfyExecutionTarget
 }) {
-  const completedJob = GenerationQueueModel.findById(params.completedJobId)
+  // PAYLOAD-1/2: 결과 좌표는 이제 `debug_meta` 컬럼에서 온다(029 이전 잡은 모델이 폴백 처리).
+  // 잡 행 자체도 라우팅/핸들 컬럼만 있으면 되므로 페이로드를 끌어오지 않는다.
+  const completedJob = GenerationQueueModel.findListRecordById(params.completedJobId)
   if (!completedJob) {
     throw new Error(`Completed queue job ${params.completedJobId} is no longer available`)
   }
 
-  const storedPayload = parseStoredQueuePayload(completedJob)
-  const debug = storedPayload._debug && typeof storedPayload._debug === 'object' && !Array.isArray(storedPayload._debug)
-    ? storedPayload._debug as Record<string, unknown>
-    : {}
+  const debug = readQueueDebugMeta(completedJob.id) ?? {}
 
   const historyId = parsePositiveIntegerish(debug.history_id)
   const compositeHash = normalizeOptionalString(debug.result_composite_hash)
