@@ -7,6 +7,10 @@ const generationHistoryPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel.tsx'),
   'utf8',
 )
+const lazyRoutesSource = readFileSync(
+  resolve(process.cwd(), 'src/app/lazy-routes.tsx'),
+  'utf8',
+)
 const generationHistoryPanelHelpersSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel-helpers.ts'),
   'utf8',
@@ -394,6 +398,19 @@ function assertHistoryRatingSafetySettingSourcePolicy() {
   )
 }
 
+function assertHistoryTranslationCatalogSourcePolicy() {
+  match(
+    lazyRoutesSource,
+    /'image-generation-page': \(\) => loadRouteModuleWithCatalog\([\s\S]*?imageGenerationCatalog[\s\S]*?moduleGraphCatalog[\s\S]*?imagesCatalog[\s\S]*?\n  \),/,
+    'private generation history should preload the shared images catalog used by image-list fallback states',
+  )
+  match(
+    lazyRoutesSource,
+    /'public-comfy-workflow-page': \(\) => loadRouteModuleWithCatalog\([\s\S]*?imageGenerationCatalog[\s\S]*?imagesCatalog[\s\S]*?\n  \),/,
+    'public workflow history should preload the shared images catalog used by image-list fallback states',
+  )
+}
+
 assertEmptySummary()
 assertPagedSummary()
 assertFilteredSummary()
@@ -406,5 +423,6 @@ assertDownloadReadinessSourcePolicy()
 assertSelectionRecoverySourcePolicy()
 assertNoImageBadgeOverlaySourcePolicy()
 assertHistoryRatingSafetySettingSourcePolicy()
+assertHistoryTranslationCatalogSourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

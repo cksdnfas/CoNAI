@@ -36,11 +36,11 @@ const routeModuleLoaders = {
   ),
   'image-generation-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/image-generation/image-generation-page'),
-    [() => import('@/i18n/resources/image-generation').then((module) => module.imageGenerationCatalog), () => import('@/i18n/resources/module-graph').then((module) => module.moduleGraphCatalog)],
+    [() => import('@/i18n/resources/image-generation').then((module) => module.imageGenerationCatalog), () => import('@/i18n/resources/module-graph').then((module) => module.moduleGraphCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog)],
   ),
   'public-comfy-workflow-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/image-generation/public-comfy-workflow-page'),
-    [() => import('@/i18n/resources/image-generation').then((module) => module.imageGenerationCatalog)],
+    [() => import('@/i18n/resources/image-generation').then((module) => module.imageGenerationCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog)],
   ),
   'wildcard-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/image-generation/wildcard-page'),
