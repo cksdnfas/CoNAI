@@ -50,6 +50,7 @@ export interface GeneralSettings {
   autoCleanupCanvasOnShutdown?: boolean
   showRatingBadges?: boolean
   imageSimilarityCheckMode?: ImageSimilarityCheckMode
+  applyRatingSafetyToGenerationHistory: boolean
 }
 
 export interface TaggerSettings {

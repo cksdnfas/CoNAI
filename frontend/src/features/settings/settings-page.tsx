@@ -139,6 +139,9 @@ export function SettingsPage() {
     queryClient.setQueryData(['runtime-appearance-settings'], nextSettings.appearance)
     queryClient.setQueryData(['runtime-appearance'], nextSettings.appearance)
     queryClient.setQueryData(['public-header-navigation-settings'], nextSettings.general.headerNavigation)
+    queryClient.setQueryData(['runtime-generation-history-settings'], {
+      applyRatingSafetyToGenerationHistory: nextSettings.general.applyRatingSafetyToGenerationHistory,
+    })
   }
 
   const refreshAutoQueries = async () => {

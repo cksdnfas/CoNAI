@@ -109,6 +109,10 @@ function renderIntegratedFrontendIndex(req: Request, res: Response, htmlTemplate
 
 const IMAGE_READ_PERMISSION_KEYS = ['page.home.view', 'page.image-detail.view'] as const;
 const HOME_IMAGE_READ_PERMISSION_KEYS = ['page.home.view', 'page.image-detail.view'] as const;
+const RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS = [
+  ...HOME_IMAGE_READ_PERMISSION_KEYS,
+  'page.generation.view',
+] as const;
 const WALLPAPER_IMAGE_READ_PERMISSION_KEYS = [
   'page.home.view',
   'page.image-detail.view',
@@ -221,7 +225,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     });
   });
   app.use('/api/runtime-appearance', optionalAuth, runtimeAppearanceRoutes);
-  app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowReadAccess(HOME_IMAGE_READ_PERMISSION_KEYS), runtimeMediaSettingsRoutes);
+  app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowReadAccess(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS), runtimeMediaSettingsRoutes);
   app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);

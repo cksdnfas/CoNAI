@@ -160,6 +160,14 @@ export function GeneralPreferencesSections({
               <input type="checkbox" checked={generalDraft.autoCleanupCanvasOnShutdown ?? false} onChange={(event) => onPatchGeneral({ autoCleanupCanvasOnShutdown: event.target.checked })} />
               {t({ ko: '종료 시 캔버스 임시 데이터 자동 정리', en: 'Clean up temporary canvas data on exit' })}
             </SettingsToggleRow>
+            <SettingsToggleRow className="md:col-span-2">
+              <input
+                type="checkbox"
+                checked={generalDraft.applyRatingSafetyToGenerationHistory ?? false}
+                onChange={(event) => onPatchGeneral({ applyRatingSafetyToGenerationHistory: event.target.checked })}
+              />
+              {t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}
+            </SettingsToggleRow>
           </div>
         </SettingsSection>
       ) : null}

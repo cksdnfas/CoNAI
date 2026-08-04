@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import {
   sendRouteBadRequest,
+  validateBooleanIfDefined,
   validateIntegerInRangeIfDefined,
   validateNumberInRangeIfDefined,
   validateStringEnumIfDefined,
@@ -138,6 +139,7 @@ router.put(
     // Validate language if provided
     if (!validateStringEnumIfDefined(res, generalSettings.language, validLanguages, `Invalid language. Must be one of: ${validLanguages.join(', ')}`)) return;
     if (!validateStringEnumIfDefined(res, generalSettings.imageSimilarityCheckMode, validImageSimilarityCheckModes, `Invalid image similarity check mode. Must be one of: ${validImageSimilarityCheckModes.join(', ')}`)) return;
+    if (!validateBooleanIfDefined(res, generalSettings.applyRatingSafetyToGenerationHistory, 'applyRatingSafetyToGenerationHistory must be a boolean')) return;
 
     if (generalSettings.deleteProtection !== undefined) {
       if (generalSettings.deleteProtection && typeof generalSettings.deleteProtection !== 'object') {

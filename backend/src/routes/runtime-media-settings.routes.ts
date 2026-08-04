@@ -28,4 +28,16 @@ router.get(
   }),
 );
 
+router.get(
+  '/generation-history',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const { applyRatingSafetyToGenerationHistory } = settingsService.loadSettings().general;
+    res.json({
+      success: true,
+      data: { applyRatingSafetyToGenerationHistory },
+    });
+    return;
+  }),
+);
+
 export { router as runtimeMediaSettingsRoutes };

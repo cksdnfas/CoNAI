@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -16,6 +16,7 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import type { ImageRecord } from '@/types/image'
+import { getRuntimeGenerationHistorySettings } from '@/lib/api-settings'
 import {
   cleanupFailedGenerationHistory,
   deleteGenerationHistoryRecord,
@@ -149,6 +150,12 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       return resolveStreamFallbackInterval(runtimeStreamStatus, resolveLegacyHistoryInterval())
     },
   })
+  const historySafetySettingsQuery = useQuery({
+    queryKey: ['runtime-generation-history-settings'],
+    queryFn: getRuntimeGenerationHistorySettings,
+    enabled: !isPublicView && !authStatusQuery.isPending,
+    staleTime: 60_000,
+  })
   const refetchHistory = historyQuery.refetch
   const refreshHistory = useCallback(async (options: { watchForNewRows?: boolean } = {}) => {
     if (options.watchForNewRows) {
@@ -191,19 +198,34 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const isRetryingRunRecovery = retryingQueueJobIds.size > 0
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyTotalCount = historyQuery.data?.pages[0]?.total
-
-  const feedProgress = useMemo(() => getGenerationHistoryFeedProgressSummary({
-    loadedCount: historyRecords.length,
-    visibleCount: historyImages.length,
-    totalCount: historyTotalCount,
-  }), [historyImages.length, historyRecords.length, historyTotalCount])
+  const applyHistoryRatingSafety = isPublicView || historySafetySettingsQuery.data?.applyRatingSafetyToGenerationHistory === true
+  const fetchNextHistoryPage = historyQuery.fetchNextPage
+  const handleLoadMoreHistory = useCallback(() => {
+    return fetchNextHistoryPage()
+  }, [fetchNextHistoryPage])
   const {
+    visibleItems: visibleHistoryImages,
+    hasOnlyHiddenItems,
     shouldBlurItemPreview,
   } = useImageFeedSafety({
     items: historyImages,
-    enabled: historyImages.length > 0,
-    visibilityMode: 'badge-only',
+    enabled: applyHistoryRatingSafety && historyImages.length > 0,
+    hasMore: Boolean(historyQuery.hasNextPage),
+    isLoading: isHistoryLoading,
+    isError: historyQuery.isError,
+    isLoadingMore: historyQuery.isFetchingNextPage,
+    onLoadMore: applyHistoryRatingSafety ? handleLoadMoreHistory : undefined,
+    visibilityMode: applyHistoryRatingSafety ? 'feed' : 'badge-only',
   })
+  const feedProgress = useMemo(() => getGenerationHistoryFeedProgressSummary({
+    loadedCount: historyRecords.length,
+    visibleCount: visibleHistoryImages.length,
+    totalCount: historyTotalCount,
+  }), [historyRecords.length, historyTotalCount, visibleHistoryImages.length])
+  const visibleHistoryRecordIds = useMemo(
+    () => new Set(visibleHistoryImages.map((image) => String(image.id))),
+    [visibleHistoryImages],
+  )
   const historyRecordMap = useMemo(
     () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
     [historyRecords],
@@ -262,14 +284,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     return `/images/${image.composite_hash}`
   }, [historyRecordMap])
   useEffect(() => {
-    setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id)))
-  }, [historyRecordMap])
+    setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id) && visibleHistoryRecordIds.has(id)))
+  }, [historyRecordMap, visibleHistoryRecordIds])
 
-  const fetchNextHistoryPage = historyQuery.fetchNextPage
   const getHistoryItemId = useCallback((image: ImageRecord) => String(image.id), [])
-  const handleLoadMoreHistory = useCallback(() => {
-    void fetchNextHistoryPage()
-  }, [fetchNextHistoryPage])
   const handleClearSelectedHistory = useCallback(() => {
     setSelectedHistoryIds([])
   }, [])
@@ -577,31 +595,39 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               ) : null}
             </PageInset>
 
-            <ImageList
-              items={historyImages}
-              layout="masonry"
-              activationMode="modal"
-              getItemHref={getHistoryImageHref}
-              getItemId={getHistoryItemId}
-              selectable
-              modalAccessOptions={isPublicView ? {
-                allowDetailNavigation: false,
-                allowEditAction: false,
-                allowGroupAssignAction: false,
-              } : undefined}
-              selectedIds={selectedHistoryIds}
-              onSelectedIdsChange={setSelectedHistoryIds}
-              minColumnWidth={220}
-              preferredColumnCount={historyColumnCount}
-              columnGap={splitPaneScroll ? 12 : 16}
-              rowGap={splitPaneScroll ? 12 : 16}
-              className={cn(splitPaneScroll && 'min-h-0 flex-1 overflow-hidden pr-3 pb-1')}
-              scrollMode={splitPaneScroll ? 'container' : 'window'}
-              hasMore={Boolean(historyQuery.hasNextPage)}
-              isLoadingMore={historyQuery.isFetchingNextPage}
-              onLoadMore={handleLoadMoreHistory}
-              shouldBlurItemPreview={shouldBlurItemPreview}
-            />
+            {visibleHistoryImages.length > 0 ? (
+              <ImageList
+                items={visibleHistoryImages}
+                layout="masonry"
+                activationMode="modal"
+                getItemHref={getHistoryImageHref}
+                getItemId={getHistoryItemId}
+                selectable
+                modalAccessOptions={isPublicView ? {
+                  allowDetailNavigation: false,
+                  allowEditAction: false,
+                  allowGroupAssignAction: false,
+                } : undefined}
+                selectedIds={selectedHistoryIds}
+                onSelectedIdsChange={setSelectedHistoryIds}
+                minColumnWidth={220}
+                preferredColumnCount={historyColumnCount}
+                columnGap={splitPaneScroll ? 12 : 16}
+                rowGap={splitPaneScroll ? 12 : 16}
+                className={cn(splitPaneScroll && 'min-h-0 flex-1 overflow-hidden pr-3 pb-1')}
+                scrollMode={splitPaneScroll ? 'container' : 'window'}
+                hasMore={Boolean(historyQuery.hasNextPage)}
+                isLoadingMore={historyQuery.isFetchingNextPage}
+                onLoadMore={handleLoadMoreHistory}
+                shouldBlurItemPreview={shouldBlurItemPreview}
+              />
+            ) : null}
+
+            {hasOnlyHiddenItems && !historyQuery.hasNextPage && !historyQuery.isFetchingNextPage ? (
+              <div className="py-4 text-sm text-muted-foreground">
+                {t({ ko: '현재 등급 표시 설정으로 모든 생성 기록이 숨겨졌어.', en: 'All generation history is hidden by the current rating visibility settings.' })}
+              </div>
+            ) : null}
 
             <div className="flex shrink-0 flex-col items-center gap-3 pb-2">
               {historyQuery.isFetchingNextPage ? (
@@ -627,7 +653,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         ) : null}
       </div>
 
-      {historyImages.length > 0 ? (
+      {visibleHistoryImages.length > 0 ? (
         <ImageListColumnFloatingControl
           value={historyColumnCount}
           defaultValue={defaultHistoryColumnCount}

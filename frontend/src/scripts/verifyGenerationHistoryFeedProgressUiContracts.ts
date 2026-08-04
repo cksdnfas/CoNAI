@@ -27,6 +27,14 @@ const generationHistoryModelSource = readFileSync(
   resolve(process.cwd(), '../backend/src/models/GenerationHistory.ts'),
   'utf8',
 )
+const backendSettingsTypesSource = readFileSync(resolve(process.cwd(), '../backend/src/types/settings.ts'), 'utf8')
+const backendSettingsDefaultsSource = readFileSync(resolve(process.cwd(), '../backend/src/services/settingsServiceStorage.ts'), 'utf8')
+const backendSettingsRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/settings.ts'), 'utf8')
+const runtimeMediaSettingsRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/runtime-media-settings.routes.ts'), 'utf8')
+const registerAppRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/startup/registerAppRoutes.ts'), 'utf8')
+const frontendSettingsTypesSource = readFileSync(resolve(process.cwd(), 'src/types/settings.ts'), 'utf8')
+const apiSettingsSource = readFileSync(resolve(process.cwd(), 'src/lib/api-settings.ts'), 'utf8')
+const generalPreferencesSource = readFileSync(resolve(process.cwd(), 'src/features/settings/components/general-preferences-sections.tsx'), 'utf8')
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -302,6 +310,69 @@ function assertNoImageBadgeOverlaySourcePolicy() {
   )
 }
 
+function assertHistoryRatingSafetySettingSourcePolicy() {
+  match(
+    backendSettingsTypesSource,
+    /applyRatingSafetyToGenerationHistory: boolean/,
+    'backend general settings should type the generation history rating-safety option',
+  )
+  match(
+    frontendSettingsTypesSource,
+    /applyRatingSafetyToGenerationHistory: boolean/,
+    'frontend general settings should type the generation history rating-safety option',
+  )
+  match(
+    backendSettingsDefaultsSource,
+    /applyRatingSafetyToGenerationHistory: false/,
+    'generation history rating safety should default off to preserve private-history behavior',
+  )
+  match(
+    backendSettingsRoutesSource,
+    /validateBooleanIfDefined\(res, generalSettings\.applyRatingSafetyToGenerationHistory, 'applyRatingSafetyToGenerationHistory must be a boolean'\)/,
+    'general settings updates should reject non-boolean history rating-safety values',
+  )
+  match(
+    runtimeMediaSettingsRoutesSource,
+    /'\/generation-history'[\s\S]*?data: \{ applyRatingSafetyToGenerationHistory \}/,
+    'runtime media settings should expose only the generation history rating-safety option',
+  )
+  match(
+    registerAppRoutesSource,
+    /RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS\s*=\s*\[[\s\S]*?\.\.\.HOME_IMAGE_READ_PERMISSION_KEYS,[\s\S]*?'page\.generation\.view'/,
+    'generation page readers should be allowed to load runtime media settings',
+  )
+  match(
+    generalPreferencesSource,
+    /checked=\{generalDraft\.applyRatingSafetyToGenerationHistory \?\? false\}[\s\S]*?onPatchGeneral\(\{ applyRatingSafetyToGenerationHistory: event\.target\.checked \}\)/,
+    'safety settings should provide a default-off generation history toggle',
+  )
+  match(
+    apiSettingsSource,
+    /function getRuntimeGenerationHistorySettings\(\)[\s\S]*?'\/api\/runtime-media-settings\/generation-history'/,
+    'frontend runtime settings should load the generation history safety option without settings-page access',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const applyHistoryRatingSafety = isPublicView \|\| historySafetySettingsQuery\.data\?\.applyRatingSafetyToGenerationHistory === true/,
+    'public workflow history should always apply rating safety while private history follows the option',
+  )
+  match(
+    generationHistoryPanelSource,
+    /visibleItems: visibleHistoryImages,[\s\S]*?hasMore: Boolean\(historyQuery\.hasNextPage\)[\s\S]*?onLoadMore: applyHistoryRatingSafety \? handleLoadMoreHistory : undefined[\s\S]*?visibilityMode: applyHistoryRatingSafety \? 'feed' : 'badge-only'/,
+    'generation history safety should filter, blur, and continue paging through fully hidden batches',
+  )
+  match(
+    generationHistoryPanelSource,
+    /visibleCount: visibleHistoryImages\.length[\s\S]*?items=\{visibleHistoryImages\}/,
+    'generation history progress and image rendering should use the safety-filtered items',
+  )
+  match(
+    generationHistoryPanelSource,
+    /hasOnlyHiddenItems && !historyQuery\.hasNextPage && !historyQuery\.isFetchingNextPage[\s\S]*?현재 등급 표시 설정으로 모든 생성 기록이 숨겨졌어/,
+    'generation history should explain when every loaded page is hidden by rating safety',
+  )
+}
+
 assertEmptySummary()
 assertPagedSummary()
 assertFilteredSummary()
@@ -313,5 +384,6 @@ assertImageListCallbackSourcePolicy()
 assertDownloadReadinessSourcePolicy()
 assertSelectionRecoverySourcePolicy()
 assertNoImageBadgeOverlaySourcePolicy()
+assertHistoryRatingSafetySettingSourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

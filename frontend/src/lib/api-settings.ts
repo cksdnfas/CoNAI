@@ -91,6 +91,10 @@ export interface WallpaperRuntimeSettings {
   wallpaperActivePresetId: string | null
 }
 
+export interface RuntimeGenerationHistorySettings {
+  applyRatingSafetyToGenerationHistory: boolean
+}
+
 export interface LlmPresetOptionRecord {
   id: string
   name: string
@@ -200,6 +204,15 @@ export async function getRuntimeSimilaritySettings(init?: RequestInit) {
   const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity', init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.runtimeSimilarity.load')
+  }
+  return response.data
+}
+
+/** Load the runtime-safe subset of generation history settings. */
+export async function getRuntimeGenerationHistorySettings() {
+  const response = await fetchJson<ApiResponse<RuntimeGenerationHistorySettings>>('/api/runtime-media-settings/generation-history')
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'settings.runtimeGenerationHistory.load')
   }
   return response.data
 }

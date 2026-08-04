@@ -76,8 +76,14 @@ assert.match(
 
 assert.match(
   routeRegistrationSource,
-  /app\.use\('\/api\/runtime-media-settings'[\s\S]*?allowReadAccess\(HOME_IMAGE_READ_PERMISSION_KEYS\)/,
-  'runtime media read settings must be available to anonymous home/detail access',
+  /RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS\s*=\s*\[[\s\S]*?\.\.\.HOME_IMAGE_READ_PERMISSION_KEYS,[\s\S]*?'page\.generation\.view'/,
+  'runtime media read settings must be available to home/detail and generation access',
+);
+
+assert.match(
+  routeRegistrationSource,
+  /app\.use\('\/api\/runtime-media-settings'[\s\S]*?allowReadAccess\(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS\)/,
+  'runtime media read settings must use the expanded media-settings permission scope',
 );
 
 assert.match(

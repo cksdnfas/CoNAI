@@ -30,6 +30,7 @@ export interface GeneralSettings {
   autoCleanupCanvasOnShutdown?: boolean;
   showRatingBadges?: boolean;
   imageSimilarityCheckMode?: ImageSimilarityCheckMode;
+  applyRatingSafetyToGenerationHistory: boolean;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';

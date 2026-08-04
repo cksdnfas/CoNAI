@@ -107,6 +107,10 @@ export const API_ERROR_FALLBACKS = {
     ko: '런타임 유사도 설정을 불러오지 못했어.',
     en: 'Failed to load runtime similarity settings.',
   },
+  'settings.runtimeGenerationHistory.load': {
+    ko: '생성 히스토리 표시 설정을 불러오지 못했어.',
+    en: 'Failed to load generation history display settings.',
+  },
   'settings.wallpaperRuntime.load': {
     ko: '월페이퍼 라이브 설정을 불러오지 못했어.',
     en: 'Failed to load wallpaper live settings.',
