@@ -1,8 +1,10 @@
 import { RuntimeJobRunner } from './runtimeJobRunner'
 import { registerFolderScanJobHandlers } from './handlers/folderScanHandlers'
 import { registerGroupRematchJobHandlers } from './handlers/groupRematchHandlers'
+import { registerPromptSearchIndexJobHandlers } from './handlers/promptSearchIndexHandlers'
 import { registerThumbnailJobHandlers } from './handlers/thumbnailHandlers'
 import { registerThumbnailRepairJobHandlers } from './handlers/thumbnailRepairHandlers'
+import { registerVideoPosterJobHandlers } from './handlers/videoPosterHandlers'
 
 export { RuntimeJobRunner, RuntimeJobCancelledError } from './runtimeJobRunner'
 export type { RuntimeJobContext, RuntimeJobHandlerOptions } from './runtimeJobRunner'
@@ -29,6 +31,8 @@ export function registerRuntimeJobHandlers(): void {
   handlersRegistered = true
   registerThumbnailJobHandlers()
   registerThumbnailRepairJobHandlers()
+  registerVideoPosterJobHandlers()
+  registerPromptSearchIndexJobHandlers()
   registerGroupRematchJobHandlers()
   registerFolderScanJobHandlers()
 }

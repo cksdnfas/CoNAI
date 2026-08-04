@@ -12,6 +12,8 @@
 export type RuntimeJobKind =
   | 'thumbnail-regenerate'
   | 'thumbnail-repair'
+  | 'video-poster-backfill'
+  | 'media-prompt-index'
   | 'group-auto-collect'
   | 'all-auto-collect'
   | 'auto-folder-rebuild'
@@ -22,6 +24,8 @@ export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | '
 export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'thumbnail-regenerate',
   'thumbnail-repair',
+  'video-poster-backfill',
+  'media-prompt-index',
   'group-auto-collect',
   'all-auto-collect',
   'auto-folder-rebuild',

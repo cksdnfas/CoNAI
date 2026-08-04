@@ -1,5 +1,6 @@
 import fs from 'fs';
-import { resolveUploadsPath } from '../../config/runtimePaths';
+import path from 'path';
+import { runtimePaths } from '../../config/runtimePaths';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import type { ImageSearchParamsInput } from '../../models/Image/ImageSearchHelpers';
@@ -154,10 +155,27 @@ export function buildBatchImageListResponse(compositeHashes: string[], items: an
   return buildImageListResponse(sortedImages, sortedImages.length, 1, sortedImages.length);
 }
 
+/**
+ * Absolute location of a stored thumbnail.
+ *
+ * `media_metadata.thumbnail_path` is relative to the **temp** directory, not the
+ * uploads directory. Resolving it against uploads (as this helper used to) made
+ * the existence check always fail, so every batch lookup silently degraded to the
+ * original file.
+ */
+function resolveThumbnailFilePath(thumbnailPath: string): string {
+  return path.isAbsolute(thumbnailPath) ? thumbnailPath : path.join(runtimePaths.tempDir, thumbnailPath);
+}
+
+/** True when the row's stored thumbnail (or video poster) is present on disk. */
+function hasStoredThumbnail(metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>): boolean {
+  return Boolean(metadata.thumbnail_path) && cachedFileExists(resolveThumbnailFilePath(metadata.thumbnail_path!));
+}
+
 /** Resolve the best thumbnail path for non-video files without changing fallback order. */
 function resolveThumbnailPath(metadata: ImageMetadataRecord, file: ImageFileRecord): string {
-  if (metadata.thumbnail_path && cachedFileExists(resolveUploadsPath(metadata.thumbnail_path))) {
-    return metadata.thumbnail_path;
+  if (hasStoredThumbnail(metadata)) {
+    return metadata.thumbnail_path!;
   }
 
   return file.original_file_path;
@@ -199,7 +217,18 @@ function buildBatchThumbnailLookupResult(
       return { success: false, error: 'File not found' };
     }
 
+    // Video rows carry a webp poster frame once Phase 2 (or the backfill job) has
+    // produced one. Before HEAVY-2 they always pointed at the original file here,
+    // which is why a batch lookup for a page of videos resolved to raw video bytes.
     if (file.mime_type && file.mime_type.startsWith('video/')) {
+      if (hasStoredThumbnail(metadata)) {
+        return {
+          success: true,
+          thumbnailPath: metadata.thumbnail_path!,
+          mimeType: 'image/webp'
+        };
+      }
+
       return {
         success: true,
         thumbnailPath: file.original_file_path,

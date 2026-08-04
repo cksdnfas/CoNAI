@@ -168,25 +168,29 @@ assert.match(
   /buildGeneralTagConditions/,
   'simple auto-tag search must keep the JSON fallback for unmigrated test DBs',
 );
+// The auto-tag-specific total cache was generalised into `resolveSearchTotal` so
+// `advancedSearch` could share it (HEAVY-1). The guarantees are unchanged: a short
+// TTL, a key derived from the count conditions and parameters, and a cache read
+// before the count query runs.
 assert.match(
   imageSearchModel,
-  /AUTO_TAG_SEARCH_TOTAL_CACHE_TTL_MS\s*=\s*30_000/,
-  'simple auto-tag search total count cache must use a short TTL',
+  /SEARCH_TOTAL_CACHE_TTL_MS\s*=\s*30_000/,
+  'search total count cache must use a short TTL',
 );
 assert.match(
   imageSearchModel,
-  /getAutoTagSearchTotalCacheKey\(safeConditions,\s*queryBuilder\.params\)/,
-  'simple auto-tag search total cache must key by count conditions and parameters',
+  /function getSearchTotalCacheKey\(scope: string, conditions: string\[\], params: unknown\[\]\)/,
+  'search total cache must key by scope, count conditions and parameters',
 );
 assert.match(
   imageSearchModel,
-  /getCachedAutoTagSearchTotal\(countCacheKey\)/,
-  'simple auto-tag search must read cached totals before running the count query',
+  /function resolveSearchTotal\([\s\S]{0,400}?getCachedSearchTotal\(cacheKey\)[\s\S]{0,200}?setCachedSearchTotal\(cacheKey, total\)/,
+  'search totals must be read from cache before the count query and written back after a miss',
 );
 assert.match(
   imageSearchModel,
-  /setCachedAutoTagSearchTotal\(countCacheKey,\s*total\)/,
-  'simple auto-tag search must cache exact totals after count misses',
+  /resolveSearchTotal\('searchByAutoTags', safeConditions, queryBuilder\.params/,
+  'simple auto-tag search must resolve its total through the shared cache',
 );
 assert.match(
   autoTagIndexPruneMigration,

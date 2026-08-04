@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 import { VideoProcessor } from './videoProcessor';
 import crypto from 'crypto';
 import { runtimePaths } from '../config/runtimePaths';
+import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 
 /**
  * VideoFrameExtractor - Extract frames from videos for auto-tagging
@@ -11,6 +12,15 @@ import { runtimePaths } from '../config/runtimePaths';
  */
 export class VideoFrameExtractor {
   private static readonly FRAME_COUNT = 7;
+  /**
+   * Poster frame position, as a fraction of the running time.
+   *
+   * Video intros are frequently black or a title card, so frame 0 makes a poor
+   * gallery cell. A fifth of the way in is past that for typical clips.
+   */
+  private static readonly POSTER_POSITION_RATIO = 0.2;
+  /** Never seek deeper than this: on long videos a far seek costs real time. */
+  private static readonly POSTER_MAX_SEEK_SECONDS = 10;
 
   /**
    * Ensure temp frames directory exists
@@ -83,6 +93,53 @@ export class VideoFrameExtractor {
       throw error instanceof Error
         ? error
         : new Error('Unknown error during frame extraction');
+    }
+  }
+
+  /**
+   * Build the webp poster frame that stands in for a video in list/thumbnail views.
+   *
+   * Gallery cells used to be served the **original video file** because video rows
+   * carry no `thumbnail_path`, so one page of video results streamed hundreds of MB.
+   * The poster lands in the normal thumbnail location (`thumbnails/<date>/<hash>.webp`)
+   * and is written to `media_metadata.thumbnail_path`, so every existing thumbnail
+   * consumer picks it up with no special casing.
+   *
+   * @param videoPath Absolute path to the source video
+   * @param compositeHash Media hash — also the poster file name
+   * @returns DB-relative thumbnail path (temp-dir relative), the same shape images use
+   */
+  static async generatePosterThumbnail(videoPath: string, compositeHash: string): Promise<string> {
+    if (!fs.existsSync(videoPath)) {
+      throw new Error(`Video file not found: ${videoPath}`);
+    }
+
+    let duration = 0;
+    try {
+      duration = (await VideoProcessor.extractMetadata(videoPath)).duration;
+    } catch {
+      // Unreadable metadata is not fatal: seek to the first frame instead.
+      duration = 0;
+    }
+
+    const timestamp = Number.isFinite(duration) && duration > 0
+      ? Math.min(duration * this.POSTER_POSITION_RATIO, this.POSTER_MAX_SEEK_SECONDS)
+      : 0;
+
+    const tempBaseDir = await this.ensureTempDir();
+    const framePath = path.join(tempBaseDir, `poster_${compositeHash}_${crypto.randomUUID()}.png`);
+
+    try {
+      await this.extractSingleFrame(videoPath, timestamp, framePath);
+      if (!fs.existsSync(framePath)) {
+        throw new Error(`Poster frame was not written: ${framePath}`);
+      }
+
+      // Reuse the shared generator so posters honour the user's thumbnail size and
+      // quality settings and land in the same date-partitioned directory as images.
+      return await ThumbnailGenerator.generateThumbnail(framePath, compositeHash);
+    } finally {
+      await fs.promises.rm(framePath, { force: true }).catch(() => undefined);
     }
   }
 
