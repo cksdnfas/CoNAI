@@ -32,6 +32,7 @@ const backendSettingsDefaultsSource = readFileSync(resolve(process.cwd(), '../ba
 const backendSettingsRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/settings.ts'), 'utf8')
 const runtimeMediaSettingsRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/runtime-media-settings.routes.ts'), 'utf8')
 const registerAppRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/startup/registerAppRoutes.ts'), 'utf8')
+const publicWorkflowRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/public-workflows.routes.ts'), 'utf8')
 const frontendSettingsTypesSource = readFileSync(resolve(process.cwd(), 'src/types/settings.ts'), 'utf8')
 const apiSettingsSource = readFileSync(resolve(process.cwd(), 'src/lib/api-settings.ts'), 'utf8')
 const generalPreferencesSource = readFileSync(resolve(process.cwd(), 'src/features/settings/components/general-preferences-sections.tsx'), 'utf8')
@@ -342,6 +343,11 @@ function assertHistoryRatingSafetySettingSourcePolicy() {
     'generation page readers should be allowed to load runtime media settings',
   )
   match(
+    registerAppRoutesSource,
+    /const allowRuntimeMediaSettingsRead: RequestHandler = \(req, res, next\) => \{[\s\S]*?req\.session\?\.authenticated === true[\s\S]*?allowReadAccess\(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS\)/,
+    'authenticated public-workflow users should load the same runtime history and rating policy without a page permission dependency',
+  )
+  match(
     generalPreferencesSource,
     /checked=\{generalDraft\.applyRatingSafetyToGenerationHistory \?\? false\}[\s\S]*?onPatchGeneral\(\{ applyRatingSafetyToGenerationHistory: event\.target\.checked \}\)/,
     'safety settings should provide a default-off generation history toggle',
@@ -353,8 +359,23 @@ function assertHistoryRatingSafetySettingSourcePolicy() {
   )
   match(
     generationHistoryPanelSource,
-    /const applyHistoryRatingSafety = isPublicView \|\| historySafetySettingsQuery\.data\?\.applyRatingSafetyToGenerationHistory === true/,
-    'public workflow history should always apply rating safety while private history follows the option',
+    /enabled: !authStatusQuery\.isPending,[\s\S]*?const applyHistoryRatingSafety = historySafetySettingsQuery\.data\?\.applyRatingSafetyToGenerationHistory === true/,
+    'private and public-workflow history should follow the same generation-history rating-safety option',
+  )
+  match(
+    generationHistoryPanelSource,
+    /isPublicView[\s\S]*?isAdmin \? 'public-workflow-all-users' : 'public-workflow-mine-only'/,
+    'public workflow history cache scope should distinguish admin all-user history from account-owned history',
+  )
+  match(
+    publicWorkflowRoutesSource,
+    /router\.get\('\/:slug\/history'[\s\S]*?applyHistoryAccessScope\(req, historyFilters, false\)[\s\S]*?getHistoryByWorkflow\(workflow\.id, \{[\s\S]*?\.\.\.historyFilters/,
+    'public workflow history should reuse the standard admin-all and non-admin-owned account scope',
+  )
+  match(
+    publicWorkflowRoutesSource,
+    /router\.post\('\/:slug\/cleanup-failed'[\s\S]*?applyHistoryAccessScope\(req, historyFilters, false\)[\s\S]*?GenerationHistoryModel\.findAll\(\{[\s\S]*?\.\.\.historyFilters/,
+    'public workflow failed-history cleanup should match the same account scope as its list',
   )
   match(
     generationHistoryPanelSource,

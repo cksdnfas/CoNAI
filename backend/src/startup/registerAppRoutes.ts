@@ -156,6 +156,16 @@ function allowReadAccess(permissionKeys: readonly string[]): RequestHandler {
   };
 }
 
+/** Allow authenticated public-workflow users to read non-sensitive runtime media policy. */
+const allowRuntimeMediaSettingsRead: RequestHandler = (req, res, next) => {
+  if (isReadMethod(req) && req.session?.authenticated === true) {
+    next();
+    return;
+  }
+
+  allowReadAccess(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS)(req, res, next);
+};
+
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
 export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
   registerRuntimeStaticDirectory(app, '/uploads', options.uploadsDir);
@@ -225,7 +235,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     });
   });
   app.use('/api/runtime-appearance', optionalAuth, runtimeAppearanceRoutes);
-  app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowReadAccess(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS), runtimeMediaSettingsRoutes);
+  app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowRuntimeMediaSettingsRead, runtimeMediaSettingsRoutes);
   app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);

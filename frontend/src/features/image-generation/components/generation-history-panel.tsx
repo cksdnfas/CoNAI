@@ -88,7 +88,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const requesterAccountId = authStatusQuery.data?.accountId ?? null
   const requesterAccountType = authStatusQuery.data?.accountType ?? null
   const isPublicView = Boolean(publicWorkflowSlug)
-  const historyScope = isPublicView ? 'public-workflow' : (isAdmin ? 'all-users' : 'mine-only')
+  const historyScope = isPublicView
+    ? (isAdmin ? 'public-workflow-all-users' : 'public-workflow-mine-only')
+    : (isAdmin ? 'all-users' : 'mine-only')
   const historyQueryKey = useMemo(() => [
     'image-generation-history',
     serviceType,
@@ -153,7 +155,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const historySafetySettingsQuery = useQuery({
     queryKey: ['runtime-generation-history-settings'],
     queryFn: getRuntimeGenerationHistorySettings,
-    enabled: !isPublicView && !authStatusQuery.isPending,
+    enabled: !authStatusQuery.isPending,
     staleTime: 60_000,
   })
   const refetchHistory = historyQuery.refetch
@@ -198,7 +200,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const isRetryingRunRecovery = retryingQueueJobIds.size > 0
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyTotalCount = historyQuery.data?.pages[0]?.total
-  const applyHistoryRatingSafety = isPublicView || historySafetySettingsQuery.data?.applyRatingSafetyToGenerationHistory === true
+  const applyHistoryRatingSafety = historySafetySettingsQuery.data?.applyRatingSafetyToGenerationHistory === true
   const fetchNextHistoryPage = historyQuery.fetchNextPage
   const handleLoadMoreHistory = useCallback(() => {
     return fetchNextHistoryPage()

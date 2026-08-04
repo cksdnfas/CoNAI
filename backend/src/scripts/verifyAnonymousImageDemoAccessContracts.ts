@@ -82,8 +82,14 @@ assert.match(
 
 assert.match(
   routeRegistrationSource,
-  /app\.use\('\/api\/runtime-media-settings'[\s\S]*?allowReadAccess\(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS\)/,
-  'runtime media read settings must use the expanded media-settings permission scope',
+  /const allowRuntimeMediaSettingsRead: RequestHandler = \(req, res, next\) => \{[\s\S]*?req\.session\?\.authenticated === true[\s\S]*?allowReadAccess\(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS\)/,
+  'runtime media read settings must allow authenticated public-workflow users and preserve anonymous permission checks',
+);
+
+assert.match(
+  routeRegistrationSource,
+  /app\.use\('\/api\/runtime-media-settings'[\s\S]*?allowRuntimeMediaSettingsRead/,
+  'runtime media read settings must use the public-workflow-compatible read guard',
 );
 
 assert.match(

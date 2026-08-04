@@ -15,7 +15,8 @@ import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
 import { AUTO_COLLECT_SOURCE_PATH } from '../services/comfyDropdownAutoCollectionService';
 import type { MarkedField, WorkflowRecord } from '../types/workflow';
-import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
+import { applyHistoryAccessScope } from './generation-history/historyRouteHelpers';
+import { getRequesterAccountId } from './requester-session-helpers';
 
 const router = Router();
 
@@ -282,10 +283,12 @@ router.get('/:slug/history', asyncHandler(async (req: Request, res: Response) =>
     return;
   }
 
-  const requesterAccountId = getRequesterAccountId(req);
-  const requesterAccountType = getRequesterAccountType(req);
-
-  if (requesterAccountId === null || requesterAccountType === null) {
+  const historyFilters: {
+    requested_by_account_id?: number;
+    requested_by_account_type?: 'admin' | 'guest';
+  } = {};
+  const accessScope = applyHistoryAccessScope(req, historyFilters, false);
+  if (accessScope.forceEmpty) {
     res.json({
       success: true,
       records: [],
@@ -295,10 +298,9 @@ router.get('/:slug/history', asyncHandler(async (req: Request, res: Response) =>
   }
 
   const result = await GenerationHistoryService.getHistoryByWorkflow(workflow.id, {
+    ...historyFilters,
     limit,
     offset,
-    requested_by_account_id: requesterAccountId,
-    requested_by_account_type: requesterAccountType,
   });
 
   res.json({
@@ -392,10 +394,12 @@ router.post('/:slug/cleanup-failed', asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  const requesterAccountId = getRequesterAccountId(req);
-  const requesterAccountType = getRequesterAccountType(req);
-
-  if (requesterAccountId === null || requesterAccountType === null) {
+  const historyFilters: {
+    requested_by_account_id?: number;
+    requested_by_account_type?: 'admin' | 'guest';
+  } = {};
+  const accessScope = applyHistoryAccessScope(req, historyFilters, false);
+  if (accessScope.forceEmpty) {
     res.status(401).json({ success: false, error: 'Authentication required' });
     return;
   }
@@ -403,8 +407,7 @@ router.post('/:slug/cleanup-failed', asyncHandler(async (req: Request, res: Resp
   const failedRecords = GenerationHistoryModel.findAll({
     workflow_id: workflow.id,
     generation_status: 'failed',
-    requested_by_account_id: requesterAccountId,
-    requested_by_account_type: requesterAccountType,
+    ...historyFilters,
   });
 
   const deleted = GenerationHistoryModel.deleteMany(
