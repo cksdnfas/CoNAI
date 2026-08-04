@@ -142,6 +142,52 @@ function verifyMimeTypeResolution() {
   assert.equal(getMimeTypeFromFilePath('sample.unknown'), 'application/octet-stream')
 }
 
+/**
+ * Media GETs must not do image work or database writes on the request path.
+ *
+ * A single Node process serves everyone, so an inline sharp resize plus a
+ * synchronous metadata UPDATE inside `GET /api/images/:hash/thumbnail` stalled
+ * every other user's request. Missing thumbnails are now served from the original
+ * file immediately and repaired through the runtime-jobs queue.
+ */
+function verifyThumbnailFallbackStaysOffTheRequestPath() {
+  const helpersSource = fs.readFileSync(
+    path.resolve(__dirname, '../routes/images/query-file-helpers.ts'),
+    'utf8',
+  )
+  const serveFunction = helpersSource.slice(
+    helpersSource.indexOf('export async function serveThumbnailOrOriginal'),
+    helpersSource.indexOf('async function resolveThumbnailDownloadFile'),
+  )
+
+  assert.ok(serveFunction.length > 0, 'serveThumbnailOrOriginal must exist in query-file-helpers')
+  assert.doesNotMatch(
+    serveFunction,
+    /ThumbnailGenerator\.generateThumbnail/,
+    'the thumbnail GET must not regenerate thumbnails inline',
+  )
+  assert.doesNotMatch(
+    serveFunction,
+    /MediaMetadataModel\.update/,
+    'the thumbnail GET must not write to media_metadata on the request path',
+  )
+  assert.match(
+    serveFunction,
+    /requestThumbnailRepair\(/,
+    'a missing thumbnail must be delegated to the background repair queue',
+  )
+
+  const guardSource = helpersSource.slice(
+    helpersSource.indexOf('export async function getVisibleMetadataOrBlock'),
+    helpersSource.indexOf('export async function getActiveFileOrBlock'),
+  )
+  assert.match(
+    guardSource,
+    /findVisibilityGuardByHash/,
+    'media guards must load only the guard columns, not the whole ~11KB metadata row',
+  )
+}
+
 async function main() {
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'conai-image-file-route-'))
   const filePath = path.join(tempDir, 'sample.png')
@@ -150,6 +196,7 @@ async function main() {
     await fs.promises.writeFile(filePath, '0123456789')
     verifyCompositeHashValidation()
     verifyMimeTypeResolution()
+    verifyThumbnailFallbackStaysOffTheRequestPath()
     await verifyCacheableFileStreaming(filePath)
     await verifyRangeStreaming(filePath)
   } finally {

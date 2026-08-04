@@ -76,7 +76,7 @@ export class ComplexFilterService {
       params,
       cteClause,
       cteParams,
-      fromClause,
+      countFromClause,
       whereClause,
       groupByClause,
       statsSources,
@@ -84,13 +84,19 @@ export class ComplexFilterService {
 
     // Count total results (composite_hash 기반) with an explicitly composed query
     // instead of regex-rewriting the SELECT clause.
+    //
+    // The count is driven straight from media_metadata: fromClause LEFT JOINs
+    // image_files only to project file columns onto the data rows, and a LEFT JOIN
+    // can neither drop nor add composite hashes. Dropping it from the count keeps
+    // the exact same result while removing an image_files fan-out over the whole
+    // match set, so the count query can stay inside media_metadata's indexes.
     const shouldCountTotal = !pagination?.useCursor || pagination.includeTotal !== false;
     let total = 0;
     if (shouldCountTotal) {
       const countQuery = `
         ${cteClause}
         SELECT COUNT(DISTINCT im.composite_hash) as total
-        ${fromClause}
+        ${countFromClause}
         ${whereClause}
       `;
       const countRow = db.prepare(countQuery).get(...params) as any;
@@ -220,11 +226,11 @@ export class ComplexFilterService {
     basicParams?: ComplexSearchScope
   ): Promise<{ query: string; params: any[] }> {
     const weights = await RatingScoreService.getWeights();
-    const { params, cteClause, fromClause, whereClause } = this.buildComplexQuery(filter, weights, basicParams);
+    const { params, cteClause, countFromClause, whereClause } = this.buildComplexQuery(filter, weights, basicParams);
     const query = `
       ${cteClause}
       SELECT DISTINCT im.composite_hash
-      ${fromClause}
+      ${countFromClause}
       ${whereClause}
     `;
 

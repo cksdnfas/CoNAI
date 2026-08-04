@@ -17,6 +17,28 @@ import {
 
 const router = Router();
 
+/** Cache scope for the whole visible library. The visibility policy is global, so one entry serves everyone. */
+const VISIBLE_FEED_TOTAL_SCOPE = 'visible-feed';
+
+/**
+ * Resolve the visible-library total through the shared server cache.
+ *
+ * The total is a whole-library aggregate that every visitor would otherwise
+ * recompute on entering Home. It is permission-neutral (the visibility policy is
+ * global), so one cached value serves everyone until the gallery cache is
+ * invalidated.
+ */
+function resolveCachedVisibleTotal(scopeKey: string): number {
+  const cached = QueryCacheService.getGalleryTotalCache(scopeKey);
+  if (cached !== null) {
+    return cached;
+  }
+
+  const total = MediaMetadataModel.countVisibleWithActiveFile();
+  QueryCacheService.setGalleryTotalCache(scopeKey, total);
+  return total;
+}
+
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
@@ -36,17 +58,21 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     if (isCursorRequest) {
+      // The cursor path used to bypass QueryCacheService entirely, so every
+      // include_total request paid for its own full-library count. The page query
+      // never counts now; the total comes from the shared cache instead.
       const result = MediaMetadataModel.findAllWithFilesCursor({
         limit,
         sortOrder,
         cursorDate: cursorDate || undefined,
         cursorHash: cursorHash || undefined,
-        includeTotal: includeCursorTotal,
+        includeTotal: false,
       });
       const lastItem = result.items.at(-1);
+      const total = includeCursorTotal ? resolveCachedVisibleTotal(VISIBLE_FEED_TOTAL_SCOPE) : result.total;
 
       return res.status(200).json(
-        buildEnrichedImageListResponse(result.items, result.total, 0, limit, {
+        buildEnrichedImageListResponse(result.items, total, 0, limit, {
           hasMore: result.hasMore,
           totalPages: 0,
           totalKnown: includeCursorTotal,
@@ -84,6 +110,26 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       error: error instanceof Error ? error.message : 'Failed to fetch images'
     } as ImageListResponse);
     return;
+  }
+}));
+
+/**
+ * Visible-library total, on its own so the home feed can render the grid first and
+ * fill the total in afterwards instead of blocking the first page on a full count.
+ * Must stay registered before `/:compositeHash` in the images router chain.
+ */
+router.get('/count', asyncHandler(async (_req: Request, res: Response) => {
+  try {
+    return res.json({
+      success: true,
+      data: { total: resolveCachedVisibleTotal(VISIBLE_FEED_TOTAL_SCOPE) },
+    });
+  } catch (error) {
+    console.error('Get image count error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to count images',
+    });
   }
 }));
 

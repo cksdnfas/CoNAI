@@ -210,6 +210,43 @@ async function main() {
     const scopedIds = await ComplexFilterService.executeComplexSearchIds({}, { ai_tool: 'ComfyUI' });
     assert.deepEqual(scopedIds, ['hash-comfy-cat'], 'ID-only search should share final scope behavior');
 
+    // The search count is now driven straight from media_metadata (the active-file
+    // LEFT JOIN only exists to project file columns onto data rows). Duplicate
+    // active files for one hash must therefore still count once, and a hash with
+    // no active file at all must still be counted exactly as before.
+    insertFile.run(90, 'hash-comfy-cat', '/tmp/hash-comfy-cat-copy.png', '2026-01-03T00:00:00.000Z');
+    seedImage(91, {
+      hash: 'hash-comfy-fileless',
+      aiTool: 'ComfyUI',
+      modelName: 'Model B',
+      prompt: 'cat bright',
+      firstSeenDate: '2026-01-05T00:00:00.000Z',
+    });
+    db.prepare(`DELETE FROM image_files WHERE composite_hash = 'hash-comfy-fileless'`).run();
+
+    const duplicateFileResult = await ComplexFilterService.executeComplexSearch(
+      {},
+      { ai_tool: 'ComfyUI' },
+      { page: 1, limit: 10, sortBy: 'first_seen_date', sortOrder: 'ASC', includeStats: false }
+    );
+
+    assert.equal(duplicateFileResult.total, 2, 'duplicate active files must not inflate the search total');
+    assert.deepEqual(
+      duplicateFileResult.images.map((image) => image.composite_hash),
+      ['hash-comfy-cat', 'hash-comfy-fileless'],
+      'the search projection must still collapse duplicate active files to one row per hash'
+    );
+
+    const cursorNoTotal = await ComplexFilterService.executeComplexSearch(
+      {},
+      { ai_tool: 'ComfyUI' },
+      { page: 1, limit: 10, sortBy: 'first_seen_date', sortOrder: 'ASC', includeStats: false, useCursor: true, includeTotal: false }
+    );
+
+    assert.equal(cursorNoTotal.totalKnown, false, 'a first page requested without a total must report totalKnown=false');
+    assert.equal(cursorNoTotal.total, 0, 'a search that skips the count must not invent a total');
+    assert.equal(cursorNoTotal.images.length, 2, 'skipping the count must not change the returned rows');
+
     console.log('✅ Complex filter search scope/stats contracts passed');
   } finally {
     closeDatabase();

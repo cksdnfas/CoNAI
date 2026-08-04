@@ -7,6 +7,7 @@
 
 export type RuntimeJobKind =
   | 'thumbnail-regenerate'
+  | 'thumbnail-repair'
   | 'group-auto-collect'
   | 'all-auto-collect'
   | 'auto-folder-rebuild'

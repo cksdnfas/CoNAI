@@ -13,6 +13,7 @@ function assertEmptyFeedSummary() {
   assertEqual(summary.visibleCount, 0, 'empty feed should report zero visible')
   assertEqual(summary.totalCount, 0, 'empty feed should report zero total')
   assertEqual(summary.hiddenCount, 0, 'empty feed should report zero hidden')
+  assertEqual(summary.isTotalKnown, false, 'empty feed should not claim an exact total')
 }
 
 function assertPagedFeedSummary() {
@@ -44,6 +45,40 @@ function assertCursorFeedUsesLoadedCountWhenTotalUnknown() {
 
   assertEqual(summary.loadedCount, 4, 'cursor feed should still count loaded rows')
   assertEqual(summary.totalCount, 4, 'cursor feed should not render approximate API total as exact total')
+  assertEqual(summary.isTotalKnown, false, 'cursor feed without a deferred total should report it as unknown')
+}
+
+/**
+ * The first page is now requested with includeTotal=false, so the exact total
+ * arrives from a separate later request. The summary must stay renderable before
+ * it lands and must switch to the exact value once it does.
+ */
+function assertDeferredTotalArrival() {
+  const pages = [
+    { total: 2, totalKnown: false, images: [{ id: 1 }, { id: 2 }] as never[] },
+    { total: 2, totalKnown: false, images: [{ id: 3 }, { id: 4 }] as never[] },
+  ]
+
+  const beforeTotal = getHomeFeedProgressSummary(pages, 4, { deferredTotal: null })
+  assertEqual(beforeTotal.totalCount, 4, 'feed should fall back to loaded rows before the deferred total arrives')
+  assertEqual(beforeTotal.isTotalKnown, false, 'feed should mark the total unknown before it arrives')
+
+  const afterTotal = getHomeFeedProgressSummary(pages, 4, { deferredTotal: 1234 })
+  assertEqual(afterTotal.totalCount, 1234, 'deferred total should replace the loaded-row fallback')
+  assertEqual(afterTotal.isTotalKnown, true, 'deferred total should mark the total known')
+  assertEqual(afterTotal.loadedCount, 4, 'deferred total must not change loaded rows')
+  assertEqual(afterTotal.hiddenCount, 0, 'deferred total must not change hidden rows')
+
+  const undercountedTotal = getHomeFeedProgressSummary(pages, 4, { deferredTotal: 1 })
+  assertEqual(undercountedTotal.totalCount, 4, 'a stale deferred total must never render below loaded rows')
+}
+
+/** Callers that still pass an exact per-page total keep their existing behavior. */
+function assertExactPageTotalWinsOverDeferred() {
+  const summary = getHomeFeedProgressSummary([{ total: 95, images: [{ id: 1 }] as never[] }], 1, { deferredTotal: 7 })
+
+  assertEqual(summary.totalCount, 95, 'an exact page total should not be overridden by a deferred total')
+  assertEqual(summary.isTotalKnown, true, 'an exact page total should report as known')
 }
 
 function assertVisibleCountNormalization() {
@@ -58,6 +93,8 @@ assertEmptyFeedSummary()
 assertPagedFeedSummary()
 assertTotalNeverFallsBelowLoaded()
 assertCursorFeedUsesLoadedCountWhenTotalUnknown()
+assertDeferredTotalArrival()
+assertExactPageTotalWinsOverDeferred()
 assertVisibleCountNormalization()
 
 console.log('Home feed progress UI contracts verified.')
