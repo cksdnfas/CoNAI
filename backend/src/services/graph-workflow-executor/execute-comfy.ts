@@ -15,6 +15,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { GenerationQueueService } from '../generationQueueService'
 import { readQueueDebugMeta } from '../generation-queue/queueDebugMeta'
+import { externalizeQueueInputDataUrls } from '../generation-queue/queueInputStore'
 import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
 import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
@@ -93,7 +94,10 @@ function resolveSourceWorkflowId(moduleDefinition: ParsedModuleDefinition) {
 function buildQueuePayload(promptData: Record<string, unknown>, context: ExecutionContext) {
   const imageSaveSettings = settingsService.loadSettings().imageSave
   const payload: Record<string, unknown> = {
-    prompt_data: promptData,
+    // PAYLOAD-3: materialized upstream artifacts arrive here as base64 data URLs. Storing them
+    // once and keeping a reference keeps graph-enqueued jobs off the multi-MB row path too;
+    // `GenerationQueueModel.create` registers the refcount claim.
+    prompt_data: externalizeQueueInputDataUrls(promptData).value,
     _debug: {
       graph_execution_id: context.executionId,
       workflow_debug_mode: context.debugMode,

@@ -527,7 +527,39 @@ async function main() {
       'the first debug write must promote a pre-029 row onto the columns so later reads skip the payload fallback',
     )
 
-    console.log('✅ Generation queue hot-path contracts passed (SQL filters, recent-completed index, lean ETA samples, lean lifecycle reads, covered debug state)')
+    // PAYLOAD-3 runtime contract: shared image inputs are stored once, refcounted per job,
+    // and released only when the payloads that reference them are compacted.
+    const { externalizeQueueInputDataUrls, resolveQueueInputPath } = await import('../services/generation-queue/queueInputStore')
+    const sharedDataUrl = `data:image/png;base64,${Buffer.alloc(64 * 1024, 3).toString('base64')}`
+    const externalized = externalizeQueueInputDataUrls({ source_image: { dataUrl: sharedDataUrl, fileName: 'shared.png' } })
+    assert.equal(externalized.refs.length, 1, 'a large base64 input must be externalized')
+
+    const sharedSha = externalized.refs[0].sha256
+    const sharedJobIds = Array.from({ length: 4 }, () => GenerationQueueModel.create({
+      service_type: 'comfyui',
+      workflow_id: 7,
+      status: 'completed',
+      request_payload: { prompt_data: externalized.value },
+    }))
+    assert.equal(
+      (db.prepare('SELECT COUNT(*) AS total FROM generation_queue_input_refs WHERE sha256 = ?').get(sharedSha) as { total: number }).total,
+      sharedJobIds.length,
+      'each job must register its own claim on the shared input',
+    )
+    assert.ok(fs.existsSync(resolveQueueInputPath(sharedSha)), 'the shared input must be stored exactly once')
+
+    // Retained (still retryable) terminal jobs must keep their inputs.
+    GenerationQueueModel.pruneTerminalRequestPayloads({ retainRecentTerminalJobs: 5000 })
+    assert.ok(
+      fs.existsSync(resolveQueueInputPath(sharedSha)),
+      'inputs must survive while any referencing job is still retryable (PAYLOAD-3)',
+    )
+
+    const released = GenerationQueueModel.pruneTerminalRequestPayloads({ retainRecentTerminalJobs: 0 })
+    assert.equal(released.releasedInputFiles, 1, 'compacting every referencing payload must release the shared input once')
+    assert.equal(fs.existsSync(resolveQueueInputPath(sharedSha)), false, 'a fully released input file must be deleted')
+
+    console.log('✅ Generation queue hot-path contracts passed (SQL filters, recent-completed index, lean ETA samples, lean lifecycle reads, covered debug state, refcounted image inputs)')
   } finally {
     closeUserSettingsDb()
     fs.rmSync(runtimeBase, { recursive: true, force: true })

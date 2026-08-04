@@ -13,6 +13,7 @@ import type {
   GenerationQueueReconcileCandidate,
 } from '../types/generationQueue'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
+import { collectQueueInputRefs, registerQueueInputRefs, releaseQueueInputsForJobs } from '../services/generation-queue/queueInputStore'
 
 function stringifyPayload(value: Record<string, unknown> | undefined) {
   if (value === undefined) {
@@ -110,6 +111,9 @@ export type GenerationQueuePayloadPruneResult = {
   pruned: number
   retainRecentTerminalJobs: number
   compactPayload: string
+  /** PAYLOAD-3: stored image inputs that became unreferenced by this pass. */
+  releasedInputFiles: number
+  releasedInputBytes: number
 }
 
 export const DEFAULT_TERMINAL_PAYLOAD_RETAIN_LIMIT = 2000
@@ -316,7 +320,13 @@ export class GenerationQueueModel {
       data.completed_at ?? null,
     )
 
-    return info.lastInsertRowid as number
+    const jobId = info.lastInsertRowid as number
+    // PAYLOAD-3: claim every content-addressed input this payload points at. Doing it here means
+    // every enqueue path gets refcounting for free — user routes, public workflows, graph
+    // executors, and `retryJob`, which re-creates a job from a payload full of the same refs.
+    registerQueueInputRefs(jobId, collectQueueInputRefs(data.request_payload))
+
+    return jobId
   }
 
   /** Find one queue job by id. */
@@ -567,6 +577,11 @@ export class GenerationQueueModel {
   /**
    * Compact heavyweight request payloads from old terminal queue rows.
    * Queue/history rows stay intact; only already-finished payload JSON is reduced.
+   *
+   * PAYLOAD-3: this is also where stored image inputs are released. Compaction is the moment a
+   * job stops being retryable (`retryJob` refuses a pruned payload), so it is the only point at
+   * which its inputs are provably unreachable — a terminal job that is still retryable, or a
+   * still-running `orphan_suspected` job, must keep them.
    */
   static pruneTerminalRequestPayloads(input: GenerationQueuePayloadPruneInput = {}): GenerationQueuePayloadPruneResult {
     const db = getUserSettingsDb()
@@ -574,6 +589,30 @@ export class GenerationQueueModel {
       0,
       Math.floor(input.retainRecentTerminalJobs ?? DEFAULT_TERMINAL_PAYLOAD_RETAIN_LIMIT),
     )
+
+    // The ids are read with the same predicate the UPDATE uses, inside one transaction, so the
+    // released set can never drift from the compacted set.
+    const prunableJobIds = db.prepare(`
+      WITH retained_recent AS (
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status IN (${TERMINAL_QUEUE_STATUS_PLACEHOLDERS})
+        ORDER BY COALESCE(completed_at, started_at, queued_at, created_date) DESC, id DESC
+        LIMIT ?
+      )
+      SELECT id
+      FROM generation_queue_jobs
+      WHERE status IN (${TERMINAL_QUEUE_STATUS_PLACEHOLDERS})
+        AND request_payload IS NOT NULL
+        AND request_payload != ?
+        AND id NOT IN (SELECT id FROM retained_recent)
+    `).all(
+      // No SET clause here, so this binds one parameter group fewer than the UPDATE below.
+      ...TERMINAL_QUEUE_STATUSES,
+      retainRecentTerminalJobs,
+      ...TERMINAL_QUEUE_STATUSES,
+      COMPACTED_TERMINAL_REQUEST_PAYLOAD,
+    ).map((row) => (row as { id: number }).id)
 
     const info = db.prepare(`
       WITH retained_recent AS (
@@ -597,10 +636,14 @@ export class GenerationQueueModel {
       COMPACTED_TERMINAL_REQUEST_PAYLOAD,
     )
 
+    const released = releaseQueueInputsForJobs(prunableJobIds)
+
     return {
       pruned: info.changes,
       retainRecentTerminalJobs,
       compactPayload: COMPACTED_TERMINAL_REQUEST_PAYLOAD,
+      releasedInputFiles: released.releasedFiles,
+      releasedInputBytes: released.releasedBytes,
     }
   }
 

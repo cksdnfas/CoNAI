@@ -11,6 +11,7 @@ import { GenerationHistoryModel } from '../models/GenerationHistory';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { GenerationQueueService } from '../services/generationQueueService';
+import { externalizeQueueInputDataUrls } from '../services/generation-queue/queueInputStore';
 import { publishQueueJobEvent } from '../services/runtime-events/runtimeEventPublishers';
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
@@ -414,9 +415,13 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
   const imageSaveSettings = settingsService.loadSettings().imageSave;
   let normalizedRequestPayload: Record<string, unknown>;
   try {
+    // PAYLOAD-3: store base64 image inputs once and keep only references in the payload.
+    // This route already expands one request into up to 32 jobs, so the shared-input win is direct.
     normalizedRequestPayload = {
       ...request_payload,
-      prompt_data: normalizeWorkflowNumericPromptValues(parseMarkedFields(workflow.marked_fields), promptData as Record<string, unknown>),
+      prompt_data: externalizeQueueInputDataUrls(
+        normalizeWorkflowNumericPromptValues(parseMarkedFields(workflow.marked_fields), promptData as Record<string, unknown>),
+      ).value,
     };
   } catch (error) {
     if (error instanceof WorkflowNumericFieldValidationError) {
