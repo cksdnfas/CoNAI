@@ -16,8 +16,8 @@ const folderScanSource = readSource('backend/src/services/folderScan/index.ts');
 
 assert.match(
   walMaintenanceSource,
-  /DEFAULT_TRUNCATE_THRESHOLD_BYTES\s*=\s*256\s*\*\s*ONE_MIB/,
-  'runtime WAL maintenance should default to a bounded 256MiB threshold',
+  /DEFAULT_TRUNCATE_THRESHOLD_BYTES\s*=\s*32\s*\*\s*ONE_MIB/,
+  'runtime WAL maintenance should default to a 32MiB threshold so TRUNCATE checkpoints stay short',
 );
 assert.match(
   walMaintenanceSource,

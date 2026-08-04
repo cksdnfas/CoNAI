@@ -42,9 +42,12 @@ import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import BetterSqlite3Store from 'better-sqlite3-session-store';
+import type { Store as SessionStore } from 'express-session';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
 import { configureSharpRuntime } from './config/sharpRuntime';
 import { resolveSessionSecret } from './utils/sessionSecret';
+import { throttleSessionStoreTouch } from './utils/sessionTouchThrottle';
+import { createTieredBodyParsers, resolveRequestBodyLimitsMb } from './middleware/requestBodyLimits';
 import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
 import { StartupCheck } from './utils/startupCheck';
@@ -55,7 +58,7 @@ import { initializeAuthDb, getAuthDb } from './database/authDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
 import { imageTaggerService } from './services/imageTaggerService';
 import { APIImageProcessor } from './services/APIImageProcessor';
-import { PORTS, IMAGE_PROCESSING } from '@conai/shared';
+import { PORTS } from '@conai/shared';
 import { AutoScanScheduler } from './services/autoScanScheduler';
 import { autoTagScheduler } from './services/autoTagScheduler';
 import { QueryCacheService } from './services/QueryCacheService';
@@ -248,8 +251,16 @@ app.use(compression({
     return compression.filter(req, res);
   },
 }));
-app.use(express.json({ limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb`, strict: false }));
-app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb` }));
+// 요청 바디 한도는 API 마운트별로 스코프된다. 50MB 전역 한도는 익명 접근 가능한 검색 라우트까지
+// 단일 이벤트 루프에서 50MB 버퍼링+동기 파싱을 하도록 허용했다. 상세 근거는 requestBodyLimits.ts 참고.
+const tieredBodyParsers = createTieredBodyParsers();
+app.use(tieredBodyParsers.json);
+app.use(tieredBodyParsers.urlencoded);
+console.log(
+  `[Config] JSON body limits (MB): ${Object.entries(resolveRequestBodyLimitsMb())
+    .map(([tier, limitMb]) => `${tier}=${limitMb}`)
+    .join(', ')}`
+);
 
 const uploadsDir = runtimePaths.uploadsDir;
 const tempDir = runtimePaths.tempDir;
@@ -263,14 +274,16 @@ async function initializeSessionMiddleware() {
   const SqliteStore = BetterSqlite3Store(session);
   const sessionSecret = resolveSessionSecret().secret;
 
+  const sessionStore = new SqliteStore({
+    client: getAuthDb(), // Changed from getUserSettingsDb() to getAuthDb()
+    expired: {
+      clear: true,
+      intervalMs: 900000 // 15분마다 만료 세션 정리
+    }
+  }) as SessionStore;
+
   const sessionMiddleware = session({
-    store: new SqliteStore({
-      client: getAuthDb(), // Changed from getUserSettingsDb() to getAuthDb()
-      expired: {
-        clear: true,
-        intervalMs: 900000 // 15분마다 만료 세션 정리
-      }
-    }),
+    store: throttleSessionStoreTouch(sessionStore),
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,

@@ -90,6 +90,39 @@ function refreshSessionAccess(req: Request): string[] {
   return resolvedAccess.permissionKeys;
 }
 
+/**
+ * Refresh cached anonymous access data for the current session.
+ * Mirrors the bootstrap freshness check so an unchanged anonymous session is left untouched and
+ * express-session can skip its per-request store write. The access epoch still makes explicit
+ * permission changes land on the very next request.
+ */
+function refreshAnonymousSessionAccess(req: Request): string[] {
+  const now = Date.now();
+  const accessEpoch = getResolvedAuthAccessEpoch();
+  const cachedPermissionKeys = req.session.permissionKeys;
+  const cachedGroupKeys = req.session.groupKeys;
+  const cacheUpdatedAt = req.session.accessCacheUpdatedAt;
+  const isFreshAnonymousSession = Array.isArray(cachedPermissionKeys)
+    && Array.isArray(cachedGroupKeys)
+    && req.session.authenticated !== true
+    && req.session.accessCacheAccountId === undefined
+    && req.session.accessCacheEpoch === accessEpoch
+    && typeof cacheUpdatedAt === 'number'
+    && now - cacheUpdatedAt < SESSION_ACCESS_CACHE_TTL_MS;
+
+  if (isFreshAnonymousSession) {
+    return cachedPermissionKeys;
+  }
+
+  const resolvedAccess = AuthAccessControlService.resolveForGroupKey('anonymous');
+  req.session.groupKeys = resolvedAccess.groupKeys;
+  req.session.permissionKeys = resolvedAccess.permissionKeys;
+  delete req.session.accessCacheAccountId;
+  req.session.accessCacheEpoch = accessEpoch;
+  req.session.accessCacheUpdatedAt = now;
+  return resolvedAccess.permissionKeys;
+}
+
 /** Resolve the current request as bootstrap, authenticated, or anonymous access. */
 function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[]; authenticated: boolean } {
   const hasCredentials = hasConfiguredAuth();
@@ -104,10 +137,7 @@ function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[];
     return { permissionKeys: refreshSessionAccess(req), authenticated: true };
   }
 
-  const resolvedAccess = AuthAccessControlService.resolveForGroupKey('anonymous');
-  req.session.groupKeys = resolvedAccess.groupKeys;
-  req.session.permissionKeys = resolvedAccess.permissionKeys;
-  return { permissionKeys: resolvedAccess.permissionKeys, authenticated: false };
+  return { permissionKeys: refreshAnonymousSessionAccess(req), authenticated: false };
 }
 
 /**

@@ -318,6 +318,137 @@ function assertAuthConfigurationRequiresUsableAdmin(authDbModule: AuthDbModule) 
   )
 }
 
+/**
+ * The anonymous access path must not rewrite the session on every request.
+ * express-session persists any mutated session synchronously, so an unconditional rewrite turned
+ * every anonymous request into an auth.db write. A freshness window removes the write while the
+ * access epoch keeps explicit permission changes landing on the very next request.
+ */
+function assertAnonymousSessionAccessIsNotRewrittenPerRequest() {
+  const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
+  const authMiddleware = require('../middleware/authMiddleware') as typeof import('../middleware/authMiddleware')
+  const accessControl = require('../services/authAccessControlService') as typeof import('../services/authAccessControlService')
+
+  authHelpers.invalidateConfiguredAuthCache()
+  assert.equal(authHelpers.hasConfiguredAuth(), true, 'anonymous handling only applies once auth is configured')
+
+  const request = { session: {} as Record<string, unknown> }
+  const guard = authMiddleware.allowAnonymousPermission('page.home.view')
+
+  let firstNextCalled = false
+  guard(request as any, createMockResponse() as any, () => {
+    firstNextCalled = true
+  })
+  assert.equal(firstNextCalled, true, 'the anonymous group must keep its granted permission')
+
+  const firstPermissionKeys = request.session.permissionKeys
+  const firstGroupKeys = request.session.groupKeys
+  const firstUpdatedAt = request.session.accessCacheUpdatedAt
+  assert.ok(Array.isArray(firstPermissionKeys), 'anonymous access must still populate permissionKeys')
+  assert.ok(Array.isArray(firstGroupKeys), 'anonymous access must still populate groupKeys')
+  assert.equal(typeof firstUpdatedAt, 'number', 'the anonymous path must stamp its access cache')
+  assert.equal(request.session.accessCacheEpoch, accessControl.getResolvedAuthAccessEpoch())
+  assert.equal(request.session.accessCacheAccountId, undefined, 'anonymous sessions must not claim an account id')
+
+  let secondNextCalled = false
+  guard(request as any, createMockResponse() as any, () => {
+    secondNextCalled = true
+  })
+  assert.equal(secondNextCalled, true, 'a cached anonymous session must resolve the same permission')
+  assert.equal(
+    request.session.accessCacheUpdatedAt,
+    firstUpdatedAt,
+    'a still-fresh anonymous session must not be rewritten on the next request',
+  )
+  assert.equal(request.session.permissionKeys, firstPermissionKeys, 'cached anonymous permissionKeys must be reused as-is')
+  assert.equal(request.session.groupKeys, firstGroupKeys, 'cached anonymous groupKeys must be reused as-is')
+
+  accessControl.invalidateResolvedAuthAccessCache()
+  let thirdNextCalled = false
+  guard(request as any, createMockResponse() as any, () => {
+    thirdNextCalled = true
+  })
+  assert.equal(thirdNextCalled, true)
+  assert.equal(
+    request.session.accessCacheEpoch,
+    accessControl.getResolvedAuthAccessEpoch(),
+    'an access epoch bump must refresh the cached anonymous access on the very next request',
+  )
+  assert.notEqual(
+    request.session.permissionKeys,
+    firstPermissionKeys,
+    'an access epoch bump must re-resolve anonymous permissions instead of reusing the cache',
+  )
+}
+
+/**
+ * Session touch writes must be throttled without changing login persistence or expiry renewal.
+ * express-session calls store.touch() on every request, which is a synchronous auth.db UPDATE on
+ * the shared event loop; only redundant writes inside the drift window may be skipped.
+ */
+function assertSessionTouchThrottleContracts() {
+  const {
+    SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS,
+    throttleSessionStoreTouch,
+  } = require('../utils/sessionTouchThrottle') as typeof import('../utils/sessionTouchThrottle')
+
+  assert.equal(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS, 60 * 60 * 1000, 'the touch drift window must stay at one hour')
+
+  const touchedExpiries: Array<number | null> = []
+  const persistedSids: string[] = []
+  const destroyedSids: string[] = []
+
+  const fakeStore = {
+    touch(_sid: string, sessionData: any, callback?: (err?: unknown) => void) {
+      const expires = sessionData?.cookie?.expires
+      touchedExpiries.push(expires instanceof Date ? expires.getTime() : null)
+      callback?.()
+    },
+    set(sid: string, _sessionData: any, callback?: (err?: unknown) => void) {
+      persistedSids.push(sid)
+      callback?.()
+    },
+    destroy(sid: string, callback?: (err?: unknown) => void) {
+      destroyedSids.push(sid)
+      callback?.()
+    },
+  }
+
+  const store = throttleSessionStoreTouch(fakeStore as any)
+  const baseExpiryMs = Date.UTC(2026, 7, 4, 0, 0, 0)
+  const sessionExpiringAt = (offsetMs: number) => ({
+    cookie: { expires: new Date(baseExpiryMs + offsetMs), maxAge: 30 * 24 * 60 * 60 * 1000 },
+  }) as any
+
+  store.touch!('sid-1', sessionExpiringAt(0))
+  assert.equal(touchedExpiries.length, 1, 'the first touch of a session must reach the store')
+
+  store.touch!('sid-1', sessionExpiringAt(60_000))
+  store.touch!('sid-1', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS - 1))
+  assert.equal(touchedExpiries.length, 1, 'touch writes inside the drift window must be skipped')
+
+  store.touch!('sid-1', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS))
+  assert.equal(touchedExpiries.length, 2, 'expiry renewal must still be persisted once the drift window elapses')
+  assert.equal(touchedExpiries[1], baseExpiryMs + SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS, 'the renewed expiry must be the real one')
+
+  store.touch!('sid-2', sessionExpiringAt(0))
+  assert.equal(touchedExpiries.length, 3, 'each session must be tracked independently')
+
+  store.set('sid-2', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS * 2))
+  assert.deepEqual(persistedSids, ['sid-2'], 'session saves must still reach the store')
+  store.touch!('sid-2', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS * 2 + 1_000))
+  assert.equal(touchedExpiries.length, 3, 'a save must refresh the tracked expiry so the next touch can be skipped')
+
+  store.destroy('sid-2')
+  assert.deepEqual(destroyedSids, ['sid-2'], 'session destroys must still reach the store')
+  store.touch!('sid-2', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS * 2 + 2_000))
+  assert.equal(touchedExpiries.length, 4, 'a destroyed session must not keep a stale tracked expiry')
+
+  store.touch!('sid-3', { cookie: {} } as any)
+  store.touch!('sid-3', { cookie: {} } as any)
+  assert.equal(touchedExpiries.length, 6, 'sessions without a resolvable expiry must always be written')
+}
+
 function main() {
   const tempRoot = process.env.RUNTIME_BASE_PATH
   assert.ok(tempRoot, 'Expected temporary runtime root')
@@ -340,6 +471,8 @@ function main() {
     assertLegacySyncedAdminCleanup(authDbModule)
     assertTrustedBootstrapAdminMode()
     assertAuthConfigurationRequiresUsableAdmin(authDbModule)
+    assertAnonymousSessionAccessIsNotRewrittenPerRequest()
+    assertSessionTouchThrottleContracts()
   } finally {
     authDbModule.getAuthDb().close()
     fs.rmSync(tempRoot, { recursive: true, force: true })
