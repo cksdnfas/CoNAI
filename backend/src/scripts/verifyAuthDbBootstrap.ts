@@ -16,6 +16,7 @@ const requiredTables = [
   'auth_permission_groups',
   'auth_permissions',
   'auth_group_permissions',
+  'auth_seed_state',
   'auth_account_group_memberships',
 ]
 
@@ -100,6 +101,13 @@ function assertSeededAccessControl(db: Database.Database) {
     getCount(db, 'SELECT COUNT(*) AS count FROM auth_group_permissions WHERE group_id = ? AND allowed = 1', adminGroupId),
     permissionCount,
     'Admin group must receive every seeded permission',
+  )
+
+  assertDirectPermission(db, 'anonymous', 'auth.guest.create')
+  assert.equal(
+    getCount(db, 'SELECT COUNT(*) AS count FROM auth_seed_state WHERE seed_key = ?', 'anonymous_guest_signup_enabled_v1'),
+    1,
+    'Anonymous guest-signup default must be recorded exactly once',
   )
 }
 
@@ -204,6 +212,11 @@ function assertAnonymousBootstrapDoesNotRewriteConfiguredAccess(authDbModule: Au
   const db = authDbModule.getAuthDb()
   grantDirectPermission(db, 'anonymous', 'page.home.view')
   grantDirectPermission(db, 'anonymous', 'page.wildcards.view')
+  db.prepare(`
+    DELETE FROM auth_group_permissions
+    WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'anonymous')
+      AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'auth.guest.create')
+  `).run()
 
   authDbModule.getAuthDb().close()
   authDbModule.initializeAuthDb()
@@ -211,6 +224,20 @@ function assertAnonymousBootstrapDoesNotRewriteConfiguredAccess(authDbModule: Au
   const refreshedDb = authDbModule.getAuthDb()
   assertDirectPermission(refreshedDb, 'anonymous', 'page.home.view')
   assertDirectPermission(refreshedDb, 'anonymous', 'page.wildcards.view')
+  assert.equal(
+    getCount(
+      refreshedDb,
+      `
+        SELECT COUNT(*) AS count
+        FROM auth_group_permissions gp
+        INNER JOIN auth_permission_groups g ON g.id = gp.group_id
+        INNER JOIN auth_permissions p ON p.id = gp.permission_id
+        WHERE g.group_key = 'anonymous' AND p.permission_key = 'auth.guest.create' AND gp.allowed = 1
+      `,
+    ),
+    0,
+    'Bootstrap must preserve an administrator choice to disable guest signup after the default seed',
+  )
 }
 
 function assertLegacySyncedAdminCleanup(authDbModule: AuthDbModule) {

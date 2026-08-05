@@ -81,6 +81,13 @@ export function createAuthTables(db: Database.Database): void {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS auth_seed_state (
+      seed_key TEXT PRIMARY KEY,
+      applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS auth_account_group_memberships (
       account_id INTEGER NOT NULL,
       group_id INTEGER NOT NULL,
