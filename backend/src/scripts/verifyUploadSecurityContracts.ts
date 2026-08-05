@@ -48,6 +48,7 @@ function verifyAuthorizationAndLimiterContracts(): void {
   const authMiddleware = readSource('backend/src/middleware/authMiddleware.ts');
   const permissionGroups = readSource('backend/src/models/AuthPermissionGroup.ts');
   const loginPage = readSource('frontend/src/features/auth/login-page.tsx');
+  const securityUiText = readSource('frontend/src/features/settings/components/security-ui-text.ts');
 
   for (const routePath of ['/upload', '/upload-multiple', '/upload-multiple-stream']) {
     const routeOffset = uploadRoutes.indexOf(`router.post('${routePath}'`);
@@ -75,6 +76,10 @@ function verifyAuthorizationAndLimiterContracts(): void {
   assert.match(permissionGroups, /'upload\.create'/);
   assert.match(loginPage, /permissionKeys\.includes\('auth\.guest\.create'\)/);
   assert.match(loginPage, /canCreateGuestAccount \? \(/);
+  assert.match(
+    securityUiText,
+    /'auth\.guest\.create': \{ ko: '게스트 회원가입', en: 'Guest account signup' \}/,
+  );
 }
 
 function verifyBoundedMultipartContracts(): void {

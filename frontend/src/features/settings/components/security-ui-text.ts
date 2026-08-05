@@ -22,6 +22,7 @@ const ACCOUNT_STATUS_LABELS: LocalizedMap = {
 }
 
 const PAGE_PERMISSION_LABELS: LocalizedMap = {
+  'auth.guest.create': { ko: '게스트 회원가입', en: 'Guest account signup' },
   'page.home.view': { ko: '홈', en: 'Home' },
   'page.groups.view': { ko: '그룹', en: 'Groups' },
   'page.prompts.view': { ko: '프롬프트', en: 'Prompts' },

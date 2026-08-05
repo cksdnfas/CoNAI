@@ -1,5 +1,7 @@
 import type Database from 'better-sqlite3';
 
+const ANONYMOUS_GUEST_SIGNUP_SEED_KEY = 'anonymous_guest_signup_enabled_v1';
+
 const DEFAULT_PERMISSION_GROUPS = [
   {
     groupKey: 'anonymous',
@@ -280,6 +282,49 @@ export function seedAccessControlDefaults(db: Database.Database): void {
   }
 
   grantAllCatalogPermissionsToAdminGroup(db);
+  applyAnonymousGuestSignupDefault(db);
+}
+
+/**
+ * Enable guest signup for every user once per auth database.
+ * Anonymous is the root built-in group, so guest and admin users inherit this permission.
+ * The durable marker preserves an administrator's later choice to disable signup.
+ */
+function applyAnonymousGuestSignupDefault(db: Database.Database): void {
+  const alreadyApplied = db.prepare(
+    'SELECT seed_key FROM auth_seed_state WHERE seed_key = ?'
+  ).get(ANONYMOUS_GUEST_SIGNUP_SEED_KEY) as { seed_key: string } | undefined;
+
+  if (alreadyApplied) {
+    return;
+  }
+
+  const anonymousGroupId = getPermissionGroupIdByKey(db, 'anonymous');
+  const guestSignupPermission = db.prepare(
+    'SELECT id FROM auth_permissions WHERE permission_key = ?'
+  ).get('auth.guest.create') as { id: number } | undefined;
+
+  if (anonymousGroupId === null || !guestSignupPermission) {
+    return;
+  }
+
+  const applyDefault = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO auth_group_permissions (
+        group_id, permission_id, allowed, created_at, updated_at
+      ) VALUES (?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(group_id, permission_id) DO UPDATE SET
+        allowed = 1,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(anonymousGroupId, guestSignupPermission.id);
+
+    db.prepare(`
+      INSERT OR IGNORE INTO auth_seed_state (seed_key, applied_at)
+      VALUES (?, CURRENT_TIMESTAMP)
+    `).run(ANONYMOUS_GUEST_SIGNUP_SEED_KEY);
+  });
+
+  applyDefault();
 }
 
 /** Grant the seeded permission catalog to the built-in admin group. */
