@@ -162,8 +162,3 @@ Why this should go first:
 2. Apply them to one backend settings slice with no API contract changes
 3. Apply the same helpers to one image helper slice with no API contract changes
 4. Only after the shared foundation is proven, start larger settings/image consolidation
-
-## Recommended Next Documents
-
-- `backend-priority1-route-foundation-plan.md`
-- `backend-priority1-route-foundation-todo.md`
