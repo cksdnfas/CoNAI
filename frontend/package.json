@@ -9,6 +9,7 @@
     "build:compiler-off": "node scripts/build-production.mjs --compiler=off",
     "build:compiler-on": "node scripts/build-production.mjs --compiler=on",
     "verify:bundle-budget": "node scripts/verify-bundle-budget.mjs",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "eslint .",
     "preview": "vite preview",
     "verify:app-document-metadata-contracts": "tsx src/scripts/verifyAppDocumentMetadataContracts.ts",

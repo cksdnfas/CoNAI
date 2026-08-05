@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --signal SIGTERM --exec tsx src/index.ts",
     "build": "tsc && npm run copy:migrations",
+    "typecheck": "tsc --noEmit",
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
     "start": "node dist/backend/src/index.js",
     "db:migrate": "tsx src/database/migrate.ts",
