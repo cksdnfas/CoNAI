@@ -30,6 +30,54 @@ interface AutoTagCapabilities {
 }
 
 /**
+ * "this metadata row still has a taggable file" — as a correlated subquery, never a join.
+ *
+ * The pending lookups used to express this as an outer join against `image_files` plus
+ * `WHERE if_.original_file_path IS NOT NULL AND if_.file_status = 'active'`. That is an
+ * inner join in disguise, so SQLite may reorder the two tables, and on a real library it
+ * does: with ~200k active `image_files`, the migration-000 partial index `idx_files_status`
+ * and no `sqlite_stat1`, the planner drives from `image_files` and probes
+ * `idx_media_metadata_auto_tag_pending` once per active file — an 18ms idle poll instead of
+ * the sub-millisecond index SEARCH migration 028 was built for. `ANALYZE` flips it back, but
+ * nothing in this project ever runs `ANALYZE`, and the statistics can disappear again.
+ *
+ * A correlated `EXISTS` cannot be reordered: `media_metadata` is structurally the driving
+ * table, so the partial pending index is always the outer SEARCH regardless of planner
+ * statistics. Same fix HOME applied to the gallery count in `MediaMetadataFileQueries`.
+ *
+ * The predicate itself is term for term the eligibility filter migration 028 and
+ * `AutoTagStateService` use to maintain `auto_tag_state` (guarded by
+ * verify:auto-tag-index-contracts), so the stored state stays a superset of what this
+ * selects and the chosen rows are the set the join produced (one row per metadata row now;
+ * see `taggableFileColumn` below).
+ */
+const TAGGABLE_FILE_MATCH = `taggable.composite_hash = mm.composite_hash
+        AND taggable.original_file_path IS NOT NULL
+        AND taggable.file_status = 'active'`;
+
+const TAGGABLE_FILE_EXISTS = `EXISTS (
+        SELECT 1 FROM image_files taggable
+        WHERE ${TAGGABLE_FILE_MATCH}
+      )`;
+
+/**
+ * Pull one file column for the row the `EXISTS` guard just proved present.
+ *
+ * Identical predicate, so it can never return NULL for a row that passed the guard. The
+ * join form emitted one output row per matching file, which made a media row with two
+ * active files consume two batch slots and get tagged twice from the same snapshot; the
+ * correlated form returns exactly one row per pending `media_metadata` row, which is what
+ * `tagSingleMedia` (keyed by composite_hash) actually processes.
+ */
+function taggableFileColumn(column: 'original_file_path' | 'file_type'): string {
+  return `(
+        SELECT taggable.${column} FROM image_files taggable
+        WHERE ${TAGGABLE_FILE_MATCH}
+        LIMIT 1
+      )`;
+}
+
+/**
  * 자동 태깅 스케줄러
  * - media_metadata 테이블에서 auto_tags가 NULL이거나 일부 결과가 비어있는 항목 검색
  * - 발견된 이미지들을 순차적으로 태깅 처리
@@ -150,39 +198,42 @@ class AutoTagScheduler {
       SELECT
         mm.composite_hash,
         mm.auto_tags,
-        if_.original_file_path,
-        if_.file_type as media_type
+        ${taggableFileColumn('original_file_path')} as original_file_path,
+        ${taggableFileColumn('file_type')} as media_type
       FROM media_metadata mm
-      LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
       WHERE ${AutoTagStateService.buildPendingStatePrefix('mm')}(
         mm.auto_tags IS NULL
         OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
         OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
       )
-        AND if_.original_file_path IS NOT NULL
-        AND if_.file_status = 'active'
+        AND ${TAGGABLE_FILE_EXISTS}
       LIMIT ?
     `).all(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0, batchSize) as PendingAutoTagMedia[];
   }
 
-  /** Single-row lookup for media this backend just saved (no pending re-scan). */
+  /**
+   * Single-row lookup for media this backend just saved (no pending re-scan).
+   *
+   * This one keeps a join, on the same `TAGGABLE_FILE_MATCH` predicate: `composite_hash`
+   * is bound to a constant on both sides, so every join order SQLite can choose is an
+   * index seek and there is no plan to protect against. One probe instead of the three a
+   * correlated form needs keeps this per-generation path at its measured cost.
+   */
   private findPendingMediaByHash(compositeHash: string, capabilities: AutoTagCapabilities): PendingAutoTagMedia | undefined {
     return db.prepare(`
       SELECT
         mm.composite_hash,
         mm.auto_tags,
-        if_.original_file_path,
-        if_.file_type as media_type
+        taggable.original_file_path,
+        taggable.file_type as media_type
       FROM media_metadata mm
-      LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
+      JOIN image_files taggable ON ${TAGGABLE_FILE_MATCH}
       WHERE mm.composite_hash = ?
         AND (
           mm.auto_tags IS NULL
           OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
           OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
         )
-        AND if_.original_file_path IS NOT NULL
-        AND if_.file_status = 'active'
       LIMIT 1
     `).get(
       compositeHash,
@@ -191,20 +242,23 @@ class AutoTagScheduler {
     ) as PendingAutoTagMedia | undefined;
   }
 
+  /**
+   * Untagged media count for the status surface. Counts pending `media_metadata` rows,
+   * i.e. the same rows `getPendingMedia()` hands to the tagger — the join form counted
+   * one row per active file, so a media row with two files was counted twice.
+   */
   private countPendingMedia(capabilities: AutoTagCapabilities): number {
     AutoTagStateService.syncCapabilityState(capabilities);
 
     const result = db.prepare(`
       SELECT COUNT(*) as count
       FROM media_metadata mm
-      LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
       WHERE ${AutoTagStateService.buildPendingStatePrefix('mm')}(
         mm.auto_tags IS NULL
         OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
         OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
       )
-        AND if_.original_file_path IS NOT NULL
-        AND if_.file_status = 'active'
+        AND ${TAGGABLE_FILE_EXISTS}
     `).get(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0) as { count: number };
 
     return result.count;

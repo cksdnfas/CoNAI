@@ -328,6 +328,52 @@ assert.match(
   /mm\.auto_tags IS NULL\s*\n\s*OR \(\? = 1 AND json_extract\(mm\.auto_tags, '\$\.tagger'\) IS NULL\)\s*\n\s*OR \(\? = 1 AND json_extract\(mm\.auto_tags, '\$\.kaloscope'\) IS NULL\)/,
   'pending media lookup must keep the dual tagger condition as the residual filter',
 );
+
+// The partial index only pays off while `media_metadata` is the driving table. Expressed
+// as `LEFT JOIN image_files ... WHERE if_.file_status = 'active'` it is an inner join in
+// disguise, so SQLite may reorder the tables — and on a real library (200k active files,
+// the migration-000 partial index idx_files_status, no sqlite_stat1) it drives from
+// image_files and probes the pending index once per file: an 18ms idle poll. A correlated
+// EXISTS cannot be reordered, so the plan no longer depends on ANALYZE statistics.
+assert.doesNotMatch(
+  autoTagScheduler,
+  /LEFT JOIN image_files/,
+  'pending scans must not reach image_files through a reorderable join',
+);
+assert.match(
+  autoTagScheduler,
+  /FROM media_metadata mm\s*\n\s*WHERE \$\{AutoTagStateService\.buildPendingStatePrefix\('mm'\)\}\(/,
+  'pending scans must select from media_metadata alone so the partial index always drives',
+);
+assert.match(
+  autoTagScheduler,
+  /const TAGGABLE_FILE_EXISTS = `EXISTS \(\s*\n\s*SELECT 1 FROM image_files taggable\s*\n\s*WHERE \$\{TAGGABLE_FILE_MATCH\}/,
+  'the active-file requirement must be a correlated EXISTS over image_files',
+);
+assert.match(
+  autoTagScheduler,
+  /\)\s*\n\s*AND \$\{TAGGABLE_FILE_EXISTS\}\s*\n\s*LIMIT \?/,
+  'the batch pending lookup must apply the EXISTS guard after the state/json filter',
+);
+assert.match(
+  autoTagScheduler,
+  /\)\s*\n\s*AND \$\{TAGGABLE_FILE_EXISTS\}\s*\n\s*`\)\.get\(capabilities\.taggerAutoEnabled/,
+  'the pending count must apply the same EXISTS guard instead of counting joined file rows',
+);
+// Same eligibility terms migration 028 / AutoTagStateService use for auto_tag_state, so
+// the state stays a superset of what the scheduler selects.
+assert.match(
+  autoTagScheduler,
+  /taggable\.original_file_path IS NOT NULL\s*\n\s*AND taggable\.file_status = 'active'/,
+  'the scheduler eligibility filter must match the migration 028 active-file condition',
+);
+// The single-hash lookup keeps a join on that same predicate: composite_hash is bound to a
+// constant on both sides there, so every join order SQLite can pick is an index seek.
+assert.match(
+  autoTagScheduler,
+  /JOIN image_files taggable ON \$\{TAGGABLE_FILE_MATCH\}\s*\n\s*WHERE mm\.composite_hash = \?/,
+  'the saved-media lookup must join on the shared taggable predicate pinned by composite_hash',
+);
 assert.match(
   autoTagScheduler,
   /AutoTagStateService\.syncCapabilityState\(capabilities\)/,
