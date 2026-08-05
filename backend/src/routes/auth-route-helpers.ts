@@ -14,6 +14,57 @@ const TRUSTED_BOOTSTRAP_USERNAME = 'Bootstrap';
 /** Shared freshness window for session-cached access data. */
 export const SESSION_ACCESS_CACHE_TTL_MS = 60_000;
 
+/** The stamp registry is a process-local optimization, so it is bounded and drops oldest first. */
+export const SESSION_ACCESS_STAMP_TRACKING_LIMIT = 10_000;
+
+/**
+ * When each session's access cache was last resolved, keyed by session id.
+ *
+ * This deliberately does not live in the session. express-session runs with `resave: false`, which
+ * dirty-checks by content, so a timestamp inside the session body rewrote the row every time the
+ * TTL lapsed and turned a read-only freshness check into a real auth.db write (measured: 8 writes
+ * per 50 anonymous requests spread over ten minutes, against 0 for a session that carries no
+ * stamp). Holding the stamp here leaves a still-fresh session byte-identical between requests, so
+ * express-session skips the store write while the TTL keeps doing its job.
+ *
+ * Correctness never depends on this map. It only ever reports a session *stale*, which costs one
+ * re-resolve that rewrites the same values; the access epoch stored in the session is what makes
+ * permission changes land. A restart, an evicted entry, or a second process therefore only adds
+ * cache misses — it can never serve revoked permissions.
+ */
+const sessionAccessStampBySid = new Map<string, number>();
+
+/** Record that this session's cached access data was resolved just now. */
+export function markSessionAccessCacheFresh(req: Request): void {
+  const sid = req.sessionID;
+  if (typeof sid !== 'string' || sid.length === 0) {
+    return;
+  }
+
+  // Re-inserting moves the session to the end so eviction stays least-recently-resolved first.
+  sessionAccessStampBySid.delete(sid);
+  sessionAccessStampBySid.set(sid, Date.now());
+
+  while (sessionAccessStampBySid.size > SESSION_ACCESS_STAMP_TRACKING_LIMIT) {
+    const oldestSid = sessionAccessStampBySid.keys().next().value;
+    if (oldestSid === undefined) {
+      break;
+    }
+    sessionAccessStampBySid.delete(oldestSid);
+  }
+}
+
+/** Check whether this process resolved the session's access cache inside the freshness window. */
+function hasFreshSessionAccessStamp(req: Request): boolean {
+  const sid = req.sessionID;
+  if (typeof sid !== 'string') {
+    return false;
+  }
+
+  const stampedAt = sessionAccessStampBySid.get(sid);
+  return stampedAt !== undefined && Date.now() - stampedAt < SESSION_ACCESS_CACHE_TTL_MS;
+}
+
 export type SessionAuthAccount = Pick<AuthAccountRecord, 'id' | 'username' | 'account_type'>;
 
 export type SessionResponseAccount = {
@@ -60,13 +111,15 @@ export function setAuthenticatedSession(req: Request, account: SessionAuthAccoun
   req.session.permissionKeys = resolvedAccess.permissionKeys;
   req.session.accessCacheAccountId = account.id;
   req.session.accessCacheEpoch = getResolvedAuthAccessEpoch();
-  req.session.accessCacheUpdatedAt = Date.now();
+  // Sessions written before the stamp moved out of the session body still carry the dead field;
+  // dropping it costs one write per pre-existing session and keeps stored sessions self-consistent.
+  delete req.session.accessCacheUpdatedAt;
+  markSessionAccessCacheFresh(req);
 }
 
 /** Populate the current session as the trusted personal-mode admin when auth is not configured. */
 export function setTrustedBootstrapSession(req: Request, resolvedAccess: { groupKeys: string[]; permissionKeys: string[] }): void {
   // Leave a still-fresh bootstrap session untouched so express-session skips its per-request save.
-  const cacheUpdatedAt = req.session.accessCacheUpdatedAt;
   const isFreshBootstrapSession = req.session.authenticated === true
     && req.session.username === TRUSTED_BOOTSTRAP_USERNAME
     && req.session.accountId === undefined
@@ -75,8 +128,7 @@ export function setTrustedBootstrapSession(req: Request, resolvedAccess: { group
     && Array.isArray(req.session.groupKeys)
     && Array.isArray(req.session.permissionKeys)
     && req.session.accessCacheEpoch === getResolvedAuthAccessEpoch()
-    && typeof cacheUpdatedAt === 'number'
-    && Date.now() - cacheUpdatedAt < SESSION_ACCESS_CACHE_TTL_MS;
+    && hasFreshSessionAccessStamp(req);
 
   if (isFreshBootstrapSession) {
     return;
@@ -90,7 +142,8 @@ export function setTrustedBootstrapSession(req: Request, resolvedAccess: { group
   req.session.permissionKeys = resolvedAccess.permissionKeys;
   delete req.session.accessCacheAccountId;
   req.session.accessCacheEpoch = getResolvedAuthAccessEpoch();
-  req.session.accessCacheUpdatedAt = Date.now();
+  delete req.session.accessCacheUpdatedAt;
+  markSessionAccessCacheFresh(req);
 }
 
 /**
@@ -101,17 +154,15 @@ export function setTrustedBootstrapSession(req: Request, resolvedAccess: { group
  * epoch is what makes the cache safe: every group/permission mutation bumps it (see
  * `invalidateResolvedAuthAccessCache`), so a session carrying an older epoch is never reported as
  * fresh and its permissions are re-resolved on the very next request. Anything the probe cannot
- * positively confirm — missing arrays, a different account, an unknown timestamp — is reported
+ * positively confirm — missing arrays, a different account, an unresolved stamp — is reported
  * stale so the caller falls back to a full re-resolve.
  */
 export function hasFreshSessionAccessCache(req: Request, expectedAccountId: number | undefined): boolean {
-  const cacheUpdatedAt = req.session?.accessCacheUpdatedAt;
   return Array.isArray(req.session?.groupKeys)
     && Array.isArray(req.session?.permissionKeys)
     && req.session?.accessCacheAccountId === expectedAccountId
     && req.session?.accessCacheEpoch === getResolvedAuthAccessEpoch()
-    && typeof cacheUpdatedAt === 'number'
-    && Date.now() - cacheUpdatedAt < SESSION_ACCESS_CACHE_TTL_MS;
+    && hasFreshSessionAccessStamp(req);
 }
 
 /** Build the current auth-status payload while keeping additive compatibility. */

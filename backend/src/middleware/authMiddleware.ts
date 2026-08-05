@@ -3,6 +3,7 @@ import { AuthAccount } from '../models/AuthAccount';
 import {
   hasConfiguredAuth,
   hasFreshSessionAccessCache,
+  markSessionAccessCacheFresh,
   setTrustedBootstrapSession,
 } from '../routes/auth-route-helpers';
 import { AuthAccessControlService, getResolvedAuthAccessEpoch } from '../services/authAccessControlService';
@@ -85,15 +86,20 @@ function refreshSessionAccess(req: Request): string[] {
   req.session.permissionKeys = resolvedAccess.permissionKeys;
   req.session.accessCacheAccountId = accountId;
   req.session.accessCacheEpoch = accessEpoch;
-  req.session.accessCacheUpdatedAt = Date.now();
+  // The freshness stamp is process-local on purpose; see markSessionAccessCacheFresh. Everything
+  // written above is either unchanged (so express-session writes nothing) or a real access change.
+  delete req.session.accessCacheUpdatedAt;
+  markSessionAccessCacheFresh(req);
   return resolvedAccess.permissionKeys;
 }
 
 /**
  * Refresh cached anonymous access data for the current session.
  * Mirrors the bootstrap freshness check so an unchanged anonymous session is left untouched and
- * express-session can skip its per-request store write. The access epoch still makes explicit
- * permission changes land on the very next request.
+ * express-session can skip its per-request store write. On a miss the resolved keys are written
+ * back verbatim, so an anonymous session whose access did not actually change stays byte-identical
+ * and still costs no write. The access epoch makes explicit permission changes land on the very
+ * next request.
  */
 function refreshAnonymousSessionAccess(req: Request): string[] {
   if (req.session.authenticated !== true && hasFreshSessionAccessCache(req, undefined)) {
@@ -106,7 +112,8 @@ function refreshAnonymousSessionAccess(req: Request): string[] {
   req.session.permissionKeys = resolvedAccess.permissionKeys;
   delete req.session.accessCacheAccountId;
   req.session.accessCacheEpoch = accessEpoch;
-  req.session.accessCacheUpdatedAt = Date.now();
+  delete req.session.accessCacheUpdatedAt;
+  markSessionAccessCacheFresh(req);
   return resolvedAccess.permissionKeys;
 }
 

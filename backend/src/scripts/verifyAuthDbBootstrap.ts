@@ -319,10 +319,22 @@ function assertAuthConfigurationRequiresUsableAdmin(authDbModule: AuthDbModule) 
 }
 
 /**
- * The anonymous access path must not rewrite the session on every request.
- * express-session persists any mutated session synchronously, so an unconditional rewrite turned
- * every anonymous request into an auth.db write. A freshness window removes the write while the
- * access epoch keeps explicit permission changes landing on the very next request.
+ * express-session runs with resave:false, so the session row is written only when the serialized
+ * session (cookie excluded) differs from the one loaded at the start of the request.
+ */
+function serializeSession(session: Record<string, unknown>) {
+  return JSON.stringify(session, (key, value) => (key === 'cookie' ? undefined : value))
+}
+
+/**
+ * The anonymous access path must not rewrite the session on any request whose access is unchanged.
+ *
+ * Two distinct rewrites are ruled out here. A cache hit must leave the session alone, and a cache
+ * miss must write back exactly the values that were already there. The second half is the one that
+ * matters: the access-cache freshness stamp lives in the process, never in the session, because a
+ * timestamp inside the session body changes the serialized content every time the TTL lapses and
+ * therefore manufactures an auth.db write per session per TTL window. The access epoch still makes
+ * explicit permission changes land on the very next request.
  */
 function assertAnonymousSessionAccessIsNotRewrittenPerRequest() {
   const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
@@ -332,7 +344,7 @@ function assertAnonymousSessionAccessIsNotRewrittenPerRequest() {
   authHelpers.invalidateConfiguredAuthCache()
   assert.equal(authHelpers.hasConfiguredAuth(), true, 'anonymous handling only applies once auth is configured')
 
-  const request = { session: {} as Record<string, unknown> }
+  const request = { sessionID: 'anonymous-session', session: {} as Record<string, unknown> }
   const guard = authMiddleware.allowAnonymousPermission('page.home.view')
 
   let firstNextCalled = false
@@ -343,12 +355,17 @@ function assertAnonymousSessionAccessIsNotRewrittenPerRequest() {
 
   const firstPermissionKeys = request.session.permissionKeys
   const firstGroupKeys = request.session.groupKeys
-  const firstUpdatedAt = request.session.accessCacheUpdatedAt
   assert.ok(Array.isArray(firstPermissionKeys), 'anonymous access must still populate permissionKeys')
   assert.ok(Array.isArray(firstGroupKeys), 'anonymous access must still populate groupKeys')
-  assert.equal(typeof firstUpdatedAt, 'number', 'the anonymous path must stamp its access cache')
   assert.equal(request.session.accessCacheEpoch, accessControl.getResolvedAuthAccessEpoch())
   assert.equal(request.session.accessCacheAccountId, undefined, 'anonymous sessions must not claim an account id')
+  assert.equal(
+    request.session.accessCacheUpdatedAt,
+    undefined,
+    'the freshness stamp must stay out of the session body, or the TTL turns into a write per window',
+  )
+
+  const freshSignature = serializeSession(request.session)
 
   let secondNextCalled = false
   guard(request as any, createMockResponse() as any, () => {
@@ -356,12 +373,27 @@ function assertAnonymousSessionAccessIsNotRewrittenPerRequest() {
   })
   assert.equal(secondNextCalled, true, 'a cached anonymous session must resolve the same permission')
   assert.equal(
-    request.session.accessCacheUpdatedAt,
-    firstUpdatedAt,
+    serializeSession(request.session),
+    freshSignature,
     'a still-fresh anonymous session must not be rewritten on the next request',
   )
   assert.equal(request.session.permissionKeys, firstPermissionKeys, 'cached anonymous permissionKeys must be reused as-is')
   assert.equal(request.session.groupKeys, firstGroupKeys, 'cached anonymous groupKeys must be reused as-is')
+
+  // A session this process has never stamped — a restart, an evicted entry, or a lapsed TTL —
+  // must take the full re-resolve path and still land on byte-identical content, so the miss
+  // costs a resolution rather than an auth.db write.
+  const coldRequest = { sessionID: 'anonymous-session-cold', session: { ...request.session } }
+  let coldNextCalled = false
+  guard(coldRequest as any, createMockResponse() as any, () => {
+    coldNextCalled = true
+  })
+  assert.equal(coldNextCalled, true, 'an unstamped anonymous session must resolve the same permission')
+  assert.equal(
+    serializeSession(coldRequest.session),
+    freshSignature,
+    'a re-resolve with unchanged access must write back identical session content',
+  )
 
   accessControl.invalidateResolvedAuthAccessCache()
   let thirdNextCalled = false
@@ -401,13 +433,8 @@ function assertAuthStatusPayloadReusesSessionAccessCache(authDbModule: AuthDbMod
     'orphan-guest',
   )
 
-  // express-session runs with resave:false, so the row is written only when the serialized
-  // session (cookie excluded) differs from the one loaded at the start of the request.
-  const serializeSession = (session: Record<string, unknown>) =>
-    JSON.stringify(session, (key, value) => (key === 'cookie' ? undefined : value))
-
   const session = {} as Record<string, unknown>
-  const request = { session }
+  const request = { sessionID: 'auth-status-session', session }
   authHelpers.setAuthenticatedSession(request as any, {
     id: guestAccount.id,
     username: guestAccount.username,
@@ -419,8 +446,12 @@ function assertAuthStatusPayloadReusesSessionAccessCache(authDbModule: AuthDbMod
   assert.ok(firstPayload.permissionKeys.includes('page.home.view'), 'the guest account must inherit anonymous page access')
 
   const freshSignature = serializeSession(session)
-  const stampedAt = session.accessCacheUpdatedAt
   const cachedPermissionKeys = session.permissionKeys
+  assert.equal(
+    session.accessCacheUpdatedAt,
+    undefined,
+    'an authenticated session must not carry a freshness stamp in its body either',
+  )
 
   const cachedPayload = authHelpers.buildAuthStatusPayload(request as any)
   assert.equal(
@@ -428,7 +459,6 @@ function assertAuthStatusPayloadReusesSessionAccessCache(authDbModule: AuthDbMod
     freshSignature,
     'a still-fresh session must not be rewritten by the auth-status payload builder',
   )
-  assert.equal(session.accessCacheUpdatedAt, stampedAt, 'the payload builder must never advance the access cache stamp')
   assert.equal(session.permissionKeys, cachedPermissionKeys, 'cached permissionKeys must be reused as-is')
   assert.deepEqual(cachedPayload.permissionKeys, firstPayload.permissionKeys)
 
