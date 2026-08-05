@@ -139,10 +139,17 @@ export function HomePage() {
                 )}
               </span>
               <span>
-                {t(
-                  { ko: '전체 {total}', en: '{total} total' },
-                  { total: formatNumber(feedProgress.totalCount) },
-                )}
+                {/* The exact total arrives after the grid renders, so show the loaded
+                    count with a "+" until it does instead of blocking on the count. */}
+                {feedProgress.isTotalKnown
+                  ? t(
+                      { ko: '전체 {total}', en: '{total} total' },
+                      { total: formatNumber(feedProgress.totalCount) },
+                    )
+                  : t(
+                      { ko: '전체 {total}+', en: '{total}+ total' },
+                      { total: formatNumber(feedProgress.totalCount) },
+                    )}
               </span>
               {feedProgress.hiddenCount > 0 ? (
                 <span>

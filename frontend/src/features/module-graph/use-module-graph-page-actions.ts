@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import type { WorkflowValidationIssue } from './module-graph-types'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'
@@ -70,7 +70,7 @@ export function useModuleGraphPageActions({
   nodes: ModuleGraphNode[]
   edges: ModuleGraphEdge[]
   modules: ModuleDefinitionRecord[]
-  graphWorkflows: GraphWorkflowRecord[]
+  graphWorkflows: GraphWorkflowSummaryRecord[]
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
   selectedFolderId: number | null
   selectedFolderRecord: GraphWorkflowFolderRecord | null

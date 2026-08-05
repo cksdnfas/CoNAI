@@ -30,9 +30,19 @@ interface CacheStats {
 
 export class QueryCacheService {
   private static galleryCache: InstanceType<typeof LRUCache>;
+  private static galleryTotalCache: InstanceType<typeof LRUCache>;
   private static metadataCache: InstanceType<typeof LRUCache>;
   private static thumbnailCache: InstanceType<typeof LRUCache>;
   private static galleryInvalidationTimer: NodeJS.Timeout | null = null;
+  /**
+   * Last computed feed total per scope, kept across invalidations purely as a
+   * recompute rate limiter. Counting the visible library is a ~60ms full index
+   * scan, and during an active generation queue the gallery cache is invalidated
+   * every few seconds — without this floor every one of those invalidations would
+   * hand the next visitor a fresh 60ms blocking count.
+   */
+  private static lastGalleryTotals = new Map<string, { total: number; computedAt: number }>();
+  private static readonly GALLERY_TOTAL_MIN_RECOMPUTE_MS = 30 * 1000;
   private static stats = {
     gallery: { hits: 0, misses: 0 },
     metadata: { hits: 0, misses: 0 },
@@ -44,6 +54,15 @@ export class QueryCacheService {
       max: 100,
       ttl: 60 * 1000,
     });
+
+    // Feed totals are a full-library aggregate: they are identical for every
+    // visitor and only move when the library itself changes, so they share the
+    // gallery invalidation hooks but get their own (tiny, longer-lived) cache.
+    this.galleryTotalCache = new LRUCache<string, number>({
+      max: 32,
+      ttl: 5 * 60 * 1000,
+    });
+    this.lastGalleryTotals.clear();
 
     this.metadataCache = new LRUCache<string, any>({
       max: 500,
@@ -91,6 +110,50 @@ export class QueryCacheService {
     }
   }
 
+  /**
+   * Read the cached feed total for one scope key.
+   *
+   * The home feed asks for its total out of band (after the grid renders), so the
+   * count query only has to run once per invalidation window instead of once per
+   * visitor entering the page.
+   */
+  static getGalleryTotalCache(scopeKey: string): number | null {
+    try {
+      const cached = this.galleryTotalCache?.get(`gallery-total:${scopeKey}`) as number | undefined;
+
+      if (typeof cached === 'number') {
+        this.stats.gallery.hits++;
+        return cached;
+      }
+
+      // Invalidated, but recomputed too recently to be worth another full count.
+      const last = this.lastGalleryTotals.get(scopeKey);
+      if (last && Date.now() - last.computedAt < this.GALLERY_TOTAL_MIN_RECOMPUTE_MS) {
+        this.stats.gallery.hits++;
+        return last.total;
+      }
+
+      this.stats.gallery.misses++;
+      return null;
+    } catch (error) {
+      logger.warn('⚠️ Gallery total cache get error:', error instanceof Error ? error.message : error);
+      return null;
+    }
+  }
+
+  static setGalleryTotalCache(scopeKey: string, total: number): void {
+    try {
+      if (!Number.isFinite(total)) {
+        return;
+      }
+
+      this.galleryTotalCache?.set(`gallery-total:${scopeKey}`, total);
+      this.lastGalleryTotals.set(scopeKey, { total, computedAt: Date.now() });
+    } catch (error) {
+      logger.warn('⚠️ Gallery total cache set error:', error instanceof Error ? error.message : error);
+    }
+  }
+
   static invalidateGalleryCache(): void {
     try {
       if (this.galleryInvalidationTimer) {
@@ -103,6 +166,7 @@ export class QueryCacheService {
       }
 
       this.galleryCache.clear();
+      this.galleryTotalCache?.clear();
       logger.debug('🗑️ Gallery cache invalidated');
     } catch (error) {
       logger.warn('⚠️ Gallery cache invalidate error:', error instanceof Error ? error.message : error);
@@ -230,6 +294,9 @@ export class QueryCacheService {
             this.galleryCache.delete(key);
           });
         });
+
+        // A single added/removed image still moves the library total.
+        this.galleryTotalCache?.clear();
 
         this.invalidateMetadataCache(compositeHash);
         this.invalidateThumbnailCache(compositeHash);

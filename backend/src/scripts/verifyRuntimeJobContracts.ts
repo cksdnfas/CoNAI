@@ -31,6 +31,9 @@ const watchedFolderRouteSource = readSource('routes', 'watchedFolders.ts')
 const typesSource = readSource('types', 'runtimeJob.ts')
 const handlerSources: Array<[string, string]> = [
   ['thumbnailHandlers.ts', readSource('services', 'runtimeJobs', 'handlers', 'thumbnailHandlers.ts')],
+  ['thumbnailRepairHandlers.ts', readSource('services', 'runtimeJobs', 'handlers', 'thumbnailRepairHandlers.ts')],
+  ['videoPosterHandlers.ts', readSource('services', 'runtimeJobs', 'handlers', 'videoPosterHandlers.ts')],
+  ['promptSearchIndexHandlers.ts', readSource('services', 'runtimeJobs', 'handlers', 'promptSearchIndexHandlers.ts')],
   ['groupRematchHandlers.ts', readSource('services', 'runtimeJobs', 'handlers', 'groupRematchHandlers.ts')],
   ['folderScanHandlers.ts', readSource('services', 'runtimeJobs', 'handlers', 'folderScanHandlers.ts')],
 ]

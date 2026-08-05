@@ -8,6 +8,10 @@ import {
   MAX_MULTIPLE_UPLOAD_TOTAL_BYTES,
 } from '../middleware/upload';
 import {
+  resolveRequestBodyLimitTier,
+  resolveRequestBodyLimitsMb,
+} from '../middleware/requestBodyLimits';
+import {
   UploadValidationError,
   cleanupStoredUpload,
   cleanupTemporaryUploads,
@@ -129,9 +133,97 @@ async function verifyActualContentAndCleanupContracts(): Promise<void> {
   }
 }
 
+/**
+ * JSON body limits must be scoped per API mount instead of granting every route the media limit.
+ * Routes that legitimately carry base64 data URLs keep the historical 50MB budget; everything
+ * else — including anonymous-reachable search routes — is bounded far below it.
+ */
+function verifyScopedJsonBodyLimitContracts(): void {
+  const index = readSource('backend/src/index.ts');
+  assert.doesNotMatch(
+    index,
+    /express\.json\(\{\s*limit:\s*`\$\{IMAGE_PROCESSING\.MAX_FILE_SIZE_MB\}mb`/,
+    'the global express.json parser must no longer grant the media upload limit to every route',
+  );
+  assert.match(index, /createTieredBodyParsers\(\)/, 'index must install the tiered body parsers');
+
+  const limitsMb = resolveRequestBodyLimitsMb();
+  assert.equal(limitsMb.media, 50, 'base64-carrying routes must keep the 50MB budget');
+  assert.ok(limitsMb.default <= 5, 'the default JSON body limit must stay at or below 5MB');
+  assert.ok(
+    limitsMb.default < limitsMb.bulk && limitsMb.bulk < limitsMb.media,
+    'body limit tiers must stay strictly ordered default < bulk < media',
+  );
+
+  const mediaPaths = [
+    '/api/image-editor/12/save-output',
+    '/api/nai/generate/image',
+    '/api/nai/store/vibes',
+    '/api/generation-queue',
+    '/api/graph-workflows',
+    '/api/graph-workflows/7/execute',
+    '/api/graph-workflows/schedules',
+    '/api/module-definitions/from-nai-snapshot',
+    '/api/public-workflows/demo/queue',
+    '/api/workflows/3/generate',
+  ];
+  for (const mediaPath of mediaPaths) {
+    assert.equal(
+      resolveRequestBodyLimitTier(mediaPath),
+      'media',
+      `${mediaPath} carries base64 data URLs and must keep the media body limit`,
+    );
+  }
+
+  const bulkPaths = [
+    '/api/images/bulk',
+    '/api/images/batch-tag',
+    '/api/groups/4/images/bulk',
+    '/api/prompt-groups/import',
+    '/api/negative-prompt-groups/import',
+    '/api/prompt-collection/batch-assign',
+    '/api/wildcards/9',
+    '/api/settings/appearance',
+    '/api/custom-dropdown-lists',
+  ];
+  for (const bulkPath of bulkPaths) {
+    assert.equal(
+      resolveRequestBodyLimitTier(bulkPath),
+      'bulk',
+      `${bulkPath} carries uncapped arrays or import documents and must keep the bulk body limit`,
+    );
+  }
+
+  const defaultPaths = [
+    '/api/auth/login',
+    '/api/search-history',
+    '/api/comfyui-servers',
+    '/api/generation-history',
+    '/api/jobs/12/cancel',
+    '/api/system/restart',
+    '/api/workflows-not-a-real-mount',
+    '/mcp',
+    '/health',
+  ];
+  for (const defaultPath of defaultPaths) {
+    assert.equal(
+      resolveRequestBodyLimitTier(defaultPath),
+      'default',
+      `${defaultPath} must fall back to the default body limit`,
+    );
+  }
+
+  assert.equal(
+    resolveRequestBodyLimitTier('/API/Image-Editor/12/save-output'),
+    'media',
+    'tier resolution must be case-insensitive like Express mount matching',
+  );
+}
+
 async function main(): Promise<void> {
   verifyAuthorizationAndLimiterContracts();
   verifyBoundedMultipartContracts();
+  verifyScopedJsonBodyLimitContracts();
   await verifyActualContentAndCleanupContracts();
   console.log('✅ Upload security contracts verified');
 }

@@ -54,6 +54,21 @@ export async function getImages(params?: {
   return response.data
 }
 
+/**
+ * Visible-library total, fetched on its own.
+ *
+ * The home feed no longer asks the first page for a total: counting the whole
+ * library is the single most expensive query on that path, so the grid renders
+ * first and this fills the counter in afterwards.
+ */
+export async function getImagesCount() {
+  const response = await fetchJson<ApiResponse<{ total: number }>>('/api/images/count')
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'images.list.load')
+  }
+  return response.data
+}
+
 export async function searchImagesComplex(input: ComplexImageSearchRequest) {
   const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images/search/complex`, {
     method: 'POST',

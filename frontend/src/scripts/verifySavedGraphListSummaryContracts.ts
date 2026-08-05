@@ -1,7 +1,17 @@
 import { deepEqual, equal } from 'node:assert/strict'
-import type { GraphWorkflowRecord, ModuleDefinitionRecord } from '../lib/api-module-graph'
-import { countGraphWorkflowFinalResultNodes, hasAssignedFinalResult, resolveGraphStructureSummary, resolveSavedGraphWorkflowSummary } from '../features/module-graph/saved-graph-list-summary'
+import type { GraphWorkflowRecord, GraphWorkflowSummaryRecord, ModuleDefinitionRecord } from '../lib/api-module-graph'
+import {
+  countGraphWorkflowFinalResultNodes,
+  hasAssignedFinalResult,
+  resolveGraphStructureSummary,
+  resolveSavedGraphWorkflowFinalResultNodeCount,
+  resolveSavedGraphWorkflowSummary,
+} from '../features/module-graph/saved-graph-list-summary'
 
+/**
+ * WF-1 계약: 목록 요약은 서버가 계산한 `node_count`/`edge_count`/`final_result_node_count` 만 읽는다.
+ * 그래프 문서는 목록 응답에 존재하지 않으므로 요약 계산이 그래프에 의존해서는 안 된다.
+ */
 function makeWorkflow(nodeCount: number, edgeCount: number): GraphWorkflowRecord {
   return {
     id: 1,
@@ -25,6 +35,25 @@ function makeWorkflow(nodeCount: number, edgeCount: number): GraphWorkflowRecord
     folder_id: null,
     version: 1,
     is_active: true,
+    node_count: nodeCount,
+    edge_count: edgeCount,
+    final_result_node_count: 0,
+    created_date: '2026-05-16T00:00:00.000Z',
+    updated_date: '2026-05-16T00:00:00.000Z',
+  }
+}
+
+function makeSummary(nodeCount: number, edgeCount: number, finalResultNodeCount: number): GraphWorkflowSummaryRecord {
+  return {
+    id: 2,
+    name: 'Summary only workflow',
+    description: null,
+    folder_id: null,
+    version: 1,
+    is_active: true,
+    node_count: nodeCount,
+    edge_count: edgeCount,
+    final_result_node_count: finalResultNodeCount,
     created_date: '2026-05-16T00:00:00.000Z',
     updated_date: '2026-05-16T00:00:00.000Z',
   }
@@ -90,6 +119,21 @@ workflowWithFinalNodes.graph.nodes[3].module_id = 999
 equal(
   countGraphWorkflowFinalResultNodes(workflowWithFinalNodes, moduleDefinitionById, (module) => module.name === 'final_result'),
   2,
+)
+
+// 목록 행은 그래프 없이 서버 카운트만으로 요약을 만들 수 있어야 한다(WF-1).
+const summaryOnly = makeSummary(7, 5, 2)
+deepEqual(resolveSavedGraphWorkflowSummary(summaryOnly, resolveSavedGraphWorkflowFinalResultNodeCount(summaryOnly)), {
+  nodeCount: 7,
+  edgeCount: 5,
+  finalResultNodeCount: 2,
+})
+equal(resolveSavedGraphWorkflowFinalResultNodeCount(makeSummary(0, 0, -3)), 0)
+equal(resolveSavedGraphWorkflowFinalResultNodeCount(makeSummary(0, 0, 2.9)), 2)
+equal(
+  'graph' in summaryOnly,
+  false,
+  'saved workflow list rows must not carry a graph document',
 )
 
 console.log('Saved graph list summary contracts verified')

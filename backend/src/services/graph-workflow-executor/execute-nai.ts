@@ -45,7 +45,8 @@ async function resolveQueueBackedNaiOutput(params: {
   completedJobId: number
   requestInput: NAIMetadataInputParams
 }) {
-  const completedJob = GenerationQueueModel.findById(params.completedJobId)
+  // PAYLOAD-1: 결과 해석은 history 행에서 오므로 잡 페이로드가 필요 없다.
+  const completedJob = GenerationQueueModel.findListRecordById(params.completedJobId)
   if (!completedJob) {
     throw new Error(`Completed queue job ${params.completedJobId} is no longer available`)
   }

@@ -22,7 +22,7 @@ const folderSettingsHookSource = readFileSync(resolve(process.cwd(), 'src/featur
 
 /** Extract one string-literal union declared as `export type <name> = 'a' | 'b'`. */
 function readUnionLiterals(source: string, typeName: string): string[] {
-  const declaration = new RegExp(`export type ${typeName} =([\\s\\S]*?)\\n\\n`).exec(source)
+  const declaration = new RegExp(`export type ${typeName} =([\\s\\S]*?)\\r?\\n\\r?\\n`).exec(source)
   if (!declaration) {
     throw new Error(`expected ${typeName} to be declared as a string literal union`)
   }

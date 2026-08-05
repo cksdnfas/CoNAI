@@ -28,7 +28,51 @@ async function main() {
     'scheduled gallery invalidation must clear the gallery cache after the debounce window',
   )
 
+  verifyGalleryTotalCache()
+
   console.log('✅ Query cache debounce contracts passed (background invalidations coalesce)')
+}
+
+/**
+ * The home feed total is a full-library count (~60ms at 200k rows) that every
+ * visitor would otherwise recompute. It is cached server-side, and — because an
+ * active generation queue invalidates the gallery cache every few seconds — an
+ * invalidation must not be able to hand the very next request a fresh count.
+ */
+function verifyGalleryTotalCache() {
+  QueryCacheService.initialize()
+
+  assert.equal(
+    QueryCacheService.getGalleryTotalCache('visible-feed'),
+    null,
+    'an unseeded feed total must report a cache miss so the caller computes it',
+  )
+
+  QueryCacheService.setGalleryTotalCache('visible-feed', 1234)
+  assert.equal(
+    QueryCacheService.getGalleryTotalCache('visible-feed'),
+    1234,
+    'a cached feed total must be served without recomputing',
+  )
+  assert.equal(
+    QueryCacheService.getGalleryTotalCache('other-scope'),
+    null,
+    'feed totals must not leak across scope keys',
+  )
+
+  QueryCacheService.invalidateGalleryCache()
+  assert.equal(
+    QueryCacheService.getGalleryTotalCache('visible-feed'),
+    1234,
+    'invalidation must not force an immediate recount while the last value is still recent',
+  )
+
+  QueryCacheService.initialize()
+  assert.equal(
+    QueryCacheService.getGalleryTotalCache('visible-feed'),
+    null,
+    're-initialization must drop every cached feed total',
+  )
 }
 
 main().catch((error) => {

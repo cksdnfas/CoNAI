@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SettingsInsetBlock, SettingsSection } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
-import type { GraphExecutionRecord, GraphWorkflowRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
+import type { GraphExecutionRecord, GraphWorkflowNameRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import { ModuleWorkflowSchedulesPanel } from './module-workflow-schedules-panel'
 
@@ -31,7 +31,7 @@ export function ModuleWorkflowEmptyRunsTab({
 }: {
   view: 'schedules' | 'executions'
   schedules: GraphWorkflowScheduleRecord[]
-  workflows: GraphWorkflowRecord[]
+  workflows: GraphWorkflowNameRecord[]
   queueExecutions: GraphExecutionRecord[]
   selectedQueueExecutionIdSet: ReadonlySet<number>
   allQueueSelected: boolean

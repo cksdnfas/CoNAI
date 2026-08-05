@@ -95,21 +95,38 @@ export class RuntimeEventBroadcaster {
     return record.accountId !== null && record.accountId === subscriber.accountId
   }
 
+  /**
+   * Fan one event out to every eligible subscriber.
+   *
+   * 직렬화는 **이벤트당 1회**다. 구독자 수만큼 `JSON.stringify` 를 반복하면 30명 접속 시
+   * 같은 payload 를 30번 직렬화하며 이벤트 루프를 잡는다.
+   */
   private static fanOut(record: RuntimeEventRecord) {
     if (this.subscribers.size === 0) {
       return
     }
+
+    let frame: string | null | undefined
 
     for (const subscriber of this.subscribers.values()) {
       if (!this.isVisibleTo(record, subscriber)) {
         continue
       }
 
-      this.writeDataFrame(subscriber, record)
+      if (frame === undefined) {
+        frame = this.buildDataFrame(record)
+      }
+
+      if (frame === null) {
+        return
+      }
+
+      this.write(subscriber, frame)
     }
   }
 
-  private static writeDataFrame(subscriber: RuntimeEventSubscriber, record: RuntimeEventRecord) {
+  /** Serialize one event into its SSE data frame, or null when the payload cannot be serialized. */
+  private static buildDataFrame(record: RuntimeEventRecord): string | null {
     const envelope: RuntimeEventEnvelope = {
       id: record.id,
       name: record.name,
@@ -118,16 +135,22 @@ export class RuntimeEventBroadcaster {
       payload: record.payload,
     }
 
-    let serialized: string
     try {
-      serialized = JSON.stringify(envelope)
+      return `id: ${record.id}\nevent: ${record.name}\ndata: ${JSON.stringify(envelope)}\n\n`
     } catch (error) {
       // 직렬화 불가능한 payload 하나가 다른 구독자의 fan-out 까지 끊어서는 안 된다.
       console.warn(`⚠️ Skipping unserializable runtime event ${record.name}:`, error instanceof Error ? error.message : error)
+      return null
+    }
+  }
+
+  private static writeDataFrame(subscriber: RuntimeEventSubscriber, record: RuntimeEventRecord) {
+    const frame = this.buildDataFrame(record)
+    if (frame === null) {
       return
     }
 
-    this.write(subscriber, `id: ${record.id}\nevent: ${record.name}\ndata: ${serialized}\n\n`)
+    this.write(subscriber, frame)
   }
 
   private static writeControlFrame(subscriber: RuntimeEventSubscriber, event: string, payload: unknown) {

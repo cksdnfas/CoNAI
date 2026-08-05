@@ -4,6 +4,10 @@ import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { MigrationManager } from '../database/migrationManager'
+import { up as upInitialSchema } from '../database/migrations/000_create_all_tables'
+import { up as upVisibilityIndex } from '../database/migrations/027_add_media_visibility_index'
+import { up as upAutoTagState } from '../database/migrations/028_add_media_auto_tag_state'
+import { up as upPromptSearchIndex } from '../database/migrations/031_add_media_prompt_search_index'
 import { ensureUserSettingsCompatibility, migrateExistingUserSettingsTables } from '../database/userSettingsCompatibility'
 import { createUserSettingsSchema } from '../database/userSettingsSchema'
 
@@ -235,6 +239,295 @@ function assertMigrationStartupLockContracts() {
   )
 }
 
+/**
+ * `000_create_all_tables.ts` is the fresh-database path; 027/028/031 are the
+ * upgrade path. Both run on a new install, so the mirrored objects must be
+ * re-appliable — and, more importantly, the mirrored SQL *expressions* must stay
+ * byte-identical to the incremental migrations:
+ *
+ *  - The FTS5 index is external-content. If the text the 000 triggers write ever
+ *    differs from the text the backfill (and the 031 triggers) write, a `'delete'`
+ *    command supplies values that were never inserted and the index corrupts
+ *    silently — on new installs only, which is the hardest place to notice it.
+ *  - The auto-tag state expressions decide which rows the scheduler can see. A
+ *    drift there means a new database quietly stops tagging some media.
+ *
+ * The migrations cannot share a module (portable/SEA builds ship the compiled
+ * migrations directory standalone), so the copies are compared here instead.
+ */
+function assertInitialSchemaMirrorsPerformanceMigrations() {
+  const migrationsDir = path.resolve(process.cwd(), 'src/database/migrations')
+  // Normalize line endings: 000 is checked in with CRLF, the newer migrations with LF.
+  const read = (file: string) => fs.readFileSync(path.join(migrationsDir, file), 'utf8').replace(/\r\n/g, '\n')
+
+  const initialSchema = read('000_create_all_tables.ts')
+  const autoTagStateMigration = read('028_add_media_auto_tag_state.ts')
+  const promptSearchMigration = read('031_add_media_prompt_search_index.ts')
+
+  const extractBetween = (source: string, startMarker: string, endMarker: string, label: string) => {
+    const start = source.indexOf(startMarker)
+    assert.notEqual(start, -1, `missing marker in ${label}: ${startMarker}`)
+    const end = source.indexOf(endMarker, start + startMarker.length)
+    assert.notEqual(end, -1, `missing end marker in ${label} after: ${startMarker}`)
+    return source.slice(start + startMarker.length, end).replace(/\s+/g, ' ').trim()
+  }
+
+  const sharedFragments: Array<{ name: string; signature: string; source: string; label: string }> = [
+    {
+      name: 'needsAutoTagWorkSql',
+      signature: 'function needsAutoTagWorkSql(autoTagsExpr: string): string {\n  return `',
+      source: autoTagStateMigration,
+      label: '028_add_media_auto_tag_state.ts',
+    },
+    {
+      name: 'positiveTextSql',
+      signature: 'function positiveTextSql(prefix: string): string {\n  return `',
+      source: promptSearchMigration,
+      label: '031_add_media_prompt_search_index.ts',
+    },
+    {
+      name: 'negativeTextSql',
+      signature: 'function negativeTextSql(prefix: string): string {\n  return `',
+      source: promptSearchMigration,
+      label: '031_add_media_prompt_search_index.ts',
+    },
+    {
+      name: 'syncGateSql',
+      signature: 'function syncGateSql(rowidExpression: string): string {\n  return `',
+      source: promptSearchMigration,
+      label: '031_add_media_prompt_search_index.ts',
+    },
+  ]
+
+  for (const fragment of sharedFragments) {
+    assert.equal(
+      extractBetween(initialSchema, fragment.signature, '`;\n}', '000_create_all_tables.ts'),
+      extractBetween(fragment.source, fragment.signature, '`;\n}', fragment.label),
+      `000_create_all_tables.ts must mirror ${fragment.name} from ${fragment.label} character for character`,
+    )
+  }
+
+  for (const capabilitySql of [
+    /COALESCE\(\(SELECT tagger_enabled FROM auto_tag_state_meta WHERE id = 1\), 1\) = 1/,
+    /COALESCE\(\(SELECT kaloscope_enabled FROM auto_tag_state_meta WHERE id = 1\), 1\) = 1/,
+  ]) {
+    assert.match(initialSchema, capabilitySql, 'the initial schema must read the same recorded auto-tag capabilities as migration 028')
+  }
+
+  // Structural mirror: columns, state tables, indexes and triggers.
+  for (const pattern of [
+    /auto_tag_state TEXT DEFAULT NULL/,
+    /raw_nai_parameters TEXT DEFAULT NULL/,
+    /character_prompt_text TEXT DEFAULT NULL/,
+    /CREATE TABLE IF NOT EXISTS auto_tag_state_meta/,
+    /CREATE TABLE IF NOT EXISTS media_prompt_fts_state/,
+    /CREATE VIRTUAL TABLE IF NOT EXISTS media_prompt_fts USING fts5/,
+    /idx_media_metadata_visibility/,
+    /idx_media_metadata_auto_tag_pending/,
+    /tokenize='trigram'/,
+  ]) {
+    assert.match(initialSchema, pattern, `the initial schema must mirror ${pattern} from migrations 027/028/031`)
+  }
+
+  for (const triggerName of [
+    'trg_media_metadata_auto_tag_state_insert',
+    'trg_media_metadata_auto_tag_state_promote',
+    'trg_media_metadata_auto_tag_state_settle',
+    'trg_image_files_auto_tag_state_insert',
+    'trg_image_files_auto_tag_state_link',
+    'trg_media_prompt_fts_insert',
+    'trg_media_prompt_fts_delete',
+    'trg_media_prompt_fts_update',
+  ]) {
+    assert.match(
+      initialSchema,
+      new RegExp(`CREATE TRIGGER ${triggerName}`),
+      `a new database must get ${triggerName} from the initial schema, not only from the incremental migration`,
+    )
+  }
+
+  // The seed decides how the FTS sync gate behaves on a brand new database.
+  // 'ready' would arm the triggers over rows the (never-run) backfill does not own,
+  // and a missing seed row would keep the gate closed forever.
+  assert.match(
+    initialSchema,
+    /VALUES \(1, 'pending', 0, 0\)/,
+    "a fresh prompt index must start pending so search stays on LIKE until the backfill job finishes",
+  )
+  assert.match(
+    initialSchema,
+    /INSERT OR IGNORE INTO auto_tag_state_meta \(id, tagger_enabled, kaloscope_enabled\)\s*\n\s*VALUES \(1, NULL, NULL\)/,
+    'the auto-tag capability row must be seeded unsynced so the first scheduler pass recomputes it',
+  )
+
+  // No backfill may live in the initial schema: a new database has no rows to
+  // backfill, and a scan there would slow down (or, for FTS, block) first boot.
+  // Prose comments are dropped first so documenting a statement cannot trip the scan.
+  const executableSchema = initialSchema
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('//'))
+    .join('\n')
+
+  for (const match of executableSchema.matchAll(/INSERT INTO media_prompt_fts\b/g)) {
+    assert.match(
+      executableSchema.slice(match.index!, match.index! + 260),
+      /\b(NEW|OLD)\.rowid\b/,
+      'the initial schema must only write to the prompt index from row triggers',
+    )
+  }
+  assert.doesNotMatch(executableSchema, /'rebuild'/, "the initial schema must not issue an FTS5 'rebuild'")
+  for (const match of executableSchema.matchAll(/SET auto_tag_state = 'pending'/g)) {
+    assert.match(
+      executableSchema.slice(match.index!, match.index! + 260),
+      /NEW\.composite_hash/,
+      'the initial schema must only set auto_tag_state from row triggers, never as a table-wide backfill',
+    )
+  }
+  assert.doesNotMatch(
+    executableSchema,
+    /SET auto_tag_state = 'pending'\s*\n\s*WHERE auto_tag_state IS NOT 'pending'\s*\n\s*AND auto_tags IS NULL/,
+    'the migration 028 backfill must stay out of the initial schema (a new database has no rows to backfill)',
+  )
+}
+
+/**
+ * A new database is built by 000 *and then* by every incremental migration, so
+ * the mirrored objects have to survive being created twice.
+ */
+async function assertInitialSchemaAndPerformanceMigrationsCompose() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-initial-schema-mirror-'))
+  const db = new Database(path.join(tempDir, 'images.db'))
+
+  // Exactly the order MigrationManager applies them in on a fresh install.
+  const migrations = [upInitialSchema, upVisibilityIndex, upAutoTagState, upPromptSearchIndex]
+
+  try {
+    for (const pass of [1, 2]) {
+      for (const migrate of migrations) {
+        await migrate(db)
+      }
+
+      const columns = getTableColumns(db, 'media_metadata')
+      for (const column of ['auto_tag_state', 'raw_nai_parameters', 'character_prompt_text']) {
+        assert.equal(columns.has(column), true, `media_metadata.${column} must exist after pass ${pass}`)
+      }
+
+      for (const objectName of [
+        'idx_media_metadata_visibility',
+        'idx_media_metadata_auto_tag_pending',
+        'auto_tag_state_meta',
+        'media_prompt_fts',
+        'media_prompt_fts_state',
+        'trg_media_metadata_auto_tag_state_insert',
+        'trg_media_metadata_auto_tag_state_promote',
+        'trg_media_metadata_auto_tag_state_settle',
+        'trg_image_files_auto_tag_state_insert',
+        'trg_image_files_auto_tag_state_link',
+        'trg_media_prompt_fts_insert',
+        'trg_media_prompt_fts_delete',
+        'trg_media_prompt_fts_update',
+      ]) {
+        assert.equal(
+          getCount(db, 'SELECT COUNT(*) AS count FROM sqlite_master WHERE name = ?', objectName),
+          1,
+          `${objectName} must exist exactly once after pass ${pass}`,
+        )
+      }
+
+      assert.equal(getCount(db, 'SELECT COUNT(*) AS count FROM auto_tag_state_meta'), 1)
+      assert.equal(
+        getCount(db, "SELECT COUNT(*) AS count FROM media_prompt_fts_state WHERE id = 1 AND status = 'pending' AND last_rowid = 0"),
+        1,
+        `the prompt index must still be pending with a zero watermark after pass ${pass}`,
+      )
+    }
+
+    // Writes must work through both trigger families, and the auto-tag scheduler's
+    // pending lookup must be answered by the partial index rather than a full scan.
+    db.prepare(`
+      INSERT INTO media_metadata (composite_hash, prompt, negative_prompt, first_seen_date)
+      VALUES ('hash-mirror', 'a mirrored prompt', 'mirrored negative', CURRENT_TIMESTAMP)
+    `).run()
+    db.prepare(`
+      INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_status, file_size, mime_type)
+      VALUES ('hash-mirror', 'C:/tmp/mirror.png', 1, 'active', 1, 'image/png')
+    `).run()
+
+    assert.equal(
+      getCount(db, "SELECT COUNT(*) AS count FROM media_metadata WHERE auto_tag_state = 'pending'"),
+      1,
+      'the mirrored triggers must mark a newly registered file as pending auto-tag work',
+    )
+
+    const pendingPlan = (db.prepare(`
+      EXPLAIN QUERY PLAN
+      SELECT mm.composite_hash FROM media_metadata mm WHERE mm.auto_tag_state = 'pending'
+    `).all() as Array<{ detail: string }>).map((row) => row.detail).join(' | ')
+    assert.match(
+      pendingPlan,
+      /idx_media_metadata_auto_tag_pending/,
+      `the pending auto-tag lookup must use the partial index, got: ${pendingPlan}`,
+    )
+
+    // The prompt index is still pending, so the sync gate must have kept the row out
+    // of the FTS table (writing it would put the watermark and the index out of step).
+    assert.equal(
+      getCount(db, `SELECT COUNT(*) AS count FROM media_prompt_fts WHERE media_prompt_fts MATCH '{positive_text} : "mirrored"'`),
+      0,
+      'a pending prompt index must not be written by the sync triggers',
+    )
+
+    // Once the backfill has run the index answers searches and stays consistent.
+    // The text below is the runtime backfill's expression (PromptSearchIndexService);
+    // it has to match what the mirrored triggers write or FTS5 corrupts on delete.
+    db.prepare(`
+      INSERT INTO media_prompt_fts(rowid, positive_text, negative_text)
+      SELECT
+        im.rowid,
+        (
+          COALESCE(im.prompt, '') || char(10) ||
+          COALESCE(im.character_prompt_text, '') || char(10) ||
+          CASE WHEN json_valid(im.raw_nai_parameters) = 1 THEN COALESCE((
+            SELECT group_concat(COALESCE(json_extract(char_item.value, '$.char_caption'), ''), char(10))
+            FROM json_each(im.raw_nai_parameters, '$.v4_prompt.caption.char_captions') AS char_item
+          ), '') ELSE '' END
+        ),
+        COALESCE(im.negative_prompt, '')
+      FROM media_metadata im
+    `).run()
+    db.prepare("UPDATE media_prompt_fts_state SET status = 'ready', last_rowid = (SELECT COALESCE(MAX(rowid), 0) FROM media_metadata) WHERE id = 1").run()
+    db.prepare(`
+      INSERT INTO media_metadata (composite_hash, prompt, first_seen_date)
+      VALUES ('hash-mirror-2', 'a second mirrored prompt', CURRENT_TIMESTAMP)
+    `).run()
+    assert.equal(
+      getCount(db, `SELECT COUNT(*) AS count FROM media_prompt_fts WHERE media_prompt_fts MATCH '{positive_text} : "second mirrored"'`),
+      1,
+      'a live prompt index must pick up rows inserted through the mirrored triggers',
+    )
+    // The delete half of the update trigger is where a text mismatch would corrupt
+    // the external-content index, so exercise it before the integrity check.
+    db.prepare("UPDATE media_metadata SET prompt = 'a rewritten mirrored prompt' WHERE composite_hash = 'hash-mirror'").run()
+    assert.equal(
+      getCount(db, `SELECT COUNT(*) AS count FROM media_prompt_fts WHERE media_prompt_fts MATCH '{positive_text} : "rewritten"'`),
+      1,
+      'an update must add the new terms through the mirrored trigger',
+    )
+    assert.equal(
+      getCount(db, `SELECT COUNT(*) AS count FROM media_prompt_fts WHERE media_prompt_fts MATCH '{positive_text} : "a mirrored prompt"'`),
+      0,
+      'an update must remove the stale terms through the mirrored trigger',
+    )
+    assert.doesNotThrow(
+      () => db.prepare(`INSERT INTO media_prompt_fts(media_prompt_fts, rank) VALUES('integrity-check', 0)`).run(),
+      'the FTS index built by the initial schema must pass its own integrity check',
+    )
+  } finally {
+    db.close()
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
 async function assertLegacyApiHistoryCollisionIsRemapped() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-api-history-migration-'))
   process.env.RUNTIME_BASE_PATH = tempRoot
@@ -446,6 +739,8 @@ async function main() {
   assertWildcardLegacyMigrationDropsStaleScratchTable()
   assertWildcardLegacyMigrationFailsAtomically()
   assertMigrationStartupLockContracts()
+  assertInitialSchemaMirrorsPerformanceMigrations()
+  await assertInitialSchemaAndPerformanceMigrationsCompose()
   await assertLegacyApiHistoryCollisionIsRemapped()
   await assertNoPendingMigrationsDoNotRequireWriteLock()
   await assertMigrationManagerFailsFastAndRollsBack()

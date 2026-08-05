@@ -112,16 +112,35 @@ export interface GraphWorkflowDocument {
   metadata?: GraphWorkflowMetadata
 }
 
-export interface GraphWorkflowRecord {
+/**
+ * List projection returned by `GET /api/graph-workflows` and browse content (WF-1).
+ *
+ * 목록 응답은 그래프 문서를 담지 않는다. 노드/엣지/최종결과 개수는 서버가 SQL 로 계산해 주므로
+ * 탐색기 사이드바는 그래프를 받지 않고도 요약 뱃지를 그릴 수 있다.
+ * 전체 그래프가 필요하면 `getGraphWorkflow(id)` 로 단건 조회한다.
+ */
+export interface GraphWorkflowSummaryRecord {
   id: number
   name: string
   description?: string | null
-  graph: GraphWorkflowDocument
   folder_id?: number | null
   version: number
   is_active: boolean
   created_date: string
   updated_date: string
+  node_count: number
+  edge_count: number
+  final_result_node_count: number
+}
+
+/** Name-only workflow label entry used by reservation and header surfaces. */
+export interface GraphWorkflowNameRecord {
+  id: number
+  name: string
+}
+
+export interface GraphWorkflowRecord extends GraphWorkflowSummaryRecord {
+  graph: GraphWorkflowDocument
 }
 
 export interface GraphWorkflowExportPayload {
@@ -294,12 +313,39 @@ export interface GraphWorkflowBrowseContentRecord {
     final_result_count: number
     empty_execution_count: number
   }
-  workflows: GraphWorkflowRecord[]
+  workflows: GraphWorkflowSummaryRecord[]
   schedules: GraphWorkflowScheduleRecord[]
   executions: GraphExecutionRecord[]
   artifacts: GraphExecutionArtifactRecord[]
   final_results: GraphExecutionFinalResultRecord[]
   empty_executions: GraphExecutionRecord[]
+}
+
+/**
+ * Reservation-tab payload returned by `GET /api/graph-workflows/reservations` (WF-2).
+ *
+ * 예약 탭은 워크플로우 이름 라벨과 일정/실행 상태만 필요하다. 그래프 문서·아티팩트 목록은
+ * 이 응답에 들어가지 않으므로 2초 폴링 비용이 상수 수준으로 내려간다.
+ */
+export interface GraphWorkflowReservationContentRecord {
+  scope: {
+    revision: string
+    workflow_count: number
+    schedule_count: number
+    execution_count: number
+    empty_execution_count: number
+  }
+  workflows: GraphWorkflowNameRecord[]
+  schedules: GraphWorkflowScheduleRecord[]
+  executions: GraphExecutionRecord[]
+  empty_executions: GraphExecutionRecord[]
+}
+
+/** Batch execution preview payload (WF-4): artifacts and final results without logs or node IO. */
+export interface GraphExecutionPreviewBatchRecord {
+  executions: GraphExecutionRecord[]
+  artifacts: GraphExecutionArtifactRecord[]
+  final_results: GraphExecutionFinalResultRecord[]
 }
 
 export interface GraphWorkflowArtifactCopyResult {

@@ -1,6 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthAccount } from '../models/AuthAccount';
-import { SESSION_ACCESS_CACHE_TTL_MS, hasConfiguredAuth, setTrustedBootstrapSession } from '../routes/auth-route-helpers';
+import {
+  hasConfiguredAuth,
+  hasFreshSessionAccessCache,
+  markSessionAccessCacheFresh,
+  setTrustedBootstrapSession,
+} from '../routes/auth-route-helpers';
 import { AuthAccessControlService, getResolvedAuthAccessEpoch } from '../services/authAccessControlService';
 
 /**
@@ -56,37 +61,59 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction): v
   res.status(403).json({ error: 'Forbidden' });
 };
 
-/** Refresh cached access data for the current authenticated account session. */
+/**
+ * Refresh cached access data for the current authenticated account session.
+ * The freshness rule itself lives in auth-route-helpers so this middleware and the SPA shell
+ * payload builder share one definition of "this session's access cache is still current"; the TTL
+ * is the steady-state optimization and the epoch makes explicit permission revocations invalidate
+ * an already-open session on its very next request.
+ */
 function refreshSessionAccess(req: Request): string[] {
   const accountId = req.session?.accountId;
   if (typeof accountId !== 'number') {
     return req.session?.permissionKeys ?? [];
   }
 
-  const now = Date.now();
-  // The TTL is the steady-state optimization; the epoch makes explicit permission
-  // revocations invalidate an already-open session on its very next request.
-  const accessEpoch = getResolvedAuthAccessEpoch();
-  const cachedPermissionKeys = req.session.permissionKeys;
-  const cachedGroupKeys = req.session.groupKeys;
-  const cacheUpdatedAt = req.session.accessCacheUpdatedAt;
-  const isFreshSessionAccessCache = Array.isArray(cachedPermissionKeys)
-    && Array.isArray(cachedGroupKeys)
-    && req.session.accessCacheAccountId === accountId
-    && req.session.accessCacheEpoch === accessEpoch
-    && typeof cacheUpdatedAt === 'number'
-    && now - cacheUpdatedAt < SESSION_ACCESS_CACHE_TTL_MS;
-
-  if (isFreshSessionAccessCache) {
-    return cachedPermissionKeys;
+  if (hasFreshSessionAccessCache(req, accountId)) {
+    return req.session.permissionKeys ?? [];
   }
 
+  // The epoch is captured before resolving so a concurrent invalidation can only make this stamp
+  // look older than the data, which costs one extra re-resolve instead of hiding a revocation.
+  const accessEpoch = getResolvedAuthAccessEpoch();
   const resolvedAccess = AuthAccessControlService.resolveForAccountId(accountId);
   req.session.groupKeys = resolvedAccess.groupKeys;
   req.session.permissionKeys = resolvedAccess.permissionKeys;
   req.session.accessCacheAccountId = accountId;
   req.session.accessCacheEpoch = accessEpoch;
-  req.session.accessCacheUpdatedAt = now;
+  // The freshness stamp is process-local on purpose; see markSessionAccessCacheFresh. Everything
+  // written above is either unchanged (so express-session writes nothing) or a real access change.
+  delete req.session.accessCacheUpdatedAt;
+  markSessionAccessCacheFresh(req);
+  return resolvedAccess.permissionKeys;
+}
+
+/**
+ * Refresh cached anonymous access data for the current session.
+ * Mirrors the bootstrap freshness check so an unchanged anonymous session is left untouched and
+ * express-session can skip its per-request store write. On a miss the resolved keys are written
+ * back verbatim, so an anonymous session whose access did not actually change stays byte-identical
+ * and still costs no write. The access epoch makes explicit permission changes land on the very
+ * next request.
+ */
+function refreshAnonymousSessionAccess(req: Request): string[] {
+  if (req.session.authenticated !== true && hasFreshSessionAccessCache(req, undefined)) {
+    return req.session.permissionKeys ?? [];
+  }
+
+  const accessEpoch = getResolvedAuthAccessEpoch();
+  const resolvedAccess = AuthAccessControlService.resolveForGroupKey('anonymous');
+  req.session.groupKeys = resolvedAccess.groupKeys;
+  req.session.permissionKeys = resolvedAccess.permissionKeys;
+  delete req.session.accessCacheAccountId;
+  req.session.accessCacheEpoch = accessEpoch;
+  delete req.session.accessCacheUpdatedAt;
+  markSessionAccessCacheFresh(req);
   return resolvedAccess.permissionKeys;
 }
 
@@ -104,10 +131,7 @@ function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[];
     return { permissionKeys: refreshSessionAccess(req), authenticated: true };
   }
 
-  const resolvedAccess = AuthAccessControlService.resolveForGroupKey('anonymous');
-  req.session.groupKeys = resolvedAccess.groupKeys;
-  req.session.permissionKeys = resolvedAccess.permissionKeys;
-  return { permissionKeys: resolvedAccess.permissionKeys, authenticated: false };
+  return { permissionKeys: refreshAnonymousSessionAccess(req), authenticated: false };
 }
 
 /**

@@ -7,6 +7,9 @@ import {
 } from '../types/workflow';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
+/** List projection for `GET /api/workflows`: every column except the ComfyUI graph document. */
+export type WorkflowSummaryRecord = Omit<WorkflowRecord, 'workflow_json'>;
+
 const PUBLIC_QUEUE_MAX_COUNT_DEFAULT = 32;
 
 function normalizePublicQueueMaxCount(value: unknown) {
@@ -93,6 +96,40 @@ export class WorkflowModel {
 
     const rows = userSettingsDb.prepare(query).all() as WorkflowRecord[];
     return (rows || []).map((row) => this.normalizeWorkflowRecord(row)).filter((row): row is WorkflowRecord => row !== null);
+  }
+
+  /**
+   * 목록용 워크플로우 조회 (WF-3).
+   *
+   * `workflow_json` 은 ComfyUI 그래프 원문이라 8개만으로도 100KB 를 넘는다. 목록 화면은
+   * 이름/색/마킹 필드만 쓰므로 컬럼에서 아예 제외하고, 작성/복사 모달은 `GET /api/workflows/:id`
+   * 로 전체 정의를 받는다.
+   */
+  static findAllSummaries(activeOnly: boolean = false): WorkflowSummaryRecord[] {
+    let query = `
+      SELECT
+        id, name, description, marked_fields, api_endpoint, is_active,
+        is_public_page, public_slug, public_queue_max_count, result_view_mode,
+        artifact_root_path, artifact_directory_mode, color, created_date, updated_date
+      FROM workflows
+    `;
+    if (activeOnly) {
+      query += ' WHERE is_active = 1';
+    }
+    query += ' ORDER BY created_date DESC';
+
+    const rows = userSettingsDb.prepare(query).all() as WorkflowSummaryRecord[];
+    return (rows || []).map((row) => ({
+      ...row,
+      is_active: (row as unknown as { is_active: boolean | number }).is_active === true
+        || (row as unknown as { is_active: boolean | number }).is_active === 1,
+      is_public_page: (row as unknown as { is_public_page: boolean | number }).is_public_page === true
+        || (row as unknown as { is_public_page: boolean | number }).is_public_page === 1,
+      public_queue_max_count: normalizePublicQueueMaxCount(row.public_queue_max_count),
+      result_view_mode: row.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
+      artifact_root_path: row.artifact_root_path ?? null,
+      artifact_directory_mode: row.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
+    }));
   }
 
   /**

@@ -11,6 +11,9 @@ function readSource(relativePath: string): string {
 const initialMigration = readSource('backend/src/database/migrations/000_create_all_tables.ts');
 const autoTagIndexMigration = readSource('backend/src/database/migrations/022_add_media_auto_tag_index.ts');
 const autoTagIndexPruneMigration = readSource('backend/src/database/migrations/023_prune_media_auto_tag_index_variants.ts');
+const autoTagStateMigration = readSource('backend/src/database/migrations/028_add_media_auto_tag_state.ts');
+const autoTagStateService = readSource('backend/src/services/autoTagStateService.ts');
+const backgroundProcessorService = readSource('backend/src/services/backgroundProcessorService.ts');
 const redundantIndexPruneMigration = readSource('backend/src/database/migrations/026_prune_redundant_indexes.ts');
 const autoTagSearchTerms = readSource('backend/src/services/autoTagSearch/autoTagSearchTerms.ts');
 const autoTagIndexService = readSource('backend/src/services/autoTagIndexService.ts');
@@ -165,25 +168,29 @@ assert.match(
   /buildGeneralTagConditions/,
   'simple auto-tag search must keep the JSON fallback for unmigrated test DBs',
 );
+// The auto-tag-specific total cache was generalised into `resolveSearchTotal` so
+// `advancedSearch` could share it (HEAVY-1). The guarantees are unchanged: a short
+// TTL, a key derived from the count conditions and parameters, and a cache read
+// before the count query runs.
 assert.match(
   imageSearchModel,
-  /AUTO_TAG_SEARCH_TOTAL_CACHE_TTL_MS\s*=\s*30_000/,
-  'simple auto-tag search total count cache must use a short TTL',
+  /SEARCH_TOTAL_CACHE_TTL_MS\s*=\s*30_000/,
+  'search total count cache must use a short TTL',
 );
 assert.match(
   imageSearchModel,
-  /getAutoTagSearchTotalCacheKey\(safeConditions,\s*queryBuilder\.params\)/,
-  'simple auto-tag search total cache must key by count conditions and parameters',
+  /function getSearchTotalCacheKey\(scope: string, conditions: string\[\], params: unknown\[\]\)/,
+  'search total cache must key by scope, count conditions and parameters',
 );
 assert.match(
   imageSearchModel,
-  /getCachedAutoTagSearchTotal\(countCacheKey\)/,
-  'simple auto-tag search must read cached totals before running the count query',
+  /function resolveSearchTotal\([\s\S]{0,400}?getCachedSearchTotal\(cacheKey\)[\s\S]{0,200}?setCachedSearchTotal\(cacheKey, total\)/,
+  'search totals must be read from cache before the count query and written back after a miss',
 );
 assert.match(
   imageSearchModel,
-  /setCachedAutoTagSearchTotal\(countCacheKey,\s*total\)/,
-  'simple auto-tag search must cache exact totals after count misses',
+  /resolveSearchTotal\('searchByAutoTags', safeConditions, queryBuilder\.params/,
+  'simple auto-tag search must resolve its total through the shared cache',
 );
 assert.match(
   autoTagIndexPruneMigration,
@@ -230,6 +237,172 @@ assert.match(
   dataRematchService,
   /this\.remapHashRefTableRows\('media_auto_tag_index', oldHash, newHash\)/,
   'hash regeneration must preserve auto-tag index rows when hashes change',
+);
+
+// --- Auto-tag pending state (migration 028 / ATAG-1..3) ---------------------------
+// The scheduler must find work through the partial index instead of the json_extract
+// full scan, and the state must stay a superset of the original condition.
+
+assert.match(
+  autoTagStateMigration,
+  /ADD COLUMN auto_tag_state TEXT DEFAULT NULL/,
+  'migration 028 must add the auto_tag_state column without rewriting existing wide rows',
+);
+assert.match(
+  autoTagStateMigration,
+  /CREATE INDEX IF NOT EXISTS idx_media_metadata_auto_tag_pending\s*\n\s*ON media_metadata\(auto_tag_state, composite_hash\)\s*\n\s*WHERE auto_tag_state = 'pending'/,
+  'migration 028 must create the partial pending index keyed by auto_tag_state',
+);
+assert.match(
+  autoTagStateMigration,
+  /CREATE TABLE IF NOT EXISTS auto_tag_state_meta/,
+  'migration 028 must record which taggers the stored state was computed for',
+);
+assert.match(
+  autoTagStateMigration,
+  /UPDATE media_metadata\s*\n\s*SET auto_tag_state = 'pending'\s*\n\s*WHERE auto_tag_state IS NOT 'pending'/,
+  'migration 028 must backfill pending rows with a single UPDATE (no per-row loop)',
+);
+for (const triggerName of [
+  'trg_media_metadata_auto_tag_state_insert',
+  'trg_media_metadata_auto_tag_state_promote',
+  'trg_media_metadata_auto_tag_state_settle',
+  'trg_image_files_auto_tag_state_insert',
+  'trg_image_files_auto_tag_state_link',
+]) {
+  assert.match(
+    autoTagStateMigration,
+    new RegExp(`CREATE TRIGGER ${triggerName}`),
+    `migration 028 must keep auto_tag_state accurate for every writer via ${triggerName}`,
+  );
+}
+
+// Migration 028 cannot import project modules (portable builds ship the compiled
+// migrations directory standalone), so the runtime copy must not drift.
+for (const source of [autoTagStateMigration, autoTagStateService]) {
+  assert.match(
+    source,
+    /COALESCE\(\(SELECT tagger_enabled FROM auto_tag_state_meta WHERE id = 1\), 1\) = 1/,
+    'auto-tag state expressions must read the recorded tagger capability',
+  );
+  assert.match(
+    source,
+    /COALESCE\(\(SELECT kaloscope_enabled FROM auto_tag_state_meta WHERE id = 1\), 1\) = 1/,
+    'auto-tag state expressions must read the recorded kaloscope capability',
+  );
+  assert.match(
+    source,
+    /json_extract\(\$\{autoTagsExpr\}, '\$\.tagger'\) IS NULL/,
+    'auto-tag state expressions must keep the tagger term of the original pending condition',
+  );
+  assert.match(
+    source,
+    /json_extract\(\$\{autoTagsExpr\}, '\$\.kaloscope'\) IS NULL/,
+    'auto-tag state expressions must keep the kaloscope term of the original pending condition',
+  );
+  assert.match(
+    source,
+    /f\.original_file_path IS NOT NULL\s*\n\s*AND f\.file_status = 'active'/,
+    'auto-tag state expressions must keep the original active-file eligibility filter',
+  );
+}
+
+assert.match(
+  autoTagStateService,
+  /buildPendingStatePrefix\(alias: string\): string/,
+  'auto-tag state service must expose the pending-state SQL prefix for the scheduler',
+);
+assert.match(
+  autoTagStateService,
+  /syncCapabilityState\(capabilities: AutoTagStateCapabilities\): void/,
+  'auto-tag state service must recompute stored state when the enabled tagger set changes',
+);
+
+assert.match(
+  autoTagScheduler,
+  /WHERE \$\{AutoTagStateService\.buildPendingStatePrefix\('mm'\)\}\(/,
+  'pending media lookup must be narrowed by the indexed auto_tag_state before the json filter',
+);
+assert.match(
+  autoTagScheduler,
+  /mm\.auto_tags IS NULL\s*\n\s*OR \(\? = 1 AND json_extract\(mm\.auto_tags, '\$\.tagger'\) IS NULL\)\s*\n\s*OR \(\? = 1 AND json_extract\(mm\.auto_tags, '\$\.kaloscope'\) IS NULL\)/,
+  'pending media lookup must keep the dual tagger condition as the residual filter',
+);
+
+// The partial index only pays off while `media_metadata` is the driving table. Expressed
+// as `LEFT JOIN image_files ... WHERE if_.file_status = 'active'` it is an inner join in
+// disguise, so SQLite may reorder the tables — and on a real library (200k active files,
+// the migration-000 partial index idx_files_status, no sqlite_stat1) it drives from
+// image_files and probes the pending index once per file: an 18ms idle poll. A correlated
+// EXISTS cannot be reordered, so the plan no longer depends on ANALYZE statistics.
+assert.doesNotMatch(
+  autoTagScheduler,
+  /LEFT JOIN image_files/,
+  'pending scans must not reach image_files through a reorderable join',
+);
+assert.match(
+  autoTagScheduler,
+  /FROM media_metadata mm\s*\n\s*WHERE \$\{AutoTagStateService\.buildPendingStatePrefix\('mm'\)\}\(/,
+  'pending scans must select from media_metadata alone so the partial index always drives',
+);
+assert.match(
+  autoTagScheduler,
+  /const TAGGABLE_FILE_EXISTS = `EXISTS \(\s*\n\s*SELECT 1 FROM image_files taggable\s*\n\s*WHERE \$\{TAGGABLE_FILE_MATCH\}/,
+  'the active-file requirement must be a correlated EXISTS over image_files',
+);
+assert.match(
+  autoTagScheduler,
+  /\)\s*\n\s*AND \$\{TAGGABLE_FILE_EXISTS\}\s*\n\s*LIMIT \?/,
+  'the batch pending lookup must apply the EXISTS guard after the state/json filter',
+);
+assert.match(
+  autoTagScheduler,
+  /\)\s*\n\s*AND \$\{TAGGABLE_FILE_EXISTS\}\s*\n\s*`\)\.get\(capabilities\.taggerAutoEnabled/,
+  'the pending count must apply the same EXISTS guard instead of counting joined file rows',
+);
+// Same eligibility terms migration 028 / AutoTagStateService use for auto_tag_state, so
+// the state stays a superset of what the scheduler selects.
+assert.match(
+  autoTagScheduler,
+  /taggable\.original_file_path IS NOT NULL\s*\n\s*AND taggable\.file_status = 'active'/,
+  'the scheduler eligibility filter must match the migration 028 active-file condition',
+);
+// The single-hash lookup keeps a join on that same predicate: composite_hash is bound to a
+// constant on both sides there, so every join order SQLite can pick is an index seek.
+assert.match(
+  autoTagScheduler,
+  /JOIN image_files taggable ON \$\{TAGGABLE_FILE_MATCH\}\s*\n\s*WHERE mm\.composite_hash = \?/,
+  'the saved-media lookup must join on the shared taggable predicate pinned by composite_hash',
+);
+assert.match(
+  autoTagScheduler,
+  /AutoTagStateService\.syncCapabilityState\(capabilities\)/,
+  'pending lookups must sync the recorded capabilities before reading the indexed state',
+);
+assert.match(
+  autoTagScheduler,
+  /AutoTagStateService\.refreshForHash\(compositeHash\)/,
+  'auto-tag persistence must settle the pending state after tagging finishes',
+);
+assert.match(
+  autoTagScheduler,
+  /AutoTagStateService\.pruneIneligiblePending\(\)/,
+  'idle polls must park pending rows whose media file disappeared',
+);
+assert.match(
+  autoTagScheduler,
+  /async triggerManualProcessing\(compositeHash\?: string\): Promise<void>/,
+  'manual auto-tag triggers must accept the composite hash that was just saved',
+);
+assert.match(
+  autoTagScheduler,
+  /findPendingMediaByHash\(compositeHash: string, capabilities: AutoTagCapabilities\)/,
+  'saved-media tagging must look up one row instead of re-scanning for pending work',
+);
+assert.match(
+  backgroundProcessorService,
+  /autoTagScheduler\.triggerManualProcessing\(compositeHash\)/,
+  'background processing must hand the saved composite hash to the auto-tag scheduler',
 );
 
 console.log('✅ Auto-tag index contracts verified');

@@ -76,7 +76,8 @@ export async function compensateComfySubmit(
   jobId: number,
   options: CompensateComfySubmitOptions = {},
 ): Promise<'cancel_confirmed' | 'cancel_unsupported' | 'orphan_unresolved' | 'not_found'> {
-  const latest = GenerationQueueModel.findById(jobId)
+  // PAYLOAD-1: 보상 취소도 라우팅/핸들 컬럼만 본다.
+  const latest = GenerationQueueModel.findListRecordById(jobId)
   if (!latest || latest.service_type !== 'comfyui') {
     return 'not_found'
   }

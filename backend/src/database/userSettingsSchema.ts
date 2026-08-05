@@ -1,4 +1,6 @@
 import Database from 'better-sqlite3';
+import { applyGenerationQueueDebugColumns } from './migrations/029_add_generation_queue_debug_columns';
+import { applyGenerationQueueInputRefs } from './migrations/032_add_generation_queue_input_refs';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
@@ -799,6 +801,15 @@ export function createUserSettingsSchema(db: Database.Database): void {
       throw error;
     }
   }
+
+  // PAYLOAD-2 (migration 029): debug flag/metadata columns.
+  // Deliberately added *after* the CHECK rebuild so the three CREATE TABLE copies
+  // and the rebuild's INSERT/SELECT column lists stay identical (R-b contract),
+  // and so a legacy rebuild can never drop freshly written debug metadata.
+  applyGenerationQueueDebugColumns(db);
+
+  // PAYLOAD-3 (migration 032): refcount for content-addressed queue image inputs.
+  applyGenerationQueueInputRefs(db);
 
   db.exec(`
     UPDATE comfyui_servers

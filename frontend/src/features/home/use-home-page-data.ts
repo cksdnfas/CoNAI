@@ -9,7 +9,7 @@ import { getHomeFeedProgressSummary } from '@/features/home/home-feed-progress'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
 import { useI18n } from '@/i18n'
 import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
-import { deleteImagesBulk, downloadImageSelection, getImages, searchImagesComplex } from '@/lib/api-images'
+import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
 
 interface UseHomePageDataOptions {
   /** Show a success/info snackbar for Home page actions. */
@@ -73,7 +73,9 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
           pagination: 'cursor',
           cursorValue: typeof typedPageParam === 'number' ? null : typedPageParam.cursorValue,
           cursorHash: typeof typedPageParam === 'number' ? null : typedPageParam.cursorHash,
-          includeTotal: typeof typedPageParam !== 'number' && !typedPageParam.cursorHash,
+          // Counting the match set is the expensive half of the query. The grid does
+          // not need it to render, so it is fetched separately once the feed is up.
+          includeTotal: false,
         })
       }
 
@@ -83,7 +85,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         limit: 40,
         cursorDate: cursor.cursorDate,
         cursorHash: cursor.cursorHash,
-        includeTotal: !cursor.cursorDate && !cursor.cursorHash,
+        includeTotal: false,
       })
     },
     getNextPageParam: (lastPage) => {
@@ -111,6 +113,37 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       }
     },
     enabled: canViewHome,
+  })
+
+  const hasFirstFeedPage = (imagesQuery.data?.pages.length ?? 0) > 0
+
+  /**
+   * Exact feed total, requested only after the first page has rendered.
+   *
+   * Home used to ask for the total inline with the first page, which made every
+   * visit pay for a full-library count before a single image appeared. The counter
+   * is a status line, not layout, so it can arrive late without disturbing the grid.
+   */
+  const feedTotalQuery = useQuery({
+    queryKey: ['home-images-total', imageListResetKey],
+    queryFn: async () => {
+      if (isSearchMode) {
+        const result = await searchImagesComplex({
+          complex_filter: buildComplexFilterPayload(appliedChips),
+          page: 1,
+          limit: 1,
+          sortBy: 'upload_date',
+          sortOrder: 'DESC',
+          includeTotal: true,
+        })
+        return result.totalKnown === false ? null : result.total
+      }
+
+      const result = await getImagesCount()
+      return result.total
+    },
+    enabled: canViewHome && hasFirstFeedPage,
+    staleTime: 60_000,
   })
 
   const groupsQuery = useQuery({
@@ -157,8 +190,10 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   })
 
   const feedProgress = useMemo(
-    () => getHomeFeedProgressSummary(imagesQuery.data?.pages, visibleImages.length),
-    [imagesQuery.data?.pages, visibleImages.length],
+    () => getHomeFeedProgressSummary(imagesQuery.data?.pages, visibleImages.length, {
+      deferredTotal: feedTotalQuery.data ?? null,
+    }),
+    [imagesQuery.data?.pages, visibleImages.length, feedTotalQuery.data],
   )
 
   useEffect(() => {
@@ -244,6 +279,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         : t({ ko: '{deleted}개를 RecycleBin으로 보냈어.', en: '{deleted} moved to the Recycle Bin.' }, { deleted: formatNumber(result.details.deleted) }))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['home-images'] }),
+        queryClient.invalidateQueries({ queryKey: ['home-images-total'] }),
         queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
@@ -291,6 +327,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     canDeleteImages,
     isAnonymousSession,
     imagesQuery,
+    feedTotalQuery,
     groupsQuery,
     assignToGroupMutation,
     visibleImages,

@@ -318,6 +318,269 @@ function assertAuthConfigurationRequiresUsableAdmin(authDbModule: AuthDbModule) 
   )
 }
 
+/**
+ * express-session runs with resave:false, so the session row is written only when the serialized
+ * session (cookie excluded) differs from the one loaded at the start of the request.
+ */
+function serializeSession(session: Record<string, unknown>) {
+  return JSON.stringify(session, (key, value) => (key === 'cookie' ? undefined : value))
+}
+
+/**
+ * The anonymous access path must not rewrite the session on any request whose access is unchanged.
+ *
+ * Two distinct rewrites are ruled out here. A cache hit must leave the session alone, and a cache
+ * miss must write back exactly the values that were already there. The second half is the one that
+ * matters: the access-cache freshness stamp lives in the process, never in the session, because a
+ * timestamp inside the session body changes the serialized content every time the TTL lapses and
+ * therefore manufactures an auth.db write per session per TTL window. The access epoch still makes
+ * explicit permission changes land on the very next request.
+ */
+function assertAnonymousSessionAccessIsNotRewrittenPerRequest() {
+  const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
+  const authMiddleware = require('../middleware/authMiddleware') as typeof import('../middleware/authMiddleware')
+  const accessControl = require('../services/authAccessControlService') as typeof import('../services/authAccessControlService')
+
+  authHelpers.invalidateConfiguredAuthCache()
+  assert.equal(authHelpers.hasConfiguredAuth(), true, 'anonymous handling only applies once auth is configured')
+
+  const request = { sessionID: 'anonymous-session', session: {} as Record<string, unknown> }
+  const guard = authMiddleware.allowAnonymousPermission('page.home.view')
+
+  let firstNextCalled = false
+  guard(request as any, createMockResponse() as any, () => {
+    firstNextCalled = true
+  })
+  assert.equal(firstNextCalled, true, 'the anonymous group must keep its granted permission')
+
+  const firstPermissionKeys = request.session.permissionKeys
+  const firstGroupKeys = request.session.groupKeys
+  assert.ok(Array.isArray(firstPermissionKeys), 'anonymous access must still populate permissionKeys')
+  assert.ok(Array.isArray(firstGroupKeys), 'anonymous access must still populate groupKeys')
+  assert.equal(request.session.accessCacheEpoch, accessControl.getResolvedAuthAccessEpoch())
+  assert.equal(request.session.accessCacheAccountId, undefined, 'anonymous sessions must not claim an account id')
+  assert.equal(
+    request.session.accessCacheUpdatedAt,
+    undefined,
+    'the freshness stamp must stay out of the session body, or the TTL turns into a write per window',
+  )
+
+  const freshSignature = serializeSession(request.session)
+
+  let secondNextCalled = false
+  guard(request as any, createMockResponse() as any, () => {
+    secondNextCalled = true
+  })
+  assert.equal(secondNextCalled, true, 'a cached anonymous session must resolve the same permission')
+  assert.equal(
+    serializeSession(request.session),
+    freshSignature,
+    'a still-fresh anonymous session must not be rewritten on the next request',
+  )
+  assert.equal(request.session.permissionKeys, firstPermissionKeys, 'cached anonymous permissionKeys must be reused as-is')
+  assert.equal(request.session.groupKeys, firstGroupKeys, 'cached anonymous groupKeys must be reused as-is')
+
+  // A session this process has never stamped — a restart, an evicted entry, or a lapsed TTL —
+  // must take the full re-resolve path and still land on byte-identical content, so the miss
+  // costs a resolution rather than an auth.db write.
+  const coldRequest = { sessionID: 'anonymous-session-cold', session: { ...request.session } }
+  let coldNextCalled = false
+  guard(coldRequest as any, createMockResponse() as any, () => {
+    coldNextCalled = true
+  })
+  assert.equal(coldNextCalled, true, 'an unstamped anonymous session must resolve the same permission')
+  assert.equal(
+    serializeSession(coldRequest.session),
+    freshSignature,
+    'a re-resolve with unchanged access must write back identical session content',
+  )
+
+  accessControl.invalidateResolvedAuthAccessCache()
+  let thirdNextCalled = false
+  guard(request as any, createMockResponse() as any, () => {
+    thirdNextCalled = true
+  })
+  assert.equal(thirdNextCalled, true)
+  assert.equal(
+    request.session.accessCacheEpoch,
+    accessControl.getResolvedAuthAccessEpoch(),
+    'an access epoch bump must refresh the cached anonymous access on the very next request',
+  )
+  assert.notEqual(
+    request.session.permissionKeys,
+    firstPermissionKeys,
+    'an access epoch bump must re-resolve anonymous permissions instead of reusing the cache',
+  )
+}
+
+/**
+ * The SPA shell embeds the auth-status payload on every full page load, so the payload builder
+ * must not rewrite an unchanged session. It reuses the access cache the permission middleware
+ * stamped and never advances that stamp itself, so it can never introduce a session store write
+ * of its own. The access epoch still makes grants and revocations land on the very next request.
+ */
+function assertAuthStatusPayloadReusesSessionAccessCache(authDbModule: AuthDbModule) {
+  const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
+  const accessControl = require('../services/authAccessControlService') as typeof import('../services/authAccessControlService')
+  const db = authDbModule.getAuthDb()
+
+  authHelpers.invalidateConfiguredAuthCache()
+  assert.equal(authHelpers.hasConfiguredAuth(), true, 'the auth-status cache path only applies once auth is configured')
+
+  const guestAccount = getRequiredRow<{ id: number; username: string }>(
+    db,
+    'SELECT id, username FROM auth_accounts WHERE username = ?',
+    'orphan-guest',
+  )
+
+  const session = {} as Record<string, unknown>
+  const request = { sessionID: 'auth-status-session', session }
+  authHelpers.setAuthenticatedSession(request as any, {
+    id: guestAccount.id,
+    username: guestAccount.username,
+    account_type: 'guest',
+  })
+
+  const firstPayload = authHelpers.buildAuthStatusPayload(request as any)
+  assert.equal(firstPayload.accountId, guestAccount.id)
+  assert.ok(firstPayload.permissionKeys.includes('page.home.view'), 'the guest account must inherit anonymous page access')
+
+  const freshSignature = serializeSession(session)
+  const cachedPermissionKeys = session.permissionKeys
+  assert.equal(
+    session.accessCacheUpdatedAt,
+    undefined,
+    'an authenticated session must not carry a freshness stamp in its body either',
+  )
+
+  const cachedPayload = authHelpers.buildAuthStatusPayload(request as any)
+  assert.equal(
+    serializeSession(session),
+    freshSignature,
+    'a still-fresh session must not be rewritten by the auth-status payload builder',
+  )
+  assert.equal(session.permissionKeys, cachedPermissionKeys, 'cached permissionKeys must be reused as-is')
+  assert.deepEqual(cachedPayload.permissionKeys, firstPayload.permissionKeys)
+
+  grantDirectPermission(db, 'guest', 'page.generation.view')
+  accessControl.invalidateResolvedAuthAccessCache()
+
+  const grantedPayload = authHelpers.buildAuthStatusPayload(request as any)
+  assert.ok(
+    grantedPayload.permissionKeys.includes('page.generation.view'),
+    'an access epoch bump must re-resolve the auth-status payload on the very next request',
+  )
+  assert.ok(
+    (session.permissionKeys as string[]).includes('page.generation.view'),
+    'the epoch bump must also refresh the session-cached permissionKeys',
+  )
+
+  db.prepare(`
+    UPDATE auth_group_permissions SET allowed = 0
+    WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'guest')
+      AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'page.generation.view')
+  `).run()
+  accessControl.invalidateResolvedAuthAccessCache()
+
+  const revokedPayload = authHelpers.buildAuthStatusPayload(request as any)
+  assert.equal(
+    revokedPayload.permissionKeys.includes('page.generation.view'),
+    false,
+    'a revoked permission must disappear from the auth-status payload on the very next request',
+  )
+  assert.equal(
+    (session.permissionKeys as string[]).includes('page.generation.view'),
+    false,
+    'a revoked permission must also be dropped from the session cache',
+  )
+
+  // Legacy bootstrap residue: authenticated with no account id must never keep bootstrap access.
+  const residueSession = {
+    authenticated: true,
+    username: 'Bootstrap',
+    accountType: 'admin',
+    groupKeys: ['bootstrap'],
+    permissionKeys: ['page.settings.view'],
+    accessCacheEpoch: accessControl.getResolvedAuthAccessEpoch(),
+    accessCacheUpdatedAt: Date.now(),
+  } as Record<string, unknown>
+  const residuePayload = authHelpers.buildAuthStatusPayload({ session: residueSession } as any)
+  assert.equal(
+    residuePayload.permissionKeys.includes('page.settings.view'),
+    false,
+    'a legacy bootstrap session must not keep admin access once auth is configured',
+  )
+  assert.deepEqual(residueSession.groupKeys, ['anonymous'], 'bootstrap residue must be downgraded to anonymous access')
+}
+
+/**
+ * Session touch writes must be throttled without changing login persistence or expiry renewal.
+ * express-session calls store.touch() on every request, which is a synchronous auth.db UPDATE on
+ * the shared event loop; only redundant writes inside the drift window may be skipped.
+ */
+function assertSessionTouchThrottleContracts() {
+  const {
+    SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS,
+    throttleSessionStoreTouch,
+  } = require('../utils/sessionTouchThrottle') as typeof import('../utils/sessionTouchThrottle')
+
+  assert.equal(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS, 60 * 60 * 1000, 'the touch drift window must stay at one hour')
+
+  const touchedExpiries: Array<number | null> = []
+  const persistedSids: string[] = []
+  const destroyedSids: string[] = []
+
+  const fakeStore = {
+    touch(_sid: string, sessionData: any, callback?: (err?: unknown) => void) {
+      const expires = sessionData?.cookie?.expires
+      touchedExpiries.push(expires instanceof Date ? expires.getTime() : null)
+      callback?.()
+    },
+    set(sid: string, _sessionData: any, callback?: (err?: unknown) => void) {
+      persistedSids.push(sid)
+      callback?.()
+    },
+    destroy(sid: string, callback?: (err?: unknown) => void) {
+      destroyedSids.push(sid)
+      callback?.()
+    },
+  }
+
+  const store = throttleSessionStoreTouch(fakeStore as any)
+  const baseExpiryMs = Date.UTC(2026, 7, 4, 0, 0, 0)
+  const sessionExpiringAt = (offsetMs: number) => ({
+    cookie: { expires: new Date(baseExpiryMs + offsetMs), maxAge: 30 * 24 * 60 * 60 * 1000 },
+  }) as any
+
+  store.touch!('sid-1', sessionExpiringAt(0))
+  assert.equal(touchedExpiries.length, 1, 'the first touch of a session must reach the store')
+
+  store.touch!('sid-1', sessionExpiringAt(60_000))
+  store.touch!('sid-1', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS - 1))
+  assert.equal(touchedExpiries.length, 1, 'touch writes inside the drift window must be skipped')
+
+  store.touch!('sid-1', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS))
+  assert.equal(touchedExpiries.length, 2, 'expiry renewal must still be persisted once the drift window elapses')
+  assert.equal(touchedExpiries[1], baseExpiryMs + SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS, 'the renewed expiry must be the real one')
+
+  store.touch!('sid-2', sessionExpiringAt(0))
+  assert.equal(touchedExpiries.length, 3, 'each session must be tracked independently')
+
+  store.set('sid-2', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS * 2))
+  assert.deepEqual(persistedSids, ['sid-2'], 'session saves must still reach the store')
+  store.touch!('sid-2', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS * 2 + 1_000))
+  assert.equal(touchedExpiries.length, 3, 'a save must refresh the tracked expiry so the next touch can be skipped')
+
+  store.destroy('sid-2')
+  assert.deepEqual(destroyedSids, ['sid-2'], 'session destroys must still reach the store')
+  store.touch!('sid-2', sessionExpiringAt(SESSION_TOUCH_MIN_EXPIRY_DRIFT_MS * 2 + 2_000))
+  assert.equal(touchedExpiries.length, 4, 'a destroyed session must not keep a stale tracked expiry')
+
+  store.touch!('sid-3', { cookie: {} } as any)
+  store.touch!('sid-3', { cookie: {} } as any)
+  assert.equal(touchedExpiries.length, 6, 'sessions without a resolvable expiry must always be written')
+}
+
 function main() {
   const tempRoot = process.env.RUNTIME_BASE_PATH
   assert.ok(tempRoot, 'Expected temporary runtime root')
@@ -340,6 +603,9 @@ function main() {
     assertLegacySyncedAdminCleanup(authDbModule)
     assertTrustedBootstrapAdminMode()
     assertAuthConfigurationRequiresUsableAdmin(authDbModule)
+    assertAnonymousSessionAccessIsNotRewrittenPerRequest()
+    assertAuthStatusPayloadReusesSessionAccessCache(authDbModule)
+    assertSessionTouchThrottleContracts()
   } finally {
     authDbModule.getAuthDb().close()
     fs.rmSync(tempRoot, { recursive: true, force: true })

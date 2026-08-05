@@ -4,6 +4,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer'
 import { WorkflowModel } from '../../models/Workflow'
 import { GenerationQueueService } from '../../services/generationQueueService'
+import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
 import { publishQueueJobEvent } from '../../services/runtime-events/runtimeEventPublishers'
 import {
@@ -18,6 +19,9 @@ import {
   resolveAccessibleQueueJob,
   TERMINAL_QUEUE_STATUSES,
 } from './queue-route-helpers'
+
+/** Mirrors the frontend "개수" control ceiling; one request may expand into this many jobs. */
+const MAX_QUEUE_ENQUEUE_COUNT = 32
 
 export function createGenerationQueueActionRoutes() {
   const router = express.Router()
@@ -54,6 +58,8 @@ export function createGenerationQueueActionRoutes() {
 
       request_summary,
 
+      enqueue_count,
+
     } = req.body ?? {}
 
     if (service_type !== 'comfyui' && service_type !== 'novelai' && service_type !== 'codex') {
@@ -75,6 +81,14 @@ export function createGenerationQueueActionRoutes() {
     if (priority !== undefined && (!Number.isInteger(priority) || priority < 0 || priority > 100000)) {
 
       sendRouteBadRequest(res, 'priority must be an integer between 0 and 100000')
+
+      return
+
+    }
+
+    if (enqueue_count !== undefined && (!Number.isInteger(enqueue_count) || enqueue_count < 1 || enqueue_count > MAX_QUEUE_ENQUEUE_COUNT)) {
+
+      sendRouteBadRequest(res, `enqueue_count must be an integer between 1 and ${MAX_QUEUE_ENQUEUE_COUNT}`)
 
       return
 
@@ -256,11 +270,14 @@ export function createGenerationQueueActionRoutes() {
 
       try {
 
+        // PAYLOAD-3: base64 image inputs are written once to the content-addressed store and the
+        // payload keeps only a reference. With `enqueue_count` up to 32, this turns "32 × 5MB in
+        // the request body and in 32 rows" into "one 5MB file and 32 small rows".
         normalizedRequestPayload = {
 
           ...request_payload,
 
-          prompt_data: normalizeWorkflowNumericPromptValues(workflowMarkedFields, promptData),
+          prompt_data: externalizeQueueInputDataUrls(normalizeWorkflowNumericPromptValues(workflowMarkedFields, promptData)).value,
 
         }
 
@@ -318,9 +335,14 @@ export function createGenerationQueueActionRoutes() {
 
       : 1
 
+    // PAYLOAD-3: the "개수" control used to fire one full HTTP request per copy, so a 32-way
+    // img2img submission uploaded and parsed 5MB thirty-two times. One request now expands
+    // server-side, and the shared inputs are stored once.
+    const enqueueCount = service_type === 'codex' ? codexJobCount : (enqueue_count ?? 1)
+
     const jobIds: number[] = []
 
-    for (let index = 0; index < codexJobCount; index += 1) {
+    for (let index = 0; index < enqueueCount; index += 1) {
 
       const expandedPayload = service_type === 'codex'
 
@@ -342,9 +364,9 @@ export function createGenerationQueueActionRoutes() {
 
         request_payload: expandedPayload,
 
-        request_summary: codexJobCount > 1 && normalizedRequestSummary
+        request_summary: enqueueCount > 1 && normalizedRequestSummary
 
-          ? `${normalizedRequestSummary} (${index + 1}/${codexJobCount})`
+          ? `${normalizedRequestSummary} (${index + 1}/${enqueueCount})`
 
           : normalizedRequestSummary,
 
@@ -370,7 +392,9 @@ export function createGenerationQueueActionRoutes() {
 
       record,
 
-      message: codexJobCount > 1 ? `Generation queue jobs created (${codexJobCount})` : 'Generation queue job created',
+      enqueued_count: jobIds.length,
+
+      message: enqueueCount > 1 ? `Generation queue jobs created (${enqueueCount})` : 'Generation queue job created',
 
     })
 

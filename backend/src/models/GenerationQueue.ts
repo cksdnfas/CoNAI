@@ -13,6 +13,7 @@ import type {
   GenerationQueueReconcileCandidate,
 } from '../types/generationQueue'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
+import { collectQueueInputRefs, registerQueueInputRefs, releaseQueueInputsForJobs } from '../services/generation-queue/queueInputStore'
 
 function stringifyPayload(value: Record<string, unknown> | undefined) {
   if (value === undefined) {
@@ -20,6 +21,64 @@ function stringifyPayload(value: Record<string, unknown> | undefined) {
   }
 
   return JSON.stringify(value)
+}
+
+function asPlainObject(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+type QueueDebugColumns = { debug_enabled: number | null; debug_meta: string | null }
+
+/** Read the two debug columns through the covering index, falling back if the index is absent. */
+function readQueueDebugColumns(db: ReturnType<typeof getUserSettingsDb>, id: number) {
+  if (generationQueueDebugStateIndexUsable) {
+    try {
+      return db.prepare(`
+        SELECT debug_enabled, debug_meta
+        FROM generation_queue_jobs INDEXED BY ${GENERATION_QUEUE_DEBUG_STATE_INDEX}
+        WHERE id = ?
+      `).get(id) as QueueDebugColumns | undefined
+    } catch (error) {
+      generationQueueDebugStateIndexUsable = false
+      console.warn(`⚠️ ${GENERATION_QUEUE_DEBUG_STATE_INDEX} is unavailable; queue debug reads fall back to the wide row:`, error)
+    }
+  }
+
+  return db.prepare(`
+    SELECT debug_enabled, debug_meta
+    FROM generation_queue_jobs
+    WHERE id = ?
+  `).get(id) as QueueDebugColumns | undefined
+}
+
+/** Parse one small `debug_meta` JSON object. Never touches the request payload. */
+function parseDebugMetaJson(debugMetaJson: string | null) {
+  if (!debugMetaJson) {
+    return null
+  }
+
+  try {
+    return asPlainObject(JSON.parse(debugMetaJson) as unknown)
+  } catch {
+    return null
+  }
+}
+
+/** Read the enqueue-time debug bag so 029's columns can be seeded without re-parsing the payload later. */
+function readCreateDebugSection(payload: Record<string, unknown> | undefined) {
+  const debugSection = asPlainObject(payload?._debug)
+
+  return {
+    debugEnabled: debugSection !== null
+      && (debugSection.workflow_debug_mode === true || debugSection.detailed_snapshots === true)
+      ? 1
+      : 0,
+    // The `_debug` bag is a handful of scalars; serializing it is nothing like
+    // serializing the payload it used to live inside.
+    debugMeta: debugSection === null ? null : JSON.stringify(debugSection),
+  }
 }
 
 function toPersistedQueueUpdates(data: GenerationQueueJobUpdateData) {
@@ -52,6 +111,9 @@ export type GenerationQueuePayloadPruneResult = {
   pruned: number
   retainRecentTerminalJobs: number
   compactPayload: string
+  /** PAYLOAD-3: stored image inputs that became unreferenced by this pass. */
+  releasedInputFiles: number
+  releasedInputBytes: number
 }
 
 export const DEFAULT_TERMINAL_PAYLOAD_RETAIN_LIMIT = 2000
@@ -89,6 +151,42 @@ const GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS = `
 
 const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
 const TERMINAL_QUEUE_STATUS_PLACEHOLDERS = TERMINAL_QUEUE_STATUSES.map(() => '?').join(', ')
+
+/**
+ * PAYLOAD-2: 디버그 상태 읽기용 커버링 인덱스(마이그레이션 029가 생성).
+ *
+ * `INDEXED BY` 는 취향이 아니라 필수다. `request_payload` 가 행에서 물리적으로 앞에 있어
+ * rowid 시크로 뒤쪽 컬럼을 읽으면 멀티 MB 오버플로 페이지 체인을 그대로 걸어야 한다.
+ * 5MB 페이로드 행 실측: rowid 시크 3,433us/행 → 커버링 인덱스 2.8us/행.
+ * 플래너는 오버플로 비용을 모델링하지 않아 힌트 없이는 항상 rowid 를 고른다.
+ */
+const GENERATION_QUEUE_DEBUG_STATE_INDEX = 'idx_generation_queue_jobs_debug_state'
+
+/** 인덱스가 없는 DB(마이그레이션 미적용 등)에서 `INDEXED BY` 가 실패하면 한 번만 평문 조회로 내려간다. */
+let generationQueueDebugStateIndexUsable = true
+
+/**
+ * PAYLOAD-2: 029 이전 행 전용 폴백 프로젝션.
+ *
+ * 인라인 `_debug` 해석을 SQLite 안에서 끝내므로 멀티 MB `request_payload` 문자열이
+ * JS 로 넘어오지 않는다. 이 SQL 은 `debug_enabled IS NULL` 인 행에서만 실행되고,
+ * 그런 행은 첫 `updateDebugMeta` 에서 컬럼으로 승격되므로 사실상 1회성이다.
+ */
+const GENERATION_QUEUE_LEGACY_DEBUG_STATE_COLUMNS = `
+  CASE
+    WHEN json_valid(request_payload)
+      AND (
+        json_extract(request_payload, '$._debug.workflow_debug_mode') = 1
+        OR json_extract(request_payload, '$._debug.detailed_snapshots') = 1
+      )
+    THEN 1
+    ELSE 0
+  END AS debug_enabled,
+  CASE
+    WHEN json_valid(request_payload) THEN json_extract(request_payload, '$._debug')
+    ELSE NULL
+  END AS debug_meta
+`
 
 type QueueWhereOptions = {
   includeStatuses?: boolean
@@ -173,6 +271,9 @@ export class GenerationQueueModel {
   static create(data: GenerationQueueJobCreateData) {
     const db = getUserSettingsDb()
     const queuedAt = data.queued_at ?? new Date().toISOString()
+    // PAYLOAD-2: the debug flag/metadata are lifted out of the payload at insert
+    // time, so no later stage has to parse the payload just to read them.
+    const debugSection = readCreateDebugSection(data.request_payload)
     const info = db.prepare(`
       INSERT INTO generation_queue_jobs (
         service_type, status, priority,
@@ -185,8 +286,9 @@ export class GenerationQueueModel {
         cancel_requested, cancel_requested_at, cancel_origin,
         provider_submit_state, provider_submit_started_at,
         provider_cancel_state, submit_attempt_count,
+        debug_enabled, debug_meta,
         queued_at, started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.service_type,
       data.status ?? 'queued',
@@ -211,12 +313,20 @@ export class GenerationQueueModel {
       data.provider_submit_started_at ?? null,
       data.provider_cancel_state ?? null,
       data.submit_attempt_count ?? 0,
+      debugSection.debugEnabled,
+      debugSection.debugMeta,
       queuedAt,
       data.started_at ?? null,
       data.completed_at ?? null,
     )
 
-    return info.lastInsertRowid as number
+    const jobId = info.lastInsertRowid as number
+    // PAYLOAD-3: claim every content-addressed input this payload points at. Doing it here means
+    // every enqueue path gets refcounting for free — user routes, public workflows, graph
+    // executors, and `retryJob`, which re-creates a job from a payload full of the same refs.
+    registerQueueInputRefs(jobId, collectQueueInputRefs(data.request_payload))
+
+    return jobId
   }
 
   /** Find one queue job by id. */
@@ -258,6 +368,78 @@ export class GenerationQueueModel {
   /** Check cancellation flag without hydrating the heavyweight request payload (hot polling path). */
   static isCancelRequested(id: number) {
     return this.readCancelState(id)?.cancelRequested ?? false
+  }
+
+  /**
+   * Read the debug flag + metadata without hydrating the request payload (PAYLOAD-2).
+   *
+   * Fast path: two narrow columns answered from `idx_generation_queue_jobs_debug_state`
+   * as a covering index, so the wide row (and its payload overflow pages) is never read.
+   * Rows written before migration 029 keep working through the legacy statement below,
+   * which resolves the inline `_debug` object inside SQLite.
+   */
+  static readDebugState(id: number) {
+    const db = getUserSettingsDb()
+    const row = readQueueDebugColumns(db, id)
+
+    if (!row) {
+      return null
+    }
+
+    if (row.debug_enabled !== null) {
+      return {
+        debugEnabled: row.debug_enabled > 0,
+        debugMetaJson: row.debug_meta ?? null,
+      }
+    }
+
+    const legacyRow = db.prepare(`
+      SELECT ${GENERATION_QUEUE_LEGACY_DEBUG_STATE_COLUMNS}
+      FROM generation_queue_jobs
+      WHERE id = ?
+    `).get(id) as { debug_enabled: number | null; debug_meta: string | null } | undefined
+
+    return {
+      debugEnabled: (legacyRow?.debug_enabled ?? 0) > 0,
+      // 이미 컬럼에 쓰인 메타가 있으면 그게 우선이다(승격 도중의 행).
+      debugMetaJson: row.debug_meta ?? legacyRow?.debug_meta ?? null,
+    }
+  }
+
+  /** Check whether detailed request snapshots were requested, reading the flag column only. */
+  static isDetailedDebugEnabled(id: number) {
+    return this.readDebugState(id)?.debugEnabled ?? false
+  }
+
+  /** Read the parsed debug metadata bag for one queue job, or null when it has none. */
+  static readDebugMeta(id: number) {
+    return parseDebugMetaJson(this.readDebugState(id)?.debugMetaJson ?? null)
+  }
+
+  /**
+   * Merge one patch into the debug metadata column.
+   * The old implementation rewrote the whole `request_payload` blob for this;
+   * now only a small JSON object is read back and written.
+   */
+  static updateDebugMeta(id: number, meta: Record<string, unknown>) {
+    const db = getUserSettingsDb()
+    const current = this.readDebugState(id)
+    if (!current) {
+      return false
+    }
+
+    const currentMeta = parseDebugMetaJson(current.debugMetaJson) ?? {}
+    // `debug_enabled` 도 함께 확정해 029 이전 행을 첫 쓰기에서 컬럼 기반으로 승격시킨다.
+    // 그래야 이후 읽기가 폴백 SQL(=페이로드 오버플로 페이지 워크)을 두 번 다시 타지 않는다.
+    const info = db.prepare(`
+      UPDATE generation_queue_jobs
+      SET debug_meta = ?,
+          debug_enabled = ?,
+          updated_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(JSON.stringify({ ...currentMeta, ...meta }), current.debugEnabled ? 1 : 0, id)
+
+    return info.changes > 0
   }
 
   /** Find one queue job for API responses without hydrating heavyweight request payloads. */
@@ -395,6 +577,11 @@ export class GenerationQueueModel {
   /**
    * Compact heavyweight request payloads from old terminal queue rows.
    * Queue/history rows stay intact; only already-finished payload JSON is reduced.
+   *
+   * PAYLOAD-3: this is also where stored image inputs are released. Compaction is the moment a
+   * job stops being retryable (`retryJob` refuses a pruned payload), so it is the only point at
+   * which its inputs are provably unreachable — a terminal job that is still retryable, or a
+   * still-running `orphan_suspected` job, must keep them.
    */
   static pruneTerminalRequestPayloads(input: GenerationQueuePayloadPruneInput = {}): GenerationQueuePayloadPruneResult {
     const db = getUserSettingsDb()
@@ -402,6 +589,30 @@ export class GenerationQueueModel {
       0,
       Math.floor(input.retainRecentTerminalJobs ?? DEFAULT_TERMINAL_PAYLOAD_RETAIN_LIMIT),
     )
+
+    // The ids are read with the same predicate the UPDATE uses, inside one transaction, so the
+    // released set can never drift from the compacted set.
+    const prunableJobIds = db.prepare(`
+      WITH retained_recent AS (
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status IN (${TERMINAL_QUEUE_STATUS_PLACEHOLDERS})
+        ORDER BY COALESCE(completed_at, started_at, queued_at, created_date) DESC, id DESC
+        LIMIT ?
+      )
+      SELECT id
+      FROM generation_queue_jobs
+      WHERE status IN (${TERMINAL_QUEUE_STATUS_PLACEHOLDERS})
+        AND request_payload IS NOT NULL
+        AND request_payload != ?
+        AND id NOT IN (SELECT id FROM retained_recent)
+    `).all(
+      // No SET clause here, so this binds one parameter group fewer than the UPDATE below.
+      ...TERMINAL_QUEUE_STATUSES,
+      retainRecentTerminalJobs,
+      ...TERMINAL_QUEUE_STATUSES,
+      COMPACTED_TERMINAL_REQUEST_PAYLOAD,
+    ).map((row) => (row as { id: number }).id)
 
     const info = db.prepare(`
       WITH retained_recent AS (
@@ -425,10 +636,14 @@ export class GenerationQueueModel {
       COMPACTED_TERMINAL_REQUEST_PAYLOAD,
     )
 
+    const released = releaseQueueInputsForJobs(prunableJobIds)
+
     return {
       pruned: info.changes,
       retainRecentTerminalJobs,
       compactPayload: COMPACTED_TERMINAL_REQUEST_PAYLOAD,
+      releasedInputFiles: released.releasedFiles,
+      releasedInputBytes: released.releasedBytes,
     }
   }
 

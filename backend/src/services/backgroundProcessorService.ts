@@ -8,6 +8,7 @@ import { ImageSimilarityService } from './imageSimilarity';
 import { BackgroundQueueService } from './backgroundQueue';
 import { generateFileHash } from '../utils/fileHash';
 import { VideoProcessor } from './videoProcessor';
+import { VideoFrameExtractor } from './videoFrameExtractor';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AutoCollectionService } from './autoCollectionService';
 import { autoTagScheduler } from './autoTagScheduler';
@@ -334,7 +335,9 @@ export class BackgroundProcessorService {
     }
 
     setTimeout(() => {
-      autoTagScheduler.triggerManualProcessing().catch((error) => {
+      // Pass the hash we just saved so the scheduler tags that row directly instead
+      // of re-scanning every media_metadata row for pending work (ATAG-3).
+      autoTagScheduler.triggerManualProcessing(compositeHash).catch((error) => {
         console.warn(
           `  ⚠️  Immediate auto-tag trigger failed for ${path.basename(filePath)} (${compositeHash.substring(0, 16)}...):`,
           error instanceof Error ? error.message : error
@@ -730,7 +733,7 @@ export class BackgroundProcessorService {
   /**
    * Process video/animated file: generate MD5 hash, store as composite_hash, create media_metadata
    */
-  private static async processVideoFile(file: UnhashedFile): Promise<void> {
+  private static async processVideoFile(file: UnhashedFile & { file_type?: string }): Promise<void> {
     const filePath = file.original_file_path;
     const fileName = path.basename(filePath);
 
@@ -746,6 +749,8 @@ export class BackgroundProcessorService {
       // Metadata already exists - just link file
       linkImageFileToHash(file.id, fileHash);
       await this.processApiGenerationGroupAssignment(fileHash);
+      // A shared row created before poster frames existed still has no thumbnail.
+      await this.generateVideoPosterFrame(fileHash, filePath, file.file_type, { skipIfPresent: true });
       const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(fileHash);
       if (releasedForVisibility) {
         QueryCacheService.scheduleGalleryCacheInvalidation();
@@ -795,6 +800,10 @@ export class BackgroundProcessorService {
     // Update image_files record with composite_hash (MD5 해시 값)
     linkImageFileToHash(file.id, fileHash);
 
+    // Poster frame: without it every "thumbnail" of this row is the original video,
+    // so one gallery page of videos streams the whole library (HEAVY-2).
+    await this.generateVideoPosterFrame(fileHash, filePath, file.file_type);
+
     // Run auto-collection for video/animated files (Option A)
     try {
       console.log(`  🔍 Running auto-collection (after hash generation)...`);
@@ -821,6 +830,49 @@ export class BackgroundProcessorService {
     }
 
     console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
+  }
+
+  /**
+   * Generate and persist the poster frame that stands in for a video in list views.
+   *
+   * Runs in Phase 2, so the ffmpeg seek happens on the background processor rather
+   * than on a request. A failure is non-critical: the thumbnail route still answers
+   * from the original and re-queues the poster through the runtime-jobs queue.
+   */
+  private static async generateVideoPosterFrame(
+    compositeHash: string,
+    filePath: string,
+    fileType: string | undefined,
+    options: { skipIfPresent?: boolean } = {}
+  ): Promise<void> {
+    try {
+      if (options.skipIfPresent) {
+        const existingThumbnail = db.prepare(`
+          SELECT thumbnail_path FROM media_metadata WHERE composite_hash = ?
+        `).get(compositeHash) as { thumbnail_path: string | null } | undefined;
+
+        if (existingThumbnail?.thumbnail_path) {
+          return;
+        }
+      }
+
+      // Animated images decode straight through sharp; spawning ffmpeg for a GIF
+      // would only add process startup cost.
+      const thumbnailPath = fileType === 'animated'
+        ? await ThumbnailGenerator.generateThumbnail(filePath, compositeHash)
+        : await VideoFrameExtractor.generatePosterThumbnail(filePath, compositeHash);
+
+      db.prepare(`
+        UPDATE media_metadata
+        SET thumbnail_path = ?
+        WHERE composite_hash = ?
+      `).run(thumbnailPath, compositeHash);
+    } catch (error) {
+      console.warn(
+        `  ⚠️  Poster frame generation failed (non-critical) for ${path.basename(filePath)}:`,
+        error instanceof Error ? error.message : error
+      );
+    }
   }
 
   /**

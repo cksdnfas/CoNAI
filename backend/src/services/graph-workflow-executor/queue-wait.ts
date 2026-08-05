@@ -1,5 +1,5 @@
 import { GenerationQueueModel } from '../../models/GenerationQueue'
-import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
+import type { GenerationQueueJobListRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { GenerationQueueService } from '../generationQueueService'
 import { isTerminalQueueStatus } from '../generation-queue/queueTerminalWaiters'
 import { abortableDelay } from './execution-abort'
@@ -16,12 +16,12 @@ export function isGraphQueueTerminalStatus(status: GenerationQueueJobStatus) {
   return isTerminalQueueStatus(status)
 }
 
-export function shouldRequestGraphQueueCancellation(record: Pick<GenerationQueueJobRecord, 'status'> | null | undefined) {
+export function shouldRequestGraphQueueCancellation(record: Pick<GenerationQueueJobListRecord,'status'> | null | undefined) {
   return Boolean(record && !isGraphQueueTerminalStatus(record.status))
 }
 
 export function resolveGraphQueueTerminalJob(
-  job: Pick<GenerationQueueJobRecord, 'status' | 'failure_message'> | null | undefined,
+  job: Pick<GenerationQueueJobListRecord,'status' | 'failure_message'> | null | undefined,
   jobId: number,
 ) {
   if (!job) {
@@ -44,7 +44,7 @@ export function resolveGraphQueueTerminalJob(
 }
 
 export async function requestGraphQueueCancellation(jobId: number) {
-  const latest = GenerationQueueModel.findById(jobId)
+  const latest = GenerationQueueModel.findListRecordById(jobId)
   if (!shouldRequestGraphQueueCancellation(latest)) {
     return false
   }
@@ -59,7 +59,7 @@ export async function waitForGraphQueueCompletion(params: {
   jobId: number
   cancellationMessage: string
 }) {
-  let terminalWait: Promise<GenerationQueueJobRecord | null> | null = null
+  let terminalWait: Promise<GenerationQueueJobListRecord | null> | null = null
 
   while (true) {
     if (params.context.signal.aborted || params.context.shouldCancel?.()) {
@@ -90,7 +90,7 @@ export async function waitForGraphQueueCompletion(params: {
     terminalWait = null
     const completedJob = resolveGraphQueueTerminalJob(job, params.jobId)
     if (completedJob) {
-      return completedJob as GenerationQueueJobRecord
+      return completedJob as GenerationQueueJobListRecord
     }
   }
 }

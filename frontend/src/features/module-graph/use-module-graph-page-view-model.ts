@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { useQueries } from '@tanstack/react-query'
-import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import { useQuery } from '@tanstack/react-query'
+import { getGraphExecution, getGraphExecutionPreviews, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type GraphWorkflowSummaryRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useI18n } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
 import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, getModuleNodeDisplayLabel, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
@@ -21,6 +21,7 @@ export function useModuleGraphPageViewModel({
   lastSavedSnapshot,
   graphWorkflows,
   selectedGraphId,
+  selectedGraphWorkflow,
   graphWorkflowFolders,
   selectedFolderId,
   modules,
@@ -40,8 +41,9 @@ export function useModuleGraphPageViewModel({
   edges: ModuleGraphEdge[]
   workflowView: 'browse' | 'edit'
   lastSavedSnapshot: string
-  graphWorkflows: GraphWorkflowRecord[]
+  graphWorkflows: GraphWorkflowSummaryRecord[]
   selectedGraphId: number | null
+  selectedGraphWorkflow: GraphWorkflowRecord | null
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
   selectedFolderId: number | null
   modules: ModuleDefinitionRecord[]
@@ -78,7 +80,11 @@ export function useModuleGraphPageViewModel({
 
   const isDirty = currentSnapshot !== lastSavedSnapshot
   const shouldBlockGraphExit = workflowView === 'edit' && isDirty
-  const selectedGraphRecord = useMemo(() => graphWorkflows.find((graph) => graph.id === selectedGraphId) ?? null, [graphWorkflows, selectedGraphId])
+  // WF-1: 목록에는 그래프 문서가 없다. 선택된 워크플로우의 전체 그래프는 by-id 쿼리 결과에서만 온다.
+  const selectedGraphRecord = useMemo(
+    () => (selectedGraphId !== null && selectedGraphWorkflow?.id === selectedGraphId ? selectedGraphWorkflow : null),
+    [selectedGraphId, selectedGraphWorkflow],
+  )
   const selectedFolderRecord = useMemo(() => graphWorkflowFolders.find((folder) => folder.id === selectedFolderId) ?? null, [graphWorkflowFolders, selectedFolderId])
   const moduleDefinitionById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules])
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
@@ -117,22 +123,41 @@ export function useModuleGraphPageViewModel({
     [executionList],
   )
 
-  const previewExecutionDetailQueries = useQueries({
-    queries: previewExecutionCandidates.map((execution) => ({
-      queryKey: ['module-graph-preview-execution-detail', execution.id],
-      queryFn: () => getGraphExecution(execution.id),
-      staleTime: 30_000,
-    })),
-  })
-  const latestExecutionDetailQueryIndex = useMemo(
-    () => latestExecution?.status === 'completed'
-      ? previewExecutionCandidates.findIndex((execution) => execution.id === latestExecution.id)
-      : -1,
-    [latestExecution, previewExecutionCandidates],
+  // WF-4: 완료 실행 8건을 각각 상세 조회하던 N+1 을 배치 프리뷰 1회로 바꿨다(로그/node_io 제외).
+  const previewExecutionIds = useMemo(
+    () => previewExecutionCandidates.map((execution) => execution.id),
+    [previewExecutionCandidates],
   )
-  const latestExecutionDetailQuery = latestExecutionDetailQueryIndex >= 0
-    ? previewExecutionDetailQueries[latestExecutionDetailQueryIndex]
-    : undefined
+  const previewExecutionBatchQuery = useQuery({
+    queryKey: ['module-graph-execution-previews', previewExecutionIds],
+    queryFn: () => getGraphExecutionPreviews(previewExecutionIds),
+    enabled: previewExecutionIds.length > 0,
+    staleTime: 30_000,
+  })
+
+  // 최신 완료 실행만 로그/node_io 까지 필요하므로 기존 상세 라우트를 그대로 쓴다.
+  // 쿼리 키는 선택 실행 상세와 동일해서 같은 실행을 볼 때는 요청이 합쳐진다.
+  const latestCompletedExecutionId = latestExecution?.status === 'completed' ? latestExecution.id : null
+  const latestExecutionDetailQuery = useQuery({
+    queryKey: ['module-graph-execution-detail', latestCompletedExecutionId],
+    queryFn: () => getGraphExecution(latestCompletedExecutionId as number),
+    enabled: latestCompletedExecutionId !== null,
+    staleTime: 30_000,
+  })
+
+  const previewArtifactsByExecution = useMemo(() => {
+    const artifactsByExecution = new Map<number, GraphExecutionArtifactRecord[]>()
+    for (const artifact of previewExecutionBatchQuery.data?.artifacts ?? []) {
+      const bucket = artifactsByExecution.get(artifact.execution_id)
+      if (bucket) {
+        bucket.push(artifact)
+      } else {
+        artifactsByExecution.set(artifact.execution_id, [artifact])
+      }
+    }
+
+    return artifactsByExecution
+  }, [previewExecutionBatchQuery.data?.artifacts])
 
   const latestArtifactPreviewByNode = useMemo(() => {
     const previewByNode = new Map<string, {
@@ -144,13 +169,13 @@ export function useModuleGraphPageViewModel({
       executionOutputGroups: ReturnType<typeof buildNodeArtifactGroups>
     }>()
 
-    previewExecutionCandidates.forEach((execution, index) => {
-      const detail = previewExecutionDetailQueries[index]?.data
-      if (!detail || detail.execution.id !== execution.id) {
+    previewExecutionCandidates.forEach((execution) => {
+      const executionArtifacts = previewArtifactsByExecution.get(execution.id)
+      if (!executionArtifacts) {
         return
       }
 
-      const artifactsByNode = detail.artifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
+      const artifactsByNode = executionArtifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
         if (!acc[artifact.node_id]) {
           acc[artifact.node_id] = []
         }
@@ -182,19 +207,19 @@ export function useModuleGraphPageViewModel({
     })
 
     return previewByNode
-  }, [nodeById, previewExecutionCandidates, previewExecutionDetailQueries])
+  }, [nodeById, previewArtifactsByExecution, previewExecutionCandidates])
 
   const latestExecutionDetail = useMemo(() => {
-    const latestPreviewDetail = latestExecutionDetailQuery?.data
+    const latestPreviewDetail = latestExecutionDetailQuery.data
     if (!latestExecution || !latestPreviewDetail || latestPreviewDetail.execution.id !== latestExecution.id) {
       return null
     }
 
     return latestPreviewDetail
-  }, [latestExecution, latestExecutionDetailQuery?.data])
+  }, [latestExecution, latestExecutionDetailQuery.data])
   const latestExecutionDetailIsLoading = latestExecution?.status === 'completed'
-    && latestExecutionDetailQuery?.isPending === true
-  const latestExecutionDetailError = latestExecution?.status === 'completed' && latestExecutionDetailQuery?.isError
+    && latestExecutionDetailQuery.isPending === true
+  const latestExecutionDetailError = latestExecution?.status === 'completed' && latestExecutionDetailQuery.isError
     ? latestExecutionDetailQuery.error instanceof Error
       ? latestExecutionDetailQuery.error.message
       : t({ ko: '최종 결과 정보를 불러오지 못했어.', en: 'Could not load final result details.' })

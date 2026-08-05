@@ -10,6 +10,8 @@ interface GenerationQueueListResponse {
 interface GenerationQueueMutationResponse {
   success: boolean
   record: GenerationQueueJobRecord | null
+  /** Number of jobs the server actually created for this request (>= 1). */
+  enqueued_count?: number
   message: string
 }
 

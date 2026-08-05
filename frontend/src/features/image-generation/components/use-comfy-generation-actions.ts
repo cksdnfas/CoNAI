@@ -115,8 +115,8 @@ export function useComfyGenerationActions({
     }
   }
 
-  /** Queue one generation job for a specific ComfyUI server. */
-  const handleGenerateOnServer = async (serverId: number) => {
+  /** Queue one or many generation jobs for a specific ComfyUI server. */
+  const handleGenerateOnServer = async (serverId: number, enqueueCount = 1) => {
     const basePayload = buildQueuePayload()
     if (!basePayload) {
       return null
@@ -125,21 +125,22 @@ export function useComfyGenerationActions({
     return createGenerationQueueJob({
       ...basePayload,
       requested_server_id: serverId,
+      enqueue_count: enqueueCount,
     })
   }
 
-  /** Queue one generation job using automatic idle-server routing. */
-  const handleGenerateAuto = async () => {
+  /** Queue one or many generation jobs using automatic idle-server routing. */
+  const handleGenerateAuto = async (enqueueCount = 1) => {
     const basePayload = buildQueuePayload()
     if (!basePayload) {
       return null
     }
 
-    return createGenerationQueueJob(basePayload)
+    return createGenerationQueueJob({ ...basePayload, enqueue_count: enqueueCount })
   }
 
-  /** Queue one generation job that targets a specific routing tag. */
-  const handleGenerateOnTag = async (serverTag: string) => {
+  /** Queue one or many generation jobs that target a specific routing tag. */
+  const handleGenerateOnTag = async (serverTag: string, enqueueCount = 1) => {
     const basePayload = buildQueuePayload()
     if (!basePayload) {
       return null
@@ -148,6 +149,7 @@ export function useComfyGenerationActions({
     return createGenerationQueueJob({
       ...basePayload,
       requested_server_tag: serverTag,
+      enqueue_count: enqueueCount,
     })
   }
 
@@ -160,7 +162,9 @@ export function useComfyGenerationActions({
     const registrationCount = clampComfyQueueRegistrationCount(queueRegistrationCount)
 
     try {
-      let enqueueJob: (() => Promise<Awaited<ReturnType<typeof createGenerationQueueJob>> | null>) | null = null
+      // PAYLOAD-3: one request carries the count. Firing N requests re-uploaded the whole
+      // payload — up to 5MB of base64 img2img input — once per copy.
+      let enqueueJob: ((count: number) => Promise<Awaited<ReturnType<typeof createGenerationQueueJob>> | null>) | null = null
       let targetLabel = 'ComfyUI'
 
       if (selectedTarget === 'auto') {
@@ -170,7 +174,7 @@ export function useComfyGenerationActions({
           return
         }
 
-        enqueueJob = () => handleGenerateAuto()
+        enqueueJob = (count) => handleGenerateAuto(count)
         targetLabel = '자동 분산'
       } else if (selectedTarget.startsWith('tag:')) {
         const selectedTag = normalizeRoutingTag(selectedTarget.slice('tag:'.length))
@@ -186,7 +190,7 @@ export function useComfyGenerationActions({
           return
         }
 
-        enqueueJob = () => handleGenerateOnTag(selectedTag)
+        enqueueJob = (count) => handleGenerateOnTag(selectedTag, count)
         targetLabel = `#${selectedTag}`
       } else if (selectedTarget.startsWith('server:')) {
         const serverId = Number(selectedTarget.slice('server:'.length))
@@ -206,7 +210,7 @@ export function useComfyGenerationActions({
           return
         }
 
-        enqueueJob = () => handleGenerateOnServer(serverId)
+        enqueueJob = (count) => handleGenerateOnServer(serverId, count)
         targetLabel = server.name
       } else {
         showSnackbar({ message: '생성 타겟이 올바르지 않아.', tone: 'error' })
@@ -219,16 +223,16 @@ export function useComfyGenerationActions({
       }
 
       setIsComfyGenerating(true)
-      const results = await Promise.allSettled(Array.from({ length: registrationCount }, () => enqueueJob()))
-      const successCount = results.filter((result) => result.status === 'fulfilled').length
-      const failedCount = results.length - successCount
+      const response = await enqueueJob(registrationCount)
+      const successCount = response?.enqueued_count ?? (response?.record ? 1 : 0)
+      const failedCount = registrationCount - successCount
 
       void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
 
-      if (failedCount === 0) {
-        showSnackbar({ message: `${targetLabel} 큐에 ${successCount}건 등록했어.`, tone: 'info' })
-      } else if (successCount === 0) {
+      if (successCount === 0) {
         showSnackbar({ message: `${targetLabel} 큐 등록이 전부 실패했어.`, tone: 'error' })
+      } else if (failedCount <= 0) {
+        showSnackbar({ message: `${targetLabel} 큐에 ${successCount}건 등록했어.`, tone: 'info' })
       } else {
         showSnackbar({ message: `${targetLabel} 큐 등록 ${successCount}건 성공, ${failedCount}건 실패.`, tone: 'error' })
       }

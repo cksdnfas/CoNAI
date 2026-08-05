@@ -6,6 +6,7 @@ import { ModuleDefinitionModel } from '../../models/ModuleDefinition'
 import { GraphWorkflowScheduleService } from '../../services/graphWorkflowScheduleService'
 import {
   buildGraphWorkflowBrowseContent,
+  buildGraphWorkflowReservationContent,
   parseStoredGraphWorkflow,
 } from '../../services/graphWorkflowViewService'
 import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
@@ -227,14 +228,36 @@ function importWorkflowPayload(payload: unknown, options: { name?: string; folde
 export function createGraphWorkflowCrudRoutes() {
   const router = Router()
 
+  // WF-1: 목록은 요약 프로젝션만 내려준다. 전체 그래프 문서는 `GET /api/graph-workflows/:id` 전용이다.
   router.get('/', asyncHandler(async (req: Request, res: Response) => {
     try {
       const activeOnly = req.query.active === 'true'
-      const workflows = GraphWorkflowModel.findAll(activeOnly).map(parseStoredGraphWorkflow)
+      const workflows = GraphWorkflowModel.findAllSummaries(activeOnly)
       return res.json({ success: true, data: workflows } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error getting graph workflows:', error)
       return res.status(500).json({ success: false, error: 'Failed to get graph workflows' } as ModuleGraphResponse)
+    }
+  }))
+
+  // WF-1: 헤더 위젯처럼 라벨만 필요한 화면을 위한 이름 전용 소스.
+  router.get('/names', asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const activeOnly = req.query.active === 'true'
+      return res.json({ success: true, data: GraphWorkflowModel.findNameEntries(activeOnly) } as ModuleGraphResponse)
+    } catch (error) {
+      console.error('Error getting graph workflow names:', error)
+      return res.status(500).json({ success: false, error: 'Failed to get graph workflow names' } as ModuleGraphResponse)
+    }
+  }))
+
+  // WF-2: 예약 탭 전용 경량 스냅샷. 워크플로우는 이름 라벨만, 실행은 명시 컬럼만 담는다.
+  router.get('/reservations', asyncHandler(async (_req: Request, res: Response) => {
+    try {
+      return res.json({ success: true, data: buildGraphWorkflowReservationContent() } as ModuleGraphResponse)
+    } catch (error) {
+      console.error('Error getting graph workflow reservations:', error)
+      return res.status(500).json({ success: false, error: 'Failed to get graph workflow reservations' } as ModuleGraphResponse)
     }
   }))
 

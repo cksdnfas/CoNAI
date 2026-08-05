@@ -23,8 +23,14 @@ export type ComplexQueryBuildResult = {
   params: any[];
   cteClause: string;
   cteParams: any[];
-  /** FROM/JOIN clause shared by the data, count, and hash-only query variants. */
+  /** FROM/JOIN clause for the data query, which also projects active-file columns. */
   fromClause: string;
+  /**
+   * FROM clause for queries that only need composite hashes (count, hash-only).
+   * The active-file LEFT JOIN can neither drop nor add hashes, so leaving it out
+   * keeps identical results while avoiding an image_files fan-out per match.
+   */
+  countFromClause: string;
   /** Final WHERE clause shared by the data, count, and hash-only query variants. */
   whereClause: string;
   /** GROUP BY clause that collapses duplicate active file rows per composite hash. */
@@ -158,8 +164,11 @@ export function buildComplexFilterQuery(
 
   const finalWhere = `WHERE ${finalConditions.join(' AND ')}`;
 
-  const fromClause = `
+  const countFromClause = `
     FROM media_metadata im
+  `;
+
+  const fromClause = `${countFromClause}
     LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
   `;
 
@@ -197,6 +206,7 @@ export function buildComplexFilterQuery(
     cteClause,
     cteParams,
     fromClause,
+    countFromClause,
     whereClause: finalWhere,
     groupByClause,
     statsSources,

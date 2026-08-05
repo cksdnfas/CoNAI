@@ -8,6 +8,7 @@ import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoTagsComposeService } from './autoTagsComposeService';
 import { AutoTagIndexService } from './autoTagIndexService';
+import { AutoTagStateService } from './autoTagStateService';
 import { AutoCollectionService } from './autoCollectionService';
 import { kaloscopeTaggerService } from './kaloscopeTaggerService';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
@@ -26,6 +27,54 @@ interface PendingAutoTagMedia {
 interface AutoTagCapabilities {
   taggerAutoEnabled: boolean;
   kaloscopeAutoEnabled: boolean;
+}
+
+/**
+ * "this metadata row still has a taggable file" — as a correlated subquery, never a join.
+ *
+ * The pending lookups used to express this as an outer join against `image_files` plus
+ * `WHERE if_.original_file_path IS NOT NULL AND if_.file_status = 'active'`. That is an
+ * inner join in disguise, so SQLite may reorder the two tables, and on a real library it
+ * does: with ~200k active `image_files`, the migration-000 partial index `idx_files_status`
+ * and no `sqlite_stat1`, the planner drives from `image_files` and probes
+ * `idx_media_metadata_auto_tag_pending` once per active file — an 18ms idle poll instead of
+ * the sub-millisecond index SEARCH migration 028 was built for. `ANALYZE` flips it back, but
+ * nothing in this project ever runs `ANALYZE`, and the statistics can disappear again.
+ *
+ * A correlated `EXISTS` cannot be reordered: `media_metadata` is structurally the driving
+ * table, so the partial pending index is always the outer SEARCH regardless of planner
+ * statistics. Same fix HOME applied to the gallery count in `MediaMetadataFileQueries`.
+ *
+ * The predicate itself is term for term the eligibility filter migration 028 and
+ * `AutoTagStateService` use to maintain `auto_tag_state` (guarded by
+ * verify:auto-tag-index-contracts), so the stored state stays a superset of what this
+ * selects and the chosen rows are the set the join produced (one row per metadata row now;
+ * see `taggableFileColumn` below).
+ */
+const TAGGABLE_FILE_MATCH = `taggable.composite_hash = mm.composite_hash
+        AND taggable.original_file_path IS NOT NULL
+        AND taggable.file_status = 'active'`;
+
+const TAGGABLE_FILE_EXISTS = `EXISTS (
+        SELECT 1 FROM image_files taggable
+        WHERE ${TAGGABLE_FILE_MATCH}
+      )`;
+
+/**
+ * Pull one file column for the row the `EXISTS` guard just proved present.
+ *
+ * Identical predicate, so it can never return NULL for a row that passed the guard. The
+ * join form emitted one output row per matching file, which made a media row with two
+ * active files consume two batch slots and get tagged twice from the same snapshot; the
+ * correlated form returns exactly one row per pending `media_metadata` row, which is what
+ * `tagSingleMedia` (keyed by composite_hash) actually processes.
+ */
+function taggableFileColumn(column: 'original_file_path' | 'file_type'): string {
+  return `(
+        SELECT taggable.${column} FROM image_files taggable
+        WHERE ${TAGGABLE_FILE_MATCH}
+        LIMIT 1
+      )`;
 }
 
 /**
@@ -79,6 +128,8 @@ class AutoTagScheduler {
     this.releaseRowsWithoutRequiredWork();
 
     const capabilities = this.getCapabilities();
+    AutoTagStateService.syncCapabilityState(capabilities);
+
     if (!this.hasEnabledProcessor(capabilities)) {
       return false;
     }
@@ -134,38 +185,80 @@ class AutoTagScheduler {
     return { general, sensitive, questionable, explicit };
   }
 
+  /**
+   * `auto_tag_state = 'pending'` (migration 028) narrows the scan to the partial
+   * index; the original json_extract chain stays as the residual filter so the
+   * selected rows keep their exact tagger/kaloscope meaning even if a state row is
+   * momentarily stale (the state is always a superset of the condition).
+   */
   private getPendingMedia(capabilities: AutoTagCapabilities, batchSize: number): PendingAutoTagMedia[] {
+    AutoTagStateService.syncCapabilityState(capabilities);
+
     return db.prepare(`
       SELECT
         mm.composite_hash,
         mm.auto_tags,
-        if_.original_file_path,
-        if_.file_type as media_type
+        ${taggableFileColumn('original_file_path')} as original_file_path,
+        ${taggableFileColumn('file_type')} as media_type
       FROM media_metadata mm
-      LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
-      WHERE (
+      WHERE ${AutoTagStateService.buildPendingStatePrefix('mm')}(
         mm.auto_tags IS NULL
         OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
         OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
       )
-        AND if_.original_file_path IS NOT NULL
-        AND if_.file_status = 'active'
+        AND ${TAGGABLE_FILE_EXISTS}
       LIMIT ?
     `).all(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0, batchSize) as PendingAutoTagMedia[];
   }
 
+  /**
+   * Single-row lookup for media this backend just saved (no pending re-scan).
+   *
+   * This one keeps a join, on the same `TAGGABLE_FILE_MATCH` predicate: `composite_hash`
+   * is bound to a constant on both sides, so every join order SQLite can choose is an
+   * index seek and there is no plan to protect against. One probe instead of the three a
+   * correlated form needs keeps this per-generation path at its measured cost.
+   */
+  private findPendingMediaByHash(compositeHash: string, capabilities: AutoTagCapabilities): PendingAutoTagMedia | undefined {
+    return db.prepare(`
+      SELECT
+        mm.composite_hash,
+        mm.auto_tags,
+        taggable.original_file_path,
+        taggable.file_type as media_type
+      FROM media_metadata mm
+      JOIN image_files taggable ON ${TAGGABLE_FILE_MATCH}
+      WHERE mm.composite_hash = ?
+        AND (
+          mm.auto_tags IS NULL
+          OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
+          OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
+        )
+      LIMIT 1
+    `).get(
+      compositeHash,
+      capabilities.taggerAutoEnabled ? 1 : 0,
+      capabilities.kaloscopeAutoEnabled ? 1 : 0,
+    ) as PendingAutoTagMedia | undefined;
+  }
+
+  /**
+   * Untagged media count for the status surface. Counts pending `media_metadata` rows,
+   * i.e. the same rows `getPendingMedia()` hands to the tagger — the join form counted
+   * one row per active file, so a media row with two files was counted twice.
+   */
   private countPendingMedia(capabilities: AutoTagCapabilities): number {
+    AutoTagStateService.syncCapabilityState(capabilities);
+
     const result = db.prepare(`
       SELECT COUNT(*) as count
       FROM media_metadata mm
-      LEFT JOIN image_files if_ ON mm.composite_hash = if_.composite_hash
-      WHERE (
+      WHERE ${AutoTagStateService.buildPendingStatePrefix('mm')}(
         mm.auto_tags IS NULL
         OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
         OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
       )
-        AND if_.original_file_path IS NOT NULL
-        AND if_.file_status = 'active'
+        AND ${TAGGABLE_FILE_EXISTS}
     `).get(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0) as { count: number };
 
     return result.count;
@@ -192,6 +285,9 @@ class AutoTagScheduler {
     try {
       const pendingMedia = this.getPendingMedia(capabilities, this.getBatchSize());
       if (pendingMedia.length === 0) {
+        // Rows whose media file vanished would otherwise stay in the pending index
+        // and get re-scanned on every poll.
+        AutoTagStateService.pruneIneligiblePending();
         return;
       }
 
@@ -312,6 +408,8 @@ class AutoTagScheduler {
       WHERE composite_hash = ?
     `).run(autoTags, ratingScore, compositeHash);
     AutoTagIndexService.syncForHash(compositeHash, autoTags);
+    // Tagging finished for this row: settle (or re-arm) its pending state.
+    AutoTagStateService.refreshForHash(compositeHash);
     ImageStatsModel.invalidateAutoTagStatsCache();
 
     try {
@@ -401,9 +499,67 @@ class AutoTagScheduler {
     setTimeout(() => this.start(), 100);
   }
 
-  async triggerManualProcessing(): Promise<void> {
+  /**
+   * @param compositeHash When the caller already knows which media was just saved,
+   * the row is tagged directly instead of re-scanning for pending work (ATAG-3).
+   */
+  async triggerManualProcessing(compositeHash?: string): Promise<void> {
+    if (compositeHash) {
+      await this.processSavedMedia(compositeHash);
+      return;
+    }
+
     console.log('[AutoTagScheduler] Manual processing triggered');
     await this.processPendingMedia();
+  }
+
+  /** Tag one freshly saved media row without touching the pending scan path. */
+  private async processSavedMedia(compositeHash: string): Promise<void> {
+    if (SystemMaintenanceLockService.isExclusiveActive()) {
+      this.scheduleProcessPendingAfterMaintenanceLock();
+      return;
+    }
+
+    const capabilities = this.getCapabilities();
+    if (!this.hasEnabledProcessor(capabilities)) {
+      return;
+    }
+
+    AutoTagStateService.syncCapabilityState(capabilities);
+    // New media registration point: make sure the row is indexed as pending before
+    // any batch poll can observe it.
+    AutoTagStateService.refreshForHash(compositeHash);
+
+    if (this.isProcessing) {
+      this.rerunRequested = true;
+      return;
+    }
+
+    const media = this.findPendingMediaByHash(compositeHash, capabilities);
+    if (!media) {
+      return;
+    }
+
+    this.isProcessing = true;
+
+    try {
+      console.log(`[AutoTagScheduler] Direct tagging requested for ${compositeHash.substring(0, 12)}`);
+      await this.tagSingleMedia(media, capabilities);
+    } catch (error) {
+      console.error(
+        `[AutoTagScheduler] Failed to tag saved media: ${path.basename(media.original_file_path)}`,
+        error instanceof Error ? error.message : error,
+      );
+    } finally {
+      this.isProcessing = false;
+
+      if (this.rerunRequested) {
+        this.rerunRequested = false;
+        setTimeout(() => {
+          void this.processPendingMedia();
+        }, this.PROCESSING_DELAY_MS);
+      }
+    }
   }
 }
 

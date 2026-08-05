@@ -61,7 +61,8 @@ function normalizePublicQueueMaxCount(value: unknown): number | null {
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const activeOnly = req.query.active === 'true';
-    const workflows = await WorkflowModel.findAll(activeOnly);
+    // WF-3: 목록에서 `workflow_json` 을 제외한다. 전체 정의가 필요한 화면은 `GET /api/workflows/:id` 를 쓴다.
+    const workflows = WorkflowModel.findAllSummaries(activeOnly);
 
     // marked_fields를 JSON 객체로 파싱
     const parsedWorkflows = workflows.map(workflow => ({

@@ -3,6 +3,7 @@ import path from 'path'
 import { type MarkedField } from '../types/workflow'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
 import { ComfyUIService } from './comfyuiService'
+import { isQueueInputRef, resolveQueueInputFilePath } from './generation-queue/queueInputStore'
 
 interface WorkflowImageFieldPayload {
   fileName?: string
@@ -50,6 +51,21 @@ function normalizeImagePayloadPath(payload: WorkflowImageFieldPayload) {
 function getComfyImageUploadInput(value: unknown): ComfyImageUploadInput | null {
   if (!value) {
     return null
+  }
+
+  // PAYLOAD-3: an enqueue-time stored input. Resolving to a path also means the upload streams
+  // from disk instead of holding a decoded multi-MB buffer in memory.
+  if (isQueueInputRef(value)) {
+    const storedPath = resolveQueueInputFilePath(value)
+    if (!storedPath) {
+      throw new Error(`Stored queue image input ${value.sha256} is no longer available on disk`)
+    }
+
+    return {
+      fileName: value.fileName || `${value.sha256}.png`,
+      filePath: storedPath,
+      mimeType: value.mimeType,
+    }
   }
 
   if (typeof value === 'object') {

@@ -5,6 +5,7 @@ import { getComfyUIServerRuntimeStatuses } from './comfyui/runtimeStatusService'
 import { createGenerationQueueRoutingContext, getGenerationQueueEligibleServerIds, getGenerationQueueServerCapacity } from './generationQueueRouting'
 import { attemptQueueUpstreamCancellation, type QueueUpstreamCancellationOptions } from './generation-queue/queueUpstreamCancellation'
 import { queueCancellationRegistry } from './generation-queue/queueCancellationRegistry'
+import { sweepOrphanQueueInputFiles } from './generation-queue/queueInputStore'
 import { NAI_SUBMIT_AMBIGUOUS_FAILURE_CODE, reconcileOrphanedProviderJobs } from './generation-queue/queueOrphanReconciler'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import {
@@ -68,6 +69,7 @@ export class GenerationQueueService {
     }, ORPHAN_RECONCILE_INTERVAL_MS)
     this.orphanReconcileHandle.unref?.()
     this.runOrphanReconcile()
+    this.sweepOrphanQueueInputs()
     this.requestDispatch()
 
     console.log(
@@ -100,6 +102,24 @@ export class GenerationQueueService {
     this.serviceThrottle.reset()
     this.comfyDispatchSkipStateByServerId.clear()
     return true
+  }
+
+  /**
+   * PAYLOAD-3: remove stored image inputs that no job claims.
+   *
+   * Refcounting covers every normal path; this covers the one it cannot — a crash between
+   * writing the blob and inserting its refcount row. The store's mtime grace keeps it from
+   * touching a blob whose enqueue is still in flight.
+   */
+  private static sweepOrphanQueueInputs() {
+    try {
+      const swept = sweepOrphanQueueInputFiles()
+      if (swept.removed > 0) {
+        console.log(`🧹 Removed ${swept.removed} unreferenced queue input file(s) (${Math.round(swept.removedBytes / 1024)}KB)`)
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to sweep unreferenced queue input files:', error)
+    }
   }
 
   private static runOrphanReconcile() {
@@ -159,7 +179,8 @@ export class GenerationQueueService {
    * 확정을 기다려야 하는 호출부는 `waitForTerminalJob` 을 써야 한다.
    */
   static async requestCancellation(jobId: number, options?: { origin?: GenerationQueueCancelOrigin }) {
-    const latest = GenerationQueueModel.findById(jobId)
+    // PAYLOAD-1: 취소 경로는 상태/식별자만 본다. 멀티 MB 페이로드를 끌어올 이유가 없다.
+    const latest = GenerationQueueModel.findListRecordById(jobId)
     if (!latest) {
       throw new Error(`Queue job ${jobId} not found`)
     }
@@ -176,7 +197,7 @@ export class GenerationQueueService {
     // 인메모리 시그널은 지연 최적화다. 소유 워커가 다른 프로세스면 false 를 받고 폴링/스위퍼에 위임한다.
     queueCancellationRegistry.abort(jobId, 'cancel_requested')
 
-    const flagged = GenerationQueueModel.findById(jobId) ?? latest
+    const flagged = GenerationQueueModel.findListRecordById(jobId) ?? latest
     // E4: "취소 요청 접수" 이벤트다. 확정(terminal)은 워커/스위퍼가 별도 E1 이벤트로 알린다.
     publishQueueJobEvent('queue.job.cancel-requested', flagged, { previousStatus: latest.status })
 
@@ -216,7 +237,7 @@ export class GenerationQueueService {
     }
 
     this.requestDispatch()
-    return GenerationQueueModel.findById(jobId)
+    return GenerationQueueModel.findListRecordById(jobId)
   }
 
   /**
@@ -281,7 +302,9 @@ export class GenerationQueueService {
       providerJobId?: string | null
     },
   ) {
-    const current = GenerationQueueModel.findById(id)
+    // PAYLOAD-1: 전이는 상태 컬럼만 읽고 쓴다. 이 두 조회가 잡당 페이로드 하이드레이션의
+    // 가장 큰 몫이었다(전이 1회당 SELECT * 2회).
+    const current = GenerationQueueModel.findListRecordById(id)
     if (!current) {
       throw new Error(`Queue job ${id} not found`)
     }
@@ -304,7 +327,7 @@ export class GenerationQueueService {
       throw new Error(`Queue job ${id} changed state before transition could be applied`)
     }
 
-    const latest = GenerationQueueModel.findById(id)
+    const latest = GenerationQueueModel.findListRecordById(id)
     this.terminalJobWaiters.resolve(latest)
     // E1: 모든 정상 전이가 이 funnel 을 지나므로 큐 상태 푸시의 주 발행 지점이다.
     publishQueueJobEvent('queue.job.status', latest, { previousStatus: current.status })
@@ -336,12 +359,14 @@ export class GenerationQueueService {
         }
       }
 
+      // PAYLOAD-1: 후보 선택은 라우팅 컬럼만 있으면 된다. 전체 페이로드는 아래 claim 성공
+      // 직후 단 한 번만 하이드레이트한다(디스패치 실행이 실제로 그걸 쓰는 유일한 지점).
       const record = db.prepare(`
-        SELECT * FROM generation_queue_jobs
+        SELECT id, requested_server_id FROM generation_queue_jobs
         WHERE ${whereClauses.join(' AND ')}
         ORDER BY priority ASC, queued_at ASC, id ASC
         LIMIT 1
-      `).get(...values) as GenerationQueueJobRecord | undefined
+      `).get(...values) as Pick<GenerationQueueJobRecord, 'id' | 'requested_server_id'> | undefined
 
       if (!record) {
         return null
@@ -391,6 +416,7 @@ export class GenerationQueueService {
       return null
     }
 
+    // 디스패치 실행이 페이로드를 쓰므로 claim 성공 시점의 이 조회가 잡 1건의 유일한 하이드레이션이다.
     const claimed = GenerationQueueModel.findById(id)
     // E3: 두 번째 claim 경로도 같은 raw UPDATE 라 같은 이벤트를 발행한다.
     publishQueueJobEvent('queue.job.status', claimed, { previousStatus: 'queued' })
@@ -399,6 +425,7 @@ export class GenerationQueueService {
 
   /** Create a new queued retry job from one finished failed/cancelled job. */
   static retryJob(id: number, options?: { force?: boolean }) {
+    // 재시도는 원본 페이로드를 그대로 복제해야 하므로 여기서는 전체 하이드레이션이 필수다.
     const existing = GenerationQueueModel.findById(id)
     if (!existing) {
       throw new Error(`Queue job ${id} not found`)
@@ -438,7 +465,7 @@ export class GenerationQueueService {
       request_summary: retrySummary,
     })
 
-    const retryJob = GenerationQueueModel.findById(retryJobId)
+    const retryJob = GenerationQueueModel.findListRecordById(retryJobId)
     // E5: 재시도는 신규 잡 생성이다.
     publishQueueJobEvent('queue.job.created', retryJob)
 
@@ -821,7 +848,7 @@ export class GenerationQueueService {
   }
 
   private static async cancelJobIfActive(jobId: number) {
-    const latest = GenerationQueueModel.findById(jobId)
+    const latest = GenerationQueueModel.findListRecordById(jobId)
     if (!latest) {
       return
     }
@@ -840,7 +867,7 @@ export class GenerationQueueService {
   }
 
   private static async failJobIfActive(jobId: number, error: unknown) {
-    const latest = GenerationQueueModel.findById(jobId)
+    const latest = GenerationQueueModel.findListRecordById(jobId)
     if (!latest) {
       return
     }

@@ -33,7 +33,7 @@ const reservationsPanelSource = readFileSync(
 
 /** Extract one string-literal union declared as `export type <name> = 'a' | 'b'`. */
 function readUnionLiterals(source: string, typeName: string): string[] {
-  const declaration = new RegExp(`export type ${typeName} =([\\s\\S]*?)\\n\\n`).exec(source)
+  const declaration = new RegExp(`export type ${typeName} =([\\s\\S]*?)\\r?\\n\\r?\\n`).exec(source)
   if (!declaration) {
     throw new Error(`expected ${typeName} to be declared as a string literal union`)
   }
@@ -117,16 +117,62 @@ function assertProviderPlacement() {
   )
 }
 
+/** Read one numeric millisecond constant declared in the bridge. */
+function readBridgeConstantMs(constantName: string) {
+  const declaration = new RegExp(`const ${constantName} = ([0-9_]+)\\b`).exec(bridgeSource)
+  if (!declaration) {
+    throw new Error(`the runtime event bridge must declare ${constantName} as a numeric millisecond budget`)
+  }
+
+  return Number(declaration[1].replace(/_/g, ''))
+}
+
 function assertCacheBridgePolicy() {
   match(
     bridgeSource,
-    /case 'queue\.job\.status':[\s\S]*?applyQueueEventToCaches\(queryClient, envelope\.payload as QueueJobEventPayload\)[\s\S]*?scheduleInvalidate\(\[QUEUE_QUERY_KEY_PREFIX\], QUEUE_INVALIDATE_DEBOUNCE_MS\)/,
+    /case 'queue\.job\.status':[\s\S]*?applyQueueEventToCaches\(queryClient, queuePayload\)[\s\S]*?scheduleInvalidate\(\[QUEUE_QUERY_KEY_PREFIX\], QUEUE_INVALIDATE_DEBOUNCE_MS\)/,
     'queue status events must patch the cache immediately and then debounce one invalidation for server-derived fields',
   )
   match(
     bridgeSource,
     /queryClient\.setQueryData<QueueListResponse>/,
     'the bridge must patch cached queue rows instead of waiting for a refetch',
+  )
+
+  // QLIST-3: 큐 진행 전이(dispatching/running)는 히스토리 표면을 건드리지 않는다.
+  // 히스토리는 `history.record.*` 가 정본이고, 히스토리 행을 쓰지 않는 `queued -> cancelled`
+  // 확정 경로만 예외로 남긴다.
+  match(
+    bridgeSource,
+    /function affectsHistorySurface\(payload: QueueJobEventPayload\) \{[\s\S]*?TERMINAL_QUEUE_EVENT_STATUSES\.has\(payload\.status\) \|\| payload\.cancel_requested === true/,
+    'queue-driven history invalidation must be limited to terminal transitions and cancel requests',
+  )
+  match(
+    bridgeSource,
+    /if \(affectsHistorySurface\(queuePayload\)\) \{[\s\S]*?scheduleInvalidate\(\[HISTORY_QUERY_KEY_PREFIX\], HISTORY_INVALIDATE_DEBOUNCE_MS\)/,
+    'the bridge must gate history invalidation behind the queue-event history relevance check',
+  )
+
+  const queueDebounceMs = readBridgeConstantMs('QUEUE_INVALIDATE_DEBOUNCE_MS')
+  const historyDebounceMs = readBridgeConstantMs('HISTORY_INVALIDATE_DEBOUNCE_MS')
+  const maxWaitMs = readBridgeConstantMs('INVALIDATE_MAX_WAIT_MS')
+
+  ok(
+    queueDebounceMs >= 2_000,
+    `queue invalidation must stay debounced at 2s or slower so N clients do not multiply refetches, got ${queueDebounceMs}ms`,
+  )
+  ok(
+    historyDebounceMs >= 2_000,
+    `history invalidation must stay debounced at 2s or slower, got ${historyDebounceMs}ms`,
+  )
+  ok(
+    maxWaitMs >= queueDebounceMs && maxWaitMs >= historyDebounceMs && maxWaitMs <= 3_000,
+    `the invalidation max-wait ceiling must bound every debounce within the 3s UI freshness budget, got ${maxWaitMs}ms`,
+  )
+  match(
+    bridgeSource,
+    /const remainingMaxWaitMs = Math\.max\(0, firstRequestedAt \+ INVALIDATE_MAX_WAIT_MS - now\)[\s\S]*?Math\.min\(delayMs, remainingMaxWaitMs\)/,
+    'a trailing debounce must never starve under a continuous event stream: cap it with the max-wait ceiling',
   )
   match(
     bridgeSource,

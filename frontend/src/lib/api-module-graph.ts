@@ -9,6 +9,7 @@ import type {
   GraphExecutionFinalResultRecord,
   GraphExecutionLogRecord,
   GraphExecutionNodeIoRecord,
+  GraphExecutionPreviewBatchRecord,
   GraphExecutionRecord,
   GraphExecutionStatus,
   GraphWorkflowArtifactCopyResult,
@@ -20,12 +21,15 @@ import type {
   GraphWorkflowExportPayload,
   GraphWorkflowFolderRecord,
   GraphWorkflowImportResult,
+  GraphWorkflowNameRecord,
   GraphWorkflowRecord,
+  GraphWorkflowReservationContentRecord,
   GraphWorkflowScheduleEnqueueResult,
   GraphWorkflowScheduleFailurePolicy,
   GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
   GraphWorkflowScheduleType,
+  GraphWorkflowSummaryRecord,
   GraphWorkflowUpdateResult,
   GraphWorkflowVersionSummaryRecord,
   ModuleDefinitionRecord
@@ -41,6 +45,7 @@ export type {
   GraphExecutionLogRecord,
   GraphExecutionNodeIoDirection,
   GraphExecutionNodeIoRecord,
+  GraphExecutionPreviewBatchRecord,
   GraphExecutionRecord,
   GraphExecutionStatus,
   GraphExecutionTriggerType,
@@ -56,13 +61,16 @@ export type {
   GraphWorkflowFolderRecord,
   GraphWorkflowImportResult,
   GraphWorkflowMetadata,
+  GraphWorkflowNameRecord,
   GraphWorkflowNode,
   GraphWorkflowRecord,
+  GraphWorkflowReservationContentRecord,
   GraphWorkflowScheduleFailurePolicy,
   GraphWorkflowScheduleMaintenanceResult,
   GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
   GraphWorkflowScheduleType,
+  GraphWorkflowSummaryRecord,
   GraphWorkflowUpdateResult,
   GraphWorkflowVersionSummaryRecord,
   ModuleAuthoringSource,
@@ -118,14 +126,32 @@ export async function createComfyModuleFromWorkflow(workflowId: number, payload:
   })
 }
 
-/** List saved graph workflows for the future graph editor page. */
+/**
+ * List saved graph workflows as summaries (WF-1).
+ * 그래프 문서는 포함되지 않는다. 편집/실행에 필요한 전체 그래프는 `getGraphWorkflow(id)` 로 받는다.
+ */
 export async function getGraphWorkflows(activeOnly = true) {
   const searchParams = new URLSearchParams()
   if (activeOnly) {
     searchParams.set('active', 'true')
   }
 
-  return requestApiData<GraphWorkflowRecord[]>(`/api/graph-workflows${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
+  return requestApiData<GraphWorkflowSummaryRecord[]>(`/api/graph-workflows${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
+}
+
+/** Load one saved graph workflow with its full graph document. */
+export async function getGraphWorkflow(workflowId: number) {
+  return requestApiData<GraphWorkflowRecord>(`/api/graph-workflows/${workflowId}`)
+}
+
+/** List `{ id, name }` label entries for surfaces that only need workflow names (WF-1). */
+export async function getGraphWorkflowNames(activeOnly = true) {
+  const searchParams = new URLSearchParams()
+  if (activeOnly) {
+    searchParams.set('active', 'true')
+  }
+
+  return requestApiData<GraphWorkflowNameRecord[]>(`/api/graph-workflows/names${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
 }
 
 /** List workflow explorer folders for the graph editor. */
@@ -390,6 +416,14 @@ export async function getGraphWorkflowBrowseContent(folderId?: number | null, op
   return requestApiData<GraphWorkflowBrowseContentRecord>(`/api/graph-workflows/browse-content${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
 }
 
+/**
+ * Load the reservation-tab snapshot (WF-2).
+ * 예약 탭 폴링이 워크플로우 그래프 전체를 다시 받지 않도록, 서버가 라벨/일정/실행만 담아 돌려준다.
+ */
+export async function getGraphWorkflowReservations() {
+  return requestApiData<GraphWorkflowReservationContentRecord>('/api/graph-workflows/reservations')
+}
+
 /** Copy selected generated workflow artifacts into one watched folder target. */
 export async function copyGraphWorkflowArtifactsToFolder(payload: {
   folder_id: number
@@ -465,6 +499,15 @@ export interface GraphExecutionStatusRecord {
 /** Load one graph execution's lightweight status only. */
 export async function getGraphExecutionStatus(executionId: number) {
   return requestApiData<GraphExecutionStatusRecord>(`/api/graph-workflows/executions/${executionId}/status`)
+}
+
+/**
+ * Load artifacts and final results for several executions in one request (WF-4).
+ * 미리보기 8건을 병렬 상세 요청으로 긁던 N+1 을 배치 1회로 바꾼다. 로그/node_io 는 포함하지 않는다.
+ */
+export async function getGraphExecutionPreviews(executionIds: number[]) {
+  const searchParams = new URLSearchParams({ execution_ids: executionIds.join(',') })
+  return requestApiData<GraphExecutionPreviewBatchRecord>(`/api/graph-workflows/executions/previews?${searchParams.toString()}`)
 }
 
 /** Load a graph execution with its stored artifacts. */

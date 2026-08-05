@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --signal SIGTERM --exec tsx src/index.ts",
     "build": "tsc && npm run copy:migrations",
+    "typecheck": "tsc --noEmit",
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
     "start": "node dist/backend/src/index.js",
     "db:migrate": "tsx src/database/migrate.ts",
@@ -65,6 +66,7 @@
     "verify:image-file-route-contracts": "tsx src/scripts/verifyImageFileRouteContracts.ts",
     "verify:backup-source-contracts": "tsx src/scripts/verifyBackupSourceContracts.ts",
     "verify:like-search-literal-contracts": "tsx src/scripts/verifyLikeSearchLiteralContracts.ts",
+    "verify:prompt-search-index-contracts": "tsx src/scripts/verifyPromptSearchIndexContracts.ts",
     "verify:random-media-selection-contracts": "tsx src/scripts/verifyRandomMediaSelectionContracts.ts",
     "verify:prompt-similarity-hot-path-contracts": "tsx src/scripts/verifyPromptSimilarityHotPathContracts.ts",
     "verify:media-postprocess-visibility": "tsx src/scripts/verifyMediaPostprocessVisibilityContracts.ts",

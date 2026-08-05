@@ -46,6 +46,10 @@ export interface GenerationQueueJobRecord {
   provider_submit_started_at?: string | null
   provider_cancel_state?: string | null
   submit_attempt_count?: number
+  /** 029/PAYLOAD-2: 디버그 스냅샷 요청 여부. NULL 은 "029 이전 행" 이라 payload 폴백 대상이다. */
+  debug_enabled?: number | null
+  /** 029/PAYLOAD-2: 구 `request_payload._debug` 미러. 페이로드 재기록 없이 갱신된다. */
+  debug_meta?: string | null
   queued_at: string
   started_at?: string | null
   completed_at?: string | null

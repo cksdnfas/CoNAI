@@ -3,7 +3,10 @@ import { db } from './init';
 import { runtimePaths } from '../config/runtimePaths';
 
 const ONE_MIB = 1024 * 1024;
-const DEFAULT_TRUNCATE_THRESHOLD_BYTES = 256 * ONE_MIB;
+// `wal_checkpoint(TRUNCATE)` runs synchronously on the single Node event loop, so its cost scales
+// with how much WAL has piled up. A 256MiB backlog produced multi-second freezes for every
+// connected client; truncating at 32MiB trades that for short, frequent pauses.
+const DEFAULT_TRUNCATE_THRESHOLD_BYTES = 32 * ONE_MIB;
 const DEFAULT_MIN_INTERVAL_MS = 30_000;
 
 let lastImagesWalAttemptAt = 0;

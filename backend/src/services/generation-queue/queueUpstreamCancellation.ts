@@ -2,7 +2,7 @@ import { ComfyUIServerModel } from '../../models/ComfyUIServer'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { WorkflowModel } from '../../models/Workflow'
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer'
-import type { GenerationQueueJobRecord } from '../../types/generationQueue'
+import type { GenerationQueueJobListRecord } from '../../types/generationQueue'
 import { createComfyUIService, type ComfyUICancelPromptResult } from '../comfyuiService'
 import { updateQueueRequestDebugMeta } from './queueDebugMeta'
 
@@ -11,7 +11,7 @@ export type QueueUpstreamCancellationOptions = {
   providerJobId?: string | null
 }
 
-function resolveComfyCancellationEndpoint(job: GenerationQueueJobRecord, assignedServer?: ComfyUIServerRecord | null) {
+function resolveComfyCancellationEndpoint(job: GenerationQueueJobListRecord, assignedServer?: ComfyUIServerRecord | null) {
   if (assignedServer?.endpoint) {
     return assignedServer.endpoint
   }
@@ -52,7 +52,8 @@ function resolveCancellationState(result: ComfyUICancelPromptResult, assignedSer
 }
 
 export async function attemptQueueUpstreamCancellation(jobId: number, options?: QueueUpstreamCancellationOptions) {
-  const latest = GenerationQueueModel.findById(jobId)
+  // PAYLOAD-1: 업스트림 취소는 엔드포인트/핸들 컬럼만 필요하다.
+  const latest = GenerationQueueModel.findListRecordById(jobId)
   if (!latest || latest.service_type !== 'comfyui') {
     return null
   }

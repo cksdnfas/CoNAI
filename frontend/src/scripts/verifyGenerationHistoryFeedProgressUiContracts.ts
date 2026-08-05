@@ -193,6 +193,85 @@ function assertRefreshPolicySource() {
   )
 }
 
+/**
+ * QLIST-2: 히스토리 목록의 결과 미디어 해석이 행별 상관 서브쿼리를 쓰지 않아야 한다.
+ * 20만행 `image_files` 를 히스토리 행마다 다시 탐색하면 페이지 요청 1회가 목록 크기에 비례한다.
+ */
+function assertHistoryListLookupCostPolicy() {
+  const listQuery = /static findAllWithMetadata\([\s\S]*?\n  \}/.exec(generationHistoryModelSource)?.[0] ?? ''
+  if (listQuery.length === 0) {
+    throw new Error('generation history model must keep a findAllWithMetadata list surface')
+  }
+
+  doesNotMatch(
+    listQuery,
+    /SELECT if2\.id/,
+    'history list rows must not resolve their backing file through a per-row correlated subquery',
+  )
+  doesNotMatch(
+    listQuery,
+    /LEFT JOIN main_db\./,
+    'history list pagination must not carry cross-database joins that run before LIMIT is applied',
+  )
+  match(
+    listQuery,
+    /return this\.attachResultMediaViews\(rows\)/,
+    'history list rows should resolve display media through one precomputed lookup',
+  )
+  match(
+    generationHistoryModelSource,
+    /private static readResultMediaViews\(compositeHashes: string\[\]\)[\s\S]*?FROM main_db\.image_files matched_file[\s\S]*?WHERE matched_file\.composite_hash IN \(/,
+    'history result media should be read with one indexed IN lookup per page',
+  )
+  match(
+    generationHistoryModelSource,
+    /function isPreferredResultFile\(candidate: HistoryResultMediaRow, current: HistoryResultMediaRow\)[\s\S]*?candidate\.file_status === 'active' \? 0 : 1[\s\S]*?candidate\.file_id > current\.file_id/,
+    'the in-memory file preference must reproduce the previous "active first, newest id" SQL ordering',
+  )
+  match(
+    generationHistoryModelSource,
+    /static countListRecords\([\s\S]*?historyListCountCache\.get\(cacheKey\)[\s\S]*?HISTORY_LIST_COUNT_CACHE_TTL_MS/,
+    'history list counts should be memoized for a few seconds instead of rerunning per page request',
+  )
+  match(
+    generationHistoryModelSource,
+    /function invalidateHistoryListCountCache\(\)/,
+    'history writes must be able to invalidate the cached list count immediately',
+  )
+}
+
+/**
+ * QLIST-4: 활성 리프레시는 첫 페이지만 서버에서 다시 읽는다.
+ * 종전에는 로드된 전 페이지를 매 리프레시마다 리페치해 서버 부하가 스크롤 깊이에 비례했다.
+ */
+function assertHistoryFirstPageRefreshPolicy() {
+  match(
+    generationHistoryPanelHelpersSource,
+    /function readCachedHistoryPage\([\s\S]*?cached\.pageParams\.findIndex\(\(param\) => param === pageParam\)[\s\S]*?cached\.pages\[pageIndex\]/,
+    'the history panel must be able to reuse an already-cached page instead of refetching it',
+  )
+  match(
+    generationHistoryPanelHelpersSource,
+    /function hasStableHistoryPageBoundary\([\s\S]*?previousFirstPage\.records\.length !== nextFirstPage\.records\.length[\s\S]*?previousLastId === nextLastId/,
+    'cached later pages may only be reused while the first page boundary is unchanged',
+  )
+  match(
+    generationHistoryPanelSource,
+    /if \(pageParam > 0 && !isFullHistoryRefreshRef\.current && !hasHistoryPageBoundaryShiftRef\.current\) \{[\s\S]*?readCachedHistoryPage\(queryClient, historyQueryKey, pageParam\)[\s\S]*?return cachedPage/,
+    'automatic history refreshes must only refetch the first page',
+  )
+  match(
+    generationHistoryPanelSource,
+    /hasHistoryPageBoundaryShiftRef\.current = !hasStableHistoryPageBoundary\(previousFirstPage, page\)/,
+    'a shifted first page must fall back to a full refetch so rows cannot silently disappear',
+  )
+  match(
+    generationHistoryPanelSource,
+    /isFullHistoryRefreshRef\.current = true[\s\S]*?await refetchHistory\(\)[\s\S]*?isFullHistoryRefreshRef\.current = false/,
+    'explicit refreshes (button, delete, rerun, parent nonce) must still reload every loaded page',
+  )
+}
+
 function assertImageListCallbackSourcePolicy() {
   match(
     generationHistoryPanelSource,
@@ -553,6 +632,8 @@ assertTotalNeverFallsBelowLoaded()
 assertCountNormalization()
 assertStatusSummarySourcePolicy()
 assertRefreshPolicySource()
+assertHistoryListLookupCostPolicy()
+assertHistoryFirstPageRefreshPolicy()
 assertImageListCallbackSourcePolicy()
 assertDownloadReadinessSourcePolicy()
 assertSelectionRecoverySourcePolicy()

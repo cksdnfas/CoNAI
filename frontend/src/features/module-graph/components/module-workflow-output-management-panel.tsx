@@ -13,7 +13,7 @@ import type {
   GraphExecutionRecord,
   GraphWorkflowBrowseContentRecord,
   GraphWorkflowFolderRecord,
-  GraphWorkflowRecord,
+  GraphWorkflowSummaryRecord,
 } from '@/lib/api-module-graph'
 import { triggerBrowserDownload } from '@/lib/api-client'
 import {
@@ -74,7 +74,7 @@ export function ModuleWorkflowOutputManagementPanel({
   })
 
   const workflowNameById = useMemo(
-    () => new Map<number, string>(browseContent.workflows.map((workflow: GraphWorkflowRecord) => [workflow.id, workflow.name])),
+    () => new Map<number, string>(browseContent.workflows.map((workflow: GraphWorkflowSummaryRecord) => [workflow.id, workflow.name])),
     [browseContent.workflows],
   )
   const executionById = useMemo(

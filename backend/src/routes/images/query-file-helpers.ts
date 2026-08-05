@@ -5,8 +5,14 @@ import type { Request, Response } from 'express';
 import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
+import {
+  MediaMetadataFileQueries,
+  type MediaVisibilityGuardRecord,
+} from '../../models/Image/MediaMetadataFileQueries';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
+import { requestThumbnailRepair } from '../../services/runtimeJobs/handlers/thumbnailRepairHandlers';
+import { requestVideoPoster } from '../../services/runtimeJobs/handlers/videoPosterHandlers';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
 import type { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
 import {
@@ -31,9 +37,15 @@ export class BatchDownloadLimitError extends Error {
   }
 }
 
-/** Load visible metadata for one image and block hidden-policy access centrally. */
-export async function getVisibleMetadataOrBlock(res: Response, compositeHash: string) {
-  const metadata = await MediaMetadataModel.findByHash(compositeHash);
+/**
+ * Load the guard columns for one image and block hidden-policy access centrally.
+ *
+ * Media routes only need visibility plus the thumbnail path, and `media_metadata`
+ * rows average ~11KB — a `SELECT *` here made every thumbnail on a gallery page
+ * walk a row overflow chain for three values.
+ */
+export async function getVisibleMetadataOrBlock(res: Response, compositeHash: string): Promise<MediaVisibilityGuardRecord | null> {
+  const metadata = MediaMetadataFileQueries.findVisibilityGuardByHash(compositeHash);
 
   if (!metadata) {
     res.status(404).json({
@@ -103,18 +115,48 @@ export function getExistingActiveFilePathOrBlock(
   return filePath;
 }
 
-/** Serve the thumbnail path, regenerate it when missing, or fall back to the original file. */
+/** Resolve the on-disk thumbnail for one metadata row, or null when it is absent. */
+function resolveExistingThumbnailPath(metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>): string | null {
+  if (!metadata.thumbnail_path) {
+    return null;
+  }
+
+  const thumbnailPath = path.join(runtimePaths.tempDir, metadata.thumbnail_path);
+  return fs.existsSync(thumbnailPath) ? thumbnailPath : null;
+}
+
+/**
+ * Serve the thumbnail, or fall back to the original and queue a background repair.
+ *
+ * Regeneration used to happen inline here: a sharp resize plus a synchronous
+ * metadata UPDATE inside a GET, blocking the single Node event loop for every
+ * other user. The GET now always returns immediately and the repair is delegated
+ * to the runtime-jobs queue.
+ *
+ * Video and animated media used to be exempt from that entirely: with no
+ * `thumbnail_path` on their rows this route streamed the **original file**, so a
+ * page of video results pulled hundreds of megabytes through the process. They now
+ * take the same path as images once a poster frame exists (HEAVY-2), and the
+ * original is only streamed while the poster is still being generated.
+ */
 export async function serveThumbnailOrOriginal(
   req: Request,
   res: Response,
   compositeHash: string,
-  metadata: ImageMetadataRecord,
+  metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>,
   file: ImageFileRecord,
 ) {
   const mimeType = file.mime_type;
   const fileType = file.file_type;
+  const isTimeBasedMedia = (mimeType && mimeType.startsWith('video/')) || fileType === 'animated';
 
-  if ((mimeType && mimeType.startsWith('video/')) || fileType === 'animated') {
+  if (isTimeBasedMedia) {
+    const posterPath = resolveExistingThumbnailPath(metadata);
+    if (posterPath) {
+      await streamCacheableFile(req, res, posterPath, 'image/webp');
+      return;
+    }
+
     const originalPath = getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'Video file not found',
       warnMessage: `[ImageServe] Video file missing on disk: ${resolveUploadsPath(file.original_file_path)}`,
@@ -124,17 +166,16 @@ export async function serveThumbnailOrOriginal(
       return;
     }
 
+    // No poster yet: answer from the original this once and build the poster in the
+    // background so the next request costs a few KB instead of the whole file.
+    requestVideoPoster(compositeHash, originalPath);
     streamRangeFile(req, res, originalPath, mimeType);
     return;
   }
 
-  let thumbnailPath = metadata.thumbnail_path
-    ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
-    : null;
+  const thumbnailPath = resolveExistingThumbnailPath(metadata);
 
-  let serveOriginal = false;
-
-  if (!thumbnailPath || !fs.existsSync(thumbnailPath)) {
+  if (!thumbnailPath) {
     const originalPath = getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'Thumbnail and original file not found',
       warnMessage: `[ImageServe] Both thumbnail and original missing: ${file.original_file_path}`,
@@ -144,43 +185,19 @@ export async function serveThumbnailOrOriginal(
       return;
     }
 
-    try {
-      console.log(`[ImageServe] Regenerating missing thumbnail for ${compositeHash}`);
-      const relativeThumbPath = await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash);
-      MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath });
-      thumbnailPath = path.join(runtimePaths.tempDir, relativeThumbPath);
-
-      if (!fs.existsSync(thumbnailPath)) {
-        serveOriginal = true;
-      }
-    } catch (err) {
-      console.error(`[ImageServe] Failed to regenerate thumbnail: ${err}`);
-      serveOriginal = true;
-    }
-  }
-
-  if (serveOriginal) {
-    const originalPath = getExistingActiveFilePathOrBlock(res, file, {
-      missingError: 'Original file not found',
-    });
-
-    if (!originalPath) {
-      return;
-    }
-
+    requestThumbnailRepair(compositeHash, originalPath);
     await streamCacheableFile(req, res, originalPath, mimeType);
-    return;
-  }
-
-  if (!thumbnailPath) {
-    res.status(404).json({ success: false, error: 'Thumbnail path error' });
     return;
   }
 
   await streamCacheableFile(req, res, thumbnailPath, 'image/webp');
 }
 
-async function resolveThumbnailDownloadFile(compositeHash: string, metadata: ImageMetadataRecord, file: ImageFileRecord) {
+async function resolveThumbnailDownloadFile(
+  compositeHash: string,
+  metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>,
+  file: ImageFileRecord,
+) {
   let thumbnailPath = metadata.thumbnail_path
     ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
     : null;
@@ -216,7 +233,7 @@ async function resolveThumbnailDownloadFile(compositeHash: string, metadata: Ima
 
 export async function resolveDownloadFileForType(
   compositeHash: string,
-  metadata: ImageMetadataRecord,
+  metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>,
   file: ImageFileRecord,
   downloadType: ImageDownloadType,
 ) {

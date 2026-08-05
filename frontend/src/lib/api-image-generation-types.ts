@@ -62,6 +62,8 @@ export interface CreateGenerationQueueJobPayload {
   requested_server_tag?: string | null
   request_payload: Record<string, unknown>
   request_summary?: string | null
+  /** Expand one request into N identical jobs server-side (1-32). Avoids re-uploading base64 inputs per copy. */
+  enqueue_count?: number
 }
 
 export interface CodexGenerationStatus {

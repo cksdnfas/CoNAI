@@ -170,6 +170,33 @@ export interface GraphWorkflowRecord {
   updated_date: string
 }
 
+/**
+ * List projection for saved graph workflows.
+ *
+ * WF-1: 목록 응답은 그래프 문서를 절대 담지 않는다. 전체 그래프는 `GET /api/graph-workflows/:id`
+ * 한 곳에서만 내려간다. 노드/엣지/최종결과 개수는 SQL(`json_array_length`, `json_each`)로 계산해
+ * 요청 경로에서 JSON.parse 가 돌지 않게 한다.
+ */
+export interface GraphWorkflowSummaryRecord {
+  id: number
+  name: string
+  description?: string | null
+  folder_id?: number | null
+  version: number
+  is_active: boolean
+  created_date: string
+  updated_date: string
+  node_count: number
+  edge_count: number
+  final_result_node_count: number
+}
+
+/** Name-only projection used by reservation/header surfaces that just label a workflow id. */
+export interface GraphWorkflowNameRecord {
+  id: number
+  name: string
+}
+
 export interface GraphWorkflowFolderRecord {
   id: number
   name: string

@@ -304,7 +304,8 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
       } as WorkflowResponse);
     }
 
-    const queueJob = history.queue_job_id ? GenerationQueueModel.findById(history.queue_job_id) : null;
+    // PAYLOAD-1: 상태 폴링 라우트는 provider 핸들만 필요하다. 페이로드를 끌어오지 않는다.
+    const queueJob = history.queue_job_id ? GenerationQueueModel.findListRecordById(history.queue_job_id) : null;
     const providerJobId = queueJob?.provider_job_id ?? history.comfyui_prompt_id;
 
     // 생성된 이미지 정보 조회

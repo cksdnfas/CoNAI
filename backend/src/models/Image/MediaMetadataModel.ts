@@ -520,6 +520,14 @@ export class MediaMetadataModel {
   }
 
   /**
+   * 활성 파일이 있는 노출 가능 미디어 총 개수
+   * 홈 피드 total 을 첫 페이지 응답과 분리해 캐시하기 위한 진입점
+   */
+  static countVisibleWithActiveFile(): number {
+    return MediaMetadataFileQueries.countVisibleWithActiveFile();
+  }
+
+  /**
    * 지정된 composite_hash 목록에 해당하는 파일 포함 상세 정보 조회
    */
   static findByHashesWithFiles(compositeHashes: string[]): any[] {

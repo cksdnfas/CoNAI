@@ -210,8 +210,19 @@ function verifyWorkflowVersionSummaryRoute() {
   )
   assert.match(
     graphWorkflowModelSource,
-    /SELECT \* FROM graph_workflow_versions[\s\S]*ORDER BY version DESC, id DESC/,
+    /FROM graph_workflow_versions[\s\S]*ORDER BY version DESC, id DESC/,
     'version summaries should read saved workflow snapshots newest-version first',
+  )
+  // WF-5: 스냅샷마다 `graph_json` 을 JS 로 두 번 파싱하던 경로를 SQL 카운트로 대체했다.
+  assert.doesNotMatch(
+    graphWorkflowModelSource,
+    /SELECT \* FROM graph_workflow_versions/,
+    'version summaries must not hydrate whole snapshot rows: the graph document must stay in SQLite',
+  )
+  assert.match(
+    graphWorkflowModelSource,
+    /GRAPH_WORKFLOW_VERSION_SUMMARY_COLUMNS[\s\S]*json_array_length\(graph_json, '\$\.nodes'\)[\s\S]*json_array_length\(graph_json, '\$\.edges'\)[\s\S]*json_array_length\(graph_json, '\$\.metadata\.exposed_inputs'\)/,
+    'version summary counts should be computed by SQLite JSON1 instead of JSON.parse per snapshot',
   )
   assert.match(
     graphWorkflowModelSource,
@@ -221,6 +232,118 @@ function verifyWorkflowVersionSummaryRoute() {
   assert.ok(
     moduleGraphTypesSource.includes('export interface GraphWorkflowVersionSummaryRecord'),
     'backend module graph types should define the version summary response shape',
+  )
+}
+
+/**
+ * WF-1/WF-2 계약: 목록·예약 응답은 그래프 문서를 절대 담지 않는다.
+ * 전체 그래프는 `GET /api/graph-workflows/:id` 한 곳으로만 나간다.
+ */
+function verifyWorkflowListSummaryProjection() {
+  const workflowRoutesSource = source('routes/graph-workflows/workflow-routes.ts')
+  const graphWorkflowModelSource = source('models/GraphWorkflow.ts')
+  const viewServiceSource = source('services/graphWorkflowViewService.ts')
+  const moduleGraphTypesSource = source('types/moduleGraph.ts')
+  const namesRouteIndex = workflowRoutesSource.indexOf("router.get('/names'")
+  const reservationsRouteIndex = workflowRoutesSource.indexOf("router.get('/reservations'")
+  const singleWorkflowRouteIndex = workflowRoutesSource.indexOf("router.get('/:id'")
+
+  assert.match(
+    workflowRoutesSource,
+    /const workflows = GraphWorkflowModel\.findAllSummaries\(activeOnly\)/,
+    'the saved workflow list route must return the summary projection, not parsed graph documents',
+  )
+  assert.doesNotMatch(
+    workflowRoutesSource,
+    /GraphWorkflowModel\.findAll\(activeOnly\)\.map\(parseStoredGraphWorkflow\)/,
+    'the saved workflow list route must not hydrate every stored graph document',
+  )
+  assert.ok(namesRouteIndex >= 0, 'workflow CRUD routes should expose a name-only label source')
+  assert.ok(reservationsRouteIndex >= 0, 'workflow CRUD routes should expose the reservation snapshot route')
+  assert.ok(
+    namesRouteIndex < singleWorkflowRouteIndex && reservationsRouteIndex < singleWorkflowRouteIndex,
+    'name and reservation routes must be registered before the generic workflow id route',
+  )
+  assert.match(
+    graphWorkflowModelSource,
+    /GRAPH_WORKFLOW_SUMMARY_COLUMNS[\s\S]*json_array_length\(graph_json, '\$\.nodes'\)[\s\S]*json_array_length\(graph_json, '\$\.edges'\)/,
+    'workflow list summaries should compute node/edge counts in SQL instead of parsing graph documents',
+  )
+  assert.doesNotMatch(
+    graphWorkflowModelSource,
+    /GRAPH_WORKFLOW_SUMMARY_COLUMNS = `[^`]*\n\s+graph_json\b/,
+    'the workflow summary projection must not select the graph document column',
+  )
+  assert.match(
+    graphWorkflowModelSource,
+    /static countFinalResultNodesByWorkflowIds\(workflowIds: number\[\]\): Map<number, number>[\s\S]*json_each\(/,
+    'final-result node counts should be computed with SQLite json_each so list rows stay graph-free',
+  )
+  assert.match(
+    viewServiceSource,
+    /export function parseStoredGraphWorkflow[\s\S]*const \{ graph_json: graphJson, \.\.\.rest \} = record/,
+    'the single-workflow response must strip the raw graph_json string instead of returning it twice',
+  )
+  assert.match(
+    viewServiceSource,
+    /GraphWorkflowModel\.findSummariesByFolderIds\(folderScopeIds, true\)[\s\S]*GraphWorkflowModel\.findAllSummaries\(true\)/,
+    'browse content must list workflow summaries rather than parsed graph documents',
+  )
+  assert.match(
+    viewServiceSource,
+    /export function buildGraphWorkflowReservationContent\(\)[\s\S]*reservationSnapshot\.revision === revision/,
+    'the reservation payload must reuse a shared snapshot while the data revision is unchanged',
+  )
+  assert.doesNotMatch(
+    viewServiceSource,
+    /GRAPH_EXECUTION_LIST_COLUMNS = `[^`]*execution_plan/,
+    'browse/reservation execution rows must not carry the execution plan document',
+  )
+  assert.ok(
+    moduleGraphTypesSource.includes('export interface GraphWorkflowSummaryRecord')
+      && moduleGraphTypesSource.includes('node_count')
+      && moduleGraphTypesSource.includes('final_result_node_count'),
+    'backend module graph types should define the workflow list summary shape',
+  )
+}
+
+/** WF-3 계약: ComfyUI 워크플로우 목록도 `workflow_json` 을 싣지 않는다. */
+function verifyComfyWorkflowListSummaryProjection() {
+  const workflowModelSource = source('models/Workflow.ts')
+  const crudRoutesSource = source('routes/workflows/crud.routes.ts')
+
+  assert.match(
+    workflowModelSource,
+    /static findAllSummaries\(activeOnly: boolean = false\): WorkflowSummaryRecord\[\]/,
+    'the ComfyUI workflow model should expose a list projection without the workflow document',
+  )
+  assert.match(
+    workflowModelSource,
+    /export type WorkflowSummaryRecord = Omit<WorkflowRecord, 'workflow_json'>/,
+    'the ComfyUI workflow list projection type must exclude workflow_json',
+  )
+  assert.match(
+    crudRoutesSource,
+    /const workflows = WorkflowModel\.findAllSummaries\(activeOnly\)/,
+    'GET /api/workflows must use the summary projection so the graph document stays out of list responses',
+  )
+}
+
+/** WF-4 계약: 실행 미리보기는 배치 1회로 받고 로그/node_io 는 포함하지 않는다. */
+function verifyExecutionPreviewBatchRoute() {
+  const executionRoutesSource = source('routes/graph-workflows/execution-routes.ts')
+  const previewRouteIndex = executionRoutesSource.indexOf("router.get('/executions/previews'")
+  const executionDetailRouteIndex = executionRoutesSource.indexOf("router.get('/executions/:executionId'")
+
+  assert.ok(previewRouteIndex >= 0, 'execution routes should expose a batch artifact preview endpoint')
+  assert.ok(
+    previewRouteIndex < executionDetailRouteIndex,
+    'the batch preview route must be registered before the generic execution id route',
+  )
+  assert.doesNotMatch(
+    executionRoutesSource.slice(previewRouteIndex, executionDetailRouteIndex),
+    /GraphExecutionLogModel|GraphExecutionNodeIoModel/,
+    'batch previews must not hydrate execution logs or node IO rows',
   )
 }
 
@@ -336,5 +459,8 @@ verifyExecutionDetailNewestTieBreakers()
 verifyWorkflowVersionSummaryRoute()
 verifyWorkflowRuntimeHealthRoute()
 verifyWorkflowImportExportRoutes()
+verifyWorkflowListSummaryProjection()
+verifyComfyWorkflowListSummaryProjection()
+verifyExecutionPreviewBatchRoute()
 
 console.log('✅ Graph workflow route contracts verified')

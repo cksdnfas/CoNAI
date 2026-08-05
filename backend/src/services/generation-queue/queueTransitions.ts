@@ -1,5 +1,5 @@
 import type {
-  GenerationQueueJobRecord,
+  GenerationQueueJobListRecord,
   GenerationQueueJobStatus,
   GenerationQueueJobUpdateData,
   GenerationQueueProviderSubmitState,
@@ -37,8 +37,9 @@ export type QueueTransitionUpdateOptions = {
   providerSubmitState?: GenerationQueueProviderSubmitState
 }
 
+// PAYLOAD-1: 전이 계산은 상태/타임스탬프 컬럼만 쓰므로 경량 레코드로 충분하다.
 export function buildQueueTransitionUpdates(
-  current: GenerationQueueJobRecord,
+  current: GenerationQueueJobListRecord,
   nextStatus: GenerationQueueJobStatus,
   nowIso: string,
   options: QueueTransitionUpdateOptions = {},

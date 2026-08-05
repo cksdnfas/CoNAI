@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Pause, Play, Plus, Rocket, Save, SquarePen, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,8 +9,9 @@ import type { SelectedImageDraft } from '@/features/image-generation/image-gener
 import { SettingsField, SettingsInsetBlock, SettingsSection } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { useI18n, type TranslationInput } from '@/i18n'
+import { getGraphWorkflow } from '@/lib/api-module-graph'
 import type {
-  GraphWorkflowRecord,
+  GraphWorkflowNameRecord,
   GraphWorkflowScheduleFailurePolicy,
   GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
@@ -117,7 +119,7 @@ export function ModuleWorkflowSchedulesPanel({
   onRunNow,
 }: {
   schedules: GraphWorkflowScheduleRecord[]
-  workflows: GraphWorkflowRecord[]
+  workflows: GraphWorkflowNameRecord[]
   workflowNameById: Map<number, string>
   isMutating: boolean
   onCreateSchedule: (payload: { graph_workflow_id: number } & ScheduleMutationPayload) => Promise<void> | void
@@ -142,11 +144,17 @@ export function ModuleWorkflowSchedulesPanel({
   const [draftEnqueueCount, setDraftEnqueueCount] = useState('1')
   const [draftInputValues, setDraftInputValues] = useState<Record<string, unknown>>({})
 
-  const selectedWorkflowRecord = useMemo(
-    () => workflows.find((workflow) => String(workflow.id) === draftWorkflowId) ?? null,
-    [draftWorkflowId, workflows],
-  )
-  const selectedInputDefinitions = selectedWorkflowRecord?.graph.metadata?.exposed_inputs ?? []
+  // WF-1: 예약 목록 응답에는 그래프 문서가 없다. 편집기를 열 때 선택한 워크플로우만 by-id 로 받아
+  // 노출 입력 정의를 구성한다(모듈그래프 페이지 상세 쿼리와 키가 같아 캐시를 함께 쓴다).
+  const draftWorkflowNumericId = Number(draftWorkflowId)
+  const hasDraftWorkflowId = Number.isInteger(draftWorkflowNumericId) && draftWorkflowNumericId > 0
+  const selectedWorkflowDetailQuery = useQuery({
+    queryKey: ['module-graph-workflow-detail', hasDraftWorkflowId ? draftWorkflowNumericId : null],
+    queryFn: () => getGraphWorkflow(draftWorkflowNumericId),
+    enabled: editorMode !== null && hasDraftWorkflowId,
+    staleTime: 30_000,
+  })
+  const selectedInputDefinitions = selectedWorkflowDetailQuery.data?.graph.metadata?.exposed_inputs ?? []
 
   const resetDraft = () => {
     setEditorMode(null)
