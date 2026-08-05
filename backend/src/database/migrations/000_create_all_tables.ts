@@ -33,6 +33,60 @@ function resolveMigrationEnvConfiguredPath(value: string, currentDir: string) {
   return path.resolve(resolveMigrationEnvBaseDir(currentDir), trimmed)
 }
 
+// ============================================================================
+// Mirrored SQL fragments (migrations 028 / 031)
+//
+// 이 파일은 "신규 DB 생성" 경로, 028/031 은 "기존 DB 업그레이드" 경로다. 두 경로가
+// 같은 스키마를 만들어야 하므로 상태 테이블/부분 인덱스/트리거를 여기에도 미러링한다.
+// 아래 표현식은 028/031 과 문자 단위로 동일해야 한다 (FTS5 external-content 인덱스는
+// 삽입 때와 삭제 때의 텍스트가 1바이트라도 다르면 조용히 손상된다).
+// `verify:db-migration-contracts` 가 이 파일과 028/031 의 사본을 비교한다.
+// 마이그레이션 파일은 프로젝트 모듈을 import 할 수 없다(포터블/SEA 빌드가 컴파일된
+// migrations 디렉터리만 통째로 복사한다). 그래서 공유가 아니라 복사본이다.
+// ============================================================================
+
+const CAPABILITY_TAGGER_SQL = `COALESCE((SELECT tagger_enabled FROM auto_tag_state_meta WHERE id = 1), 1) = 1`;
+const CAPABILITY_KALOSCOPE_SQL = `COALESCE((SELECT kaloscope_enabled FROM auto_tag_state_meta WHERE id = 1), 1) = 1`;
+
+/** Same meaning as the scheduler's json_extract OR chain, guarded against malformed JSON. */
+function needsAutoTagWorkSql(autoTagsExpr: string): string {
+  return `(
+    ${autoTagsExpr} IS NULL
+    OR json_valid(${autoTagsExpr}) = 0
+    OR (${CAPABILITY_TAGGER_SQL} AND json_extract(${autoTagsExpr}, '$.tagger') IS NULL)
+    OR (${CAPABILITY_KALOSCOPE_SQL} AND json_extract(${autoTagsExpr}, '$.kaloscope') IS NULL)
+  )`;
+}
+
+/** Searchable positive text: prompt + NAI character prompt + v4 char captions. */
+function positiveTextSql(prefix: string): string {
+  return `(
+    COALESCE(${prefix}.prompt, '') || char(10) ||
+    COALESCE(${prefix}.character_prompt_text, '') || char(10) ||
+    CASE WHEN json_valid(${prefix}.raw_nai_parameters) = 1 THEN COALESCE((
+      SELECT group_concat(COALESCE(json_extract(char_item.value, '$.char_caption'), ''), char(10))
+      FROM json_each(${prefix}.raw_nai_parameters, '$.v4_prompt.caption.char_captions') AS char_item
+    ), '') ELSE '' END
+  )`;
+}
+
+function negativeTextSql(prefix: string): string {
+  return `COALESCE(${prefix}.negative_prompt, '')`;
+}
+
+/**
+ * Only touch the index for rows the backfill already owns.
+ * 'ready' means the whole table is owned.
+ */
+function syncGateSql(rowidExpression: string): string {
+  return `EXISTS (
+    SELECT 1 FROM media_prompt_fts_state s
+    WHERE s.id = 1
+      AND s.status IN ('pending', 'ready')
+      AND (s.status = 'ready' OR ${rowidExpression} <= s.last_rowid)
+  )`;
+}
+
 /**
  * 통합 마이그레이션: 모든 필수 테이블 생성
  * - 프롬프트 관리 (prompt_collection, negative_prompt_collection, prompt_groups, negative_prompt_groups)
@@ -40,6 +94,7 @@ function resolveMigrationEnvConfiguredPath(value: string, currentDir: string) {
  * - 평가 시스템 (rating_weights, rating_tiers)
  * - 미디어 메타데이터 (media_metadata, image_files)
  * - 폴더 관리 (watched_folders, scan_logs)
+ * - 자동 태그 상태 / 프롬프트 검색 인덱스 (auto_tag_state_meta, media_prompt_fts*)
  * - 워크플로우 (workflows, comfyui_servers, workflow_servers)
  * - API 생성 히스토리 (generation_history)
  * - 사용자 설정 (user_preferences, wildcards)
@@ -281,7 +336,13 @@ export const up = async (db: Database.Database): Promise<void> => {
       first_seen_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       metadata_updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       postprocess_status TEXT NOT NULL DEFAULT 'ready',
-      postprocess_completed_at DATETIME DEFAULT NULL
+      postprocess_completed_at DATETIME DEFAULT NULL,
+      -- NovelAI 원본 생성 파라미터 (마이그레이션 009). 아래 031 미러 트리거가 읽는다.
+      raw_nai_parameters TEXT DEFAULT NULL,
+      -- NAI v4 캐릭터 캡션 평문 (마이그레이션 010). 아래 031 미러 트리거가 읽는다.
+      character_prompt_text TEXT DEFAULT NULL,
+      -- 자동 태그 스케줄러 작업 상태 (마이그레이션 028): 'pending' | 'done' | 'skip' | NULL
+      auto_tag_state TEXT DEFAULT NULL
     )
   `);
 
@@ -315,7 +376,17 @@ export const up = async (db: Database.Database): Promise<void> => {
       WHERE json_type(auto_tags, '$.character') = 'object'`,
     `CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_root_model
       ON media_metadata(json_extract(auto_tags, '$.model'))
-      WHERE json_extract(auto_tags, '$.model') IS NOT NULL`
+      WHERE json_extract(auto_tags, '$.model') IS NOT NULL`,
+    // Home feed visibility count covering index (from migration 027).
+    // composite_hash is part of the index on purpose: media_metadata is a rowid table,
+    // so without it the EXISTS(image_files) correlation drops back to the wide row.
+    `CREATE INDEX IF NOT EXISTS idx_media_metadata_visibility
+      ON media_metadata(rating_score, postprocess_status, composite_hash)`,
+    // Auto-tag pending work set (from migration 028). Partial + leading with the state
+    // column so an idle poll is an index SEARCH over an almost always empty set.
+    `CREATE INDEX IF NOT EXISTS idx_media_metadata_auto_tag_pending
+      ON media_metadata(auto_tag_state, composite_hash)
+      WHERE auto_tag_state = 'pending'`
   ];
 
   metadataIndexes.forEach(sql => {
@@ -483,6 +554,190 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 1개 생성 완료\n');
 
   // ============================================
+  // 5-1. 자동 태그 대기 상태 (마이그레이션 028 미러)
+  // ============================================
+  // image_files 트리거가 있으므로 image_files 생성 이후여야 한다.
+  // 028의 백필(UPDATE ... SET auto_tag_state = 'pending')은 옮기지 않는다: 신규 DB에는
+  // 대상 행이 없고, 000이 (migrations 레코드가 사라진) 기존 DB에 대해 실행되는 경우에도
+  // 028이 바로 뒤에 실행되며 백필을 직접 수행한다.
+  console.log('🏷️  자동 태그 대기 상태 테이블/트리거 생성 중...');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auto_tag_state_meta (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      tagger_enabled INTEGER DEFAULT NULL,
+      kaloscope_enabled INTEGER DEFAULT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  // NULL capabilities on purpose: AutoTagStateService.syncCapabilityState() sees the
+  // unsynced marker on the first scheduler use and completes the capability-aware pass.
+  db.prepare(`
+    INSERT OR IGNORE INTO auto_tag_state_meta (id, tagger_enabled, kaloscope_enabled)
+    VALUES (1, NULL, NULL)
+  `).run();
+
+  db.exec(`
+    DROP TRIGGER IF EXISTS trg_media_metadata_auto_tag_state_insert;
+    CREATE TRIGGER trg_media_metadata_auto_tag_state_insert
+    AFTER INSERT ON media_metadata
+    WHEN NEW.auto_tag_state IS NOT 'pending' AND ${needsAutoTagWorkSql('NEW.auto_tags')}
+    BEGIN
+      UPDATE media_metadata
+      SET auto_tag_state = 'pending'
+      WHERE composite_hash = NEW.composite_hash;
+    END;
+
+    DROP TRIGGER IF EXISTS trg_media_metadata_auto_tag_state_promote;
+    CREATE TRIGGER trg_media_metadata_auto_tag_state_promote
+    AFTER UPDATE OF auto_tags ON media_metadata
+    WHEN NEW.auto_tag_state IS NOT 'pending' AND ${needsAutoTagWorkSql('NEW.auto_tags')}
+    BEGIN
+      UPDATE media_metadata
+      SET auto_tag_state = 'pending'
+      WHERE composite_hash = NEW.composite_hash;
+    END;
+
+    DROP TRIGGER IF EXISTS trg_media_metadata_auto_tag_state_settle;
+    CREATE TRIGGER trg_media_metadata_auto_tag_state_settle
+    AFTER UPDATE OF auto_tags ON media_metadata
+    WHEN NEW.auto_tag_state = 'pending' AND NOT ${needsAutoTagWorkSql('NEW.auto_tags')}
+    BEGIN
+      UPDATE media_metadata
+      SET auto_tag_state = 'done'
+      WHERE composite_hash = NEW.composite_hash;
+    END;
+
+    DROP TRIGGER IF EXISTS trg_image_files_auto_tag_state_insert;
+    CREATE TRIGGER trg_image_files_auto_tag_state_insert
+    AFTER INSERT ON image_files
+    WHEN NEW.composite_hash IS NOT NULL
+      AND NEW.file_status = 'active'
+      AND NEW.original_file_path IS NOT NULL
+    BEGIN
+      UPDATE media_metadata
+      SET auto_tag_state = 'pending'
+      WHERE composite_hash = NEW.composite_hash
+        AND auto_tag_state IS NOT 'pending'
+        AND ${needsAutoTagWorkSql('auto_tags')};
+    END;
+
+    DROP TRIGGER IF EXISTS trg_image_files_auto_tag_state_link;
+    CREATE TRIGGER trg_image_files_auto_tag_state_link
+    AFTER UPDATE OF composite_hash, file_status, original_file_path ON image_files
+    WHEN NEW.composite_hash IS NOT NULL
+      AND NEW.file_status = 'active'
+      AND NEW.original_file_path IS NOT NULL
+      AND (
+        OLD.composite_hash IS NOT NEW.composite_hash
+        OR OLD.file_status IS NOT NEW.file_status
+        OR OLD.original_file_path IS NOT NEW.original_file_path
+      )
+    BEGIN
+      UPDATE media_metadata
+      SET auto_tag_state = 'pending'
+      WHERE composite_hash = NEW.composite_hash
+        AND auto_tag_state IS NOT 'pending'
+        AND ${needsAutoTagWorkSql('auto_tags')};
+    END;
+  `);
+
+  console.log('  ✅ auto_tag_state_meta + 상태 유지 트리거 5개 생성 완료\n');
+
+  // ============================================
+  // 5-2. 프롬프트 검색 FTS5 인덱스 (마이그레이션 031 미러)
+  // ============================================
+  // 상태는 반드시 'pending' / last_rowid = 0 으로 시작한다 (031과 동일).
+  //  - 'ready' 로 시드하면 트리거가 처음부터 살아난다. 정말로 빈 DB라면 무해하지만,
+  //    000은 전부 `IF NOT EXISTS` 라서 (migrations 레코드가 유실된 DB 등) 이미 행이 있는
+  //    media_metadata 위에서도 실행될 수 있다. 그 경우 인덱스에 넣은 적 없는 rowid 에
+  //    대해 FTS5 'delete' 명령이 나가고 external-content 인덱스가 조용히 손상된다.
+  //  - 시드 행 자체를 빼면 반대로 게이트의 EXISTS 가 영원히 false 이고, 백필 잡은
+  //    status='absent' 를 보고 경고만 남긴 채 종료한다 → 인덱스가 영영 안 채워진다.
+  //  - 'pending' 은 두 경우 모두에서 안전하고, 신규 설치에서 손해도 없다. 첫 프롬프트
+  //    검색이 `media-prompt-index` 잡을 요청하고, 빈 테이블은 한 배치에서 끝나며
+  //    markReady() 가 인덱스를 살린다. 그 전까지 검색은 원래의 LIKE 경로로 정확히 동작한다.
+  // 백필은 여기에도 031에도 없다. 인덱싱은 전적으로 런타임 잡의 몫이다.
+  console.log('🔎 프롬프트 검색 FTS5 인덱스 생성 중...');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS media_prompt_fts_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      status TEXT NOT NULL DEFAULT 'pending',
+      last_rowid INTEGER NOT NULL DEFAULT 0,
+      indexed_rows INTEGER NOT NULL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  db.prepare(`
+    INSERT OR IGNORE INTO media_prompt_fts_state (id, status, last_rowid, indexed_rows)
+    VALUES (1, 'pending', 0, 0)
+  `).run();
+
+  // FTS5 + trigram 이 없는 SQLite 빌드에서도 신규 DB 생성 자체는 성공해야 한다.
+  // 그 경우 상태를 'disabled' 로 내리고 검색은 LIKE 경로에 머문다.
+  let promptFtsAvailable = true;
+  try {
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS media_prompt_fts USING fts5(
+        positive_text,
+        negative_text,
+        content='media_metadata',
+        content_rowid='rowid',
+        tokenize='trigram'
+      );
+    `);
+  } catch (error) {
+    promptFtsAvailable = false;
+    db.prepare(`
+      UPDATE media_prompt_fts_state
+      SET status = 'disabled', updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1
+    `).run();
+    console.warn(
+      '  ⚠️  FTS5 trigram 인덱스를 사용할 수 없어 프롬프트 검색은 LIKE 경로를 유지합니다:',
+      error instanceof Error ? error.message : error
+    );
+  }
+
+  if (promptFtsAvailable) {
+    db.exec(`
+      DROP TRIGGER IF EXISTS trg_media_prompt_fts_insert;
+      DROP TRIGGER IF EXISTS trg_media_prompt_fts_delete;
+      DROP TRIGGER IF EXISTS trg_media_prompt_fts_update;
+
+      CREATE TRIGGER trg_media_prompt_fts_insert
+      AFTER INSERT ON media_metadata
+      BEGIN
+        INSERT INTO media_prompt_fts(rowid, positive_text, negative_text)
+        SELECT NEW.rowid, ${positiveTextSql('NEW')}, ${negativeTextSql('NEW')}
+        WHERE ${syncGateSql('NEW.rowid')};
+      END;
+
+      CREATE TRIGGER trg_media_prompt_fts_delete
+      AFTER DELETE ON media_metadata
+      BEGIN
+        INSERT INTO media_prompt_fts(media_prompt_fts, rowid, positive_text, negative_text)
+        SELECT 'delete', OLD.rowid, ${positiveTextSql('OLD')}, ${negativeTextSql('OLD')}
+        WHERE ${syncGateSql('OLD.rowid')};
+      END;
+
+      CREATE TRIGGER trg_media_prompt_fts_update
+      AFTER UPDATE OF prompt, negative_prompt, character_prompt_text, raw_nai_parameters ON media_metadata
+      BEGIN
+        INSERT INTO media_prompt_fts(media_prompt_fts, rowid, positive_text, negative_text)
+        SELECT 'delete', OLD.rowid, ${positiveTextSql('OLD')}, ${negativeTextSql('OLD')}
+        WHERE ${syncGateSql('OLD.rowid')};
+
+        INSERT INTO media_prompt_fts(rowid, positive_text, negative_text)
+        SELECT NEW.rowid, ${positiveTextSql('NEW')}, ${negativeTextSql('NEW')}
+        WHERE ${syncGateSql('NEW.rowid')};
+      END;
+    `);
+    console.log('  ✅ media_prompt_fts + 상태 테이블 + 동기화 트리거 3개 생성 완료 (백필은 런타임 잡)\n');
+  }
+
+  // ============================================
   // 6. 시스템 설정
   // ============================================
   console.log('⚙️  시스템 설정 테이블 생성 중...');
@@ -546,15 +801,27 @@ export const up = async (db: Database.Database): Promise<void> => {
   console.log('   - 폴더 관리: 3개 테이블');
   console.log('   - 시스템 설정: 1개 테이블');
   console.log('   - 파일 검증 로그: 1개 테이블');
-  console.log('   총 14개 테이블 + 인덱스 생성');
+  console.log('   - 자동 태그/프롬프트 검색 색인: 4개 테이블');
+  console.log('   총 18개 테이블 + 인덱스 + 트리거 생성');
   console.log('   (워크플로우, 사용자 설정, API 생성 히스토리는 별도 DB)\n');
 };
 
 export const down = async (db: Database.Database): Promise<void> => {
   console.log('🔄 통합 마이그레이션 롤백 시작...\n');
 
+  // 프롬프트 검색 FTS5 인덱스는 media_metadata 를 external content 로 참조하므로 먼저 제거한다.
+  // (media_metadata 를 DROP 하면 그 위의 트리거는 SQLite 가 함께 제거한다.)
+  db.exec(`
+    DROP TRIGGER IF EXISTS trg_media_prompt_fts_insert;
+    DROP TRIGGER IF EXISTS trg_media_prompt_fts_delete;
+    DROP TRIGGER IF EXISTS trg_media_prompt_fts_update;
+  `);
+
   // 역순으로 테이블 제거 (images.db 테이블만)
   const tables = [
+    'media_prompt_fts',
+    'media_prompt_fts_state',
+    'auto_tag_state_meta',
     'file_verification_logs',
     'system_settings',
     'scan_logs',
