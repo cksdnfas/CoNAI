@@ -4,6 +4,10 @@ import { type MarkedField } from '../types/workflow'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
 import { ComfyUIService } from './comfyuiService'
 import { isQueueInputRef, resolveQueueInputFilePath } from './generation-queue/queueInputStore'
+import {
+  isWorkflowInputAssetRef,
+  resolveWorkflowInputAssetFilePath,
+} from './workflowInputAssetStore'
 
 interface WorkflowImageFieldPayload {
   fileName?: string
@@ -16,7 +20,7 @@ interface WorkflowImageFieldPayload {
   mimeType?: string
 }
 
-type ComfyImageUploadInput = {
+type ComfyMediaUploadInput = {
   fileName?: string
   buffer?: Buffer
   filePath?: string
@@ -48,7 +52,7 @@ function normalizeImagePayloadPath(payload: WorkflowImageFieldPayload) {
   return candidate
 }
 
-function getComfyImageUploadInput(value: unknown): ComfyImageUploadInput | null {
+function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null {
   if (!value) {
     return null
   }
@@ -63,6 +67,19 @@ function getComfyImageUploadInput(value: unknown): ComfyImageUploadInput | null 
 
     return {
       fileName: value.fileName || `${value.sha256}.png`,
+      filePath: storedPath,
+      mimeType: value.mimeType,
+    }
+  }
+
+  if (isWorkflowInputAssetRef(value)) {
+    const storedPath = resolveWorkflowInputAssetFilePath(value)
+    if (!storedPath) {
+      throw new Error(`Workflow input asset ${value.id} is no longer available on disk`)
+    }
+
+    return {
+      fileName: value.fileName,
       filePath: storedPath,
       mimeType: value.mimeType,
     }
@@ -110,6 +127,83 @@ function getComfyImageUploadInput(value: unknown): ComfyImageUploadInput | null 
   return null
 }
 
+const MINIMAX_H3_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
+const MINIMAX_H3_DIRECTOR_META_KEY = '__conai_minimax_h3_director'
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function getMiniMaxDirectorActiveItems(mode: unknown, timeline: Record<string, any>) {
+  const items = Array.isArray(timeline.items) ? timeline.items : []
+  const ordered = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => isRecord(item) && item.enabled !== false)
+    .sort((left, right) => Number(left.item.order ?? left.index) - Number(right.item.order ?? right.index))
+
+  return mode === 'FL2VA'
+    ? ordered.filter(({ item }) => item.type === 'image').slice(0, 2).map(({ item }) => item)
+    : ordered.map(({ item }) => item)
+}
+
+/** Upload Director draft assets and return plain MiniMax node inputs for workflow substitution. */
+async function prepareMiniMaxDirectorNodeValue(
+  comfyService: ComfyUIService,
+  fieldId: string,
+  value: unknown,
+): Promise<unknown> {
+  if (!isRecord(value)) {
+    return value
+  }
+
+  const metadata = isRecord(value[MINIMAX_H3_DIRECTOR_META_KEY]) ? value[MINIMAX_H3_DIRECTOR_META_KEY] : null
+  const assets = metadata && isRecord(metadata.assets) ? metadata.assets : {}
+  let timeline: Record<string, any>
+  try {
+    const parsed = JSON.parse(typeof value.timeline_data === 'string' ? value.timeline_data : '{}')
+    timeline = isRecord(parsed) ? parsed : { version: 1, items: [], prompt_blocks: [] }
+  } catch {
+    throw new Error(`MiniMax H3 Director field ${fieldId} has invalid timeline_data JSON`)
+  }
+
+  const nextItems = Array.isArray(timeline.items)
+    ? timeline.items.map((item: unknown) => isRecord(item) ? { ...item } : item)
+    : []
+  const nextTimeline = { ...timeline, version: 1, items: nextItems }
+  const activeItemIds = new Set(getMiniMaxDirectorActiveItems(value.mode, nextTimeline).map((item) => String(item.id ?? '')))
+
+  for (const item of nextItems) {
+    if (!isRecord(item) || !activeItemIds.has(String(item.id ?? ''))) {
+      continue
+    }
+
+    const uploadInput = getComfyMediaUploadInput(assets[String(item.id ?? '')])
+    if (!uploadInput) {
+      continue
+    }
+
+    const uploadName = buildComfyImageUploadName(uploadInput.fileName, `${sanitizeUploadSegment(fieldId)}_${sanitizeUploadSegment(String(item.id ?? 'media'))}`)
+    const fileStream = uploadInput.filePath ? fs.createReadStream(uploadInput.filePath) : null
+    const mediaInput = fileStream ?? uploadInput.buffer
+    if (!mediaInput) {
+      continue
+    }
+
+    try {
+      item.value = await comfyService.uploadInputImage(uploadName, mediaInput, { contentType: uploadInput.mimeType })
+    } finally {
+      fileStream?.destroy()
+    }
+  }
+
+  const preparedValue: Record<string, any> = {
+    ...value,
+    timeline_data: JSON.stringify(nextTimeline),
+  }
+  delete preparedValue[MINIMAX_H3_DIRECTOR_META_KEY]
+  return preparedValue
+}
+
 /** Upload image-marked prompt fields to ComfyUI and replace them with stored input filenames. */
 export async function prepareComfyPromptData(
   comfyService: ComfyUIService,
@@ -120,11 +214,16 @@ export async function prepareComfyPromptData(
   const preparedPromptData = { ...promptData }
 
   for (const field of markedFields) {
+    if (field.type === 'node' && field.node_editor === MINIMAX_H3_DIRECTOR_EDITOR) {
+      preparedPromptData[field.id] = await prepareMiniMaxDirectorNodeValue(comfyService, field.id, preparedPromptData[field.id])
+      continue
+    }
+
     if (field.type !== 'image') {
       continue
     }
 
-    const uploadInput = getComfyImageUploadInput(preparedPromptData[field.id])
+    const uploadInput = getComfyMediaUploadInput(preparedPromptData[field.id])
     if (!uploadInput) {
       continue
     }

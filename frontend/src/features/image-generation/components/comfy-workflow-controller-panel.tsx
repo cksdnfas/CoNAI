@@ -8,7 +8,7 @@ import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
-import { hasWorkflowFieldValue } from '../image-generation-drafts'
+import { collectWorkflowNodeDraftIssues, hasWorkflowFieldValue } from '../image-generation-drafts'
 import type { ComfyUIServerTestState, SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
 import { WorkflowFieldDisclosureCard } from './workflow-field-disclosure-card'
@@ -251,6 +251,10 @@ export function ComfyWorkflowControllerPanel({
     () => workflowFields.filter((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id])),
     [workflowDraft, workflowFields],
   )
+  const workflowNodeIssues = useMemo(
+    () => collectWorkflowNodeDraftIssues(workflowFields, workflowDraft),
+    [workflowDraft, workflowFields],
+  )
   const queueRegistrationNumber = Number(queueRegistrationCount)
   const queueRegistrationCountValid = Number.isInteger(queueRegistrationNumber) && queueRegistrationNumber >= 1 && queueRegistrationNumber <= 32
   const readinessIssues = useMemo(() => {
@@ -284,9 +288,17 @@ export function ComfyWorkflowControllerPanel({
       issues.push(t({ ko: '큐 등록 개수는 1부터 32 사이의 정수여야 해.', en: 'Queue count must be an integer between 1 and 32.' }))
     }
 
+    if (workflowNodeIssues.length > 0) {
+      const firstIssue = workflowNodeIssues[0]
+      issues.push(t(
+        { ko: '{label}: {message}', en: '{label}: {message}' },
+        { label: firstIssue.field.label, message: t({ ko: firstIssue.issue.ko, en: firstIssue.issue.en }) },
+      ))
+    }
+
     return issues
-  }, [missingRequiredFields, queueRegistrationCountValid, routingCanGenerate, selectedTag, selectedTarget, servers.length, t, workflowFields.length])
-  const canGenerateSelected = routingCanGenerate && missingRequiredFields.length === 0 && queueRegistrationCountValid
+  }, [missingRequiredFields, queueRegistrationCountValid, routingCanGenerate, selectedTag, selectedTarget, servers.length, t, workflowFields.length, workflowNodeIssues])
+  const canGenerateSelected = routingCanGenerate && missingRequiredFields.length === 0 && workflowNodeIssues.length === 0 && queueRegistrationCountValid
   const targetOptions = useMemo<WorkflowTargetOption[]>(() => {
     if (servers.length === 0) {
       return [{ value: 'auto', label: t({ ko: '서버 없음', en: 'No servers' }) }]

@@ -43,7 +43,7 @@ export interface MarkedField {
   max?: number; // number 타입인 경우 최대값
   step?: number; // number 타입인 경우 증감 단위
   node_class_type?: string;
-  node_editor?: 'power_lora_loader_rgthree';
+  node_editor?: 'power_lora_loader_rgthree' | 'minimax_h3_director_dasiwa';
   node_items?: Array<{
     key: string;
     label: string;

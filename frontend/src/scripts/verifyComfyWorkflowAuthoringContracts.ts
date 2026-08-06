@@ -144,8 +144,8 @@ match(
 )
 match(
   comfyWorkflowControllerPanelSource,
-  /routingCanGenerate && missingRequiredFields\.length === 0 && queueRegistrationCountValid/,
-  'Comfy workflow controller should gate queueing on routing, required fields, and queue count',
+  /routingCanGenerate && missingRequiredFields\.length === 0 && workflowNodeIssues\.length === 0 && queueRegistrationCountValid/,
+  'Comfy workflow controller should gate queueing on routing, required fields, composite-node issues, and queue count',
 )
 doesNotMatch(
   comfyWorkflowControllerPanelSource,

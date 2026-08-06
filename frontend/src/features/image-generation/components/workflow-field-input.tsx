@@ -11,6 +11,7 @@ import { TextSegmentSpreadsheetInput } from './text-segment-spreadsheet-input'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { PowerLoraLoaderInput } from './power-lora-loader-input'
+import { MiniMaxH3DirectorDasiwaInput } from './minimax-h3-director-dasiwa-input'
 import { PathOptionTreeSelect } from './path-option-tree-select'
 
 const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
@@ -161,6 +162,17 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         isRefreshingLoraOptions={isRefreshingOptions}
         onRefreshLoraOptions={onRefreshOptions}
         useValueFallback={false}
+        onChange={onChange}
+      />,
+    )
+  }
+
+  if (field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa') {
+    const nodeValue: Record<string, unknown> = isWorkflowNodeDraftValue(value) ? value : {}
+
+    return wrapField(
+      <MiniMaxH3DirectorDasiwaInput
+        value={nodeValue}
         onChange={onChange}
       />,
     )

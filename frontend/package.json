@@ -11,6 +11,7 @@
     "verify:bundle-budget": "node scripts/verify-bundle-budget.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "eslint .",
+    "verify:minimax-h3-director-ui-contracts": "tsx src/scripts/verifyMiniMaxH3DirectorContracts.ts",
     "preview": "vite preview",
     "verify:app-document-metadata-contracts": "tsx src/scripts/verifyAppDocumentMetadataContracts.ts",
     "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts",

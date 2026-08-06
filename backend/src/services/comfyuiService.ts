@@ -28,6 +28,52 @@ import {
 import { substituteComfyPromptData } from './comfyui/workflowSubstitution';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
+export const COMFYUI_NODE_VALIDATION_FAILURE_CODE = 'comfy_node_validation';
+
+/** Preserve structured Comfy node errors while remaining compatible with queue error messages. */
+export class ComfyUINodeValidationError extends Error {
+  readonly nodeErrors: Record<string, unknown>;
+  readonly queueFailureCode = COMFYUI_NODE_VALIDATION_FAILURE_CODE;
+  readonly queueFailureMessage: string;
+
+  constructor(nodeErrors: Record<string, unknown>) {
+    const summaries = Object.entries(nodeErrors).map(([nodeId, nodeError]) => {
+      const boundedNodeId = nodeId.slice(0, 80);
+      if (!nodeError || typeof nodeError !== 'object' || Array.isArray(nodeError)) {
+        return `node ${boundedNodeId}`;
+      }
+
+      const record = nodeError as Record<string, unknown>;
+      const classType = typeof record.class_type === 'string' ? ` (${record.class_type.slice(0, 80)})` : '';
+      const firstError = Array.isArray(record.errors) && record.errors[0] && typeof record.errors[0] === 'object'
+        ? record.errors[0] as Record<string, unknown>
+        : null;
+      const extraInfo = firstError?.extra_info && typeof firstError.extra_info === 'object' && !Array.isArray(firstError.extra_info)
+        ? firstError.extra_info as Record<string, unknown>
+        : null;
+      const inputName = typeof extraInfo?.input_name === 'string' ? ` input ${extraInfo.input_name.slice(0, 80)}` : '';
+      const detail = typeof firstError?.message === 'string' ? `: ${firstError.message.slice(0, 240)}` : '';
+      return `node ${boundedNodeId}${classType}${inputName}${detail}`;
+    });
+    const summary = summaries.length > 0 ? summaries.slice(0, 4).join('; ') : 'unknown node';
+    const message = `ComfyUI node errors: ${summary}`;
+    super(message);
+    this.name = 'ComfyUINodeValidationError';
+    this.nodeErrors = nodeErrors;
+    this.queueFailureMessage = message;
+  }
+}
+
+function readComfyNodeErrors(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const nodeErrors = (value as Record<string, unknown>).node_errors;
+  return nodeErrors && typeof nodeErrors === 'object' && !Array.isArray(nodeErrors)
+    ? nodeErrors as Record<string, unknown>
+    : null;
+}
 
 const HISTORY_POLL_TIMEOUT_MS = 10000;
 // 연속 실패 5회까지는 재시도하고, 그 다음(6회째) 실패에서 생성을 포기한다.
@@ -217,12 +263,17 @@ export class ComfyUIService {
       options?.onAccepted?.(promptId);
 
       if (response.data.node_errors && Object.keys(response.data.node_errors).length > 0) {
-        throw new Error(`ComfyUI node errors: ${JSON.stringify(response.data.node_errors)}`);
+        throw new ComfyUINodeValidationError(response.data.node_errors);
       }
 
       return promptId;
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        const nodeErrors = readComfyNodeErrors(error.response?.data);
+        if (nodeErrors && Object.keys(nodeErrors).length > 0) {
+          throw new ComfyUINodeValidationError(nodeErrors);
+        }
+
         // 실패 분류기가 code/status 를 볼 수 있도록 원인을 붙여서 감싼다.
         const apiError = new Error(`ComfyUI API error: ${resolveAxiosErrorMessage(error)}`) as Error & { cause?: unknown };
         apiError.cause = error;

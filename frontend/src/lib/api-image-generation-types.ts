@@ -143,7 +143,7 @@ export interface WorkflowMarkedField {
   max?: number
   step?: number
   node_class_type?: string
-  node_editor?: 'power_lora_loader_rgthree'
+  node_editor?: 'power_lora_loader_rgthree' | 'minimax_h3_director_dasiwa'
   node_items?: Array<{
     key: string
     label: string

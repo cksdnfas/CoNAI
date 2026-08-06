@@ -6,6 +6,7 @@ import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { hasWorkflowFieldValue } from '../image-generation-drafts'
 import type { SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { WorkflowFieldInput } from './workflow-field-input'
+import { validateMiniMaxH3DirectorNodeValue } from './minimax-h3-director-dasiwa-utils'
 
 function formatWorkflowFieldTypeLabel(field: WorkflowMarkedField) {
   if (field.type === 'node') {
@@ -34,6 +35,12 @@ export function WorkflowFieldDisclosureCard({ field, value, loraOptions, isRefre
   const [isExpanded, setIsExpanded] = useState(field.default_collapsed !== true)
   const hasValue = hasWorkflowFieldValue(value)
   const fieldLabel = field.label || field.id
+  const hasNodeIssues = field.type === 'node'
+    && field.node_editor === 'minimax_h3_director_dasiwa'
+    && typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && validateMiniMaxH3DirectorNodeValue(value).length > 0
 
   useEffect(() => {
     setIsExpanded(field.default_collapsed !== true)
@@ -43,6 +50,7 @@ export function WorkflowFieldDisclosureCard({ field, value, loraOptions, isRefre
     <div className={cn(
       WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
       hasValue && WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS,
+      hasNodeIssues && 'border-destructive/80 ring-1 ring-destructive/25',
     )}>
       <div className="px-4 py-3">
         <button

@@ -26,7 +26,9 @@ import { WorkflowFieldDisclosureCard } from './components/workflow-field-disclos
 import {
   buildWorkflowDraft,
   buildWorkflowPromptData,
+  collectWorkflowNodeDraftIssues,
   clearPersistedComfyWorkflowDraft,
+  deleteComfyWorkflowDraftInputAssets,
   findInvalidWorkflowNumberField,
   hasWorkflowFieldValue,
   loadPersistedComfyWorkflowDraft,
@@ -117,6 +119,10 @@ export function PublicComfyWorkflowPage() {
     () => workflowFields.find((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id])),
     [workflowDraft, workflowFields],
   )
+  const workflowNodeIssues = useMemo(
+    () => collectWorkflowNodeDraftIssues(workflowFields as WorkflowMarkedField[], workflowDraft),
+    [workflowDraft, workflowFields],
+  )
 
   const handleFieldChange = (fieldId: string, value: WorkflowFieldDraftValue) => {
     setWorkflowDraft((current) => ({
@@ -137,6 +143,7 @@ export function PublicComfyWorkflowPage() {
       return
     }
 
+    void deleteComfyWorkflowDraftInputAssets(workflowDraft)
     clearPersistedComfyWorkflowDraft(workflow.id)
     setWorkflowDraft(buildWorkflowDraft(workflowFields))
   }
@@ -183,6 +190,18 @@ export function PublicComfyWorkflowPage() {
         message: t(
           { ko: '숫자 필드 값이 올바르지 않아: {label}', en: 'Invalid numeric field value: {label}' },
           { label: invalidNumberField.label },
+        ),
+        tone: 'error',
+      })
+      return
+    }
+
+    const invalidNodeField = workflowNodeIssues[0]
+    if (invalidNodeField) {
+      showSnackbar({
+        message: t(
+          { ko: '{label}: {message}', en: '{label}: {message}' },
+          { label: invalidNodeField.field.label, message: t({ ko: invalidNodeField.issue.ko, en: invalidNodeField.issue.en }) },
         ),
         tone: 'error',
       })
@@ -344,6 +363,13 @@ export function PublicComfyWorkflowPage() {
         <Alert>
           <AlertTitle>{t({ ko: '입력이 더 필요해', en: 'More input is required' })}</AlertTitle>
           <AlertDescription>{t({ ko: '{label} 필드는 꼭 채워야 해.', en: 'The {label} field is required.' }, { label: missingRequiredField.label })}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {workflowNodeIssues.length > 0 ? (
+        <Alert variant="destructive">
+          <AlertTitle>{t({ ko: '워크플로 입력 확인', en: 'Check workflow inputs' })}</AlertTitle>
+          <AlertDescription>{t({ ko: workflowNodeIssues[0].issue.ko, en: workflowNodeIssues[0].issue.en })}</AlertDescription>
         </Alert>
       ) : null}
 

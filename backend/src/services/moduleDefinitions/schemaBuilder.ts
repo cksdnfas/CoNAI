@@ -19,13 +19,15 @@ function hasPowerLoraLoaderEntries(value: unknown) {
     && Object.values(value).some(isPowerLoraLoaderEntryValue);
 }
 
-function isPowerLoraLoaderField(field: any) {
-  return field?.node_editor === 'power_lora_loader_rgthree' || hasPowerLoraLoaderEntries(field?.default_value);
+function isCompositeNodeEditorField(field: any) {
+  return field?.node_editor === 'power_lora_loader_rgthree'
+    || field?.node_editor === 'minimax_h3_director_dasiwa'
+    || hasPowerLoraLoaderEntries(field?.default_value);
 }
 
 export function getConfigOnlyFieldKeys(uiSchema: any[], exposedInputs: any[]) {
   return new Set([
-    ...uiSchema.filter(isPowerLoraLoaderField).map((field) => field.key),
+    ...uiSchema.filter(isCompositeNodeEditorField).map((field) => field.key),
     ...exposedInputs.filter((port) => hasPowerLoraLoaderEntries(port.default_value)).map((port) => port.key),
   ]);
 }
@@ -150,7 +152,7 @@ export function convertMarkedFieldsToPorts(markedFields: any[], exposedFieldIds?
   const allowedIds = exposedFieldIds && exposedFieldIds.length > 0 ? new Set(exposedFieldIds) : null;
 
   return markedFields
-    .filter((field) => (!allowedIds || allowedIds.has(field.id)) && !isPowerLoraLoaderField(field))
+    .filter((field) => (!allowedIds || allowedIds.has(field.id)) && !isCompositeNodeEditorField(field))
     .map((field): ModulePortDefinition => ({
       key: field.id,
       label: field.label || inferPortLabel(field.id),

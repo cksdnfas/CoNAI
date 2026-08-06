@@ -1,7 +1,13 @@
 import { readBlobAsDataUrl } from '@/lib/file-data-url'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
 import type { NAIFormDraft, SelectedImageDraft, WorkflowFieldDraftValue, WorkflowNodeDraftValue, WorkflowTextDraftSegments } from './image-generation-shared'
 import { DEFAULT_NAI_FORM, EMPTY_NAI_CHARACTER_PROMPT, EMPTY_NAI_CHARACTER_REFERENCE, EMPTY_NAI_VIBE } from './image-generation-shared'
+import {
+  getMiniMaxH3DirectorAssets,
+  validateMiniMaxH3DirectorNodeValue,
+  type MiniMaxH3DirectorIssue,
+} from './components/minimax-h3-director-dasiwa-utils'
 
 const NAI_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:nai-form-draft:v1'
 const COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX = 'conai:image-generation:comfy:workflow-draft:v1:'
@@ -319,6 +325,50 @@ export function findInvalidWorkflowNumberField(
     && hasWorkflowFieldValue(draft[field.id])
     && !isValidWorkflowNumberDraftValue(draft[field.id])
   ))
+}
+
+/** Mark private Director assets for delayed deletion after a draft is discarded. */
+export async function deleteComfyWorkflowDraftInputAssets(draft: Record<string, WorkflowFieldDraftValue>) {
+  const assetIds = new Set<string>()
+  for (const value of Object.values(draft)) {
+    if (!isWorkflowNodeDraftValue(value)) {
+      continue
+    }
+    for (const asset of Object.values(getMiniMaxH3DirectorAssets(value))) {
+      assetIds.add(asset.id)
+    }
+  }
+
+  await Promise.allSettled(Array.from(assetIds, (assetId) => deleteWorkflowInputAsset(assetId)))
+}
+
+export type WorkflowNodeDraftIssue = {
+  field: WorkflowMarkedField
+  issue: MiniMaxH3DirectorIssue
+}
+
+/** Collect composite node-editor validation issues before queue registration. */
+export function collectWorkflowNodeDraftIssues(
+  fields: WorkflowMarkedField[],
+  draft: Record<string, WorkflowFieldDraftValue>,
+): WorkflowNodeDraftIssue[] {
+  return fields.flatMap((field) => {
+    if (field.type !== 'node' || field.node_editor !== 'minimax_h3_director_dasiwa') {
+      return []
+    }
+
+    const value = draft[field.id]
+    return isWorkflowNodeDraftValue(value)
+      ? validateMiniMaxH3DirectorNodeValue(value).map((issue) => ({ field, issue }))
+      : [{
+          field,
+          issue: {
+            code: 'missing-node-value',
+            ko: 'MiniMax H3 Director 입력을 확인해줘.',
+            en: 'Check the MiniMax H3 Director input.',
+          },
+        }]
+  })
 }
 
 /** Parse and clamp one workflow number without aligning it to the configured step. */

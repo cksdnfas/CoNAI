@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import {
   buildWorkflowDraft,
   clearPersistedComfyWorkflowDraft,
+  deleteComfyWorkflowDraftInputAssets,
   loadPersistedComfyWorkflowDraft,
   persistComfyWorkflowDraft,
 } from '../image-generation-drafts'
@@ -488,11 +489,12 @@ export function ComfyGenerationPanel({
   const handleRefreshDropdownLists = useCallback(() => handleScanDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS }), [handleScanDropdownLists])
 
   const handleResetWorkflowDraft = useCallback(() => {
+    void deleteComfyWorkflowDraftInputAssets(workflowDraft)
     if (selectedWorkflow) {
       clearPersistedComfyWorkflowDraft(selectedWorkflow.id)
     }
     setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
-  }, [selectedWorkflow, selectedWorkflowFields])
+  }, [selectedWorkflow, selectedWorkflowFields, workflowDraft])
 
   const handleOpenSelectedModuleSave = useCallback(() => {
     if (selectedWorkflow) {

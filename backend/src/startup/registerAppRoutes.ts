@@ -40,6 +40,7 @@ import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
 import { runtimeAppearanceRoutes } from '../routes/runtimeAppearance.routes';
 import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.routes';
 import publicWorkflowRoutes from '../routes/public-workflows.routes';
+import { workflowInputAssetRoutes } from '../routes/workflow-input-assets.routes';
 import { runtimeEventStreamRoutes } from '../routes/events/event-stream.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
@@ -252,6 +253,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/runtime-appearance', optionalAuth, runtimeAppearanceRoutes);
   app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowRuntimeMediaSettingsRead, runtimeMediaSettingsRoutes);
   app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
+  app.use('/api/workflow-input-assets', options.uploadLimiter, requireAuth, workflowInputAssetRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
   app.use('/api/comfyui-servers', optionalAuth, requirePermission('page.generation.view'), comfyuiServerRoutes);

@@ -4,6 +4,11 @@ import type { Edge, Node, NodeProps } from '@xyflow/react'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { useI18n } from '@/i18n'
 import { buildPowerLoraNodeItemsFromInputs } from './power-lora-loader-input'
+import {
+  MINIMAX_H3_DIRECTOR_CLASS_TYPE,
+  MINIMAX_H3_DIRECTOR_NODE_EDITOR,
+  MINIMAX_H3_DIRECTOR_NODE_INPUT_KEY,
+} from './minimax-h3-director-dasiwa-utils'
 
 type WorkflowJsonNodeRecord = {
   title?: string
@@ -293,6 +298,18 @@ export function parseWorkflowGraph(params: {
       }
     }
 
+    if (classType === MINIMAX_H3_DIRECTOR_CLASS_TYPE) {
+      editableInputs.push({
+        key: MINIMAX_H3_DIRECTOR_NODE_INPUT_KEY,
+        label: 'MiniMax H3 Director',
+        value: inputs,
+        inferredType: 'node',
+        jsonPath: `${nodeId}.inputs`,
+        typeLabel: 'Director',
+        nodeEditor: MINIMAX_H3_DIRECTOR_NODE_EDITOR,
+      })
+    }
+
     for (const [inputKey, inputValue] of Object.entries(inputs)) {
       if (Array.isArray(inputValue) && inputValue.length >= 2) {
         edges.push({
@@ -305,6 +322,10 @@ export function parseWorkflowGraph(params: {
       }
 
       if (classType === POWER_LORA_LOADER_CLASS_TYPE && inputKey === '➕ Add Lora') {
+        continue
+      }
+
+      if (classType === MINIMAX_H3_DIRECTOR_CLASS_TYPE) {
         continue
       }
 

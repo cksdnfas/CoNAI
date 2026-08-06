@@ -5,6 +5,7 @@ import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import {
   buildWorkflowPromptData,
+  collectWorkflowNodeDraftIssues,
   findInvalidWorkflowNumberField,
   hasWorkflowFieldValue,
 } from '../image-generation-drafts'
@@ -90,6 +91,12 @@ export function useComfyGenerationActions({
     const invalidNumberField = findInvalidWorkflowNumberField(selectedWorkflowFields, workflowDraft)
     if (invalidNumberField) {
       showSnackbar({ message: `숫자 필드 값이 올바르지 않아: ${invalidNumberField.label}`, tone: 'error' })
+      return false
+    }
+
+    const invalidNodeField = collectWorkflowNodeDraftIssues(selectedWorkflowFields, workflowDraft)[0]
+    if (invalidNodeField) {
+      showSnackbar({ message: `${invalidNodeField.field.label}: ${invalidNodeField.issue.ko}`, tone: 'error' })
       return false
     }
 
