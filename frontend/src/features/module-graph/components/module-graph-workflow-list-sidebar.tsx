@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { ArrowLeft, Copy, Download, FolderPlus, PenSquare, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
 import { SavedGraphList } from './saved-graph-list'
 
 /** Render the saved-workflow sidebar and its browse/editor toolbar actions. */
@@ -11,7 +11,6 @@ export function ModuleGraphWorkflowListSidebar({
   folders,
   selectedGraphId,
   selectedFolderId,
-  moduleDefinitionById,
   workflowView,
   selectedGraphRecord,
   selectedFolderRecord,
@@ -33,7 +32,6 @@ export function ModuleGraphWorkflowListSidebar({
   folders: GraphWorkflowFolderRecord[]
   selectedGraphId: number | null
   selectedFolderId: number | null
-  moduleDefinitionById: Map<number, ModuleDefinitionRecord>
   workflowView: 'browse' | 'edit'
   selectedGraphRecord: GraphWorkflowRecord | null
   selectedFolderRecord: GraphWorkflowFolderRecord | null
@@ -60,7 +58,6 @@ export function ModuleGraphWorkflowListSidebar({
       folders={folders}
       selectedGraphId={selectedGraphId}
       selectedFolderId={selectedFolderId}
-      moduleDefinitionById={moduleDefinitionById}
       onLoadGraph={onLoadGraph}
       onSelectFolder={onSelectFolder}
       leftToolbar={

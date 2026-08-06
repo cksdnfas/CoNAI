@@ -198,7 +198,7 @@ function assertRefreshPolicySource() {
  * 20만행 `image_files` 를 히스토리 행마다 다시 탐색하면 페이지 요청 1회가 목록 크기에 비례한다.
  */
 function assertHistoryListLookupCostPolicy() {
-  const listQuery = /static findAllWithMetadata\([\s\S]*?\n  \}/.exec(generationHistoryModelSource)?.[0] ?? ''
+  const listQuery = /static findAllWithMetadata\([\s\S]*?\n {2}\}/.exec(generationHistoryModelSource)?.[0] ?? ''
   if (listQuery.length === 0) {
     throw new Error('generation history model must keep a findAllWithMetadata list surface')
   }

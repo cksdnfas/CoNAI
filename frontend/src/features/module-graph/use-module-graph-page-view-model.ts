@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getGraphExecution, getGraphExecutionPreviews, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type GraphWorkflowSummaryRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import { getGraphExecution, getGraphExecutionPreviews, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useI18n } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
 import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, getModuleNodeDisplayLabel, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
@@ -19,7 +19,6 @@ export function useModuleGraphPageViewModel({
   edges,
   workflowView,
   lastSavedSnapshot,
-  graphWorkflows,
   selectedGraphId,
   selectedGraphWorkflow,
   graphWorkflowFolders,
@@ -41,7 +40,6 @@ export function useModuleGraphPageViewModel({
   edges: ModuleGraphEdge[]
   workflowView: 'browse' | 'edit'
   lastSavedSnapshot: string
-  graphWorkflows: GraphWorkflowSummaryRecord[]
   selectedGraphId: number | null
   selectedGraphWorkflow: GraphWorkflowRecord | null
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
@@ -285,7 +283,6 @@ export function useModuleGraphPageViewModel({
     shouldBlockGraphExit,
     selectedGraphRecord,
     selectedFolderRecord,
-    moduleDefinitionById,
     workflowInputCandidates,
     latestExecution,
     latestArtifactPreviewByNode,

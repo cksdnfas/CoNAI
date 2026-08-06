@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ImagePlus, Loader2 } from 'lucide-react'
+import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { getImageListDisplayName, getImageListItemId, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { DropSurface } from '@/features/upload/components/upload-page-sections'
 import { useI18n } from '@/i18n'
 import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
 import { listGenerationSaveImages } from '@/lib/api-image-generation-history'
@@ -44,6 +45,8 @@ type ImageAttachmentPickerButtonProps = {
   disabled?: boolean
   allowSaveDialog?: boolean
   uploadOnly?: boolean
+  selectedImage?: SelectedImageDraft | null
+  onRemove?: () => void
   onSelect: (image?: SelectedImageDraft) => void
 }
 
@@ -193,7 +196,7 @@ function ImageAttachmentBrowserSection({
 }
 
 /** Render a shared image attachment button backed by upload/system/save picker sources. */
-export function ImageAttachmentPickerButton({ label, modalTitle, disabled = false, allowSaveDialog = true, uploadOnly = false, onSelect }: ImageAttachmentPickerButtonProps) {
+export function ImageAttachmentPickerButton({ label, modalTitle, disabled = false, allowSaveDialog = true, uploadOnly = false, selectedImage, onRemove, onSelect }: ImageAttachmentPickerButtonProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -448,25 +451,69 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
   }
 
   if (uploadOnly) {
+    const uploadDisabled = disabled || isImporting
+
     return (
       <>
         <input ref={inputRef} type="file" accept="image/*" hidden onChange={(event) => void handleUploadFileChange(event)} />
 
-        <div className={disabled ? 'pointer-events-none opacity-60' : undefined}>
-          <DropSurface
-            ariaLabel={t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
-            active={uploadDropZone.isDragActive}
-            onClick={() => {
-              if (!disabled && !isImporting) {
-                inputRef.current?.click()
-              }
-            }}
-            onDrop={uploadDropZone.handleDrop}
-            onDragEnter={uploadDropZone.handleDragEnter}
-            onDragOver={uploadDropZone.handleDragOver}
-            onDragLeave={uploadDropZone.handleDragLeave}
-          />
-        </div>
+        <MediaFileDropSurface
+          ariaLabel={selectedImage ? t('uploadPageSections.replaceSelectedImage') : t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
+          active={uploadDropZone.isDragActive}
+          disabled={uploadDisabled}
+          onClick={() => inputRef.current?.click()}
+          onDrop={uploadDropZone.handleDrop}
+          onDragEnter={uploadDropZone.handleDragEnter}
+          onDragOver={uploadDropZone.handleDragOver}
+          onDragLeave={uploadDropZone.handleDragLeave}
+          actions={selectedImage ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon-sm"
+                disabled={uploadDisabled}
+                onClick={() => inputRef.current?.click()}
+                aria-label={t('uploadPageSections.replaceSelectedImage')}
+                title={t('uploadPageSections.replaceSelectedImage')}
+              >
+                <RefreshCw />
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon-sm"
+                disabled={uploadDisabled}
+                onClick={() => {
+                  if (onRemove) {
+                    onRemove()
+                    return
+                  }
+
+                  onSelect()
+                }}
+                aria-label={t('uploadPageSections.removeSelectedImage')}
+                title={t('uploadPageSections.removeSelectedImage')}
+              >
+                <Trash2 />
+              </Button>
+            </>
+          ) : undefined}
+        >
+          {selectedImage ? (
+            <div className="w-full space-y-2">
+              <InlineMediaPreview
+                src={selectedImage.dataUrl}
+                mimeType={selectedImage.mimeType}
+                fileName={selectedImage.fileName}
+                alt={label}
+                frameClassName="w-full border-0 bg-transparent p-0"
+                mediaClassName="max-h-40 w-full object-contain"
+              />
+              <div className="truncate px-2 text-center text-xs text-muted-foreground" title={selectedImage.fileName}>{selectedImage.fileName}</div>
+            </div>
+          ) : undefined}
+        </MediaFileDropSurface>
       </>
     )
   }
@@ -499,7 +546,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
 
           {source === 'upload' ? (
             <div className="pt-1">
-              <DropSurface
+              <MediaFileDropSurface
                 ariaLabel={t({ ko: '첨부할 이미지 선택', en: 'Select image to attach' })}
                 active={uploadDropZone.isDragActive}
                 onClick={() => inputRef.current?.click()}

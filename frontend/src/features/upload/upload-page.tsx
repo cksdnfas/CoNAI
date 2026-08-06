@@ -336,6 +336,10 @@ export function UploadPage() {
           isUploading={isUploading}
           uploadDropZone={uploadDropZone}
           onUploadFileChange={handleUploadFileChange}
+          onRemoveUploadFile={(index) => {
+            setUploadFiles((current) => current.filter((_, currentIndex) => currentIndex !== index))
+            resetUploadState()
+          }}
           onResetUpload={() => {
             setUploadFiles([])
             resetUploadState()

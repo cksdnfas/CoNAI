@@ -84,6 +84,7 @@
     "verify:app-document-metadata-contracts": "cd frontend && npm run verify:app-document-metadata-contracts",
     "verify:prompt-list-progress-contracts": "cd frontend && npm run verify:prompt-list-progress-contracts",
     "verify:upload-result-links": "cd frontend && npm run verify:upload-result-links",
+    "verify:upload-media-selection-contracts": "cd frontend && npm run verify:upload-media-selection-contracts",
     "verify:danbooru-browser-progress-contracts": "cd frontend && npm run verify:danbooru-browser-progress-contracts",
     "verify:module-workflow-output-progress-contracts": "cd frontend && npm run verify:module-workflow-output-progress-contracts",
     "verify:settings-paged-list-progress-contracts": "cd frontend && npm run verify:settings-paged-list-progress-contracts",

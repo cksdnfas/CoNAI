@@ -1,10 +1,11 @@
 import type { ChangeEvent, DragEvent, RefObject } from 'react'
 import { Link } from 'react-router-dom'
-import { Copy, Download, ExternalLink, Image as ImageIcon } from 'lucide-react'
+import { Copy, Download, ExternalLink, File, RefreshCw, Trash2, Video } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { PageInset, PageSection } from '@/components/common/page-surface'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
+import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +14,7 @@ import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
 import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
+import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { RewriteMetadataDraft } from '@/features/metadata/use-metadata-rewrite-draft'
 import { useI18n } from '@/i18n'
 import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
@@ -21,6 +23,7 @@ import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import { getUploadResultDetailPath } from '../upload-result-links'
 import { getVisibleUploadResultLists } from '../upload-result-list'
+import { useLocalFilePreviews, type LocalFilePreview } from '../use-local-file-previews'
 import type { UploadBatchResult, UploadTransferProgress } from '@/lib/api-images'
 import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from '@/lib/api-settings'
 import type { ExtractedPromptActionScope, ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
@@ -104,40 +107,55 @@ function ProgressBar({ percent }: { percent: number }) {
   )
 }
 
-/** Render a reusable drag/drop click target for upload and extract surfaces. */
-export function DropSurface({
-  active,
-  ariaLabel,
-  onClick,
-  onDrop,
-  onDragEnter,
-  onDragOver,
-  onDragLeave,
+/** Render one compact local file preview with accessible removal. */
+function UploadFilePreviewTile({
+  preview,
+  disabled,
+  removeLabel,
+  onRemove,
 }: {
-  active: boolean
-  ariaLabel: string
-  onClick: () => void
-  onDrop: (event: DragEvent<HTMLButtonElement>) => void
-  onDragEnter: (event: DragEvent<HTMLButtonElement>) => void
-  onDragOver: (event: DragEvent<HTMLButtonElement>) => void
-  onDragLeave: (event: DragEvent<HTMLButtonElement>) => void
+  preview: LocalFilePreview
+  disabled: boolean
+  removeLabel: string
+  onRemove: () => void
 }) {
+  const isVideo = preview.file.type.startsWith('video/')
+
   return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      onClick={onClick}
-      onDrop={onDrop}
-      onDragEnter={onDragEnter}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      className={[
-        'flex h-44 w-full items-center justify-center rounded-sm border-2 border-dashed transition-colors',
-        active ? 'border-primary bg-primary/6' : 'border-border bg-surface-low hover:border-primary/30 hover:bg-surface-high/60',
-      ].join(' ')}
-    >
-      <ImageIcon className={active ? 'h-12 w-12 text-primary' : 'h-12 w-12 text-muted-foreground'} />
-    </button>
+    <div className="relative min-w-0 overflow-hidden rounded-sm border border-border/70 bg-background/50">
+      {preview.url ? (
+        <InlineMediaPreview
+          src={preview.url}
+          mimeType={preview.file.type}
+          fileName={preview.file.name}
+          alt={preview.file.name}
+          frameClassName="aspect-square w-full rounded-none border-0 bg-surface-lowest p-0"
+          mediaClassName="h-full max-h-none w-full object-cover"
+        />
+      ) : (
+        <div className="flex aspect-square w-full items-center justify-center bg-surface-lowest text-muted-foreground">
+          {isVideo ? <Video className="h-8 w-8" /> : <File className="h-8 w-8" />}
+        </div>
+      )}
+
+      <Button
+        type="button"
+        variant="destructive"
+        size="icon-xs"
+        className="absolute right-2 top-2 shadow-sm"
+        disabled={disabled}
+        onClick={onRemove}
+        aria-label={removeLabel}
+        title={removeLabel}
+      >
+        <Trash2 />
+      </Button>
+
+      <div className="space-y-1 p-2">
+        <div className="truncate text-xs text-foreground" title={preview.file.name}>{preview.file.name}</div>
+        <div className="text-[11px] text-muted-foreground">{formatBytes(preview.file.size)}</div>
+      </div>
+    </div>
   )
 }
 
@@ -154,6 +172,7 @@ export function UploadPageUploadSection({
   isUploading,
   uploadDropZone,
   onUploadFileChange,
+  onRemoveUploadFile,
   onResetUpload,
   onUpload,
 }: {
@@ -174,10 +193,12 @@ export function UploadPageUploadSection({
     handleDragLeave: (event: DragEvent<HTMLButtonElement>) => void
   }
   onUploadFileChange: (event: ChangeEvent<HTMLInputElement>) => void
+  onRemoveUploadFile: (index: number) => void
   onResetUpload: () => void
   onUpload: () => void
 }) {
   const { t, formatNumber } = useI18n()
+  const uploadFilePreviews = useLocalFilePreviews(uploadFiles, MAX_VISIBLE_FILES)
   const uploadResultItems = uploadResult ? getVisibleUploadResultLists(uploadResult, MAX_VISIBLE_FILES) : null
 
   return (
@@ -201,7 +222,7 @@ export function UploadPageUploadSection({
     >
       <input ref={uploadInputRef} type="file" multiple accept={uploadAccept} className="hidden" onChange={onUploadFileChange} />
 
-      <DropSurface
+      <MediaFileDropSurface
         ariaLabel={t('uploadPageSections.chooseFilesToUpload')}
         active={uploadDropZone.isDragActive}
         onClick={() => uploadInputRef.current?.click()}
@@ -217,15 +238,18 @@ export function UploadPageUploadSection({
             <Badge variant="secondary">{t({ ko: '{count}개', en: '{count} files' }, { count: formatNumber(uploadFiles.length) })}</Badge>
             <Badge variant="outline">{formatBytes(uploadTotalSize)}</Badge>
           </div>
-          <div className="space-y-2 text-sm text-muted-foreground">
-            {uploadFiles.slice(0, MAX_VISIBLE_FILES).map((file) => (
-              <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-sm border border-border/70 bg-background/50 px-3 py-2">
-                <span className="min-w-0 truncate text-foreground">{file.name}</span>
-                <span className="shrink-0 text-xs">{formatBytes(file.size)}</span>
-              </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {uploadFilePreviews.slice(0, MAX_VISIBLE_FILES).map((preview, index) => (
+              <UploadFilePreviewTile
+                key={preview.key}
+                preview={preview}
+                disabled={isUploading}
+                removeLabel={t('uploadPageSections.removeFileFromUpload', { fileName: preview.file.name })}
+                onRemove={() => onRemoveUploadFile(index)}
+              />
             ))}
-            {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs">{t({ ko: '…{count}개 더 있음', en: '…{count} more' }, { count: formatNumber(uploadFiles.length - MAX_VISIBLE_FILES) })}</div> : null}
           </div>
+          {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs text-muted-foreground">{t({ ko: '…{count}개 더 있음', en: '…{count} more' }, { count: formatNumber(uploadFiles.length - MAX_VISIBLE_FILES) })}</div> : null}
         </PageInset>
       ) : null}
 
@@ -416,7 +440,7 @@ export function UploadPageExtractSection({
       <input ref={extractInputRef} type="file" accept={imageAccept} className="hidden" onChange={onExtractFileChange} />
 
       <PageInset className="px-0 py-0">
-        <DropSurface
+        <MediaFileDropSurface
           ariaLabel={t('uploadPageSections.chooseAnImageToPreview')}
           active={extractDropZone.isDragActive}
           onClick={() => extractInputRef.current?.click()}
@@ -424,19 +448,48 @@ export function UploadPageExtractSection({
           onDragEnter={extractDropZone.handleDragEnter}
           onDragOver={extractDropZone.handleDragOver}
           onDragLeave={extractDropZone.handleDragLeave}
-        />
+          actions={extractFile ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon-sm"
+                onClick={() => extractInputRef.current?.click()}
+                aria-label={t('uploadPageSections.replaceSelectedImage')}
+                title={t('uploadPageSections.replaceSelectedImage')}
+              >
+                <RefreshCw />
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon-sm"
+                onClick={onResetExtract}
+                aria-label={t('uploadPageSections.removeSelectedImage')}
+                title={t('uploadPageSections.removeSelectedImage')}
+              >
+                <Trash2 />
+              </Button>
+            </>
+          ) : undefined}
+        >
+          {extractFile && extractPreviewUrl ? (
+            <InlineMediaPreview
+              src={extractPreviewUrl}
+              mimeType={extractFile.type}
+              fileName={extractFile.name}
+              alt={extractFile.name}
+              frameClassName="w-full border-0 bg-transparent p-0"
+              mediaClassName="max-h-[420px] w-full object-contain"
+            />
+          ) : undefined}
+        </MediaFileDropSurface>
       </PageInset>
 
       {extractFile ? (
         <div className={cn('grid gap-4', isDesktopPageLayout ? 'grid-cols-2 items-start' : 'grid-cols-1')}>
           <div className="space-y-4">
             <PageInset className="space-y-4">
-              {extractPreviewUrl ? (
-                <div className="overflow-hidden rounded-sm border border-border/70 bg-background/50 p-4">
-                  <img src={extractPreviewUrl} alt={extractFile.name} className="max-h-[420px] w-full object-contain" />
-                </div>
-              ) : null}
-
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
                 <SummaryTile label="file" value={extractFile.name} />
                 <SummaryTile label="size" value={formatBytes(extractFile.size)} />

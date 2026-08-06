@@ -116,11 +116,20 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
 
   if (field.type === 'image') {
     const imageValue = isSelectedImageDraftValue(value) ? value : null
+    const isSimpleImageUpload = field.simple_upload_only === true
 
     return wrapField(
       <div className="space-y-3">
-        <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} allowSaveDialog={false} uploadOnly={field.simple_upload_only === true} onSelect={(image) => void onImageChange(image)} />
-        {imageValue ? (
+        <ImageAttachmentPickerButton
+          label={imageValue ? '이미지 변경' : '이미지 선택'}
+          modalTitle={field.label}
+          allowSaveDialog={false}
+          uploadOnly={isSimpleImageUpload}
+          selectedImage={isSimpleImageUpload ? imageValue : null}
+          onRemove={isSimpleImageUpload ? () => void onImageChange() : undefined}
+          onSelect={(image) => void onImageChange(image)}
+        />
+        {imageValue && !isSimpleImageUpload ? (
           <div className="theme-input-surface space-y-2 rounded-sm border border-border/80 p-3">
             <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
             <InlineMediaPreview

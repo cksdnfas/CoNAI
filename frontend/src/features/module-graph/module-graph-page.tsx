@@ -124,7 +124,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     shouldBlockGraphExit,
     selectedGraphRecord,
     selectedFolderRecord,
-    moduleDefinitionById,
     latestExecution,
     latestArtifactPreviewByNode,
     latestExecutionDetail,
@@ -144,7 +143,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     edges,
     workflowView,
     lastSavedSnapshot,
-    graphWorkflows: graphWorkflowsQuery.data ?? [],
     selectedGraphId,
     selectedGraphWorkflow,
     graphWorkflowFolders: graphWorkflowFoldersQuery.data ?? [],
@@ -313,7 +311,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       folders={graphWorkflowFoldersQuery.data ?? []}
       selectedGraphId={selectedGraphId}
       selectedFolderId={selectedFolderId}
-      moduleDefinitionById={moduleDefinitionById}
       workflowView={workflowView}
       selectedGraphRecord={selectedGraphRecord}
       selectedFolderRecord={selectedFolderRecord}

@@ -40,6 +40,7 @@
     "verify:saved-graph-list-contracts": "tsx src/scripts/verifySavedGraphListContracts.ts",
     "verify:wallpaper-widget-library-search-contracts": "tsx src/scripts/verifyWallpaperWidgetLibrarySearchContracts.tsx",
     "verify:upload-result-links": "tsx src/scripts/verifyUploadResultLinks.ts",
+    "verify:upload-media-selection-contracts": "tsx src/scripts/verifyUploadMediaSelectionContracts.ts",
     "verify:prompt-tag-links": "tsx src/scripts/verifyPromptTagLinks.ts",
     "verify:prompt-weight-display-contracts": "tsx src/scripts/verifyPromptWeightDisplayContracts.ts",
     "verify:prompt-inline-syntax-contracts": "tsx src/scripts/verifyPromptInlineSyntaxContracts.ts",

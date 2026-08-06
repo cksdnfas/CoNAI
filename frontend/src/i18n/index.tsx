@@ -22,14 +22,12 @@ export type TranslationCatalog = Record<string, TranslationDictionary>
 const DEFAULT_LANGUAGE: AppLanguage = 'ko'
 const LANGUAGE_STORAGE_KEY = 'conai.language'
 const DEFAULT_CATALOG: TranslationCatalog = { ...shellCatalog, ...authCatalog }
-const registeredCatalog: TranslationCatalog = { ...DEFAULT_CATALOG }
+let registeredCatalog: TranslationCatalog = { ...DEFAULT_CATALOG }
 const catalogListeners = new Set<() => void>()
-let catalogVersion = 0
 
 /** Register one route catalog before its lazy page renders. */
 export function registerTranslationCatalog(catalog: TranslationCatalog): void {
-  Object.assign(registeredCatalog, catalog)
-  catalogVersion += 1
+  registeredCatalog = { ...registeredCatalog, ...catalog }
   catalogListeners.forEach((listener) => listener())
 }
 
@@ -38,8 +36,8 @@ function subscribeCatalog(listener: () => void) {
   return () => catalogListeners.delete(listener)
 }
 
-function getCatalogVersion() {
-  return catalogVersion
+function getRegisteredCatalog() {
+  return registeredCatalog
 }
 
 export const SUPPORTED_LANGUAGES: AppLanguage[] = ['ko', 'en']
@@ -171,7 +169,7 @@ function withDefaultDateTimeOptions(
 }
 
 export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithChildren<{ catalog?: TranslationCatalog }>) {
-  const registeredCatalogVersion = useSyncExternalStore(subscribeCatalog, getCatalogVersion, getCatalogVersion)
+  const registeredCatalogSnapshot = useSyncExternalStore(subscribeCatalog, getRegisteredCatalog, getRegisteredCatalog)
   const storedLanguage = useMemo(() => readStoredLanguage(), [])
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -189,8 +187,8 @@ export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithC
   }, [language])
 
   const activeCatalog = useMemo(
-    () => ({ ...registeredCatalog, ...catalog }),
-    [catalog, registeredCatalogVersion],
+    () => ({ ...registeredCatalogSnapshot, ...catalog }),
+    [catalog, registeredCatalogSnapshot],
   )
 
   const t = useCallback<I18nContextValue['t']>(

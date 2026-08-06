@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowSummaryRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import type { GraphWorkflowFolderRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { hasAssignedFinalResult, resolveSavedGraphWorkflowFinalResultNodeCount, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
@@ -18,7 +18,6 @@ type SavedGraphListProps = {
   folders: GraphWorkflowFolderRecord[]
   selectedGraphId: number | null
   selectedFolderId: number | null
-  moduleDefinitionById: Map<number, ModuleDefinitionRecord>
   onLoadGraph: (graph: GraphWorkflowSummaryRecord) => void
   onSelectFolder: (folderId: number | null) => void
   leftToolbar?: ReactNode
@@ -59,7 +58,6 @@ export function SavedGraphList({
   folders,
   selectedGraphId,
   selectedFolderId,
-  moduleDefinitionById,
   onLoadGraph,
   onSelectFolder,
   leftToolbar,
