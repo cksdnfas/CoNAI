@@ -4,6 +4,13 @@
 export type WorkflowResultViewMode = 'history' | 'artifact_explorer';
 export type WorkflowArtifactDirectoryMode = 'shared' | 'per_run';
 
+export interface WorkflowNodeNumericBound {
+  min?: number;
+  max?: number;
+}
+
+export type WorkflowNodeNumericBounds = Record<string, WorkflowNodeNumericBound>;
+
 export interface WorkflowRecord {
   id: number;
   name: string;
@@ -45,6 +52,7 @@ export interface MarkedField {
   node_class_type?: string;
   node_editor?: 'power_lora_loader_rgthree' | 'minimax_h3_director_dasiwa';
   node_visible_fields?: string[];
+  node_numeric_bounds?: WorkflowNodeNumericBounds;
   node_items?: Array<{
     key: string;
     label: string;

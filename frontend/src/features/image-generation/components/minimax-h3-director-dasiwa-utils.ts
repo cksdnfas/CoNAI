@@ -7,6 +7,8 @@ export const MINIMAX_H3_DIRECTOR_CLASS_TYPE = 'MiniMaxH3Director'
 export const MINIMAX_H3_DIRECTOR_NODE_EDITOR = 'minimax_h3_director_dasiwa'
 export const MINIMAX_H3_DIRECTOR_NODE_INPUT_KEY = '__minimax_h3_director_node__'
 export const MINIMAX_H3_DIRECTOR_META_KEY = '__conai_minimax_h3_director'
+export const MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS = 1
+export const MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS = 60
 
 export type MiniMaxH3DirectorMode = 'FL2VA' | 'REF2VA'
 export type MiniMaxH3DirectorMediaType = 'image' | 'video' | 'audio'
@@ -283,8 +285,12 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3Dir
   const issues: MiniMaxH3DirectorIssue[] = []
   const timelineLinked = isMiniMaxH3DirectorInputLink(nodeValue.timeline_data)
 
-  if (!isMiniMaxH3DirectorInputLink(nodeValue.duration) && (!Number.isInteger(nodeValue.duration) || nodeValue.duration < 1 || nodeValue.duration > 1000)) {
-    issues.push({ code: 'duration-range', field: 'duration', ko: '영상 길이는 1~1000초 정수여야 해.', en: 'Duration must be an integer from 1 to 1000 seconds.' })
+  if (!isMiniMaxH3DirectorInputLink(nodeValue.duration) && (
+    !Number.isInteger(nodeValue.duration)
+    || nodeValue.duration < MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS
+    || nodeValue.duration > MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS
+  )) {
+    issues.push({ code: 'duration-range', field: 'duration', ko: '영상 길이는 1~60초 정수여야 해.', en: 'Duration must be an integer from 1 to 60 seconds.' })
   }
 
   const staticMode = isMiniMaxH3DirectorInputLink(nodeValue.mode) ? null : nodeValue.mode

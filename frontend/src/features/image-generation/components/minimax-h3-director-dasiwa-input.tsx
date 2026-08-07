@@ -15,6 +15,7 @@ import {
   uploadWorkflowInputAsset,
   type WorkflowInputAssetRef,
 } from '@/lib/api-workflow-input-assets'
+import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import {
   buildMiniMaxH3DirectorNodeValue,
@@ -22,6 +23,8 @@ import {
   getMiniMaxH3DirectorAssets,
   inferMiniMaxH3DirectorMediaType,
   isMiniMaxH3DirectorInputLink,
+  MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS,
+  MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS,
   MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS,
   normalizeMiniMaxH3DirectorNodeValue,
   parseMiniMaxH3DirectorTimeline,
@@ -43,6 +46,7 @@ type MediaLane = 'visual' | 'audio'
 type MiniMaxH3DirectorDasiwaInputProps = {
   value: Record<string, unknown>
   visibleFields?: string[]
+  numericBounds?: WorkflowNodeNumericBounds
   onChange: (value: Record<string, unknown>) => void
 }
 
@@ -118,7 +122,7 @@ function formatMediaTypeLabel(type: MiniMaxH3DirectorMediaType, index: number) {
 }
 
 /** Render DaSiWa MiniMax H3 Director inputs as a CoNAI-native reference board. */
-export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, onChange }: MiniMaxH3DirectorDasiwaInputProps) {
+export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBounds, onChange }: MiniMaxH3DirectorDasiwaInputProps) {
   const { t } = useI18n()
   const visualInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
@@ -534,19 +538,26 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, onChange }:
           {isFieldVisible('width') ? (
             <label className="space-y-1 text-xs text-muted-foreground">
               <span>{t({ ko: '너비', en: 'Width' })}</span>
-              <ScrubbableNumberInput step={1} value={widthValue} onChange={(nextValue) => emit({ width: Number(nextValue) })} />
+              <ScrubbableNumberInput min={numericBounds?.width?.min} max={numericBounds?.width?.max} step={1} value={widthValue} onChange={(nextValue) => emit({ width: Number(nextValue) })} />
             </label>
           ) : null}
           {isFieldVisible('height') ? (
             <label className="space-y-1 text-xs text-muted-foreground">
               <span>{t({ ko: '높이', en: 'Height' })}</span>
-              <ScrubbableNumberInput step={1} value={heightValue} onChange={(nextValue) => emit({ height: Number(nextValue) })} />
+              <ScrubbableNumberInput min={numericBounds?.height?.min} max={numericBounds?.height?.max} step={1} value={heightValue} onChange={(nextValue) => emit({ height: Number(nextValue) })} />
             </label>
           ) : null}
           {isFieldVisible('duration') ? (
             <label className={cn('space-y-1 text-xs text-muted-foreground', invalidFields.has('duration') && 'text-destructive')}>
               <span>{t({ ko: '길이(초)', en: 'Duration (seconds)' })}</span>
-              <ScrubbableNumberInput min={1} max={1000} step={1} value={durationValue} className={cn(invalidFields.has('duration') && 'border-destructive')} onChange={(nextValue) => emit({ duration: Number(nextValue) })} />
+              <ScrubbableNumberInput
+                min={Math.max(MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS, numericBounds?.duration?.min ?? MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS)}
+                max={Math.min(MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS, numericBounds?.duration?.max ?? MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS)}
+                step={1}
+                value={durationValue}
+                className={cn(invalidFields.has('duration') && 'border-destructive')}
+                onChange={(nextValue) => emit({ duration: Number(nextValue) })}
+              />
             </label>
           ) : null}
           {isFieldVisible('ref_image_size') ? (

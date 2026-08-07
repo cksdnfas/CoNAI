@@ -12,6 +12,8 @@ import {
   type MiniMaxH3DirectorTimelineItem,
 } from '../features/image-generation/components/minimax-h3-director-dasiwa-utils'
 import type { WorkflowInputAssetRef } from '../lib/api-workflow-input-assets'
+import type { WorkflowMarkedField } from '../lib/api-image-generation-types'
+import { buildWorkflowPromptData } from '../features/image-generation/image-generation-drafts'
 
 function item(
   id: string,
@@ -123,6 +125,38 @@ assert.ok(
   validateMiniMaxH3DirectorNodeValue({ ...original, fl2va_model: undefined }).some((issue) => issue.code === 'selected-model-connection'),
   'the selected mode must highlight a missing workflow MODEL connection',
 )
+assert.equal(
+  validateMiniMaxH3DirectorNodeValue({ ...original, duration: 60 }).some((issue) => issue.code === 'duration-range'),
+  false,
+  'a one-minute Director request must remain valid',
+)
+assert.ok(
+  validateMiniMaxH3DirectorNodeValue({ ...original, duration: 61 }).some((issue) => issue.code === 'duration-range'),
+  'Director duration must reject requests longer than one minute',
+)
+
+const boundedDirectorField: WorkflowMarkedField = {
+  id: 'director',
+  label: 'MiniMax H3 Director',
+  jsonPath: '42.inputs',
+  type: 'node',
+  node_editor: 'minimax_h3_director_dasiwa',
+  node_numeric_bounds: {
+    width: { min: 512, max: 2048 },
+    height: { min: 512, max: 2048 },
+    duration: { min: 1, max: 10 },
+  },
+}
+const boundedPrompt = buildWorkflowPromptData([boundedDirectorField], {
+  director: { ...original, width: 256, height: 4096, duration: 12 },
+})
+assert.equal((boundedPrompt.director as Record<string, unknown>).width, 512, 'Director width must honor the workflow minimum')
+assert.equal((boundedPrompt.director as Record<string, unknown>).height, 2048, 'Director height must honor the workflow maximum')
+assert.equal((boundedPrompt.director as Record<string, unknown>).duration, 10, 'Director duration must honor the workflow maximum')
+const defaultBoundedPrompt = buildWorkflowPromptData([{ ...boundedDirectorField, node_numeric_bounds: undefined }], {
+  director: { ...original, duration: 1000 },
+})
+assert.equal((defaultBoundedPrompt.director as Record<string, unknown>).duration, 60, 'Director duration must retain its one-minute hard maximum')
 
 const authoringSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-authoring-graph.tsx'), 'utf8')
 const fieldInputSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/workflow-field-input.tsx'), 'utf8')
@@ -133,7 +167,12 @@ assert.match(authoringSource, /classType === MINIMAX_H3_DIRECTOR_CLASS_TYPE/, 'o
 assert.match(authoringSource, /jsonPath: `\$\{nodeId\}\.inputs`/, 'the Director must remain one ordinary composite workflow input')
 assert.match(fieldInputSource, /MiniMaxH3DirectorDasiwaInput/, 'the composite input must render the CoNAI Director UI')
 assert.match(fieldInputSource, /visibleFields=\{field\.node_visible_fields\}/, 'the workflow field configuration must reach the Director UI')
+assert.match(fieldInputSource, /numericBounds=\{field\.node_numeric_bounds\}/, 'the workflow numeric bounds must reach the Director UI')
 assert.match(markedFieldsEditorSource, /node_visible_fields/, 'workflow settings must configure visible Director fields')
+assert.match(markedFieldsEditorSource, /node_numeric_bounds/, 'workflow settings must configure Director numeric bounds')
+for (const field of ['width', 'height', 'duration']) {
+  assert.match(directorInputSource, new RegExp(`numericBounds\\?\\.${field}\\?\\.(?:min|max)`), `${field} must consume configured workflow bounds`)
+}
 for (const field of ['mode', 'width', 'height', 'duration', 'ref_image_size', 'timeline_data', 'prompt']) {
   assert.match(directorInputSource, new RegExp(`isFieldVisible\\('${field}'\\)`), `${field} visibility must be configurable`)
 }

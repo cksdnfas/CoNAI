@@ -5,6 +5,9 @@ import type { NAIFormDraft, SelectedImageDraft, WorkflowFieldDraftValue, Workflo
 import { DEFAULT_NAI_FORM, EMPTY_NAI_CHARACTER_PROMPT, EMPTY_NAI_CHARACTER_REFERENCE, EMPTY_NAI_VIBE } from './image-generation-shared'
 import {
   getMiniMaxH3DirectorAssets,
+  isMiniMaxH3DirectorInputLink,
+  MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS,
+  MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS,
   validateMiniMaxH3DirectorNodeValue,
   type MiniMaxH3DirectorIssue,
 } from './components/minimax-h3-director-dasiwa-utils'
@@ -389,6 +392,50 @@ export function normalizeWorkflowNumberPromptValue(field: WorkflowMarkedField, v
   return normalizedValue
 }
 
+/** Clamp configured MiniMax composite numeric inputs without changing Comfy links. */
+function normalizeWorkflowNodePromptValue(field: WorkflowMarkedField, value: WorkflowNodeDraftValue) {
+  const normalizedValue = cloneWorkflowNodeDraftValue(value)
+  if (field.node_editor !== 'minimax_h3_director_dasiwa') {
+    return normalizedValue
+  }
+
+  for (const fieldKey of ['width', 'height', 'duration'] as const) {
+    const bounds = field.node_numeric_bounds?.[fieldKey]
+    const rawValue = normalizedValue[fieldKey]
+    const hasIntrinsicBounds = fieldKey === 'duration'
+    if ((!bounds || (bounds.min === undefined && bounds.max === undefined)) && !hasIntrinsicBounds) {
+      continue
+    }
+    if (rawValue === undefined || isMiniMaxH3DirectorInputLink(rawValue)) {
+      continue
+    }
+
+    const numericValue = Number(rawValue)
+    if (!Number.isFinite(numericValue)) {
+      throw new Error(`Invalid numeric workflow node field: ${field.id}.${fieldKey}`)
+    }
+
+    let nextValue = numericValue
+    const configuredMin = typeof bounds?.min === 'number' && Number.isFinite(bounds.min) ? bounds.min : undefined
+    const configuredMax = typeof bounds?.max === 'number' && Number.isFinite(bounds.max) ? bounds.max : undefined
+    const effectiveMin = fieldKey === 'duration'
+      ? Math.max(MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS, configuredMin ?? MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS)
+      : configuredMin
+    const effectiveMax = fieldKey === 'duration'
+      ? Math.min(MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS, configuredMax ?? MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS)
+      : configuredMax
+    if (effectiveMin !== undefined) {
+      nextValue = Math.max(effectiveMin, nextValue)
+    }
+    if (effectiveMax !== undefined) {
+      nextValue = Math.min(effectiveMax, nextValue)
+    }
+    normalizedValue[fieldKey] = nextValue
+  }
+
+  return normalizedValue
+}
+
 /** Convert workflow field input strings into the payload expected by the backend. */
 export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>) {
   return fields.reduce<Record<string, unknown>>((payload, field) => {
@@ -407,7 +454,7 @@ export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Re
     }
 
     if (typeof value !== 'string') {
-      payload[field.id] = isWorkflowNodeDraftValue(value) ? cloneWorkflowNodeDraftValue(value) : value
+      payload[field.id] = isWorkflowNodeDraftValue(value) ? normalizeWorkflowNodePromptValue(field, value) : value
       return payload
     }
 

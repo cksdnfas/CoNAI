@@ -6,7 +6,7 @@ import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsField, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
-import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import type { WorkflowMarkedField, WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
@@ -28,6 +28,12 @@ const MINIMAX_H3_DIRECTOR_VISIBLE_FIELD_OPTIONS: Array<{
   { key: 'timeline_data', ko: '참조 미디어', en: 'Reference media' },
   { key: 'prompt', ko: '글로벌 프롬프트', en: 'Global prompt' },
 ]
+
+const MINIMAX_H3_DIRECTOR_NUMERIC_BOUND_OPTIONS = [
+  { key: 'width', ko: '너비', en: 'Width' },
+  { key: 'height', ko: '높이', en: 'Height' },
+  { key: 'duration', ko: '길이', en: 'Duration', min: 1, max: 60 },
+] as const
 
 type ComfyWorkflowMarkedFieldsEditorProps = {
   markedFields: WorkflowMarkedField[]
@@ -56,6 +62,31 @@ function parseOptionalNumberInput(rawValue: string) {
 
   const parsed = Number(trimmed)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+/** Build one sparse node-bound map while removing cleared fields. */
+function buildNodeNumericBounds(
+  field: WorkflowMarkedField,
+  fieldKey: string,
+  boundKey: 'min' | 'max',
+  value: number | undefined,
+): WorkflowNodeNumericBounds | undefined {
+  const nextBounds: WorkflowNodeNumericBounds = {
+    ...field.node_numeric_bounds,
+    [fieldKey]: {
+      ...field.node_numeric_bounds?.[fieldKey],
+      [boundKey]: value,
+    },
+  }
+
+  if (value === undefined) {
+    delete nextBounds[fieldKey][boundKey]
+  }
+  if (nextBounds[fieldKey].min === undefined && nextBounds[fieldKey].max === undefined) {
+    delete nextBounds[fieldKey]
+  }
+
+  return Object.keys(nextBounds).length > 0 ? nextBounds : undefined
 }
 
 function formatMarkedFieldTypeLabel(field: WorkflowMarkedField) {
@@ -233,34 +264,78 @@ export function ComfyWorkflowMarkedFieldsEditor({
                     </div>
 
                     {field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa' ? (
-                      <SettingsField label={t({ ko: '노출할 Director 필드', en: 'Visible Director fields' })}>
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                          {MINIMAX_H3_DIRECTOR_VISIBLE_FIELD_OPTIONS.map((option) => {
-                            const visibleFields = field.node_visible_fields ?? [...MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS]
-                            const isVisible = visibleFields.includes(option.key)
-                            return (
-                              <SettingsToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
-                                <input
-                                  type="checkbox"
-                                  checked={isVisible}
-                                  onChange={(event) => {
-                                    const nextVisibleFieldSet = new Set(visibleFields)
-                                    if (event.target.checked) nextVisibleFieldSet.add(option.key)
-                                    else nextVisibleFieldSet.delete(option.key)
-                                    const nextVisibleFields = MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS.filter((key) => nextVisibleFieldSet.has(key))
-                                    onFieldPatch(field.id, {
-                                      node_visible_fields: nextVisibleFields.length === MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS.length
-                                        ? undefined
-                                        : [...nextVisibleFields],
-                                    })
-                                  }}
-                                />
-                                {t({ ko: option.ko, en: option.en })}
-                              </SettingsToggleRow>
-                            )
-                          })}
-                        </div>
-                      </SettingsField>
+                      <div className="space-y-4">
+                        <SettingsField label={t({ ko: '노출할 Director 필드', en: 'Visible Director fields' })}>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {MINIMAX_H3_DIRECTOR_VISIBLE_FIELD_OPTIONS.map((option) => {
+                              const visibleFields = field.node_visible_fields ?? [...MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS]
+                              const isVisible = visibleFields.includes(option.key)
+                              return (
+                                <SettingsToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isVisible}
+                                    onChange={(event) => {
+                                      const nextVisibleFieldSet = new Set(visibleFields)
+                                      if (event.target.checked) nextVisibleFieldSet.add(option.key)
+                                      else nextVisibleFieldSet.delete(option.key)
+                                      const nextVisibleFields = MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS.filter((key) => nextVisibleFieldSet.has(key))
+                                      onFieldPatch(field.id, {
+                                        node_visible_fields: nextVisibleFields.length === MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS.length
+                                          ? undefined
+                                          : [...nextVisibleFields],
+                                      })
+                                    }}
+                                  />
+                                  {t({ ko: option.ko, en: option.en })}
+                                </SettingsToggleRow>
+                              )
+                            })}
+                          </div>
+                        </SettingsField>
+
+                        <SettingsField label={t({ ko: 'Director 입력 범위', en: 'Director input ranges' })}>
+                          <div className="grid gap-3 lg:grid-cols-3">
+                            {MINIMAX_H3_DIRECTOR_NUMERIC_BOUND_OPTIONS.map((option) => (
+                              <div key={option.key} className="space-y-2 rounded-sm border border-border/70 bg-background p-3">
+                                <div className="text-xs font-medium text-foreground">{t({ ko: option.ko, en: option.en })}</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <label className="space-y-1 text-xs text-muted-foreground">
+                                    <span>{t({ ko: '최소', en: 'Min' })}</span>
+                                    <Input
+                                      variant="settings"
+                                      type="number"
+                                      step="any"
+                                      min={'min' in option ? option.min : undefined}
+                                      max={'max' in option ? option.max : undefined}
+                                      value={field.node_numeric_bounds?.[option.key]?.min ?? ''}
+                                      placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
+                                      onChange={(event) => onFieldPatch(field.id, {
+                                        node_numeric_bounds: buildNodeNumericBounds(field, option.key, 'min', parseOptionalNumberInput(event.target.value)),
+                                      })}
+                                    />
+                                  </label>
+                                  <label className="space-y-1 text-xs text-muted-foreground">
+                                    <span>{t({ ko: '최대', en: 'Max' })}</span>
+                                    <Input
+                                      variant="settings"
+                                      type="number"
+                                      step="any"
+                                      min={'min' in option ? option.min : undefined}
+                                      max={'max' in option ? option.max : undefined}
+                                      value={field.node_numeric_bounds?.[option.key]?.max ?? ''}
+                                      placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
+                                      onChange={(event) => onFieldPatch(field.id, {
+                                        node_numeric_bounds: buildNodeNumericBounds(field, option.key, 'max', parseOptionalNumberInput(event.target.value)),
+                                      })}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </SettingsField>
+                      </div>
                     ) : null}
 
                     <div className="flex flex-wrap items-center gap-3">
