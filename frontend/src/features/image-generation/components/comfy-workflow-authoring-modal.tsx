@@ -601,9 +601,10 @@ export function ComfyWorkflowAuthoringModal({
             />
           }
           bodyClassName="space-y-0 px-0 py-0"
+          headerClassName="flex-col items-stretch lg:flex-row lg:items-center"
           actions={
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="relative min-w-[240px] flex-1 sm:min-w-[280px]">
+            <div className="flex w-full flex-wrap items-center justify-start gap-2 lg:w-auto lg:justify-end">
+              <div className="relative min-w-0 basis-full flex-1 sm:basis-auto sm:min-w-[280px]">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   variant="settings"

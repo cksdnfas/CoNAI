@@ -10,6 +10,10 @@ const authoringGraphSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-authoring-graph.tsx'),
   'utf8',
 )
+const authoringModalSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-authoring-modal.tsx'),
+  'utf8',
+)
 const comfyModuleSaveModalSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/comfy-module-save-modal.tsx'),
   'utf8',
@@ -56,6 +60,21 @@ doesNotMatch(
   authoringGraphSource,
   /markedJsonPaths\.includes\(path\)/,
   'Comfy workflow authoring inputs must not scan marked JSON paths for every rendered input',
+)
+match(
+  authoringModalSource,
+  /headerClassName="flex-col items-stretch lg:flex-row lg:items-center"/,
+  'Comfy workflow editor controls should stack below the desktop breakpoint',
+)
+match(
+  authoringModalSource,
+  /className="flex w-full flex-wrap items-center justify-start gap-2 lg:w-auto lg:justify-end"/,
+  'Comfy workflow editor actions should use the available width when stacked',
+)
+match(
+  authoringModalSource,
+  /className="relative min-w-0 basis-full flex-1 sm:basis-auto sm:min-w-\[280px\]"/,
+  'Comfy workflow search should take its own row without forcing narrow viewports wider',
 )
 match(
   comfyModuleSaveModalSource,
