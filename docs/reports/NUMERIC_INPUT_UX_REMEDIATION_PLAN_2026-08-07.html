@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoNAI 숫자 입력 UX 전면 개선 계획</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --report-bg: #0b0d10;
+      --report-surface: #12161b;
+      --report-surface-2: #181d23;
+      --report-border: #2a313a;
+      --report-muted: #9aa5b1;
+      --report-accent: #73a8ff;
+      --report-accent-soft: rgba(115, 168, 255, .12);
+      --report-success: #63d6ad;
+      --report-warning: #f4c76b;
+      --report-danger: #ff8e8e;
+    }
+    body { background: var(--report-bg); color: #eef2f6; line-height: 1.65; }
+    main { max-width: 1180px; }
+    .report-header, .report-section {
+      background: var(--report-surface);
+      border: 1px solid var(--report-border);
+      border-radius: .5rem;
+    }
+    .report-header { border-top: 4px solid var(--report-accent); }
+    .report-section { padding: 1.5rem; }
+    .eyebrow {
+      color: var(--report-accent);
+      font-size: .75rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .text-secondary { color: var(--report-muted) !important; }
+    .badge-soft {
+      color: #b9d3ff;
+      background: var(--report-accent-soft);
+      border: 1px solid rgba(115, 168, 255, .32);
+    }
+    .metric {
+      height: 100%;
+      padding: 1rem;
+      background: var(--report-surface-2);
+      border: 1px solid var(--report-border);
+      border-radius: .4rem;
+    }
+    .metric strong {
+      display: block;
+      color: var(--report-accent);
+      font-size: 1.55rem;
+      line-height: 1.2;
+    }
+    .finding {
+      height: 100%;
+      padding: 1rem;
+      background: var(--report-surface-2);
+      border-left: 3px solid var(--report-accent);
+      border-radius: .25rem;
+    }
+    .finding.warning { border-left-color: var(--report-warning); }
+    .finding.danger { border-left-color: var(--report-danger); }
+    .alert-report {
+      color: #dce9ff;
+      background: var(--report-accent-soft);
+      border: 1px solid rgba(115, 168, 255, .35);
+    }
+    .table {
+      --bs-table-color: #e8edf2;
+      --bs-table-bg: transparent;
+      --bs-table-border-color: var(--report-border);
+      margin-bottom: 0;
+    }
+    .table thead th {
+      color: #fff;
+      background: var(--report-surface-2);
+      white-space: nowrap;
+    }
+    code {
+      color: #bed5ff;
+      background: #090b0e;
+      border: 1px solid var(--report-border);
+      border-radius: .25rem;
+      padding: .1rem .3rem;
+      overflow-wrap: anywhere;
+    }
+    .source-path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .83rem;
+      color: #cbd5df;
+      overflow-wrap: anywhere;
+    }
+    .flow-step {
+      position: relative;
+      padding: 1rem 1rem 1rem 3.35rem;
+      background: var(--report-surface-2);
+      border: 1px solid var(--report-border);
+      border-radius: .4rem;
+    }
+    .flow-step::before {
+      content: attr(data-step);
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      display: grid;
+      width: 1.65rem;
+      height: 1.65rem;
+      place-items: center;
+      color: #07111f;
+      background: var(--report-accent);
+      border-radius: 50%;
+      font-size: .78rem;
+      font-weight: 800;
+    }
+    .control-demo {
+      padding: 1.25rem;
+      background: #0d1014;
+      border: 1px solid var(--report-border);
+      border-radius: .4rem;
+    }
+    .stepper-demo {
+      display: grid;
+      grid-template-columns: 3rem minmax(7rem, 1fr) 3rem;
+      max-width: 26rem;
+      min-height: 3rem;
+      overflow: hidden;
+      border: 1px solid #485463;
+      border-radius: .35rem;
+      background: #11161c;
+    }
+    .stepper-demo span { display: grid; place-items: center; min-height: 3rem; }
+    .stepper-demo .step-button {
+      color: #d9e7ff;
+      background: #1b2530;
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+    .stepper-demo .step-value {
+      border-inline: 1px solid #485463;
+      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .state-sequence {
+      display: grid;
+      gap: .75rem;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .state-box {
+      padding: .8rem;
+      background: var(--report-surface-2);
+      border: 1px solid var(--report-border);
+      border-radius: .35rem;
+    }
+    details {
+      background: var(--report-surface-2);
+      border: 1px solid var(--report-border);
+      border-radius: .4rem;
+    }
+    details + details { margin-top: .75rem; }
+    summary { cursor: pointer; padding: .85rem 1rem; font-weight: 700; }
+    details[open] summary { border-bottom: 1px solid var(--report-border); }
+    .inventory-body { padding: 1rem; }
+    .risk-low { color: var(--report-success); }
+    .risk-mid { color: var(--report-warning); }
+    .list-group-item {
+      color: #e8edf2;
+      background: transparent;
+      border-color: var(--report-border);
+    }
+    @media (max-width: 767.98px) {
+      .report-section { padding: 1.1rem; }
+      .state-sequence { grid-template-columns: 1fr; }
+      .stepper-demo { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container py-4 py-lg-5">
+    <header class="report-header p-4 p-lg-5 mb-4">
+      <div class="eyebrow mb-2">UX AUDIT · 2026-08-07</div>
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div>
+          <h1 class="display-6 fw-semibold mb-3">숫자 입력 UX 전면 개선 계획</h1>
+          <p class="lead text-secondary mb-0">좌우 드래그 변경을 완전히 폐기하고, 입력 중에는 값을 강제로 보정하지 않는 공통 숫자 입력으로 통합한다.</p>
+        </div>
+        <span class="badge badge-soft rounded-pill px-3 py-2">조사 완료 · 구현 전 계획</span>
+      </div>
+    </header>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">결론</h2>
+      <div class="alert alert-report mb-4">
+        <strong>전역 기본 UI는 <code>− [직접 입력] +</code> 형태의 스테퍼로 결정한다.</strong>
+        슬라이더는 값의 범위가 짧고 명확하며 대략적인 조절이 목적일 때만 사용한다. 숫자 입력 전체를 슬라이더로 바꾸면 큰 범위, 정확한 값, 소수, 음수, 선택적 빈 값을 제대로 다루기 어렵다.
+      </div>
+      <div class="row g-3">
+        <div class="col-6 col-lg-3"><div class="metric"><strong>58개</strong><span class="text-secondary">드래그 입력 사용처</span></div></div>
+        <div class="col-6 col-lg-3"><div class="metric"><strong>74개</strong><span class="text-secondary">일반 number 입력</span></div></div>
+        <div class="col-6 col-lg-3"><div class="metric"><strong>132개</strong><span class="text-secondary">통합 전환 대상</span></div></div>
+        <div class="col-6 col-lg-3"><div class="metric"><strong>46개</strong><span class="text-secondary">소비 파일</span></div></div>
+      </div>
+      <p class="small text-secondary mt-3 mb-0">별도의 명시적 슬라이더 5개는 <code>image-detail-media-controls.tsx</code>의 픽셀 미리보기 조절용이다. 이들은 숫자 필드 드래그가 아니므로 유지하되 모바일 조작 회귀만 확인한다.</p>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">현재 문제의 실제 원인</h2>
+      <div class="row g-3">
+        <div class="col-lg-6"><div class="finding danger">
+          <h3 class="h6">1. 입력 자체가 스크롤 제스처를 가로챔</h3>
+          <p class="mb-0"><code>scrubbable-number-input.tsx</code>가 <code>touch-none</code>, <code>setPointerCapture()</code>, <code>onPointerMove</code>, 가로 이동량 계산을 사용한다. 모바일에서 입력 위로 스크롤을 시작하면 값 변경 동작으로 넘어갈 수 있는 구조다.</p>
+        </div></div>
+        <div class="col-lg-6"><div class="finding warning">
+          <h3 class="h6">2. 빈 문자열이 즉시 0 또는 기본값으로 변환됨</h3>
+          <p class="mb-0">공통 입력은 빈 문자열을 전달할 수 있지만 여러 소비처가 입력 순간 <code>Number('') === 0</code>, <code>Number(value) || 기본값</code>, 즉시 <code>Math.min/Math.max</code>를 적용한다. 그래서 기존 값의 마지막 숫자를 지우는 순간 0이나 기본값이 다시 나타난다.</p>
+        </div></div>
+        <div class="col-lg-6"><div class="finding">
+          <h3 class="h6">3. 보정 책임이 컴포넌트와 소비처에 흩어짐</h3>
+          <p class="mb-0">공통 드래그 입력은 blur/Enter에서 범위를 보정하지만, 일부 화면은 그보다 먼저 숫자화한다. 워크플로 제출 시점의 백엔드·프런트 보정도 별도로 존재해 화면별 체감이 달라졌다.</p>
+        </div></div>
+        <div class="col-lg-6"><div class="finding">
+          <h3 class="h6">4. 일반 number 입력은 작은 기본 스핀 버튼에 의존</h3>
+          <p class="mb-0">직접 사용 중인 <code>type="number"</code> 74개는 브라우저 기본 위/아래 버튼과 휠 동작을 따른다. 모바일 터치 대상이 작고 브라우저별 사용감도 일정하지 않다.</p>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">채택 UI</h2>
+      <div class="row g-4 align-items-center">
+        <div class="col-lg-5">
+          <div class="control-demo">
+            <div class="small text-secondary mb-2">공통 숫자 스테퍼 예시</div>
+            <div class="stepper-demo" aria-label="숫자 입력 스테퍼 예시">
+              <span class="step-button">−</span><span class="step-value">1.00</span><span class="step-button">+</span>
+            </div>
+            <div class="small text-secondary mt-3">모바일 버튼 터치 영역 최소 44×44px · 입력 칸은 직접 편집 가능</div>
+          </div>
+        </div>
+        <div class="col-lg-7">
+          <ul class="mb-0">
+            <li>좌우 드래그, 포인터 캡처, <code>touch-none</code>, 가로 리사이즈 커서와 안내 문구를 모두 제거한다.</li>
+            <li>브라우저 기본 스핀 버튼 대신 좌우에 명시적인 감소/증가 버튼을 둔다.</li>
+            <li>입력부는 <code>type="text"</code> + <code>inputMode="decimal"</code> 또는 정수용 <code>numeric</code>을 사용해 휠·기본 스핀 동작을 제거한다.</li>
+            <li>버튼은 <code>− / +</code> 아이콘을 사용한다. <code>&lt; / &gt;</code>보다 값의 감소·증가 의미가 명확하다.</li>
+            <li>ArrowUp/ArrowDown은 step 증감, Enter는 확정, Escape는 마지막 확정값 복원으로 통일한다.</li>
+            <li>누르고 있기 자동 반복은 1차 구현에서 넣지 않는다. 단일 탭이 모바일 오조작 위험이 가장 낮다.</li>
+          </ul>
+        </div>
+      </div>
+      <hr class="border-secondary-subtle my-4">
+      <h3 class="h6">슬라이더를 기본값으로 채택하지 않는 이유</h3>
+      <p class="mb-0 text-secondary">큐 등록 수, 이미지 크기, 스케줄 시간, 임계값, 좌표, ID처럼 정확한 값이 필요한 항목은 슬라이더로 조작하기 불편하다. 현재 픽셀 미리보기처럼 범위가 짧고 즉시 미리보기가 핵심인 항목만 슬라이더를 유지한다. 연속 조절이 특히 유용한 벽지 효과 값은 추후 <code>슬라이더 + 숫자 스테퍼</code> 조합을 별도 검토할 수 있지만 이번 전역 수정의 필수 범위는 아니다.</p>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">입력 중·확정 시 동작 계약</h2>
+      <div class="state-sequence mb-4">
+        <div class="state-box"><strong>1. 포커스</strong><div class="small text-secondary">현재 확정값을 로컬 문자열 초안으로 복사</div></div>
+        <div class="state-box"><strong>2. 편집</strong><div class="small text-secondary"><code>''</code>, <code>-</code>, <code>.</code>, <code>1.</code> 같은 중간 상태 허용</div></div>
+        <div class="state-box"><strong>3. 확정</strong><div class="small text-secondary">blur 또는 Enter에서만 파싱·범위 보정</div></div>
+        <div class="state-box"><strong>4. 반영</strong><div class="small text-secondary">유효한 최종값만 상위 상태와 저장 데이터에 전달</div></div>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead><tr><th>상황</th><th>편집 중</th><th>blur / Enter</th></tr></thead>
+          <tbody>
+            <tr><td>기본값 1을 모두 지움</td><td>빈 칸을 그대로 유지한다. 0이나 1을 재삽입하지 않는다.</td><td>선택 필드는 빈 값 확정, 필수 숫자는 마지막 유효값 복원</td></tr>
+            <tr><td>최댓값 128에 9000 입력</td><td>사용자가 입력을 마칠 때까지 9000을 표시한다.</td><td>128로 보정하고 보정 사실을 짧게 표시</td></tr>
+            <tr><td>소수 입력 중 <code>1.</code></td><td>문자열 초안으로 유지한다.</td><td>유효 숫자로 파싱해 1 또는 정책상 필요한 정밀도로 확정</td></tr>
+            <tr><td>잘못된 문자열</td><td>강제 치환하지 않고 오류 상태만 표시할 수 있다.</td><td>마지막 유효값 복원, 선택 필드는 비움 허용</td></tr>
+            <tr><td>− / + 버튼</td><td colspan="2">마지막 유효값을 기준으로 step만큼 즉시 증감하고 min/max에서 멈춘다.</td></tr>
+            <tr><td>마우스 휠·세로 스와이프</td><td colspan="2">값을 바꾸지 않는다. 모바일 세로 스와이프는 페이지 스크롤로 전달한다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small text-secondary mt-3 mb-0"><code>step</code>은 버튼·Arrow 키 증감 단위로 사용한다. 직접 입력한 유효값을 step 배수로 강제 반올림하는 것은 기존 워크플로 계약과 다를 수 있으므로, 필드가 별도 요구하지 않는 한 min/max 보정만 적용한다.</p>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">공통 컴포넌트 변경</h2>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead><tr><th>파일</th><th>조치</th></tr></thead>
+          <tbody>
+            <tr><td class="source-path">frontend/src/components/ui/scrubbable-number-input.tsx</td><td>삭제한다. 드래그 상태, scrubRatio, pointer 이벤트, 드래그 title, <code>touch-none</code>, <code>cursor-ew-resize</code>를 전부 폐기한다.</td></tr>
+            <tr><td class="source-path">frontend/src/components/ui/number-stepper-input.tsx <span class="badge text-bg-primary ms-1">신규</span></td><td>로컬 문자열 초안, blur/Enter 확정, Escape 복원, min/max 보정, 좌우 −/+ 버튼, 44px 모바일 터치 영역, inputMode, 접근성 속성을 가진 단일 공통 숫자 입력을 만든다.</td></tr>
+            <tr><td class="source-path">frontend/src/i18n/resources/shell.ts</td><td><code>scrubbableNumberInput.dragLeftOrRightTo</code> 한·영 키를 제거하고 감소/증가 및 보정 안내가 필요하면 중립적인 <code>numberStepperInput.*</code> 키로 교체한다.</td></tr>
+            <tr><td class="source-path">frontend/src/scripts/verifyWorkflowNumericBoundsUiContracts.ts</td><td>기존 드래그 컴포넌트 경로 검사를 새 스테퍼 계약으로 변경한다. blur/Enter 보정은 유지하고 pointer drag 관련 코드가 없음을 검증한다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3 class="h6 mt-4">권장 API</h3>
+      <ul class="mb-0">
+        <li><code>value: number | string | null</code>, <code>onValueCommit(value)</code>, 필요 화면만 <code>onValidPreview(value)</code></li>
+        <li><code>min</code>, <code>max</code>, <code>step</code>, <code>precision</code>, <code>allowEmpty</code>, <code>inputMode</code></li>
+        <li>입력 중간 문자열은 컴포넌트 내부에서만 보관하고 소비처의 숫자 상태를 오염시키지 않는다.</li>
+        <li>선택형 워크플로 숫자는 <code>allowEmpty</code>, 일반 설정값은 기본적으로 마지막 유효값 복원을 사용한다.</li>
+      </ul>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">변경 파일 전체 목록</h2>
+      <p class="text-secondary">아래 46개 소비 파일의 숫자 입력 132개를 공통 스테퍼로 바꾼다. 괄호는 해당 파일의 전환 대상 렌더 수다.</p>
+      <details open><summary>이미지 생성 · 14개 파일 / 35개 입력</summary><div class="inventory-body">
+        <ul class="mb-0 source-path">
+          <li>frontend/src/features/image-generation/components/codex-generation-panel.tsx (2)</li>
+          <li>frontend/src/features/image-generation/components/comfy-server-registration-modal.tsx (1)</li>
+          <li>frontend/src/features/image-generation/components/comfy-workflow-authoring-modal.tsx (1)</li>
+          <li>frontend/src/features/image-generation/components/comfy-workflow-controller-panel.tsx (2)</li>
+          <li>frontend/src/features/image-generation/components/comfy-workflow-marked-fields-editor.tsx (6)</li>
+          <li>frontend/src/features/image-generation/components/lora-auto-collect-modal.tsx (1)</li>
+          <li>frontend/src/features/image-generation/components/minimax-h3-director-dasiwa-input.tsx (5)</li>
+          <li>frontend/src/features/image-generation/components/nai-generation-editor-sections.tsx (8)</li>
+          <li>frontend/src/features/image-generation/components/nai-references-section.tsx (2)</li>
+          <li>frontend/src/features/image-generation/components/nai-vibes-section.tsx (2)</li>
+          <li>frontend/src/features/image-generation/components/power-lora-loader-input.tsx (1)</li>
+          <li>frontend/src/features/image-generation/components/wildcard-editor-modal.tsx (1)</li>
+          <li>frontend/src/features/image-generation/components/workflow-field-input.tsx (1)</li>
+          <li>frontend/src/features/image-generation/public-comfy-workflow-page.tsx (2)</li>
+        </ul>
+        <p class="small text-secondary mt-3 mb-0">워크플로 숫자 초안은 문자열을 유지하고 제출 시점의 기존 <code>normalizeWorkflowNumberPromptValue()</code> min/max 보정 계약을 보존한다. MiniMax의 width/height/duration과 trim 값은 입력 중 <code>Number('')</code>가 0으로 전파되지 않게 분리한다.</p>
+      </div></details>
+      <details><summary>이미지 상세 · 4개 파일 / 10개 입력</summary><div class="inventory-body">
+        <ul class="mb-0 source-path">
+          <li>frontend/src/features/images/components/detail/image-detail-meta-card.tsx (1)</li>
+          <li>frontend/src/features/images/components/detail/prompt-similarity-settings-panel.tsx (7)</li>
+          <li>frontend/src/features/images/components/detail/similarity-settings-panel-shared.tsx (1)</li>
+          <li>frontend/src/features/images/components/detail/similarity-settings-panel.tsx (1)</li>
+        </ul>
+        <p class="small text-secondary mt-3 mb-0">유사도 가중치·임계값이 빈 문자열을 즉시 0으로 바꾸지 않도록 컴포넌트 확정 콜백에서만 숫자로 반영한다.</p>
+      </div></details>
+      <details><summary>모듈 그래프 · 4개 파일 / 9개 입력</summary><div class="inventory-body">
+        <ul class="mb-0 source-path">
+          <li>frontend/src/features/module-graph/components/module-graph-simple-value-input.tsx (1)</li>
+          <li>frontend/src/features/module-graph/components/module-workflow-schedules-panel.tsx (3)</li>
+          <li>frontend/src/features/module-graph/components/nai-reusable-assets-input.tsx (4)</li>
+          <li>frontend/src/features/module-graph/components/workflow-input-fields.tsx (1)</li>
+        </ul>
+        <p class="small text-secondary mt-3 mb-0">명시적으로 빈 값을 허용하는 포트는 <code>allowEmpty</code>로 보존한다. 기본값 복원·값 지우기 버튼의 의미도 유지한다.</p>
+      </div></details>
+      <details><summary>설정 · 16개 파일 / 47개 입력</summary><div class="inventory-body">
+        <ul class="mb-0 source-path">
+          <li>frontend/src/features/settings/components/appearance-general-editor-content.tsx (3)</li>
+          <li>frontend/src/features/settings/components/appearance-list-editor-content.tsx (1)</li>
+          <li>frontend/src/features/settings/components/appearance-tab-editor-shared.tsx (1)</li>
+          <li>frontend/src/features/settings/components/backup-source-card.tsx (2)</li>
+          <li>frontend/src/features/settings/components/backup-source-create-form.tsx (2)</li>
+          <li>frontend/src/features/settings/components/general-preferences-sections.tsx (1)</li>
+          <li>frontend/src/features/settings/components/image-save-tab.tsx (13)</li>
+          <li>frontend/src/features/settings/components/kaloscope-settings-card.tsx (2)</li>
+          <li>frontend/src/features/settings/components/llm-connections-tab-modals.tsx (2)</li>
+          <li>frontend/src/features/settings/components/metadata-tab.tsx (2)</li>
+          <li>frontend/src/features/settings/components/rating-tier-settings-card.tsx (2)</li>
+          <li>frontend/src/features/settings/components/rating-weight-settings-card.tsx (8)</li>
+          <li>frontend/src/features/settings/components/tagger-settings-card.tsx (3)</li>
+          <li>frontend/src/features/settings/components/video-optimization-tab.tsx (2)</li>
+          <li>frontend/src/features/settings/components/watched-folder-card.tsx (1)</li>
+          <li>frontend/src/features/settings/components/watched-folder-create-form.tsx (2)</li>
+        </ul>
+        <p class="small text-secondary mt-3 mb-0"><code>Number(value) || 기본값</code>, <code>parseInt(value || 기본값)</code>를 onChange에서 제거한다. 저장 가능한 최종 숫자 상태는 blur/Enter 또는 스테퍼 버튼에서만 갱신한다.</p>
+      </div></details>
+      <details><summary>벽지 편집 · 4개 파일 / 15개 입력</summary><div class="inventory-body">
+        <ul class="mb-0 source-path">
+          <li>frontend/src/features/wallpaper/wallpaper-easing-picker.tsx (2)</li>
+          <li>frontend/src/features/wallpaper/wallpaper-widget-inspector-editor-shared.tsx (6)</li>
+          <li>frontend/src/features/wallpaper/wallpaper-widget-inspector-image-editor-fields.tsx (6)</li>
+          <li>frontend/src/features/wallpaper/wallpaper-widget-inspector-status-editor-fields.tsx (1)</li>
+        </ul>
+        <p class="small text-secondary mt-3 mb-0">현재 화면별 <code>scrubRatio</code>는 모두 삭제한다. 라이브 미리보기가 필요한 유효 숫자만 <code>onValidPreview</code>로 전달하고, 빈 중간 상태는 미리보기에 보내지 않는다.</p>
+      </div></details>
+      <details><summary>이미지 편집 · 2개 파일 / 10개 입력</summary><div class="inventory-body">
+        <ul class="mb-0 source-path">
+          <li>frontend/src/features/image-editor/image-editor-session-actions.tsx (8)</li>
+          <li>frontend/src/features/image-editor/image-editor-toolbar.tsx (2)</li>
+        </ul>
+        <p class="small text-secondary mt-3 mb-0">좌표·크기·브러시 값을 입력 순간 0/1로 되돌리는 fallback을 제거한다. 확정 시 최소 크기와 0~100 범위만 적용한다.</p>
+      </div></details>
+      <details><summary>공통 미디어·프롬프트 · 2개 파일 / 6개 입력</summary><div class="inventory-body">
+        <ul class="mb-0 source-path">
+          <li>frontend/src/components/media/image-save-options-modal.tsx (3)</li>
+          <li>frontend/src/features/prompts/components/prompt-danbooru-browser-panel-ui.tsx (3)</li>
+        </ul>
+        <p class="small text-secondary mt-3 mb-0">저장 크기·품질과 프롬프트 브라우저 숫자 옵션을 같은 공통 스테퍼로 통합한다.</p>
+      </div></details>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">진행 단계</h2>
+      <div class="d-grid gap-3">
+        <div class="flow-step" data-step="1"><strong>공통 스테퍼와 입력 상태 계약 구현</strong><div class="text-secondary">로컬 문자열 초안, 확정/복원, min/max, 정밀도, allowEmpty, −/+ 버튼, 접근성을 먼저 완성한다.</div></div>
+        <div class="flow-step" data-step="2"><strong>드래그 입력 58개 교체</strong><div class="text-secondary">모든 <code>ScrubbableNumberInput</code> import와 <code>scrubRatio</code>를 제거한다. 입력 중 숫자화하는 소비처는 commit 콜백으로 이동한다.</div></div>
+        <div class="flow-step" data-step="3"><strong>일반 number 입력 74개 교체</strong><div class="text-secondary">브라우저 기본 스핀 UI와 즉시 fallback을 제거한다. 화면별 최소값·최댓값·step은 기존 설정을 그대로 전달한다.</div></div>
+        <div class="flow-step" data-step="4"><strong>구형 컴포넌트·번역·계약 정리</strong><div class="text-secondary">구형 파일과 드래그 안내 키를 삭제하고, 정적 검색으로 잔존 import·pointer drag·number input이 없는지 확인한다.</div></div>
+        <div class="flow-step" data-step="5"><strong>도메인 회귀 검증</strong><div class="text-secondary">워크플로 제출 보정, 설정 저장, 라이브 미리보기, 이미지 편집 좌표, 모바일 스크롤을 대표 표본으로 확인한다.</div></div>
+      </div>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">검증 계획</h2>
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <h3 class="h6">자동 검증</h3>
+          <ul class="mb-0">
+            <li>기존 <code>verifyWorkflowNumericBoundsUiContracts.ts</code>를 새 스테퍼 계약으로 갱신</li>
+            <li><code>ScrubbableNumberInput</code>, <code>scrubbable-number-input</code>, <code>scrubRatio</code> 검색 결과 0</li>
+            <li>공통 숫자 입력에서 <code>onPointerMove</code>, <code>setPointerCapture</code>, <code>touch-none</code>, <code>cursor-ew-resize</code> 사용 0</li>
+            <li>제품 숫자 필드의 직접 <code>type="number"</code> 사용 0</li>
+            <li>빈 문자열 입력 중 상위 숫자 상태가 0/기본값으로 변하지 않는 계약</li>
+            <li>blur/Enter에서 min/max 보정, Escape 복원, −/+ step 및 경계값 검증</li>
+            <li><code>npm run verify:workflow-numeric-bounds-ui-contracts</code></li>
+            <li><code>npm run typecheck</code>, <code>npm run build:frontend</code></li>
+          </ul>
+        </div>
+        <div class="col-lg-6">
+          <h3 class="h6">화면 검증</h3>
+          <ul class="mb-0">
+            <li>모바일에서 입력 위로 세로 스와이프 → 페이지 스크롤, 값 불변</li>
+            <li>기본값 1 전체 삭제 → 빈 칸 유지 → 12 입력 → 정상 확정</li>
+            <li>범위 초과값은 편집 중 유지되고 blur/Enter 후에만 보정</li>
+            <li>선택형 워크플로 숫자는 빈 값으로 지울 수 있고 제출 payload에서 생략</li>
+            <li>필수 설정 숫자의 빈 확정은 0이 아니라 마지막 유효값으로 복원</li>
+            <li>−/+ 버튼 터치 영역, disabled 상태, min/max 경계, aria-label 확인</li>
+            <li>키보드 Tab, ArrowUp/Down, Enter, Escape 동작 확인</li>
+            <li>워크플로 내부/공개, MiniMax, NAI, 설정, 벽지, 이미지 편집 대표 화면 확인</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">위험과 대응</h2>
+      <div class="table-responsive"><table class="table align-middle">
+        <thead><tr><th>위험</th><th>발생 조건·영향</th><th>대응</th><th>판정</th></tr></thead>
+        <tbody>
+          <tr><td>라이브 미리보기 지연</td><td>벽지 등 유효 숫자 입력마다 미리보기를 갱신하던 화면</td><td>유효한 숫자 초안만 선택적으로 <code>onValidPreview</code> 전달</td><td><span class="risk-mid">설계 주의</span></td></tr>
+          <tr><td>저장 버튼과 blur 순서</td><td>입력 포커스 상태에서 바로 저장 클릭</td><td>blur 확정이 click보다 먼저 반영되는지 회귀 검증, 필요 시 form submit에서 강제 commit</td><td><span class="risk-mid">테스트 필요</span></td></tr>
+          <tr><td>빈 값 의미 혼동</td><td>선택형 워크플로와 필수 설정이 같은 정책을 사용할 때</td><td><code>allowEmpty</code>를 명시하고 기본값을 도메인별로 지정</td><td><span class="risk-mid">설계 주의</span></td></tr>
+          <tr><td>step 강제 반올림</td><td>입력값을 무조건 step 배수로 맞출 때 기존 payload 변경</td><td>step은 버튼·키보드 증감에만 사용, 입력값은 기존 min/max 계약 유지</td><td><span class="risk-low">낮음</span></td></tr>
+          <tr><td>밀집 화면 폭 증가</td><td>좌우 44px 버튼이 작은 툴바에 들어갈 때</td><td>compact variant는 시각 폭을 줄이되 모바일 hit area는 유지하고, 툴바 배치를 별도 조정</td><td><span class="risk-mid">화면 확인</span></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">완료 기준</h2>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item px-0">숫자 입력을 좌우로 드래그해도 값이 변하지 않고 모바일 세로 스크롤이 정상 작동한다.</li>
+        <li class="list-group-item px-0">구형 드래그 컴포넌트, scrubRatio, 드래그 안내 번역과 pointer drag 코드가 제품 소스에서 완전히 제거된다.</li>
+        <li class="list-group-item px-0">기본값 1을 지울 때 입력 중 0 또는 기본값이 재삽입되지 않는다.</li>
+        <li class="list-group-item px-0">보정은 blur/Enter/버튼 확정 시점에만 수행된다.</li>
+        <li class="list-group-item px-0">모든 일반 숫자 입력이 동일한 −/직접입력/+ UI와 키보드 계약을 사용한다.</li>
+        <li class="list-group-item px-0">선택형 빈 값, 필수값 복원, min/max, 소수, 음수, step이 각 도메인 계약대로 동작한다.</li>
+        <li class="list-group-item px-0">워크플로 제출 전후의 숫자 min/max 보정과 최종 API payload 계약이 유지된다.</li>
+        <li class="list-group-item px-0">현재 명시적 슬라이더 5개는 기존 목적과 동작을 유지한다.</li>
+      </ul>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">범위에서 제외</h2>
+      <ul class="mb-0">
+        <li>백엔드 숫자 검증·워크플로 payload 보정 정책 변경</li>
+        <li>모든 숫자 필드를 슬라이더로 재설계하는 작업</li>
+        <li>버튼 길게 누르기 자동 반복, 가속 증감, 마우스 휠 증감</li>
+        <li>숫자 입력과 무관한 이미지 드래그, 캔버스 포인터 조작, 정렬 드래그 변경</li>
+        <li>기존 픽셀 미리보기 슬라이더 5개의 시각 재설계</li>
+      </ul>
+    </section>
+
+    <section class="report-section">
+      <h2 class="h4 mb-3">조사 메모</h2>
+      <p class="mb-2">Graphify 그래프는 <code>6ad42266</code> 기준이고 현재 확인 커밋은 <code>6646a4b4</code>라 공통 컴포넌트와 후보 파일 탐색에만 사용했다. 최종 수량과 동작은 현재 소스에서 <code>ScrubbableNumberInput</code>, <code>type="number"</code>, 숫자 즉시 변환 패턴을 직접 다시 검색해 확인했다.</p>
+      <p class="mb-0 text-secondary">이번 작업은 조사와 변경 계획 HTML 작성만 수행했다. 제품 코드는 수정하지 않았고, 조사 전용 작업이라 테스트·빌드·린트는 실행하지 않았다. HTML 문서만 추가했으므로 코드 전용 Graphify 증분 업데이트도 수행하지 않았다.</p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 import { Select } from '@/components/ui/select'
 import type { StoredNaiCharacterReferenceAsset } from '@/lib/api-image-generation-types'
@@ -107,10 +107,10 @@ export function NaiReferencesSection({
                     </Select>
                   </FormField>
                   <FormField label={t({ ko: '강도', en: 'Strength' })}>
-                    <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.strength} onChange={(value) => onReferenceFieldChange(index, 'strength', value)} />
+                    <NumberStepperInput min={0} max={1} step={0.01} value={reference.strength} onValueCommit={(value) => onReferenceFieldChange(index, 'strength', value)} />
                   </FormField>
                   <FormField label={t({ ko: '충실도', en: 'Fidelity' })}>
-                    <ScrubbableNumberInput min={0} max={1} step={0.01} value={reference.fidelity} onChange={(value) => onReferenceFieldChange(index, 'fidelity', value)} />
+                    <NumberStepperInput min={0} max={1} step={0.01} value={reference.fidelity} onValueCommit={(value) => onReferenceFieldChange(index, 'fidelity', value)} />
                   </FormField>
                 </div>
 

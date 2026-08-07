@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { TaggerModelInfo, TaggerSettings } from '@/types/settings'
 import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import { useI18n } from '@/i18n'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface TaggerSettingsCardProps {
   heading: ReactNode
@@ -61,11 +62,11 @@ export function TaggerSettingsCard({
             </SettingsField>
 
             <SettingsField label={t({ ko: 'General 임계값', en: 'General threshold' })}>
-              <Input type="number" min={0} max={1} step={0.01} variant="settings" value={taggerDraft.generalThreshold} onChange={(event) => onPatchTagger({ generalThreshold: Number(event.target.value) || 0 })} />
+              <NumberStepperInput min={0} max={1} step={0.01} variant="settings" value={taggerDraft.generalThreshold} onValueCommit={(nextValue) => onPatchTagger({ generalThreshold: Number(nextValue) || 0 })} />
             </SettingsField>
 
             <SettingsField label={t({ ko: 'Character 임계값', en: 'Character threshold' })}>
-              <Input type="number" min={0} max={1} step={0.01} variant="settings" value={taggerDraft.characterThreshold} onChange={(event) => onPatchTagger({ characterThreshold: Number(event.target.value) || 0 })} />
+              <NumberStepperInput min={0} max={1} step={0.01} variant="settings" value={taggerDraft.characterThreshold} onValueCommit={(nextValue) => onPatchTagger({ characterThreshold: Number(nextValue) || 0 })} />
             </SettingsField>
 
             <SettingsField label={t({ ko: 'Python 경로', en: 'Python path' })} className="md:col-span-2">
@@ -82,7 +83,7 @@ export function TaggerSettingsCard({
             </SettingsToggleRow>
 
             <SettingsField label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
-              <Input type="number" min={1} variant="settings" value={taggerDraft.autoUnloadMinutes} onChange={(event) => onPatchTagger({ autoUnloadMinutes: Number(event.target.value) || 1 })} />
+              <NumberStepperInput min={1} variant="settings" value={taggerDraft.autoUnloadMinutes} onValueCommit={(nextValue) => onPatchTagger({ autoUnloadMinutes: Number(nextValue) || 1 })} />
             </SettingsField>
           </>
         ) : (

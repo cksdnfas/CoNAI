@@ -1,4 +1,4 @@
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { SettingsField } from '@/features/settings/components/settings-primitives'
 import {
@@ -191,14 +191,14 @@ export function WallpaperImageWidgetEditorFields({
                   <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
                     <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
                     <SettingsField label={t({ ko: '강도', en: 'Strength' })}>
-                      <ScrubbableNumberInput
+                      <NumberStepperInput
                         variant="settings"
                         min={0}
                         max={2.5}
                         step={0.1}
-                        scrubRatio={0.45}
+
                         value={getWallpaperMotionStrengthMultiplier(selectedWidget.settings.motionStrength ?? 1)}
-                        onChange={(nextValue) => {
+                        onValueCommit={(nextValue) => {
                           updateWidgetSettings({
                             motionStrength: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
                           })
@@ -266,14 +266,14 @@ export function WallpaperImageWidgetEditorFields({
             </SettingsField>
 
             <SettingsField label={t({ ko: '이미지 크기(%)', en: 'Image size (%)' })}>
-              <ScrubbableNumberInput
+              <NumberStepperInput
                 variant="settings"
                 min={50}
                 max={200}
                 step={1}
-                scrubRatio={0.35}
+
                 value={selectedWidget.settings.imageScalePercent ?? 100}
-                onChange={(nextValue) => {
+                onValueCommit={(nextValue) => {
                   const parsed = Number(nextValue)
                   updateWidgetSettings({
                     imageScalePercent: Number.isFinite(parsed) ? Math.min(200, Math.max(50, Math.round(parsed))) : 100,
@@ -322,14 +322,14 @@ export function WallpaperImageWidgetEditorFields({
                   <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SettingsField label={t({ ko: '움직임 강도', en: 'Motion strength' })}>
-                      <ScrubbableNumberInput
+                      <NumberStepperInput
                         variant="settings"
                         min={0}
                         max={2.5}
                         step={0.1}
-                        scrubRatio={0.45}
+
                         value={getWallpaperMotionStrengthMultiplier(selectedWidget.settings.motionStrength ?? 1)}
-                        onChange={(nextValue) => {
+                        onValueCommit={(nextValue) => {
                           updateWidgetSettings({
                             motionStrength: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
                           })
@@ -337,14 +337,14 @@ export function WallpaperImageWidgetEditorFields({
                       />
                     </SettingsField>
                     <SettingsField label={t({ ko: '이동 속도', en: 'Movement speed' })}>
-                      <ScrubbableNumberInput
+                      <NumberStepperInput
                         variant="settings"
                         min={0.2}
                         max={20}
                         step={0.1}
-                        scrubRatio={0.45}
+
                         value={selectedWidget.settings.motionSpeed ?? 1}
-                        onChange={(nextValue) => {
+                        onValueCommit={(nextValue) => {
                           const parsed = Number(nextValue)
                           updateWidgetSettings({
                             motionSpeed: Number.isFinite(parsed) ? Math.min(20, Math.max(0.2, parsed)) : 1,
@@ -397,14 +397,14 @@ export function WallpaperImageWidgetEditorFields({
 
                     {selectedWidget.settings.imageSwapMode === 'time' ? (
                       <SettingsField label={t({ ko: '교체 간격(초)', en: 'Swap interval (sec)' })}>
-                        <ScrubbableNumberInput
+                        <NumberStepperInput
                           variant="settings"
                           min={2}
                           max={60}
                           step={1}
-                          scrubRatio={0.35}
+
                           value={selectedWidget.settings.swapIntervalSec ?? 12}
-                          onChange={(nextValue) => {
+                          onValueCommit={(nextValue) => {
                             const parsed = Number(nextValue)
                             updateWidgetSettings({
                               swapIntervalSec: Number.isFinite(parsed) ? Math.min(60, Math.max(2, Math.round(parsed))) : 12,
@@ -414,14 +414,14 @@ export function WallpaperImageWidgetEditorFields({
                       </SettingsField>
                     ) : (
                       <SettingsField label={t({ ko: '교체까지 튕김 수', en: 'Bounces before swap' })}>
-                        <ScrubbableNumberInput
+                        <NumberStepperInput
                           variant="settings"
                           min={1}
                           max={12}
                           step={1}
-                          scrubRatio={0.35}
+
                           value={selectedWidget.settings.swapBounceCount ?? 3}
-                          onChange={(nextValue) => {
+                          onValueCommit={(nextValue) => {
                             const parsed = Number(nextValue)
                             updateWidgetSettings({
                               swapBounceCount: Number.isFinite(parsed) ? Math.min(12, Math.max(1, Math.round(parsed))) : 3,

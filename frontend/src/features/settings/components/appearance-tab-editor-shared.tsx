@@ -1,7 +1,7 @@
 import { Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@/types/settings'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
@@ -220,13 +220,13 @@ export function RelatedImageColumnSlider({
   return (
     <SettingsField label={label}>
       <div className="space-y-2">
-        <ScrubbableNumberInput
+        <NumberStepperInput
           min={1}
           max={6}
           step={1}
           value={value}
           variant="settings"
-          onChange={(nextValue) => onChange(Number.parseInt(nextValue || '1', 10))}
+          onValueCommit={(nextValue) => onChange(Number.parseInt(nextValue || '1', 10))}
         />
         <div className="flex justify-between text-[11px] text-muted-foreground">
           <span>1</span>

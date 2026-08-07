@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS, type GeneralSettings, type HeaderNavigationItemKey } from '@/types/settings'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
 
@@ -153,17 +154,17 @@ export function GeneralPreferencesSections({
               />
             </SettingsField>
             <SettingsField label={t({ ko: '생성 히스토리 최대 항목 수', en: 'Generation history maximum items' })}>
-              <Input
+              <NumberStepperInput
                 variant="settings"
-                type="number"
+
                 min={1}
                 max={1_000_000}
                 step={1}
                 value={generalDraft.generationHistoryMaxItems ?? 10_000}
-                onChange={(event) => {
-                  const nextValue = Number.parseInt(event.target.value, 10)
-                  if (Number.isFinite(nextValue)) {
-                    onPatchGeneral({ generationHistoryMaxItems: nextValue })
+                onValueCommit={(nextValue) => {
+                  const parsedValue = Number.parseInt(nextValue, 10)
+                  if (Number.isFinite(parsedValue)) {
+                    onPatchGeneral({ generationHistoryMaxItems: parsedValue })
                   }
                 }}
               />

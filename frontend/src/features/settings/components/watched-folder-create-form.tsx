@@ -3,6 +3,7 @@ import { SettingsField, SettingsToggleRow } from './settings-primitives'
 import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import type { NewWatchedFolderDraft } from '../settings-utils'
 import { useI18n } from '@/i18n'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface WatchedFolderCreateFormProps {
   newFolder: NewWatchedFolderDraft
@@ -37,11 +38,11 @@ export function WatchedFolderCreateForm({
         </SettingsField>
 
         <SettingsField label={t({ ko: '스캔 주기(분)', en: 'Scan interval (minutes)' })}>
-          <Input type="number" min={1} variant="settings" value={newFolder.scan_interval} onChange={(event) => onNewFolderChange({ scan_interval: Number(event.target.value) || 1 })} />
+          <NumberStepperInput min={1} variant="settings" value={newFolder.scan_interval} onValueCommit={(nextValue) => onNewFolderChange({ scan_interval: Number(nextValue) || 1 })} />
         </SettingsField>
 
         <SettingsField label={t({ ko: 'watcher polling(ms)', en: 'Watcher polling (ms)' })}>
-          <Input type="number" min={100} variant="settings" value={newFolder.watcher_polling_interval} onChange={(event) => onNewFolderChange({ watcher_polling_interval: Number(event.target.value) || 100 })} />
+          <NumberStepperInput min={100} variant="settings" value={newFolder.watcher_polling_interval} onValueCommit={(nextValue) => onNewFolderChange({ watcher_polling_interval: Number(nextValue) || 100 })} />
         </SettingsField>
 
         <SettingsField label={t({ ko: '제외 확장자', en: 'Excluded extensions' })}>

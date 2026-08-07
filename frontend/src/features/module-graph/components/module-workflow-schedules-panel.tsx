@@ -19,6 +19,7 @@ import type {
 } from '@/lib/api-module-graph'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
 import { WorkflowInputFields } from './workflow-input-fields'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 type ScheduleMutationPayload = {
   name: string
@@ -400,10 +401,10 @@ export function ModuleWorkflowSchedulesPanel({
               <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} disabled={isMutating} />
             </SettingsField>
             <SettingsField label={t({ ko: '최대 예약 횟수', en: 'Max runs' })}>
-              <Input type="number" min={-1} value={draftMaxRunCount} onChange={(event) => setDraftMaxRunCount(event.target.value)} disabled={isMutating} />
+              <NumberStepperInput min={-1} value={draftMaxRunCount} onValueCommit={(nextValue) => setDraftMaxRunCount(nextValue)} disabled={isMutating} />
             </SettingsField>
             <SettingsField label={t({ ko: '1회 큐 등록수', en: 'Queue count per run' })}>
-              <Input type="number" min={1} max={100} value={draftEnqueueCount} onChange={(event) => setDraftEnqueueCount(event.target.value)} disabled={isMutating} />
+              <NumberStepperInput min={1} max={100} value={draftEnqueueCount} onValueCommit={(nextValue) => setDraftEnqueueCount(nextValue)} disabled={isMutating} />
             </SettingsField>
             <SettingsField label={t({ ko: '실패 처리', en: 'Failure handling' })}>
               <Select value={draftFailurePolicy} onChange={(event) => setDraftFailurePolicy(event.target.value as GraphWorkflowScheduleFailurePolicy)} disabled={isMutating}>
@@ -418,7 +419,7 @@ export function ModuleWorkflowSchedulesPanel({
             ) : null}
             {draftScheduleType === 'interval' ? (
               <SettingsField label={t({ ko: '반복 간격(분)', en: 'Repeat interval (min)' })}>
-                <Input type="number" min={1} value={draftIntervalMinutes} onChange={(event) => setDraftIntervalMinutes(event.target.value)} disabled={isMutating} />
+                <NumberStepperInput min={1} value={draftIntervalMinutes} onValueCommit={(nextValue) => setDraftIntervalMinutes(nextValue)} disabled={isMutating} />
               </SettingsField>
             ) : null}
             {draftScheduleType === 'daily' ? (

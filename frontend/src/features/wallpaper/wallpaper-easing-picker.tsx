@@ -4,7 +4,7 @@ import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsField, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { cn } from '@/lib/utils'
@@ -456,7 +456,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                       >
                         <div className="text-sm font-medium text-foreground">{pointLabel}</div>
                         <SettingsField label={t({ ko: '시간 X', en: 'Time X' })}>
-                          <ScrubbableNumberInput
+                          <NumberStepperInput
                             variant="settings"
                             step={0.01}
                             min={0}
@@ -464,18 +464,18 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                             value={formatWallpaperEasingGraphPointValue(point.x)}
                             disabled={isEndpoint}
                             onClick={(event) => event.stopPropagation()}
-                            onChange={(nextValue) => updateCustomPoint(index, 'x', nextValue)}
+                            onValueCommit={(nextValue) => updateCustomPoint(index, 'x', nextValue)}
                           />
                         </SettingsField>
                         <SettingsField label={t({ ko: '값 Y', en: 'Value Y' })}>
-                          <ScrubbableNumberInput
+                          <NumberStepperInput
                             variant="settings"
                             step={0.01}
                             min={-3}
                             max={3}
                             value={formatWallpaperEasingGraphPointValue(point.y)}
                             onClick={(event) => event.stopPropagation()}
-                            onChange={(nextValue) => updateCustomPoint(index, 'y', nextValue)}
+                            onValueCommit={(nextValue) => updateCustomPoint(index, 'y', nextValue)}
                           />
                         </SettingsField>
                         {!isEndpoint ? (

@@ -1,4 +1,4 @@
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { SettingsField } from '@/features/settings/components/settings-primitives'
 import {
@@ -181,14 +181,14 @@ export function WallpaperStatusWidgetEditorFields({
           </SettingsField>
 
           <SettingsField label={t({ ko: '강도', en: 'Strength' })}>
-            <ScrubbableNumberInput
+            <NumberStepperInput
               variant="settings"
               min={0}
               max={2.5}
               step={0.1}
-              scrubRatio={0.45}
+
               value={getWallpaperMotionStrengthMultiplier(selectedWidget.settings.motionStrength ?? 1)}
-              onChange={(nextValue) => {
+              onValueCommit={(nextValue) => {
                 updateWidgetSettings({
                   motionStrength: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
                 })

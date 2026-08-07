@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS, getGenerationCustomDropdownLists, scanGenerationComfyUIModelDropdownLists } from '@/lib/api-image-generation-workflows'
@@ -226,12 +226,12 @@ export function PowerLoraLoaderInput({
               <div className={cn('truncate font-medium text-foreground', isCompact ? 'text-[11px] leading-5' : 'text-sm')}>{item.label}</div>
             </div>
 
-            <ScrubbableNumberInput
+            <NumberStepperInput
               step={0.05}
               value={typeof entry.strength === 'number' ? String(entry.strength) : ''}
               aria-label={t('image-generation.components.power.lora.loader.input.value.weight', { label: item.label })}
               className={cn('text-left', isCompact ? 'h-6 w-11 px-1.5 text-[11px]' : 'h-8 w-[72px] px-2')}
-              onChange={(nextValue) => {
+              onValueCommit={(nextValue) => {
                 const parsedStrength = Number(nextValue)
                 onChange({
                   ...nodeValue,

@@ -40,6 +40,7 @@ import {
   reorderWorkflowMarkedFieldGroup,
   reorderWorkflowMarkedFieldWithinGroup,
 } from '../workflow-marked-field-groups'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 type ComfyWorkflowAuthoringModalInitialData = {
   workflow: GenerationWorkflowDetail
@@ -537,13 +538,13 @@ export function ComfyWorkflowAuthoringModal({
                 </SettingsField>
 
                 <SettingsField label={t({ ko: '공용 1회 요청 상한', en: 'Public per-request limit' })}>
-                  <Input
+                  <NumberStepperInput
                     variant="settings"
-                    type="number"
+
                     min={1}
                     max={32}
                     value={publicQueueMaxCount}
-                    onChange={(event) => setPublicQueueMaxCount(event.target.value)}
+                    onValueCommit={(nextValue) => setPublicQueueMaxCount(nextValue)}
                     onBlur={() => setPublicQueueMaxCount(String(clampPublicQueueMaxCount(publicQueueMaxCount)))}
                   />
                 </SettingsField>

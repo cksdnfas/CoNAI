@@ -3,7 +3,7 @@ import { Film, Music2, Plus, RotateCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -455,14 +455,14 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
           <div className="grid grid-cols-2 gap-2">
             <label className="space-y-1 text-[11px] text-muted-foreground">
               <span>{t({ ko: '시작', en: 'Start' })}</span>
-              <ScrubbableNumberInput min={0} max={Math.max(0, trimEnd - 2)} step={0.25} value={String(trimStart)} onChange={(nextValue) => {
+              <NumberStepperInput min={0} max={Math.max(0, trimEnd - 2)} step={0.25} value={String(trimStart)} onValueCommit={(nextValue) => {
                 const nextStart = Math.max(0, Math.min(trimEnd - 2, Number(nextValue)))
                 updateTimelineItem(item.id, { trim_start: nextStart, duration: trimEnd - nextStart })
               }} />
             </label>
             <label className="space-y-1 text-[11px] text-muted-foreground">
               <span>{t({ ko: '끝', en: 'End' })}</span>
-              <ScrubbableNumberInput min={trimStart + 2} max={sourceDuration} step={0.25} value={String(trimEnd)} onChange={(nextValue) => {
+              <NumberStepperInput min={trimStart + 2} max={sourceDuration} step={0.25} value={String(trimEnd)} onValueCommit={(nextValue) => {
                 const nextEnd = Math.min(sourceDuration, Math.max(trimStart + 2, Number(nextValue)))
                 updateTimelineItem(item.id, { trim_end: nextEnd, duration: nextEnd - trimStart })
               }} />
@@ -538,25 +538,25 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
           {isFieldVisible('width') ? (
             <label className="space-y-1 text-xs text-muted-foreground">
               <span>{t({ ko: '너비', en: 'Width' })}</span>
-              <ScrubbableNumberInput min={numericBounds?.width?.min} max={numericBounds?.width?.max} step={1} value={widthValue} onChange={(nextValue) => emit({ width: Number(nextValue) })} />
+              <NumberStepperInput min={numericBounds?.width?.min} max={numericBounds?.width?.max} step={1} value={widthValue} onValueCommit={(nextValue) => emit({ width: Number(nextValue) })} />
             </label>
           ) : null}
           {isFieldVisible('height') ? (
             <label className="space-y-1 text-xs text-muted-foreground">
               <span>{t({ ko: '높이', en: 'Height' })}</span>
-              <ScrubbableNumberInput min={numericBounds?.height?.min} max={numericBounds?.height?.max} step={1} value={heightValue} onChange={(nextValue) => emit({ height: Number(nextValue) })} />
+              <NumberStepperInput min={numericBounds?.height?.min} max={numericBounds?.height?.max} step={1} value={heightValue} onValueCommit={(nextValue) => emit({ height: Number(nextValue) })} />
             </label>
           ) : null}
           {isFieldVisible('duration') ? (
             <label className={cn('space-y-1 text-xs text-muted-foreground', invalidFields.has('duration') && 'text-destructive')}>
               <span>{t({ ko: '길이(초)', en: 'Duration (seconds)' })}</span>
-              <ScrubbableNumberInput
+              <NumberStepperInput
                 min={Math.max(MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS, numericBounds?.duration?.min ?? MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS)}
                 max={Math.min(MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS, numericBounds?.duration?.max ?? MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS)}
                 step={1}
                 value={durationValue}
                 className={cn(invalidFields.has('duration') && 'border-destructive')}
-                onChange={(nextValue) => emit({ duration: Number(nextValue) })}
+                onValueCommit={(nextValue) => emit({ duration: Number(nextValue) })}
               />
             </label>
           ) : null}

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { RatingWeightsRecord } from '@/lib/api-settings'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsValueTile } from './settings-primitives'
@@ -84,42 +84,42 @@ export function RatingWeightSettingsCard({
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <SettingsField label={t({ ko: 'General 가중치', en: 'General weight' })}>
-              <ScrubbableNumberInput
+              <NumberStepperInput
                 min={0}
                 step={0.1}
                 variant="settings"
                 value={ratingWeightsDraft.general_weight}
-                onChange={(value) => onPatchRatingWeights({ general_weight: Number(value) || 0 })}
+                onValueCommit={(value) => onPatchRatingWeights({ general_weight: Number(value) || 0 })}
               />
             </SettingsField>
 
             <SettingsField label={t({ ko: 'Sensitive 가중치', en: 'Sensitive weight' })}>
-              <ScrubbableNumberInput
+              <NumberStepperInput
                 min={0}
                 step={0.1}
                 variant="settings"
                 value={ratingWeightsDraft.sensitive_weight}
-                onChange={(value) => onPatchRatingWeights({ sensitive_weight: Number(value) || 0 })}
+                onValueCommit={(value) => onPatchRatingWeights({ sensitive_weight: Number(value) || 0 })}
               />
             </SettingsField>
 
             <SettingsField label={t({ ko: 'Questionable 가중치', en: 'Questionable weight' })}>
-              <ScrubbableNumberInput
+              <NumberStepperInput
                 min={0}
                 step={0.1}
                 variant="settings"
                 value={ratingWeightsDraft.questionable_weight}
-                onChange={(value) => onPatchRatingWeights({ questionable_weight: Number(value) || 0 })}
+                onValueCommit={(value) => onPatchRatingWeights({ questionable_weight: Number(value) || 0 })}
               />
             </SettingsField>
 
             <SettingsField label={t({ ko: 'Explicit 가중치', en: 'Explicit weight' })}>
-              <ScrubbableNumberInput
+              <NumberStepperInput
                 min={0}
                 step={0.1}
                 variant="settings"
                 value={ratingWeightsDraft.explicit_weight}
-                onChange={(value) => onPatchRatingWeights({ explicit_weight: Number(value) || 0 })}
+                onValueCommit={(value) => onPatchRatingWeights({ explicit_weight: Number(value) || 0 })}
               />
             </SettingsField>
           </div>
@@ -129,16 +129,16 @@ export function RatingWeightSettingsCard({
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SettingsField label={t({ ko: 'General 점수', en: 'General score' })}>
-                <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.general} onChange={(value) => handlePreviewPatch('general', value)} />
+                <NumberStepperInput min={0} step={0.01} variant="settings" value={previewState.general} onValueCommit={(value) => handlePreviewPatch('general', value)} />
               </SettingsField>
               <SettingsField label={t({ ko: 'Sensitive 점수', en: 'Sensitive score' })}>
-                <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.sensitive} onChange={(value) => handlePreviewPatch('sensitive', value)} />
+                <NumberStepperInput min={0} step={0.01} variant="settings" value={previewState.sensitive} onValueCommit={(value) => handlePreviewPatch('sensitive', value)} />
               </SettingsField>
               <SettingsField label={t({ ko: 'Questionable 점수', en: 'Questionable score' })}>
-                <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.questionable} onChange={(value) => handlePreviewPatch('questionable', value)} />
+                <NumberStepperInput min={0} step={0.01} variant="settings" value={previewState.questionable} onValueCommit={(value) => handlePreviewPatch('questionable', value)} />
               </SettingsField>
               <SettingsField label={t({ ko: 'Explicit 점수', en: 'Explicit score' })}>
-                <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.explicit} onChange={(value) => handlePreviewPatch('explicit', value)} />
+                <NumberStepperInput min={0} step={0.01} variant="settings" value={previewState.explicit} onValueCommit={(value) => handlePreviewPatch('explicit', value)} />
               </SettingsField>
             </div>
 

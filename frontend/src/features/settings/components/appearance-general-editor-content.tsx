@@ -1,4 +1,3 @@
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { DENSITY_PRESETS, FONT_PRESETS, GLASS_PRESETS, RADIUS_PRESETS, SHADOW_PRESETS } from '@/lib/appearance'
 import type { AppearanceSettings } from '@/types/settings'
@@ -17,6 +16,7 @@ import {
 } from './appearance-tab-editor-shared'
 import { SettingsField } from './settings-primitives'
 import { useI18n } from '@/i18n'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 /** Render the general appearance controls for theme, font, and shell layout. */
 export function AppearanceGeneralEditorContent({
@@ -80,26 +80,26 @@ export function AppearanceGeneralEditorContent({
           </SettingsField>
 
           <SettingsField label={t({ ko: 'UI 배율 (%)', en: 'UI scale (%)' })}>
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min={85}
               max={200}
               step={1}
               variant="settings"
               value={appearanceDraft.fontScalePercent}
-              onChange={(event) => onPatchAppearance({ fontScalePercent: Number.parseInt(event.target.value || '100', 10) })}
+              onValueCommit={(nextValue) => onPatchAppearance({ fontScalePercent: Number.parseInt(nextValue || '100', 10) })}
             />
           </SettingsField>
 
           <SettingsField label={t({ ko: '글자 크기 (%)', en: 'Text size (%)' })}>
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min={85}
               max={200}
               step={1}
               variant="settings"
               value={appearanceDraft.textScalePercent}
-              onChange={(event) => onPatchAppearance({ textScalePercent: Number.parseInt(event.target.value || '100', 10) })}
+              onValueCommit={(nextValue) => onPatchAppearance({ textScalePercent: Number.parseInt(nextValue || '100', 10) })}
             />
           </SettingsField>
 
@@ -163,14 +163,14 @@ export function AppearanceGeneralEditorContent({
         <EditorSectionLead title={t({ ko: '검색 / 반응형', en: 'Search / responsive' })} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SettingsField label={t({ ko: '데스크톱 본문 2칼럼 전환폭 (px)', en: 'Desktop content two-column breakpoint (px)' })}>
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min={768}
               max={1800}
               step={10}
               variant="settings"
               value={appearanceDraft.desktopPageColumnsMinWidth}
-              onChange={(event) => onPatchAppearance({ desktopPageColumnsMinWidth: Number.parseInt(event.target.value || '1280', 10) })}
+              onValueCommit={(nextValue) => onPatchAppearance({ desktopPageColumnsMinWidth: Number.parseInt(nextValue || '1280', 10) })}
             />
           </SettingsField>
         </div>

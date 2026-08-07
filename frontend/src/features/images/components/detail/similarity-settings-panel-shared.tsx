@@ -2,14 +2,14 @@ import type { ComponentProps, RefObject } from 'react'
 import { useRef, useState } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 
-export function NumberInputWithSuffix({ suffix, ...props }: ComponentProps<typeof ScrubbableNumberInput> & { suffix: string }) {
+export function NumberInputWithSuffix({ suffix, ...props }: ComponentProps<typeof NumberStepperInput> & { suffix: string }) {
   return (
-    <div className="relative">
-      <ScrubbableNumberInput {...props} className="pr-8" />
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+    <div className="flex items-center gap-2">
+      <NumberStepperInput {...props} className="min-w-0 flex-1" />
+      <span className="shrink-0 text-xs font-semibold text-muted-foreground">
         {suffix}
       </span>
     </div>

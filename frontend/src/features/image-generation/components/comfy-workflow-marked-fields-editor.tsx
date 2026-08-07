@@ -2,7 +2,7 @@ import { useMemo, useState, type DragEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsField, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
@@ -323,13 +323,14 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             onChange={(event) => onFieldPatch(field.id, { default_value: event.target.value })}
                           />
                         ) : field.type === 'number' ? (
-                          <ScrubbableNumberInput
+                          <NumberStepperInput
                             variant="settings"
                             min={field.min}
                             max={field.max}
                             step={field.step ?? 1}
+                            allowEmpty
                             value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
-                            onChange={(value) => onFieldPatch(field.id, { default_value: value })}
+                            onValueCommit={(value) => onFieldPatch(field.id, { default_value: value })}
                           />
                         ) : field.type === 'node' ? (
                           <Textarea
@@ -390,31 +391,33 @@ export function ComfyWorkflowMarkedFieldsEditor({
                                 <div className="grid grid-cols-2 gap-2">
                                   <label className="space-y-1 text-xs text-muted-foreground">
                                     <span>{t({ ko: '최소', en: 'Min' })}</span>
-                                    <Input
+                                    <NumberStepperInput
                                       variant="settings"
-                                      type="number"
+
                                       step="any"
+                                      allowEmpty
                                       min={'min' in option ? option.min : undefined}
                                       max={'max' in option ? option.max : undefined}
                                       value={field.node_numeric_bounds?.[option.key]?.min ?? ''}
                                       placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
-                                      onChange={(event) => onFieldPatch(field.id, {
-                                        node_numeric_bounds: buildNodeNumericBounds(field, option.key, 'min', parseOptionalNumberInput(event.target.value)),
+                                      onValueCommit={(nextValue) => onFieldPatch(field.id, {
+                                        node_numeric_bounds: buildNodeNumericBounds(field, option.key, 'min', parseOptionalNumberInput(nextValue)),
                                       })}
                                     />
                                   </label>
                                   <label className="space-y-1 text-xs text-muted-foreground">
                                     <span>{t({ ko: '최대', en: 'Max' })}</span>
-                                    <Input
+                                    <NumberStepperInput
                                       variant="settings"
-                                      type="number"
+
                                       step="any"
+                                      allowEmpty
                                       min={'min' in option ? option.min : undefined}
                                       max={'max' in option ? option.max : undefined}
                                       value={field.node_numeric_bounds?.[option.key]?.max ?? ''}
                                       placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
-                                      onChange={(event) => onFieldPatch(field.id, {
-                                        node_numeric_bounds: buildNodeNumericBounds(field, option.key, 'max', parseOptionalNumberInput(event.target.value)),
+                                      onValueCommit={(nextValue) => onFieldPatch(field.id, {
+                                        node_numeric_bounds: buildNodeNumericBounds(field, option.key, 'max', parseOptionalNumberInput(nextValue)),
                                       })}
                                     />
                                   </label>
@@ -460,33 +463,36 @@ export function ComfyWorkflowMarkedFieldsEditor({
                     {field.type === 'number' ? (
                       <div className="grid gap-4 md:grid-cols-3">
                         <SettingsField label="Min">
-                          <Input
+                          <NumberStepperInput
                             variant="settings"
-                            type="number"
+                            allowEmpty
+
                             value={field.min ?? ''}
-                            onChange={(event) => onFieldPatch(field.id, { min: parseOptionalNumberInput(event.target.value) })}
+                            onValueCommit={(nextValue) => onFieldPatch(field.id, { min: parseOptionalNumberInput(nextValue) })}
                             placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
                           />
                         </SettingsField>
 
                         <SettingsField label="Max">
-                          <Input
+                          <NumberStepperInput
                             variant="settings"
-                            type="number"
+                            allowEmpty
+
                             value={field.max ?? ''}
-                            onChange={(event) => onFieldPatch(field.id, { max: parseOptionalNumberInput(event.target.value) })}
+                            onValueCommit={(nextValue) => onFieldPatch(field.id, { max: parseOptionalNumberInput(nextValue) })}
                             placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
                           />
                         </SettingsField>
 
                         <SettingsField label="Step">
-                          <Input
+                          <NumberStepperInput
                             variant="settings"
-                            type="number"
+                            allowEmpty
+
                             min={0}
                             step="any"
                             value={field.step ?? ''}
-                            onChange={(event) => onFieldPatch(field.id, { step: parseOptionalNumberInput(event.target.value) })}
+                            onValueCommit={(nextValue) => onFieldPatch(field.id, { step: parseOptionalNumberInput(nextValue) })}
                             placeholder="1"
                           />
                         </SettingsField>

@@ -26,6 +26,7 @@ import type { ImageRecord } from '@/types/image'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems } from './image-detail-utils'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface ImageDetailMetaCardProps {
   image: ImageRecord
@@ -115,14 +116,14 @@ function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: Pr
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-4 rounded-sm border border-border/75 bg-surface-container/70 px-3 py-2.5">
           <label className={detailSettingsLabelClassName} htmlFor="prompt-grouping-depth-input">{t({ ko: '분류 깊이', en: 'Classification depth' })}</label>
-          <input
+          <NumberStepperInput
             id="prompt-grouping-depth-input"
-            type="number"
+
             min={PROMPT_GROUPING_DEPTH_MIN}
             max={PROMPT_GROUPING_DEPTH_MAX}
             step={1}
             value={options.classificationDepth}
-            onChange={(event) => onChange({ classificationDepth: clampPromptGroupingDepth(Number(event.target.value)) })}
+            onValueCommit={(nextValue) => onChange({ classificationDepth: clampPromptGroupingDepth(Number(nextValue)) })}
             className="h-8 w-16 rounded-sm border border-border bg-surface-low px-2 text-center font-mono text-sm font-semibold text-foreground outline-none transition-colors focus:border-primary"
           />
         </div>

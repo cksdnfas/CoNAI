@@ -1,13 +1,13 @@
 import { Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import { calculateImageSaveOutputSize, resolveImageSaveFormat, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@/types/settings'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface ImageSaveOptionsModalProps {
   open: boolean
@@ -65,13 +65,13 @@ export function ImageSaveOptionsModal({
           </SettingsField>
 
           <SettingsField label={t({ ko: '품질', en: 'Quality' })}>
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min={1}
               max={100}
               variant="settings"
               value={options.quality}
-              onChange={(event) => onOptionsChange({ quality: Number(event.target.value) || 1 })}
+              onValueCommit={(nextValue) => onOptionsChange({ quality: Number(nextValue) || 1 })}
             />
           </SettingsField>
 
@@ -85,25 +85,25 @@ export function ImageSaveOptionsModal({
           </SettingsToggleRow>
 
           <SettingsField label={t('imageSaveOptionsModal.maxWidth')}>
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min={64}
               max={16384}
               variant="settings"
               value={options.maxWidth}
-              onChange={(event) => onOptionsChange({ maxWidth: Number(event.target.value) || 64 })}
+              onValueCommit={(nextValue) => onOptionsChange({ maxWidth: Number(nextValue) || 64 })}
               disabled={!options.resizeEnabled}
             />
           </SettingsField>
 
           <SettingsField label={t('imageSaveOptionsModal.maxHeight')}>
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min={64}
               max={16384}
               variant="settings"
               value={options.maxHeight}
-              onChange={(event) => onOptionsChange({ maxHeight: Number(event.target.value) || 64 })}
+              onValueCommit={(nextValue) => onOptionsChange({ maxHeight: Number(nextValue) || 64 })}
               disabled={!options.resizeEnabled}
             />
           </SettingsField>

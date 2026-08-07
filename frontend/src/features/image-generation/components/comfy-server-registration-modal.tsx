@@ -5,6 +5,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServerFormDraft } from '../image-generation-shared'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 type ComfyServerRegistrationModalProps = {
   open: boolean
@@ -56,7 +57,7 @@ export function ComfyServerRegistrationModal({
             </Select>
           </SettingsField>
           <SettingsField label={t({ ko: '동시 실행 슬롯', en: 'Capacity' })}>
-            <Input variant="settings" type="number" min={1} max={100} value={form.capacity} onChange={(event) => onFieldChange('capacity', event.target.value)} />
+            <NumberStepperInput variant="settings" min={1} max={100} value={form.capacity} onValueCommit={(nextValue) => onFieldChange('capacity', nextValue)} />
           </SettingsField>
         </div>
 

@@ -34,7 +34,6 @@ export const shellResources = {
     "imageSaveOptionsModal.keepOriginal": "원본 유지",
     "imageSaveOptionsModal.maxWidth": "최대 가로",
     "imageSaveOptionsModal.maxHeight": "최대 세로",
-    "scrubbableNumberInput.dragLeftOrRightTo": "좌우로 드래그해서 값 조절",
   },
   en: {
     "routeErrorBoundary.anUnknownErrorOccurred": "An unknown error occurred.",
@@ -66,7 +65,6 @@ export const shellResources = {
     "imageSaveOptionsModal.keepOriginal": "Keep original",
     "imageSaveOptionsModal.maxWidth": "Max width",
     "imageSaveOptionsModal.maxHeight": "Max height",
-    "scrubbableNumberInput.dragLeftOrRightTo": "Drag left or right to adjust the value",
   },
 } as const satisfies ScopedLocaleResources
 

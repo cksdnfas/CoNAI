@@ -1,7 +1,7 @@
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 import type { StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAIVibeDraft, type SelectedImageDraft } from '../image-generation-shared'
@@ -100,10 +100,10 @@ export function NaiVibesSection({
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField label={t({ ko: '강도', en: 'Strength' })}>
-                    <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.strength} onChange={(value) => onVibeFieldChange(index, 'strength', value)} />
+                    <NumberStepperInput min={0.01} max={1} step={0.01} value={vibe.strength} onValueCommit={(value) => onVibeFieldChange(index, 'strength', value)} />
                   </FormField>
                   <FormField label={t({ ko: '정보 추출량', en: 'Information Extracted' })}>
-                    <ScrubbableNumberInput min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onChange={(value) => onVibeFieldChange(index, 'informationExtracted', value)} />
+                    <NumberStepperInput min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onValueCommit={(value) => onVibeFieldChange(index, 'informationExtracted', value)} />
                   </FormField>
                 </div>
 

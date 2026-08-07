@@ -17,6 +17,7 @@ import {
   listNaiVibeAssets,
 } from '@/lib/api-image-generation-nai'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 type NaiReusableAssetKind = 'vibes' | 'character_refs'
 
@@ -455,11 +456,11 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-sm font-medium text-foreground">{t({ ko: '강도', en: 'Strength' })}</span>
-                  <Input type="number" min={0.01} max={1} step={0.01} value={draft.strength} onChange={(event) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, strength: event.target.value } : entry))} />
+                  <NumberStepperInput min={0.01} max={1} step={0.01} value={draft.strength} onValueCommit={(nextValue) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, strength: nextValue } : entry))} />
                 </label>
                 <label className="space-y-2">
                   <span className="text-sm font-medium text-foreground">{t({ ko: '정보 추출량', en: 'Information Extracted' })}</span>
-                  <Input type="number" min={0.01} max={1} step={0.01} value={draft.informationExtracted} onChange={(event) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, informationExtracted: event.target.value } : entry))} />
+                  <NumberStepperInput min={0.01} max={1} step={0.01} value={draft.informationExtracted} onValueCommit={(nextValue) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, informationExtracted: nextValue } : entry))} />
                 </label>
               </div>
             </div>
@@ -582,11 +583,11 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               </label>
               <label className="space-y-2">
                 <span className="text-sm font-medium text-foreground">{t({ ko: '강도', en: 'Strength' })}</span>
-                <Input type="number" min={0} max={1} step={0.01} value={draft.strength} onChange={(event) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, strength: event.target.value } : entry))} />
+                <NumberStepperInput min={0} max={1} step={0.01} value={draft.strength} onValueCommit={(nextValue) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, strength: nextValue } : entry))} />
               </label>
               <label className="space-y-2">
                 <span className="text-sm font-medium text-foreground">{t({ ko: '충실도', en: 'Fidelity' })}</span>
-                <Input type="number" min={0} max={1} step={0.01} value={draft.fidelity} onChange={(event) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, fidelity: event.target.value } : entry))} />
+                <NumberStepperInput min={0} max={1} step={0.01} value={draft.fidelity} onValueCommit={(nextValue) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, fidelity: nextValue } : entry))} />
               </label>
             </div>
           </div>

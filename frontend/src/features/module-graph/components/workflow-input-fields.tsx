@@ -15,6 +15,7 @@ import { hasMeaningfulValue } from './module-graph-field-shared'
 import { formatModuleGraphDefaultOptionLabel } from './module-graph-simple-value-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-4'
 const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
@@ -227,10 +228,10 @@ export function WorkflowInputFields({
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
           {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
-          <Input
-            type="number"
+          <NumberStepperInput
+            allowEmpty={!inputDefinition.required}
             value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
-            onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value === '' ? '' : Number(event.target.value))}
+            onValueCommit={(nextValue) => onInputValueChange(inputDefinition.id, nextValue === '' ? '' : Number(nextValue))}
             placeholder={inputDefinition.placeholder || inputDefinition.label}
           />
         </div>

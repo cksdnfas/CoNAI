@@ -4,7 +4,6 @@ import { ExternalLink, Languages, X } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { resolveDanbooruBrowserProgress } from '../danbooru-browser-progress'
@@ -20,6 +19,7 @@ import type {
   DanbooruBrowserTreeNode,
 } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 export const CHARACTER_PAGE_SIZE = 30
 export const DEFAULT_PAGE_SIZE = 50
@@ -306,13 +306,13 @@ export function CharacterRelatedTagOptionsPopup({
 
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">{t({ ko: '최대 표시 갯수', en: 'Maximum visible count' })}</div>
-          <Input
-            type="number"
+          <NumberStepperInput
+
             min="0"
             max={MAX_RELATED_TAG_LIMIT}
             step="1"
             value={limitInput}
-            onChange={(event) => onLimitInputChange(event.target.value)}
+            onValueCommit={(nextValue) => onLimitInputChange(nextValue)}
             placeholder={String(DEFAULT_RELATED_TAG_LIMIT)}
           />
         </div>
@@ -320,22 +320,22 @@ export function CharacterRelatedTagOptionsPopup({
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">{t({ ko: 'Cosine 점수 범위', en: 'Cosine score range' })}</div>
           <div className="grid grid-cols-2 gap-2">
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min="0"
               max="1"
               step="0.01"
               value={scoreMinInput}
-              onChange={(event) => onScoreMinInputChange(event.target.value)}
+              onValueCommit={(nextValue) => onScoreMinInputChange(nextValue)}
               placeholder="min"
             />
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min="0"
               max="1"
               step="0.01"
               value={scoreMaxInput}
-              onChange={(event) => onScoreMaxInputChange(event.target.value)}
+              onValueCommit={(nextValue) => onScoreMaxInputChange(nextValue)}
               placeholder="max"
             />
           </div>

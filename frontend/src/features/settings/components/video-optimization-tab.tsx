@@ -1,11 +1,11 @@
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n, type TranslationDictionary } from '@/i18n'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import type { VideoOptimizationSettings } from '@/types/settings'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 const VIDEO_PRESETS: Array<{ value: VideoOptimizationSettings['preset']; label: TranslationDictionary; crf: number; audioBitrateKbps: number }> = [
   { value: 'high-quality', label: { ko: '고화질', en: 'High quality' }, crf: 22, audioBitrateKbps: 192 },
@@ -85,24 +85,24 @@ export function VideoOptimizationTab({
                 </SettingsField>
 
                 <SettingsField label={t({ ko: '오디오 bitrate (kbps)', en: 'Audio bitrate (kbps)' })}>
-                  <Input
-                    type="number"
+                  <NumberStepperInput
+
                     min={32}
                     max={320}
                     variant="settings"
                     value={videoOptimizationDraft.audioBitrateKbps}
-                    onChange={(event) => onPatchVideoOptimization({ audioBitrateKbps: Number(event.target.value) || 32 })}
+                    onValueCommit={(nextValue) => onPatchVideoOptimization({ audioBitrateKbps: Number(nextValue) || 32 })}
                   />
                 </SettingsField>
 
                 <SettingsField label="CRF">
-                  <Input
-                    type="number"
+                  <NumberStepperInput
+
                     min={18}
                     max={40}
                     variant="settings"
                     value={videoOptimizationDraft.crf}
-                    onChange={(event) => onPatchVideoOptimization({ crf: Number(event.target.value) || 18 })}
+                    onValueCommit={(nextValue) => onPatchVideoOptimization({ crf: Number(nextValue) || 18 })}
                   />
                 </SettingsField>
 

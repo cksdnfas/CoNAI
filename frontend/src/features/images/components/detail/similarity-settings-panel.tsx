@@ -1,7 +1,7 @@
 import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type SimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
@@ -39,13 +39,13 @@ function SimilarityNumberField({
   return (
     <div className="space-y-2">
       <label className={detailSettingsLabelClassName}>{label}</label>
-      <ScrubbableNumberInput
+      <NumberStepperInput
         min={min}
         max={max}
         step={step}
         variant={variant}
         value={value}
-        onChange={(nextValue) => onChange(Number(nextValue))}
+        onValueCommit={(nextValue) => onChange(Number(nextValue))}
       />
     </div>
   )
@@ -175,7 +175,7 @@ export function SimilaritySettingsPanel({
                     step={1}
                     variant="detailNested"
                     value={draft.detailSimilarThresholds.color}
-                    onChange={(nextValue) => onPatchDraft({
+                    onValueCommit={(nextValue) => onPatchDraft({
                       detailSimilarIncludeColorSimilarity: Number(nextValue) > 0 || draft.detailSimilarWeights.color > 0,
                       detailSimilarThresholds: { ...draft.detailSimilarThresholds, color: Number(nextValue) },
                     })}

@@ -3,8 +3,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
@@ -277,11 +276,11 @@ export function NaiGenerationEditorSections({
                 </FormField>
 
                 <FormField label="Steps">
-                  <Input type="number" min={1} max={100} value={naiForm.steps} onChange={(event) => handleNaiFieldChange('steps', event.target.value)} />
+                  <NumberStepperInput min={1} max={100} value={naiForm.steps} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />
                 </FormField>
 
                 <FormField label="CFG Scale">
-                  <Input type="number" min={1} max={20} step={0.1} value={naiForm.scale} onChange={(event) => handleNaiFieldChange('scale', event.target.value)} />
+                  <NumberStepperInput min={1} max={20} step={0.1} value={naiForm.scale} onValueCommit={(nextValue) => handleNaiFieldChange('scale', nextValue)} />
                 </FormField>
               </div>
             </NaiControllerInsetBlock>
@@ -301,19 +300,19 @@ export function NaiGenerationEditorSections({
                 </FormField>
 
                 <FormField label="Width">
-                  <Input type="number" min={64} step={64} value={naiForm.width} onChange={(event) => handleNaiFieldChange('width', event.target.value)} />
+                  <NumberStepperInput min={64} step={64} value={naiForm.width} onValueCommit={(nextValue) => handleNaiFieldChange('width', nextValue)} />
                 </FormField>
 
                 <FormField label="Height">
-                  <Input type="number" min={64} step={64} value={naiForm.height} onChange={(event) => handleNaiFieldChange('height', event.target.value)} />
+                  <NumberStepperInput min={64} step={64} value={naiForm.height} onValueCommit={(nextValue) => handleNaiFieldChange('height', nextValue)} />
                 </FormField>
 
                 <FormField label="Samples">
-                  <Input type="number" min={NAI_SAMPLE_COUNT_MIN} max={NAI_SAMPLE_COUNT_MAX} step={1} value={naiForm.samples} onChange={(event) => handleNaiFieldChange('samples', event.target.value)} />
+                  <NumberStepperInput min={NAI_SAMPLE_COUNT_MIN} max={NAI_SAMPLE_COUNT_MAX} step={1} value={naiForm.samples} onValueCommit={(nextValue) => handleNaiFieldChange('samples', nextValue)} />
                 </FormField>
 
                 <FormField label="Seed">
-                  <Input type="number" value={naiForm.seed} onChange={(event) => handleNaiFieldChange('seed', event.target.value)} />
+                  <NumberStepperInput value={naiForm.seed} onValueCommit={(nextValue) => handleNaiFieldChange('seed', nextValue)} />
                 </FormField>
 
                 <div className="space-y-2">
@@ -386,10 +385,10 @@ export function NaiGenerationEditorSections({
               <div className="text-sm font-medium text-foreground">{t({ ko: '이미지 옵션', en: 'Image Options' })}</div>
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField label={t({ ko: '강도', en: 'Strength' })}>
-                  <ScrubbableNumberInput min={0} max={1} step={0.01} value={naiForm.strength} onChange={(value) => handleNaiFieldChange('strength', value)} />
+                  <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
                 </FormField>
                 <FormField label="Noise">
-                  <Input type="number" min={0} max={1} step={0.01} value={naiForm.noise} onChange={(event) => handleNaiFieldChange('noise', event.target.value)} />
+                  <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.noise} onValueCommit={(nextValue) => handleNaiFieldChange('noise', nextValue)} />
                 </FormField>
               </div>
 

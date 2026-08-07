@@ -2,7 +2,7 @@ import { useState, type DragEvent, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, GripVertical, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { SettingsField, SettingsSection } from './settings-primitives'
@@ -189,12 +189,12 @@ export function RatingTierSettingsCard({
                       </SettingsField>
 
                       <SettingsField label={t({ ko: '최소 점수', en: 'Minimum score' })}>
-                        <ScrubbableNumberInput
+                        <NumberStepperInput
                           min={0}
                           step={0.1}
                           variant="settings"
                           value={tier.min_score}
-                          onChange={(value) => onPatchRatingTier(tier.id, { min_score: Number(value) || 0 })}
+                          onValueCommit={(value) => onPatchRatingTier(tier.id, { min_score: Number(value) || 0 })}
                         />
                       </SettingsField>
 
@@ -202,12 +202,12 @@ export function RatingTierSettingsCard({
                         {isLast ? (
                           <Input variant="settings" value="∞" disabled />
                         ) : (
-                          <ScrubbableNumberInput
+                          <NumberStepperInput
                             min={0}
                             step={0.1}
                             variant="settings"
                             value={tier.max_score ?? ''}
-                            onChange={(value) => onPatchRatingTier(tier.id, {
+                            onValueCommit={(value) => onPatchRatingTier(tier.id, {
                               max_score: value === '' ? null : Number(value),
                             })}
                           />

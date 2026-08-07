@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ArrowLeft, ChevronDown, Play, RotateCcw, Save } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api-image-generation-types'
@@ -364,15 +364,15 @@ export function ComfyWorkflowControllerPanel({
           />
         </div>
 
-        <ScrubbableNumberInput
+        <NumberStepperInput
           min={1}
           max={32}
           step={1}
-          scrubRatio={1}
+
           variant="detail"
           className="h-9 w-[72px] shrink-0 !rounded-none !border-0 !bg-transparent px-2 text-center text-xs"
           value={queueRegistrationCount}
-          onChange={onQueueRegistrationCountChange}
+          onValueCommit={onQueueRegistrationCountChange}
           disabled={isGenerating || workflowFields.length === 0}
           aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
           inputMode="numeric"
@@ -484,15 +484,15 @@ export function ComfyWorkflowControllerPanel({
           </div>
         ) : null}
 
-        <ScrubbableNumberInput
+        <NumberStepperInput
           min={1}
           max={32}
           step={1}
-          scrubRatio={1}
+
           variant="detail"
           className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
           value={queueRegistrationCount}
-          onChange={onQueueRegistrationCountChange}
+          onValueCommit={onQueueRegistrationCountChange}
           disabled={isGenerating || workflowFields.length === 0}
           aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
           inputMode="numeric"

@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { FlaskConical, LoaderCircle, Save, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -166,23 +166,23 @@ function LlmConnectionFormFields({
       </SettingsField>
 
       <SettingsField label={t('llmConnectionsTab.defaultTemperature')}>
-        <ScrubbableNumberInput
+        <NumberStepperInput
           variant="settings"
           step={0.1}
           min={0}
           value={draft.defaultTemperature}
-          onChange={(value) => onChange({ defaultTemperature: value })}
+          onValueCommit={(value) => onChange({ defaultTemperature: value })}
           placeholder={t({ ko: '예: 0.7', en: 'e.g. 0.7' })}
         />
       </SettingsField>
 
       <SettingsField label={t('llmConnectionsTab.defaultMaxTokens')}>
-        <ScrubbableNumberInput
+        <NumberStepperInput
           variant="settings"
           step={128}
           min={128}
           value={draft.defaultMaxTokens}
-          onChange={(value) => onChange({ defaultMaxTokens: value })}
+          onValueCommit={(value) => onChange({ defaultMaxTokens: value })}
           placeholder={t({ ko: '예: 1024', en: 'e.g. 1024' })}
         />
       </SettingsField>

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, RotateCcw, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getAppSettings } from '@/lib/api-settings'
@@ -389,15 +389,15 @@ export function CodexGenerationPanel({
 
   const compactActionBarContent = (
     <CompactGenerationActionSurface className="max-w-full">
-      <ScrubbableNumberInput
+      <NumberStepperInput
         min={CODEX_COUNT_MIN}
         max={CODEX_COUNT_MAX}
         step={1}
-        scrubRatio={1}
+
         variant="detail"
         className="h-8 w-[58px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
         value={codexForm.count}
-        onChange={(value) => handleFieldChange('count', value)}
+        onValueCommit={(value) => handleFieldChange('count', value)}
         disabled={isSubmitting}
         aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
         inputMode="numeric"
@@ -449,15 +449,15 @@ export function CodexGenerationPanel({
 
   const actionContent = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <ScrubbableNumberInput
+      <NumberStepperInput
         min={CODEX_COUNT_MIN}
         max={CODEX_COUNT_MAX}
         step={1}
-        scrubRatio={1}
+
         variant="detail"
         className="h-9 w-[72px]"
         value={codexForm.count}
-        onChange={(value) => handleFieldChange('count', value)}
+        onValueCommit={(value) => handleFieldChange('count', value)}
         disabled={isSubmitting}
         aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
         inputMode="numeric"

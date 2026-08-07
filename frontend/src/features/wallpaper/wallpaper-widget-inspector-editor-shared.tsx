@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Select } from '@/components/ui/select'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsField } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -232,14 +232,14 @@ export function WallpaperTransitionAnimationEditorField({
                     </Select>
                   </SettingsField>
                   <SettingsField label={t({ ko: '전환 시간 (ms)', en: 'Transition duration (ms)' })}>
-                    <ScrubbableNumberInput
+                    <NumberStepperInput
                       variant="settings"
                       min={80}
                       max={4000}
                       step={10}
-                      scrubRatio={0.35}
+
                       value={durationMs}
-                      onChange={(nextValue) => {
+                      onValueCommit={(nextValue) => {
                         onTransitionDurationChange(clampWallpaperInspectorNumber(nextValue, durationMs, 80, 4000, 0))
                       }}
                     />
@@ -278,14 +278,14 @@ export function WallpaperHoverInteractionEditorFields({
           title: t({ ko: '호버 옵션', en: 'Hover options' }),
           children: (
             <SettingsField label={t({ ko: '호버 반응', en: 'Hover response' })}>
-              <ScrubbableNumberInput
+              <NumberStepperInput
                 variant="settings"
                 min={0}
                 max={2.5}
                 step={0.1}
-                scrubRatio={0.45}
+
                 value={hoverAmount}
-                onChange={(nextValue) => {
+                onValueCommit={(nextValue) => {
                   onHoverMotionChange(clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5))
                 }}
               />
@@ -360,27 +360,27 @@ export function WallpaperPreviewOpenAnimationEditorField({
           children: (
             <div className="grid gap-3 sm:grid-cols-2">
               <SettingsField label={t({ ko: '시작 크기 (%)', en: 'Start scale (%)' })}>
-                <ScrubbableNumberInput
+                <NumberStepperInput
                   variant="settings"
                   min={60}
                   max={100}
                   step={1}
-                  scrubRatio={0.35}
+
                   value={resolvedScalePercent}
-                  onChange={(nextValue) => {
+                  onValueCommit={(nextValue) => {
                     onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
                   }}
                 />
               </SettingsField>
               <SettingsField label={t({ ko: '열림 시간 (ms)', en: 'Open duration (ms)' })}>
-                <ScrubbableNumberInput
+                <NumberStepperInput
                   variant="settings"
                   min={80}
                   max={1200}
                   step={10}
-                  scrubRatio={0.35}
+
                   value={resolvedDurationMs}
-                  onChange={(nextValue) => {
+                  onValueCommit={(nextValue) => {
                     onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
                   }}
                 />
@@ -423,27 +423,27 @@ export function WallpaperPreviewCloseAnimationEditorField({
           children: (
             <div className="grid gap-3 sm:grid-cols-2">
               <SettingsField label={t({ ko: '끝 크기 (%)', en: 'End scale (%)' })}>
-                <ScrubbableNumberInput
+                <NumberStepperInput
                   variant="settings"
                   min={60}
                   max={100}
                   step={1}
-                  scrubRatio={0.35}
+
                   value={resolvedScalePercent}
-                  onChange={(nextValue) => {
+                  onValueCommit={(nextValue) => {
                     onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
                   }}
                 />
               </SettingsField>
               <SettingsField label={t({ ko: '닫힘 시간 (ms)', en: 'Close duration (ms)' })}>
-                <ScrubbableNumberInput
+                <NumberStepperInput
                   variant="settings"
                   min={80}
                   max={1200}
                   step={10}
-                  scrubRatio={0.35}
+
                   value={resolvedDurationMs}
-                  onChange={(nextValue) => {
+                  onValueCommit={(nextValue) => {
                     onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
                   }}
                 />

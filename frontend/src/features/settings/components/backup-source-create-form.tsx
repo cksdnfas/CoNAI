@@ -5,6 +5,7 @@ import { SettingsField, SettingsToggleRow } from './settings-primitives'
 import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import { buildBackupTargetPreviewPath, type NewBackupSourceDraft } from '../settings-utils'
 import { useI18n } from '@/i18n'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface BackupSourceCreateFormProps {
   newBackupSource: NewBackupSourceDraft
@@ -74,11 +75,11 @@ export function BackupSourceCreateForm({
         </SettingsField>
 
         <SettingsField label={t({ ko: 'watcher polling(ms)', en: 'Watcher polling (ms)' })}>
-          <Input type="number" min={100} variant="settings" value={newBackupSource.watcher_polling_interval} onChange={(event) => onNewBackupSourceChange({ watcher_polling_interval: Number(event.target.value) || 100 })} />
+          <NumberStepperInput min={100} variant="settings" value={newBackupSource.watcher_polling_interval} onValueCommit={(nextValue) => onNewBackupSourceChange({ watcher_polling_interval: Number(nextValue) || 100 })} />
         </SettingsField>
 
         <SettingsField label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>
-          <Input type="number" min={1} max={100} variant="settings" value={newBackupSource.webp_quality} onChange={(event) => onNewBackupSourceChange({ webp_quality: Number(event.target.value) || 90 })} disabled={newBackupSource.import_mode !== 'convert_webp'} />
+          <NumberStepperInput min={1} max={100} variant="settings" value={newBackupSource.webp_quality} onValueCommit={(nextValue) => onNewBackupSourceChange({ webp_quality: Number(nextValue) || 90 })} disabled={newBackupSource.import_mode !== 'convert_webp'} />
         </SettingsField>
       </div>
 

@@ -1,4 +1,4 @@
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -83,12 +83,13 @@ export function ModuleGraphSimpleValueInput({
 
   if (dataType === 'number') {
     return (
-      <ScrubbableNumberInput
+      <NumberStepperInput
         min={min}
         max={max}
         step={typeof step === 'number' ? step : 1}
+        allowEmpty={allowEmptyOption}
         value={typeof value === 'number' ? String(value) : typeof value === 'string' ? value : ''}
-        onChange={(nextValue) => onChange(nextValue === '' ? '' : Number(nextValue))}
+        onValueCommit={(nextValue) => onChange(nextValue === '' ? '' : Number(nextValue))}
         placeholder={placeholder}
         className={className}
       />

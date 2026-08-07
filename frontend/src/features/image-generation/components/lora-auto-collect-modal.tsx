@@ -8,6 +8,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import type { LoraFileData, LoraScanRequest } from '@/lib/api-wildcards'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 type LoraAutoCollectModalProps = {
   open: boolean
@@ -276,7 +277,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
 
         <div className="grid gap-4 md:grid-cols-2">
           <SettingsField label={t({ ko: '기본 LoRA weight', en: 'Default LoRA weight' })}>
-            <Input type="number" min="0.1" max="2.0" step="0.1" value={loraWeight} onChange={(event) => setLoraWeight(event.target.value)} />
+            <NumberStepperInput min="0.1" max="2.0" step="0.1" value={loraWeight} onValueCommit={(nextValue) => setLoraWeight(nextValue)} />
           </SettingsField>
 
           <SettingsField label={t({ ko: '중복 이름 처리', en: 'Duplicate name handling' })}>

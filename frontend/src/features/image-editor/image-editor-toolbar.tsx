@@ -13,6 +13,7 @@ import {
   getImageEditorToolShortcut,
 } from './image-editor-tool-metadata'
 import type { ImageEditorTool } from './image-editor-types'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface ImageEditorToolbarProps {
   tool: ImageEditorTool
@@ -141,11 +142,11 @@ export function ImageEditorToolbar({
           </label>
           <label className="space-y-1 text-xs text-muted-foreground">
             {t({ ko: '브러시 크기', en: 'Brush size' })}
-            <Input type="number" min={1} max={256} value={brushSize} onChange={(event) => onBrushSizeChange(Math.max(1, Number(event.target.value) || 1))} className="w-24" />
+            <NumberStepperInput min={1} max={256} value={brushSize} onValueCommit={(nextValue) => onBrushSizeChange(Math.max(1, Number(nextValue) || 1))} className="w-24" />
           </label>
           <label className="space-y-1 text-xs text-muted-foreground">
             {t({ ko: '불투명도', en: 'Opacity' })}
-            <Input type="number" min={0} max={100} value={brushOpacity} onChange={(event) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} className="w-24" />
+            <NumberStepperInput min={0} max={100} value={brushOpacity} onValueCommit={(nextValue) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(nextValue) || 0)))} className="w-24" />
           </label>
         </ToolbarSection>
 

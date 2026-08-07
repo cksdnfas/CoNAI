@@ -1,9 +1,9 @@
 import { Crop, Minus, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import type { ImageEditorCropRect } from './image-editor-types'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface ImageEditorSessionActionsProps {
   canFlattenVisible: boolean
@@ -75,10 +75,10 @@ export function ImageEditorSessionActions({
           <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
             <div className="text-xs font-medium text-foreground">{t({ ko: '선택 범위', en: 'Selection bounds' })}</div>
             <div className="grid grid-cols-2 gap-2">
-              <label className="space-y-1 text-xs text-muted-foreground">X<Input type="number" value={Math.round(selectionRect.x)} onChange={(event) => onSelectionRectFieldChange('x', Number(event.target.value) || 0)} className="h-8" /></label>
-              <label className="space-y-1 text-xs text-muted-foreground">Y<Input type="number" value={Math.round(selectionRect.y)} onChange={(event) => onSelectionRectFieldChange('y', Number(event.target.value) || 0)} className="h-8" /></label>
-              <label className="space-y-1 text-xs text-muted-foreground">W<Input type="number" min={1} value={Math.round(selectionRect.width)} onChange={(event) => onSelectionRectFieldChange('width', Number(event.target.value) || 1)} className="h-8" /></label>
-              <label className="space-y-1 text-xs text-muted-foreground">H<Input type="number" min={1} value={Math.round(selectionRect.height)} onChange={(event) => onSelectionRectFieldChange('height', Number(event.target.value) || 1)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">X<NumberStepperInput value={Math.round(selectionRect.x)} onValueCommit={(nextValue) => onSelectionRectFieldChange('x', Number(nextValue) || 0)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">Y<NumberStepperInput value={Math.round(selectionRect.y)} onValueCommit={(nextValue) => onSelectionRectFieldChange('y', Number(nextValue) || 0)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">W<NumberStepperInput min={1} value={Math.round(selectionRect.width)} onValueCommit={(nextValue) => onSelectionRectFieldChange('width', Number(nextValue) || 1)} className="h-8" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">H<NumberStepperInput min={1} value={Math.round(selectionRect.height)} onValueCommit={(nextValue) => onSelectionRectFieldChange('height', Number(nextValue) || 1)} className="h-8" /></label>
             </div>
           </div>
         ) : null}
@@ -92,10 +92,10 @@ export function ImageEditorSessionActions({
             <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
               <div className="text-xs font-medium text-foreground">{t({ ko: '자르기 범위', en: 'Crop bounds' })}</div>
               <div className="grid grid-cols-2 gap-2">
-                <label className="space-y-1 text-xs text-muted-foreground">X<Input type="number" value={Math.round(cropRect.x)} onChange={(event) => onCropRectFieldChange('x', Number(event.target.value) || 0)} className="h-8" /></label>
-                <label className="space-y-1 text-xs text-muted-foreground">Y<Input type="number" value={Math.round(cropRect.y)} onChange={(event) => onCropRectFieldChange('y', Number(event.target.value) || 0)} className="h-8" /></label>
-                <label className="space-y-1 text-xs text-muted-foreground">W<Input type="number" min={1} value={Math.round(cropRect.width)} onChange={(event) => onCropRectFieldChange('width', Number(event.target.value) || 1)} className="h-8" /></label>
-                <label className="space-y-1 text-xs text-muted-foreground">H<Input type="number" min={1} value={Math.round(cropRect.height)} onChange={(event) => onCropRectFieldChange('height', Number(event.target.value) || 1)} className="h-8" /></label>
+                <label className="space-y-1 text-xs text-muted-foreground">X<NumberStepperInput value={Math.round(cropRect.x)} onValueCommit={(nextValue) => onCropRectFieldChange('x', Number(nextValue) || 0)} className="h-8" /></label>
+                <label className="space-y-1 text-xs text-muted-foreground">Y<NumberStepperInput value={Math.round(cropRect.y)} onValueCommit={(nextValue) => onCropRectFieldChange('y', Number(nextValue) || 0)} className="h-8" /></label>
+                <label className="space-y-1 text-xs text-muted-foreground">W<NumberStepperInput min={1} value={Math.round(cropRect.width)} onValueCommit={(nextValue) => onCropRectFieldChange('width', Number(nextValue) || 1)} className="h-8" /></label>
+                <label className="space-y-1 text-xs text-muted-foreground">H<NumberStepperInput min={1} value={Math.round(cropRect.height)} onValueCommit={(nextValue) => onCropRectFieldChange('height', Number(nextValue) || 1)} className="h-8" /></label>
               </div>
             </div>
           </>

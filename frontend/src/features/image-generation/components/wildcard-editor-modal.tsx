@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -435,14 +435,14 @@ function WildcardItemDraftEditor({
             onChange={(event) => handleChangeDraft(draft.id, 'content', event.target.value)}
             placeholder={t(wildcardEditorKey('item.content'))}
           />
-          <ScrubbableNumberInput
+          <NumberStepperInput
             variant="settings"
             min={0.1}
             step={0.1}
-            scrubRatio={0.6}
+
             className="h-10 px-3 text-center"
             value={draft.weight}
-            onChange={(value) => handleChangeDraft(draft.id, 'weight', value)}
+            onValueCommit={(value) => handleChangeDraft(draft.id, 'weight', value)}
             placeholder="1"
             inputMode="decimal"
             aria-label={t(wildcardEditorKey('tool.item.weight'), { tool: activeToolLabel, index: formatNumber(index + 1) })}

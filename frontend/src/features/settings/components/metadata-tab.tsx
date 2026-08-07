@@ -1,11 +1,11 @@
 import { RefreshCcw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@/types/settings'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import { useI18n } from '@/i18n'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface MetadataTabProps {
   metadataDraft: MetadataExtractionSettings | null
@@ -79,11 +79,11 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                 </SettingsField>
 
                 <SettingsField label={t('metadataTab.maximumFileSizeMb')}>
-                  <Input type="number" min={1} variant="settings" value={metadataDraft.stealthMaxFileSizeMB} onChange={(event) => onPatchMetadata({ stealthMaxFileSizeMB: Number(event.target.value) || 1 })} />
+                  <NumberStepperInput min={1} variant="settings" value={metadataDraft.stealthMaxFileSizeMB} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxFileSizeMB: Number(nextValue) || 1 })} />
                 </SettingsField>
 
                 <SettingsField label={t('metadataTab.maximumResolutionMp')}>
-                  <Input type="number" min={1} variant="settings" value={metadataDraft.stealthMaxResolutionMP} onChange={(event) => onPatchMetadata({ stealthMaxResolutionMP: Number(event.target.value) || 1 })} />
+                  <NumberStepperInput min={1} variant="settings" value={metadataDraft.stealthMaxResolutionMP} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxResolutionMP: Number(nextValue) || 1 })} />
                 </SettingsField>
 
                 <SettingsToggleRow>

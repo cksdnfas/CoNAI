@@ -1,12 +1,12 @@
 import { RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { GenerationThrottleSettings, ImageSaveSettings, ThumbnailSettings, VideoOptimizationSettings } from '@/types/settings'
 import { useI18n } from '@/i18n'
 import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import { VideoOptimizationTab } from './video-optimization-tab'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
   { label: '720p', width: 1280, height: 720 },
@@ -130,7 +130,7 @@ export function ImageSaveTab({
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <SettingsField label={t({ ko: '예약 동시 실행 수', en: 'Reservation concurrency' })}>
-                    <Input type="number" min={1} max={12} variant="settings" value={generationThrottleDraft.reservations.maxConcurrentJobs} onChange={(event) => onPatchGenerationThrottle({ reservations: { maxConcurrentJobs: Number(event.target.value) || 1 } })} />
+                    <NumberStepperInput min={1} max={12} variant="settings" value={generationThrottleDraft.reservations.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ reservations: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
                   </SettingsField>
                   <SettingsField label={t({ ko: '사용자 대기열이 있을 때', en: 'When a user queue exists' })}>
                     <Select
@@ -165,13 +165,13 @@ export function ImageSaveTab({
                 </div>
                 <div className="grid gap-4 md:grid-cols-5">
                   <SettingsField label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
-                    <Input type="number" min={1} max={8} variant="settings" value={generationThrottleDraft.novelai.maxConcurrentJobs} onChange={(event) => onPatchGenerationThrottle({ novelai: { maxConcurrentJobs: Number(event.target.value) || 1 } })} />
+                    <NumberStepperInput min={1} max={8} variant="settings" value={generationThrottleDraft.novelai.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
                   </SettingsField>
                   <SettingsField label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
-                    <Input type="number" min={1} max={1440} variant="settings" value={generationThrottleDraft.novelai.scheduleWindowMinutes} onChange={(event) => onPatchGenerationThrottle({ novelai: { scheduleWindowMinutes: Number(event.target.value) || 1 } })} />
+                    <NumberStepperInput min={1} max={1440} variant="settings" value={generationThrottleDraft.novelai.scheduleWindowMinutes} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { scheduleWindowMinutes: Number(nextValue) || 1 } })} />
                   </SettingsField>
                   <SettingsField label={t({ ko: '생성횟수', en: 'Job count' })}>
-                    <Input type="number" min={1} max={10000} variant="settings" value={generationThrottleDraft.novelai.scheduleJobCount} onChange={(event) => onPatchGenerationThrottle({ novelai: { scheduleJobCount: Number(event.target.value) || 1 } })} />
+                    <NumberStepperInput min={1} max={10000} variant="settings" value={generationThrottleDraft.novelai.scheduleJobCount} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { scheduleJobCount: Number(nextValue) || 1 } })} />
                   </SettingsField>
                   <SettingsField label={t({ ko: '분배', en: 'Distribution' })}>
                     <Select
@@ -184,7 +184,7 @@ export function ImageSaveTab({
                     </Select>
                   </SettingsField>
                   <SettingsField label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
-                    <Input type="number" min={0} max={3600} variant="settings" value={generationThrottleDraft.novelai.minStartIntervalSeconds} onChange={(event) => onPatchGenerationThrottle({ novelai: { minStartIntervalSeconds: Number(event.target.value) || 0 } })} />
+                    <NumberStepperInput min={0} max={3600} variant="settings" value={generationThrottleDraft.novelai.minStartIntervalSeconds} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { minStartIntervalSeconds: Number(nextValue) || 0 } })} />
                   </SettingsField>
                 </div>
               </div>
@@ -209,13 +209,13 @@ export function ImageSaveTab({
                 </div>
                 <div className="grid gap-4 md:grid-cols-5">
                   <SettingsField label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
-                    <Input type="number" min={1} max={8} variant="settings" value={generationThrottleDraft.codex.maxConcurrentJobs} onChange={(event) => onPatchGenerationThrottle({ codex: { maxConcurrentJobs: Number(event.target.value) || 1 } })} />
+                    <NumberStepperInput min={1} max={8} variant="settings" value={generationThrottleDraft.codex.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
                   </SettingsField>
                   <SettingsField label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
-                    <Input type="number" min={1} max={1440} variant="settings" value={generationThrottleDraft.codex.scheduleWindowMinutes} onChange={(event) => onPatchGenerationThrottle({ codex: { scheduleWindowMinutes: Number(event.target.value) || 1 } })} />
+                    <NumberStepperInput min={1} max={1440} variant="settings" value={generationThrottleDraft.codex.scheduleWindowMinutes} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { scheduleWindowMinutes: Number(nextValue) || 1 } })} />
                   </SettingsField>
                   <SettingsField label={t({ ko: '생성횟수', en: 'Job count' })}>
-                    <Input type="number" min={1} max={10000} variant="settings" value={generationThrottleDraft.codex.scheduleJobCount} onChange={(event) => onPatchGenerationThrottle({ codex: { scheduleJobCount: Number(event.target.value) || 1 } })} />
+                    <NumberStepperInput min={1} max={10000} variant="settings" value={generationThrottleDraft.codex.scheduleJobCount} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { scheduleJobCount: Number(nextValue) || 1 } })} />
                   </SettingsField>
                   <SettingsField label={t({ ko: '분배', en: 'Distribution' })}>
                     <Select
@@ -228,7 +228,7 @@ export function ImageSaveTab({
                     </Select>
                   </SettingsField>
                   <SettingsField label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
-                    <Input type="number" min={0} max={3600} variant="settings" value={generationThrottleDraft.codex.minStartIntervalSeconds} onChange={(event) => onPatchGenerationThrottle({ codex: { minStartIntervalSeconds: Number(event.target.value) || 0 } })} />
+                    <NumberStepperInput min={0} max={3600} variant="settings" value={generationThrottleDraft.codex.minStartIntervalSeconds} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { minStartIntervalSeconds: Number(nextValue) || 0 } })} />
                   </SettingsField>
                 </div>
               </div>
@@ -274,13 +274,13 @@ export function ImageSaveTab({
                 </SettingsField>
 
                 <SettingsField label={t({ ko: '품질', en: 'Quality' })}>
-                  <Input
-                    type="number"
+                  <NumberStepperInput
+
                     min={1}
                     max={100}
                     variant="settings"
                     value={imageSaveDraft.quality}
-                    onChange={(event) => onPatchImageSave({ quality: Number(event.target.value) || 1 })}
+                    onValueCommit={(nextValue) => onPatchImageSave({ quality: Number(nextValue) || 1 })}
                   />
                 </SettingsField>
 
@@ -310,24 +310,24 @@ export function ImageSaveTab({
                 </SettingsField>
 
                 <SettingsField label={t({ ko: '최대 가로', en: 'Max width' })}>
-                  <Input
-                    type="number"
+                  <NumberStepperInput
+
                     min={64}
                     max={16384}
                     variant="settings"
                     value={imageSaveDraft.maxWidth}
-                    onChange={(event) => onPatchImageSave({ maxWidth: Number(event.target.value) || 64 })}
+                    onValueCommit={(nextValue) => onPatchImageSave({ maxWidth: Number(nextValue) || 64 })}
                   />
                 </SettingsField>
 
                 <SettingsField label={t({ ko: '최대 세로', en: 'Max height' })}>
-                  <Input
-                    type="number"
+                  <NumberStepperInput
+
                     min={64}
                     max={16384}
                     variant="settings"
                     value={imageSaveDraft.maxHeight}
-                    onChange={(event) => onPatchImageSave({ maxHeight: Number(event.target.value) || 64 })}
+                    onValueCommit={(nextValue) => onPatchImageSave({ maxHeight: Number(nextValue) || 64 })}
                   />
                 </SettingsField>
 
@@ -426,13 +426,13 @@ export function ImageSaveTab({
               </SettingsField>
 
               <SettingsField label={t({ ko: '썸네일 품질', en: 'Thumbnail quality' })}>
-                <Input
-                  type="number"
+                <NumberStepperInput
+
                   min={60}
                   max={100}
                   variant="settings"
                   value={thumbnailDraft.quality}
-                  onChange={(event) => onPatchThumbnail({ quality: Number(event.target.value) || 60 })}
+                  onValueCommit={(nextValue) => onPatchThumbnail({ quality: Number(nextValue) || 60 })}
                 />
               </SettingsField>
 

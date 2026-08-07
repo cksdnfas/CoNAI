@@ -12,6 +12,7 @@ import {
   SettingsResourceMetaList,
   getWatcherBadgeVariant,
 } from './settings-resource-shared'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface WatchedFolderCardProps {
   folder: WatchedFolder
@@ -106,7 +107,7 @@ export function WatchedFolderCard({
         </SettingsField>
 
         <SettingsField label={t({ ko: '스캔 주기(분)', en: 'Scan interval (minutes)' })}>
-          <Input type="number" min={1} variant="settings" value={draft.scan_interval} onChange={(event) => setDraft((current) => ({ ...current, scan_interval: Number(event.target.value) || 1 }))} />
+          <NumberStepperInput min={1} variant="settings" value={draft.scan_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, scan_interval: Number(nextValue) || 1 }))} />
         </SettingsField>
 
         <SettingsField label={t({ ko: '제외 확장자', en: 'Excluded extensions' })}>

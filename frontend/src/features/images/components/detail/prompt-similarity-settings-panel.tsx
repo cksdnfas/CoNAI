@@ -1,7 +1,7 @@
 import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type PromptSimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
@@ -43,12 +43,12 @@ export function PromptSimilaritySettingsPanel({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className={detailSettingsLabelClassName}>{t('images.components.detail.prompt.similarity.settings.panel.rows.to.show')}</label>
-                <ScrubbableNumberInput min={SIMILARITY_RESULT_ROW_MIN} max={SIMILARITY_RESULT_ROW_MAX} step={1} variant="detail" value={draft.resultLimit} onChange={(value) => onPatchDraft({ resultLimit: Number(value) })} />
+                <NumberStepperInput min={SIMILARITY_RESULT_ROW_MIN} max={SIMILARITY_RESULT_ROW_MAX} step={1} variant="detail" value={draft.resultLimit} onValueCommit={(value) => onPatchDraft({ resultLimit: Number(value) })} />
               </div>
 
               <div className="space-y-2">
                 <label className={detailSettingsLabelClassName}>{t('images.components.detail.prompt.similarity.settings.panel.combined.score.threshold')}</label>
-                <NumberInputWithSuffix suffix="%" min={0} max={100} step={1} variant="detail" value={draft.combinedThreshold} onChange={(value) => onPatchDraft({ combinedThreshold: Number(value) })} />
+                <NumberInputWithSuffix suffix="%" min={0} max={100} step={1} variant="detail" value={draft.combinedThreshold} onValueCommit={(value) => onPatchDraft({ combinedThreshold: Number(value) })} />
               </div>
             </div>
 
@@ -58,17 +58,17 @@ export function PromptSimilaritySettingsPanel({
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>{t({ ko: '포지티브', en: 'Positive' })}</label>
-                  <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.positive} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, positive: Number(value) } })} />
+                  <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.positive} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, positive: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>{t({ ko: '네거티브', en: 'Negative' })}</label>
-                  <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.negative} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, negative: Number(value) } })} />
+                  <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.negative} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, negative: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
-                  <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.auto} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
+                  <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.auto} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
                 </div>
               </div>
 
@@ -77,17 +77,17 @@ export function PromptSimilaritySettingsPanel({
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>{t({ ko: '포지티브', en: 'Positive' })}</label>
-                  <ScrubbableNumberInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.positive} onChange={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, positive: Number(value) } })} />
+                  <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.positive} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, positive: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>{t({ ko: '네거티브', en: 'Negative' })}</label>
-                  <ScrubbableNumberInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.negative} onChange={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, negative: Number(value) } })} />
+                  <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.negative} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, negative: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
-                  <ScrubbableNumberInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.auto} onChange={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(value) } })} />
+                  <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.auto} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(value) } })} />
                 </div>
               </div>
             </div>

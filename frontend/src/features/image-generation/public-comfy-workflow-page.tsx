@@ -7,7 +7,7 @@ import { ArrowLeft, Play, RotateCcw } from 'lucide-react'
 import { BottomDrawerNotice, BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
@@ -287,15 +287,15 @@ export function PublicComfyWorkflowPage() {
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
-      <ScrubbableNumberInput
+      <NumberStepperInput
         min={1}
         max={publicQueueMaxCount}
         step={1}
-        scrubRatio={1}
+
         variant="detail"
         className="h-9 w-[72px] shrink-0 px-2 text-center text-xs"
         value={queueRegistrationCount}
-        onChange={setQueueRegistrationCount}
+        onValueCommit={setQueueRegistrationCount}
         disabled={isQueueSubmitting}
         aria-label={t({ ko: '큐 등록 개수', en: 'Queue registration count' })}
         inputMode="numeric"
@@ -411,15 +411,15 @@ export function PublicComfyWorkflowPage() {
       onToggle={() => setIsControllerOpen((current) => !current)}
       expandedContent={(
         <CompactGenerationActionSurface>
-          <ScrubbableNumberInput
+          <NumberStepperInput
             min={1}
             max={publicQueueMaxCount}
             step={1}
-            scrubRatio={1}
+
             variant="detail"
             className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
             value={queueRegistrationCount}
-            onChange={setQueueRegistrationCount}
+            onValueCommit={setQueueRegistrationCount}
             disabled={isQueueSubmitting}
             aria-label={t({ ko: '큐 등록 개수', en: 'Queue registration count' })}
             inputMode="numeric"

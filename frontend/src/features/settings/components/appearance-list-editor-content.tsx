@@ -1,4 +1,3 @@
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { AppearanceSettings } from '@/types/settings'
 import {
@@ -10,6 +9,7 @@ import {
 } from './appearance-tab-editor-shared'
 import { SettingsField } from './settings-primitives'
 import { useI18n } from '@/i18n'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 /** Render the list-oriented appearance controls for related image cards. */
 export function AppearanceListEditorContent({
@@ -74,14 +74,14 @@ export function AppearanceListEditorContent({
         <EditorSectionLead title={t({ ko: '선택 표시', en: 'Selection indicator' })} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SettingsField label={t({ ko: '선택 테두리 두께 (px)', en: 'Selection border width (px)' })}>
-            <Input
-              type="number"
+            <NumberStepperInput
+
               min={1}
               max={8}
               step={1}
               variant="settings"
               value={appearanceDraft.selectionOutlineWidth}
-              onChange={(event) => onPatchAppearance({ selectionOutlineWidth: Number.parseInt(event.target.value || '3', 10) })}
+              onValueCommit={(nextValue) => onPatchAppearance({ selectionOutlineWidth: Number.parseInt(nextValue || '3', 10) })}
             />
           </SettingsField>
         </div>

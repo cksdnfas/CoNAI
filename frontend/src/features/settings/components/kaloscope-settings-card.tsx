@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE, type KaloscopeServerStatus, type KaloscopeSettings } from '@/types/settings'
 import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import { useI18n, type TranslationInput } from '@/i18n'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface KaloscopeSettingsCardProps {
   heading: ReactNode
@@ -58,7 +59,7 @@ export function KaloscopeSettingsCard({
             </SettingsField>
 
             <SettingsField label={t({ ko: 'Top K', en: 'Top K' })}>
-              <Input type="number" min={1} max={200} variant="settings" value={kaloscopeDraft.topK} onChange={(event) => onPatchKaloscope({ topK: Number(event.target.value) || 1 })} />
+              <NumberStepperInput min={1} max={200} variant="settings" value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
             </SettingsField>
 
             <SettingsToggleRow>
@@ -71,12 +72,12 @@ export function KaloscopeSettingsCard({
             </SettingsToggleRow>
 
             <SettingsField label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
-              <Input
-                type="number"
+              <NumberStepperInput
+
                 min={1}
                 variant="settings"
                 value={kaloscopeDraft.autoUnloadMinutes}
-                onChange={(event) => onPatchKaloscope({ autoUnloadMinutes: Number(event.target.value) || 1 })}
+                onValueCommit={(nextValue) => onPatchKaloscope({ autoUnloadMinutes: Number(nextValue) || 1 })}
               />
             </SettingsField>
 
