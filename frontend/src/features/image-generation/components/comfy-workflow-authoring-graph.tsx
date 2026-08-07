@@ -379,6 +379,8 @@ export function buildWorkflowMarkedFieldFromInput(
     label: `${nodeTitle}-${input.label}`,
     description: input.typeLabel ? `${classType} · ${input.typeLabel}` : `${classType} · ${input.key}`,
     jsonPath: resolvedJsonPath,
+    source_node_id: nodeId,
+    source_node_title: nodeTitle,
     type: fieldType,
     default_collapsed: false,
     default_value:

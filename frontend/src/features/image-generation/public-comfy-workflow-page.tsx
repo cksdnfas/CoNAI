@@ -22,7 +22,7 @@ import { refreshGenerationQueueViews } from './components/generation-queue-actio
 import { GenerationHistoryPanel } from './components/generation-history-panel'
 import { CompactGenerationActionSurface, CompactGenerationControllerActionBar, GenerationControllerFieldStack } from './components/shared-generation-controller'
 import { WorkflowArtifactExplorerPanel } from './components/workflow-artifact-explorer-panel'
-import { WorkflowFieldDisclosureCard } from './components/workflow-field-disclosure-card'
+import { WorkflowFieldGroupList } from './components/workflow-field-group-list'
 import {
   buildWorkflowDraft,
   buildWorkflowPromptData,
@@ -377,17 +377,14 @@ export function PublicComfyWorkflowPage() {
         <BottomDrawerNotice>{t({ ko: '노출된 입력 필드가 아직 없어.', en: 'There are no exposed input fields yet.' })}</BottomDrawerNotice>
       ) : (
         <GenerationControllerFieldStack>
-          {workflowFields.map((field) => (
-            <WorkflowFieldDisclosureCard
-              key={field.id}
-              field={field}
-              value={workflowDraft[field.id] ?? ''}
-              isRefreshingOptions={isRefreshingDropdownLists}
-              onRefreshOptions={handleRefreshDropdownLists}
-              onChange={(value) => handleFieldChange(field.id, value)}
-              onImageChange={(image) => handleImageChange(field.id, image)}
-            />
-          ))}
+          <WorkflowFieldGroupList
+            fields={workflowFields}
+            values={workflowDraft}
+            isRefreshingOptions={isRefreshingDropdownLists}
+            onRefreshOptions={handleRefreshDropdownLists}
+            onChange={handleFieldChange}
+            onImageChange={handleImageChange}
+          />
         </GenerationControllerFieldStack>
       )}
     </>

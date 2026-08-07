@@ -59,6 +59,7 @@
     "verify:nai-reusable-assets-contracts": "tsx src/scripts/verifyNaiReusableAssetsContracts.ts",
     "verify:thumbnail-settings-ui-contracts": "tsx src/scripts/verifyThumbnailSettingsUiContracts.ts",
     "verify:comfy-workflow-authoring-contracts": "tsx src/scripts/verifyComfyWorkflowAuthoringContracts.ts",
+    "verify:workflow-marked-field-grouping-contracts": "tsx src/scripts/verifyWorkflowMarkedFieldGroupingContracts.ts",
     "verify:comfy-workflow-entry-contracts": "tsx src/scripts/verifyComfyWorkflowEntryContracts.ts",
     "verify:workflow-numeric-bounds-ui-contracts": "tsx src/scripts/verifyWorkflowNumericBoundsUiContracts.ts",
     "verify:comfy-dropdown-auto-collect-contracts": "tsx src/scripts/verifyComfyDropdownAutoCollectContracts.ts",

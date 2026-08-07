@@ -38,6 +38,8 @@ export interface MarkedField {
   label: string; // 사용자에게 표시될 라벨 (예: "Positive Prompt")
   description?: string; // 필드 사용 가이드 (MCP 및 사용자용)
   jsonPath: string; // JSON 경로 (예: "6.inputs.text")
+  source_node_id?: string;
+  source_node_title?: string;
   type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node';
   default_collapsed?: boolean;
   simple_upload_only?: boolean;

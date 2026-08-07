@@ -22,6 +22,10 @@ const workflowFieldDisclosureCardSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/workflow-field-disclosure-card.tsx'),
   'utf8',
 )
+const workflowFieldGroupListSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/workflow-field-group-list.tsx'),
+  'utf8',
+)
 const workflowFieldInputSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/workflow-field-input.tsx'),
   'utf8',
@@ -232,8 +236,8 @@ assert.match(
 )
 assert.match(
   comfyWorkflowControllerPanelSource,
-  /loraOptions\?: string\[\][\s\S]*onRefreshDropdownLists\?: \(\) => Promise<void> \| void[\s\S]*<WorkflowFieldDisclosureCard[\s\S]*loraOptions=\{loraOptions\}[\s\S]*onRefreshOptions=\{onRefreshDropdownLists\}/,
-  'Comfy workflow controller should pass dropdown refresh wiring to each field card',
+  /loraOptions\?: string\[\][\s\S]*onRefreshDropdownLists\?: \(\) => Promise<void> \| void[\s\S]*<WorkflowFieldGroupList[\s\S]*loraOptions=\{loraOptions\}[\s\S]*onRefreshOptions=\{onRefreshDropdownLists\}/,
+  'Comfy workflow controller should pass dropdown refresh wiring to the shared field-group list',
 )
 assert.match(
   publicComfyWorkflowPageSource,
@@ -242,8 +246,13 @@ assert.match(
 )
 assert.match(
   publicComfyWorkflowPageSource,
-  /<WorkflowFieldDisclosureCard[\s\S]*isRefreshingOptions=\{isRefreshingDropdownLists\}[\s\S]*onRefreshOptions=\{handleRefreshDropdownLists\}/,
+  /<WorkflowFieldGroupList[\s\S]*isRefreshingOptions=\{isRefreshingDropdownLists\}[\s\S]*onRefreshOptions=\{handleRefreshDropdownLists\}/,
   'public Comfy workflow fields should expose the shared auto-collect refresh action',
+)
+assert.match(
+  workflowFieldGroupListSource,
+  /<WorkflowFieldDisclosureCard[\s\S]*loraOptions=\{loraOptions\}[\s\S]*onRefreshOptions=\{onRefreshOptions\}[\s\S]*<WorkflowNodeFieldDisclosureCard[\s\S]*loraOptions=\{loraOptions\}[\s\S]*onRefreshOptions=\{onRefreshOptions\}/,
+  'single-field and grouped-node runtime surfaces should both preserve dropdown refresh wiring',
 )
 assert.match(
   workflowFieldDisclosureCardSource,

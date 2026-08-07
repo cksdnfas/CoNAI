@@ -178,6 +178,7 @@
     "verify:optimization-hot-path-contracts": "node scripts/verify-optimization-hot-path-contracts.mjs",
     "verify:module-definition-reconcile-contracts": "cd backend && npm run verify:module-definition-reconcile-contracts",
     "verify:comfy-workflow-authoring-contracts": "cd frontend && npm run verify:comfy-workflow-authoring-contracts",
+    "verify:workflow-marked-field-grouping-contracts": "cd frontend && npm run verify:workflow-marked-field-grouping-contracts",
     "verify:comfy-workflow-entry-contracts": "cd frontend && npm run verify:comfy-workflow-entry-contracts",
     "verify:comfy-dropdown-auto-collect-contracts": "cd frontend && npm run verify:comfy-dropdown-auto-collect-contracts",
     "verify:comfy-server-default-contracts": "cd backend && npm run verify:comfy-server-default-contracts",

@@ -35,6 +35,11 @@ import {
 } from './comfy-workflow-authoring-graph'
 import { ComfyWorkflowMarkedFieldsEditor } from './comfy-workflow-marked-fields-editor'
 import { getErrorMessage } from '../image-generation-shared'
+import {
+  enrichWorkflowMarkedFieldsWithNodeSources,
+  reorderWorkflowMarkedFieldGroup,
+  reorderWorkflowMarkedFieldWithinGroup,
+} from '../workflow-marked-field-groups'
 
 type ComfyWorkflowAuthoringModalInitialData = {
   workflow: GenerationWorkflowDetail
@@ -257,6 +262,15 @@ export function ComfyWorkflowAuthoringModal({
     }
   }, [handleAddField, jsonError, workflowJson])
 
+  const workflowNodeSources = useMemo(
+    () => parsedGraph?.nodes.map((node) => ({ id: node.id, title: node.data.title })) ?? [],
+    [parsedGraph],
+  )
+  const markedFieldsWithNodeSources = useMemo(
+    () => enrichWorkflowMarkedFieldsWithNodeSources(markedFields, workflowNodeSources),
+    [markedFields, workflowNodeSources],
+  )
+
   const graphSearchMatches = useMemo(() => {
     if (!parsedGraph) {
       return []
@@ -397,22 +411,11 @@ export function ComfyWorkflowAuthoringModal({
   }
 
   const handleReorderMarkedField = (sourceFieldId: string, targetFieldId: string) => {
-    if (sourceFieldId === targetFieldId) {
-      return
-    }
+    setMarkedFields((current) => reorderWorkflowMarkedFieldWithinGroup(current, sourceFieldId, targetFieldId))
+  }
 
-    setMarkedFields((current) => {
-      const reorderedFields = [...current]
-      const sourceIndex = reorderedFields.findIndex((field) => field.id === sourceFieldId)
-      const targetIndex = reorderedFields.findIndex((field) => field.id === targetFieldId)
-      if (sourceIndex < 0 || targetIndex < 0) {
-        return current
-      }
-
-      const [movedField] = reorderedFields.splice(sourceIndex, 1)
-      reorderedFields.splice(targetIndex, 0, movedField)
-      return reorderedFields
-    })
+  const handleReorderMarkedFieldGroup = (sourceGroupKey: string, targetGroupKey: string) => {
+    setMarkedFields((current) => reorderWorkflowMarkedFieldGroup(current, sourceGroupKey, targetGroupKey))
   }
 
   const handleSave = async () => {
@@ -449,7 +452,7 @@ export function ComfyWorkflowAuthoringModal({
         name: workflowName.trim(),
         description: workflowDescription.trim() || undefined,
         workflow_json: workflowJson,
-        marked_fields: markedFields,
+        marked_fields: enrichWorkflowMarkedFieldsWithNodeSources(markedFields, workflowNodeSources),
         is_active: initialData?.workflow.is_active ?? true,
         is_public_page: isPublicPage,
         public_slug: isPublicPage ? normalizedPublicSlug : null,
@@ -715,7 +718,7 @@ export function ComfyWorkflowAuthoringModal({
         </SettingsSection>
 
         <ComfyWorkflowMarkedFieldsEditor
-          markedFields={markedFields}
+          markedFields={markedFieldsWithNodeSources}
           expandedFieldIds={expandedFieldIds}
           dropdownListNames={dropdownListNames}
           listClassName="max-h-[520px]"
@@ -723,6 +726,7 @@ export function ComfyWorkflowAuthoringModal({
           onFieldRemove={handleFieldRemove}
           onFieldExpandToggle={handleFieldExpandToggle}
           onReorderMarkedField={handleReorderMarkedField}
+          onReorderMarkedFieldGroup={handleReorderMarkedFieldGroup}
         />
 
         <SettingsModalFooter>

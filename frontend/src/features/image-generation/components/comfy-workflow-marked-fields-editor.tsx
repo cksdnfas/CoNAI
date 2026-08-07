@@ -10,6 +10,7 @@ import type { WorkflowMarkedField, WorkflowNodeNumericBounds } from '@/lib/api-i
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
+import { groupWorkflowMarkedFieldsByNode } from '../workflow-marked-field-groups'
 import {
   MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS,
   type MiniMaxH3DirectorVisibleField,
@@ -44,6 +45,7 @@ type ComfyWorkflowMarkedFieldsEditorProps = {
   onFieldRemove: (fieldId: string) => void
   onFieldExpandToggle: (fieldId: string) => void
   onReorderMarkedField: (sourceFieldId: string, targetFieldId: string) => void
+  onReorderMarkedFieldGroup: (sourceGroupKey: string, targetGroupKey: string) => void
 }
 
 /** Convert the comma-separated manual option input into workflow field options. */
@@ -107,40 +109,91 @@ export function ComfyWorkflowMarkedFieldsEditor({
   onFieldRemove,
   onFieldExpandToggle,
   onReorderMarkedField,
+  onReorderMarkedFieldGroup,
 }: ComfyWorkflowMarkedFieldsEditorProps) {
   const { t } = useI18n()
+  const [draggedGroupKey, setDraggedGroupKey] = useState<string | null>(null)
+  const [dragOverGroupKey, setDragOverGroupKey] = useState<string | null>(null)
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null)
+  const [draggedFieldGroupKey, setDraggedFieldGroupKey] = useState<string | null>(null)
   const [dragOverFieldId, setDragOverFieldId] = useState<string | null>(null)
   const expandedFieldIdSet = useMemo(() => new Set(expandedFieldIds), [expandedFieldIds])
+  const markedFieldGroups = useMemo(() => groupWorkflowMarkedFieldsByNode(markedFields), [markedFields])
+  const markedFieldIndexById = useMemo(
+    () => new Map(markedFields.map((field, index) => [field.id, index])),
+    [markedFields],
+  )
 
-  const handleFieldDragStart = (fieldId: string) => (event: DragEvent<HTMLButtonElement>) => {
+  const handleGroupDragStart = (groupKey: string) => (event: DragEvent<HTMLButtonElement>) => {
     event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', fieldId)
-    setDraggedFieldId(fieldId)
-    setDragOverFieldId(fieldId)
+    event.dataTransfer.setData('text/plain', groupKey)
+    setDraggedGroupKey(groupKey)
+    setDragOverGroupKey(groupKey)
   }
 
-  const handleFieldDragOver = (fieldId: string) => (event: DragEvent<HTMLDivElement>) => {
-    if (draggedFieldId == null || draggedFieldId === fieldId) {
+  const handleGroupDragOver = (groupKey: string) => (event: DragEvent<HTMLDivElement>) => {
+    if (draggedGroupKey == null || draggedGroupKey === groupKey) {
       return
     }
 
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
+    setDragOverGroupKey(groupKey)
+  }
+
+  const handleGroupDrop = (groupKey: string) => (event: DragEvent<HTMLDivElement>) => {
+    if (draggedGroupKey == null) {
+      return
+    }
+
+    event.preventDefault()
+    if (draggedGroupKey !== groupKey) {
+      onReorderMarkedFieldGroup(draggedGroupKey, groupKey)
+    }
+    setDraggedGroupKey(null)
+    setDragOverGroupKey(null)
+  }
+
+  const handleFieldDragStart = (groupKey: string, fieldId: string) => (event: DragEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', fieldId)
+    setDraggedFieldId(fieldId)
+    setDraggedFieldGroupKey(groupKey)
     setDragOverFieldId(fieldId)
   }
 
-  const handleFieldDrop = (fieldId: string) => (event: DragEvent<HTMLDivElement>) => {
+  const handleFieldDragOver = (groupKey: string, fieldId: string) => (event: DragEvent<HTMLDivElement>) => {
+    if (draggedFieldId == null || draggedFieldGroupKey !== groupKey || draggedFieldId === fieldId) {
+      return
+    }
+
     event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+    setDragOverFieldId(fieldId)
+  }
+
+  const handleFieldDrop = (groupKey: string, fieldId: string) => (event: DragEvent<HTMLDivElement>) => {
+    if (draggedFieldGroupKey !== groupKey) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
     if (draggedFieldId != null && draggedFieldId !== fieldId) {
       onReorderMarkedField(draggedFieldId, fieldId)
     }
     setDraggedFieldId(null)
+    setDraggedFieldGroupKey(null)
     setDragOverFieldId(null)
   }
 
-  const handleFieldDragEnd = () => {
+  const handleDragEnd = () => {
+    setDraggedGroupKey(null)
+    setDragOverGroupKey(null)
     setDraggedFieldId(null)
+    setDraggedFieldGroupKey(null)
     setDragOverFieldId(null)
   }
 
@@ -148,24 +201,59 @@ export function ComfyWorkflowMarkedFieldsEditor({
     <SettingsSection heading="Marked Fields" actions={<Badge variant="outline">{markedFields.length}</Badge>}>
       {markedFields.length > 0 ? (
         <div className={cn('space-y-3 overflow-y-auto pr-1', listClassName ?? 'max-h-[620px]')}>
-          {markedFields.map((field, index) => {
-            const isExpanded = expandedFieldIdSet.has(field.id)
+          {markedFieldGroups.map((group) => {
+            const isMultiFieldGroup = group.fields.length > 1
 
             return (
               <div
-                key={field.id}
-                onDragOver={handleFieldDragOver(field.id)}
-                onDrop={handleFieldDrop(field.id)}
-                className={dragOverFieldId === field.id && draggedFieldId !== field.id
-                  ? 'rounded-sm border border-primary bg-surface-low/55 ring-1 ring-primary/35'
-                  : 'rounded-sm border border-border/70 bg-surface-low/35'}
+                key={group.key}
+                onDragOver={handleGroupDragOver(group.key)}
+                onDrop={handleGroupDrop(group.key)}
+                className={dragOverGroupKey === group.key && draggedGroupKey !== group.key
+                  ? 'overflow-hidden rounded-sm border border-primary bg-surface-low/55 ring-1 ring-primary/35'
+                  : 'overflow-hidden rounded-sm border border-border/70 bg-surface-low/35'}
               >
+                {isMultiFieldGroup ? (
+                  <div className="flex items-start gap-3 px-3 py-3">
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={handleGroupDragStart(group.key)}
+                      onDragEnd={handleDragEnd}
+                      className="mt-0.5 inline-flex shrink-0 cursor-grab items-center justify-center rounded-sm border border-border/70 bg-background/60 p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
+                      aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.group.to.reorder')}
+                      title={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.group.to.reorder')}
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-foreground">{group.nodeTitle}</div>
+                      {group.nodeId ? <div className="mt-0.5 text-[11px] text-muted-foreground">{t('image-generation.components.workflow.field.group.node.id', { id: group.nodeId })}</div> : null}
+                    </div>
+                    <Badge variant="outline">{t('image-generation.components.workflow.field.group.field.count', { count: group.fields.length })}</Badge>
+                  </div>
+                ) : null}
+
+                <div className={isMultiFieldGroup ? 'divide-y divide-border/70 border-t border-border/70' : undefined}>
+                  {group.fields.map((field) => {
+                    const index = markedFieldIndexById.get(field.id) ?? 0
+                    const isExpanded = expandedFieldIdSet.has(field.id)
+
+                    return (
+                      <div
+                        key={field.id}
+                        onDragOver={isMultiFieldGroup ? handleFieldDragOver(group.key, field.id) : undefined}
+                        onDrop={isMultiFieldGroup ? handleFieldDrop(group.key, field.id) : undefined}
+                        className={isMultiFieldGroup && dragOverFieldId === field.id && draggedFieldId !== field.id
+                          ? 'bg-primary/5 ring-1 ring-inset ring-primary/35'
+                          : undefined}
+                      >
                 <div className="flex items-start gap-2 px-3 py-3">
                   <button
                     type="button"
                     draggable
-                    onDragStart={handleFieldDragStart(field.id)}
-                    onDragEnd={handleFieldDragEnd}
+                    onDragStart={isMultiFieldGroup ? handleFieldDragStart(group.key, field.id) : handleGroupDragStart(group.key)}
+                    onDragEnd={handleDragEnd}
                     className="mt-0.5 inline-flex shrink-0 cursor-grab items-center justify-center rounded-sm border border-border/70 bg-background/60 p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
                     aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.to.reorder')}
                     title={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.to.reorder')}
@@ -434,6 +522,10 @@ export function ComfyWorkflowMarkedFieldsEditor({
                     ) : null}
                   </div>
                 ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )
           })}

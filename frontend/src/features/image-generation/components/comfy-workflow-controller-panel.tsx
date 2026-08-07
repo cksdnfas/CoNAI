@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { collectWorkflowNodeDraftIssues, hasWorkflowFieldValue } from '../image-generation-drafts'
 import type { ComfyUIServerTestState, SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
-import { WorkflowFieldDisclosureCard } from './workflow-field-disclosure-card'
+import { WorkflowFieldGroupList } from './workflow-field-group-list'
 import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownItemClassName, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 import {
   buildComfyWorkflowServerRoutingSummary,
@@ -551,18 +551,15 @@ export function ComfyWorkflowControllerPanel({
         <section className="space-y-3 px-4">
           {workflowFields.length > 0 ? (
             <GenerationControllerFieldStack>
-              {workflowFields.map((field) => (
-                <WorkflowFieldDisclosureCard
-                  key={field.id}
-                  field={field}
-                  value={workflowDraft[field.id] ?? ''}
-                  loraOptions={loraOptions}
-                  isRefreshingOptions={isRefreshingDropdownLists}
-                  onRefreshOptions={onRefreshDropdownLists}
-                  onChange={(value) => onFieldChange(field.id, value)}
-                  onImageChange={(image) => onImageChange(field.id, image)}
-                />
-              ))}
+              <WorkflowFieldGroupList
+                fields={workflowFields}
+                values={workflowDraft}
+                loraOptions={loraOptions}
+                isRefreshingOptions={isRefreshingDropdownLists}
+                onRefreshOptions={onRefreshDropdownLists}
+                onChange={onFieldChange}
+                onImageChange={onImageChange}
+              />
             </GenerationControllerFieldStack>
           ) : (
             <Alert>

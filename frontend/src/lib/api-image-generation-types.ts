@@ -130,6 +130,8 @@ export interface WorkflowMarkedField {
   label: string
   description?: string
   jsonPath: string
+  source_node_id?: string
+  source_node_title?: string
   type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node'
   default_collapsed?: boolean
   simple_upload_only?: boolean
