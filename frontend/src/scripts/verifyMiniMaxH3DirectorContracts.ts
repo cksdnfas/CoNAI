@@ -5,6 +5,7 @@ import {
   MINIMAX_H3_DIRECTOR_META_KEY,
   buildMiniMaxH3DirectorNodeValue,
   getMiniMaxH3DirectorActiveItems,
+  isMiniMaxH3DirectorInputLink,
   parseMiniMaxH3DirectorTimeline,
   validateMiniMaxH3DirectorNodeValue,
   type MiniMaxH3DirectorTimeline,
@@ -67,6 +68,36 @@ assert.deepEqual(
 const builtTimeline = parseMiniMaxH3DirectorTimeline(built.timeline_data).timeline
 assert.equal(builtTimeline.prompt_blocks[0]?.text, 'opening frame', 'media prompts must synchronize to prompt_blocks')
 
+const connectedInputs = {
+  ...original,
+  mode: ['90', 0],
+  prompt: ['91', 0],
+  width: ['92', 0],
+  height: ['93', 0],
+  duration: ['94', 0],
+  ref_image_size: ['95', 0],
+  timeline_data: ['96', 0],
+}
+const connectedBuilt = buildMiniMaxH3DirectorNodeValue(
+  connectedInputs,
+  { width: 640 },
+)
+assert.equal(connectedBuilt.width, 640, 'an explicitly edited connected input must become a local value')
+for (const key of ['mode', 'prompt', 'height', 'duration', 'ref_image_size', 'timeline_data'] as const) {
+  assert.deepEqual(connectedBuilt[key], connectedInputs[key], `${key} links must survive unrelated composite-field edits`)
+  assert.equal(isMiniMaxH3DirectorInputLink(connectedBuilt[key]), true, `${key} must remain a Comfy input link`)
+}
+assert.equal(validateMiniMaxH3DirectorNodeValue(connectedBuilt).length, 0, 'connected inputs must not be validated as local scalar values')
+assert.equal(
+  validateMiniMaxH3DirectorNodeValue({ ...original, width: 1279, height: 719 }).length,
+  0,
+  'workflow-managed dimensions must not be rejected or rounded by the Director editor',
+)
+
+const connectedTimelineBuilt = buildMiniMaxH3DirectorNodeValue(connectedInputs, {}, timeline, { opening: asset })
+assert.equal(typeof connectedTimelineBuilt.timeline_data, 'string', 'editing reference media must replace a connected timeline with local timeline data')
+assert.deepEqual(connectedTimelineBuilt.mode, connectedInputs.mode, 'editing reference media must preserve unrelated connected inputs')
+
 const flWithPreservedRefImages = {
   ...original,
   timeline_data: JSON.stringify({
@@ -95,8 +126,26 @@ assert.ok(
 
 const authoringSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-authoring-graph.tsx'), 'utf8')
 const fieldInputSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/workflow-field-input.tsx'), 'utf8')
+const markedFieldsEditorSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-marked-fields-editor.tsx'), 'utf8')
+const directorInputSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/minimax-h3-director-dasiwa-input.tsx'), 'utf8')
+const mediaCardSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/minimax-h3-director-media-card.tsx'), 'utf8')
 assert.match(authoringSource, /classType === MINIMAX_H3_DIRECTOR_CLASS_TYPE/, 'only the exact DaSiWa class should select the Director editor')
 assert.match(authoringSource, /jsonPath: `\$\{nodeId\}\.inputs`/, 'the Director must remain one ordinary composite workflow input')
 assert.match(fieldInputSource, /MiniMaxH3DirectorDasiwaInput/, 'the composite input must render the CoNAI Director UI')
+assert.match(fieldInputSource, /visibleFields=\{field\.node_visible_fields\}/, 'the workflow field configuration must reach the Director UI')
+assert.match(markedFieldsEditorSource, /node_visible_fields/, 'workflow settings must configure visible Director fields')
+for (const field of ['mode', 'width', 'height', 'duration', 'ref_image_size', 'timeline_data', 'prompt']) {
+  assert.match(directorInputSource, new RegExp(`isFieldVisible\\('${field}'\\)`), `${field} visibility must be configurable`)
+}
+assert.doesNotMatch(directorInputSource, /ConnectedBadge|timelineLocked|modeLocked/, 'connected inputs must not be automatically locked')
+assert.match(directorInputSource, /시작 프레임/, 'FL2VA must expose an explicit start-frame slot')
+assert.match(directorInputSource, /끝 프레임/, 'FL2VA must expose an explicit end-frame slot')
+assert.match(directorInputSource, /clearLane\('visual'\)/, 'the visual lane must have an independent reset')
+assert.match(directorInputSource, /clearLane\('audio'\)/, 'the audio lane must have an independent reset')
+assert.match(directorInputSource, /SettingsModal/, 'media prompts must be edited in a modal')
+assert.match(directorInputSource, /Media prompt summary/, 'media prompts must have a read-only summary viewer')
+assert.match(mediaCardSource, /LONG_PRESS_DELAY_MS/, 'media cards must support delayed pointer sorting')
+assert.match(mediaCardSource, /onReplaceFile/, 'dropping a file on a media card must replace that card')
+assert.doesNotMatch(mediaCardSource, /object-cover/, 'media previews must preserve their intrinsic aspect ratio')
 
 console.log('MiniMax H3 Director frontend contracts verified')

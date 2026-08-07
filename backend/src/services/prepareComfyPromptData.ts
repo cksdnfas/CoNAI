@@ -134,6 +134,14 @@ function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
+function isComfyInputLink(value: unknown) {
+  return Array.isArray(value)
+    && value.length >= 2
+    && (typeof value[0] === 'string' || typeof value[0] === 'number')
+    && typeof value[1] === 'number'
+    && Number.isInteger(value[1])
+}
+
 function getMiniMaxDirectorActiveItems(mode: unknown, timeline: Record<string, any>) {
   const items = Array.isArray(timeline.items) ? timeline.items : []
   const ordered = items
@@ -157,6 +165,12 @@ async function prepareMiniMaxDirectorNodeValue(
   }
 
   const metadata = isRecord(value[MINIMAX_H3_DIRECTOR_META_KEY]) ? value[MINIMAX_H3_DIRECTOR_META_KEY] : null
+  if (isComfyInputLink(value.timeline_data)) {
+    const preparedValue = { ...value }
+    delete preparedValue[MINIMAX_H3_DIRECTOR_META_KEY]
+    return preparedValue
+  }
+
   const assets = metadata && isRecord(metadata.assets) ? metadata.assets : {}
   let timeline: Record<string, any>
   try {

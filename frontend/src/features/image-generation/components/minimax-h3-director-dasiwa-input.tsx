@@ -1,20 +1,13 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
-import {
-  ArrowLeft,
-  ArrowRight,
-  Film,
-  ImageIcon,
-  Music2,
-  Plus,
-  RotateCcw,
-  Trash2,
-} from 'lucide-react'
+import { Film, Music2, Plus, RotateCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import {
   buildWorkflowInputAssetUrl,
@@ -28,28 +21,36 @@ import {
   createMiniMaxH3DirectorItemId,
   getMiniMaxH3DirectorAssets,
   inferMiniMaxH3DirectorMediaType,
+  isMiniMaxH3DirectorInputLink,
+  MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS,
   normalizeMiniMaxH3DirectorNodeValue,
   parseMiniMaxH3DirectorTimeline,
   validateMiniMaxH3DirectorNodeValue,
   type MiniMaxH3DirectorMediaType,
+  type MiniMaxH3DirectorMode,
   type MiniMaxH3DirectorTimeline,
   type MiniMaxH3DirectorTimelineItem,
   type MiniMaxH3DirectorVideoMode,
+  type MiniMaxH3DirectorVisibleField,
 } from './minimax-h3-director-dasiwa-utils'
+import { MiniMaxH3DirectorMediaCard } from './minimax-h3-director-media-card'
 
 const MAX_MEDIA_COUNT = { image: 9, video: 3, audio: 3, total: 12 } as const
 const MAX_AUDIO_WAVEFORM_DECODE_BYTES = 64 * 1024 * 1024
 
+type MediaLane = 'visual' | 'audio'
+
 type MiniMaxH3DirectorDasiwaInputProps = {
   value: Record<string, unknown>
+  visibleFields?: string[]
   onChange: (value: Record<string, unknown>) => void
 }
 
-function getMediaLane(item: MiniMaxH3DirectorTimelineItem) {
+function getMediaLane(item: MiniMaxH3DirectorTimelineItem): MediaLane {
   return item.type === 'audio' ? 'audio' : 'visual'
 }
 
-function getNextMediaSlot(items: MiniMaxH3DirectorTimelineItem[], lane: 'visual' | 'audio', capacity: number) {
+function getNextMediaSlot(items: MiniMaxH3DirectorTimelineItem[], lane: MediaLane, capacity: number) {
   const occupied = new Set(items.filter((item) => getMediaLane(item) === lane).map((item) => item.slot))
   return Array.from({ length: capacity }, (_, index) => index).find((index) => !occupied.has(index)) ?? null
 }
@@ -116,56 +117,61 @@ function formatMediaTypeLabel(type: MiniMaxH3DirectorMediaType, index: number) {
   return `Audio ${index}`
 }
 
-function MiniMaxDirectorMediaPreview({ item, asset }: { item: MiniMaxH3DirectorTimelineItem; asset?: WorkflowInputAssetRef }) {
-  const src = asset ? buildWorkflowInputAssetUrl(asset) : null
-  if (item.type === 'image' && src) {
-    return <img src={src} alt={asset?.fileName || item.value} className="h-28 w-full object-cover" />
-  }
-  if (item.type === 'video' && src) {
-    return <video src={src} preload="metadata" muted controls className="h-28 w-full bg-black object-cover" />
-  }
-  if (item.type === 'audio' && src) {
-    return <audio src={src} preload="metadata" controls className="w-full" />
-  }
-
-  const Icon = item.type === 'image' ? ImageIcon : item.type === 'video' ? Film : Music2
-  return (
-    <div className="flex h-28 items-center justify-center bg-background/45 text-muted-foreground">
-      <Icon className="h-7 w-7" />
-    </div>
-  )
-}
-
 /** Render DaSiWa MiniMax H3 Director inputs as a CoNAI-native reference board. */
-export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3DirectorDasiwaInputProps) {
+export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, onChange }: MiniMaxH3DirectorDasiwaInputProps) {
   const { t } = useI18n()
   const visualInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const replacementInputRef = useRef<HTMLInputElement>(null)
+  const [menuItemId, setMenuItemId] = useState<string | null>(null)
+  const [promptItemId, setPromptItemId] = useState<string | null>(null)
+  const [promptDraft, setPromptDraft] = useState('')
+  const [replacementItemId, setReplacementItemId] = useState<string | null>(null)
+  const [sortingItemId, setSortingItemId] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const nodeValue = normalizeMiniMaxH3DirectorNodeValue(value)
-  const parsedTimeline = parseMiniMaxH3DirectorTimeline(nodeValue.timeline_data)
+  const mode: MiniMaxH3DirectorMode | null = isMiniMaxH3DirectorInputLink(nodeValue.mode) ? null : nodeValue.mode
+  const parsedTimeline = parseMiniMaxH3DirectorTimeline(isMiniMaxH3DirectorInputLink(nodeValue.timeline_data) ? '' : nodeValue.timeline_data)
   const timeline = parsedTimeline.timeline
+  const promptValue = isMiniMaxH3DirectorInputLink(nodeValue.prompt) ? '' : nodeValue.prompt
+  const widthValue = isMiniMaxH3DirectorInputLink(nodeValue.width) ? '' : String(nodeValue.width)
+  const heightValue = isMiniMaxH3DirectorInputLink(nodeValue.height) ? '' : String(nodeValue.height)
+  const durationValue = isMiniMaxH3DirectorInputLink(nodeValue.duration) ? '' : String(nodeValue.duration)
+  const refImageSizeValue = isMiniMaxH3DirectorInputLink(nodeValue.ref_image_size) ? '' : nodeValue.ref_image_size
+  const visibleFieldSet = useMemo(
+    () => new Set<MiniMaxH3DirectorVisibleField>(
+      visibleFields == null
+        ? MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS
+        : visibleFields.filter((field): field is MiniMaxH3DirectorVisibleField => MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS.includes(field as MiniMaxH3DirectorVisibleField)),
+    ),
+    [visibleFields],
+  )
+  const isFieldVisible = (field: MiniMaxH3DirectorVisibleField) => visibleFieldSet.has(field)
   const assets = getMiniMaxH3DirectorAssets(nodeValue)
-  const mode = nodeValue.mode
   const activeItems = timeline.items.filter((item) => item.enabled !== false)
   const displayedItems = mode === 'FL2VA'
     ? activeItems.filter((item) => item.type === 'image').sort((left, right) => left.slot - right.slot).slice(0, 2)
     : activeItems
   const visualItems = displayedItems.filter((item) => item.type !== 'audio').sort((left, right) => left.slot - right.slot)
-  const audioItems = mode === 'REF2VA' ? displayedItems.filter((item) => item.type === 'audio').sort((left, right) => left.slot - right.slot) : []
-  const selectedItem = timeline.items.find((item) => item.id === selectedItemId) ?? null
+  const audioItems = mode === 'FL2VA' ? [] : displayedItems.filter((item) => item.type === 'audio').sort((left, right) => left.slot - right.slot)
+  const promptItem = timeline.items.find((item) => item.id === promptItemId && item.type !== 'audio') ?? null
   const issues = useMemo(() => validateMiniMaxH3DirectorNodeValue(value), [value])
   const issueItemIds = useMemo(() => new Set(issues.flatMap((issue) => issue.itemId ? [issue.itemId] : [])), [issues])
   const invalidFields = useMemo(() => new Set(issues.flatMap((issue) => issue.field ? [issue.field] : [])), [issues])
 
   const emit = (
     inputPatch: Record<string, unknown>,
-    nextTimeline = timeline,
+    nextTimeline?: MiniMaxH3DirectorTimeline,
     nextAssets = assets,
   ) => {
     onChange(buildMiniMaxH3DirectorNodeValue(nodeValue, inputPatch, nextTimeline, nextAssets))
+  }
+
+  const cleanupAssets = (removableAssets: WorkflowInputAssetRef[]) => {
+    void Promise.all(removableAssets.map((asset) => deleteWorkflowInputAsset(asset.id))).catch((error) => {
+      setStatus(error instanceof Error ? error.message : t({ ko: '일부 미디어 자산 정리에 실패했어.', en: 'Failed to clean up some media assets.' }))
+    })
   }
 
   const updateTimelineItem = (itemId: string, patch: Partial<MiniMaxH3DirectorTimelineItem>) => {
@@ -175,31 +181,37 @@ export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3Direc
     })
   }
 
-  const removeTimelineItem = (itemId: string) => {
-    const asset = assets[itemId]
+  const removeTimelineItems = (itemIds: Set<string>) => {
+    if (itemIds.size === 0) return
+    const removableAssets = Array.from(itemIds).flatMap((itemId) => assets[itemId] ? [assets[itemId]] : [])
     const nextAssets = { ...assets }
-    delete nextAssets[itemId]
+    for (const itemId of itemIds) delete nextAssets[itemId]
     emit({}, {
       ...timeline,
-      items: timeline.items.filter((item) => item.id !== itemId),
+      items: timeline.items.filter((item) => !itemIds.has(item.id)),
     }, nextAssets)
-    if (selectedItemId === itemId) {
-      setSelectedItemId(null)
-    }
-    if (asset) {
-      void deleteWorkflowInputAsset(asset.id).catch((error) => {
-        setStatus(error instanceof Error ? error.message : t({ ko: '미디어 자산 정리에 실패했어.', en: 'Failed to clean up the media asset.' }))
-      })
-    }
+    setMenuItemId(null)
+    if (promptItemId && itemIds.has(promptItemId)) setPromptItemId(null)
+    cleanupAssets(removableAssets)
+  }
+
+  const removeTimelineItem = (itemId: string) => removeTimelineItems(new Set([itemId]))
+
+  const clearLane = (lane: MediaLane) => {
+    removeTimelineItems(new Set(timeline.items.filter((item) => getMediaLane(item) === lane).map((item) => item.id)))
   }
 
   const clearTimeline = () => {
-    const removableAssets = Object.values(assets)
-    setSelectedItemId(null)
-    emit({ prompt: '' }, { ...timeline, items: [], prompt_blocks: [] }, {})
-    void Promise.all(removableAssets.map((asset) => deleteWorkflowInputAsset(asset.id))).catch((error) => {
-      setStatus(error instanceof Error ? error.message : t({ ko: '일부 미디어 자산 정리에 실패했어.', en: 'Failed to clean up some media assets.' }))
-    })
+    const clearMedia = isFieldVisible('timeline_data')
+    const removableAssets = clearMedia ? Object.values(assets) : []
+    setMenuItemId(null)
+    setPromptItemId(null)
+    emit(
+      isFieldVisible('prompt') ? { prompt: '' } : {},
+      clearMedia ? { ...timeline, items: [], prompt_blocks: [] } : undefined,
+      clearMedia ? {} : assets,
+    )
+    cleanupAssets(removableAssets)
   }
 
   const canAcceptFile = (type: MiniMaxH3DirectorMediaType, items: MiniMaxH3DirectorTimelineItem[]) => {
@@ -211,10 +223,20 @@ export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3Direc
     return typeCount < MAX_MEDIA_COUNT[type] && items.filter((item) => item.enabled !== false).length < MAX_MEDIA_COUNT.total
   }
 
-  const handleFiles = async (files: File[], lane: 'visual' | 'audio') => {
-    if (files.length === 0 || isUploading) {
-      return
+  const validateFileForLane = (file: File, lane: MediaLane) => {
+    const type = inferMiniMaxH3DirectorMediaType(file)
+    const laneMatches = lane === 'audio' ? type === 'audio' : type === 'image' || type === 'video'
+    if (!type || !laneMatches || (mode === 'FL2VA' && type !== 'image')) {
+      setStatus(mode === 'FL2VA'
+        ? t({ ko: 'FL2VA 슬롯에는 이미지만 사용할 수 있어.', en: 'FL2VA slots accept images only.' })
+        : t({ ko: '선택한 레인에 맞는 미디어 파일을 골라줘.', en: 'Choose media that matches the selected lane.' }))
+      return null
     }
+    return type
+  }
+
+  const handleFiles = async (files: File[], lane: MediaLane) => {
+    if (files.length === 0 || isUploading) return
 
     setIsUploading(true)
     let nextTimeline: MiniMaxH3DirectorTimeline = { ...timeline, items: [...timeline.items] }
@@ -223,15 +245,11 @@ export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3Direc
 
     try {
       for (const file of files) {
-        const type = inferMiniMaxH3DirectorMediaType(file)
-        const laneMatches = lane === 'audio' ? type === 'audio' : type === 'image' || type === 'video'
-        if (!type || !laneMatches) {
-          setStatus(t({ ko: '선택한 레인에 맞는 미디어 파일을 골라줘.', en: 'Choose media that matches the selected lane.' }))
-          continue
-        }
+        const type = validateFileForLane(file, lane)
+        if (!type) continue
         if (!canAcceptFile(type, nextTimeline.items)) {
           setStatus(mode === 'FL2VA'
-            ? t({ ko: 'FL2VA는 이미지를 최대 2개까지 사용할 수 있어.', en: 'FL2VA supports at most two images.' })
+            ? t({ ko: 'FL2VA는 시작·끝 이미지 두 슬롯만 사용할 수 있어.', en: 'FL2VA uses only the start and end image slots.' })
             : t({ ko: 'REF2VA 참조 개수 제한에 도달했어.', en: 'The REF2VA reference limit has been reached.' }))
           continue
         }
@@ -246,8 +264,11 @@ export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3Direc
         const asset = await uploadWorkflowInputAsset(file)
         const id = createMiniMaxH3DirectorItemId(type)
         const targetLane = type === 'audio' ? 'audio' : 'visual'
-        const slotCapacity = targetLane === 'audio' ? MAX_MEDIA_COUNT.audio : mode === 'FL2VA' ? 2 : MAX_MEDIA_COUNT.image + MAX_MEDIA_COUNT.video
-        const slot = getNextMediaSlot(nextTimeline.items, targetLane, slotCapacity)
+        const flImages = nextTimeline.items.filter((item) => item.enabled !== false && item.type === 'image').sort((left, right) => left.slot - right.slot)
+        const slotCapacity = targetLane === 'audio' ? MAX_MEDIA_COUNT.audio : MAX_MEDIA_COUNT.image + MAX_MEDIA_COUNT.video
+        const slot = mode === 'FL2VA'
+          ? flImages.length === 0 ? 0 : Math.max(...flImages.map((item) => item.slot)) + 1
+          : getNextMediaSlot(nextTimeline.items, targetLane, slotCapacity)
         if (slot === null) {
           void deleteWorkflowInputAsset(asset.id).catch(() => undefined)
           setStatus(t({ ko: '선택한 레인에 빈 슬롯이 없어.', en: 'There is no free slot in the selected lane.' }))
@@ -273,223 +294,273 @@ export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3Direc
         nextTimeline = { ...nextTimeline, items: [...nextTimeline.items, item] }
         nextAssets[id] = asset
         hasChanges = true
-        setSelectedItemId(id)
         setStatus(sourceDuration !== null && sourceDuration > 15
           ? t({ ko: '{name}을 추가하고 처음 15초로 잘랐어.', en: 'Added {name} and cropped it to the first 15 seconds.' }, { name: file.name })
           : t({ ko: '{name}을 추가했어.', en: 'Added {name}.' }, { name: file.name }))
       }
-
     } catch (error) {
       setStatus(error instanceof Error ? error.message : t({ ko: '미디어 업로드에 실패했어.', en: 'Media upload failed.' }))
     } finally {
-      if (hasChanges) {
-        emit({}, nextTimeline, nextAssets)
-      }
+      if (hasChanges) emit({}, nextTimeline, nextAssets)
       setIsUploading(false)
     }
   }
 
-  const handleDrop = (event: DragEvent<HTMLDivElement>, lane: 'visual' | 'audio') => {
-    event.preventDefault()
-    const movedItemId = event.dataTransfer.getData('application/x-conai-minimax-item')
-    if (movedItemId) {
-      const targetItemId = event.currentTarget.dataset.itemId
-      const moved = timeline.items.find((item) => item.id === movedItemId)
-      const target = timeline.items.find((item) => item.id === targetItemId)
-      if (moved && target && getMediaLane(moved) === getMediaLane(target)) {
-        emit({}, {
-          ...timeline,
-          items: timeline.items.map((item) => {
-            if (item.id === moved.id) return { ...item, slot: target.slot, start: target.slot }
-            if (item.id === target.id) return { ...item, slot: moved.slot, start: moved.slot }
-            return item
-          }),
-        })
-      }
-      return
-    }
+  const replaceTimelineItem = async (itemId: string, file: File) => {
+    const currentItem = timeline.items.find((item) => item.id === itemId)
+    if (!currentItem || isUploading) return
+    const lane = getMediaLane(currentItem)
+    const type = validateFileForLane(file, lane)
+    if (!type) return
 
+    setIsUploading(true)
+    try {
+      const sourceDuration = await probeMediaDuration(file, type)
+      if (type !== 'image' && (sourceDuration === null || sourceDuration < 2)) {
+        setStatus(t({ ko: '{name}: 영상·오디오는 최소 2초여야 해.', en: '{name}: Video and audio must be at least two seconds.' }, { name: file.name }))
+        return
+      }
+
+      setStatus(t({ ko: '{name} 교체 업로드 중…', en: 'Uploading replacement {name}…' }, { name: file.name }))
+      const asset = await uploadWorkflowInputAsset(file)
+      const duration = sourceDuration === null ? 1 : Math.min(sourceDuration, 15)
+      const waveformPeaks = type === 'audio' ? await extractAudioWaveformPeaks(file) : []
+      const stableItem = { ...currentItem }
+      delete stableItem.source_duration
+      delete stableItem.trim_start
+      delete stableItem.trim_end
+      delete stableItem.media_mode
+      delete stableItem.waveform_peaks
+      const nextItem: MiniMaxH3DirectorTimelineItem = {
+        ...stableItem,
+        type,
+        value: asset.fileName,
+        duration,
+        ...(sourceDuration !== null ? { source_duration: sourceDuration } : {}),
+        ...(type === 'video' ? { media_mode: 'video' as const, trim_start: 0, trim_end: duration } : {}),
+        ...(type === 'audio' ? { trim_start: 0, trim_end: duration } : {}),
+        ...(waveformPeaks.length > 0 ? { waveform_peaks: waveformPeaks } : {}),
+      }
+      const previousAsset = assets[itemId]
+      emit({}, {
+        ...timeline,
+        items: timeline.items.map((item) => item.id === itemId ? nextItem : item),
+      }, { ...assets, [itemId]: asset })
+      setMenuItemId(null)
+      setStatus(t({ ko: '{name}(으)로 교체했어.', en: 'Replaced with {name}.' }, { name: file.name }))
+      if (previousAsset) cleanupAssets([previousAsset])
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : t({ ko: '미디어 교체에 실패했어.', en: 'Failed to replace media.' }))
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleLaneDrop = (event: DragEvent<HTMLElement>, lane: MediaLane) => {
+    event.preventDefault()
     void handleFiles(Array.from(event.dataTransfer.files), lane)
   }
 
-  const moveSelectedItem = (item: MiniMaxH3DirectorTimelineItem, direction: -1 | 1) => {
-    const laneItems = timeline.items.filter((candidate) => getMediaLane(candidate) === getMediaLane(item)).sort((left, right) => left.slot - right.slot)
-    const index = laneItems.findIndex((candidate) => candidate.id === item.id)
-    const other = laneItems[index + direction]
-    if (!other) return
+  const swapTimelineItems = (sourceItemId: string, targetItemId: string) => {
+    if (sourceItemId === targetItemId) return
+    const source = timeline.items.find((item) => item.id === sourceItemId)
+    const target = timeline.items.find((item) => item.id === targetItemId)
+    if (!source || !target || getMediaLane(source) !== getMediaLane(target)) return
     emit({}, {
       ...timeline,
-      items: timeline.items.map((candidate) => {
-        if (candidate.id === item.id) return { ...candidate, slot: other.slot, start: other.slot }
-        if (candidate.id === other.id) return { ...candidate, slot: item.slot, start: item.slot }
-        return candidate
+      items: timeline.items.map((item) => {
+        if (item.id === source.id) return { ...item, slot: target.slot, start: target.slot }
+        if (item.id === target.id) return { ...item, slot: source.slot, start: source.slot }
+        return item
       }),
     })
   }
 
-  const renderMediaCard = (item: MiniMaxH3DirectorTimelineItem, typeIndex: number) => {
+  const moveTimelineItem = (item: MiniMaxH3DirectorTimelineItem, direction: -1 | 1) => {
+    const laneItems = displayedItems.filter((candidate) => getMediaLane(candidate) === getMediaLane(item)).sort((left, right) => left.slot - right.slot)
+    const index = laneItems.findIndex((candidate) => candidate.id === item.id)
+    const other = laneItems[index + direction]
+    if (other) swapTimelineItems(item.id, other.id)
+  }
+
+  const requestReplacement = (itemId: string) => {
+    setReplacementItemId(itemId)
+    setMenuItemId(null)
+    window.setTimeout(() => replacementInputRef.current?.click(), 0)
+  }
+
+  const openPromptModal = (item: MiniMaxH3DirectorTimelineItem) => {
+    setPromptItemId(item.id)
+    setPromptDraft(String(item.prompt ?? ''))
+    setMenuItemId(null)
+  }
+
+  const renderMediaCard = (item: MiniMaxH3DirectorTimelineItem, typeIndex: number, labelOverride?: string) => {
     const asset = assets[item.id]
-    const isSelected = selectedItemId === item.id
     const sourceDuration = Math.max(2, Number(item.source_duration ?? item.duration ?? 2))
     const trimStart = Number(item.trim_start ?? 0)
     const trimEnd = Number(item.trim_end ?? sourceDuration)
+    const label = labelOverride ?? formatMediaTypeLabel(item.type, typeIndex)
     return (
-      <div
+      <MiniMaxH3DirectorMediaCard
         key={item.id}
-        data-item-id={item.id}
-        draggable
-        onDragStart={(event) => event.dataTransfer.setData('application/x-conai-minimax-item', item.id)}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => handleDrop(event, getMediaLane(item))}
-        onClick={() => setSelectedItemId(item.id)}
-        className={cn(
-          'overflow-hidden rounded-sm border bg-background/25 transition',
-          isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-border/80 hover:border-primary/45',
-          issueItemIds.has(item.id) && 'border-destructive ring-2 ring-destructive/20',
-        )}
+        item={item}
+        asset={asset}
+        label={label}
+        hasIssue={issueItemIds.has(item.id)}
+        menuOpen={menuItemId === item.id}
+        disabled={isUploading}
+        sorting={sortingItemId === item.id}
+        replaceLabel={t({ ko: '미디어 교체', en: 'Replace media' })}
+        promptLabel={t({ ko: '미디어 프롬프트', en: 'Media prompt' })}
+        deleteLabel={t({ ko: '삭제', en: 'Delete' })}
+        menuLabel={t({ ko: '{name} 메뉴', en: '{name} menu' }, { name: label })}
+        onToggleMenu={() => setMenuItemId((current) => current === item.id ? null : item.id)}
+        onRequestReplace={() => requestReplacement(item.id)}
+        onOpenPrompt={item.type === 'audio' ? undefined : () => openPromptModal(item)}
+        onDelete={() => removeTimelineItem(item.id)}
+        onReplaceFile={(file) => void replaceTimelineItem(item.id, file)}
+        onSortStart={() => { setMenuItemId(null); setSortingItemId(item.id) }}
+        onSortOver={(targetItemId) => swapTimelineItems(item.id, targetItemId)}
+        onSortEnd={() => setSortingItemId(null)}
+        onKeyboardMove={(direction) => moveTimelineItem(item, direction)}
       >
-        <div className="relative">
-          <MiniMaxDirectorMediaPreview item={item} asset={asset} />
-          <Badge className="absolute left-2 top-2 bg-background/85">{formatMediaTypeLabel(item.type, typeIndex)}</Badge>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            className="absolute right-1 top-1 bg-background/80"
-            aria-label={t({ ko: '{name} 제거', en: 'Remove {name}' }, { name: asset?.fileName || item.value })}
-            title={t({ ko: '제거', en: 'Remove' })}
-            onClick={(event) => {
-              event.stopPropagation()
-              removeTimelineItem(item.id)
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="space-y-2 p-3">
-          <div className="min-w-0">
-            <div className="truncate text-xs font-medium text-foreground">{asset?.fileName || item.value}</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">
-              {asset ? formatMediaBytes(asset.bytes) : t({ ko: '기존 Comfy 입력', en: 'Existing Comfy input' })}
-            </div>
+        {item.type === 'video' ? (
+          <div className="flex gap-1">
+            {([['video', 'V'], ['audio', 'A'], ['video_audio', 'V+A']] as Array<[MiniMaxH3DirectorVideoMode, string]>).map(([videoMode, videoLabel]) => (
+              <Button key={videoMode} type="button" size="sm" variant={(item.media_mode ?? 'video') === videoMode ? 'default' : 'outline'} className="h-7 px-2 text-[11px]" onClick={() => updateTimelineItem(item.id, { media_mode: videoMode })}>
+                {videoLabel}
+              </Button>
+            ))}
           </div>
+        ) : null}
 
-          {item.type === 'video' ? (
-            <div className="flex gap-1" onClick={(event) => event.stopPropagation()}>
-              {([
-                ['video', 'V'],
-                ['audio', 'A'],
-                ['video_audio', 'V+A'],
-              ] as Array<[MiniMaxH3DirectorVideoMode, string]>).map(([videoMode, label]) => (
-                <Button
-                  key={videoMode}
-                  type="button"
-                  size="sm"
-                  variant={(item.media_mode ?? 'video') === videoMode ? 'default' : 'outline'}
-                  className="h-7 px-2 text-[11px]"
-                  onClick={() => updateTimelineItem(item.id, { media_mode: videoMode })}
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-          ) : null}
+        {item.type === 'audio' && asset ? (
+          <audio src={buildWorkflowInputAssetUrl(asset)} aria-label={asset.fileName} preload="metadata" controls className="w-full" />
+        ) : null}
 
-          {item.type === 'audio' && Array.isArray(item.waveform_peaks) && item.waveform_peaks.length > 0 ? (
-            <div className="flex h-10 items-center gap-px overflow-hidden rounded-sm bg-surface-low px-1" aria-hidden="true">
-              {item.waveform_peaks.map((peak, index) => (
-                <span key={`${item.id}-peak-${index}`} className="min-w-px flex-1 bg-primary/70" style={{ height: `${Math.max(8, Math.round(peak * 100))}%` }} />
-              ))}
-            </div>
-          ) : null}
-
-          {item.type !== 'image' ? (
-            <div className="grid grid-cols-2 gap-2" onClick={(event) => event.stopPropagation()}>
-              <label className="space-y-1 text-[11px] text-muted-foreground">
-                <span>{t({ ko: '시작', en: 'Start' })}</span>
-                <ScrubbableNumberInput
-                  min={0}
-                  max={Math.max(0, trimEnd - 2)}
-                  step={0.25}
-                  value={String(trimStart)}
-                  onChange={(nextValue) => {
-                    const nextStart = Math.max(0, Math.min(trimEnd - 2, Number(nextValue)))
-                    updateTimelineItem(item.id, { trim_start: nextStart, duration: trimEnd - nextStart })
-                  }}
-                />
-              </label>
-              <label className="space-y-1 text-[11px] text-muted-foreground">
-                <span>{t({ ko: '끝', en: 'End' })}</span>
-                <ScrubbableNumberInput
-                  min={trimStart + 2}
-                  max={sourceDuration}
-                  step={0.25}
-                  value={String(trimEnd)}
-                  onChange={(nextValue) => {
-                    const nextEnd = Math.min(sourceDuration, Math.max(trimStart + 2, Number(nextValue)))
-                    updateTimelineItem(item.id, { trim_end: nextEnd, duration: nextEnd - trimStart })
-                  }}
-                />
-              </label>
-            </div>
-          ) : null}
-
-          <div className="flex justify-end gap-1">
-            <Button type="button" size="icon-sm" variant="ghost" onClick={(event) => { event.stopPropagation(); moveSelectedItem(item, -1) }} aria-label={t({ ko: '왼쪽으로 이동', en: 'Move left' })} title={t({ ko: '왼쪽으로 이동', en: 'Move left' })}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <Button type="button" size="icon-sm" variant="ghost" onClick={(event) => { event.stopPropagation(); moveSelectedItem(item, 1) }} aria-label={t({ ko: '오른쪽으로 이동', en: 'Move right' })} title={t({ ko: '오른쪽으로 이동', en: 'Move right' })}>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+        {item.type === 'audio' && Array.isArray(item.waveform_peaks) && item.waveform_peaks.length > 0 ? (
+          <div className="flex h-10 items-center gap-px overflow-hidden rounded-sm bg-surface-low px-1" aria-hidden="true">
+            {item.waveform_peaks.map((peak, index) => (
+              <span key={`${item.id}-peak-${index}`} className="min-w-px flex-1 bg-primary/70" style={{ height: `${Math.max(8, Math.round(peak * 100))}%` }} />
+            ))}
           </div>
-        </div>
-      </div>
+        ) : null}
+
+        {item.type !== 'image' ? (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1 text-[11px] text-muted-foreground">
+              <span>{t({ ko: '시작', en: 'Start' })}</span>
+              <ScrubbableNumberInput min={0} max={Math.max(0, trimEnd - 2)} step={0.25} value={String(trimStart)} onChange={(nextValue) => {
+                const nextStart = Math.max(0, Math.min(trimEnd - 2, Number(nextValue)))
+                updateTimelineItem(item.id, { trim_start: nextStart, duration: trimEnd - nextStart })
+              }} />
+            </label>
+            <label className="space-y-1 text-[11px] text-muted-foreground">
+              <span>{t({ ko: '끝', en: 'End' })}</span>
+              <ScrubbableNumberInput min={trimStart + 2} max={sourceDuration} step={0.25} value={String(trimEnd)} onChange={(nextValue) => {
+                const nextEnd = Math.min(sourceDuration, Math.max(trimStart + 2, Number(nextValue)))
+                updateTimelineItem(item.id, { trim_end: nextEnd, duration: nextEnd - trimStart })
+              }} />
+            </label>
+          </div>
+        ) : null}
+      </MiniMaxH3DirectorMediaCard>
     )
   }
 
+  const renderEmptyFlSlot = (index: number) => {
+    const isEndSlotUnavailable = index === 1 && visualItems.length === 0
+    const label = index === 0 ? t({ ko: '시작 프레임', en: 'Start frame' }) : t({ ko: '끝 프레임', en: 'End frame' })
+    return (
+      <button
+        key={`fl-slot-${index}`}
+        type="button"
+        disabled={isUploading || isEndSlotUnavailable}
+        className="flex min-h-36 min-w-0 flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-border/80 px-3 text-xs text-muted-foreground hover:border-primary/45 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={() => visualInputRef.current?.click()}
+        onDragOver={(event) => { if (!isEndSlotUnavailable) event.preventDefault() }}
+        onDrop={(event) => { event.stopPropagation(); if (!isEndSlotUnavailable) handleLaneDrop(event, 'visual') }}
+      >
+        <span className="font-medium text-foreground">{label}</span>
+        <span>{isEndSlotUnavailable
+          ? t({ ko: '시작 프레임을 먼저 추가해줘.', en: 'Add the start frame first.' })
+          : t({ ko: '이미지를 추가하거나 놓아줘.', en: 'Add or drop an image.' })}</span>
+      </button>
+    )
+  }
+
+  const fl2vaModelConnected = isMiniMaxH3DirectorInputLink(nodeValue.fl2va_model)
+  const ref2vaModelConnected = isMiniMaxH3DirectorInputLink(nodeValue.ref2va_model)
+  const hasVisibleDimensionField = (['width', 'height', 'duration', 'ref_image_size'] as const).some(isFieldVisible)
+  const canReset = (isFieldVisible('timeline_data') && timeline.items.length > 0)
+    || (isFieldVisible('prompt') && promptValue.trim().length > 0)
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClick={() => setMenuItemId(null)}>
+      <input ref={replacementInputRef} type="file" accept="image/*,video/*,audio/*" hidden onChange={(event) => {
+        const itemId = replacementItemId
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        setReplacementItemId(null)
+        if (itemId && file) void replaceTimelineItem(itemId, file)
+      }} />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="text-sm font-semibold text-foreground">MiniMax H3 Director</div>
           <Badge variant="outline">DaSiWa</Badge>
+          {!fl2vaModelConnected ? <Badge variant="destructive">{t({ ko: 'FL2VA 미연결', en: 'FL2VA missing' })}</Badge> : null}
+          {!ref2vaModelConnected ? <Badge variant="destructive">{t({ ko: 'REF2VA 미연결', en: 'REF2VA missing' })}</Badge> : null}
         </div>
         <div className="flex gap-1">
-          {(['FL2VA', 'REF2VA'] as const).map((nextMode) => (
-            <Button key={nextMode} type="button" size="sm" variant={mode === nextMode ? 'default' : 'outline'} onClick={() => emit({ mode: nextMode })}>
-              {nextMode}
-            </Button>
-          ))}
-          {timeline.items.length > 0 || String(nodeValue.prompt).trim() ? (
-            <Button type="button" size="icon-sm" variant="ghost" onClick={clearTimeline} aria-label={t({ ko: 'Director 초기화', en: 'Reset Director' })} title={t({ ko: '초기화', en: 'Reset' })}>
+          {isFieldVisible('mode')
+            ? (['FL2VA', 'REF2VA'] as const).map((nextMode) => (
+                <Button key={nextMode} type="button" size="sm" variant={mode === nextMode ? 'default' : 'outline'} onClick={() => emit({ mode: nextMode })}>
+                  {nextMode}
+                </Button>
+              ))
+            : null}
+          {canReset ? (
+            <Button type="button" size="icon-sm" variant="ghost" onClick={clearTimeline} aria-label={t({ ko: 'Director 초기화', en: 'Reset Director' })} title={t({ ko: '전체 초기화', en: 'Reset all' })}>
               <RotateCcw className="h-4 w-4" />
             </Button>
           ) : null}
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className={cn('space-y-1 text-xs text-muted-foreground', invalidFields.has('width') && 'text-destructive')}>
-          <span>{t({ ko: '너비', en: 'Width' })}</span>
-          <ScrubbableNumberInput min={32} max={8192} step={32} value={String(nodeValue.width)} className={cn(invalidFields.has('width') && 'border-destructive')} onChange={(nextValue) => emit({ width: Number(nextValue) })} />
-        </label>
-        <label className={cn('space-y-1 text-xs text-muted-foreground', invalidFields.has('height') && 'text-destructive')}>
-          <span>{t({ ko: '높이', en: 'Height' })}</span>
-          <ScrubbableNumberInput min={32} max={8192} step={32} value={String(nodeValue.height)} className={cn(invalidFields.has('height') && 'border-destructive')} onChange={(nextValue) => emit({ height: Number(nextValue) })} />
-        </label>
-        <label className={cn('space-y-1 text-xs text-muted-foreground', invalidFields.has('duration') && 'text-destructive')}>
-          <span>{t({ ko: '길이(초)', en: 'Duration (seconds)' })}</span>
-          <ScrubbableNumberInput min={1} max={1000} step={1} value={String(nodeValue.duration)} className={cn(invalidFields.has('duration') && 'border-destructive')} onChange={(nextValue) => emit({ duration: Number(nextValue) })} />
-        </label>
-        <label className="space-y-1 text-xs text-muted-foreground">
-          <span>{t({ ko: '참조 이미지 크기', en: 'Reference image size' })}</span>
-          <Select value={String(nodeValue.ref_image_size)} onChange={(event) => emit({ ref_image_size: event.target.value })}>
-            <option value="match">match</option>
-            <option value="max">max</option>
-          </Select>
-        </label>
-      </div>
+      {hasVisibleDimensionField ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {isFieldVisible('width') ? (
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>{t({ ko: '너비', en: 'Width' })}</span>
+              <ScrubbableNumberInput step={1} value={widthValue} onChange={(nextValue) => emit({ width: Number(nextValue) })} />
+            </label>
+          ) : null}
+          {isFieldVisible('height') ? (
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>{t({ ko: '높이', en: 'Height' })}</span>
+              <ScrubbableNumberInput step={1} value={heightValue} onChange={(nextValue) => emit({ height: Number(nextValue) })} />
+            </label>
+          ) : null}
+          {isFieldVisible('duration') ? (
+            <label className={cn('space-y-1 text-xs text-muted-foreground', invalidFields.has('duration') && 'text-destructive')}>
+              <span>{t({ ko: '길이(초)', en: 'Duration (seconds)' })}</span>
+              <ScrubbableNumberInput min={1} max={1000} step={1} value={durationValue} className={cn(invalidFields.has('duration') && 'border-destructive')} onChange={(nextValue) => emit({ duration: Number(nextValue) })} />
+            </label>
+          ) : null}
+          {isFieldVisible('ref_image_size') ? (
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>{t({ ko: '참조 이미지 크기', en: 'Reference image size' })}</span>
+              <Select value={refImageSizeValue} onChange={(event) => emit({ ref_image_size: event.target.value })}>
+                {refImageSizeValue === '' ? <option value="">{t({ ko: '선택', en: 'Select' })}</option> : null}
+                <option value="match">match</option>
+                <option value="max">max</option>
+              </Select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
 
       {issues.length > 0 ? (
         <Alert variant="destructive">
@@ -499,7 +570,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3Direc
               {issues.slice(0, 6).map((issue) => (
                 <li key={`${issue.code}-${issue.itemId ?? issue.field ?? ''}`}>
                   {issue.itemId ? (
-                    <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => setSelectedItemId(issue.itemId ?? null)}>
+                    <button type="button" className="text-left underline-offset-2 hover:underline" onClick={(event) => { event.stopPropagation(); setMenuItemId(issue.itemId ?? null) }}>
                       {t({ ko: issue.ko, en: issue.en })}
                     </button>
                   ) : t({ ko: issue.ko, en: issue.en })}
@@ -510,45 +581,59 @@ export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3Direc
         </Alert>
       ) : null}
 
-      <div
-        className="space-y-3 rounded-sm border border-border/80 bg-surface-low/50 p-3"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => handleDrop(event, 'visual')}
-      >
+      {isFieldVisible('timeline_data') ? <>
+      <div className="space-y-3 rounded-sm border border-border/80 bg-surface-low/50 p-3" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'visual')}>
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-medium text-foreground"><Film className="h-4 w-4" />{t({ ko: '이미지 / 영상', en: 'Image / Video' })}</div>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isUploading} onClick={() => visualInputRef.current?.click()} aria-label={t({ ko: '이미지 또는 영상 추가', en: 'Add image or video' })} title={t({ ko: '추가', en: 'Add' })}>
-            <Plus className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2 text-xs font-medium text-foreground"><Film className="h-4 w-4" />{mode === 'FL2VA' ? t({ ko: 'FL2VA 이미지', en: 'FL2VA images' }) : t({ ko: '이미지 / 영상', en: 'Image / Video' })}</div>
+          <div className="flex items-center gap-1">
+            {timeline.items.some((item) => getMediaLane(item) === 'visual') ? (
+              <Button type="button" size="icon-sm" variant="ghost" onClick={() => clearLane('visual')} aria-label={t({ ko: '이미지·영상 초기화', en: 'Clear image and video lane' })} title={t({ ko: '이미지·영상 초기화', en: 'Clear image and video lane' })}>
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            ) : null}
+            <Button type="button" size="icon-sm" variant="outline" disabled={isUploading} onClick={() => visualInputRef.current?.click()} aria-label={t({ ko: '이미지 또는 영상 추가', en: 'Add image or video' })} title={t({ ko: '추가', en: 'Add' })}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
           <input ref={visualInputRef} type="file" accept={mode === 'FL2VA' ? 'image/*' : 'image/*,video/*'} multiple hidden onChange={(event) => { void handleFiles(Array.from(event.target.files ?? []), 'visual'); event.target.value = '' }} />
         </div>
-        {visualItems.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+
+        {mode === 'FL2VA' ? (
+          <div className="grid grid-cols-2 gap-3">
+            {[0, 1].map((index) => visualItems[index]
+              ? renderMediaCard(visualItems[index], index + 1, index === 0 ? t({ ko: '시작 프레임', en: 'Start frame' }) : t({ ko: '끝 프레임', en: 'End frame' }))
+              : renderEmptyFlSlot(index))}
+          </div>
+        ) : visualItems.length > 0 ? (
+          <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
             {visualItems.map((item) => renderMediaCard(item, visualItems.filter((candidate) => candidate.type === item.type && candidate.slot <= item.slot).length))}
           </div>
         ) : (
           <button type="button" className="flex min-h-28 w-full items-center justify-center rounded-sm border border-dashed border-border/80 text-xs text-muted-foreground hover:border-primary/45 hover:text-foreground" onClick={() => visualInputRef.current?.click()}>
-            {mode === 'FL2VA' ? t({ ko: '이미지를 추가하거나 여기에 놓아줘.', en: 'Add images or drop them here.' }) : t({ ko: '이미지·영상을 추가하거나 여기에 놓아줘.', en: 'Add images or videos, or drop them here.' })}
+            {mode === null ? t({ ko: '실행 모드는 상위 노드가 결정해. 참조 미디어를 추가할 수 있어.', en: 'An upstream node selects the mode. You can add reference media.' }) : t({ ko: '이미지·영상을 추가하거나 여기에 놓아줘.', en: 'Add images or videos, or drop them here.' })}
           </button>
         )}
       </div>
 
-      <div
-        className={cn('space-y-3 rounded-sm border p-3', mode === 'FL2VA' ? 'border-border/50 bg-muted/20 opacity-60' : 'border-border/80 bg-surface-low/50')}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => mode === 'REF2VA' ? handleDrop(event, 'audio') : event.preventDefault()}
-      >
+      <div className={cn('space-y-3 rounded-sm border p-3', mode === 'FL2VA' ? 'border-border/50 bg-muted/20 opacity-60' : 'border-border/80 bg-surface-low/50')} onDragOver={(event) => { if (mode !== 'FL2VA') event.preventDefault() }} onDrop={(event) => mode !== 'FL2VA' ? handleLaneDrop(event, 'audio') : event.preventDefault()}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-medium text-foreground"><Music2 className="h-4 w-4" />{t({ ko: '오디오', en: 'Audio' })}</div>
-          <Button type="button" size="icon-sm" variant="outline" disabled={mode === 'FL2VA' || isUploading} onClick={() => audioInputRef.current?.click()} aria-label={t({ ko: '오디오 추가', en: 'Add audio' })} title={t({ ko: '추가', en: 'Add' })}>
-            <Plus className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {timeline.items.some((item) => getMediaLane(item) === 'audio') ? (
+              <Button type="button" size="icon-sm" variant="ghost" onClick={() => clearLane('audio')} aria-label={t({ ko: '오디오 초기화', en: 'Clear audio lane' })} title={t({ ko: '오디오 초기화', en: 'Clear audio lane' })}>
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            ) : null}
+            <Button type="button" size="icon-sm" variant="outline" disabled={mode === 'FL2VA' || isUploading} onClick={() => audioInputRef.current?.click()} aria-label={t({ ko: '오디오 추가', en: 'Add audio' })} title={t({ ko: '추가', en: 'Add' })}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
           <input ref={audioInputRef} type="file" accept="audio/*" multiple hidden onChange={(event) => { void handleFiles(Array.from(event.target.files ?? []), 'audio'); event.target.value = '' }} />
         </div>
         {mode === 'FL2VA' ? (
           <div className="flex min-h-20 items-center justify-center rounded-sm border border-dashed border-border/60 text-xs text-muted-foreground">{t({ ko: 'FL2VA에서는 오디오 참조를 사용하지 않아.', en: 'FL2VA does not use audio references.' })}</div>
         ) : audioItems.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
             {audioItems.map((item, index) => renderMediaCard(item, index + 1))}
           </div>
         ) : (
@@ -558,25 +643,67 @@ export function MiniMaxH3DirectorDasiwaInput({ value, onChange }: MiniMaxH3Direc
         )}
       </div>
 
-      <label className="block space-y-1.5 text-xs text-muted-foreground">
-        <span>{selectedItem && selectedItem.type !== 'audio'
-          ? t({ ko: '미디어 프롬프트 · {name}', en: 'Media prompt · {name}' }, { name: assets[selectedItem.id]?.fileName || selectedItem.value })
-          : t({ ko: '미디어 프롬프트', en: 'Media prompt' })}</span>
-        <Textarea
-          rows={4}
-          disabled={!selectedItem || selectedItem.type === 'audio'}
-          value={selectedItem && selectedItem.type !== 'audio' ? String(selectedItem.prompt ?? '') : ''}
-          placeholder={t({ ko: '이미지 또는 영상을 선택하면 개별 역할을 적을 수 있어.', en: 'Select an image or video to describe its role.' })}
-          onChange={(event) => selectedItem && updateTimelineItem(selectedItem.id, { prompt: event.target.value })}
-        />
-      </label>
+      {visualItems.length > 0 ? (
+        <section className="space-y-2 rounded-sm border border-border/70 bg-background/25 p-3" aria-label={t({ ko: '미디어 프롬프트 요약', en: 'Media prompt summary' })}>
+          <div className="text-xs font-medium text-foreground">{t({ ko: '미디어 프롬프트 요약', en: 'Media prompt summary' })}</div>
+          <div className="divide-y divide-border/60">
+            {visualItems.map((item, index) => {
+              const label = mode === 'FL2VA'
+                ? index === 0 ? t({ ko: '시작 프레임', en: 'Start frame' }) : t({ ko: '끝 프레임', en: 'End frame' })
+                : formatMediaTypeLabel(item.type, visualItems.filter((candidate) => candidate.type === item.type && candidate.slot <= item.slot).length)
+              return (
+                <div key={item.id} className="grid gap-1 py-2 text-xs sm:grid-cols-[8rem_minmax(0,1fr)]">
+                  <span className="font-medium text-foreground">{label}</span>
+                  <span className={cn('whitespace-pre-wrap break-words', String(item.prompt ?? '').trim() ? 'text-muted-foreground' : 'text-muted-foreground/60')}>
+                    {String(item.prompt ?? '').trim() || t({ ko: '미작성', en: 'Not written' })}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
+      </> : null}
 
-      <label className="block space-y-1.5 text-xs text-muted-foreground">
-        <span>{t({ ko: '글로벌 프롬프트', en: 'Global prompt' })}</span>
-        <Textarea rows={5} value={String(nodeValue.prompt)} placeholder={t({ ko: '전체 영상 프롬프트', en: 'Global video prompt' })} onChange={(event) => emit({ prompt: event.target.value })} />
-      </label>
+      {isFieldVisible('prompt') ? (
+        <label className="block space-y-1.5 text-xs text-muted-foreground">
+          <span>{t({ ko: '글로벌 프롬프트', en: 'Global prompt' })}</span>
+          <Textarea rows={5} value={promptValue} placeholder={t({ ko: '전체 영상 프롬프트', en: 'Global video prompt' })} onChange={(event) => emit({ prompt: event.target.value })} />
+        </label>
+      ) : null}
 
       {status ? <div className="rounded-sm border border-border/70 bg-background/35 px-3 py-2 text-xs text-muted-foreground">{status}</div> : null}
+
+      <SettingsModal
+        open={isFieldVisible('timeline_data') && Boolean(promptItem)}
+        title={t({ ko: '미디어 프롬프트', en: 'Media prompt' })}
+        description={promptItem ? assets[promptItem.id]?.fileName || promptItem.value : undefined}
+        widthClassName="max-w-xl"
+        onClose={() => setPromptItemId(null)}
+      >
+        {promptItem ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-sm border border-border/70 bg-surface-low/45 px-3 py-3">
+                <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '파일명', en: 'File name' })}</div>
+                <div className="mt-2 break-all text-sm text-foreground">{assets[promptItem.id]?.fileName || promptItem.value}</div>
+              </div>
+              <div className="rounded-sm border border-border/70 bg-surface-low/45 px-3 py-3">
+                <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '용량', en: 'Size' })}</div>
+                <div className="mt-2 text-sm text-foreground">{assets[promptItem.id] ? formatMediaBytes(assets[promptItem.id].bytes) : t({ ko: '기존 Comfy 입력', en: 'Existing Comfy input' })}</div>
+              </div>
+            </div>
+            <label className="block space-y-1.5 text-xs text-muted-foreground">
+              <span>{t({ ko: '프롬프트', en: 'Prompt' })}</span>
+              <Textarea rows={7} autoFocus value={promptDraft} placeholder={t({ ko: '이 미디어의 역할과 장면을 적어줘.', en: 'Describe this media role and scene.' })} onChange={(event) => setPromptDraft(event.target.value)} />
+            </label>
+            <SettingsModalFooter>
+              <Button type="button" variant="outline" onClick={() => setPromptItemId(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+              <Button type="button" onClick={() => { updateTimelineItem(promptItem.id, { prompt: promptDraft }); setPromptItemId(null) }}>{t({ ko: '저장', en: 'Save' })}</Button>
+            </SettingsModalFooter>
+          </div>
+        ) : null}
+      </SettingsModal>
     </div>
   )
 }

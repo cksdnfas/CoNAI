@@ -83,6 +83,26 @@ async function main() {
     assert.equal(substituted['42'].class_type, 'MiniMaxH3Director', 'Director execution must use the ordinary workflow node');
     assert.deepEqual(substituted['42'].inputs, nodeValue, 'the prepared composite value must use ordinary workflow substitution');
 
+    const linkedTimeline = ['77', 0];
+    const linkedPromptData = {
+      director: {
+        ...promptData.director,
+        mode: ['70', 0],
+        prompt: ['71', 0],
+        width: ['72', 0],
+        height: ['73', 0],
+        duration: ['74', 0],
+        ref_image_size: ['75', 0],
+        timeline_data: linkedTimeline,
+      },
+    };
+    const uploadCountBeforeLinkedTimeline = uploads.length;
+    const preparedLinked = await prepareComfyPromptData(comfyService as never, fields as never, linkedPromptData);
+    assert.deepEqual(preparedLinked.director.timeline_data, linkedTimeline, 'a connected timeline_data input must remain an untouched Comfy link');
+    assert.deepEqual(preparedLinked.director.width, ['72', 0], 'connected scalar inputs must remain untouched');
+    assert.equal(uploads.length, uploadCountBeforeLinkedTimeline, 'a connected timeline must not trigger draft-media uploads');
+    assert.equal('__conai_minimax_h3_director' in preparedLinked.director, false, 'private metadata must still be stripped from linked timelines');
+
     const nodeError = new ComfyUINodeValidationError({
       '42': {
         class_type: 'MiniMaxH3Director',

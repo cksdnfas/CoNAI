@@ -10,6 +10,24 @@ import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
+import {
+  MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS,
+  type MiniMaxH3DirectorVisibleField,
+} from './minimax-h3-director-dasiwa-utils'
+
+const MINIMAX_H3_DIRECTOR_VISIBLE_FIELD_OPTIONS: Array<{
+  key: MiniMaxH3DirectorVisibleField
+  ko: string
+  en: string
+}> = [
+  { key: 'mode', ko: '실행 모드', en: 'Mode' },
+  { key: 'width', ko: '너비', en: 'Width' },
+  { key: 'height', ko: '높이', en: 'Height' },
+  { key: 'duration', ko: '길이', en: 'Duration' },
+  { key: 'ref_image_size', ko: '참조 이미지 크기', en: 'Reference image size' },
+  { key: 'timeline_data', ko: '참조 미디어', en: 'Reference media' },
+  { key: 'prompt', ko: '글로벌 프롬프트', en: 'Global prompt' },
+]
 
 type ComfyWorkflowMarkedFieldsEditorProps = {
   markedFields: WorkflowMarkedField[]
@@ -213,6 +231,37 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         )}
                       </SettingsField>
                     </div>
+
+                    {field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa' ? (
+                      <SettingsField label={t({ ko: '노출할 Director 필드', en: 'Visible Director fields' })}>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {MINIMAX_H3_DIRECTOR_VISIBLE_FIELD_OPTIONS.map((option) => {
+                            const visibleFields = field.node_visible_fields ?? [...MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS]
+                            const isVisible = visibleFields.includes(option.key)
+                            return (
+                              <SettingsToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                                <input
+                                  type="checkbox"
+                                  checked={isVisible}
+                                  onChange={(event) => {
+                                    const nextVisibleFieldSet = new Set(visibleFields)
+                                    if (event.target.checked) nextVisibleFieldSet.add(option.key)
+                                    else nextVisibleFieldSet.delete(option.key)
+                                    const nextVisibleFields = MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS.filter((key) => nextVisibleFieldSet.has(key))
+                                    onFieldPatch(field.id, {
+                                      node_visible_fields: nextVisibleFields.length === MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS.length
+                                        ? undefined
+                                        : [...nextVisibleFields],
+                                    })
+                                  }}
+                                />
+                                {t({ ko: option.ko, en: option.en })}
+                              </SettingsToggleRow>
+                            )
+                          })}
+                        </div>
+                      </SettingsField>
+                    ) : null}
 
                     <div className="flex flex-wrap items-center gap-3">
                       <SettingsToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">

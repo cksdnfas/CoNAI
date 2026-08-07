@@ -11,6 +11,17 @@ export const MINIMAX_H3_DIRECTOR_META_KEY = '__conai_minimax_h3_director'
 export type MiniMaxH3DirectorMode = 'FL2VA' | 'REF2VA'
 export type MiniMaxH3DirectorMediaType = 'image' | 'video' | 'audio'
 export type MiniMaxH3DirectorVideoMode = 'video' | 'audio' | 'video_audio'
+export type MiniMaxH3DirectorInputLink = [string | number, number]
+export const MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS = [
+  'mode',
+  'width',
+  'height',
+  'duration',
+  'ref_image_size',
+  'timeline_data',
+  'prompt',
+] as const
+export type MiniMaxH3DirectorVisibleField = typeof MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS[number]
 
 export type MiniMaxH3DirectorTimelineItem = {
   id: string
@@ -70,6 +81,15 @@ const AUDIO_EXTENSIONS = new Set(['aac', 'aif', 'aiff', 'alac', 'amr', 'ape', 'c
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** Match the ordinary Comfy API-workflow input link shape. */
+export function isMiniMaxH3DirectorInputLink(value: unknown): value is MiniMaxH3DirectorInputLink {
+  return Array.isArray(value)
+    && value.length >= 2
+    && (typeof value[0] === 'string' || typeof value[0] === 'number')
+    && typeof value[1] === 'number'
+    && Number.isInteger(value[1])
 }
 
 function asFiniteNumber(value: unknown, fallback: number) {
@@ -161,26 +181,28 @@ export function getMiniMaxH3DirectorAssets(value: unknown) {
 
 /** Normalize visible Director inputs without discarding model links or unknown workflow values. */
 export function normalizeMiniMaxH3DirectorNodeValue(value: unknown): Record<string, unknown> & {
-  mode: MiniMaxH3DirectorMode
-  prompt: string
-  width: number
-  height: number
-  duration: number
-  ref_image_size: 'match' | 'max'
-  timeline_data: string
+  mode: MiniMaxH3DirectorMode | MiniMaxH3DirectorInputLink
+  prompt: string | MiniMaxH3DirectorInputLink
+  width: number | MiniMaxH3DirectorInputLink
+  height: number | MiniMaxH3DirectorInputLink
+  duration: number | MiniMaxH3DirectorInputLink
+  ref_image_size: 'match' | 'max' | MiniMaxH3DirectorInputLink
+  timeline_data: string | MiniMaxH3DirectorInputLink
 } {
   const source = isRecord(value) ? value : {}
   return {
     ...source,
-    mode: source.mode === 'REF2VA' ? 'REF2VA' : 'FL2VA',
-    prompt: typeof source.prompt === 'string' ? source.prompt : '',
-    width: asFiniteNumber(source.width, 1344),
-    height: asFiniteNumber(source.height, 768),
-    duration: asFiniteNumber(source.duration, 5),
-    ref_image_size: source.ref_image_size === 'max' ? 'max' : 'match',
-    timeline_data: typeof source.timeline_data === 'string'
+    mode: isMiniMaxH3DirectorInputLink(source.mode) ? source.mode : source.mode === 'REF2VA' ? 'REF2VA' : 'FL2VA',
+    prompt: isMiniMaxH3DirectorInputLink(source.prompt) ? source.prompt : typeof source.prompt === 'string' ? source.prompt : '',
+    width: isMiniMaxH3DirectorInputLink(source.width) ? source.width : asFiniteNumber(source.width, 1344),
+    height: isMiniMaxH3DirectorInputLink(source.height) ? source.height : asFiniteNumber(source.height, 768),
+    duration: isMiniMaxH3DirectorInputLink(source.duration) ? source.duration : asFiniteNumber(source.duration, 5),
+    ref_image_size: isMiniMaxH3DirectorInputLink(source.ref_image_size) ? source.ref_image_size : source.ref_image_size === 'max' ? 'max' : 'match',
+    timeline_data: isMiniMaxH3DirectorInputLink(source.timeline_data)
       ? source.timeline_data
-      : JSON.stringify(DEFAULT_TIMELINE),
+      : typeof source.timeline_data === 'string'
+        ? source.timeline_data
+        : JSON.stringify(DEFAULT_TIMELINE),
   }
 }
 
@@ -212,15 +234,17 @@ export function buildMiniMaxH3DirectorNodeValue(
   inputPatch: Record<string, unknown>,
   timeline?: MiniMaxH3DirectorTimeline,
   assets?: Record<string, WorkflowInputAssetRef>,
-): Record<string, unknown> & { timeline_data: string } {
+): Record<string, unknown> {
   const current = normalizeMiniMaxH3DirectorNodeValue(currentValue)
-  const nextTimeline = timeline ? syncMiniMaxH3DirectorPromptBlocks(timeline) : parseMiniMaxH3DirectorTimeline(current.timeline_data).timeline
   const currentMeta = isRecord(current[MINIMAX_H3_DIRECTOR_META_KEY]) ? current[MINIMAX_H3_DIRECTOR_META_KEY] : {}
+  const timelineData = timeline
+    ? JSON.stringify(syncMiniMaxH3DirectorPromptBlocks(timeline))
+    : current.timeline_data
 
   return {
     ...current,
     ...inputPatch,
-    timeline_data: JSON.stringify(nextTimeline),
+    timeline_data: timelineData,
     [MINIMAX_H3_DIRECTOR_META_KEY]: {
       ...currentMeta,
       assets: assets ?? getMiniMaxH3DirectorAssets(current),
@@ -231,6 +255,9 @@ export function buildMiniMaxH3DirectorNodeValue(
 /** Return items that the DaSiWa backend will consume for the selected mode. */
 export function getMiniMaxH3DirectorActiveItems(value: unknown) {
   const nodeValue = normalizeMiniMaxH3DirectorNodeValue(value)
+  if (isMiniMaxH3DirectorInputLink(nodeValue.timeline_data)) {
+    return []
+  }
   const items = parseMiniMaxH3DirectorTimeline(nodeValue.timeline_data).timeline.items
     .filter((item) => item.enabled !== false)
     .sort((left, right) => left.order - right.order)
@@ -253,36 +280,31 @@ function getSelectedDuration(item: MiniMaxH3DirectorTimelineItem) {
 /** Validate Director inputs against the actual DaSiWa FL2VA and REF2VA contracts. */
 export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3DirectorIssue[] {
   const nodeValue = normalizeMiniMaxH3DirectorNodeValue(value)
-  const parsedTimeline = parseMiniMaxH3DirectorTimeline(nodeValue.timeline_data)
   const issues: MiniMaxH3DirectorIssue[] = []
+  const timelineLinked = isMiniMaxH3DirectorInputLink(nodeValue.timeline_data)
 
-  if (parsedTimeline.error) {
-    issues.push({ code: 'timeline-json', field: 'timeline', ko: '타임라인 데이터가 올바른 JSON이 아니야.', en: 'Timeline data is not valid JSON.' })
-    return issues
-  }
-
-  for (const [field, numberValue] of [['width', nodeValue.width], ['height', nodeValue.height]] as const) {
-    if (!Number.isInteger(numberValue) || numberValue < 32 || numberValue > 8192 || numberValue % 32 !== 0) {
-      issues.push({
-        code: `${field}-range`,
-        field,
-        ko: `${field === 'width' ? '너비' : '높이'}는 32~8192 범위의 32 단위 정수여야 해.`,
-        en: `${field === 'width' ? 'Width' : 'Height'} must be an integer from 32 to 8192 in steps of 32.`,
-      })
-    }
-  }
-
-  if (!Number.isInteger(nodeValue.duration) || nodeValue.duration < 1 || nodeValue.duration > 1000) {
+  if (!isMiniMaxH3DirectorInputLink(nodeValue.duration) && (!Number.isInteger(nodeValue.duration) || nodeValue.duration < 1 || nodeValue.duration > 1000)) {
     issues.push({ code: 'duration-range', field: 'duration', ko: '영상 길이는 1~1000초 정수여야 해.', en: 'Duration must be an integer from 1 to 1000 seconds.' })
   }
 
-  const selectedModelInput = nodeValue.mode === 'FL2VA' ? nodeValue.fl2va_model : nodeValue.ref2va_model
-  if (!Array.isArray(selectedModelInput) || selectedModelInput.length < 2) {
+  const staticMode = isMiniMaxH3DirectorInputLink(nodeValue.mode) ? null : nodeValue.mode
+  const selectedModelInput = staticMode === 'FL2VA' ? nodeValue.fl2va_model : staticMode === 'REF2VA' ? nodeValue.ref2va_model : null
+  if (staticMode && !isMiniMaxH3DirectorInputLink(selectedModelInput)) {
     issues.push({
       code: 'selected-model-connection',
       ko: `워크플로 수정 필요: ${nodeValue.mode} 모델 연결이 없어.`,
       en: `Workflow update required: the ${nodeValue.mode} model is not connected.`,
     })
+  }
+
+  if (timelineLinked) {
+    return issues
+  }
+
+  const parsedTimeline = parseMiniMaxH3DirectorTimeline(nodeValue.timeline_data)
+  if (parsedTimeline.error) {
+    issues.push({ code: 'timeline-json', field: 'timeline', ko: '타임라인 데이터가 올바른 JSON이 아니야.', en: 'Timeline data is not valid JSON.' })
+    return issues
   }
 
   const activeItems = getMiniMaxH3DirectorActiveItems(nodeValue)
@@ -292,7 +314,7 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3Dir
     }
   }
 
-  if (nodeValue.mode === 'FL2VA') {
+  if (staticMode === null || staticMode === 'FL2VA') {
     return issues
   }
 
