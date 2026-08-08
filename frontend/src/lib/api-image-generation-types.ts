@@ -1,5 +1,18 @@
 export type GenerationServiceType = 'novelai' | 'codex' | 'comfyui'
 export type GenerationQueueJobStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export type GenerationQueueProgressPhase = 'preparing' | 'executing' | 'sampling' | 'finalizing'
+
+export interface GenerationQueueLiveProgress {
+  source: 'comfyui_ws'
+  phase: GenerationQueueProgressPhase
+  node_id: string | null
+  node_label: string | null
+  value: number | null
+  max: number | null
+  percent: number | null
+  updated_at: string
+}
 /** status와 직교하는 축: 업스트림에 작업을 만들었을 가능성 (백엔드 타입 미러) */
 export type GenerationQueueProviderSubmitState =
   | 'none'
@@ -49,6 +62,7 @@ export interface GenerationQueueJobRecord {
   estimated_wait_seconds?: number | null
   estimated_total_seconds?: number | null
   estimated_duration_seconds?: number | null
+  live_progress?: GenerationQueueLiveProgress | null
   is_mine?: boolean
 }
 

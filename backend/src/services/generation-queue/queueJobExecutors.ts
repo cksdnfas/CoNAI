@@ -26,6 +26,8 @@ import {
 } from './queuePayloads'
 import { updateQueueRequestDebugMeta, writeQueueComfyDebugSnapshot } from './queueDebugMeta'
 import { classifySubmitFailure } from './queueSubmitFailureClassifier'
+import { clearGenerationQueueLiveProgress, setGenerationQueueLiveProgress } from './queueProgressRegistry'
+import { publishQueueJobEvent, publishQueueJobProgressEvent } from '../runtime-events/runtimeEventPublishers'
 import {
   handleComfySubmitFailure,
   markNaiSubmitAmbiguous,
@@ -200,6 +202,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     console.log(`🧾 Queue job ${job.id} ComfyUI request snapshot: ${preparedDebugLog.relativePath}`)
   }
 
+  let acceptedPromptId = job.provider_job_id ?? null
   try {
     const result = await executeComfyGeneration({
       comfyService,
@@ -226,7 +229,19 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       },
       // PJ-2: 응답 파싱과 같은 tick 에서 핸들 + running 전이를 한 번의 UPDATE 로 커밋한다.
       onPromptAccepted: (promptId) => {
+        acceptedPromptId = promptId
         GenerationQueueModel.markProviderAccepted(job.id, promptId)
+        publishQueueJobEvent('queue.job.status', GenerationQueueModel.findListRecordById(job.id), {
+          previousStatus: 'dispatching',
+        })
+      },
+      onProgress: (progress) => {
+        setGenerationQueueLiveProgress(job.id, progress)
+        publishQueueJobProgressEvent({
+          id: job.id,
+          requested_by_account_id: job.requested_by_account_id,
+          provider_job_id: acceptedPromptId,
+        }, progress)
       },
       onPromptSubmitted: async (promptId) => {
         await writeQueueComfyDebugSnapshot(job, {
@@ -355,6 +370,8 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       GenerationHistoryModel.recordError(historyId, failureMessage)
     }
     throw error
+  } finally {
+    clearGenerationQueueLiveProgress(job.id)
   }
 }
 

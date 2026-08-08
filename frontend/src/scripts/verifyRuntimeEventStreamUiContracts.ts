@@ -55,6 +55,12 @@ function assertTypeMirrorHasNoDrift() {
     /export interface QueueJobEventPayload \{[\s\S]*?cancel_requested_at: string \| null[\s\S]*?cancel_origin: string \| null[\s\S]*?provider_submit_state: string \| null[\s\S]*?provider_submit_started_at: string \| null[\s\S]*?provider_cancel_state: string \| null[\s\S]*?submit_attempt_count: number \| null/,
     'queue job events must carry the cancellation protocol columns promoted by the queue cancel redesign',
   )
+  match(
+    frontendTypesSource,
+    /export interface QueueJobProgressEventPayload \{[\s\S]*?source: 'comfyui_ws'[\s\S]*?phase: 'preparing' \| 'executing' \| 'sampling' \| 'finalizing'[\s\S]*?percent: number \| null/,
+    'ComfyUI progress events must preserve their trusted source, phase, and optional real percent',
+  )
+  match(streamSource, /'queue\.job\.progress'/, 'the single EventSource must subscribe to live queue progress events')
 }
 
 function assertSingleConnectionPolicy() {
@@ -137,6 +143,11 @@ function assertCacheBridgePolicy() {
     bridgeSource,
     /queryClient\.setQueryData<QueueListResponse>/,
     'the bridge must patch cached queue rows instead of waiting for a refetch',
+  )
+  match(
+    bridgeSource,
+    /case 'queue\.job\.progress':[\s\S]*?applyQueueProgressEventToCaches\(queryClient, progressPayload\)[\s\S]*?return/,
+    'high-frequency ComfyUI progress must patch queue caches directly without a queue-list invalidation',
   )
 
   // QLIST-3: 큐 진행 전이(dispatching/running)는 히스토리 표면을 건드리지 않는다.

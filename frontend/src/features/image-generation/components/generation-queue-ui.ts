@@ -213,6 +213,47 @@ export function getGenerationQueueRequesterLabel(record: GenerationQueueJobRecor
   return t('image-generation.components.generation.queue.ui.unknown')
 }
 
+export function hasGenerationQueueLiveProgress(record: GenerationQueueJobRecord) {
+  return record.status === 'running'
+    && record.service_type === 'comfyui'
+    && record.live_progress?.source === 'comfyui_ws'
+}
+
+/** Render only the current trusted node/step detail, keeping the queue card compact. */
+export function getGenerationQueueProgressStageLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber) {
+  if (record.status !== 'running') {
+    return null
+  }
+
+  const progress = hasGenerationQueueLiveProgress(record) ? record.live_progress : null
+  if (!progress) {
+    return getGenerationQueueProgressPercent(record) != null
+      ? t({ ko: '예상 진행률', en: 'Estimated progress' })
+      : t({ ko: '진행 중', en: 'In progress' })
+  }
+
+  if (progress.phase === 'preparing') {
+    return t({ ko: '실행 준비 중', en: 'Preparing' })
+  }
+
+  if (progress.phase === 'finalizing') {
+    return t({ ko: '후처리 중', en: 'Finalizing' })
+  }
+
+  const nodeLabel = progress.node_label?.trim() || null
+  const hasSteps = progress.value != null && Number.isFinite(progress.value)
+    && progress.max != null && Number.isFinite(progress.max) && progress.max > 0
+  const stepLabel = hasSteps
+    ? t({ ko: '{value} / {max} 스텝', en: '{value} / {max} steps' }, {
+      value: formatNumber(Math.round(progress.value as number)),
+      max: formatNumber(Math.round(progress.max as number)),
+    })
+    : null
+
+  return [nodeLabel, stepLabel].filter(Boolean).join(' · ')
+    || t({ ko: '실행 중', en: 'Running' })
+}
+
 /** Render the short remaining-time label used beside the progress gauge. */
 export function getGenerationQueueRemainingLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber) {
   return formatGenerationQueueEtaSeconds(record.estimated_total_seconds, t, formatNumber)
@@ -316,6 +357,13 @@ export function getGenerationQueueElapsedLabel(record: GenerationQueueJobRecord,
 export function getGenerationQueueProgressPercent(record: GenerationQueueJobRecord, nowMs = Date.now()) {
   if (record.status !== 'running') {
     return null
+  }
+
+  if (hasGenerationQueueLiveProgress(record)) {
+    const livePercent = record.live_progress?.percent
+    return livePercent != null && Number.isFinite(livePercent)
+      ? Math.max(0, Math.min(100, Math.round(livePercent)))
+      : null
   }
 
   const durationSeconds = record.estimated_duration_seconds

@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoNAI ComfyUI 실시간 진행률 조사 보고서</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --report-bg: #0b0d10;
+      --report-surface: #12161b;
+      --report-surface-2: #181d23;
+      --report-border: #2a313a;
+      --report-muted: #9aa5b1;
+      --report-accent: #73a8ff;
+      --report-accent-soft: rgba(115, 168, 255, .12);
+      --report-success: #63d6ad;
+      --report-warning: #f4c76b;
+      --report-danger: #ff8c8c;
+    }
+    body {
+      background: var(--report-bg);
+      color: #eef2f6;
+      line-height: 1.65;
+    }
+    main { max-width: 1120px; }
+    a { color: #9bc1ff; }
+    a:hover { color: #c4d9ff; }
+    .report-header,
+    .report-section {
+      background: var(--report-surface);
+      border: 1px solid var(--report-border);
+      border-radius: .55rem;
+    }
+    .report-header { border-top: 4px solid var(--report-accent); }
+    .report-section { padding: 1.5rem; }
+    .eyebrow {
+      color: var(--report-accent);
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .text-secondary { color: var(--report-muted) !important; }
+    .badge-soft {
+      color: #b9d3ff;
+      background: var(--report-accent-soft);
+      border: 1px solid rgba(115, 168, 255, .32);
+    }
+    .metric,
+    .finding,
+    .flow-step,
+    .code-panel {
+      height: 100%;
+      padding: 1rem;
+      background: var(--report-surface-2);
+      border: 1px solid var(--report-border);
+      border-radius: .45rem;
+    }
+    .metric strong {
+      display: block;
+      margin-bottom: .25rem;
+      color: var(--report-accent);
+      font-size: 1.45rem;
+      line-height: 1.2;
+    }
+    .finding { border-left: 3px solid var(--report-accent); }
+    .finding.success { border-left-color: var(--report-success); }
+    .finding.warning { border-left-color: var(--report-warning); }
+    .table {
+      --bs-table-color: #e8edf2;
+      --bs-table-bg: transparent;
+      --bs-table-border-color: var(--report-border);
+      margin-bottom: 0;
+    }
+    .table thead th {
+      color: #fff;
+      background: var(--report-surface-2);
+      white-space: nowrap;
+    }
+    code {
+      color: #bed5ff;
+      background: #090b0e;
+      border: 1px solid var(--report-border);
+      border-radius: .25rem;
+      padding: .1rem .3rem;
+      overflow-wrap: anywhere;
+    }
+    pre {
+      margin: 0;
+      padding: 1rem;
+      color: #dce8f8;
+      background: #090b0e;
+      border: 1px solid var(--report-border);
+      border-radius: .4rem;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .source-path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .84rem;
+      color: #cbd5df;
+      overflow-wrap: anywhere;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: .65rem;
+      align-items: stretch;
+    }
+    .flow-step {
+      position: relative;
+      padding-top: 2.7rem;
+    }
+    .flow-step::before {
+      content: attr(data-step);
+      position: absolute;
+      top: .75rem;
+      left: 1rem;
+      display: grid;
+      width: 1.55rem;
+      height: 1.55rem;
+      place-items: center;
+      color: #07111f;
+      background: var(--report-accent);
+      border-radius: 50%;
+      font-size: .75rem;
+      font-weight: 800;
+    }
+    .status-label {
+      display: inline-block;
+      min-width: 5.2rem;
+      color: var(--report-success);
+      font-weight: 700;
+    }
+    .alert-report {
+      color: #dce9ff;
+      background: var(--report-accent-soft);
+      border: 1px solid rgba(115, 168, 255, .35);
+    }
+    .small-note { font-size: .9rem; color: var(--report-muted); }
+    @media (max-width: 991.98px) {
+      .flow { grid-template-columns: 1fr; }
+      .table-responsive { font-size: .9rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container py-4 py-lg-5">
+    <header class="report-header p-4 p-lg-5 mb-4">
+      <div class="eyebrow mb-2">CoNAI · 기술 조사</div>
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div>
+          <h1 class="h2 mb-2">ComfyUI 실시간 진행률 수집 적용성</h1>
+          <p class="text-secondary mb-0">평균 실행시간 기반 진행률을 실제 노드·샘플링 스텝 이벤트로 대체할 수 있는지 조사</p>
+        </div>
+        <span class="badge badge-soft rounded-pill px-3 py-2">조사일 2026-08-07</span>
+      </div>
+    </header>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">결론</h2>
+      <div class="alert alert-report mb-4">
+        <strong>적용 가능 — Go.</strong> 표준 ComfyUI 서버는 <code>/ws</code> WebSocket으로 현재 노드, KSampler 스텝, 성공·오류·중단, 큐 변화를 실시간 전송한다. CoNAI의 실행 중 퍼센트는 기존 시간 추정값보다 훨씬 정확한 <code>progress.value / progress.max</code>로 교체할 수 있다.
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="metric">
+            <strong>실측 가능</strong>
+            <span>현재 노드와 표준 KSampler의 현재/전체 스텝</span>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="metric">
+            <strong>추정 유지</strong>
+            <span>아직 시작하지 않은 큐 작업의 남은 시간</span>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="metric">
+            <strong>부분 지원</strong>
+            <span>모든 커스텀 노드를 합친 워크플로 전체 퍼센트</span>
+          </div>
+        </div>
+      </div>
+      <p class="small-note mt-3 mb-0">핵심 구분: “현재 실행 중인 샘플러의 진척도”는 실측할 수 있지만, “미래 큐 대기시간”과 “진행 훅이 없는 모든 노드까지 포함한 절대적인 전체 퍼센트”는 ComfyUI가 직접 제공하지 않는다.</p>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">현재 CoNAI에서 오차가 생기는 이유</h2>
+      <div class="row g-3 mb-4">
+        <div class="col-lg-6">
+          <div class="finding warning">
+            <h3 class="h6">실행시간 기준값</h3>
+            <p class="mb-2">최근 완료 작업을 최대 12건씩 모아 중앙값을 사용한다. 우선순위는 워크플로+서버 → 워크플로 → 서버 → 전체 ComfyUI 순이다.</p>
+            <div class="source-path">backend/src/routes/generation-queue/queue-eta.ts:104, 114-205</div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="finding warning">
+            <h3 class="h6">화면 진행률</h3>
+            <p class="mb-2"><code>경과시간 / 중앙값 실행시간</code>을 퍼센트로 만들고 완료 전에는 최대 99%로 제한한다. 모델 로딩, 해상도, 스텝 수, 캐시 상태가 달라지면 오차가 커진다.</p>
+            <div class="source-path">frontend/src/features/image-generation/components/generation-queue-ui.ts:315-332</div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="finding">
+            <h3 class="h6">완료 감지 방식</h3>
+            <p class="mb-2">현재는 <code>/history/{prompt_id}</code>를 기본 2초 간격으로 폴링해 완료·오류만 확인한다. 중간 노드나 샘플링 스텝은 받지 않는다.</p>
+            <div class="source-path">backend/src/services/comfyuiService.ts:291-395</div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="finding success">
+            <h3 class="h6">이미 준비된 연결점</h3>
+            <p class="mb-2">ComfyUI 요청에 <code>client_id = conai-job-{queueJobId}</code>를 이미 넣고 있고, CoNAI 백엔드→프론트엔드 SSE 런타임 이벤트도 존재한다. 새 진행률을 전달할 골격은 갖춰져 있다.</p>
+            <div class="source-path">backend/src/services/comfyuiService.ts:241-269 · backend/src/services/runtime-events/runtimeEventPublishers.ts:71-87</div>
+          </div>
+        </div>
+      </div>
+      <p class="mb-0"><strong>판단:</strong> 현재 중앙값 계산이 잘못된 것은 아니다. 큐 대기시간·대체 표시용으로는 유효하지만, 실행 중인 ComfyUI 작업의 진행률 정본으로 사용하기에는 정보가 부족하다.</p>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">ComfyUI가 공식 제공하는 정보</h2>
+      <div class="table-responsive mb-3">
+        <table class="table table-bordered align-middle">
+          <thead>
+            <tr>
+              <th>이벤트/API</th>
+              <th>주요 데이터</th>
+              <th>CoNAI에서의 용도</th>
+              <th>정확도·주의점</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>status</code></td>
+              <td><code>exec_info.queue_remaining</code></td>
+              <td>서버 전체 큐 변화 감지</td>
+              <td>개별 잡 위치가 아니라 전체 잔여 개수</td>
+            </tr>
+            <tr>
+              <td><code>execution_start</code></td>
+              <td><code>prompt_id</code></td>
+              <td>실제 실행 시작 시각 확정</td>
+              <td>시간 추정 대신 실행 상태 전환에 사용 가능</td>
+            </tr>
+            <tr>
+              <td><code>execution_cached</code></td>
+              <td><code>prompt_id</code>, <code>nodes[]</code></td>
+              <td>캐시로 생략되는 노드 제외</td>
+              <td>전체 단계 계산 시 반드시 반영</td>
+            </tr>
+            <tr>
+              <td><code>executing</code></td>
+              <td><code>prompt_id</code>, <code>node</code></td>
+              <td>“모델 로드 중”, “KSampler 실행 중” 같은 현재 단계 표시</td>
+              <td>새 노드를 시작할 때 발생; <code>node: null</code>은 실행 종료 신호</td>
+            </tr>
+            <tr>
+              <td><code>progress</code></td>
+              <td><code>prompt_id</code>, <code>node</code>, <code>value</code>, <code>max</code></td>
+              <td><strong>실제 샘플링 스텝과 퍼센트</strong></td>
+              <td>진행 훅을 구현한 노드에서만 발생</td>
+            </tr>
+            <tr>
+              <td><code>execution_success</code></td>
+              <td><code>prompt_id</code></td>
+              <td>성공 확정 후 결과 수집</td>
+              <td><code>/history/{prompt_id}</code>로 결과 파일을 회수</td>
+            </tr>
+            <tr>
+              <td><code>execution_error</code> / <code>execution_interrupted</code></td>
+              <td>프롬프트·노드·예외 정보</td>
+              <td>즉시 실패·취소 표시</td>
+              <td>2초 폴링보다 빠른 사용자 피드백 가능</td>
+            </tr>
+            <tr>
+              <td><code>GET /queue</code></td>
+              <td><code>queue_running</code>, <code>queue_pending</code></td>
+              <td>개별 <code>prompt_id</code>의 현재 실행/대기 여부와 순서 복구</td>
+              <td>스냅샷이므로 연결 복구·폴백에 적합</td>
+            </tr>
+            <tr>
+              <td>WebSocket binary frame</td>
+              <td>생성 중 latent preview 이미지</td>
+              <td>선택적으로 미리보기 제공</td>
+              <td>이번 진행률 개선에는 필수 아님</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="alert alert-report mb-0">
+        표준 <code>KSampler</code>는 내부적으로 <code>ProgressBar(steps)</code>를 만들고 매 콜백마다 <code>update_absolute(step + 1, total_steps)</code>를 호출한다. 서버는 이 값을 그대로 <code>progress</code> WebSocket 메시지로 전송한다. 즉, 20스텝이면 실제 <code>1/20 … 20/20</code>을 받을 수 있다.
+      </div>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">권장 사용자 표시 방식</h2>
+      <p>정확해 보이는 하나의 “전체 퍼센트”를 억지로 만들기보다, 상태마다 신뢰할 수 있는 값을 보여주는 편이 좋다.</p>
+      <div class="code-panel mb-3">
+        <div class="mb-2"><span class="status-label">대기</span> 큐 2번째 · 예상 대기 1분 20초</div>
+        <div class="mb-2"><span class="status-label">실행 준비</span> 모델 로드 중</div>
+        <div class="mb-2"><span class="status-label">샘플링</span> KSampler · 12 / 20 steps · 60%</div>
+        <div class="mb-2"><span class="status-label">후처리</span> VAE Decode / 저장 중</div>
+        <div><span class="status-label">완료</span> 100%</div>
+      </div>
+      <ul class="mb-0">
+        <li><strong>샘플링 중:</strong> WebSocket 실측 퍼센트를 최우선 사용한다.</li>
+        <li><strong>진행 훅이 없는 노드:</strong> 퍼센트를 계속 밀어 올리지 말고 현재 노드/단계 이름을 표시한다.</li>
+        <li><strong>샘플러 100% 이후:</strong> 전체 완료 이벤트 전까지 “후처리 중”으로 표시한다. 100% 완료처럼 보이게 하지 않는다.</li>
+        <li><strong>연결 끊김·미지원 서버:</strong> 기존 중앙값 진행률을 <em>예상</em>이라고 명시해 폴백한다.</li>
+        <li><strong>큐 대기:</strong> 현재 중앙값 ETA를 유지하되, <code>/queue</code>의 실제 순서와 함께 보여준다.</li>
+      </ul>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">CoNAI 적용 구조</h2>
+      <div class="flow mb-4">
+        <div class="flow-step" data-step="1">
+          <strong>WebSocket 선연결</strong>
+          <div class="small-note mt-1"><code>/ws?clientId=conai-job-{id}</code></div>
+        </div>
+        <div class="flow-step" data-step="2">
+          <strong>프롬프트 제출</strong>
+          <div class="small-note mt-1">같은 <code>client_id</code>로 <code>POST /prompt</code></div>
+        </div>
+        <div class="flow-step" data-step="3">
+          <strong>이벤트 정규화</strong>
+          <div class="small-note mt-1"><code>prompt_id</code>가 일치하는 이벤트만 수용</div>
+        </div>
+        <div class="flow-step" data-step="4">
+          <strong>CoNAI SSE 전달</strong>
+          <div class="small-note mt-1"><code>queue.job.progress</code> 이벤트 추가</div>
+        </div>
+        <div class="flow-step" data-step="5">
+          <strong>UI 실측 우선</strong>
+          <div class="small-note mt-1">실측값 → 예상값 순으로 폴백</div>
+        </div>
+      </div>
+
+      <h3 class="h6">권장 진행률 계약 예시</h3>
+      <pre class="mb-4">{
+  "job_id": 1842,
+  "provider_job_id": "...prompt uuid...",
+  "source": "comfyui_ws",
+  "phase": "sampling",
+  "node_id": "3",
+  "node_type": "KSampler",
+  "value": 12,
+  "max": 20,
+  "percent": 60,
+  "updated_at": "2026-08-07T07:40:00.000Z"
+}</pre>
+
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+          <thead>
+            <tr>
+              <th>영역</th>
+              <th>예상 변경 지점</th>
+              <th>역할</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Backend / ComfyUI</td>
+              <td class="source-path">backend/src/services/comfyuiService.ts<br>backend/src/services/comfyui/comfyProgressMonitor.ts (신규 후보)</td>
+              <td>WebSocket 연결, 재연결, 이벤트 파싱, 기존 히스토리 폴링 폴백</td>
+            </tr>
+            <tr>
+              <td>Backend / Queue</td>
+              <td class="source-path">backend/src/services/generation-queue/queueJobExecutors.ts</td>
+              <td>ComfyUI 진행 이벤트를 CoNAI 잡 ID와 연결</td>
+            </tr>
+            <tr>
+              <td>Backend / Events</td>
+              <td class="source-path">backend/src/types/runtimeEvents.ts<br>backend/src/services/runtime-events/runtimeEventPublishers.ts</td>
+              <td><code>queue.job.progress</code> 계약과 계정별 SSE 발행</td>
+            </tr>
+            <tr>
+              <td>Frontend / Events</td>
+              <td class="source-path">frontend/src/lib/runtime-events-types.ts<br>frontend/src/features/runtime-events/use-runtime-event-query-bridge.ts</td>
+              <td>고빈도 이벤트를 목록 재조회 없이 캐시에 직접 반영</td>
+            </tr>
+            <tr>
+              <td>Frontend / UI</td>
+              <td class="source-path">frontend/src/features/image-generation/components/generation-queue-ui.ts<br>frontend/src/features/image-generation/components/generation-queue-header-widget.tsx</td>
+              <td>실측 스텝·현재 단계 표시, 기존 시간 기반 값은 폴백으로 유지</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">구현 시 중요한 세부사항</h2>
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="finding success">
+            <h3 class="h6">1. 연결을 먼저 열고 제출</h3>
+            <p class="mb-0">WebSocket이 열린 뒤 같은 <code>client_id</code>로 프롬프트를 제출해야 첫 이벤트를 놓치지 않는다. CoNAI의 기존 <code>conai-job-{id}</code> 값을 그대로 재사용할 수 있다.</p>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="finding">
+            <h3 class="h6">2. 반드시 prompt_id로 필터링</h3>
+            <p class="mb-0">서버별·잡별 이벤트가 섞일 수 있으므로 <code>prompt_id</code>가 현재 잡과 일치할 때만 반영한다. 재연결 직후 <code>executing</code> 메시지는 현재 소스에서 <code>prompt_id</code>가 없을 수 있어 단독 신뢰하면 안 된다.</p>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="finding">
+            <h3 class="h6">3. executed를 노드 완료로 쓰지 않기</h3>
+            <p class="mb-0">공식 문서상 <code>executed</code>는 UI 출력을 반환하는 노드에서만 온다. 현재 노드 전환은 <code>executing</code>, 전체 성공은 <code>execution_success</code> 또는 <code>executing.node === null</code>로 판단한다.</p>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="finding">
+            <h3 class="h6">4. 이벤트 빈도 제한</h3>
+            <p class="mb-0">ComfyUI 자체가 일반 진행 이벤트를 최소 100ms·0.5% 변화로 제한한다. CoNAI SSE는 250~500ms 단위로 최신값만 합쳐 보내면 다중 잡에서도 충분하다.</p>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="finding warning">
+            <h3 class="h6">5. 커스텀 노드 한계</h3>
+            <p class="mb-0"><code>ProgressBar</code> 훅을 호출하지 않는 커스텀 노드는 세부 퍼센트를 보내지 않는다. 이때는 현재 노드명과 기존 예상값을 함께 사용한다.</p>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="finding warning">
+            <h3 class="h6">6. backend_type 범위</h3>
+            <p class="mb-0">우선 <code>backend_type = comfyui</code>인 표준 직접 서버에 적용한다. 현재 별도 실행 경로인 <code>modal</code>은 같은 WebSocket 계약을 보장하지 않으므로 기존 방식 유지가 안전하다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">권장 도입 순서</h2>
+      <ol class="mb-0">
+        <li class="mb-2"><strong>수집:</strong> 표준 ComfyUI 서버에 잡별 WebSocket 모니터를 연결하고, 성공·오류 시 기존 <code>/history</code> 결과 수집으로 이어 붙인다.</li>
+        <li class="mb-2"><strong>전달:</strong> <code>queue.job.progress</code>를 기존 계정 제한 SSE에 추가하고, 최신 상태를 메모리 레지스트리로 유지한다.</li>
+        <li class="mb-2"><strong>표시:</strong> ComfyUI 실행 중에는 실측 스텝을 우선 표시하고, 미수신·연결 끊김일 때만 현재 중앙값 계산으로 폴백한다.</li>
+        <li class="mb-2"><strong>복구:</strong> WebSocket 재연결 시 같은 <code>clientId</code>를 사용하고 <code>/queue</code>·<code>/history</code>로 상태를 재동기화한다.</li>
+        <li><strong>검증:</strong> 표준 KSampler 20스텝, 캐시 재사용, 2개 큐, 강제 연결 끊김, 오류·중단, 진행 훅 없는 커스텀 노드 케이스를 확인한다.</li>
+      </ol>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">최종 판단</h2>
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+          <tbody>
+            <tr>
+              <th style="width: 26%">실행 중 오차 개선</th>
+              <td><strong style="color: var(--report-success)">매우 큼</strong> — 시간 추정 대신 실제 스텝 카운터 사용</td>
+            </tr>
+            <tr>
+              <th>큐 ETA 개선</th>
+              <td><strong style="color: var(--report-warning)">제한적</strong> — 실제 순서는 확인 가능하지만 미래 작업시간은 계속 추정</td>
+            </tr>
+            <tr>
+              <th>CoNAI 적합성</th>
+              <td><strong style="color: var(--report-success)">높음</strong> — client_id, 큐 잡 ID, SSE 전달 구조가 이미 존재</td>
+            </tr>
+            <tr>
+              <th>구현 난이도</th>
+              <td>중간 — WebSocket 수명주기·폴백·이벤트 계약·UI 우선순위 변경 필요</td>
+            </tr>
+            <tr>
+              <th>권장 결정</th>
+              <td><strong>표준 ComfyUI 서버부터 적용하고 기존 중앙값 로직은 큐 ETA와 폴백으로 보존</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="report-section mb-4">
+      <h2 class="h4 mb-3">근거 자료</h2>
+      <h3 class="h6">ComfyUI 공식 문서</h3>
+      <ul>
+        <li><a href="https://docs.comfy.org/development/comfyui-server/comms_messages">Server Messages</a> — 내장 WebSocket 이벤트와 필드 정의</li>
+        <li><a href="https://docs.comfy.org/development/comfyui-server/comms_routes">Server Routes</a> — <code>/ws</code>, <code>/prompt</code>, <code>/queue</code>, <code>/history</code> 역할</li>
+        <li><a href="https://docs.comfy.org/development/comfyui-server/api-examples">API Examples</a> — WebSocket으로 완료를 감지하고 History로 결과를 받는 공식 예제</li>
+      </ul>
+      <h3 class="h6">ComfyUI 공식 소스</h3>
+      <ul>
+        <li><a href="https://github.com/Comfy-Org/ComfyUI/blob/0ab8332bfa41c695b1c104a6535ff1fde81c7939/server.py#L269-L290">server.py:269-290</a> — <code>/ws?clientId=...</code> 연결과 초기 상태·재연결 동작</li>
+        <li><a href="https://github.com/Comfy-Org/ComfyUI/blob/0ab8332bfa41c695b1c104a6535ff1fde81c7939/server.py#L1072-L1133">server.py:1072-1133</a> — <code>POST /prompt</code>, <code>client_id</code>, <code>prompt_id</code>, 큐 번호</li>
+        <li><a href="https://github.com/Comfy-Org/ComfyUI/blob/0ab8332bfa41c695b1c104a6535ff1fde81c7939/main.py#L435-L450">main.py:435-450</a> — <code>progress</code> 메시지의 <code>value/max/prompt_id/node</code> 생성</li>
+        <li><a href="https://github.com/Comfy-Org/ComfyUI/blob/0ab8332bfa41c695b1c104a6535ff1fde81c7939/main.py#L359-L384">main.py:359-384</a> — 실행 종료 시 <code>executing.node = null</code> 전송</li>
+        <li><a href="https://github.com/Comfy-Org/ComfyUI/blob/0ab8332bfa41c695b1c104a6535ff1fde81c7939/comfy/utils.py#L1264-L1305">comfy/utils.py:1264-1305</a> — 진행 이벤트 100ms·0.5% 스로틀</li>
+        <li><a href="https://github.com/Comfy-Org/ComfyUI/blob/0ab8332bfa41c695b1c104a6535ff1fde81c7939/latent_preview.py#L112-L130">latent_preview.py:112-130</a> — KSampler 스텝을 <code>ProgressBar</code>로 전달</li>
+        <li><a href="https://github.com/Comfy-Org/ComfyUI/blob/0ab8332bfa41c695b1c104a6535ff1fde81c7939/nodes.py#L1564-L1582">nodes.py:1564-1582</a> — 기본 KSampler가 진행 콜백을 연결하는 경로</li>
+      </ul>
+      <p class="small-note mb-0">공식 소스 기준 커밋: <code>0ab8332bfa41c695b1c104a6535ff1fde81c7939</code> (ComfyUI master, 2026-08-07 조회). 외부 자료의 설명보다 공식 문서와 이 커밋의 구현을 우선해 판단했다.</p>
+    </section>
+
+    <footer class="text-secondary small px-1">
+      <p class="mb-1">범위: 문서·소스·현재 CoNAI 코드의 읽기 전용 조사. 구현 변경이나 실제 생성 요청은 수행하지 않았다.</p>
+      <p class="mb-0">보고서 경로: <span class="source-path">docs/reports/COMFYUI_REALTIME_PROGRESS_INVESTIGATION_2026-08-07.html</span></p>
+    </footer>
+  </main>
+</body>
+</html>

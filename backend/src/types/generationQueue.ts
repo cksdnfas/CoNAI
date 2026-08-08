@@ -20,6 +20,20 @@ export type GenerationQueueProviderSubmitState =
 /** 취소 요청의 출처. 스테일 스위퍼/기동 reconcile 이 만든 취소를 사용자 취소와 구분한다. */
 export type GenerationQueueCancelOrigin = 'user' | 'graph' | 'system' | 'reconcile'
 
+export type GenerationQueueProgressPhase = 'preparing' | 'executing' | 'sampling' | 'finalizing'
+
+/** Latest trusted progress sample received directly from a standard ComfyUI server. */
+export interface GenerationQueueLiveProgress {
+  source: 'comfyui_ws'
+  phase: GenerationQueueProgressPhase
+  node_id: string | null
+  node_label: string | null
+  value: number | null
+  max: number | null
+  percent: number | null
+  updated_at: string
+}
+
 export interface GenerationQueueJobRecord {
   id: number
   service_type: ServiceType
@@ -63,6 +77,7 @@ export interface GenerationQueueJobRecord {
   estimated_wait_seconds?: number | null
   estimated_total_seconds?: number | null
   estimated_duration_seconds?: number | null
+  live_progress?: GenerationQueueLiveProgress | null
   is_mine?: boolean
 }
 

@@ -82,7 +82,8 @@ function ensureInvalidationSubscription() {
   invalidationSubscribed = true
   try {
     subscribeToRuntimeEvents((record) => {
-      if (record.topic === 'generation-queue') {
+      // Live progress is decorated outside this TTL cache and patched directly over SSE.
+      if (record.topic === 'generation-queue' && record.name !== 'queue.job.progress') {
         invalidateQueueListSnapshots()
       }
     })

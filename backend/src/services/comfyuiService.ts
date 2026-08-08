@@ -2,6 +2,8 @@ import axios, { AxiosInstance } from 'axios';
 import * as fs from 'fs';
 import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse } from '../types/workflow';
 import type { ComfyUIBackendType, ComfyUIQueueState, ComfyUIServerRecord, ComfyUIServerRuntimeStatus } from '../types/comfyuiServer';
+import type { GenerationQueueLiveProgress } from '../types/generationQueue';
+import { ComfyProgressMonitor } from './comfyui/comfyProgressMonitor';
 import { resolveAxiosErrorMessage } from './comfyui/errors';
 import { downloadComfyOutputFile, uploadComfyInputImage } from './comfyui/fileTransfer';
 import {
@@ -29,6 +31,10 @@ import { substituteComfyPromptData } from './comfyui/workflowSubstitution';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
 export const COMFYUI_NODE_VALIDATION_FAILURE_CODE = 'comfy_node_validation';
+
+export function buildComfyQueueClientId(queueJobId: number) {
+  return `conai-job-${queueJobId}`;
+}
 
 /** Preserve structured Comfy node errors while remaining compatible with queue error messages. */
 export class ComfyUINodeValidationError extends Error {
@@ -196,6 +202,15 @@ export class ComfyUIService {
       : '';
   }
 
+  /** Prepare one job-scoped live progress socket. The caller starts it before POST /prompt. */
+  createProgressMonitor(
+    queueJobId: number,
+    workflow: Record<string, any>,
+    onProgress: (progress: GenerationQueueLiveProgress) => void,
+  ) {
+    return new ComfyProgressMonitor(this.apiEndpoint, buildComfyQueueClientId(queueJobId), workflow, onProgress);
+  }
+
   /** Load the exact allowed option list for one node input from the target ComfyUI server. */
   async getNodeInputOptions(classType: string, inputKey: string): Promise<string[] | null> {
     if (this.isModalBackend()) {
@@ -246,7 +261,7 @@ export class ComfyUIService {
 
     if (queueJobId !== null && queueJobId !== undefined) {
       // PJ-3: prompt_id 를 못 받아도 /queue 에서 우리 잡을 되찾을 수 있게 마커를 각인한다.
-      requestBody.client_id = `conai-job-${queueJobId}`;
+      requestBody.client_id = buildComfyQueueClientId(queueJobId);
       requestBody.extra_data = {
         [COMFY_QUEUE_JOB_MARKER_KEY]: queueJobId,
       };

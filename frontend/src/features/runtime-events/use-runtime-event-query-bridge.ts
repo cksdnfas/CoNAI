@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
-import type { QueueJobEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
+import type { QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
 import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
 
 /**
@@ -109,6 +109,41 @@ function applyQueueEventToCaches(queryClient: QueryClient, payload: QueueJobEven
   })
 }
 
+/** Apply a high-frequency progress sample directly; no queue-list refetch is needed. */
+function applyQueueProgressEventToCaches(queryClient: QueryClient, payload: QueueJobProgressEventPayload) {
+  const caches = queryClient.getQueriesData<QueueListResponse>({ queryKey: [QUEUE_QUERY_KEY_PREFIX] })
+
+  caches.forEach(([queryKey, cached]) => {
+    if (!cached?.records) {
+      return
+    }
+
+    const matchedIndex = cached.records.findIndex((record) => record.id === payload.job_id)
+    if (matchedIndex < 0) {
+      return
+    }
+
+    const nextRecords = [...cached.records]
+    nextRecords[matchedIndex] = {
+      ...nextRecords[matchedIndex],
+      // A prompt-filtered ComfyUI progress frame is itself proof that upstream execution started.
+      status: 'running',
+      provider_job_id: payload.provider_job_id ?? nextRecords[matchedIndex].provider_job_id,
+      live_progress: {
+        source: payload.source,
+        phase: payload.phase,
+        node_id: payload.node_id,
+        node_label: payload.node_label,
+        value: payload.value,
+        max: payload.max,
+        percent: payload.percent,
+        updated_at: payload.updated_at,
+      },
+    }
+    queryClient.setQueryData<QueueListResponse>(queryKey, { ...cached, records: nextRecords })
+  })
+}
+
 /**
  * Bridge runtime events into the query cache.
  * 이벤트 폭주(대량 enqueue)에서도 invalidate 는 디바운스로 한 번만 나간다.
@@ -164,6 +199,11 @@ export function useRuntimeEventQueryBridge() {
       case 'queue.job.created': {
         // 신규 행의 전체 필드(대기 순번/ETA)를 모르므로 패치 없이 무효화만 한다.
         scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX], QUEUE_INVALIDATE_DEBOUNCE_MS)
+        return
+      }
+      case 'queue.job.progress': {
+        const progressPayload = envelope.payload as QueueJobProgressEventPayload
+        applyQueueProgressEventToCaches(queryClient, progressPayload)
         return
       }
       case 'history.record.created':

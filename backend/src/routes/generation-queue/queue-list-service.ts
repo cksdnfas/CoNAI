@@ -4,6 +4,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { computeQueueEtas, computeQueuePositions } from './queue-eta'
 import { buildQueueListSnapshotCacheKey, readQueueListSnapshot } from './queue-list-snapshot-cache'
+import { getGenerationQueueLiveProgress } from '../../services/generation-queue/queueProgressRegistry'
 import {
   ACTIVE_QUEUE_STATUSES,
   buildQueueRequesterUsernameMap,
@@ -164,6 +165,8 @@ export function buildGenerationQueueListResponse(req: Request) {
     success: true,
     records: snapshot.records.map((record) => ({
       ...record,
+      // Progress is process-local and high frequency, so decorate it outside the shared TTL snapshot.
+      live_progress: record.status === 'running' ? getGenerationQueueLiveProgress(record.id) : null,
       is_mine: requesterAccountId !== null && record.requested_by_account_id === requesterAccountId,
     })),
     total: snapshot.total,

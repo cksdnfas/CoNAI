@@ -13,12 +13,14 @@ import {
   getGenerationQueueDurationLabel,
   getGenerationQueueLaneLabel,
   getGenerationQueueProgressPercent,
+  getGenerationQueueProgressStageLabel,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
   getGenerationQueueStartLabel,
   getGenerationQueueStatusLabel,
   getGenerationQueueWaitLabel,
   getGenerationQueueWorkflowLabel,
+  hasGenerationQueueLiveProgress,
   shouldEnableFilteredQueueHeaderQuery,
 } from '../features/image-generation/components/generation-queue-ui'
 
@@ -306,6 +308,64 @@ function assertProgressPercent() {
     0,
     'invalid start timestamps should be treated as zero elapsed time',
   )
+
+  const liveSamplingRecord = makeQueueRecord({
+    status: 'running',
+    started_at: startedThirtySecondsAgo,
+    estimated_duration_seconds: 120,
+    estimated_total_seconds: 90,
+    live_progress: {
+      source: 'comfyui_ws',
+      phase: 'sampling',
+      node_id: '3',
+      node_label: 'KSampler',
+      value: 12,
+      max: 20,
+      percent: 60,
+      updated_at: new Date(nowMs).toISOString(),
+    },
+  })
+  assertEqual(hasGenerationQueueLiveProgress(liveSamplingRecord), true, 'running ComfyUI jobs should identify trusted WebSocket progress')
+  assertEqual(getGenerationQueueProgressPercent(liveSamplingRecord, nowMs), 60, 'live ComfyUI percent must override the median-time estimate')
+  assertEqual(
+    getGenerationQueueProgressStageLabel(liveSamplingRecord, translate, formatNumber),
+    'KSampler · 12 / 20 스텝',
+    'live progress should show only the current node and actual steps',
+  )
+
+  const liveExecutingRecord = makeQueueRecord({
+    status: 'running',
+    started_at: startedThirtySecondsAgo,
+    estimated_duration_seconds: 120,
+    estimated_total_seconds: 90,
+    live_progress: {
+      source: 'comfyui_ws',
+      phase: 'executing',
+      node_id: '8',
+      node_label: 'VAE Decode',
+      value: null,
+      max: null,
+      percent: null,
+      updated_at: new Date(nowMs).toISOString(),
+    },
+  })
+  assertEqual(getGenerationQueueProgressPercent(liveExecutingRecord, nowMs), null, 'a live node without a progress hook must not keep inflating estimated percent')
+  assertEqual(getGenerationQueueProgressStageLabel(liveExecutingRecord, translate, formatNumber), 'VAE Decode', 'a node without progress hooks should still expose its current stage')
+
+  const finalizingRecord = makeQueueRecord({
+    status: 'running',
+    live_progress: {
+      source: 'comfyui_ws',
+      phase: 'finalizing',
+      node_id: null,
+      node_label: null,
+      value: null,
+      max: null,
+      percent: null,
+      updated_at: new Date(nowMs).toISOString(),
+    },
+  })
+  assertEqual(getGenerationQueueProgressStageLabel(finalizingRecord, translate, formatNumber), '후처리 중', 'sampler completion must switch to finalizing instead of showing false 100% completion')
 }
 
 function assertHeaderQuerySnapshotSelection() {

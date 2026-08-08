@@ -5,6 +5,7 @@ import { COMFYUI_EXECUTION_CANCELLED_MESSAGE, ComfyUIService } from './comfyuiSe
 import { moveFileIntoWorkflowArtifacts, writeWorkflowArtifactDirectoryThumbnail } from './workflowArtifactService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { WorkflowRecord } from '../types/workflow'
+import type { GenerationQueueLiveProgress } from '../types/generationQueue'
 
 export interface ComfyGenerationRepresentativeImage {
   originalPath: string
@@ -23,6 +24,8 @@ export interface ExecuteComfyGenerationInput {
   onUpstreamSubmitting?: () => void | Promise<void>
   /** PJ-2: 응답 파싱과 같은 tick 에서 핸들을 지속시킨다(동기 콜백이어야 한다). */
   onPromptAccepted?: (promptId: string) => void
+  /** Trusted node/step progress received from the direct ComfyUI WebSocket. */
+  onProgress?: (progress: GenerationQueueLiveProgress) => void
   shouldCancel?: () => boolean | Promise<boolean>
   onCancelRequested?: (promptId: string) => void | Promise<void>
   /** PJ-3: `/queue` 역매칭용 CoNAI 잡 마커 */
@@ -116,6 +119,7 @@ export async function executeComfyGeneration(
     onPromptSubmitted,
     onUpstreamSubmitting,
     onPromptAccepted,
+    onProgress,
     shouldCancel,
     onCancelRequested,
     queueJobId,
@@ -124,43 +128,54 @@ export async function executeComfyGeneration(
   const normalizedWorkflow = normalizeCoNaiArtifactFileOutputNodes(workflow)
 
   const isArtifactWorkflow = artifactWorkflow?.result_view_mode === 'artifact_explorer'
-
-  // PJ-1: 제출 의사를 먼저 커밋해야 프로세스가 죽어도 orphan 복구 근거가 남는다.
-  await onUpstreamSubmitting?.()
-
+  const progressMonitor = !comfyService.isModalBackend() && queueJobId != null && onProgress
+    ? comfyService.createProgressMonitor(queueJobId, normalizedWorkflow, onProgress)
+    : null
   let promptId: string
-  if (comfyService.isModalBackend()) {
-    // modal 핸들은 클라이언트가 만들기 때문에 POST 전에 곧바로 지속시킬 수 있다(PJ-4).
-    promptId = comfyService.createProviderJobId()
-    onPromptAccepted?.(promptId)
-  } else {
-    promptId = await comfyService.submitPrompt(normalizedWorkflow, {
-      signal,
-      queueJobId,
-      onAccepted: onPromptAccepted,
-    })
+  let collectedOutputs: Awaited<ReturnType<ComfyUIService['collectGeneratedOutputs']>>
+  try {
+    // Open /ws first so a fast workflow cannot finish before its first progress frame is observed.
+    await progressMonitor?.start(signal)
+
+    // PJ-1: 제출 의사를 먼저 커밋해야 프로세스가 죽어도 orphan 복구 근거가 남는다.
+    await onUpstreamSubmitting?.()
+
+    if (comfyService.isModalBackend()) {
+      // modal 핸들은 클라이언트가 만들기 때문에 POST 전에 곧바로 지속시킬 수 있다(PJ-4).
+      promptId = comfyService.createProviderJobId()
+      onPromptAccepted?.(promptId)
+    } else {
+      promptId = await comfyService.submitPrompt(normalizedWorkflow, {
+        signal,
+        queueJobId,
+        onAccepted: onPromptAccepted,
+      })
+      progressMonitor?.setPromptId(promptId)
+    }
+
+    await onPromptSubmitted?.(promptId)
+
+    if (await shouldCancel?.()) {
+      await onCancelRequested?.(promptId)
+      throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
+    }
+
+    collectedOutputs = comfyService.isModalBackend()
+      ? await comfyService.runModalWorkflowAndCollectOutputs(normalizedWorkflow, promptId, {
+        shouldCancel,
+        onCancelRequested,
+        signal,
+        onlyFinalOutput: !isArtifactWorkflow,
+      })
+      : await comfyService.collectGeneratedOutputs(promptId, {
+        shouldCancel,
+        onCancelRequested,
+        signal,
+        onlyFinalOutput: !isArtifactWorkflow,
+      })
+  } finally {
+    progressMonitor?.close()
   }
-
-  await onPromptSubmitted?.(promptId)
-
-  if (await shouldCancel?.()) {
-    await onCancelRequested?.(promptId)
-    throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
-  }
-
-  const collectedOutputs = comfyService.isModalBackend()
-    ? await comfyService.runModalWorkflowAndCollectOutputs(normalizedWorkflow, promptId, {
-      shouldCancel,
-      onCancelRequested,
-      signal,
-      onlyFinalOutput: !isArtifactWorkflow,
-    })
-    : await comfyService.collectGeneratedOutputs(promptId, {
-      shouldCancel,
-      onCancelRequested,
-      signal,
-      onlyFinalOutput: !isArtifactWorkflow,
-    })
 
   if (await shouldCancel?.()) {
     throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)

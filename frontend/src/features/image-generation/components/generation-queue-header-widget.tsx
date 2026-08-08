@@ -21,18 +21,14 @@ import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } 
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
   canRetryGenerationQueueCancellation,
-  getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueHeaderRefreshTargets,
-  getGenerationQueueDurationLabel,
   getGenerationQueueProgressPercent,
-  getGenerationQueueLaneLabel,
-  getGenerationQueueRemainingLabel,
+  getGenerationQueueProgressStageLabel,
   getGenerationQueueRequesterLabel,
-  getGenerationQueueStartLabel,
   getGenerationQueueStatusLabel,
-  getGenerationQueueWaitLabel,
   getGenerationQueueWorkflowLabel,
+  hasGenerationQueueLiveProgress,
   shouldEnableFilteredQueueHeaderQuery,
 } from './generation-queue-ui'
 import {
@@ -119,32 +115,6 @@ function parseQueueFilter(value: QueueFilterValue) {
 
   return { serviceType: undefined, workflowId: undefined }
 }
-
-function getQueueProgressToneClass(record: GenerationQueueJobRecord) {
-  if (record.status === 'running') {
-    return 'bg-primary'
-  }
-
-  return 'bg-secondary'
-}
-
-function formatQueueCompactStartTime(value: string | null | undefined, locale: string) {
-  if (!value) {
-    return null
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
-  return new Intl.DateTimeFormat(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
 
 /** Render the global generation queue widget beside the header search action. */
 export function GenerationQueueHeaderWidget() {
@@ -421,32 +391,18 @@ export function GenerationQueueHeaderWidget() {
                     const isCancelRequested = record.cancel_requested > 0
                     const workflowLabel = getGenerationQueueWorkflowLabel(record, t)
                     const creatorLabel = getGenerationQueueRequesterLabel(record, t)
-                    const remainingLabel = getGenerationQueueRemainingLabel(record, t, formatNumber)
-                    const laneLabel = getGenerationQueueLaneLabel(record, t, formatNumber)
-                    const waitLabel = getGenerationQueueWaitLabel(record, t, formatNumber)
-                    const startLabel = getGenerationQueueStartLabel(record, t, locale)
-                    const durationLabel = getGenerationQueueDurationLabel(record, t, formatNumber)
+                    const isRunning = record.status === 'running'
+                    const isLiveProgress = hasGenerationQueueLiveProgress(record)
                     const progressPercent = getGenerationQueueProgressPercent(record)
-                    const shownProgressPercent = progressPercent == null ? null : Math.min(100, Math.max(progressPercent, progressPercent > 0 ? 8 : 0))
+                    const progressStageLabel = getGenerationQueueProgressStageLabel(record, t, formatNumber)
                     // CR-3: 업스트림 취소가 실패했을 때 사용자가 재시도할 수 있어야 한다.
                     const canRetryCancel = canRetryGenerationQueueCancellation(record)
                     const hasRecordPermission = authStatusQuery.data?.isAdmin === true || record.is_mine === true
                     const canManageRecord = (!isCancelRequested || canRetryCancel) && hasRecordPermission
-                    const isRunning = record.status === 'running'
-                    const startTimeLabel = formatQueueCompactStartTime(record.started_at ?? record.queued_at, locale)
-                    const elapsedLabel = getGenerationQueueElapsedLabel(record, t, formatNumber)
                     const statusLabel = isCancelRequested ? t('image-generation.components.generation.queue.header.widget.cancel.requested') : getGenerationQueueStatusLabel(record, t)
-                    const idTimingLabel = [
-                      `#${record.id}`,
-                      startTimeLabel,
-                      elapsedLabel,
-                    ].filter(Boolean).join(' · ')
-                    const operationalMetaLabel = [
-                      laneLabel,
-                      waitLabel,
-                      startLabel,
-                      durationLabel,
-                    ].filter(Boolean).join(' · ')
+                    const queueLabel = record.queue_position != null && record.queue_position > 0
+                      ? t({ ko: '대기열 {position}', en: 'Queue {position}' }, { position: formatNumber(record.queue_position) })
+                      : statusLabel
 
                     return (
                       <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
@@ -456,19 +412,36 @@ export function GenerationQueueHeaderWidget() {
                               <Badge variant={isCancelRequested ? 'outline' : 'secondary'} className={cn(isCancelRequested ? 'border-amber-500/40 text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</Badge>
                               <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
                             </div>
-                            <div className="flex shrink-0 items-center gap-2 font-medium text-foreground">
-                              <span>{remainingLabel ? t('image-generation.components.generation.queue.header.widget.about.value', { remainingLabel }) : t('image-generation.components.generation.queue.header.widget.calculating')}</span>
-                              {progressPercent != null ? <span className="text-muted-foreground">{progressPercent}%</span> : null}
-                            </div>
+                            {isRunning ? (
+                              <div className="shrink-0 text-[11px] font-medium text-foreground">
+                                {progressPercent != null
+                                  ? (isLiveProgress
+                                    ? t({ ko: '{percent}%', en: '{percent}%' }, { percent: formatNumber(progressPercent) })
+                                    : t({ ko: '예상 {percent}%', en: 'Est. {percent}%' }, { percent: formatNumber(progressPercent) }))
+                                  : t({ ko: '진행 중', en: 'In progress' })}
+                              </div>
+                            ) : null}
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          {isRunning ? (
                             <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-background/60">
-                              <div
-                                className={cn('h-full rounded-full transition-[width] duration-500', getQueueProgressToneClass(record))}
-                                style={{ width: `${shownProgressPercent ?? 0}%` }}
-                              />
+                              {progressPercent != null ? (
+                                <div
+                                  className="h-full rounded-full bg-primary transition-[width] duration-300"
+                                  style={{ width: `${progressPercent}%` }}
+                                />
+                              ) : (
+                                <div className="h-full w-1/3 animate-pulse rounded-full bg-primary/70" />
+                              )}
                             </div>
+                          ) : null}
+
+                          <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+                            <span className="min-w-0 truncate" title={isRunning ? progressStageLabel ?? undefined : queueLabel}>
+                              {isRunning ? progressStageLabel : queueLabel}
+                            </span>
+                            <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+                              <span className="max-w-28 truncate">{record.is_mine ? t('image-generation.components.generation.queue.header.widget.value.me', { creatorLabel }) : creatorLabel}</span>
                             {canManageRecord ? (
                               <Button
                                 type="button"
@@ -491,17 +464,8 @@ export function GenerationQueueHeaderWidget() {
                                 {isRunning ? <Square className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </Button>
                             ) : null}
-                          </div>
-
-                          <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
-                            <span>{idTimingLabel}</span>
-                            <span className="truncate">{record.is_mine ? t('image-generation.components.generation.queue.header.widget.value.me', { creatorLabel }) : creatorLabel}</span>
-                          </div>
-                          {operationalMetaLabel ? (
-                            <div className="truncate text-[10px] text-muted-foreground" title={operationalMetaLabel}>
-                              {operationalMetaLabel}
                             </div>
-                          ) : null}
+                          </div>
                         </div>
                       </div>
                     )

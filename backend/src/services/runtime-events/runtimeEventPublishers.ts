@@ -4,10 +4,12 @@ import type {
   GraphScheduleEventPayload,
   HistoryRecordEventPayload,
   QueueJobEventPayload,
+  QueueJobProgressEventPayload,
   QueueJobEventStatus,
   RuntimeJobHintPayload,
 } from '../../types/runtimeEvents'
 import type { GenerationQueueJobRecord } from '../../types/generationQueue'
+import type { GenerationQueueLiveProgress } from '../../types/generationQueue'
 
 /**
  * 이벤트 payload 조립을 한 곳에 모아 둔다.
@@ -84,6 +86,27 @@ export function publishQueueJobEvent(
     visibility: accountId === null ? 'all' : 'account',
     accountId,
     payload: buildQueueJobPayload(job, options?.previousStatus ?? null),
+  })
+}
+
+/** Publish one throttled ComfyUI progress sample without invalidating queue snapshots. */
+export function publishQueueJobProgressEvent(
+  job: Pick<GenerationQueueJobRecord, 'id' | 'requested_by_account_id' | 'provider_job_id'>,
+  progress: GenerationQueueLiveProgress,
+): void {
+  const accountId = job.requested_by_account_id ?? null
+  const payload: QueueJobProgressEventPayload = {
+    job_id: job.id,
+    provider_job_id: job.provider_job_id ?? null,
+    ...progress,
+  }
+
+  publishRuntimeEvent({
+    name: 'queue.job.progress',
+    topic: 'generation-queue',
+    visibility: accountId === null ? 'all' : 'account',
+    accountId,
+    payload,
   })
 }
 

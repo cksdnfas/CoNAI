@@ -17,6 +17,7 @@ export type RuntimeEventName =
   | 'queue.job.created'
   | 'queue.job.status'
   | 'queue.job.cancel-requested'
+  | 'queue.job.progress'
   | 'history.record.created'
   | 'history.record.status'
   | 'graph.schedule.changed'
@@ -78,6 +79,19 @@ export interface QueueJobEventPayload {
   provider_submit_started_at: string | null
   provider_cancel_state: string | null
   submit_attempt_count: number | null
+}
+
+export interface QueueJobProgressEventPayload {
+  job_id: number
+  provider_job_id: string | null
+  source: 'comfyui_ws'
+  phase: 'preparing' | 'executing' | 'sampling' | 'finalizing'
+  node_id: string | null
+  node_label: string | null
+  value: number | null
+  max: number | null
+  percent: number | null
+  updated_at: string
 }
 
 export interface HistoryRecordEventPayload {

@@ -121,14 +121,14 @@ assert.match(
   /export const DEFAULT_COMFY_MODEL_API_PATHS = \[/,
   'default ComfyUI model API paths should be shared by modal and inline refresh controls',
 )
-for (const pattern of [/onRefresh\?: \(\) => Promise<void> \| void/, /stopPropagation\(\)/, /RotateCcw/, /aria-label=\{refreshLabel\}/]) {
+for (const pattern of [/onRefresh\?: \(\) => Promise<void> \| void/, /stopPropagation\(\)/, /RotateCcw/, /aria-label=\{resolvedRefreshLabel\}/]) {
   assert.match(
     pathOptionTreeSelectSource,
     pattern,
     'path tree selects should support an inline refresh button without toggling the dropdown',
   )
 }
-for (const pattern of [/Search/, /<Input[\s\S]*placeholder="검색"/, /filterPathOptionTreeNodes/, /items=\{filteredTreeNodes\}/, /defaultExpandedIds=\{searchExpandedIds\}/]) {
+for (const pattern of [/Search/, /<Input[\s\S]*placeholder=\{t\(\{ ko: '검색', en: 'Search' \}\)\}/, /filterPathOptionTreeNodes/, /items=\{filteredTreeNodes\}/, /defaultExpandedIds=\{searchExpandedIds\}/]) {
   assert.match(
     pathOptionTreeSelectSource,
     pattern,
@@ -151,7 +151,7 @@ for (const pattern of [
 }
 assert.match(
   pathOptionTreeSelectSource,
-  /const selectedLabel = selectedNode\?\.label \?\? \(value \? getOptionDisplayLabel\(value\) : placeholder\)/,
+  /const selectedLabel = selectedNode\?\.label \?\? \(value \? getOptionDisplayLabel\(value, randomSelectionLabel\) : resolvedPlaceholder\)/,
   'path tree selects should show only the selected node label, including the placeholder label',
 )
 assert.doesNotMatch(
