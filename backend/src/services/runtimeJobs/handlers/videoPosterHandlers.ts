@@ -44,6 +44,7 @@ interface PendingPoster {
 
 const pending = new Map<string, PendingPoster>()
 const recentlyRequested = new Map<string, number>()
+const activePosterGenerations = new Set<string>()
 
 /** Bound the queue so a library full of unreadable videos cannot grow it forever. */
 const MAX_PENDING = 200
@@ -136,21 +137,31 @@ function takeNextPendingPoster(): PendingPoster | null {
  * Animated images (GIF/APNG) are decoded straight by sharp — spawning ffmpeg for
  * them would be pure overhead.
  */
-async function generatePoster(compositeHash: string, originalPath: string, fileType: string | null): Promise<boolean> {
-  if (!fs.existsSync(originalPath)) {
-    return false
+async function generatePoster(compositeHash: string, originalPath: string, fileType: string | null): Promise<boolean | null> {
+  if (activePosterGenerations.has(compositeHash)) {
+    return null
   }
 
-  const relativeThumbPath = fileType === 'animated'
-    ? await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash)
-    : await VideoFrameExtractor.generatePosterThumbnail(originalPath, compositeHash)
+  activePosterGenerations.add(compositeHash)
 
-  if (!fs.existsSync(path.join(runtimePaths.tempDir, relativeThumbPath))) {
-    return false
+  try {
+    if (!fs.existsSync(originalPath)) {
+      return false
+    }
+
+    const relativeThumbPath = fileType === 'animated'
+      ? await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash)
+      : await VideoFrameExtractor.generatePosterThumbnail(originalPath, compositeHash)
+
+    if (!fs.existsSync(path.join(runtimePaths.tempDir, relativeThumbPath))) {
+      return false
+    }
+
+    MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath })
+    return true
+  } finally {
+    activePosterGenerations.delete(compositeHash)
   }
-
-  MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath })
-  return true
 }
 
 /** Video/animated rows that still have no poster, oldest first. */
@@ -181,6 +192,7 @@ function selectPosterlessMedia(afterHash: string | null, limit: number): Array<{
 async function runQueuedPosters(ctx: RuntimeJobContext<VideoPosterJobParams>): Promise<VideoPosterJobResult> {
   let generated = 0
   let failed = 0
+  let skipped = 0
   let processed = 0
 
   ctx.flush({ total: pending.size, processed: 0, currentLabel: null, phase: 'poster' })
@@ -201,7 +213,10 @@ async function runQueuedPosters(ctx: RuntimeJobContext<VideoPosterJobParams>): P
         LIMIT 1
       `).get(next.compositeHash) as { file_type: string | null } | undefined)?.file_type ?? null
 
-      if (await generatePoster(next.compositeHash, next.originalPath, fileType)) {
+      const outcome = await generatePoster(next.compositeHash, next.originalPath, fileType)
+      if (outcome === null) {
+        skipped++
+      } else if (outcome) {
         generated++
       } else {
         failed++
@@ -216,18 +231,20 @@ async function runQueuedPosters(ctx: RuntimeJobContext<VideoPosterJobParams>): P
       processed,
       succeeded: generated,
       failed,
+      skipped,
       currentLabel: next.compositeHash,
     })
     await ctx.yield()
   }
 
-  ctx.flush({ total: processed, processed, succeeded: generated, failed, currentLabel: null })
-  return { generated, failed, skipped: 0 }
+  ctx.flush({ total: processed, processed, succeeded: generated, failed, skipped, currentLabel: null })
+  return { generated, failed, skipped }
 }
 
 async function runFullSweep(ctx: RuntimeJobContext<VideoPosterJobParams>): Promise<VideoPosterJobResult> {
   let generated = 0
   let failed = 0
+  let skipped = 0
   let processed = 0
   let cursor: string | null = null
 
@@ -263,9 +280,13 @@ async function runFullSweep(ctx: RuntimeJobContext<VideoPosterJobParams>): Promi
       ctx.throwIfCancelled()
       cursor = row.composite_hash
       processed++
+      pending.delete(row.composite_hash)
 
       try {
-        if (await generatePoster(row.composite_hash, resolveUploadsPath(row.original_file_path), row.file_type)) {
+        const outcome = await generatePoster(row.composite_hash, resolveUploadsPath(row.original_file_path), row.file_type)
+        if (outcome === null) {
+          skipped++
+        } else if (outcome) {
           generated++
         } else {
           failed++
@@ -275,15 +296,15 @@ async function runFullSweep(ctx: RuntimeJobContext<VideoPosterJobParams>): Promi
         ctx.recordError(row.composite_hash, error)
       }
 
-      ctx.report({ total, processed, succeeded: generated, failed, currentLabel: row.composite_hash })
+      ctx.report({ total, processed, succeeded: generated, failed, skipped, currentLabel: row.composite_hash })
       await ctx.yield()
     }
   }
 
-  ctx.flush({ total, processed, succeeded: generated, failed, currentLabel: null })
-  console.log(`✅ Video poster backfill complete (${generated} generated, ${failed} failed)`)
+  ctx.flush({ total, processed, succeeded: generated, failed, skipped, currentLabel: null })
+  console.log(`✅ Video poster backfill complete (${generated} generated, ${failed} failed, ${skipped} skipped)`)
 
-  return { generated, failed, skipped: 0 }
+  return { generated, failed, skipped }
 }
 
 export function registerVideoPosterJobHandlers(): void {

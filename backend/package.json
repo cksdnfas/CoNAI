@@ -82,6 +82,8 @@
     "verify:group-wal-hot-path-contracts": "tsx src/scripts/verifyGroupWalHotPathContracts.ts",
     "verify:group-rematch-job-contracts": "tsx src/scripts/verifyGroupRematchJobContracts.ts",
     "verify:runtime-job-contracts": "tsx src/scripts/verifyRuntimeJobContracts.ts",
+    "verify:watcher-lifecycle-contracts": "tsx src/scripts/verifyWatcherLifecycleContracts.ts",
+    "verify:video-poster-contracts": "tsx src/scripts/verifyVideoPosterContracts.ts",
     "verify:supported-extension-contracts": "tsx src/scripts/verifySupportedExtensionContracts.ts",
     "verify:recycle-bin-deletion-contracts": "tsx src/scripts/verifyRecycleBinDeletionContracts.ts",
     "verify:deletion-lock-contracts": "tsx src/scripts/verifyDeletionLockContracts.ts",

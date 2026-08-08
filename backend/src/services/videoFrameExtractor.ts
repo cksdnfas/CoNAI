@@ -149,42 +149,52 @@ export class VideoFrameExtractor {
    * @param timestamp Time in seconds
    * @param outputPath Output frame path
    */
-  private static extractSingleFrame(
+  private static async extractSingleFrame(
     videoPath: string,
     timestamp: number,
     outputPath: string
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const ffmpegCmd = VideoProcessor['getFFmpegPath']();
-      const seekTime = this.formatTime(timestamp);
+    const seekTime = this.formatTime(timestamp);
+    const errors: string[] = [];
 
-      const ffmpeg = spawn(ffmpegCmd, [
-        '-ss', seekTime,              // Seek to timestamp
-        '-i', videoPath,              // Input video
-        '-vframes', '1',              // Extract 1 frame
-        '-f', 'image2',               // Force image format
-        '-y',                         // Overwrite output
-        outputPath
-      ]);
+    for (const ffmpegCmd of VideoProcessor.listFFmpegPaths()) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const ffmpeg = spawn(ffmpegCmd, [
+            '-ss', seekTime,              // Seek to timestamp
+            '-i', videoPath,              // Input video
+            '-vframes', '1',              // Extract 1 frame
+            '-f', 'image2',               // Force image format
+            '-y',                         // Overwrite output
+            outputPath
+          ]);
 
-      let stderr = '';
+          let stderr = '';
 
-      ffmpeg.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
+          ffmpeg.stderr.on('data', (data) => {
+            stderr += data.toString();
+          });
 
-      ffmpeg.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(`FFmpeg frame extraction failed (code ${code}): ${stderr}`));
-          return;
-        }
-        resolve();
-      });
+          ffmpeg.on('close', (code) => {
+            if (code !== 0) {
+              reject(new Error(`FFmpeg frame extraction failed (code ${code}): ${stderr}`));
+              return;
+            }
+            resolve();
+          });
 
-      ffmpeg.on('error', (error) => {
-        reject(new Error(`Failed to spawn FFmpeg: ${error.message}`));
-      });
-    });
+          ffmpeg.on('error', (error) => {
+            reject(new Error(`Failed to spawn FFmpeg: ${error.message}`));
+          });
+        });
+        return;
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+        await fs.promises.rm(outputPath, { force: true }).catch(() => undefined);
+      }
+    }
+
+    throw new Error(`FFmpeg frame extraction failed for all candidates: ${errors.join(' | ')}`);
   }
 
   /**

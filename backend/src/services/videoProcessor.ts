@@ -53,6 +53,11 @@ export class VideoProcessor {
     return ffmpegPath || 'ffmpeg';
   }
 
+  /** List bundled and system FFmpeg binaries in fallback order. */
+  static listFFmpegPaths(): string[] {
+    return Array.from(new Set([ffmpegPath, 'ffmpeg'].filter((candidate): candidate is string => Boolean(candidate))));
+  }
+
   /**
    * Get FFprobe binary path (bundled or system)
    */

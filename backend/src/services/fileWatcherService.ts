@@ -35,7 +35,7 @@ import {
   type WatcherRuntimeState,
 } from './fileWatcher/watcherRuntimeStatus';
 import { createExcludePatternMatcher } from './folderScan/excludePatternUtils';
-import { sleep, waitForChokidarReady } from './watcherLifecycleUtils';
+import { resolveWatcherReadyTimeoutMs, sleep, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
@@ -58,6 +58,11 @@ interface WatcherEntry {
   eventCount: number;
   retryAttempts: number;
   isRetrying?: boolean;  // 재시도 진행 중 플래그 (중복 재시도 방지)
+}
+
+interface WatcherRetryState {
+  retryAttempts: number;
+  isRetrying: boolean;
 }
 
 /**
@@ -273,9 +278,11 @@ function getWatcherRetryDelay(retryDelayMs: number, retryAttempts: number): numb
 async function waitForWatcherReady(
   entry: WatcherEntry,
   updateWatcherStatus: (folderId: number, status: string, error: string | null) => void,
+  timeoutMs: number,
 ): Promise<void> {
   await waitForChokidarReady({
     watcher: entry.watcher,
+    timeoutMs,
     timeoutMessage: '워처 초기화 타임아웃',
     onReady: () => {
       entry.state = 'watching';
@@ -309,6 +316,7 @@ export class FileWatcherService {
   private static readonly STABILITY_THRESHOLD = parseInt(process.env.WATCHER_STABILITY_THRESHOLD || '2000');
   private static readonly MAX_RETRY_ATTEMPTS = parseInt(process.env.WATCHER_RETRY_ATTEMPTS || '3');
   private static readonly RETRY_DELAY_MS = parseInt(process.env.WATCHER_RETRY_DELAY_MS || '5000');
+  private static readonly READY_TIMEOUT_MS = resolveWatcherReadyTimeoutMs();
 
   private static syncRuntimeStatus(entry: WatcherEntry): void {
     setWatcherRuntimeStatus({
@@ -378,7 +386,10 @@ export class FileWatcherService {
   /**
    * 워처 시작
    */
-  static async startWatcher(folderId: number): Promise<void> {
+  static async startWatcher(
+    folderId: number,
+    retryState: WatcherRetryState = { retryAttempts: 0, isRetrying: false },
+  ): Promise<void> {
     if (this.watcherRegistry.size >= this.MAX_WATCHERS) {
       throw new Error(`최대 워처 수 초과 (${this.MAX_WATCHERS})`);
     }
@@ -428,14 +439,31 @@ export class FileWatcherService {
       watcher,
       state: 'initializing',
       eventCount: 0,
-      retryAttempts: 0,
+      retryAttempts: retryState.retryAttempts,
+      isRetrying: retryState.isRetrying,
     };
 
     this.watcherRegistry.set(folderId, entry);
     this.syncRuntimeStatus(entry);
     this.registerEventHandlers(entry, watcherOptions.excludeExtensions);
-    await waitForWatcherReady(entry, this.updateWatcherStatus.bind(this));
-    this.syncRuntimeStatus(entry);
+    try {
+      await waitForWatcherReady(entry, this.updateWatcherStatus.bind(this), this.READY_TIMEOUT_MS);
+      this.syncRuntimeStatus(entry);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      entry.state = 'error';
+      entry.error = errorMessage;
+      this.updateWatcherStatus(folderId, 'error', errorMessage);
+      this.syncRuntimeStatus(entry);
+
+      try {
+        await watcher.close();
+      } catch (closeError) {
+        console.warn(`  ⚠️  실패한 워처 정리 실패: ${entry.folderName}`, closeError);
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -578,11 +606,11 @@ export class FileWatcherService {
   /**
    * 워처 재시작
    */
-  static async restartWatcher(folderId: number): Promise<void> {
+  static async restartWatcher(folderId: number, retryState?: WatcherRetryState): Promise<void> {
     console.warn(`⚠️  Restarting watcher: folderId=${folderId}`);
     await this.stopWatcher(folderId);
     await sleep(1000);
-    await this.startWatcher(folderId);
+    await this.startWatcher(folderId, retryState);
   }
 
   /**
@@ -599,9 +627,6 @@ export class FileWatcherService {
       return;
     }
 
-    entry.retryAttempts += 1;
-    this.syncRuntimeStatus(entry);
-
     if (entry.retryAttempts >= this.MAX_RETRY_ATTEMPTS) {
       console.error(`  ❌ 최대 재시도 횟수 초과: ${entry.folderName}`);
       entry.state = 'error';
@@ -610,30 +635,48 @@ export class FileWatcherService {
       return;
     }
 
+    entry.retryAttempts += 1;
+    this.syncRuntimeStatus(entry);
+
     const delay = getWatcherRetryDelay(this.RETRY_DELAY_MS, entry.retryAttempts);
     console.warn(`⚠️  Watcher restart scheduled: ${entry.folderName} (${delay}ms, attempt ${entry.retryAttempts}/${this.MAX_RETRY_ATTEMPTS})`);
 
     entry.isRetrying = true;
     this.syncRuntimeStatus(entry);
 
+    const retryState: WatcherRetryState = {
+      retryAttempts: entry.retryAttempts,
+      isRetrying: true,
+    };
+    const folderName = entry.folderName;
+
     setTimeout(async () => {
       try {
-        await this.restartWatcher(folderId);
-        entry.retryAttempts = 0;
-        entry.isRetrying = false;
-        console.warn(`✅ Watcher recovered: ${entry.folderName}`);
+        await this.restartWatcher(folderId, retryState);
+        const restartedEntry = this.watcherRegistry.get(folderId);
+        if (restartedEntry) {
+          restartedEntry.retryAttempts = 0;
+          restartedEntry.isRetrying = false;
+          this.syncRuntimeStatus(restartedEntry);
+        }
+        console.warn(`✅ Watcher recovered: ${folderName}`);
       } catch (error) {
-        console.error(`  ❌ 워처 재시작 실패: ${entry.folderName}`, error);
-        entry.isRetrying = false;
-        this.syncRuntimeStatus(entry);
+        console.error(`  ❌ 워처 재시작 실패: ${folderName}`, error);
+        const failedEntry = this.watcherRegistry.get(folderId);
+        if (!failedEntry) {
+          return;
+        }
 
-        if (entry.retryAttempts < this.MAX_RETRY_ATTEMPTS) {
+        failedEntry.isRetrying = false;
+        this.syncRuntimeStatus(failedEntry);
+
+        if (failedEntry.retryAttempts < this.MAX_RETRY_ATTEMPTS) {
           await this.scheduleWatcherRestart(folderId);
         } else {
           console.error('  ❌ 최대 재시도 횟수 도달, 워처 비활성화');
-          entry.state = 'error';
-          this.syncRuntimeStatus(entry);
-          disableWatcherAfterRetryFailure(folderId, entry.folderName, '재시작 실패 - 자동 비활성화됨');
+          failedEntry.state = 'error';
+          this.syncRuntimeStatus(failedEntry);
+          disableWatcherAfterRetryFailure(folderId, failedEntry.folderName, '재시작 실패 - 자동 비활성화됨');
         }
       }
     }, delay);
