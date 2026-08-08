@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ListTodo, RefreshCw, Square, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -115,6 +115,104 @@ function parseQueueFilter(value: QueueFilterValue) {
 
   return { serviceType: undefined, workflowId: undefined }
 }
+
+type QueueJobRowProps = {
+  record: GenerationQueueJobRecord
+  isBusy: boolean
+  isAdmin: boolean
+  onCancel: (jobId: number) => void
+  t: ReturnType<typeof useI18n>['t']
+  formatNumber: ReturnType<typeof useI18n>['formatNumber']
+}
+
+/**
+ * 진행률 이벤트가 레코드 하나만 patch 해도 나머지 행이 리렌더되지 않도록 행 단위로 memo 한다.
+ * react-query 구조 공유와 브리지의 단일 레코드 교체가 무변경 레코드의 identity 를 보존하므로
+ * 얕은 비교로 충분하다.
+ */
+const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCancel, t, formatNumber }: QueueJobRowProps) {
+  const isCancelRequested = record.cancel_requested > 0
+  const workflowLabel = getGenerationQueueWorkflowLabel(record, t)
+  const creatorLabel = getGenerationQueueRequesterLabel(record, t)
+  const isRunning = record.status === 'running'
+  const isLiveProgress = hasGenerationQueueLiveProgress(record)
+  const progressPercent = getGenerationQueueProgressPercent(record)
+  const progressStageLabel = getGenerationQueueProgressStageLabel(record, t, formatNumber)
+  // CR-3: 업스트림 취소가 실패했을 때 사용자가 재시도할 수 있어야 한다.
+  const canRetryCancel = canRetryGenerationQueueCancellation(record)
+  const hasRecordPermission = isAdmin || record.is_mine === true
+  const canManageRecord = (!isCancelRequested || canRetryCancel) && hasRecordPermission
+  const statusLabel = isCancelRequested ? t('image-generation.components.generation.queue.header.widget.cancel.requested') : getGenerationQueueStatusLabel(record, t)
+  const queueLabel = record.queue_position != null && record.queue_position > 0
+    ? t({ ko: '대기열 {position}', en: 'Queue {position}' }, { position: formatNumber(record.queue_position) })
+    : statusLabel
+
+  return (
+    <div className="rounded-sm border border-border bg-surface-low px-3 py-3">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3 text-[11px]">
+          <div className="flex min-w-0 items-center gap-2">
+            <Badge variant={isCancelRequested ? 'outline' : 'secondary'} className={cn(isCancelRequested ? 'border-amber-500/40 text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</Badge>
+            <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
+          </div>
+          {isRunning ? (
+            <div className="shrink-0 text-[11px] font-medium text-foreground">
+              {progressPercent != null
+                ? (isLiveProgress
+                  ? t({ ko: '{percent}%', en: '{percent}%' }, { percent: formatNumber(progressPercent) })
+                  : t({ ko: '예상 {percent}%', en: 'Est. {percent}%' }, { percent: formatNumber(progressPercent) }))
+                : t({ ko: '진행 중', en: 'In progress' })}
+            </div>
+          ) : null}
+        </div>
+
+        {isRunning ? (
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-background/60">
+            {progressPercent != null ? (
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            ) : (
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-primary/70" />
+            )}
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+          <span className="min-w-0 truncate" title={isRunning ? progressStageLabel ?? undefined : queueLabel}>
+            {isRunning ? progressStageLabel : queueLabel}
+          </span>
+          <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+            <span className="max-w-28 truncate">{record.is_mine ? t('image-generation.components.generation.queue.header.widget.value.me', { creatorLabel }) : creatorLabel}</span>
+            {canManageRecord ? (
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                className="shrink-0"
+                onClick={() => onCancel(record.id)}
+                disabled={isBusy}
+                aria-label={canRetryCancel
+                  ? t({ ko: '큐 작업 {id} 취소 재시도', en: 'Retry cancelling queue job {id}' }, { id: record.id })
+                  : isRunning
+                    ? t('image-generation.components.generation.queue.header.widget.queue.job.value.request.stop', { id: record.id })
+                    : t('image-generation.components.generation.queue.header.widget.queue.job.value.delete', { id: record.id })}
+                title={canRetryCancel
+                  ? t({ ko: '취소 재시도', en: 'Retry cancel' })
+                  : isRunning
+                    ? t('image-generation.components.generation.queue.header.widget.request.stop')
+                    : t('image-generation.components.generation.queue.header.widget.delete')}
+              >
+                {isRunning ? <Square className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+})
 
 /** Render the global generation queue widget beside the header search action. */
 export function GenerationQueueHeaderWidget() {
@@ -305,6 +403,13 @@ export function GenerationQueueHeaderWidget() {
     }
   }
 
+  // memo 된 행이 렌더마다 새 콜백 때문에 무효화되지 않도록 identity 를 고정한다.
+  const handleCancelRef = useRef(handleCancel)
+  handleCancelRef.current = handleCancel
+  const cancelJob = useCallback((jobId: number) => {
+    void handleCancelRef.current(jobId)
+  }, [])
+
   return (
     <div ref={containerRef} className="relative">
       <button
@@ -331,6 +436,8 @@ export function GenerationQueueHeaderWidget() {
           isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
       >
+        {/* 닫힌 팝업까지 전역 잡 목록을 매 렌더 재조정하지 않도록, 프레임만 남기고 내용은 열렸을 때만 렌더한다. */}
+        {isOpen ? (<>
         <div className="px-3 py-3 sm:px-4">
           <SegmentedTabBar
             value={activeTab}
@@ -386,90 +493,17 @@ export function GenerationQueueHeaderWidget() {
 
               {records.length > 0 ? (
                 <div className="space-y-2">
-                  {records.map((record) => {
-                    const isBusy = pendingJobId === record.id
-                    const isCancelRequested = record.cancel_requested > 0
-                    const workflowLabel = getGenerationQueueWorkflowLabel(record, t)
-                    const creatorLabel = getGenerationQueueRequesterLabel(record, t)
-                    const isRunning = record.status === 'running'
-                    const isLiveProgress = hasGenerationQueueLiveProgress(record)
-                    const progressPercent = getGenerationQueueProgressPercent(record)
-                    const progressStageLabel = getGenerationQueueProgressStageLabel(record, t, formatNumber)
-                    // CR-3: 업스트림 취소가 실패했을 때 사용자가 재시도할 수 있어야 한다.
-                    const canRetryCancel = canRetryGenerationQueueCancellation(record)
-                    const hasRecordPermission = authStatusQuery.data?.isAdmin === true || record.is_mine === true
-                    const canManageRecord = (!isCancelRequested || canRetryCancel) && hasRecordPermission
-                    const statusLabel = isCancelRequested ? t('image-generation.components.generation.queue.header.widget.cancel.requested') : getGenerationQueueStatusLabel(record, t)
-                    const queueLabel = record.queue_position != null && record.queue_position > 0
-                      ? t({ ko: '대기열 {position}', en: 'Queue {position}' }, { position: formatNumber(record.queue_position) })
-                      : statusLabel
-
-                    return (
-                      <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between gap-3 text-[11px]">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <Badge variant={isCancelRequested ? 'outline' : 'secondary'} className={cn(isCancelRequested ? 'border-amber-500/40 text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</Badge>
-                              <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
-                            </div>
-                            {isRunning ? (
-                              <div className="shrink-0 text-[11px] font-medium text-foreground">
-                                {progressPercent != null
-                                  ? (isLiveProgress
-                                    ? t({ ko: '{percent}%', en: '{percent}%' }, { percent: formatNumber(progressPercent) })
-                                    : t({ ko: '예상 {percent}%', en: 'Est. {percent}%' }, { percent: formatNumber(progressPercent) }))
-                                  : t({ ko: '진행 중', en: 'In progress' })}
-                              </div>
-                            ) : null}
-                          </div>
-
-                          {isRunning ? (
-                            <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-background/60">
-                              {progressPercent != null ? (
-                                <div
-                                  className="h-full rounded-full bg-primary transition-[width] duration-300"
-                                  style={{ width: `${progressPercent}%` }}
-                                />
-                              ) : (
-                                <div className="h-full w-1/3 animate-pulse rounded-full bg-primary/70" />
-                              )}
-                            </div>
-                          ) : null}
-
-                          <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
-                            <span className="min-w-0 truncate" title={isRunning ? progressStageLabel ?? undefined : queueLabel}>
-                              {isRunning ? progressStageLabel : queueLabel}
-                            </span>
-                            <div className="flex min-w-0 shrink-0 items-center gap-1.5">
-                              <span className="max-w-28 truncate">{record.is_mine ? t('image-generation.components.generation.queue.header.widget.value.me', { creatorLabel }) : creatorLabel}</span>
-                            {canManageRecord ? (
-                              <Button
-                                type="button"
-                                size="icon-xs"
-                                variant="ghost"
-                                className="shrink-0"
-                                onClick={() => void handleCancel(record.id)}
-                                disabled={isBusy}
-                                aria-label={canRetryCancel
-                                  ? t({ ko: '큐 작업 {id} 취소 재시도', en: 'Retry cancelling queue job {id}' }, { id: record.id })
-                                  : isRunning
-                                    ? t('image-generation.components.generation.queue.header.widget.queue.job.value.request.stop', { id: record.id })
-                                    : t('image-generation.components.generation.queue.header.widget.queue.job.value.delete', { id: record.id })}
-                                title={canRetryCancel
-                                  ? t({ ko: '취소 재시도', en: 'Retry cancel' })
-                                  : isRunning
-                                    ? t('image-generation.components.generation.queue.header.widget.request.stop')
-                                    : t('image-generation.components.generation.queue.header.widget.delete')}
-                              >
-                                {isRunning ? <Square className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
-                              </Button>
-                            ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
+                  {records.map((record) => (
+                    <QueueJobRow
+                      key={record.id}
+                      record={record}
+                      isBusy={pendingJobId === record.id}
+                      isAdmin={authStatusQuery.data?.isAdmin === true}
+                      onCancel={cancelJob}
+                      t={t}
+                      formatNumber={formatNumber}
+                    />
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -538,6 +572,7 @@ export function GenerationQueueHeaderWidget() {
             </div>
           </>
         )}
+        </>) : null}
       </div>
     </div>
   )

@@ -437,7 +437,7 @@ function assertHistoryRatingSafetySettingSourcePolicy() {
   )
   match(
     generalPreferencesSource,
-    /생성 히스토리 최대 항목 수[\s\S]*?value=\{generalDraft\.generationHistoryMaxItems \?\? 10_000\}[\s\S]*?onPatchGeneral\(\{ generationHistoryMaxItems: nextValue \}\)/,
+    /생성 히스토리 최대 항목 수[\s\S]*?value=\{generalDraft\.generationHistoryMaxItems \?\? 10_000\}[\s\S]*?onPatchGeneral\(\{ generationHistoryMaxItems: parsedValue \}\)/,
     'safety and cleanup settings should expose the configurable generation history row limit',
   )
   match(

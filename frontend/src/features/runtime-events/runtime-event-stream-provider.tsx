@@ -11,14 +11,12 @@ export type RuntimeEventStreamContextValue = {
   isLive: boolean
   /** 폴백 폴링이 필요한 상태(연결 중/열화/미지원). */
   isDegraded: boolean
-  lastEventAt: number | null
 }
 
 export const RuntimeEventStreamContext = createContext<RuntimeEventStreamContextValue>({
   status: 'unsupported',
   isLive: false,
   isDegraded: true,
-  lastEventAt: null,
 })
 
 /**
@@ -28,7 +26,6 @@ export const RuntimeEventStreamContext = createContext<RuntimeEventStreamContext
  */
 export function RuntimeEventStreamProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<RuntimeStreamStatus>(() => getRuntimeEventStreamStatus())
-  const [lastEventAt, setLastEventAt] = useState<number | null>(null)
   const bridge = useRuntimeEventQueryBridge()
   const bridgeRef = useRef(bridge)
   bridgeRef.current = bridge
@@ -44,9 +41,11 @@ export function RuntimeEventStreamProvider({ children }: PropsWithChildren) {
     }
 
     // 핸들러는 ref 를 통해 최신 브리지를 읽으므로 구독은 마운트당 한 번만 만들어진다.
+    // 여기서 이벤트마다 setState 를 하면 컨텍스트 값이 매 이벤트 새로 만들어져 모든 구독
+    // 컴포넌트(전역 큐 위젯 포함)가 이벤트 빈도로 리렌더된다. 이벤트 도착 자체는 브리지의
+    // setQueryData 가 필요한 쿼리 구독자에게만 전파하므로 여기서는 상태를 만들지 않는다.
     return createRuntimeEventStream({
       onEnvelope: (envelope) => {
-        setLastEventAt(Date.now())
         bridgeRef.current.applyEnvelope(envelope)
       },
       onStatusChange: setStatus,
@@ -63,8 +62,7 @@ export function RuntimeEventStreamProvider({ children }: PropsWithChildren) {
     status,
     isLive: status === 'live',
     isDegraded: status !== 'live',
-    lastEventAt,
-  }), [lastEventAt, status])
+  }), [status])
 
   return (
     <RuntimeEventStreamContext.Provider value={value}>
