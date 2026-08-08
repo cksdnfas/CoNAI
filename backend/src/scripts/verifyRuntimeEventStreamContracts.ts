@@ -324,10 +324,23 @@ assert.deepEqual(
 );
 
 /* ------------------------------------------------------------------ *
- * RT-1: 진행률 이벤트는 절대 `all` 로 발행되지 않는다.
- * 요청 계정이 없는 시스템 잡(그래프 실행·예약·익명 공개 워크플로우)의 고빈도 진행률이
- * 전체 구독자에게 팬아웃되는 회귀를 막는다. admin 은 브로드캐스터 규칙으로 계속 수신한다.
+ * RT-1(개정): 큐 이벤트(상태·진행률)는 토픽 구독자 전원에게 `all` 로 팬아웃된다.
+ * 큐 목록 REST 가 인증만 요구하는 permission-neutral 표면이므로 이벤트 가시성도 이에 맞춘다.
+ * b02dd9cc 회귀(무스로틀 프레임 팬아웃)의 재발 방지는 가시성 축소가 아니라 발행 지점의
+ * 스로틀(comfyProgressMonitor PROGRESS_EMIT_INTERVAL_MS)이 담당한다.
  * ------------------------------------------------------------------ */
+
+const publishersSource = readSource('services', 'runtime-events', 'runtimeEventPublishers.ts');
+assert.ok(
+  (publishersSource.match(/topic: 'generation-queue',\s*\r?\n\s*visibility: 'all'/g) ?? []).length === 2,
+  'queue job status and progress events must both publish visibility=all so every authenticated subscriber sees them',
+);
+const progressMonitorSource = readSource('services', 'comfyui', 'comfyProgressMonitor.ts');
+const progressEmitIntervalMs = Number(/PROGRESS_EMIT_INTERVAL_MS = (\d+)/.exec(progressMonitorSource)?.[1] ?? 0);
+assert.ok(
+  progressEmitIntervalMs >= 200,
+  'visibility=all progress requires the publish-site throttle: PROGRESS_EMIT_INTERVAL_MS must stay at 200ms or slower',
+);
 
 function countProgressFrames(frames: string[]): number {
   return frames.join('').split('event: queue.job.progress').length - 1;
@@ -350,18 +363,18 @@ publishQueueJobProgressEvent(
 );
 assert.equal(
   countProgressFrames(ownerStream.frames),
-  0,
-  'system-job progress (null requester) must not reach regular accounts — this fan-out was the b02dd9cc regression',
+  1,
+  'system-job progress must reach every queue-topic subscriber',
 );
 assert.equal(
   countProgressFrames(otherStream.frames),
-  0,
-  'system-job progress must not reach any non-admin subscriber',
+  1,
+  'system-job progress must reach non-owner subscribers too',
 );
 assert.equal(
   countProgressFrames(adminStream.frames),
   1,
-  'admins must keep receiving system-job progress via the broadcaster admin rule',
+  'admins must keep receiving system-job progress',
 );
 
 publishQueueJobProgressEvent(
@@ -370,18 +383,38 @@ publishQueueJobProgressEvent(
 );
 assert.equal(
   countProgressFrames(ownerStream.frames),
-  1,
+  2,
   'owned-job progress must reach the requesting account',
 );
 assert.equal(
   countProgressFrames(otherStream.frames),
-  0,
-  'owned-job progress must never leak to another account',
+  2,
+  'owned-job progress must reach other authenticated subscribers — the queue list already shows them the job',
 );
 assert.equal(
   countProgressFrames(adminStream.frames),
   2,
   'admins must receive owned-job progress as well',
+);
+
+/* ------------------------------------------------------------------ *
+ * 토픽 접근 분리: 큐 토픽은 인증만으로, 나머지 토픽은 페이지 권한으로 구독한다.
+ * ------------------------------------------------------------------ */
+
+assert.match(
+  streamAuthSource,
+  /const SESSION_ONLY_TOPICS: ReadonlySet<RuntimeEventTopic> = new Set\(\['generation-queue'\]\)/,
+  'the stream auth must keep generation-queue as the session-only topic, matching the queue list REST guard',
+);
+assert.match(
+  streamRouteSource,
+  /const grantedTopics = resolvePermittedEventStreamTopics\(access\.permissionKeys, parseRequestedTopics\(req\.query\.topics\)\)[\s\S]*?grantedTopics\.length === 0[\s\S]*?403/,
+  'the stream route must filter requested topics by permission and reject only when nothing remains',
+);
+assert.match(
+  streamRouteSource,
+  /createEventStreamAccessRevalidator\(\s*access\.accountId,\s*eventStreamTopicsRequirePagePermission\(grantedTopics\),?\s*\)/,
+  'queue-only subscriptions must not be killed when the page permission is revoked mid-stream',
 );
 
 RuntimeEventBroadcaster.unregister(resumeSubscription.id);

@@ -233,6 +233,10 @@ export function GenerationQueueHeaderWidget() {
   useOverlayBackClose({ open: isOpen, onClose: () => setIsOpen(false) })
 
   const hasGenerationPermission = (authStatusQuery.data?.permissionKeys ?? []).includes('page.generation.view')
+  // 큐 목록 REST 는 인증만 요구한다(permission-neutral). 페이지 권한은 워크플로 필터 목록과
+  // 예약 탭에만 필요하므로, 큐 조회 자체는 인증 세션 기준으로 켠다.
+  const canViewQueue = authStatusQuery.data !== undefined
+    && (authStatusQuery.data.hasCredentials !== true || authStatusQuery.data.authenticated === true)
 
   const workflowsQuery = useQuery({
     queryKey: ['generation-workflows', 'header-widget'],
@@ -245,7 +249,7 @@ export function GenerationQueueHeaderWidget() {
   const filterParams = useMemo(() => parseQueueFilter(selectedFilter), [selectedFilter])
   const isFilteredQueueView = selectedFilter !== 'all'
   const isFilteredQueueQueryEnabled = shouldEnableFilteredQueueHeaderQuery({
-    hasGenerationPermission,
+    canViewQueue,
     isFilteredQueueView,
     isOpen,
   })
@@ -253,7 +257,7 @@ export function GenerationQueueHeaderWidget() {
   const globalQueueQuery = useQuery({
     queryKey: ['image-generation-queue', 'header-widget', 'global-active'],
     queryFn: () => getGenerationQueue({ status: ACTIVE_QUEUE_STATUSES }),
-    enabled: hasGenerationPermission,
+    enabled: canViewQueue,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
       return resolveStreamFallbackInterval(runtimeStreamStatus, getGenerationQueueHeaderRefetchInterval(activeCount, isOpen))
@@ -369,10 +373,12 @@ export function GenerationQueueHeaderWidget() {
   }, [isOpen, latestQueueJobId])
 
   const hasUnreadQueueUpdate = isNotificationBaselineReady && latestQueueJobId > (lastSeenQueueJobId ?? 0)
+  // 예약 탭은 백엔드가 page.generation.view 로 403 을 주는 표면이므로 권한 없는 계정에는 숨긴다.
+  const effectiveTab: HeaderPopupTab = hasGenerationPermission ? activeTab : 'jobs'
 
   const handleRefresh = async () => {
     const refreshTargets = getGenerationQueueHeaderRefreshTargets({
-      activeTab,
+      activeTab: effectiveTab,
       isFilteredQueueQueryEnabled,
     })
 
@@ -440,10 +446,12 @@ export function GenerationQueueHeaderWidget() {
         {isOpen ? (<>
         <div className="px-3 py-3 sm:px-4">
           <SegmentedTabBar
-            value={activeTab}
+            value={effectiveTab}
             items={[
               { value: 'jobs', label: t('image-generation.components.generation.queue.header.widget.job.queue') },
-              { value: 'reservations', label: t('image-generation.components.generation.queue.header.widget.reservations') },
+              ...(hasGenerationPermission
+                ? [{ value: 'reservations', label: t('image-generation.components.generation.queue.header.widget.reservations') }]
+                : []),
             ]}
             onChange={(nextTab) => setActiveTab(nextTab as HeaderPopupTab)}
             size="sm"
@@ -457,7 +465,7 @@ export function GenerationQueueHeaderWidget() {
           />
         </div>
 
-        {activeTab === 'jobs' ? (
+        {effectiveTab === 'jobs' ? (
           <>
             <div className="space-y-3 border-y border-border/70 px-3 py-3 sm:px-4">
               <div className="flex items-center justify-between gap-3">

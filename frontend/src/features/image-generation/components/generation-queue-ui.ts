@@ -25,16 +25,17 @@ export function getGenerationQueueHeaderQuerySnapshot<TRecord>({
 }
 
 export function shouldEnableFilteredQueueHeaderQuery({
-  hasGenerationPermission,
+  canViewQueue,
   isFilteredQueueView,
   isOpen,
 }: {
-  hasGenerationPermission: boolean
+  /** 큐 목록 REST 는 인증만 요구하므로 페이지 권한이 아니라 세션 기준이다. */
+  canViewQueue: boolean
   isFilteredQueueView: boolean
   isOpen: boolean
 }) {
   // The filtered queue is popup-only; keep the global active query as the only closed-header poller.
-  return hasGenerationPermission && isFilteredQueueView && isOpen
+  return canViewQueue && isFilteredQueueView && isOpen
 }
 
 export function getGenerationQueueHeaderRefreshTargets({

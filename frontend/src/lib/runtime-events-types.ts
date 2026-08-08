@@ -31,7 +31,10 @@ export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'runtime-job',
 ]
 
-/** 모든 토픽이 요구하는 권한 키. 서버 가드(`RUNTIME_EVENT_TOPIC_PERMISSION_KEY`)와 같아야 한다. */
+/**
+ * `generation-queue` 외 토픽이 요구하는 권한 키. 서버(`RUNTIME_EVENT_TOPIC_PERMISSION_KEY`)와
+ * 같아야 한다. 큐 토픽은 인증 세션만으로 구독되며, 서버가 허용 토픽을 hello.topics 로 알려 준다.
+ */
 export const RUNTIME_EVENT_STREAM_PERMISSION_KEY = 'page.generation.view'
 
 /** SSE 데이터 프레임 공통 봉투. `id` 는 서버 프로세스 로컬 시퀀스이자 재개 커서다. */

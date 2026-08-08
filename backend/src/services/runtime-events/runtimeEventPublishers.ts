@@ -67,8 +67,9 @@ function buildQueueJobPayload(
 /**
  * Publish one generation queue job event.
  *
- * 요청 계정이 있는 잡은 `visibility='account'` 로 발행해 소유자 + admin 에게만 전달한다.
- * 계정이 없는 시스템 잡(그래프 실행 등)은 기존 큐 목록 가시성과 같게 `all` 로 발행한다.
+ * 큐 목록 REST 는 인증만 요구하는 permission-neutral 표면이고, `generation-queue` SSE 토픽도
+ * 인증 세션에만 열린다. 목록에서 이미 모두에게 보이는 잡의 상태 전이를 이벤트에서만 숨기면
+ * SSE-live(폴링 꺼짐) 클라이언트의 타인 잡 표시가 굳으므로, 목록 가시성과 같게 `all` 로 발행한다.
  */
 export function publishQueueJobEvent(
   name: QueueJobEventName,
@@ -83,7 +84,7 @@ export function publishQueueJobEvent(
   publishRuntimeEvent({
     name,
     topic: 'generation-queue',
-    visibility: accountId === null ? 'all' : 'account',
+    visibility: 'all',
     accountId,
     payload: buildQueueJobPayload(job, options?.previousStatus ?? null),
   })
@@ -92,11 +93,9 @@ export function publishQueueJobEvent(
 /**
  * Publish one throttled ComfyUI progress sample without invalidating queue snapshots.
  *
- * 진행률은 고빈도 장식 데이터이므로 상태 전이와 달리 **절대 `all` 로 발행하지 않는다**.
- * 요청 계정이 없는 시스템 잡(그래프 실행·예약·익명 공개 워크플로우)을 `all` 로 흘리면
- * 잡 하나의 노드 워크/샘플링 스트림이 전체 SSE 구독자에게 팬아웃된다.
- * `account` + accountId null 은 브로드캐스터 규칙상 admin 에게만 전달되고, 일반 클라이언트의
- * 해당 잡 표시는 기존 ETA 기반 예상 진행률로 퇴행한다 — 타인 잡과 동일한 기존 동작이다.
+ * 모든 인증 사용자가 타인 잡의 실제 진행률을 봐야 하므로 `all` 로 발행한다. b02dd9cc 회귀
+ * (무스로틀 프레임의 전체 팬아웃)의 재발 방지는 가시성 축소가 아니라 발행 지점 스로틀이 담당한다:
+ * comfyProgressMonitor 의 PROGRESS_EMIT_INTERVAL_MS(250ms)가 잡당 초당 4샘플로 상한을 건다.
  */
 export function publishQueueJobProgressEvent(
   job: Pick<GenerationQueueJobRecord, 'id' | 'requested_by_account_id' | 'provider_job_id'>,
@@ -112,7 +111,7 @@ export function publishQueueJobProgressEvent(
   publishRuntimeEvent({
     name: 'queue.job.progress',
     topic: 'generation-queue',
-    visibility: 'account',
+    visibility: 'all',
     accountId,
     payload,
   })

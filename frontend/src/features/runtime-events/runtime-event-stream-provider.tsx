@@ -1,7 +1,6 @@
 import { createContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { createRuntimeEventStream, getRuntimeEventStreamStatus } from '@/lib/runtime-event-stream'
-import { RUNTIME_EVENT_STREAM_PERMISSION_KEY } from '@/lib/runtime-events-types'
 import type { RuntimeStreamStatus } from './runtime-event-fallback'
 import { useRuntimeEventQueryBridge } from './use-runtime-event-query-bridge'
 
@@ -30,12 +29,14 @@ export function RuntimeEventStreamProvider({ children }: PropsWithChildren) {
   const bridgeRef = useRef(bridge)
   bridgeRef.current = bridge
   const authStatusQuery = useAuthStatusQuery()
-  // 권한이 없으면 서버가 403 을 주므로 연결을 시도하지 않는다. 익명 열람 페이지에서
-  // 30초 간격 재접속 루프가 도는 것을 막고, 해당 표면은 기존 폴링 폴백으로 남는다.
-  const hasStreamPermission = (authStatusQuery.data?.permissionKeys ?? []).includes(RUNTIME_EVENT_STREAM_PERMISSION_KEY)
+  // 서버는 인증 세션이면 generation-queue 토픽을 항상 허용하고, 나머지 토픽은 페이지 권한으로
+  // 걸러 hello.topics 로 알려 준다. 비로그인 세션은 401 이므로 연결을 시도하지 않는다 —
+  // 익명 열람 페이지에서 30초 간격 재접속 루프가 도는 것을 막고, 해당 표면은 폴링 폴백으로 남는다.
+  const hasStreamSession = authStatusQuery.data !== undefined
+    && (authStatusQuery.data.hasCredentials !== true || authStatusQuery.data.authenticated === true)
 
   useEffect(() => {
-    if (!hasStreamPermission) {
+    if (!hasStreamSession) {
       setStatus('unsupported')
       return
     }
@@ -56,7 +57,7 @@ export function RuntimeEventStreamProvider({ children }: PropsWithChildren) {
         bridgeRef.current.invalidateAuthStatus()
       },
     })
-  }, [hasStreamPermission])
+  }, [hasStreamSession])
 
   const value = useMemo<RuntimeEventStreamContextValue>(() => ({
     status,

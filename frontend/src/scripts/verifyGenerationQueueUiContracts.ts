@@ -405,24 +405,24 @@ function assertHeaderQuerySnapshotSelection() {
 
 function assertFilteredQueueHeaderQueryEnablement() {
   assertEqual(
-    shouldEnableFilteredQueueHeaderQuery({ hasGenerationPermission: true, isFilteredQueueView: true, isOpen: true }),
+    shouldEnableFilteredQueueHeaderQuery({ canViewQueue: true, isFilteredQueueView: true, isOpen: true }),
     true,
     'filtered queue query should run while the filtered popup view is open',
   )
   assertEqual(
-    shouldEnableFilteredQueueHeaderQuery({ hasGenerationPermission: true, isFilteredQueueView: true, isOpen: false }),
+    shouldEnableFilteredQueueHeaderQuery({ canViewQueue: true, isFilteredQueueView: true, isOpen: false }),
     false,
     'filtered queue query should not keep polling after the popup closes',
   )
   assertEqual(
-    shouldEnableFilteredQueueHeaderQuery({ hasGenerationPermission: true, isFilteredQueueView: false, isOpen: true }),
+    shouldEnableFilteredQueueHeaderQuery({ canViewQueue: true, isFilteredQueueView: false, isOpen: true }),
     false,
     'all-queue scope should not enable the filtered queue query',
   )
   assertEqual(
-    shouldEnableFilteredQueueHeaderQuery({ hasGenerationPermission: false, isFilteredQueueView: true, isOpen: true }),
+    shouldEnableFilteredQueueHeaderQuery({ canViewQueue: false, isFilteredQueueView: true, isOpen: true }),
     false,
-    'missing generation permission should keep the filtered queue query disabled',
+    'an unauthenticated session should keep the filtered queue query disabled',
   )
 }
 

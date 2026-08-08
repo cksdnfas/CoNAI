@@ -107,10 +107,12 @@ function assertProviderPlacement() {
     resolve(process.cwd(), 'src/features/runtime-events/runtime-event-stream-provider.tsx'),
     'utf8',
   )
+  // 서버는 인증 세션이면 generation-queue 토픽을 허용하므로 클라이언트 게이트도 세션 기준이다.
+  // 비로그인(익명) 세션만 걸러야 401 재접속 루프가 생기지 않는다.
   match(
     streamProviderSource,
-    /const hasStreamPermission = \(authStatusQuery\.data\?\.permissionKeys \?\? \[\]\)\.includes\(RUNTIME_EVENT_STREAM_PERMISSION_KEY\)[\s\S]*?if \(!hasStreamPermission\) \{[\s\S]*?setStatus\('unsupported'\)/,
-    'the provider must not open a stream for accounts the server would reject, or anonymous pages reconnect forever',
+    /const hasStreamSession = authStatusQuery\.data !== undefined[\s\S]*?hasCredentials !== true \|\| authStatusQuery\.data\.authenticated === true\)[\s\S]*?if \(!hasStreamSession\) \{[\s\S]*?setStatus\('unsupported'\)/,
+    'the provider must not open a stream for sessions the server would reject, or anonymous pages reconnect forever',
   )
 
   const backendPermissionKey = /RUNTIME_EVENT_TOPIC_PERMISSION_KEY = '([^']+)'/.exec(backendTypesSource)?.[1]
@@ -119,7 +121,7 @@ function assertProviderPlacement() {
   equal(
     frontendPermissionKey,
     backendPermissionKey,
-    'the client-side stream gate must use the same permission key as the server guard',
+    'the non-queue topic permission key must stay mirrored between backend and frontend',
   )
 }
 

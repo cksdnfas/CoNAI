@@ -1,7 +1,12 @@
 import express, { type Request, type Response } from 'express'
 import { RuntimeEventBroadcaster } from '../../services/runtime-events/runtimeEventBroadcaster'
 import { RUNTIME_EVENT_TOPICS, type RuntimeEventTopic } from '../../types/runtimeEvents'
-import { createEventStreamAccessRevalidator, resolveEventStreamAccess } from './event-stream-auth'
+import {
+  createEventStreamAccessRevalidator,
+  eventStreamTopicsRequirePagePermission,
+  resolveEventStreamAccess,
+  resolvePermittedEventStreamTopics,
+} from './event-stream-auth'
 
 /** SSE 재연결 권고 간격. 브라우저 EventSource 가 이 값을 그대로 쓴다. */
 const RUNTIME_EVENT_STREAM_RETRY_MS = 3000
@@ -49,6 +54,14 @@ export function createRuntimeEventStreamRoutes() {
       return
     }
 
+    // 큐 토픽은 인증만으로 구독 가능, 나머지 토픽은 생성 페이지 권한이 필요하다.
+    // 허용 집합은 hello 프레임의 topics 로 클라이언트에 그대로 알려진다.
+    const grantedTopics = resolvePermittedEventStreamTopics(access.permissionKeys, parseRequestedTopics(req.query.topics))
+    if (grantedTopics.length === 0) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+
     // compression 은 첫 write 시점에 Content-Type 을 보고 event-stream 을 건너뛴다(index.ts filter).
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     res.setHeader('Cache-Control', 'no-cache, no-transform')
@@ -69,9 +82,12 @@ export function createRuntimeEventStreamRoutes() {
       res,
       accountId: access.accountId,
       isAdmin: access.isAdmin,
-      topics: parseRequestedTopics(req.query.topics),
+      topics: grantedTopics,
       resumeCursor: parseResumeCursor(req),
-      revalidateAccess: createEventStreamAccessRevalidator(access.accountId),
+      revalidateAccess: createEventStreamAccessRevalidator(
+        access.accountId,
+        eventStreamTopicsRequirePagePermission(grantedTopics),
+      ),
     })
 
     req.on('close', () => {

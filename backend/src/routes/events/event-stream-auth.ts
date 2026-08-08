@@ -2,7 +2,7 @@ import type { Request } from 'express'
 import { AuthAccount } from '../../models/AuthAccount'
 import { AuthAccessControlService } from '../../services/authAccessControlService'
 import { hasConfiguredAuth } from '../auth-route-helpers'
-import { RUNTIME_EVENT_TOPIC_PERMISSION_KEY } from '../../types/runtimeEvents'
+import { RUNTIME_EVENT_TOPIC_PERMISSION_KEY, type RuntimeEventTopic } from '../../types/runtimeEvents'
 
 /**
  * SSE 전용 read-only 접근 가드.
@@ -20,16 +20,37 @@ export type EventStreamAccess =
   | { ok: true; accountId: number | null; isAdmin: boolean; permissionKeys: string[] }
   | { ok: false; status: 401 | 403 }
 
+/**
+ * 인증 세션만으로 구독할 수 있는 토픽.
+ *
+ * 큐 목록 REST(`GET /api/generation-queue`)가 인증만 요구하는 permission-neutral 표면이므로,
+ * 같은 데이터를 나르는 SSE 토픽도 같은 기준을 쓴다. 나머지 토픽은 생성 페이지 권한이 필요하다.
+ */
+const SESSION_ONLY_TOPICS: ReadonlySet<RuntimeEventTopic> = new Set(['generation-queue'])
+
+/** Filter the requested topics down to what this permission set may subscribe to. */
+export function resolvePermittedEventStreamTopics(
+  permissionKeys: string[],
+  requestedTopics: RuntimeEventTopic[],
+): RuntimeEventTopic[] {
+  if (permissionKeys.includes(RUNTIME_EVENT_TOPIC_PERMISSION_KEY)) {
+    return requestedTopics
+  }
+
+  return requestedTopics.filter((topic) => SESSION_ONLY_TOPICS.has(topic))
+}
+
+/** 구독이 세션 전용 토픽 밖으로 나가는지 — 나가면 재검증이 페이지 권한을 계속 요구해야 한다. */
+export function eventStreamTopicsRequirePagePermission(topics: RuntimeEventTopic[]): boolean {
+  return topics.some((topic) => !SESSION_ONLY_TOPICS.has(topic))
+}
+
 /** Resolve stream access for one request without mutating the session. */
 export function resolveEventStreamAccess(req: Request): EventStreamAccess {
   if (!hasConfiguredAuth()) {
     // 부트스트랩(개인) 모드. 신뢰 세션을 "쓰지 않고" 권한만 해석한다.
     // 판정 기준은 생성 라우트의 권한 가드와 동일하게 맞춘다.
     const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess()
-    if (!resolvedAccess.permissionKeys.includes(RUNTIME_EVENT_TOPIC_PERMISSION_KEY)) {
-      return { ok: false, status: 403 }
-    }
-
     return {
       ok: true,
       accountId: null,
@@ -46,10 +67,6 @@ export function resolveEventStreamAccess(req: Request): EventStreamAccess {
   if (typeof accountId !== 'number') {
     // 계정 없는 인증 세션(구 부트스트랩 잔여). refreshSessionAccess 의 비수치 분기와 같은 판단을 하되 읽기만 한다.
     const cachedPermissionKeys = Array.isArray(req.session.permissionKeys) ? req.session.permissionKeys : []
-    if (!cachedPermissionKeys.includes(RUNTIME_EVENT_TOPIC_PERMISSION_KEY)) {
-      return { ok: false, status: 403 }
-    }
-
     return {
       ok: true,
       accountId: null,
@@ -64,10 +81,6 @@ export function resolveEventStreamAccess(req: Request): EventStreamAccess {
   }
 
   const resolvedAccess = AuthAccessControlService.resolveForAccountId(accountId)
-  if (!resolvedAccess.permissionKeys.includes(RUNTIME_EVENT_TOPIC_PERMISSION_KEY)) {
-    return { ok: false, status: 403 }
-  }
-
   return {
     ok: true,
     accountId,
@@ -79,8 +92,11 @@ export function resolveEventStreamAccess(req: Request): EventStreamAccess {
 /**
  * Build the periodic revalidation closure used by the broadcaster heartbeat.
  * 요청 객체에서 계정 식별자만 캡처하므로 스트림이 살아 있는 동안에도 세션 객체를 만지지 않는다.
+ *
+ * `requiresPagePermission` 은 구독이 세션 전용 토픽(큐) 밖을 포함할 때만 true 다.
+ * 큐 전용 구독은 페이지 권한이 회수되어도 계속 살아 있어야 한다 — 애초에 권한 없이 열 수 있으므로.
  */
-export function createEventStreamAccessRevalidator(accountId: number | null) {
+export function createEventStreamAccessRevalidator(accountId: number | null, requiresPagePermission: boolean) {
   return (): { ok: true } | { ok: false; reason: 'unauthenticated' | 'permission-revoked' } => {
     if (!hasConfiguredAuth()) {
       return { ok: true }
@@ -95,9 +111,11 @@ export function createEventStreamAccessRevalidator(accountId: number | null) {
       return { ok: false, reason: 'unauthenticated' }
     }
 
-    const resolvedAccess = AuthAccessControlService.resolveForAccountId(accountId)
-    if (!resolvedAccess.permissionKeys.includes(RUNTIME_EVENT_TOPIC_PERMISSION_KEY)) {
-      return { ok: false, reason: 'permission-revoked' }
+    if (requiresPagePermission) {
+      const resolvedAccess = AuthAccessControlService.resolveForAccountId(accountId)
+      if (!resolvedAccess.permissionKeys.includes(RUNTIME_EVENT_TOPIC_PERMISSION_KEY)) {
+        return { ok: false, reason: 'permission-revoked' }
+      }
     }
 
     return { ok: true }
