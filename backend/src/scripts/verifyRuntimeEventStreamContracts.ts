@@ -155,6 +155,25 @@ for (const [relativePath, requiredFragments] of emitSiteFiles) {
   }
 }
 
+// 후처리 ready 전환은 히스토리 행을 쓰지 않지만 목록 표시 상태('후처리 중' -> '완료')를 바꾼다.
+// 이 알림이 사라지면 SSE-live 클라이언트(폴링 꺼짐)는 히스토리를 영영 갱신하지 못한다.
+const visibilityServiceSource = readSource('services', 'mediaPostprocessVisibilityService.ts');
+assert.ok(
+  /publishStatusEventsByCompositeHashes\(/.test(visibilityServiceSource),
+  'mediaPostprocessVisibilityService must notify linked generation history rows when postprocess visibility flips to ready',
+);
+assert.ok(
+  (visibilityServiceSource.match(/this\.publishLinkedGenerationHistoryEvents\(/g) ?? []).length >= 2,
+  'both the single-hash markReady and the batch release must publish linked history events',
+);
+
+// 범용 update 도 generation_status 를 쓰면 발행해야 한다(큐 실행기의 pending -> processing 경로).
+const generationHistoryModelSource = readSource('models', 'GenerationHistory.ts');
+assert.ok(
+  /if \(typeof updates\.generation_status === 'string'\) \{[\s\S]*?publishHistoryEventById\(id, 'history\.record\.status'\)/.test(generationHistoryModelSource),
+  'GenerationHistoryModel.update must publish history.record.status whenever it writes generation_status',
+);
+
 // E1 이 큐 전이를 전부 덮는다는 전제: 실행기는 자체 상태 쓰기를 하지 않고 transitionJob 을 경유한다.
 assert.ok(
   (queueJobExecutorsSource.match(/context\.transitionJob\(/g) ?? []).length >= 5,

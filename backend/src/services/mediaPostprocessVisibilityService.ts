@@ -50,6 +50,23 @@ export class MediaPostprocessVisibilityService {
     }
   }
 
+  /**
+   * ready 전환을 연결된 생성 히스토리 행에 알린다.
+   *
+   * 히스토리 목록은 이 서비스의 ready 조건이 참이 될 때까지 완료 행을 '후처리 중' 으로
+   * 그린다. 전환 시점에 히스토리 테이블 쓰기가 없어 자체 이벤트가 나가지 않으므로,
+   * 여기서 알리지 않으면 SSE-live 클라이언트(폴링 꺼짐)는 목록을 영영 갱신하지 못한다.
+   * GenerationHistory 가 이 서비스를 import 하므로 순환을 피해 lazy require 로 접근한다.
+   */
+  private static publishLinkedGenerationHistoryEvents(compositeHashes: string[]): void {
+    try {
+      const { GenerationHistoryModel } = require('../models/GenerationHistory') as typeof import('../models/GenerationHistory');
+      GenerationHistoryModel.publishStatusEventsByCompositeHashes(compositeHashes);
+    } catch (error) {
+      console.warn('⚠️ Postprocess visibility history event publish failed:', error instanceof Error ? error.message : error);
+    }
+  }
+
   private static invalidateVisibilityCaches(compositeHash: string, options: { scheduleGallery?: boolean } = {}): void {
     try {
       const { QueryCacheService } = require('./QueryCacheService') as typeof import('./QueryCacheService');
@@ -128,6 +145,7 @@ export class MediaPostprocessVisibilityService {
       WHERE composite_hash = ?
     `).run(compositeHash);
     this.invalidateVisibilityCaches(compositeHash);
+    this.publishLinkedGenerationHistoryEvents([compositeHash]);
   }
 
   static markReadyIfNoPendingImmediateWork(compositeHash: string): boolean {
@@ -193,6 +211,7 @@ export class MediaPostprocessVisibilityService {
       this.invalidateVisibilityCaches(hash, { scheduleGallery: false });
     }
     this.scheduleGalleryCacheInvalidation();
+    this.publishLinkedGenerationHistoryEvents(releasedHashes);
 
     return releasedHashes.length;
   }

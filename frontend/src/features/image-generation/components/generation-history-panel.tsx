@@ -39,6 +39,7 @@ import {
   GENERATION_HISTORY_POSTPROCESS_REFRESH_MS,
   GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX,
   GENERATION_HISTORY_REFRESH_WATCH_MS,
+  GENERATION_HISTORY_STREAM_WATCHDOG_REFRESH_MS,
   collectRetryableHistoryRecords,
   dedupeHistoryRecords,
   getGenerationHistorySelectionId,
@@ -173,7 +174,16 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         return hasPostprocessPendingHistory(records) ? GENERATION_HISTORY_POSTPROCESS_REFRESH_MS : false
       }
 
-      return resolveStreamFallbackInterval(runtimeStreamStatus, resolveLegacyHistoryInterval())
+      const legacyInterval = resolveLegacyHistoryInterval()
+      const streamInterval = resolveStreamFallbackInterval(runtimeStreamStatus, legacyInterval)
+      // 스트림이 live 라도 진행 중/후처리 대기 행이 남아 있으면 느린 워치독 폴링을 유지한다.
+      // 완료/ready 이벤트가 유실되면 live 상태에서는 다른 복구 경로가 없어
+      // 행이 '생성 중' 에 영구 고정된다. 유휴 목록(대기 행 없음)은 종전대로 폴링 0 이다.
+      if (streamInterval === false && legacyInterval !== false) {
+        return GENERATION_HISTORY_STREAM_WATCHDOG_REFRESH_MS
+      }
+
+      return streamInterval
     },
   })
   const historySafetySettingsQuery = useQuery({

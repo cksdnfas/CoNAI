@@ -183,9 +183,23 @@ function assertRefreshPolicySource() {
   )
   match(
     generationHistoryPanelSource,
-    /return resolveStreamFallbackInterval\(runtimeStreamStatus, resolveLegacyHistoryInterval\(\)\)/,
+    /const legacyInterval = resolveLegacyHistoryInterval\(\)[\s\S]*?const streamInterval = resolveStreamFallbackInterval\(runtimeStreamStatus, legacyInterval\)/,
     'history polling should be wrapped by the runtime stream fallback so the legacy cadence returns when SSE dies',
   )
+  // 완료/ready 이벤트 유실 시 live 상태에는 다른 복구 경로가 없다: 대기 행이 남아 있는 동안만
+  // 느린 워치독 폴링을 유지하고, 유휴 목록은 종전대로 폴링 0 을 지킨다.
+  match(
+    generationHistoryPanelSource,
+    /if \(streamInterval === false && legacyInterval !== false\) \{[\s\S]*?return GENERATION_HISTORY_STREAM_WATCHDOG_REFRESH_MS/,
+    'a live stream must keep a slow watchdog poll while rows still wait on generation or postprocess visibility',
+  )
+  const watchdogRefreshMs = readRefreshConstantMs('GENERATION_HISTORY_STREAM_WATCHDOG_REFRESH_MS')
+  const postprocessRefreshFloorMs = readRefreshConstantMs('GENERATION_HISTORY_POSTPROCESS_REFRESH_MS')
+  if (watchdogRefreshMs <= postprocessRefreshFloorMs) {
+    throw new Error(
+      `the live-stream watchdog (${watchdogRefreshMs}ms) must stay slower than the degraded-mode postprocess cadence (${postprocessRefreshFloorMs}ms), or SSE stops saving requests`,
+    )
+  }
   match(
     generationHistoryPanelSource,
     /const \{ status: runtimeStreamStatus \} = useRuntimeEventStream\(\)/,

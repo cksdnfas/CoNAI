@@ -432,6 +432,13 @@ export class GenerationHistoryModel {
     stmt.run(...values);
     invalidateHistoryListCountCache();
 
+    // E10: 큐 실행기/MCP 가 pending -> processing 전이를 이 범용 update 로 쓴다.
+    // 브리지는 큐 진행 전이에서 히스토리를 무효화하지 않으므로, 여기서 발행하지 않으면
+    // SSE-live 클라이언트의 히스토리 행이 '대기 중' 에 고정된다.
+    if (typeof updates.generation_status === 'string') {
+      publishHistoryEventById(id, 'history.record.status');
+    }
+
     if (updates.generation_status === 'completed' || updates.generation_status === 'failed') {
       requestGenerationResultRetentionPrune();
     }
@@ -475,6 +482,43 @@ export class GenerationHistoryModel {
     invalidateHistoryListCountCache();
     // E11: composite_hash 확정은 히스토리 카드가 실제 미디어로 바뀌는 순간이다.
     publishHistoryEventById(id, 'history.record.status');
+  }
+
+  /**
+   * Publish history.record.status for rows linked to the given main-image hashes.
+   *
+   * 후처리 가시성(postprocess_status) 전환은 히스토리 행을 쓰지 않지만 목록 표시 상태를
+   * ('후처리 중' -> '완료') 바꾼다. 히스토리 테이블에 쓰기가 없어 E10/E11 이 발행되지 않으므로
+   * 미디어 도메인이 이 훅으로 연결된 행을 대신 알린다.
+   *
+   * 스케줄러 일괄 해제는 행 수가 클 수 있는데, 클라이언트 브리지는 이 이벤트를 무효화
+   * 신호로만 쓰므로 수신 계정당 대표 1건이면 충분하다. requester 가 NULL 인 행은
+   * visibility 'all' 로 나가 전체 구독자를 덮으므로 그 1건으로 축약한다.
+   */
+  static publishStatusEventsByCompositeHashes(compositeHashes: string[]): void {
+    const uniqueHashes = Array.from(new Set(
+      compositeHashes.filter((hash): hash is string => typeof hash === 'string' && hash.length > 0),
+    ));
+    if (uniqueHashes.length === 0) {
+      return;
+    }
+
+    const rows: Array<{ id: number; requested_by_account_id: number | null }> = [];
+    for (let start = 0; start < uniqueHashes.length; start += HISTORY_RESULT_MEDIA_LOOKUP_CHUNK_SIZE) {
+      const chunk = uniqueHashes.slice(start, start + HISTORY_RESULT_MEDIA_LOOKUP_CHUNK_SIZE);
+      rows.push(...apiGenDb.prepare(`
+        SELECT id, requested_by_account_id
+        FROM api_generation_history
+        WHERE composite_hash IN (${chunk.map(() => '?').join(',')})
+      `).all(...chunk) as Array<{ id: number; requested_by_account_id: number | null }>);
+    }
+
+    const nullRequesterRow = rows.find((row) => row.requested_by_account_id === null);
+    const representativeRows = nullRequesterRow
+      ? [nullRequesterRow]
+      : Array.from(new Map(rows.map((row) => [row.requested_by_account_id, row])).values());
+
+    representativeRows.forEach((row) => publishHistoryEventById(row.id, 'history.record.status'));
   }
 
   /**

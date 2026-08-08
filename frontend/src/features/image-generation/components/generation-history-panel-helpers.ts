@@ -15,6 +15,12 @@ import {
 export const GENERATION_HISTORY_PAGE_SIZE = 40
 export const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 3_000
 export const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000
+/**
+ * SSE 가 live 여도 진행 중/후처리 대기 행이 남아 있는 동안 유지하는 워치독 리페치 간격.
+ * 이벤트 전달은 보장이 없어서, 완료/ready 이벤트가 한 건이라도 유실되면 live 상태에서는
+ * 복구 경로가 없다(폴링 전면 꺼짐). 첫 페이지만 재조회하므로 비용은 페이지 요청 1회/15초다.
+ */
+export const GENERATION_HISTORY_STREAM_WATCHDOG_REFRESH_MS = 15_000
 export const GENERATION_HISTORY_REFRESH_WATCH_MS = 30_000
 export const GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX = 'conai:image-generation:history-recovery-ack:'
 
