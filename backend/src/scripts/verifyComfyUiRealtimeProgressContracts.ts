@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   buildComfyProgressWebSocketUrl,
+  isImmediateProgressPhase,
   parseComfyProgressEvent,
 } from '../services/comfyui/comfyProgressMonitor'
 
@@ -46,6 +47,13 @@ equal(finalizing?.progress.percent, null, 'execution end must become finalizing,
 equal(parseComfyProgressEvent('not-json', workflow), null, 'invalid and binary-like payloads must be ignored')
 equal(parseComfyProgressEvent(JSON.stringify({ type: 'progress', data: { value: 1, max: 0 } }), workflow), null, 'invalid progress maxima must be ignored')
 
+// RT-2: 잡당 2회뿐인 경계 페이즈만 즉시 발행한다. `executing` 은 그래프 노드마다 1프레임씩
+// 도착하므로(50~80노드 버스트) 반드시 sampling 과 같은 코얼레싱을 타야 한다.
+equal(isImmediateProgressPhase('preparing'), true, 'job start must surface immediately')
+equal(isImmediateProgressPhase('finalizing'), true, 'job completion must surface immediately')
+equal(isImmediateProgressPhase('executing'), false, 'per-node executing frames must be coalesced, not emitted per graph node')
+equal(isImmediateProgressPhase('sampling'), false, 'sampler steps must stay coalesced')
+
 const monitorSource = readFileSync(resolve(process.cwd(), 'src/services/comfyui/comfyProgressMonitor.ts'), 'utf8')
 match(
   monitorSource,
@@ -55,7 +63,12 @@ match(
 match(
   monitorSource,
   /const PROGRESS_EMIT_INTERVAL_MS = 250/,
-  'high-frequency sampler steps must be coalesced before entering the CoNAI SSE stream',
+  'high-frequency progress frames must be coalesced before entering the CoNAI SSE stream',
+)
+match(
+  monitorSource,
+  /const isImmediate = isImmediateProgressPhase\(progress\.phase\)/,
+  'the emit path must route immediacy through isImmediateProgressPhase so the coalescing rule stays testable',
 )
 
 console.log('ComfyUI realtime progress contracts verified.')

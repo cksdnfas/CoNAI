@@ -89,7 +89,15 @@ export function publishQueueJobEvent(
   })
 }
 
-/** Publish one throttled ComfyUI progress sample without invalidating queue snapshots. */
+/**
+ * Publish one throttled ComfyUI progress sample without invalidating queue snapshots.
+ *
+ * 진행률은 고빈도 장식 데이터이므로 상태 전이와 달리 **절대 `all` 로 발행하지 않는다**.
+ * 요청 계정이 없는 시스템 잡(그래프 실행·예약·익명 공개 워크플로우)을 `all` 로 흘리면
+ * 잡 하나의 노드 워크/샘플링 스트림이 전체 SSE 구독자에게 팬아웃된다.
+ * `account` + accountId null 은 브로드캐스터 규칙상 admin 에게만 전달되고, 일반 클라이언트의
+ * 해당 잡 표시는 기존 ETA 기반 예상 진행률로 퇴행한다 — 타인 잡과 동일한 기존 동작이다.
+ */
 export function publishQueueJobProgressEvent(
   job: Pick<GenerationQueueJobRecord, 'id' | 'requested_by_account_id' | 'provider_job_id'>,
   progress: GenerationQueueLiveProgress,
@@ -104,7 +112,7 @@ export function publishQueueJobProgressEvent(
   publishRuntimeEvent({
     name: 'queue.job.progress',
     topic: 'generation-queue',
-    visibility: accountId === null ? 'all' : 'account',
+    visibility: 'account',
     accountId,
     payload,
   })
