@@ -144,10 +144,26 @@ function assertCacheBridgePolicy() {
     /queryClient\.setQueryData<QueueListResponse>/,
     'the bridge must patch cached queue rows instead of waiting for a refetch',
   )
+  // RT-5: 진행률은 이벤트당 캐시 순회 대신 잡별 최신 샘플 버퍼 + 코얼레싱 flush 로 반영한다.
   match(
     bridgeSource,
-    /case 'queue\.job\.progress':[\s\S]*?applyQueueProgressEventToCaches\(queryClient, progressPayload\)[\s\S]*?return/,
-    'high-frequency ComfyUI progress must patch queue caches directly without a queue-list invalidation',
+    /case 'queue\.job\.progress':[\s\S]*?pendingProgressByJobIdRef\.current\.set\(progressPayload\.job_id, progressPayload\)[\s\S]*?return/,
+    'high-frequency ComfyUI progress must buffer per job without a queue-list invalidation',
+  )
+  match(
+    bridgeSource,
+    /setTimeout\(flushPendingProgress, PROGRESS_APPLY_COALESCE_MS\)/,
+    'buffered progress must flush on the coalescing window, bounding cache scans per second',
+  )
+  match(
+    bridgeSource,
+    /function applyQueueProgressEventsToCaches\(queryClient: QueryClient, payloads: QueueJobProgressEventPayload\[\]\)/,
+    'flushed progress must apply as one batched pass over the cached queue lists',
+  )
+  const progressCoalesceMs = readBridgeConstantMs('PROGRESS_APPLY_COALESCE_MS')
+  ok(
+    progressCoalesceMs >= 50 && progressCoalesceMs <= 500,
+    `progress coalescing must stay within the perceptible-latency budget (50-500ms), got ${progressCoalesceMs}ms`,
   )
 
   // QLIST-3: 큐 진행 전이(dispatching/running)는 히스토리 표면을 건드리지 않는다.

@@ -23,6 +23,11 @@ const QUEUE_INVALIDATE_DEBOUNCE_MS = 2_000
 const HISTORY_INVALIDATE_DEBOUNCE_MS = 2_000
 const GRAPH_INVALIDATE_DEBOUNCE_MS = 500
 /**
+ * 진행률 패치 코얼레싱 창. 진행률 반영은 잡별 최신 샘플만 의미가 있으므로,
+ * 이벤트 빈도와 무관하게 캐시 순회·구독자 알림을 초당 최대 10회로 상한한다.
+ */
+const PROGRESS_APPLY_COALESCE_MS = 100
+/**
  * 첫 무효화 요청 이후 실제 무효화까지 허용하는 최대 지연.
  * 이벤트가 디바운스 창보다 촘촘히 들어와도 이 시간 안에는 반드시 한 번 나간다(수용 기준 ②: 3초 내 반영).
  */
@@ -109,8 +114,13 @@ function applyQueueEventToCaches(queryClient: QueryClient, payload: QueueJobEven
   })
 }
 
-/** Apply a high-frequency progress sample directly; no queue-list refetch is needed. */
-function applyQueueProgressEventToCaches(queryClient: QueryClient, payload: QueueJobProgressEventPayload) {
+/**
+ * Apply buffered high-frequency progress samples in one pass; no queue-list refetch is needed.
+ *
+ * `getQueriesData` 는 클라이언트의 전체 쿼리 캐시를 순회한다(갤러리/그룹 페이지는 수백 엔트리).
+ * 이벤트당 1회 순회하는 대신, 코얼레싱 창 동안 모인 잡별 최신 샘플을 **한 번의 순회**로 반영한다.
+ */
+function applyQueueProgressEventsToCaches(queryClient: QueryClient, payloads: QueueJobProgressEventPayload[]) {
   const caches = queryClient.getQueriesData<QueueListResponse>({ queryKey: [QUEUE_QUERY_KEY_PREFIX] })
 
   caches.forEach(([queryKey, cached]) => {
@@ -118,29 +128,38 @@ function applyQueueProgressEventToCaches(queryClient: QueryClient, payload: Queu
       return
     }
 
-    const matchedIndex = cached.records.findIndex((record) => record.id === payload.job_id)
-    if (matchedIndex < 0) {
-      return
+    let nextRecords: GenerationQueueJobRecord[] | null = null
+    for (const payload of payloads) {
+      const records = nextRecords ?? cached.records
+      const matchedIndex = records.findIndex((record) => record.id === payload.job_id)
+      if (matchedIndex < 0) {
+        continue
+      }
+
+      if (!nextRecords) {
+        nextRecords = [...cached.records]
+      }
+      nextRecords[matchedIndex] = {
+        ...nextRecords[matchedIndex],
+        // A prompt-filtered ComfyUI progress frame is itself proof that upstream execution started.
+        status: 'running',
+        provider_job_id: payload.provider_job_id ?? nextRecords[matchedIndex].provider_job_id,
+        live_progress: {
+          source: payload.source,
+          phase: payload.phase,
+          node_id: payload.node_id,
+          node_label: payload.node_label,
+          value: payload.value,
+          max: payload.max,
+          percent: payload.percent,
+          updated_at: payload.updated_at,
+        },
+      }
     }
 
-    const nextRecords = [...cached.records]
-    nextRecords[matchedIndex] = {
-      ...nextRecords[matchedIndex],
-      // A prompt-filtered ComfyUI progress frame is itself proof that upstream execution started.
-      status: 'running',
-      provider_job_id: payload.provider_job_id ?? nextRecords[matchedIndex].provider_job_id,
-      live_progress: {
-        source: payload.source,
-        phase: payload.phase,
-        node_id: payload.node_id,
-        node_label: payload.node_label,
-        value: payload.value,
-        max: payload.max,
-        percent: payload.percent,
-        updated_at: payload.updated_at,
-      },
+    if (nextRecords) {
+      queryClient.setQueryData<QueueListResponse>(queryKey, { ...cached, records: nextRecords })
     }
-    queryClient.setQueryData<QueueListResponse>(queryKey, { ...cached, records: nextRecords })
   })
 }
 
@@ -151,6 +170,17 @@ function applyQueueProgressEventToCaches(queryClient: QueryClient, payload: Queu
 export function useRuntimeEventQueryBridge() {
   const queryClient = useQueryClient()
   const debounceTimersRef = useRef(new Map<string, PendingInvalidation>())
+  const pendingProgressByJobIdRef = useRef(new Map<number, QueueJobProgressEventPayload>())
+  const progressFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushPendingProgress = useCallback(() => {
+    progressFlushTimerRef.current = null
+    const payloads = [...pendingProgressByJobIdRef.current.values()]
+    pendingProgressByJobIdRef.current.clear()
+    if (payloads.length > 0) {
+      applyQueueProgressEventsToCaches(queryClient, payloads)
+    }
+  }, [queryClient])
 
   /**
    * Debounce one invalidation per query-key prefix, with a hard max-wait ceiling.
@@ -178,9 +208,15 @@ export function useRuntimeEventQueryBridge() {
 
   useEffect(() => {
     const timers = debounceTimersRef.current
+    const pendingProgress = pendingProgressByJobIdRef.current
     return () => {
       timers.forEach((pending) => clearTimeout(pending.timer))
       timers.clear()
+      if (progressFlushTimerRef.current) {
+        clearTimeout(progressFlushTimerRef.current)
+        progressFlushTimerRef.current = null
+      }
+      pendingProgress.clear()
     }
   }, [])
 
@@ -189,6 +225,10 @@ export function useRuntimeEventQueryBridge() {
       case 'queue.job.status':
       case 'queue.job.cancel-requested': {
         const queuePayload = envelope.payload as QueueJobEventPayload
+        if (TERMINAL_QUEUE_EVENT_STATUSES.has(queuePayload.status)) {
+          // 종료된 잡의 대기 중 진행률 샘플이 나중에 flush 되어도 행이 이미 없어 no-op 이지만, 버퍼는 미리 비운다.
+          pendingProgressByJobIdRef.current.delete(queuePayload.job_id)
+        }
         applyQueueEventToCaches(queryClient, queuePayload)
         scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX], QUEUE_INVALIDATE_DEBOUNCE_MS)
         if (affectsHistorySurface(queuePayload)) {
@@ -203,7 +243,10 @@ export function useRuntimeEventQueryBridge() {
       }
       case 'queue.job.progress': {
         const progressPayload = envelope.payload as QueueJobProgressEventPayload
-        applyQueueProgressEventToCaches(queryClient, progressPayload)
+        pendingProgressByJobIdRef.current.set(progressPayload.job_id, progressPayload)
+        if (!progressFlushTimerRef.current) {
+          progressFlushTimerRef.current = setTimeout(flushPendingProgress, PROGRESS_APPLY_COALESCE_MS)
+        }
         return
       }
       case 'history.record.created':
