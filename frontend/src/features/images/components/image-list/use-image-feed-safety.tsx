@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getRatingTiers } from '@/lib/api-search'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
-import { ImageRatingSafetyBadge, resolveImageFeedSafety } from './image-rating-safety'
+import { ImageRatingSafetyBadge, resolveImageFeedSafety, type ResolvedImageFeedSafety } from './image-rating-safety'
 
 /**
  * 마지막으로 받은 티어 정책의 로컬 캐시.
@@ -83,10 +83,36 @@ export function useImageFeedSafety({
     }
   }, [ratingTiersQuery.data, ratingTiersQuery.isPlaceholderData, ratingTiersQuery.isSuccess])
 
-  const itemSafetyById = useMemo(
-    () => new Map(items.map((image) => [getImageFeedSafetyKey(image), resolveImageFeedSafety(image, ratingTiersQuery.data)])),
-    [items, ratingTiersQuery.data],
-  )
+  // 무한스크롤은 페이지가 붙을 때마다 누적 배열을 새로 만든다. 이미 계산한 아이템의 safety
+  // "객체"를 재사용해야 아래 오버레이 캐시가 identity 비교만으로 기존 엘리먼트를 유지할 수 있다.
+  const safetyCacheRef = useRef<{
+    tiers: RatingTierRecord[] | null | undefined
+    entries: Map<string, { score: number | null | undefined; safety: ResolvedImageFeedSafety }>
+  }>({ tiers: undefined, entries: new Map() })
+
+  const itemSafetyById = useMemo(() => {
+    const cache = safetyCacheRef.current
+    if (cache.tiers !== ratingTiersQuery.data) {
+      // 정책 자체가 바뀌면(로드 포함) 전체 재계산이 맞다.
+      cache.tiers = ratingTiersQuery.data
+      cache.entries.clear()
+    }
+
+    const safetyById = new Map<string, ResolvedImageFeedSafety>()
+    for (const image of items) {
+      const key = getImageFeedSafetyKey(image)
+      const cached = cache.entries.get(key)
+      if (cached && cached.score === image.rating_score) {
+        safetyById.set(key, cached.safety)
+        continue
+      }
+
+      const safety = resolveImageFeedSafety(image, ratingTiersQuery.data)
+      cache.entries.set(key, { score: image.rating_score, safety })
+      safetyById.set(key, safety)
+    }
+    return safetyById
+  }, [items, ratingTiersQuery.data])
 
   const visibleItems = useMemo(
     () => visibilityMode === 'badge-only'
@@ -108,14 +134,31 @@ export function useImageFeedSafety({
   }, [hasMore, isError, isLoading, isLoadingMore, items.length, onLoadMore, visibleItems.length])
 
   // Cache overlay elements per item so memoized list cells keep stable props across re-renders.
+  // safety 객체 identity 가 보존되는 아이템은 "같은 엘리먼트 객체"를 돌려줘야 memo 가 실제로
+  // 작동한다 — 페이지가 추가될 때마다 전 카드가 새 엘리먼트를 받아 리렌더되던 원인이 이것이다.
+  const overlayElementCacheRef = useRef(new Map<string, {
+    safety: ResolvedImageFeedSafety
+    visibilityMode: 'feed' | 'badge-only'
+    element: ReactNode
+  }>())
+
   const persistentOverlayByKey = useMemo(() => {
+    const elementCache = overlayElementCacheRef.current
     const overlays = new Map<string, ReactNode>()
     for (const [key, safety] of itemSafetyById) {
       if (!safety?.tier) {
         continue
       }
 
-      overlays.set(key, <ImageRatingSafetyBadge tier={safety.tier} visibility={visibilityMode === 'badge-only' ? 'show' : safety.visibility} />)
+      const cached = elementCache.get(key)
+      if (cached && cached.safety === safety && cached.visibilityMode === visibilityMode) {
+        overlays.set(key, cached.element)
+        continue
+      }
+
+      const element = <ImageRatingSafetyBadge tier={safety.tier} visibility={visibilityMode === 'badge-only' ? 'show' : safety.visibility} />
+      elementCache.set(key, { safety, visibilityMode, element })
+      overlays.set(key, element)
     }
     return overlays
   }, [itemSafetyById, visibilityMode])
