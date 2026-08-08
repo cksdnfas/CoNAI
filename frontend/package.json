@@ -55,6 +55,7 @@
     "verify:home-search-drawer-contracts": "tsx src/scripts/verifyHomeSearchDrawerContracts.ts",
     "verify:search-suggestion-query-contracts": "tsx src/scripts/verifySearchSuggestionQueryContracts.ts",
     "verify:image-list-selection-contracts": "tsx src/scripts/verifyImageListSelectionContracts.ts",
+    "verify:image-list-video-preview-contracts": "tsx src/scripts/verifyImageListVideoPreviewContracts.ts",
     "verify:image-list-modal-contracts": "tsx src/scripts/verifyImageListModalContracts.ts",
     "verify:nai-reusable-assets-contracts": "tsx src/scripts/verifyNaiReusableAssetsContracts.ts",
     "verify:thumbnail-settings-ui-contracts": "tsx src/scripts/verifyThumbnailSettingsUiContracts.ts",

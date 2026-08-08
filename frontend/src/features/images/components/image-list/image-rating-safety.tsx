@@ -38,6 +38,14 @@ export function resolveRatingTier(score: number | null | undefined, tiers: Ratin
 /** Resolve how one image should appear in feed/list contexts for the phase-1 safety slice. */
 export function resolveImageFeedSafety(image: ImageRecord, tiers: RatingTierRecord[] | null | undefined): ResolvedImageFeedSafety {
   const tier = resolveRatingTier(image.rating_score, tiers)
+
+  // 티어 정책이 아직 도착하지 않은 첫 페인트는 노출(fail-open)이 아니라 블러(fail-closed)로
+  // 시작한다. 종전의 'show' 기본값은 제한 컨텐츠를 한 프레임 노출한 뒤 블러로 반전시키면서
+  // 리스트를 흔들었다. 정책이 로드된 뒤 티어에 안 걸리는(미평가) 미디어는 그대로 보여준다.
+  if (!tier && tiers == null) {
+    return { tier: null, visibility: 'blur' }
+  }
+
   return {
     tier,
     visibility: tier?.feed_visibility ?? 'show',
