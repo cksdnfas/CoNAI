@@ -88,13 +88,17 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
 
   const content = previewUrl && !hasPreviewError ? (
     mediaKind === 'video' ? (
+      // key: 가상화 레이아웃이 컴포넌트 인스턴스를 다른 미디어에 재활용해도 <video> DOM 이
+      // 함께 재활용되어 이전 프레임이 남는 일이 없도록, 미디어 identity 로 서브트리를 교체한다.
       <ImageListVideoPreview
+        key={imageId}
         image={image}
         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
         style={mediaFrameStyle}
         draggable={false}
         onDragStart={preventNativeDrag}
         onError={() => setHasPreviewError(true)}
+        suspendPlayback={blurPreview}
       />
     ) : (
       <ImagePreviewMedia

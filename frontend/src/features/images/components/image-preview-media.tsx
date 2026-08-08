@@ -44,6 +44,7 @@ export function ImagePreviewMedia({
     return (
       <video
         src={previewUrl}
+        poster={image.thumbnail_url ?? undefined}
         className={className}
         style={style}
         muted
