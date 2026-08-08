@@ -338,12 +338,15 @@ export class FileWatcherService {
   static async initialize(): Promise<void> {
     try {
       const folders = listAutoScanWatcherFolders();
+      const enabledFolders = folders.filter((folder) => folder.watcher_enabled === 1);
 
       let startedCount = 0;
       let errorCount = 0;
 
-      for (const folder of folders) {
-        if (folder.watcher_enabled === 1) {
+      // 폴더별 ready 대기(chokidar 초기 스캔, 최대 READY_TIMEOUT_MS)가 기동 시간을
+      // 지배하므로 순차가 아닌 병렬로 시작한다.
+      await Promise.all(
+        enabledFolders.map(async (folder) => {
           try {
             const validation = validateInitialWatcherPath(folder.folder_path);
             if (!validation.isValid) {
@@ -351,7 +354,7 @@ export class FileWatcherService {
               console.warn(`     경로: ${validation.resolvedPath}`);
               disableWatcherInDatabase(folder.id, validation.errorMessage || '초기화 시 경로 접근 실패');
               errorCount++;
-              continue;
+              return;
             }
 
             await this.startWatcher(folder.id);
@@ -367,8 +370,8 @@ export class FileWatcherService {
               console.error('  ❌ DB 업데이트 실패:', dbError);
             }
           }
-        }
-      }
+        }),
+      );
 
       if (startedCount > 0) {
         console.log(`👀 File watchers ready: ${startedCount} active, ${errorCount} issues`);

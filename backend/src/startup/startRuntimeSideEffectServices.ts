@@ -53,19 +53,23 @@ export async function startRuntimeSideEffectServices(
   }
 
   if (process.env.ENABLE_FILE_WATCHING !== 'false') {
-    try {
-      const { FileWatcherService } = await import('../services/fileWatcherService')
-      await FileWatcherService.initialize()
+    // Watcher readiness waits on chokidar's initial scan (minutes on large or
+    // network folders), so it must not block the HTTP server from listening.
+    void (async () => {
+      try {
+        const { FileWatcherService } = await import('../services/fileWatcherService')
+        await FileWatcherService.initialize()
 
-      const { BackupSourceWatcherService } = await import('../services/backupSourceWatcherService')
-      await BackupSourceWatcherService.initialize()
+        const { BackupSourceWatcherService } = await import('../services/backupSourceWatcherService')
+        await BackupSourceWatcherService.initialize()
 
-      const { CustomNodeWatcherService } = await import('../services/customNodeWatcherService')
-      await CustomNodeWatcherService.initialize()
-    } catch (error) {
-      console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error)
-      console.warn('   Falling back to scheduled scans only')
-    }
+        const { CustomNodeWatcherService } = await import('../services/customNodeWatcherService')
+        await CustomNodeWatcherService.initialize()
+      } catch (error) {
+        console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error)
+        console.warn('   Falling back to scheduled scans only')
+      }
+    })()
   } else {
     console.log('👀 File watching disabled, scheduled scans only')
   }
