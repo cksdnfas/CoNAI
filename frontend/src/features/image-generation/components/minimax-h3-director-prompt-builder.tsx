@@ -1,0 +1,140 @@
+import { useState } from 'react'
+import { Copy, Eye, Plus, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
+import {
+  buildMiniMaxH3DirectorPrompt,
+  prefillMiniMaxH3DirectorRefBuilder,
+  type MiniMaxH3DirectorBuilderState,
+  type MiniMaxH3DirectorTimelineItem,
+} from './minimax-h3-director-dasiwa-utils'
+
+type MiniMaxH3DirectorPromptBuilderProps = {
+  state: MiniMaxH3DirectorBuilderState
+  items: MiniMaxH3DirectorTimelineItem[]
+  invalid?: boolean
+  onChange: (state: MiniMaxH3DirectorBuilderState) => void
+  onStatus: (status: string) => void
+}
+
+/** Mode-specific DaSiWa prompt builder with canonical preview and REF scaffolding. */
+export function MiniMaxH3DirectorPromptBuilder({
+  state,
+  items,
+  invalid = false,
+  onChange,
+  onStatus,
+}: MiniMaxH3DirectorPromptBuilderProps) {
+  const { t } = useI18n()
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const preview = buildMiniMaxH3DirectorPrompt(state)
+  const patchState = (patch: Partial<MiniMaxH3DirectorBuilderState>) => onChange({ ...state, ...patch })
+  const patchRef = (patch: Partial<MiniMaxH3DirectorBuilderState['ref']>) => onChange({ ...state, ref: { ...state.ref, ...patch } })
+  const insertShotMarker = () => {
+    const shotNumber = window.prompt(t({ ko: '샷 번호', en: 'Shot number' }), '1')?.trim()
+    if (!shotNumber) return
+    const marker = `[Shot ${shotNumber}] `
+    if (state.mode === 'REF2VA') {
+      patchRef({ detailed_description: `${state.ref.detailed_description}${state.ref.detailed_description ? '\n' : ''}${marker}` })
+    } else {
+      patchState({ imd: `${state.imd}${state.imd ? '\n' : ''}${marker}` })
+    }
+  }
+
+  return <>
+    <section className="space-y-3 rounded-sm border border-border/80 bg-surface-low/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-medium text-foreground">{t({ ko: '프롬프트 빌더', en: 'Prompt builder' })}</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">{state.mode}</div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button type="button" size="sm" variant="outline" onClick={insertShotMarker}>
+            <Plus className="h-3.5 w-3.5" />[Shot N]
+          </Button>
+          {state.mode === 'REF2VA' ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => onChange(prefillMiniMaxH3DirectorRefBuilder(state, items))}>
+              <Sparkles className="h-3.5 w-3.5" />{t({ ko: '라벨·요약 채우기', en: 'Prefill labels & summary' })}
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
+            <Eye className="h-3.5 w-3.5" />{t({ ko: '프롬프트 미리보기', en: 'Preview prompt' })}
+          </Button>
+        </div>
+      </div>
+
+      {state.mode === 'REF2VA' ? (
+        <div className="grid gap-3">
+          <label className="space-y-1 text-xs text-muted-foreground">
+            <span>subject_definitions</span>
+            <Textarea rows={4} value={state.ref.subject_definitions} placeholder="<Subject 1> ... / <Picture 1> ..." onChange={(event) => patchRef({ subject_definitions: event.target.value })} />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            <span>summary</span>
+            <Textarea rows={3} value={state.ref.summary} placeholder="[reference generation] Use <Picture 1> ..." onChange={(event) => patchRef({ summary: event.target.value })} />
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            <span>retention_analysis</span>
+            <Textarea rows={4} value={state.ref.retention_analysis} placeholder="<Subject 1>: fully_preserved - ..." onChange={(event) => patchRef({ retention_analysis: event.target.value })} />
+          </label>
+          <label className={cn('space-y-1 text-xs text-muted-foreground', invalid && 'text-destructive')}>
+            <span>detailed_description</span>
+            <Textarea rows={6} value={state.ref.detailed_description} placeholder="[Shot 1] ... [Shot 2] At 00:04.500, ..." className={cn(invalid && 'border-destructive')} onChange={(event) => patchRef({ detailed_description: event.target.value })} />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>overall_soundscape</span>
+              <Textarea rows={3} value={state.ref.soundscape} onChange={(event) => patchRef({ soundscape: event.target.value })} />
+            </label>
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>non_diegetic_music</span>
+              <Textarea rows={3} value={state.ref.music} onChange={(event) => patchRef({ music: event.target.value })} />
+            </label>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          <label className={cn('space-y-1 text-xs text-muted-foreground', invalid && 'text-destructive')}>
+            <span>integrated_multimodal_description</span>
+            <Textarea rows={6} value={state.imd} placeholder="[Shot 1] Start your scene description here..." className={cn(invalid && 'border-destructive')} onChange={(event) => patchState({ imd: event.target.value })} />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>overall_soundscape</span>
+              <Textarea rows={3} value={state.soundscape} onChange={(event) => patchState({ soundscape: event.target.value })} />
+            </label>
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>non_diegetic_music</span>
+              <Textarea rows={3} value={state.music} onChange={(event) => patchState({ music: event.target.value })} />
+            </label>
+          </div>
+        </div>
+      )}
+    </section>
+
+    <SettingsModal
+      open={previewOpen}
+      title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })}
+      description={state.mode}
+      widthClassName="max-w-3xl"
+      onClose={() => setPreviewOpen(false)}
+    >
+      <div className="space-y-3">
+        <Textarea rows={18} readOnly value={preview} className="font-mono text-xs" />
+        <SettingsModalFooter>
+          <Button type="button" variant="outline" onClick={() => void navigator.clipboard.writeText(preview).then(
+            () => onStatus(t({ ko: '프롬프트를 복사했어.', en: 'Prompt copied.' })),
+            () => onStatus(t({ ko: '프롬프트 복사에 실패했어.', en: 'Failed to copy prompt.' })),
+          )}>
+            <Copy className="h-4 w-4" />{t({ ko: '복사', en: 'Copy' })}
+          </Button>
+          <Button type="button" onClick={() => setPreviewOpen(false)}>{t({ ko: '완료', en: 'Done' })}</Button>
+        </SettingsModalFooter>
+      </div>
+    </SettingsModal>
+  </>
+}

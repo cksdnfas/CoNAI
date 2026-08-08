@@ -3,10 +3,14 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   MINIMAX_H3_DIRECTOR_META_KEY,
+  buildMiniMaxH3DirectorPrompt,
   buildMiniMaxH3DirectorNodeValue,
+  createMiniMaxH3DirectorBuilderState,
   getMiniMaxH3DirectorActiveItems,
   isMiniMaxH3DirectorInputLink,
+  normalizeMiniMaxH3DirectorBuilderState,
   parseMiniMaxH3DirectorTimeline,
+  prefillMiniMaxH3DirectorRefBuilder,
   validateMiniMaxH3DirectorNodeValue,
   type MiniMaxH3DirectorTimeline,
   type MiniMaxH3DirectorTimelineItem,
@@ -69,6 +73,13 @@ assert.deepEqual(
 )
 const builtTimeline = parseMiniMaxH3DirectorTimeline(built.timeline_data).timeline
 assert.equal(builtTimeline.prompt_blocks[0]?.text, 'opening frame', 'media prompts must synchronize to prompt_blocks')
+assert.equal(typeof built.builder_state, 'string', 'the new required builder_state input must be serialized')
+assert.equal(builtTimeline.builder_state?.mode, 'REF2VA', 'timeline_data must retain a builder_state compatibility copy')
+assert.equal(
+  (JSON.parse(String(built.builder_state)) as { ref: { detailed_description: string } }).ref.detailed_description,
+  'global\nopening frame',
+  'legacy REF2VA prompt text and attached media prompts must migrate without loss',
+)
 
 const connectedInputs = {
   ...original,
@@ -79,13 +90,14 @@ const connectedInputs = {
   duration: ['94', 0],
   ref_image_size: ['95', 0],
   timeline_data: ['96', 0],
+  builder_state: ['97', 0],
 }
 const connectedBuilt = buildMiniMaxH3DirectorNodeValue(
   connectedInputs,
   { width: 640 },
 )
 assert.equal(connectedBuilt.width, 640, 'an explicitly edited connected input must become a local value')
-for (const key of ['mode', 'prompt', 'height', 'duration', 'ref_image_size', 'timeline_data'] as const) {
+for (const key of ['mode', 'prompt', 'height', 'duration', 'ref_image_size', 'timeline_data', 'builder_state'] as const) {
   assert.deepEqual(connectedBuilt[key], connectedInputs[key], `${key} links must survive unrelated composite-field edits`)
   assert.equal(isMiniMaxH3DirectorInputLink(connectedBuilt[key]), true, `${key} must remain a Comfy input link`)
 }
@@ -110,6 +122,47 @@ const flWithPreservedRefImages = {
 }
 assert.equal(getMiniMaxH3DirectorActiveItems(flWithPreservedRefImages).length, 2, 'FL2VA must consume only its first two image slots')
 assert.equal(validateMiniMaxH3DirectorNodeValue(flWithPreservedRefImages).length, 0, 'hidden REF2VA media must not block FL2VA generation')
+assert.equal(getMiniMaxH3DirectorActiveItems({ ...flWithPreservedRefImages, mode: 'T2VA' }).length, 0, 'T2VA must consume no media')
+assert.equal(getMiniMaxH3DirectorActiveItems({ ...flWithPreservedRefImages, mode: 'I2VA' }).length, 1, 'I2VA must consume one opening image')
+assert.equal(getMiniMaxH3DirectorActiveItems({ ...flWithPreservedRefImages, mode: 'L2VA' }).length, 1, 'L2VA must consume one closing image')
+assert.equal(getMiniMaxH3DirectorActiveItems({ ...flWithPreservedRefImages, mode: 'REF2VA' }).length, 3, 'REF2VA must restore all preserved references')
+
+const baseBuilder = normalizeMiniMaxH3DirectorBuilderState(
+  createMiniMaxH3DirectorBuilderState('FL2VA', 5),
+  timeline,
+  'FL2VA',
+  5,
+)
+baseBuilder.imd = '[Shot 1] A crane shot crosses the harbor.'
+assert.match(buildMiniMaxH3DirectorPrompt(baseBuilder), /5\.17-second mark/, 'FL2VA preview must use DaSiWa frame-aligned duration text')
+const refBuilder = prefillMiniMaxH3DirectorRefBuilder(
+  createMiniMaxH3DirectorBuilderState('REF2VA', 5),
+  [
+    item('picture', 'image'),
+    item('clip', 'video', { order: 1, media_mode: 'video_audio' }),
+    item('voice', 'audio', { order: 2 }),
+  ],
+)
+assert.match(refBuilder.ref.subject_definitions, /<Picture 1>/, 'REF prefill must define image labels')
+assert.match(refBuilder.ref.subject_definitions, /<Video 1>/, 'REF prefill must define visual-video labels')
+assert.match(refBuilder.ref.subject_definitions, /<Audio 2>/, 'REF prefill must count embedded and standalone audio references')
+assert.match(buildMiniMaxH3DirectorPrompt(refBuilder), /^subject_definitions:/, 'REF preview must use the six-section DaSiWa format')
+const normalizedLegacyRefBuilder = normalizeMiniMaxH3DirectorBuilderState({
+  version: 1,
+  mode: 'REF2VA',
+  ref: {
+    subject_defs: [{ text: '<Picture 1> is the keyframe.' }],
+    summary_types: ['reference generation'],
+    summary_text: 'Use <Picture 1>.',
+    retention: [{ label: '<Picture 1>', marker: 'fully_preserved', note: 'Keep framing.' }],
+    style_line: 'Cinematic realism.',
+    detail: '[Shot 1] The camera pushes in.',
+  },
+}, timeline, 'REF2VA', 5)
+assert.match(normalizedLegacyRefBuilder.ref.subject_definitions, /<Picture 1>/, 'legacy v1 subject definitions must normalize into the v2 editor')
+assert.match(normalizedLegacyRefBuilder.ref.summary, /^\[reference generation\]/, 'legacy v1 summary must normalize into the v2 editor')
+assert.match(normalizedLegacyRefBuilder.ref.retention_analysis, /fully_preserved/, 'legacy v1 retention rows must normalize into the v2 editor')
+assert.match(normalizedLegacyRefBuilder.ref.detailed_description, /Cinematic realism/, 'legacy v1 detail fields must normalize into the v2 editor')
 
 const audioWithoutVisual = {
   ...original,
@@ -162,6 +215,7 @@ const authoringSource = readFileSync(resolve(process.cwd(), 'src/features/image-
 const fieldInputSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/workflow-field-input.tsx'), 'utf8')
 const markedFieldsEditorSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-marked-fields-editor.tsx'), 'utf8')
 const directorInputSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/minimax-h3-director-dasiwa-input.tsx'), 'utf8')
+const promptBuilderSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/minimax-h3-director-prompt-builder.tsx'), 'utf8')
 const mediaCardSource = readFileSync(resolve(process.cwd(), 'src/features/image-generation/components/minimax-h3-director-media-card.tsx'), 'utf8')
 assert.match(authoringSource, /classType === MINIMAX_H3_DIRECTOR_CLASS_TYPE/, 'only the exact DaSiWa class should select the Director editor')
 assert.match(authoringSource, /jsonPath: `\$\{nodeId\}\.inputs`/, 'the Director must remain one ordinary composite workflow input')
@@ -183,6 +237,13 @@ assert.match(directorInputSource, /clearLane\('visual'\)/, 'the visual lane must
 assert.match(directorInputSource, /clearLane\('audio'\)/, 'the audio lane must have an independent reset')
 assert.match(directorInputSource, /SettingsModal/, 'media prompts must be edited in a modal')
 assert.match(directorInputSource, /Media prompt summary/, 'media prompts must have a read-only summary viewer')
+for (const mode of ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA']) {
+  assert.match(directorInputSource, new RegExp(`['"]${mode}['"]`), `${mode} must be available in the CoNAI Director UI`)
+}
+assert.match(directorInputSource, /MiniMaxH3DirectorPromptBuilder/, 'the composite input must render the dedicated prompt builder')
+assert.match(promptBuilderSource, /prefillMiniMaxH3DirectorRefBuilder/, 'REF2VA must expose label and summary prefill')
+assert.match(promptBuilderSource, /buildMiniMaxH3DirectorPrompt/, 'the UI must preview the canonical DaSiWa prompt')
+assert.match(mediaCardSource, /videoPoster/, 'video references must derive transient posters without persisting base64 in timeline_data')
 assert.match(mediaCardSource, /LONG_PRESS_DELAY_MS/, 'media cards must support delayed pointer sorting')
 assert.match(mediaCardSource, /onReplaceFile/, 'dropping a file on a media card must replace that card')
 assert.doesNotMatch(mediaCardSource, /object-cover/, 'media previews must preserve their intrinsic aspect ratio')

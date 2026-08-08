@@ -47,14 +47,15 @@ async function main() {
           version: 1,
           items: [
             { id: 'opening', type: 'image', value: 'opening.png', enabled: true, order: 0, slot: 0 },
-            { id: 'hidden-audio', type: 'audio', value: 'hidden.wav', enabled: true, order: 1, slot: 0 },
+            { id: 'closing', type: 'image', value: 'closing.png', enabled: true, order: 1, slot: 1 },
+            { id: 'hidden-audio', type: 'audio', value: 'hidden.wav', enabled: true, order: 2, slot: 0 },
           ],
           prompt_blocks: [],
         }),
         fl2va_model: ['10', 0],
         ref2va_model: ['11', 0],
         future_input: 'retained',
-        __conai_minimax_h3_director: { assets: { opening: asset } },
+        __conai_minimax_h3_director: { assets: { opening: asset, closing: asset } },
       },
     };
     const fields = [{
@@ -68,9 +69,11 @@ async function main() {
     const prepared = await prepareComfyPromptData(comfyService as never, fields as never, promptData);
     const nodeValue = prepared.director;
     const timeline = JSON.parse(nodeValue.timeline_data);
-    assert.equal(uploads.length, 1, 'FL2VA must upload only its active image references');
+    assert.equal(uploads.length, 2, 'FL2VA must upload only its two active image references');
     assert.match(timeline.items[0].value, /^conai\//, 'the standard Comfy upload result must replace the draft filename');
-    assert.equal(timeline.items[1].value, 'hidden.wav', 'REF-only media must survive an FL2VA submission unchanged');
+    assert.equal(timeline.items[2].value, 'hidden.wav', 'REF-only media must survive an FL2VA submission unchanged');
+    assert.equal(typeof nodeValue.builder_state, 'string', 'the required builder_state input must be prepared for ComfyUI');
+    assert.equal(JSON.parse(nodeValue.timeline_data).builder_state.mode, 'FL2VA', 'timeline_data must carry the same builder state');
     assert.deepEqual(nodeValue.fl2va_model, ['10', 0], 'FL2VA MODEL links must remain untouched');
     assert.deepEqual(nodeValue.ref2va_model, ['11', 0], 'REF2VA MODEL links must remain untouched');
     assert.equal(nodeValue.future_input, 'retained', 'unknown node inputs must remain untouched');
@@ -83,6 +86,20 @@ async function main() {
     assert.equal(substituted['42'].class_type, 'MiniMaxH3Director', 'Director execution must use the ordinary workflow node');
     assert.deepEqual(substituted['42'].inputs, nodeValue, 'the prepared composite value must use ordinary workflow substitution');
 
+    const expectedUploadsByMode = { T2VA: 0, I2VA: 1, FL2VA: 2, L2VA: 1, REF2VA: 2 } as const;
+    for (const [mode, expectedUploadCount] of Object.entries(expectedUploadsByMode)) {
+      const uploadCountBeforeMode: number = uploads.length;
+      const preparedMode = await prepareComfyPromptData(comfyService as never, fields as never, {
+        director: { ...promptData.director, mode, builder_state: '' },
+      });
+      assert.equal(uploads.length - uploadCountBeforeMode, expectedUploadCount, `${mode} must upload only media consumed by that mode`);
+      const preparedBuilder = JSON.parse(preparedMode.director.builder_state);
+      assert.equal(preparedBuilder.mode, mode, `${mode} must be synchronized into builder_state`);
+      if (mode === 'REF2VA') {
+        assert.equal(preparedBuilder.ref.detailed_description, 'global prompt', 'legacy REF2VA prompt must migrate to detailed_description');
+      }
+    }
+
     const linkedTimeline = ['77', 0];
     const linkedPromptData = {
       director: {
@@ -94,12 +111,14 @@ async function main() {
         duration: ['74', 0],
         ref_image_size: ['75', 0],
         timeline_data: linkedTimeline,
+        builder_state: ['76', 0],
       },
     };
     const uploadCountBeforeLinkedTimeline = uploads.length;
     const preparedLinked = await prepareComfyPromptData(comfyService as never, fields as never, linkedPromptData);
     assert.deepEqual(preparedLinked.director.timeline_data, linkedTimeline, 'a connected timeline_data input must remain an untouched Comfy link');
     assert.deepEqual(preparedLinked.director.width, ['72', 0], 'connected scalar inputs must remain untouched');
+    assert.deepEqual(preparedLinked.director.builder_state, ['76', 0], 'a connected builder_state input must remain untouched');
     assert.equal(uploads.length, uploadCountBeforeLinkedTimeline, 'a connected timeline must not trigger draft-media uploads');
     assert.equal('__conai_minimax_h3_director' in preparedLinked.director, false, 'private metadata must still be stripped from linked timelines');
 

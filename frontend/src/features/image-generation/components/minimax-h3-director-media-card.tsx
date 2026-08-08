@@ -1,4 +1,4 @@
-import { useEffect, useRef, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { Film, ImageIcon, MessageSquareText, Music2, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { buildWorkflowInputAssetUrl, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
@@ -38,6 +38,37 @@ function isInteractiveTarget(target: EventTarget | null) {
 
 function MiniMaxDirectorMediaPreview({ item, asset }: { item: MiniMaxH3DirectorTimelineItem; asset?: WorkflowInputAssetRef }) {
   const src = asset ? buildWorkflowInputAssetUrl(asset) : null
+  const [videoPoster, setVideoPoster] = useState<string | null>(null)
+
+  useEffect(() => {
+    setVideoPoster(null)
+    if (item.type !== 'video' || !src) return
+
+    let disposed = false
+    const video = document.createElement('video')
+    video.preload = 'auto'
+    video.muted = true
+    video.playsInline = true
+    video.src = src
+    video.onloadeddata = () => {
+      if (disposed || video.videoWidth <= 0 || video.videoHeight <= 0) return
+      try {
+        const canvas = document.createElement('canvas')
+        const scale = Math.min(1, 640 / video.videoWidth)
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
+        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
+        setVideoPoster(canvas.toDataURL('image/jpeg', 0.72))
+      } catch {
+        setVideoPoster(null)
+      }
+    }
+    return () => {
+      disposed = true
+      video.removeAttribute('src')
+      video.load()
+    }
+  }, [item.type, src])
 
   if (item.type === 'image' && src) {
     return (
@@ -53,6 +84,7 @@ function MiniMaxDirectorMediaPreview({ item, asset }: { item: MiniMaxH3DirectorT
     return (
       <video
         src={src}
+        poster={videoPoster ?? undefined}
         aria-label={asset?.fileName || item.value}
         preload="metadata"
         muted
