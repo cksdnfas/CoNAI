@@ -168,6 +168,23 @@ function withDefaultDateTimeOptions(
   return { ...defaults, ...options }
 }
 
+/**
+ * `Intl.NumberFormat` 생성은 포맷 1회보다 훨씬 비싸다. 큐 헤더 위젯처럼 렌더마다
+ * 레코드당 수 회 호출하는 소비처가 있으므로 locale+options 조합별로 인스턴스를 재사용한다.
+ * 키는 options 의 JSON 직렬화 — 호출부가 리터럴 옵션을 쓰므로 조합 수는 소수로 유계다.
+ */
+const numberFormatCache = new Map<string, Intl.NumberFormat>()
+
+function getCachedNumberFormat(locale: string, options?: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const cacheKey = options ? `${locale}|${JSON.stringify(options)}` : locale
+  let format = numberFormatCache.get(cacheKey)
+  if (!format) {
+    format = new Intl.NumberFormat(locale, options)
+    numberFormatCache.set(cacheKey, format)
+  }
+  return format
+}
+
 export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithChildren<{ catalog?: TranslationCatalog }>) {
   const registeredCatalogSnapshot = useSyncExternalStore(subscribeCatalog, getRegisteredCatalog, getRegisteredCatalog)
   const storedLanguage = useMemo(() => readStoredLanguage(), [])
@@ -197,7 +214,7 @@ export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithC
   )
 
   const formatNumber = useCallback<I18nContextValue['formatNumber']>(
-    (value, options) => new Intl.NumberFormat(locale, options).format(value),
+    (value, options) => getCachedNumberFormat(locale, options).format(value),
     [locale],
   )
 
