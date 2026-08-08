@@ -3,6 +3,10 @@ import type { GenerationQueueLiveProgress, GenerationQueueProgressPhase } from '
 
 const INITIAL_CONNECT_TIMEOUT_MS = 5000;
 const RECONNECT_DELAY_MS = 1000;
+/** 연속 실패 시 지수 백오프 상한 — /ws 불통 환경에서 잡 생애 내내 1conn/s 를 여는 누수를 막는다. */
+const RECONNECT_DELAY_MAX_MS = 30_000;
+/** 첫 경고 이후에도 이 횟수마다 다시 경고해, 조용히 재연결만 도는 상태를 드러낸다. */
+const RECONNECT_REWARN_EVERY_ATTEMPTS = 30;
 const PROGRESS_EMIT_INTERVAL_MS = 250;
 const MAX_PENDING_EVENTS = 16;
 
@@ -177,6 +181,7 @@ export class ComfyProgressMonitor {
   private expectedPromptId: string | null = null;
   private pendingEvents: ParsedComfyProgressEvent[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingProgress: GenerationQueueLiveProgress | null = null;
   private lastEmittedAt = 0;
@@ -265,7 +270,10 @@ export class ComfyProgressMonitor {
         settle();
       }, INITIAL_CONNECT_TIMEOUT_MS);
 
-      socket.once('open', settle);
+      socket.once('open', () => {
+        this.reconnectAttempts = 0;
+        settle();
+      });
       socket.on('message', (data: RawData, isBinary: boolean) => {
         if (!isBinary) {
           this.handleMessage(data.toString());
@@ -296,13 +304,27 @@ export class ComfyProgressMonitor {
     if (this.stopped || this.reconnectTimer) {
       return;
     }
+
+    this.reconnectAttempts += 1;
+    if (this.reconnectAttempts % RECONNECT_REWARN_EVERY_ATTEMPTS === 0) {
+      console.warn(`⚠️ ComfyUI progress socket for ${this.clientId} still unreachable after ${this.reconnectAttempts} attempts; queue ETA fallback remains active.`);
+    }
+
+    const delayMs = Math.min(RECONNECT_DELAY_MS * 2 ** Math.max(0, this.reconnectAttempts - 1), RECONNECT_DELAY_MAX_MS);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect(false);
-    }, RECONNECT_DELAY_MS);
+    }, delayMs);
   }
 
   private handleMessage(rawMessage: string) {
+    // 프롬프트에 바인딩된 뒤에는 파싱 전에 저비용 문자열 검사로 타 프롬프트/브로드캐스트
+    // 프레임을 거른다. 같은 서버에 모니터가 N개면 모든 프레임이 N번 JSON.parse 되기 때문이다.
+    // (문자열 포함 = 후보일 뿐이므로, 통과한 프레임은 여전히 아래 정식 필터를 거친다.)
+    if (this.expectedPromptId && !rawMessage.includes(this.expectedPromptId)) {
+      return;
+    }
+
     const event = parseComfyProgressEvent(rawMessage, this.workflow);
     if (!event) {
       return;
