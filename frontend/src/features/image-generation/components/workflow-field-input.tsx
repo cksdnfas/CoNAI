@@ -105,7 +105,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
 
     return wrapField(
       <Select value={stringValue} onChange={(event) => onChange(event.target.value)}>
-        <option value="">선택</option>
+        <option value="" disabled hidden>선택</option>
         {options.map((option) => (
           <option key={option} value={option}>
             {getSelectOptionLabel(option)}

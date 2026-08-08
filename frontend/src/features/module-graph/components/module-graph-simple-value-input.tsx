@@ -6,6 +6,8 @@ import { useI18n } from '@/i18n'
 
 export type ModuleGraphSelectOption = string | { value: string; label: string }
 
+const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
+
 type ModuleGraphSimpleValueInputProps = {
   dataType: 'select' | 'number' | 'boolean' | 'text' | 'prompt' | 'json'
   value: unknown
@@ -38,6 +40,10 @@ function formatModuleGraphOptionDefaultValue(value: unknown) {
   return serialized.length > 48 ? `${serialized.slice(0, 47)}…` : serialized
 }
 
+function isDropdownRandomOption(option: ModuleGraphSelectOption) {
+  return (typeof option === 'string' ? option : option.value) === DROPDOWN_RANDOM_OPTION_VALUE
+}
+
 export function formatModuleGraphDefaultOptionLabel(t: ReturnType<typeof useI18n>['t'], value: unknown) {
   const formattedValue = formatModuleGraphOptionDefaultValue(value)
   return formattedValue
@@ -63,13 +69,15 @@ export function ModuleGraphSimpleValueInput({
   const { t } = useI18n()
   const resolvedEmptyLabel = emptyLabel ?? t({ ko: '선택', en: 'Select' })
   if (dataType === 'select') {
+    const hasRandomSelectionOption = (options ?? []).some(isDropdownRandomOption)
+
     return (
       <Select
         value={typeof value === 'string' ? value : value == null ? '' : String(value)}
         onChange={(event) => onChange(event.target.value)}
         className={className}
       >
-        {allowEmptyOption ? <option value="">{resolvedEmptyLabel}</option> : null}
+        {allowEmptyOption ? <option value="" disabled={hasRandomSelectionOption} hidden={hasRandomSelectionOption}>{resolvedEmptyLabel}</option> : null}
         {(options ?? []).map((option) => {
           const resolvedOption = typeof option === 'string'
             ? { value: option, label: option }

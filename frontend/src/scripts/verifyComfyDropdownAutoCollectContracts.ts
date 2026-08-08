@@ -30,6 +30,14 @@ const workflowFieldInputSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/workflow-field-input.tsx'),
   'utf8',
 )
+const workflowInputFieldsSource = readFileSync(
+  resolve(process.cwd(), 'src/features/module-graph/components/workflow-input-fields.tsx'),
+  'utf8',
+)
+const moduleGraphSimpleValueInputSource = readFileSync(
+  resolve(process.cwd(), 'src/features/module-graph/components/module-graph-simple-value-input.tsx'),
+  'utf8',
+)
 const pathOptionTreeSelectSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/path-option-tree-select.tsx'),
   'utf8',
@@ -137,7 +145,6 @@ for (const pattern of [/Search/, /<Input[\s\S]*placeholder=\{t\(\{ ko: '검색',
 }
 for (const pattern of [
   /function normalizePathOptionSearch\(value: string\)[\s\S]*return value\.trim\(\)\.toLocaleLowerCase\(\)/,
-  /if \(node\.kind === 'placeholder'\) \{[\s\S]*continue[\s\S]*\}/,
   /const searchText = normalizePathOptionSearch\(`\$\{node\.label\} \$\{node\.value \?\? ''\}`\)/,
   /includeAncestors\(node\)[\s\S]*if \(node\.kind === 'folder'\) \{[\s\S]*includeDescendants\(node\)/,
   /const selectedNode = treeNodes\.find\(\(node\) => node\.value === value\) \?\? null/,
@@ -149,6 +156,11 @@ for (const pattern of [
     'path tree select search should preserve normalized matching, context expansion, and close reset behavior',
   )
 }
+assert.doesNotMatch(
+  pathOptionTreeSelectSource,
+  /placeholder:|kind: 'placeholder'/,
+  'path tree selects should keep the empty placeholder on the trigger without exposing it as a selectable menu item',
+)
 assert.match(
   pathOptionTreeSelectSource,
   /const selectedLabel = selectedNode\?\.label \?\? \(value \? getOptionDisplayLabel\(value, randomSelectionLabel\) : resolvedPlaceholder\)/,
@@ -168,6 +180,23 @@ assert.match(
   workflowFieldInputSource,
   /<PathOptionTreeSelect[\s\S]*modelPreviewFolder=\{field\.model_preview_folder\}[\s\S]*refreshLabel="ComfyUI 자동수집 새로고침"/,
   'path-like ComfyUI dropdown fields should pass model preview folders to hover thumbnail trees',
+)
+assert.match(
+  workflowFieldInputSource,
+  /<option value="" disabled hidden>선택<\/option>/,
+  'plain workflow selects should retain an unset placeholder without exposing an empty selectable menu item',
+)
+for (const source of [workflowInputFieldsSource, moduleGraphSimpleValueInputSource]) {
+  assert.match(
+    source,
+    /<option value=""[^>]*disabled[^>]*hidden/,
+    'module-graph workflow dropdowns should hide empty placeholders from random-selection option menus',
+  )
+}
+assert.match(
+  moduleGraphSimpleValueInputSource,
+  /hasRandomSelectionOption = \(options \?\? \[\]\)\.some\(isDropdownRandomOption\)/,
+  'shared module-graph selects should preserve selectable empty defaults outside random-selection dropdowns',
 )
 
 assert.match(

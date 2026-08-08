@@ -20,7 +20,7 @@ type PathOptionTreeNode = {
   parentId: string | null
   label: string
   value?: string
-  kind: 'placeholder' | 'random' | 'folder' | 'option'
+  kind: 'random' | 'folder' | 'option'
   order: number
 }
 
@@ -55,17 +55,8 @@ function getOptionDisplayLabel(option: string, randomSelectionLabel: string) {
   return parts.at(-1) ?? option
 }
 
-function buildPathOptionTree(options: string[], placeholder: string, randomSelectionLabel: string): PathOptionTreeNode[] {
-  const nodes: PathOptionTreeNode[] = [
-    {
-      id: 'placeholder:',
-      parentId: null,
-      label: placeholder,
-      value: '',
-      kind: 'placeholder',
-      order: -2,
-    },
-  ]
+function buildPathOptionTree(options: string[], randomSelectionLabel: string): PathOptionTreeNode[] {
+  const nodes: PathOptionTreeNode[] = []
   const folderIds = new Set<string>()
 
   for (const option of options) {
@@ -170,10 +161,6 @@ function filterPathOptionTreeNodes(nodes: PathOptionTreeNode[], query: string) {
   }
 
   for (const node of nodes) {
-    if (node.kind === 'placeholder') {
-      continue
-    }
-
     const searchText = normalizePathOptionSearch(`${node.label} ${node.value ?? ''}`)
     if (!searchText.includes(normalizedQuery)) {
       continue
@@ -226,7 +213,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
   const previewTimerRef = useRef<number | null>(null)
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const menuId = useId()
-  const treeNodes = useMemo(() => buildPathOptionTree(options, resolvedPlaceholder, randomSelectionLabel), [options, randomSelectionLabel, resolvedPlaceholder])
+  const treeNodes = useMemo(() => buildPathOptionTree(options, randomSelectionLabel), [options, randomSelectionLabel])
   const filteredTreeNodes = useMemo(() => filterPathOptionTreeNodes(treeNodes, searchQuery), [searchQuery, treeNodes])
   const searchExpandedIds = useMemo(() => (searchQuery.trim() ? collectPathOptionFolderIds(filteredTreeNodes) : []), [filteredTreeNodes, searchQuery])
   const selectedNode = treeNodes.find((node) => node.value === value) ?? null
