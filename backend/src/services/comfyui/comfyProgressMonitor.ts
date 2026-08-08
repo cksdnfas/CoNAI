@@ -1,5 +1,5 @@
 import WebSocket, { type RawData } from 'ws';
-import type { GenerationQueueLiveProgress } from '../../types/generationQueue';
+import type { GenerationQueueLiveProgress, GenerationQueueProgressPhase } from '../../types/generationQueue';
 
 const INITIAL_CONNECT_TIMEOUT_MS = 5000;
 const RECONNECT_DELAY_MS = 1000;
@@ -142,6 +142,17 @@ export function parseComfyProgressEvent(
   }
 
   return null;
+}
+
+/**
+ * 잡당 정확히 2회뿐인 경계 페이즈만 즉시 발행한다.
+ *
+ * `executing` 은 그래프 노드마다 1프레임씩 도착하므로(50~80노드 워크플로우는 시작 직후
+ * 1초 안에 그만큼의 버스트) `sampling` 과 함께 250ms 코얼레싱을 태운다. 마지막 프레임은
+ * trailing 타이머가 보존하므로 노드 전환 표시가 사라지지는 않는다.
+ */
+export function isImmediateProgressPhase(phase: GenerationQueueProgressPhase): boolean {
+  return phase === 'preparing' || phase === 'finalizing';
 }
 
 /** Build the direct ComfyUI WebSocket URL without dropping an endpoint base path. */
@@ -316,7 +327,7 @@ export class ComfyProgressMonitor {
 
   private emit(progress: GenerationQueueLiveProgress) {
     const now = Date.now();
-    const isImmediate = progress.phase !== 'sampling';
+    const isImmediate = isImmediateProgressPhase(progress.phase);
     const waitMs = Math.max(0, PROGRESS_EMIT_INTERVAL_MS - (now - this.lastEmittedAt));
     if (isImmediate || waitMs === 0) {
       if (this.emitTimer) {
