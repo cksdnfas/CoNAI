@@ -19,6 +19,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
       is_public_page BOOLEAN DEFAULT 0,
       public_slug VARCHAR(255),
       public_queue_max_count INTEGER,
+      public_queue_role_limits TEXT,
       result_view_mode TEXT NOT NULL DEFAULT 'history',
       artifact_root_path TEXT,
       artifact_directory_mode TEXT NOT NULL DEFAULT 'shared',
@@ -434,6 +435,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('workflows', 'public_queue_max_count')) {
     console.log('  Migrating workflows: adding public_queue_max_count column');
     db.exec('ALTER TABLE workflows ADD COLUMN public_queue_max_count INTEGER');
+  }
+  if (!hasColumn('workflows', 'public_queue_role_limits')) {
+    console.log('  Migrating workflows: adding public_queue_role_limits column');
+    db.exec('ALTER TABLE workflows ADD COLUMN public_queue_role_limits TEXT');
   }
   if (!hasColumn('workflows', 'result_view_mode')) {
     console.log('  Migrating workflows: adding result_view_mode column');
@@ -886,6 +891,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_completed_service_workflow_recent ON generation_queue_jobs(status, service_type, workflow_id, completed_at DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_service_type ON generation_queue_jobs(service_type)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_by_account_id ON generation_queue_jobs(requested_by_account_id)',
+    // 등급별 대기열 제한 검사: 한 사용자의 특정 워크플로우 활성 잡 수를 세는 경로.
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requester_workflow_status ON generation_queue_jobs(requested_by_account_id, workflow_id, status)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_server_id ON generation_queue_jobs(requested_server_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_server_tag ON generation_queue_jobs(requested_server_tag)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_assigned_server_id ON generation_queue_jobs(assigned_server_id)',

@@ -90,6 +90,12 @@ export function PublicComfyWorkflowPage() {
   const workflowFields = useMemo(() => workflow?.marked_fields ?? [], [workflow?.marked_fields])
   const shouldShowArtifactExplorer = workflow?.result_view_mode === 'artifact_explorer'
   const publicQueueMaxCount = resolvePublicQueueMaxCount(workflow?.public_queue_max_count)
+  // 등급별 회원 1인당 동시 대기열 제한(조회 시점 스냅샷). 최종 판정은 서버가 한다.
+  const viewerQueueRoleLimit = typeof workflow?.viewer_queue_role_limit === 'number' ? workflow.viewer_queue_role_limit : null
+  const viewerQueueRoleActive = typeof workflow?.viewer_queue_role_active === 'number' ? workflow.viewer_queue_role_active : 0
+  const viewerQueueRoleLabel = workflow?.viewer_queue_role_label ?? null
+  const viewerQueueRoleLimitReached = viewerQueueRoleLimit !== null
+    && (viewerQueueRoleLimit <= 0 || viewerQueueRoleActive >= viewerQueueRoleLimit)
   const generationSaveOptions = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
   const useWideSplitPaneScroll = isWideLayout && workflow !== null
 
@@ -236,6 +242,10 @@ export function PublicComfyWorkflowPage() {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '공용 워크플로우 큐 등록에 실패했어.', en: 'Failed to enqueue the public workflow.' })), tone: 'error' })
     } finally {
       setIsQueueSubmitting(false)
+      if (viewerQueueRoleLimit !== null) {
+        // 등급별 제한 배너의 진행 중 개수를 서버 기준으로 다시 맞춘다.
+        void workflowQuery.refetch()
+      }
     }
   }
 
@@ -357,8 +367,31 @@ export function PublicComfyWorkflowPage() {
     </div>
   ) : null
 
+  const viewerRoleName = viewerQueueRoleLabel ?? t({ ko: '현재', en: 'current' })
   const controllerBodyContent = (
     <>
+      {viewerQueueRoleLimit !== null ? (
+        <Alert variant={viewerQueueRoleLimitReached ? 'destructive' : undefined}>
+          <AlertTitle>{t({ ko: '대기열 생성 제한', en: 'Queue creation limit' })}</AlertTitle>
+          <AlertDescription>
+            {viewerQueueRoleLimit <= 0
+              ? t(
+                { ko: '{role} 등급은 이 워크플로우에서 대기열을 만들 수 없어.', en: 'The {role} role cannot create queue jobs on this workflow.' },
+                { role: viewerRoleName },
+              )
+              : viewerQueueRoleLimitReached
+                ? t(
+                  { ko: '{role} 등급은 이 워크플로우에서 동시에 {limit}개까지만 대기열을 만들 수 있어. 진행 중인 {active}개가 끝난 뒤에 다시 등록할 수 있어.', en: 'The {role} role can keep at most {limit} active queue job(s) on this workflow. You can enqueue again after your {active} active job(s) finish.' },
+                  { role: viewerRoleName, limit: viewerQueueRoleLimit, active: viewerQueueRoleActive },
+                )
+                : t(
+                  { ko: '{role} 등급은 이 워크플로우에서 동시에 {limit}개까지 대기열을 만들 수 있어. (현재 {active}개 진행 중)', en: 'The {role} role can keep up to {limit} active queue job(s) on this workflow. ({active} in progress now)' },
+                  { role: viewerRoleName, limit: viewerQueueRoleLimit, active: viewerQueueRoleActive },
+                )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {missingRequiredField ? (
         <Alert>
           <AlertTitle>{t({ ko: '입력이 더 필요해', en: 'More input is required' })}</AlertTitle>

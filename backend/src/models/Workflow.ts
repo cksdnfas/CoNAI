@@ -3,6 +3,7 @@ import {
   WorkflowRecord,
   WorkflowCreateData,
   WorkflowUpdateData,
+  WorkflowRoleQueueLimits,
   MarkedField
 } from '../types/workflow';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
@@ -26,6 +27,58 @@ function normalizePublicQueueMaxCount(value: unknown) {
   return Math.min(PUBLIC_QUEUE_MAX_COUNT_DEFAULT, Math.max(1, Math.trunc(numericValue as number)));
 }
 
+const PUBLIC_QUEUE_ROLE_LIMIT_MAX = 999;
+
+/**
+ * 등급별 동시 대기열 제한 정규화. 값이 없거나(빈 문자열/null) 숫자가 아니면 해당 등급 항목을
+ * 버린다(= 무제한). 남는 항목이 없으면 null.
+ */
+export function normalizePublicQueueRoleLimits(value: unknown): WorkflowRoleQueueLimits | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const normalized: WorkflowRoleQueueLimits = {};
+  for (const [rawGroupKey, rawLimit] of Object.entries(value as Record<string, unknown>)) {
+    const groupKey = rawGroupKey.trim();
+    if (!groupKey) {
+      continue;
+    }
+
+    const numericValue = typeof rawLimit === 'number'
+      ? rawLimit
+      : typeof rawLimit === 'string' && rawLimit.trim().length > 0
+        ? Number(rawLimit)
+        : null;
+
+    if (numericValue === null || !Number.isFinite(numericValue)) {
+      continue;
+    }
+
+    normalized[groupKey] = Math.min(PUBLIC_QUEUE_ROLE_LIMIT_MAX, Math.max(0, Math.trunc(numericValue)));
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function serializePublicQueueRoleLimits(value: unknown): string | null {
+  const normalized = normalizePublicQueueRoleLimits(value);
+  return normalized ? JSON.stringify(normalized) : null;
+}
+
+/** DB에 저장된 JSON 문자열을 등급별 제한 맵으로 파싱한다. */
+export function parseWorkflowRoleQueueLimits(raw: string | null | undefined): WorkflowRoleQueueLimits | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return normalizePublicQueueRoleLimits(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 export class WorkflowModel {
   private static normalizeWorkflowRecord(workflow: WorkflowRecord | undefined | null): WorkflowRecord | null {
     if (!workflow) {
@@ -40,6 +93,7 @@ export class WorkflowModel {
       is_active: rawIsActive === true || rawIsActive === 1,
       is_public_page: rawIsPublicPage === true || rawIsPublicPage === 1,
       public_queue_max_count: normalizePublicQueueMaxCount(workflow.public_queue_max_count),
+      public_queue_role_limits: workflow.public_queue_role_limits ?? null,
       result_view_mode: workflow.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
       artifact_root_path: workflow.artifact_root_path ?? null,
       artifact_directory_mode: workflow.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
@@ -55,8 +109,8 @@ export class WorkflowModel {
 
     const info = userSettingsDb.prepare(`
       INSERT INTO workflows (
-        name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, result_view_mode, artifact_root_path, artifact_directory_mode, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       workflowData.name,
       workflowData.description || null,
@@ -67,6 +121,7 @@ export class WorkflowModel {
       workflowData.is_public_page ? 1 : 0,
       workflowData.public_slug || null,
       workflowData.is_public_page ? normalizePublicQueueMaxCount(workflowData.public_queue_max_count) : null,
+      workflowData.is_public_page ? serializePublicQueueRoleLimits(workflowData.public_queue_role_limits) : null,
       workflowData.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
       workflowData.artifact_root_path?.trim() || null,
       workflowData.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
@@ -109,7 +164,7 @@ export class WorkflowModel {
     let query = `
       SELECT
         id, name, description, marked_fields, api_endpoint, is_active,
-        is_public_page, public_slug, public_queue_max_count, result_view_mode,
+        is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode,
         artifact_root_path, artifact_directory_mode, color, created_date, updated_date
       FROM workflows
     `;
@@ -126,6 +181,7 @@ export class WorkflowModel {
       is_public_page: (row as unknown as { is_public_page: boolean | number }).is_public_page === true
         || (row as unknown as { is_public_page: boolean | number }).is_public_page === 1,
       public_queue_max_count: normalizePublicQueueMaxCount(row.public_queue_max_count),
+      public_queue_role_limits: row.public_queue_role_limits ?? null,
       result_view_mode: row.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
       artifact_root_path: row.artifact_root_path ?? null,
       artifact_directory_mode: row.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
@@ -146,6 +202,9 @@ export class WorkflowModel {
       is_public_page: workflowData.is_public_page !== undefined ? (workflowData.is_public_page ? 1 : 0) : undefined,
       public_queue_max_count: workflowData.public_queue_max_count !== undefined
         ? normalizePublicQueueMaxCount(workflowData.public_queue_max_count)
+        : undefined,
+      public_queue_role_limits: workflowData.public_queue_role_limits !== undefined
+        ? serializePublicQueueRoleLimits(workflowData.public_queue_role_limits)
         : undefined,
       result_view_mode: workflowData.result_view_mode !== undefined
         ? (workflowData.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history')

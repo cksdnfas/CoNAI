@@ -179,6 +179,9 @@ export type WorkflowNodeNumericBounds = Record<string, WorkflowNodeNumericBound>
 export type WorkflowResultViewMode = 'history' | 'artifact_explorer'
 export type WorkflowArtifactDirectoryMode = 'shared' | 'per_run'
 
+/** 등급(권한 그룹 key)별 회원 1인당 동시 대기열 제한. 항목이 없는 등급은 무제한. */
+export type WorkflowRoleQueueLimits = Record<string, number>
+
 export interface GenerationWorkflow {
   id: number
   name: string
@@ -188,6 +191,7 @@ export interface GenerationWorkflow {
   is_public_page?: boolean
   public_slug?: string | null
   public_queue_max_count?: number | null
+  public_queue_role_limits?: WorkflowRoleQueueLimits | null
   result_view_mode: WorkflowResultViewMode
   artifact_root_path?: string | null
   artifact_directory_mode: WorkflowArtifactDirectoryMode
@@ -445,6 +449,12 @@ export interface PublicGenerationWorkflow {
   result_view_mode: WorkflowResultViewMode
   artifact_directory_mode: WorkflowArtifactDirectoryMode
   marked_fields: WorkflowMarkedField[]
+  /** 조회한 회원의 등급에 걸린 동시 대기열 한도(없으면 null). */
+  viewer_queue_role_limit?: number | null
+  /** 조회 시점에 그 회원이 이 워크플로우에 갖고 있던 활성 대기열 수. */
+  viewer_queue_role_active?: number | null
+  /** 한도가 적용된 등급의 표시 이름. */
+  viewer_queue_role_label?: string | null
 }
 
 export interface CreateGenerationWorkflowPayload {
@@ -457,6 +467,7 @@ export interface CreateGenerationWorkflowPayload {
   is_public_page?: boolean
   public_slug?: string | null
   public_queue_max_count?: number | null
+  public_queue_role_limits?: WorkflowRoleQueueLimits | null
   result_view_mode?: WorkflowResultViewMode
   artifact_root_path?: string | null
   artifact_directory_mode?: WorkflowArtifactDirectoryMode

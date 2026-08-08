@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   Background,
   Controls,
@@ -17,12 +18,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { getPermissionGroupDisplayName } from '@/features/settings/components/security-ui-text'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
-import type { CustomDropdownList, GenerationWorkflowDetail, WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import type { CustomDropdownList, GenerationWorkflowDetail, WorkflowMarkedField, WorkflowRoleQueueLimits } from '@/lib/api-image-generation-types'
 import { createGenerationWorkflow, updateGenerationWorkflow } from '@/lib/api-image-generation-workflows'
+import { listAuthPermissionGroups } from '@/lib/api-auth'
 import {
   buildWorkflowMarkedFieldFromInput,
   findAuthoringGraphMatches,
@@ -88,6 +91,31 @@ function clampPublicQueueMaxCount(value: string) {
   return Math.min(32, Math.max(1, parsed))
 }
 
+const PUBLIC_QUEUE_ROLE_LIMIT_MAX = 999
+
+/** 빈 문자열(무제한)·잘못된 값은 항목에서 제외하고, 남는 항목이 없으면 null. */
+function buildPublicQueueRoleLimitsPayload(draft: Record<string, string>): WorkflowRoleQueueLimits | null {
+  const limits: WorkflowRoleQueueLimits = {}
+  for (const [groupKey, rawValue] of Object.entries(draft)) {
+    if (rawValue.trim().length === 0) {
+      continue
+    }
+
+    const parsed = Math.trunc(Number(rawValue))
+    if (!Number.isFinite(parsed)) {
+      continue
+    }
+
+    limits[groupKey] = Math.min(PUBLIC_QUEUE_ROLE_LIMIT_MAX, Math.max(0, parsed))
+  }
+
+  return Object.keys(limits).length > 0 ? limits : null
+}
+
+function roleLimitsToDraft(limits: WorkflowRoleQueueLimits | null | undefined): Record<string, string> {
+  return Object.fromEntries(Object.entries(limits ?? {}).map(([groupKey, limit]) => [groupKey, String(limit)]))
+}
+
 function getMarkedFieldNumericDefinitionError(markedFields: WorkflowMarkedField[]) {
   for (const field of markedFields) {
     if (field.type !== 'number') {
@@ -118,7 +146,7 @@ export function ComfyWorkflowAuthoringModal({
   onSaved,
 }: ComfyWorkflowAuthoringModalProps) {
   const { showSnackbar } = useSnackbar()
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
   const [workflowName, setWorkflowName] = useState('')
   const [workflowDescription, setWorkflowDescription] = useState('')
@@ -127,6 +155,7 @@ export function ComfyWorkflowAuthoringModal({
   const [isPublicPage, setIsPublicPage] = useState(false)
   const [publicSlug, setPublicSlug] = useState('')
   const [publicQueueMaxCount, setPublicQueueMaxCount] = useState('32')
+  const [publicQueueRoleLimits, setPublicQueueRoleLimits] = useState<Record<string, string>>({})
   const [resultViewMode, setResultViewMode] = useState<'history' | 'artifact_explorer'>('history')
   const [artifactDirectoryMode, setArtifactDirectoryMode] = useState<'shared' | 'per_run'>('shared')
   const [artifactRootPath, setArtifactRootPath] = useState('')
@@ -139,6 +168,41 @@ export function ComfyWorkflowAuthoringModal({
   const isCoarsePointer = useIsCoarsePointer()
   const [authoringFlowInstance, setAuthoringFlowInstance] = useState<ReactFlowInstance<AuthoringNode, AuthoringEdge> | null>(null)
   const jsonTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // 등급별 제한 입력 행을 그리기 위한 권한 그룹 목록. 관리자 전용 API라 403이면 기본 그룹으로 폴백한다.
+  const permissionGroupsQuery = useQuery({
+    queryKey: ['auth-permission-groups', 'all'],
+    queryFn: listAuthPermissionGroups,
+    enabled: open && isPublicPage,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const roleLimitGroups = useMemo(() => {
+    // 익명은 로그인 없이 대기열을 만들 수 없으므로 제외한다.
+    const rows = (permissionGroupsQuery.data ?? [])
+      .filter((group) => group.groupKey !== 'anonymous')
+      .sort((a, b) => a.priority - b.priority || a.id - b.id)
+      .map((group) => ({ groupKey: group.groupKey, name: group.name as string | null }))
+
+    const seenGroupKeys = new Set(rows.map((row) => row.groupKey))
+    for (const fallbackKey of ['guest', 'admin']) {
+      if (!seenGroupKeys.has(fallbackKey)) {
+        rows.push({ groupKey: fallbackKey, name: null })
+        seenGroupKeys.add(fallbackKey)
+      }
+    }
+
+    // 이미 저장된 제한에만 존재하는 그룹 키도 편집할 수 있게 남긴다.
+    for (const groupKey of Object.keys(publicQueueRoleLimits)) {
+      if (!seenGroupKeys.has(groupKey)) {
+        rows.push({ groupKey, name: null })
+        seenGroupKeys.add(groupKey)
+      }
+    }
+
+    return rows
+  }, [permissionGroupsQuery.data, publicQueueRoleLimits])
 
   useEffect(() => {
     if (!open) {
@@ -153,6 +217,7 @@ export function ComfyWorkflowAuthoringModal({
       setIsPublicPage(Boolean(initialData.workflow.is_public_page))
       setPublicSlug(initialData.workflow.public_slug ?? '')
       setPublicQueueMaxCount(String(initialData.workflow.public_queue_max_count ?? 32))
+      setPublicQueueRoleLimits(roleLimitsToDraft(initialData.workflow.public_queue_role_limits))
       setResultViewMode(initialData.workflow.result_view_mode ?? 'history')
       setArtifactDirectoryMode(initialData.workflow.artifact_directory_mode ?? 'shared')
       setArtifactRootPath(initialData.workflow.artifact_root_path ?? '')
@@ -172,6 +237,7 @@ export function ComfyWorkflowAuthoringModal({
     setIsPublicPage(false)
     setPublicSlug('')
     setPublicQueueMaxCount('32')
+    setPublicQueueRoleLimits({})
     setResultViewMode('history')
     setArtifactDirectoryMode('shared')
     setArtifactRootPath('')
@@ -458,6 +524,7 @@ export function ComfyWorkflowAuthoringModal({
         is_public_page: isPublicPage,
         public_slug: isPublicPage ? normalizedPublicSlug : null,
         public_queue_max_count: isPublicPage ? clampPublicQueueMaxCount(publicQueueMaxCount) : null,
+        public_queue_role_limits: isPublicPage ? buildPublicQueueRoleLimitsPayload(publicQueueRoleLimits) : null,
         result_view_mode: resultViewMode,
         artifact_directory_mode: artifactDirectoryMode,
         artifact_root_path: artifactRootPath.trim() || null,
@@ -548,6 +615,39 @@ export function ComfyWorkflowAuthoringModal({
                     onBlur={() => setPublicQueueMaxCount(String(clampPublicQueueMaxCount(publicQueueMaxCount)))}
                   />
                 </SettingsField>
+
+                <div className="grid gap-2.5 rounded-sm border border-border/70 px-3 py-3">
+                  <div className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                    {t({ ko: '등급별 동시 대기열 제한', en: 'Per-role active queue limit' })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t({
+                      ko: '각 등급의 회원 한 명이 이 워크플로우에서 동시에 유지할 수 있는 대기열 개수야. 등급 전체 합산이 아니라 회원별 제한이고, 비워두면 무제한이야. 0은 등록 금지야.',
+                      en: 'How many active queue jobs a single member of each role can keep on this workflow. The limit applies per member, not to the whole role. Leave empty for unlimited; 0 blocks the role.',
+                    })}
+                  </div>
+                  {roleLimitGroups.map((group) => (
+                    <div key={group.groupKey} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-sm text-foreground">
+                        {getPermissionGroupDisplayName(language, group.groupKey, group.name)}
+                      </span>
+                      <NumberStepperInput
+                        variant="settings"
+                        min={0}
+                        max={999}
+                        allowEmpty
+                        className="w-44 shrink-0"
+                        value={publicQueueRoleLimits[group.groupKey] ?? ''}
+                        placeholder={t({ ko: '무제한', en: 'Unlimited' })}
+                        aria-label={t(
+                          { ko: '{name} 동시 대기열 제한', en: '{name} active queue limit' },
+                          { name: getPermissionGroupDisplayName(language, group.groupKey, group.name) },
+                        )}
+                        onValueCommit={(nextValue) => setPublicQueueRoleLimits((current) => ({ ...current, [group.groupKey]: nextValue }))}
+                      />
+                    </div>
+                  ))}
+                </div>
               </>
             ) : null}
 

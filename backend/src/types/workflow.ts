@@ -11,6 +11,13 @@ export interface WorkflowNodeNumericBound {
 
 export type WorkflowNodeNumericBounds = Record<string, WorkflowNodeNumericBound>;
 
+/**
+ * 등급(권한 그룹)별 회원 1인당 동시 대기열 제한.
+ * key = auth_permission_groups.group_key, value = 허용 개수(0 = 등록 금지).
+ * 항목이 없는 등급은 무제한.
+ */
+export type WorkflowRoleQueueLimits = Record<string, number>;
+
 export interface WorkflowRecord {
   id: number;
   name: string;
@@ -22,6 +29,7 @@ export interface WorkflowRecord {
   is_public_page: boolean;
   public_slug?: string | null;
   public_queue_max_count?: number | null;
+  public_queue_role_limits?: string | null; // JSON string: WorkflowRoleQueueLimits
   result_view_mode: WorkflowResultViewMode;
   artifact_root_path?: string | null;
   artifact_directory_mode: WorkflowArtifactDirectoryMode;
@@ -75,6 +83,7 @@ export interface WorkflowCreateData {
   is_public_page?: boolean;
   public_slug?: string | null;
   public_queue_max_count?: number | null;
+  public_queue_role_limits?: WorkflowRoleQueueLimits | null;
   result_view_mode?: WorkflowResultViewMode;
   artifact_root_path?: string | null;
   artifact_directory_mode?: WorkflowArtifactDirectoryMode;
@@ -94,6 +103,7 @@ export interface WorkflowUpdateData {
   is_public_page?: boolean;
   public_slug?: string | null;
   public_queue_max_count?: number | null;
+  public_queue_role_limits?: WorkflowRoleQueueLimits | null;
   result_view_mode?: WorkflowResultViewMode;
   artifact_root_path?: string | null;
   artifact_directory_mode?: WorkflowArtifactDirectoryMode;

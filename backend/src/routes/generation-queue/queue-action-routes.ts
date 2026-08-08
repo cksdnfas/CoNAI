@@ -5,12 +5,18 @@ import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUISer
 import { WorkflowModel } from '../../models/Workflow'
 import { GenerationQueueService } from '../../services/generationQueueService'
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore'
+import {
+  buildWorkflowRoleQueueLimitMessage,
+  checkWorkflowRoleQueueLimit,
+} from '../../services/generation-queue/queueRoleLimitPolicy'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
 import { publishQueueJobEvent } from '../../services/runtime-events/runtimeEventPublishers'
 import {
   normalizeWorkflowNumericPromptValues,
   WorkflowNumericFieldValidationError,
 } from '../../services/workflowNumericFieldPolicy'
+import type { WorkflowRecord } from '../../types/workflow'
+import { getRequesterAccountType, isAdminRequest } from '../requester-session-helpers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import {
   getRequesterAccountId,
@@ -120,6 +126,8 @@ export function createGenerationQueueActionRoutes() {
 
     let workflowMarkedFields: Array<{ id: string; type?: string; default_value?: unknown; min?: unknown; max?: unknown; step?: unknown }> = []
 
+    let workflowRecord: WorkflowRecord | null = null
+
     if (workflow_id !== undefined && workflow_id !== null) {
 
       workflowIdNumber = parsePositiveInteger(workflow_id)
@@ -141,6 +149,8 @@ export function createGenerationQueueActionRoutes() {
         return
 
       }
+
+      workflowRecord = workflow
 
       workflowMarkedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
 
@@ -340,6 +350,31 @@ export function createGenerationQueueActionRoutes() {
     // server-side, and the shared inputs are stored once.
     const enqueueCount = service_type === 'codex' ? codexJobCount : (enqueue_count ?? 1)
 
+    // 워크플로우에 등급별 회원 1인당 동시 대기열 제한이 설정돼 있으면 이 경로에서도 동일하게 막는다.
+    if (workflowRecord) {
+
+      const roleLimitViolation = checkWorkflowRoleQueueLimit({
+        workflow: workflowRecord,
+        accountId: requesterAccountId,
+        accountType: getRequesterAccountType(req),
+        requestedCount: enqueueCount,
+      })
+
+      if (roleLimitViolation) {
+
+        res.status(429).json({
+          success: false,
+          error: buildWorkflowRoleQueueLimitMessage(roleLimitViolation),
+          limit: roleLimitViolation.limit,
+          active: roleLimitViolation.active,
+        })
+
+        return
+
+      }
+
+    }
+
     const jobIds: number[] = []
 
     for (let index = 0; index < enqueueCount; index += 1) {
@@ -420,7 +455,38 @@ export function createGenerationQueueActionRoutes() {
 
     }
 
-    const { jobId } = resolvedJob
+    const { jobId, job } = resolvedJob
+
+    // 재시도는 원 요청자 계정으로 새 활성 잡을 만들므로, 관리자가 아닌 요청자는 등급 제한을 넘겨 쓸 수 없게 한다.
+    if (!isAdminRequest(req) && typeof job.workflow_id === 'number') {
+
+      const retryWorkflow = await WorkflowModel.findById(job.workflow_id)
+
+      if (retryWorkflow) {
+
+        const roleLimitViolation = checkWorkflowRoleQueueLimit({
+          workflow: retryWorkflow,
+          accountId: job.requested_by_account_id ?? null,
+          accountType: job.requested_by_account_type ?? null,
+          requestedCount: 1,
+        })
+
+        if (roleLimitViolation) {
+
+          res.status(429).json({
+            success: false,
+            error: buildWorkflowRoleQueueLimitMessage(roleLimitViolation),
+            limit: roleLimitViolation.limit,
+            active: roleLimitViolation.active,
+          })
+
+          return
+
+        }
+
+      }
+
+    }
 
     try {
 

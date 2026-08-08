@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
-import { WorkflowModel } from '../../models/Workflow';
+import { WorkflowModel, normalizePublicQueueRoleLimits, parseWorkflowRoleQueueLimits } from '../../models/Workflow';
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
@@ -67,7 +67,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     // marked_fields를 JSON 객체로 파싱
     const parsedWorkflows = workflows.map(workflow => ({
       ...workflow,
-      marked_fields: workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
+      marked_fields: workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [],
+      public_queue_role_limits: parseWorkflowRoleQueueLimits(workflow.public_queue_role_limits)
     }));
 
     const response: WorkflowResponse = {
@@ -113,7 +114,8 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     // marked_fields를 JSON 객체로 파싱
     const workflowData = {
       ...workflow,
-      marked_fields: workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
+      marked_fields: workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [],
+      public_queue_role_limits: parseWorkflowRoleQueueLimits(workflow.public_queue_role_limits)
     };
 
     const response: WorkflowResponse = {
@@ -137,7 +139,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/workflows
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
+  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
 
   if (!name || !workflow_json) {
     return res.status(400).json({
@@ -198,6 +200,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       is_public_page: isPublicPage,
       public_slug: isPublicPage ? normalizedPublicSlug : null,
       public_queue_max_count: isPublicPage ? normalizePublicQueueMaxCount(public_queue_max_count) : null,
+      public_queue_role_limits: isPublicPage ? normalizePublicQueueRoleLimits(public_queue_role_limits) : null,
       result_view_mode: normalizeResultViewMode(result_view_mode),
       artifact_root_path: normalizeArtifactRootPath(artifact_root_path),
       artifact_directory_mode: normalizeArtifactDirectoryMode(artifact_directory_mode),
@@ -231,7 +234,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
-  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
+  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -300,6 +303,11 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
         : public_queue_max_count === undefined
           ? undefined
           : normalizePublicQueueMaxCount(public_queue_max_count),
+      public_queue_role_limits: isPublicPage === false
+        ? null
+        : public_queue_role_limits === undefined
+          ? undefined
+          : normalizePublicQueueRoleLimits(public_queue_role_limits),
       result_view_mode: result_view_mode === undefined ? undefined : normalizeResultViewMode(result_view_mode),
       artifact_root_path: artifact_root_path === undefined ? undefined : normalizeArtifactRootPath(artifact_root_path),
       artifact_directory_mode: artifact_directory_mode === undefined ? undefined : normalizeArtifactDirectoryMode(artifact_directory_mode),

@@ -12,6 +12,11 @@ import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { GenerationQueueService } from '../services/generationQueueService';
 import { externalizeQueueInputDataUrls } from '../services/generation-queue/queueInputStore';
+import {
+  buildWorkflowRoleQueueLimitMessage,
+  checkWorkflowRoleQueueLimit,
+  resolveWorkflowRoleQueueLimitState,
+} from '../services/generation-queue/queueRoleLimitPolicy';
 import { publishQueueJobEvent } from '../services/runtime-events/runtimeEventPublishers';
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
@@ -22,7 +27,7 @@ import {
 } from '../services/workflowNumericFieldPolicy';
 import type { MarkedField, WorkflowRecord } from '../types/workflow';
 import { applyHistoryAccessScope } from './generation-history/historyRouteHelpers';
-import { getRequesterAccountId } from './requester-session-helpers';
+import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
 
 const router = Router();
 
@@ -212,10 +217,21 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const dropdownListMap = buildCustomDropdownListMap();
+  // 등급별 동시 대기열 제한이 걸린 뷰어에게는 자신의 한도·사용량을 함께 내려 UI가 미리 안내할 수 있게 한다.
+  const viewerRoleQueueState = resolveWorkflowRoleQueueLimitState({
+    workflow,
+    accountId: getRequesterAccountId(req),
+    accountType: getRequesterAccountType(req),
+  });
 
   res.json({
     success: true,
-    data: serializePublicWorkflow(workflow, dropdownListMap),
+    data: {
+      ...serializePublicWorkflow(workflow, dropdownListMap),
+      viewer_queue_role_limit: viewerRoleQueueState?.limit ?? null,
+      viewer_queue_role_active: viewerRoleQueueState?.active ?? null,
+      viewer_queue_role_label: viewerRoleQueueState?.groupLabel ?? null,
+    },
   });
 }));
 
@@ -412,6 +428,24 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
     return;
   }
 
+  // 등급별 회원 1인당 동시 대기열 제한. 여기부터 잡 생성까지 await 가 없어야 카운트 레이스가 없다.
+  const requesterAccountId = getRequesterAccountId(req);
+  const roleLimitViolation = checkWorkflowRoleQueueLimit({
+    workflow,
+    accountId: requesterAccountId,
+    accountType: getRequesterAccountType(req),
+    requestedCount: parsedEnqueueCount.count,
+  });
+  if (roleLimitViolation) {
+    res.status(429).json({
+      success: false,
+      error: buildWorkflowRoleQueueLimitMessage(roleLimitViolation),
+      limit: roleLimitViolation.limit,
+      active: roleLimitViolation.active,
+    });
+    return;
+  }
+
   const imageSaveSettings = settingsService.loadSettings().imageSave;
   let normalizedRequestPayload: Record<string, unknown>;
   try {
@@ -441,7 +475,6 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
     };
   }
 
-  const requesterAccountId = getRequesterAccountId(req);
   const jobIds = Array.from({ length: parsedEnqueueCount.count }, () => {
     const jobId = GenerationQueueModel.create({
       service_type: 'comfyui',
