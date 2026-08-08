@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Response } from 'express';
 import { RuntimeEventBroadcaster } from '../services/runtime-events/runtimeEventBroadcaster';
 import { publishRuntimeEvent, resetRuntimeEventBusForTests } from '../services/runtime-events/runtimeEventBus';
+import { publishQueueJobProgressEvent } from '../services/runtime-events/runtimeEventPublishers';
 import { isRuntimeEventStreamEnabled } from '../routes/events/event-stream.routes';
 import { RUNTIME_EVENT_TOPICS } from '../types/runtimeEvents';
 
@@ -301,6 +302,67 @@ assert.deepEqual(
   parseEventNames(resumeStream.frames),
   ['hello', 'queue.job.status', 'graph.schedule.changed'],
   'a resumed stream must replay only the events after its cursor',
+);
+
+/* ------------------------------------------------------------------ *
+ * RT-1: 진행률 이벤트는 절대 `all` 로 발행되지 않는다.
+ * 요청 계정이 없는 시스템 잡(그래프 실행·예약·익명 공개 워크플로우)의 고빈도 진행률이
+ * 전체 구독자에게 팬아웃되는 회귀를 막는다. admin 은 브로드캐스터 규칙으로 계속 수신한다.
+ * ------------------------------------------------------------------ */
+
+function countProgressFrames(frames: string[]): number {
+  return frames.join('').split('event: queue.job.progress').length - 1;
+}
+
+const sampleProgress = {
+  source: 'comfyui_ws' as const,
+  phase: 'sampling' as const,
+  node_id: '3',
+  node_label: 'KSampler',
+  value: 1,
+  max: 20,
+  percent: 5,
+  updated_at: new Date().toISOString(),
+};
+
+publishQueueJobProgressEvent(
+  { id: 43, requested_by_account_id: null, provider_job_id: 'prompt-system' },
+  sampleProgress,
+);
+assert.equal(
+  countProgressFrames(ownerStream.frames),
+  0,
+  'system-job progress (null requester) must not reach regular accounts — this fan-out was the b02dd9cc regression',
+);
+assert.equal(
+  countProgressFrames(otherStream.frames),
+  0,
+  'system-job progress must not reach any non-admin subscriber',
+);
+assert.equal(
+  countProgressFrames(adminStream.frames),
+  1,
+  'admins must keep receiving system-job progress via the broadcaster admin rule',
+);
+
+publishQueueJobProgressEvent(
+  { id: 44, requested_by_account_id: 7, provider_job_id: 'prompt-owned' },
+  sampleProgress,
+);
+assert.equal(
+  countProgressFrames(ownerStream.frames),
+  1,
+  'owned-job progress must reach the requesting account',
+);
+assert.equal(
+  countProgressFrames(otherStream.frames),
+  0,
+  'owned-job progress must never leak to another account',
+);
+assert.equal(
+  countProgressFrames(adminStream.frames),
+  2,
+  'admins must receive owned-job progress as well',
 );
 
 RuntimeEventBroadcaster.unregister(resumeSubscription.id);
