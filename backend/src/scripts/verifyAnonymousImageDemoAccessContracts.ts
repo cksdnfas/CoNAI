@@ -98,6 +98,27 @@ assert.match(
   'generation actions must remain authenticated and permission-gated',
 );
 
+// 공개 워크플로 표면(requireAuth 마운트)은 page.generation.view 없는 계정에게도 자기 히스토리
+// 목록을 내려주므로, 소유권 검사(canAccessHistoryRecord)로 이미 보호되는 미디어 경로까지 페이지
+// 권한으로 막으면 게스트 썸네일이 전부 403('표시 불가')이 된다.
+assert.match(
+  routeRegistrationSource,
+  /function isOwnerScopedHistoryMediaRequest\(req: Request\): boolean \{[\s\S]*?\/\^\\\/\\d\+\\\/\(\?:file\|thumbnail\|image\)\$\/[\s\S]*?req\.method === 'POST' && req\.path === '\/download\/batch'/,
+  'the owner-scoped history predicate must stay limited to per-record media paths plus batch download',
+);
+
+assert.match(
+  routeRegistrationSource,
+  /const allowScopedGenerationHistoryAccess: RequestHandler = \(req, res, next\) => \{[\s\S]*?req\.session\?\.authenticated === true && isOwnerScopedHistoryMediaRequest\(req\)[\s\S]*?requirePermission\('page\.generation\.view'\)\(req, res, next\)/,
+  'generation-history media must allow authenticated owners while every other history route keeps the page permission',
+);
+
+assert.match(
+  routeRegistrationSource,
+  /app\.use\('\/api\/generation-history'[\s\S]*?allowScopedGenerationHistoryAccess/,
+  'the generation-history mount must use the owner-scoped access guard',
+);
+
 assert.ok(
   dockerfileSource.includes('python3-pip'),
   'Coolify Docker runtime must include pip so WD Tagger and Kaloscope dependencies can be installed',

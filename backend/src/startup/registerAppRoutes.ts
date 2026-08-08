@@ -168,6 +168,33 @@ const allowRuntimeMediaSettingsRead: RequestHandler = (req, res, next) => {
   allowReadAccess(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS)(req, res, next);
 };
 
+/** History requests whose handlers already enforce per-record owner-or-admin access. */
+function isOwnerScopedHistoryMediaRequest(req: Request): boolean {
+  if (isReadMethod(req)) {
+    return /^\/\d+\/(?:file|thumbnail|image)$/.test(req.path);
+  }
+
+  return req.method === 'POST' && req.path === '/download/batch';
+}
+
+/**
+ * Allow authenticated public-workflow users to load their own generation-history media.
+ *
+ * The public-workflow surface (mounted with requireAuth only) hands guests a history list
+ * whose media URLs point at /api/generation-history/:id/{file,thumbnail,image}. Those
+ * handlers all pass through canAccessHistoryRecord (owner-or-admin), so the page permission
+ * is not the effective guard there — requiring it 403'd every thumbnail for accounts without
+ * page.generation.view. Every other history route keeps the page permission.
+ */
+const allowScopedGenerationHistoryAccess: RequestHandler = (req, res, next) => {
+  if (req.session?.authenticated === true && isOwnerScopedHistoryMediaRequest(req)) {
+    next();
+    return;
+  }
+
+  requirePermission('page.generation.view')(req, res, next);
+};
+
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
 export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
   registerRuntimeStaticDirectory(app, '/uploads', options.uploadsDir);
@@ -262,7 +289,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/module-definitions', optionalAuth, requirePermission('page.generation.view'), moduleDefinitionRoutes);
   app.use('/api/graph-workflows', optionalAuth, requirePermission('page.generation.view'), graphWorkflowRoutes);
   app.use('/api/nai', options.uploadLimiter, optionalAuth, requirePermission('page.generation.view'), naiRoutes);
-  app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), generationHistoryRoutes);
+  app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, allowScopedGenerationHistoryAccess, generationHistoryRoutes);
   app.use('/api/generation-queue', requireAuth, generationQueueRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardUtilityRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardMutationRoutes);
