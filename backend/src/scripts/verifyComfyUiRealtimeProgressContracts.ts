@@ -71,4 +71,17 @@ match(
   'the emit path must route immediacy through isImmediateProgressPhase so the coalescing rule stays testable',
 )
 
+// RT-6: 같은 서버에 모니터가 N개면 모든 WS 프레임이 N번 파싱된다 — 바인딩 후에는 파싱 전에 거른다.
+match(
+  monitorSource,
+  /private handleMessage\(rawMessage: string\) \{[\s\S]*?rawMessage\.includes\(this\.expectedPromptId\)[\s\S]*?parseComfyProgressEvent\(/,
+  'bound monitors must pre-filter frames by prompt id before paying JSON.parse',
+)
+// RT-6: /ws 불통 환경에서 고정 1초 무한 재연결 루프가 잡 생애 내내 소켓을 여는 누수를 막는다.
+match(
+  monitorSource,
+  /Math\.min\(RECONNECT_DELAY_MS \* 2 \*\* Math\.max\(0, this\.reconnectAttempts - 1\), RECONNECT_DELAY_MAX_MS\)/,
+  'reconnects must back off exponentially with a cap instead of a fixed 1s loop',
+)
+
 console.log('ComfyUI realtime progress contracts verified.')
