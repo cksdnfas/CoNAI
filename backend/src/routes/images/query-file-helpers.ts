@@ -27,6 +27,57 @@ export { getCompositeHashOrBlock, getMimeTypeFromFilePath, pipeFileToResponse, s
 
 export type ImageDownloadType = 'original' | 'thumbnail';
 
+/**
+ * 미디어 서빙 행 캐시 (단기 TTL).
+ *
+ * 비디오 1개 재생이 Range 요청 수십 개를 만들고, 요청마다 가드 행 + 파일 행 동기 SQLite
+ * 조회가 단일 프로세스를 직렬 점유했다. **행만 캐시하고 판정(숨김/후처리 준비)은 매 요청
+ * 다시 평가**하므로, 티어 정책 변경은 즉시 반영되고 행 데이터 신선도만 TTL 로 제한된다.
+ */
+const MEDIA_SERVE_ROW_CACHE_TTL_MS = 2_000;
+const MEDIA_SERVE_ROW_CACHE_MAX_ENTRIES = 500;
+
+type MediaServeRowCacheEntry<T> = {
+  expiresAt: number;
+  value: T;
+};
+
+const visibilityGuardRowCache = new Map<string, MediaServeRowCacheEntry<MediaVisibilityGuardRecord | null>>();
+const activeFileRowCache = new Map<string, MediaServeRowCacheEntry<ImageFileRecord[]>>();
+
+function readMediaServeRowCache<T>(cache: Map<string, MediaServeRowCacheEntry<T>>, key: string): MediaServeRowCacheEntry<T> | null {
+  const entry = cache.get(key);
+  if (!entry) {
+    return null;
+  }
+
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+
+  return entry;
+}
+
+function writeMediaServeRowCache<T>(cache: Map<string, MediaServeRowCacheEntry<T>>, key: string, value: T): void {
+  cache.delete(key);
+  cache.set(key, { expiresAt: Date.now() + MEDIA_SERVE_ROW_CACHE_TTL_MS, value });
+
+  while (cache.size > MEDIA_SERVE_ROW_CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) {
+      break;
+    }
+    cache.delete(oldestKey);
+  }
+}
+
+/** Contract smoke helper. Production code never calls this. */
+export function clearMediaServeRowCachesForTests(): void {
+  visibilityGuardRowCache.clear();
+  activeFileRowCache.clear();
+}
+
 export const MAX_BATCH_DOWNLOAD_FILE_COUNT = 200;
 export const MAX_BATCH_DOWNLOAD_TOTAL_SOURCE_BYTES = 512 * 1024 * 1024;
 
@@ -45,7 +96,13 @@ export class BatchDownloadLimitError extends Error {
  * walk a row overflow chain for three values.
  */
 export async function getVisibleMetadataOrBlock(res: Response, compositeHash: string): Promise<MediaVisibilityGuardRecord | null> {
-  const metadata = MediaMetadataFileQueries.findVisibilityGuardByHash(compositeHash);
+  const cachedGuard = readMediaServeRowCache(visibilityGuardRowCache, compositeHash);
+  const metadata = cachedGuard
+    ? cachedGuard.value
+    : MediaMetadataFileQueries.findVisibilityGuardByHash(compositeHash);
+  if (!cachedGuard) {
+    writeMediaServeRowCache(visibilityGuardRowCache, compositeHash, metadata);
+  }
 
   if (!metadata) {
     res.status(404).json({
@@ -76,7 +133,13 @@ export async function getVisibleMetadataOrBlock(res: Response, compositeHash: st
 
 /** Load the active file row for one composite hash and send the shared not-found response if absent. */
 export async function getActiveFileOrBlock(res: Response, compositeHash: string, errorMessage: string) {
-  const files = await ImageFileModel.findActiveByHash(compositeHash);
+  const cachedFiles = readMediaServeRowCache(activeFileRowCache, compositeHash);
+  const files = cachedFiles
+    ? cachedFiles.value
+    : await ImageFileModel.findActiveByHash(compositeHash);
+  if (!cachedFiles) {
+    writeMediaServeRowCache(activeFileRowCache, compositeHash, files ?? []);
+  }
 
   if (!files || files.length === 0) {
     res.status(404).json({
@@ -105,6 +168,10 @@ export function getExistingActiveFilePathOrBlock(
       console.warn(options.warnMessage);
     }
     ImageFileModel.updateStatus(file.id, 'missing');
+    // missing 전이가 TTL 동안 캐시에 가려져 재경고/재기록되지 않게 즉시 비운다.
+    if (file.composite_hash) {
+      activeFileRowCache.delete(file.composite_hash);
+    }
     res.status(404).json({
       success: false,
       error: options.missingError

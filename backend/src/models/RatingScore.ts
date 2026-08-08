@@ -3,6 +3,27 @@ import { RatingWeights, RatingWeightsUpdate, RatingTier, RatingTierInput } from 
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
 /**
+ * 티어 캐시.
+ *
+ * 티어는 사실상 정적 설정인데, 가시성 조건을 만드는 쿼리 빌더 9곳이 목록 요청마다
+ * `getAllTiers` 를 호출하고(유사도 쿼리 빌더는 1회 빌드에 5콜), 미디어 서빙 가드가
+ * Range 요청마다 `getTierByScore` 를 호출한다 — 전부 매번 prepare+실행이었다.
+ * 티어 뮤테이션은 전부 이 모델을 경유하므로 여기서 무효화하면 정합이 보장된다.
+ */
+let cachedTiersInOrder: RatingTier[] | null = null;
+
+function invalidateRatingTierCache(): void {
+  cachedTiersInOrder = null;
+}
+
+function getTiersInOrderCached(): RatingTier[] {
+  if (!cachedTiersInOrder) {
+    cachedTiersInOrder = db.prepare('SELECT * FROM rating_tiers ORDER BY tier_order ASC').all() as RatingTier[];
+  }
+  return cachedTiersInOrder;
+}
+
+/**
  * RatingScoreModel
  * Rating 가중치 및 등급 관리 모델
  */
@@ -59,8 +80,8 @@ export class RatingScoreModel {
    * 모든 등급 조회 (tier_order 순서대로)
    */
   static getAllTiers(): RatingTier[] {
-    const rows = db.prepare('SELECT * FROM rating_tiers ORDER BY tier_order ASC').all() as RatingTier[];
-    return rows || [];
+    // 호출부가 배열을 변형해도 캐시가 오염되지 않도록 사본을 준다 (티어는 소수라 비용 무시 가능).
+    return [...getTiersInOrderCached()];
   }
 
   /**
@@ -77,14 +98,12 @@ export class RatingScoreModel {
    * @returns 해당하는 등급 (없으면 null)
    */
   static getTierByScore(score: number): RatingTier | null {
-    const row = db.prepare(`
-      SELECT * FROM rating_tiers
-      WHERE min_score <= ?
-        AND (max_score IS NULL OR max_score > ?)
-      ORDER BY tier_order ASC
-      LIMIT 1
-    `).get(score, score) as RatingTier | undefined;
-    return row || null;
+    // 캐시는 tier_order ASC 정렬 상태이므로 첫 매치가 종전 SQL(ORDER BY tier_order LIMIT 1)과 동일하다.
+    const tier = getTiersInOrderCached().find((candidate) => (
+      candidate.min_score <= score
+      && (candidate.max_score === null || candidate.max_score === undefined || candidate.max_score > score)
+    ));
+    return tier ?? null;
   }
 
   /**
@@ -103,6 +122,7 @@ export class RatingScoreModel {
       tierData.feed_visibility || 'show'
     );
 
+    invalidateRatingTierCache();
     const result = this.getTierById(info.lastInsertRowid as number);
     if (!result) {
       throw new Error('Failed to retrieve created tier');
@@ -129,6 +149,7 @@ export class RatingScoreModel {
     const { sql, values } = buildUpdateQuery('rating_tiers', finalUpdates, { id });
     db.prepare(sql).run(...values);
 
+    invalidateRatingTierCache();
     const result = this.getTierById(id);
     if (!result) {
       throw new Error('Failed to retrieve updated tier');
@@ -144,6 +165,7 @@ export class RatingScoreModel {
     if (info.changes === 0) {
       throw new Error('Tier not found');
     }
+    invalidateRatingTierCache();
   }
 
   /**
@@ -173,6 +195,7 @@ export class RatingScoreModel {
     });
 
     transaction();
+    invalidateRatingTierCache();
     return this.getAllTiers();
   }
 }
