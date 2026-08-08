@@ -106,12 +106,30 @@ function isNetworkDrivePath(folderPath: string): boolean {
   return false;
 }
 
+/**
+ * chokidar 폴링 모드는 트리의 파일마다 fs.watchFile(개별 stat 타이머)을 걸어 매 주기
+ * 전체 트리를 다시 stat 한다. 큰 트리에서는 어떤 주기든 부하가 파일 수에 비례하므로,
+ * 하한 없이 짧은 주기를 허용하면 libuv 스레드풀이 stat 로 포화되어 서버 전체
+ * (이미지 스트리밍 포함)가 느려진다. 명시 설정이라도 이 하한 아래로는 내려가지 않는다.
+ */
+export const MIN_WATCHER_POLLING_INTERVAL_MS = 2000;
+
+/** Clamp one polling interval to the storm-safe floor, logging when it changes the value. */
+export function clampWatcherPollingIntervalMs(configuredMs: number, sourceLabel: string): number {
+  if (configuredMs >= MIN_WATCHER_POLLING_INTERVAL_MS) {
+    return configuredMs;
+  }
+
+  console.warn(`  ⚠️  워처 폴링 간격 ${configuredMs}ms는 너무 짧아 ${MIN_WATCHER_POLLING_INTERVAL_MS}ms로 보정됨: ${sourceLabel}`);
+  return MIN_WATCHER_POLLING_INTERVAL_MS;
+}
+
 /** Build watcher polling behavior from folder config and resolved path. */
 export function resolveWatcherPollingOptions(folder: Pick<WatchedFolderWatcherRecord, 'watcher_polling_interval'>, resolvedPath: string) {
   if (folder.watcher_polling_interval !== null && folder.watcher_polling_interval !== undefined) {
     return {
       usePolling: true,
-      pollingInterval: folder.watcher_polling_interval,
+      pollingInterval: clampWatcherPollingIntervalMs(folder.watcher_polling_interval, resolvedPath),
       pollingReason: 'user-configured',
     };
   }

@@ -68,7 +68,7 @@ export interface NewWatchedFolderDraft {
   scan_interval: number
   recursive: boolean
   watcher_enabled: boolean
-  watcher_polling_interval: number
+  watcher_polling_interval: number | null
   exclude_extensions: string
   exclude_patterns: string
 }
@@ -79,11 +79,14 @@ export interface NewBackupSourceDraft {
   target_folder_name: string
   recursive: boolean
   watcher_enabled: boolean
-  watcher_polling_interval: number
+  watcher_polling_interval: number | null
   import_mode: 'copy_original' | 'convert_webp'
   webp_quality: number
 }
 
+// watcher_polling_interval 은 null(자동 감지)이 기본이다. 값을 채워 저장하면 폴링 모드가
+// 강제되어 트리의 모든 파일을 주기마다 다시 stat 하므로, 큰 라이브러리에서는 서버 전체가
+// 느려진다. 실제로 폴링이 필요한 경로(이벤트가 오지 않는 마운트)에서만 손으로 지정한다.
 export function createNewWatchedFolderDraft(): NewWatchedFolderDraft {
   return {
     folder_path: '',
@@ -92,7 +95,7 @@ export function createNewWatchedFolderDraft(): NewWatchedFolderDraft {
     scan_interval: 5,
     recursive: true,
     watcher_enabled: true,
-    watcher_polling_interval: 2000,
+    watcher_polling_interval: null,
     exclude_extensions: '',
     exclude_patterns: '',
   }
@@ -105,7 +108,7 @@ export function createNewBackupSourceDraft(): NewBackupSourceDraft {
     target_folder_name: '',
     recursive: true,
     watcher_enabled: true,
-    watcher_polling_interval: 2000,
+    watcher_polling_interval: null,
     import_mode: 'copy_original',
     webp_quality: 90,
   }

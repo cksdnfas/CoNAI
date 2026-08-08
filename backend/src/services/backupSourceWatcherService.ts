@@ -7,6 +7,7 @@ import { settingsService } from './settingsService';
 import { VideoOptimizationService } from './videoOptimizationService';
 import { WebPConversionService } from './webpConversionService';
 import { BackupSource, BackupSourceService, ensureBackupTargetDirectory, normalizeBackupComparePath } from './backupSourceService';
+import { clampWatcherPollingIntervalMs } from './fileWatcher/fileWatcherPathUtils';
 import { sleep, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseBackupWatcherLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
@@ -192,7 +193,9 @@ export class BackupSourceWatcherService {
 
     const isNetworkPath = source.source_path.startsWith('\\\\') || source.source_path.startsWith('//');
     const usePolling = source.watcher_polling_interval != null || isNetworkPath;
-    const pollingInterval = source.watcher_polling_interval ?? (isNetworkPath ? 5000 : undefined);
+    const pollingInterval = source.watcher_polling_interval != null
+      ? clampWatcherPollingIntervalMs(source.watcher_polling_interval, source.source_path)
+      : (isNetworkPath ? 5000 : undefined);
 
     const watcher = chokidar.watch(source.source_path, {
       persistent: true,

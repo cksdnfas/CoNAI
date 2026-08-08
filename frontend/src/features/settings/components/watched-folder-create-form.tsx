@@ -41,8 +41,8 @@ export function WatchedFolderCreateForm({
           <NumberStepperInput min={1} variant="settings" value={newFolder.scan_interval} onValueCommit={(nextValue) => onNewFolderChange({ scan_interval: Number(nextValue) || 1 })} />
         </SettingsField>
 
-        <SettingsField label={t({ ko: 'watcher polling(ms)', en: 'Watcher polling (ms)' })}>
-          <NumberStepperInput min={100} variant="settings" value={newFolder.watcher_polling_interval} onValueCommit={(nextValue) => onNewFolderChange({ watcher_polling_interval: Number(nextValue) || 100 })} />
+        <SettingsField label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
+          <NumberStepperInput min={2000} allowEmpty variant="settings" value={newFolder.watcher_polling_interval} onValueCommit={(nextValue) => onNewFolderChange({ watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null })} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} />
         </SettingsField>
 
         <SettingsField label={t({ ko: '제외 확장자', en: 'Excluded extensions' })}>

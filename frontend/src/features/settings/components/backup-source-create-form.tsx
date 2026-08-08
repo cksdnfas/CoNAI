@@ -74,8 +74,8 @@ export function BackupSourceCreateForm({
           </Select>
         </SettingsField>
 
-        <SettingsField label={t({ ko: 'watcher polling(ms)', en: 'Watcher polling (ms)' })}>
-          <NumberStepperInput min={100} variant="settings" value={newBackupSource.watcher_polling_interval} onValueCommit={(nextValue) => onNewBackupSourceChange({ watcher_polling_interval: Number(nextValue) || 100 })} />
+        <SettingsField label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
+          <NumberStepperInput min={2000} allowEmpty variant="settings" value={newBackupSource.watcher_polling_interval} onValueCommit={(nextValue) => onNewBackupSourceChange({ watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null })} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} />
         </SettingsField>
 
         <SettingsField label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>

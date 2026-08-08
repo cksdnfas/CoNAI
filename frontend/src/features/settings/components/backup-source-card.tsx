@@ -39,7 +39,7 @@ export function BackupSourceCard({
     target_folder_name: source.target_folder_name,
     recursive: source.recursive === 1,
     watcher_enabled: source.watcher_enabled === 1,
-    watcher_polling_interval: source.watcher_polling_interval ?? 2000,
+    watcher_polling_interval: source.watcher_polling_interval ?? null,
     import_mode: source.import_mode,
     webp_quality: source.webp_quality,
     is_active: source.is_active === 1,
@@ -53,7 +53,7 @@ export function BackupSourceCard({
       target_folder_name: source.target_folder_name,
       recursive: source.recursive === 1,
       watcher_enabled: source.watcher_enabled === 1,
-      watcher_polling_interval: source.watcher_polling_interval ?? 2000,
+      watcher_polling_interval: source.watcher_polling_interval ?? null,
       import_mode: source.import_mode,
       webp_quality: source.webp_quality,
       is_active: source.is_active === 1,
@@ -142,8 +142,8 @@ export function BackupSourceCard({
             </Select>
           </SettingsField>
 
-          <SettingsField label={t({ ko: 'watcher polling(ms)', en: 'Watcher polling (ms)' })}>
-            <NumberStepperInput min={100} variant="settings" value={draft.watcher_polling_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, watcher_polling_interval: Number(nextValue) || 100 }))} />
+          <SettingsField label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
+            <NumberStepperInput min={2000} allowEmpty variant="settings" value={draft.watcher_polling_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null }))} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} />
           </SettingsField>
 
           <SettingsField label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>

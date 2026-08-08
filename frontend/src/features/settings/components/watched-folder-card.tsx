@@ -42,7 +42,8 @@ export function WatchedFolderCard({
     scan_interval: folder.scan_interval,
     recursive: folder.recursive === 1,
     watcher_enabled: folder.watcher_enabled === 1,
-    watcher_polling_interval: folder.watcher_polling_interval ?? 2000,
+    // null = 자동 감지. 값을 채우면 폴링 모드가 강제되므로 저장 시 기본값을 심지 않는다.
+    watcher_polling_interval: folder.watcher_polling_interval ?? null,
     is_active: folder.is_active === 1,
     exclude_extensions: toCommaSeparatedInput(parseJsonArray(folder.exclude_extensions)),
     exclude_patterns: toCommaSeparatedInput(parseJsonArray(folder.exclude_patterns)),
@@ -56,7 +57,7 @@ export function WatchedFolderCard({
       scan_interval: folder.scan_interval,
       recursive: folder.recursive === 1,
       watcher_enabled: folder.watcher_enabled === 1,
-      watcher_polling_interval: folder.watcher_polling_interval ?? 2000,
+      watcher_polling_interval: folder.watcher_polling_interval ?? null,
       is_active: folder.is_active === 1,
       exclude_extensions: toCommaSeparatedInput(parseJsonArray(folder.exclude_extensions)),
       exclude_patterns: toCommaSeparatedInput(parseJsonArray(folder.exclude_patterns)),
