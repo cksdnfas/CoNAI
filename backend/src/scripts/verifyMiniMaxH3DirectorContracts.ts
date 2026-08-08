@@ -100,6 +100,28 @@ async function main() {
       }
     }
 
+    const partiallyPopulatedRef = await prepareComfyPromptData(comfyService as never, fields as never, {
+      director: {
+        ...promptData.director,
+        mode: 'REF2VA',
+        prompt: '',
+        timeline_data: JSON.stringify({
+          ...JSON.parse(promptData.director.timeline_data),
+          prompt_blocks: [{ id: 'legacy-opening', text: 'opening frame', enabled: true, start: 0, duration: 1, order: 0 }],
+        }),
+        builder_state: JSON.stringify({
+          version: 2,
+          mode: 'REF2VA',
+          ref: { subject_definitions: '<Picture 1> is the keyframe.' },
+        }),
+      },
+    });
+    assert.equal(
+      JSON.parse(partiallyPopulatedRef.director.builder_state).ref.detailed_description,
+      'opening frame',
+      'legacy media prompts must migrate into an empty detailed_description even when other REF sections are populated',
+    );
+
     const linkedTimeline = ['77', 0];
     const linkedPromptData = {
       director: {

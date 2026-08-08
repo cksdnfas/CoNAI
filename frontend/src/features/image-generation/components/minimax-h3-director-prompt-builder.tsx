@@ -6,6 +6,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { FormField } from '../image-generation-shared'
 import {
   buildMiniMaxH3DirectorPrompt,
   prefillMiniMaxH3DirectorRefBuilder,
@@ -46,13 +47,13 @@ export function MiniMaxH3DirectorPromptBuilder({
   }
 
   return <>
-    <section className="space-y-3 rounded-sm border border-border/80 bg-surface-low/50 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section className="space-y-4 rounded-sm border border-border/80 bg-surface-low/50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-xs font-medium text-foreground">{t({ ko: '프롬프트 빌더', en: 'Prompt builder' })}</div>
           <div className="mt-1 text-[11px] text-muted-foreground">{state.mode}</div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="outline" onClick={insertShotMarker}>
             <Plus className="h-3.5 w-3.5" />[Shot N]
           </Button>
@@ -68,49 +69,40 @@ export function MiniMaxH3DirectorPromptBuilder({
       </div>
 
       {state.mode === 'REF2VA' ? (
-        <div className="grid gap-3">
-          <label className="space-y-1 text-xs text-muted-foreground">
-            <span>subject_definitions</span>
+        <div className="grid gap-4">
+          <FormField label="subject_definitions">
             <Textarea rows={4} value={state.ref.subject_definitions} placeholder="<Subject 1> ... / <Picture 1> ..." onChange={(event) => patchRef({ subject_definitions: event.target.value })} />
-          </label>
-          <label className="space-y-1 text-xs text-muted-foreground">
-            <span>summary</span>
+          </FormField>
+          <FormField label="summary">
             <Textarea rows={3} value={state.ref.summary} placeholder="[reference generation] Use <Picture 1> ..." onChange={(event) => patchRef({ summary: event.target.value })} />
-          </label>
-          <label className="space-y-1 text-xs text-muted-foreground">
-            <span>retention_analysis</span>
+          </FormField>
+          <FormField label="retention_analysis">
             <Textarea rows={4} value={state.ref.retention_analysis} placeholder="<Subject 1>: fully_preserved - ..." onChange={(event) => patchRef({ retention_analysis: event.target.value })} />
-          </label>
-          <label className={cn('space-y-1 text-xs text-muted-foreground', invalid && 'text-destructive')}>
-            <span>detailed_description</span>
+          </FormField>
+          <FormField label="detailed_description">
             <Textarea rows={6} value={state.ref.detailed_description} placeholder="[Shot 1] ... [Shot 2] At 00:04.500, ..." className={cn(invalid && 'border-destructive')} onChange={(event) => patchRef({ detailed_description: event.target.value })} />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1 text-xs text-muted-foreground">
-              <span>overall_soundscape</span>
+          </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="overall_soundscape">
               <Textarea rows={3} value={state.ref.soundscape} onChange={(event) => patchRef({ soundscape: event.target.value })} />
-            </label>
-            <label className="space-y-1 text-xs text-muted-foreground">
-              <span>non_diegetic_music</span>
+            </FormField>
+            <FormField label="non_diegetic_music">
               <Textarea rows={3} value={state.ref.music} onChange={(event) => patchRef({ music: event.target.value })} />
-            </label>
+            </FormField>
           </div>
         </div>
       ) : (
-        <div className="grid gap-3">
-          <label className={cn('space-y-1 text-xs text-muted-foreground', invalid && 'text-destructive')}>
-            <span>integrated_multimodal_description</span>
+        <div className="grid gap-4">
+          <FormField label="integrated_multimodal_description">
             <Textarea rows={6} value={state.imd} placeholder="[Shot 1] Start your scene description here..." className={cn(invalid && 'border-destructive')} onChange={(event) => patchState({ imd: event.target.value })} />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1 text-xs text-muted-foreground">
-              <span>overall_soundscape</span>
+          </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="overall_soundscape">
               <Textarea rows={3} value={state.soundscape} onChange={(event) => patchState({ soundscape: event.target.value })} />
-            </label>
-            <label className="space-y-1 text-xs text-muted-foreground">
-              <span>non_diegetic_music</span>
+            </FormField>
+            <FormField label="non_diegetic_music">
               <Textarea rows={3} value={state.music} onChange={(event) => patchState({ music: event.target.value })} />
-            </label>
+            </FormField>
           </div>
         </div>
       )}

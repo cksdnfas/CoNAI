@@ -181,17 +181,6 @@ function createMiniMaxBuilderState(mode: string, duration: number) {
   }
 }
 
-function hasMiniMaxBuilderContent(builder: Record<string, any>) {
-  const ref = isRecord(builder.ref) ? builder.ref : {}
-  if (builder.mode === 'REF2VA') {
-    return ['subject_definitions', 'summary', 'retention_analysis', 'detailed_description', 'soundscape']
-      .some((key) => typeof ref[key] === 'string' && ref[key].trim())
-      || (typeof ref.music === 'string' && ref.music.trim() && ref.music.trim() !== 'N/A')
-  }
-  return ['imd', 'soundscape'].some((key) => typeof builder[key] === 'string' && builder[key].trim())
-    || (typeof builder.music === 'string' && builder.music.trim() && builder.music.trim() !== 'N/A')
-}
-
 function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Record<string, any>) {
   const mode = typeof value.mode === 'string' && MINIMAX_H3_DIRECTOR_MODES.has(value.mode) ? value.mode : 'FL2VA'
   const duration = Number.isFinite(Number(value.duration)) ? Number(value.duration) : 5
@@ -253,19 +242,20 @@ function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Reco
       .join('\n')
   }
 
-  if (!hasMiniMaxBuilderContent(builder)) {
-    const legacyPrompt = [
-      typeof value.prompt === 'string' ? value.prompt.trim() : '',
-      ...(Array.isArray(timeline.prompt_blocks)
-        ? timeline.prompt_blocks
-            .filter((block: unknown) => isRecord(block) && block.enabled !== false && typeof block.text === 'string' && block.text.trim())
-            .sort((left: Record<string, any>, right: Record<string, any>) => Number(left.start ?? 0) - Number(right.start ?? 0) || Number(left.order ?? 0) - Number(right.order ?? 0))
-            .map((block: Record<string, any>) => block.text.trim())
-        : []),
-    ].filter(Boolean).join('\n')
-    if (legacyPrompt) {
-      if (mode === 'REF2VA') builder.ref.detailed_description = legacyPrompt
-      else builder.imd = legacyPrompt
+  const legacyPrompt = [
+    typeof value.prompt === 'string' ? value.prompt.trim() : '',
+    ...(Array.isArray(timeline.prompt_blocks)
+      ? timeline.prompt_blocks
+          .filter((block: unknown) => isRecord(block) && block.enabled !== false && typeof block.text === 'string' && block.text.trim())
+          .sort((left: Record<string, any>, right: Record<string, any>) => Number(left.start ?? 0) - Number(right.start ?? 0) || Number(left.order ?? 0) - Number(right.order ?? 0))
+          .map((block: Record<string, any>) => block.text.trim())
+      : []),
+  ].filter(Boolean).join('\n')
+  if (legacyPrompt) {
+    if (mode === 'REF2VA' && !builder.ref.detailed_description.trim()) {
+      builder.ref.detailed_description = legacyPrompt
+    } else if (mode !== 'REF2VA' && !builder.imd.trim()) {
+      builder.imd = legacyPrompt
     }
   }
   return builder

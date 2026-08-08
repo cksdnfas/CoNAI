@@ -72,7 +72,7 @@ assert.deepEqual(
   'Director media must persist as a small private asset reference',
 )
 const builtTimeline = parseMiniMaxH3DirectorTimeline(built.timeline_data).timeline
-assert.equal(builtTimeline.prompt_blocks[0]?.text, 'opening frame', 'media prompts must synchronize to prompt_blocks')
+assert.equal(builtTimeline.prompt_blocks[0]?.text, 'opening frame', 'legacy media prompts must remain synchronized to prompt_blocks')
 assert.equal(typeof built.builder_state, 'string', 'the new required builder_state input must be serialized')
 assert.equal(builtTimeline.builder_state?.mode, 'REF2VA', 'timeline_data must retain a builder_state compatibility copy')
 assert.equal(
@@ -163,6 +163,16 @@ assert.match(normalizedLegacyRefBuilder.ref.subject_definitions, /<Picture 1>/, 
 assert.match(normalizedLegacyRefBuilder.ref.summary, /^\[reference generation\]/, 'legacy v1 summary must normalize into the v2 editor')
 assert.match(normalizedLegacyRefBuilder.ref.retention_analysis, /fully_preserved/, 'legacy v1 retention rows must normalize into the v2 editor')
 assert.match(normalizedLegacyRefBuilder.ref.detailed_description, /Cinematic realism/, 'legacy v1 detail fields must normalize into the v2 editor')
+const partiallyPopulatedRefBuilder = normalizeMiniMaxH3DirectorBuilderState({
+  version: 2,
+  mode: 'REF2VA',
+  ref: { subject_definitions: '<Picture 1> is the keyframe.' },
+}, builtTimeline, 'REF2VA', 5)
+assert.equal(
+  partiallyPopulatedRefBuilder.ref.detailed_description,
+  'opening frame',
+  'legacy media prompts must migrate into an empty detailed_description even when other REF sections are populated',
+)
 
 const audioWithoutVisual = {
   ...original,
@@ -235,8 +245,10 @@ assert.match(directorInputSource, /시작 프레임/, 'FL2VA must expose an expl
 assert.match(directorInputSource, /끝 프레임/, 'FL2VA must expose an explicit end-frame slot')
 assert.match(directorInputSource, /clearLane\('visual'\)/, 'the visual lane must have an independent reset')
 assert.match(directorInputSource, /clearLane\('audio'\)/, 'the audio lane must have an independent reset')
-assert.match(directorInputSource, /SettingsModal/, 'media prompts must be edited in a modal')
-assert.match(directorInputSource, /Media prompt summary/, 'media prompts must have a read-only summary viewer')
+assert.doesNotMatch(directorInputSource, /미디어 프롬프트|Media prompt/, 'the retired per-media prompt UI must not compete with the new prompt builder')
+assert.doesNotMatch(mediaCardSource, /promptLabel|onOpenPrompt|MessageSquareText/, 'media cards must not expose retired per-media prompt actions')
+assert.match(directorInputSource, /import \{ FormField \}/, 'Director settings must reuse the shared image-generation field layout')
+assert.match(promptBuilderSource, /import \{ FormField \}/, 'prompt sections must reuse the shared image-generation field layout')
 for (const mode of ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA']) {
   assert.match(directorInputSource, new RegExp(`['"]${mode}['"]`), `${mode} must be available in the CoNAI Director UI`)
 }

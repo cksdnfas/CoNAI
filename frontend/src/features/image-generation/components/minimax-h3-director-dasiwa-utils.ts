@@ -281,10 +281,10 @@ export function normalizeMiniMaxH3DirectorBuilderState(
   }
 
   const legacy = buildLegacyPrompt(legacyPrompt, timeline)
-  if (!hasMiniMaxH3DirectorBuilderContent(normalized) && legacy) {
-    if (mode === 'REF2VA') {
+  if (legacy) {
+    if (mode === 'REF2VA' && !normalized.ref.detailed_description.trim()) {
       normalized.ref.detailed_description = legacy
-    } else {
+    } else if (mode !== 'REF2VA' && !normalized.imd.trim()) {
       normalized.imd = legacy
     }
   }

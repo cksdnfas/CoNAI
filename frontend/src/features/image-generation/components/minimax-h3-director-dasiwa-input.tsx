@@ -5,9 +5,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import {
   buildWorkflowInputAssetUrl,
@@ -17,6 +14,7 @@ import {
 } from '@/lib/api-workflow-input-assets'
 import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
+import { FormField } from '../image-generation-shared'
 import {
   buildMiniMaxH3DirectorNodeValue,
   createMiniMaxH3DirectorItemId,
@@ -115,12 +113,6 @@ async function extractAudioWaveformPeaks(file: File) {
   }
 }
 
-function formatMediaBytes(bytes: number) {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${bytes} B`
-}
-
 function formatMediaTypeLabel(type: MiniMaxH3DirectorMediaType, index: number) {
   if (type === 'image') return `Picture ${index}`
   if (type === 'video') return `Video ${index}`
@@ -134,8 +126,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
   const audioInputRef = useRef<HTMLInputElement>(null)
   const replacementInputRef = useRef<HTMLInputElement>(null)
   const [menuItemId, setMenuItemId] = useState<string | null>(null)
-  const [promptItemId, setPromptItemId] = useState<string | null>(null)
-  const [promptDraft, setPromptDraft] = useState('')
   const [replacementItemId, setReplacementItemId] = useState<string | null>(null)
   const [sortingItemId, setSortingItemId] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -194,7 +184,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
   const audioItems = mode === null || mode === 'REF2VA'
     ? displayedItems.filter((item) => item.type === 'audio').sort((left, right) => left.slot - right.slot)
     : []
-  const promptItem = timeline.items.find((item) => item.id === promptItemId && item.type !== 'audio') ?? null
   const issues = useMemo(() => validateMiniMaxH3DirectorNodeValue(value), [value])
   const issueItemIds = useMemo(() => new Set(issues.flatMap((issue) => issue.itemId ? [issue.itemId] : [])), [issues])
   const invalidFields = useMemo(() => new Set(issues.flatMap((issue) => issue.field ? [issue.field] : [])), [issues])
@@ -236,7 +225,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
       items: timeline.items.filter((item) => !itemIds.has(item.id)),
     }, nextAssets)
     setMenuItemId(null)
-    if (promptItemId && itemIds.has(promptItemId)) setPromptItemId(null)
     cleanupAssets(removableAssets)
   }
 
@@ -250,7 +238,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
     const clearMedia = isFieldVisible('timeline_data')
     const removableAssets = clearMedia ? Object.values(assets) : []
     setMenuItemId(null)
-    setPromptItemId(null)
     emit(
       isFieldVisible('prompt') ? { prompt: '' } : {},
       clearMedia ? { ...timeline, items: [], prompt_blocks: [] } : undefined,
@@ -442,12 +429,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
     window.setTimeout(() => replacementInputRef.current?.click(), 0)
   }
 
-  const openPromptModal = (item: MiniMaxH3DirectorTimelineItem) => {
-    setPromptItemId(item.id)
-    setPromptDraft(String(item.prompt ?? ''))
-    setMenuItemId(null)
-  }
-
   const renderMediaCard = (item: MiniMaxH3DirectorTimelineItem, typeIndex: number, labelOverride?: string) => {
     const asset = assets[item.id]
     const sourceDuration = Math.max(2, Number(item.source_duration ?? item.duration ?? 2))
@@ -465,12 +446,10 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
         disabled={isUploading}
         sorting={sortingItemId === item.id}
         replaceLabel={t({ ko: '미디어 교체', en: 'Replace media' })}
-        promptLabel={t({ ko: '미디어 프롬프트', en: 'Media prompt' })}
         deleteLabel={t({ ko: '삭제', en: 'Delete' })}
         menuLabel={t({ ko: '{name} 메뉴', en: '{name} menu' }, { name: label })}
         onToggleMenu={() => setMenuItemId((current) => current === item.id ? null : item.id)}
         onRequestReplace={() => requestReplacement(item.id)}
-        onOpenPrompt={item.type === 'audio' ? undefined : () => openPromptModal(item)}
         onDelete={() => removeTimelineItem(item.id)}
         onReplaceFile={(file) => void replaceTimelineItem(item.id, file)}
         onSortStart={() => { setMenuItemId(null); setSortingItemId(item.id) }}
@@ -501,21 +480,19 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
         ) : null}
 
         {item.type !== 'image' ? (
-          <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1 text-[11px] text-muted-foreground">
-              <span>{t({ ko: '시작', en: 'Start' })}</span>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label={t({ ko: '시작', en: 'Start' })}>
               <NumberStepperInput min={0} max={Math.max(0, trimEnd - 2)} step={0.25} value={String(trimStart)} onValueCommit={(nextValue) => {
                 const nextStart = Math.max(0, Math.min(trimEnd - 2, Number(nextValue)))
                 updateTimelineItem(item.id, { trim_start: nextStart, duration: trimEnd - nextStart })
               }} />
-            </label>
-            <label className="space-y-1 text-[11px] text-muted-foreground">
-              <span>{t({ ko: '끝', en: 'End' })}</span>
+            </FormField>
+            <FormField label={t({ ko: '끝', en: 'End' })}>
               <NumberStepperInput min={trimStart + 2} max={sourceDuration} step={0.25} value={String(trimEnd)} onValueCommit={(nextValue) => {
                 const nextEnd = Math.min(sourceDuration, Math.max(trimStart + 2, Number(nextValue)))
                 updateTimelineItem(item.id, { trim_end: nextEnd, duration: nextEnd - trimStart })
               }} />
-            </label>
+            </FormField>
           </div>
         ) : null}
       </MiniMaxH3DirectorMediaCard>
@@ -594,22 +571,19 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
       </div>
 
       {hasVisibleDimensionField ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {isFieldVisible('width') ? (
-            <label className="space-y-1 text-xs text-muted-foreground">
-              <span>{t({ ko: '너비', en: 'Width' })}</span>
+            <FormField label={t({ ko: '너비', en: 'Width' })}>
               <NumberStepperInput min={numericBounds?.width?.min} max={numericBounds?.width?.max} step={1} value={widthValue} onValueCommit={(nextValue) => emit({ width: Number(nextValue) })} />
-            </label>
+            </FormField>
           ) : null}
           {isFieldVisible('height') ? (
-            <label className="space-y-1 text-xs text-muted-foreground">
-              <span>{t({ ko: '높이', en: 'Height' })}</span>
+            <FormField label={t({ ko: '높이', en: 'Height' })}>
               <NumberStepperInput min={numericBounds?.height?.min} max={numericBounds?.height?.max} step={1} value={heightValue} onValueCommit={(nextValue) => emit({ height: Number(nextValue) })} />
-            </label>
+            </FormField>
           ) : null}
           {isFieldVisible('duration') ? (
-            <label className={cn('space-y-1 text-xs text-muted-foreground', invalidFields.has('duration') && 'text-destructive')}>
-              <span>{t({ ko: '길이(초)', en: 'Duration (seconds)' })}</span>
+            <FormField label={t({ ko: '길이(초)', en: 'Duration (seconds)' })}>
               <NumberStepperInput
                 min={Math.max(MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS, numericBounds?.duration?.min ?? MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS)}
                 max={Math.min(MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS, numericBounds?.duration?.max ?? MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS)}
@@ -621,17 +595,16 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
                   emit({ duration }, undefined, assets, { ...builderState, duration })
                 }}
               />
-            </label>
+            </FormField>
           ) : null}
           {isFieldVisible('ref_image_size') ? (
-            <label className="space-y-1 text-xs text-muted-foreground">
-              <span>{t({ ko: '참조 이미지 크기', en: 'Reference image size' })}</span>
+            <FormField label={t({ ko: '참조 이미지 크기', en: 'Reference image size' })}>
               <Select value={refImageSizeValue} onChange={(event) => emit({ ref_image_size: event.target.value })}>
                 {refImageSizeValue === '' ? <option value="">{t({ ko: '선택', en: 'Select' })}</option> : null}
                 <option value="match">match</option>
                 <option value="max">max</option>
               </Select>
-            </label>
+            </FormField>
           ) : null}
         </div>
       ) : null}
@@ -719,26 +692,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
         )}
       </div>
 
-      {visualItems.length > 0 ? (
-        <section className="space-y-2 rounded-sm border border-border/70 bg-background/25 p-3" aria-label={t({ ko: '미디어 프롬프트 요약', en: 'Media prompt summary' })}>
-          <div className="text-xs font-medium text-foreground">{t({ ko: '미디어 프롬프트 요약', en: 'Media prompt summary' })}</div>
-          <div className="divide-y divide-border/60">
-            {visualItems.map((item, index) => {
-              const label = !isReferenceMediaMode
-                ? frameSlots[index]?.label ?? formatMediaTypeLabel(item.type, index + 1)
-                : formatMediaTypeLabel(item.type, visualItems.filter((candidate) => candidate.type === item.type && candidate.slot <= item.slot).length)
-              return (
-                <div key={item.id} className="grid gap-1 py-2 text-xs sm:grid-cols-[8rem_minmax(0,1fr)]">
-                  <span className="font-medium text-foreground">{label}</span>
-                  <span className={cn('whitespace-pre-wrap break-words', String(item.prompt ?? '').trim() ? 'text-muted-foreground' : 'text-muted-foreground/60')}>
-                    {String(item.prompt ?? '').trim() || t({ ko: '미작성', en: 'Not written' })}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      ) : null}
       </> : null}
 
       {isFieldVisible('prompt') ? (
@@ -753,36 +706,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
 
       {status ? <div className="rounded-sm border border-border/70 bg-background/35 px-3 py-2 text-xs text-muted-foreground">{status}</div> : null}
 
-      <SettingsModal
-        open={isFieldVisible('timeline_data') && Boolean(promptItem)}
-        title={t({ ko: '미디어 프롬프트', en: 'Media prompt' })}
-        description={promptItem ? assets[promptItem.id]?.fileName || promptItem.value : undefined}
-        widthClassName="max-w-xl"
-        onClose={() => setPromptItemId(null)}
-      >
-        {promptItem ? (
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-sm border border-border/70 bg-surface-low/45 px-3 py-3">
-                <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '파일명', en: 'File name' })}</div>
-                <div className="mt-2 break-all text-sm text-foreground">{assets[promptItem.id]?.fileName || promptItem.value}</div>
-              </div>
-              <div className="rounded-sm border border-border/70 bg-surface-low/45 px-3 py-3">
-                <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '용량', en: 'Size' })}</div>
-                <div className="mt-2 text-sm text-foreground">{assets[promptItem.id] ? formatMediaBytes(assets[promptItem.id].bytes) : t({ ko: '기존 Comfy 입력', en: 'Existing Comfy input' })}</div>
-              </div>
-            </div>
-            <label className="block space-y-1.5 text-xs text-muted-foreground">
-              <span>{t({ ko: '프롬프트', en: 'Prompt' })}</span>
-              <Textarea rows={7} autoFocus value={promptDraft} placeholder={t({ ko: '이 미디어의 역할과 장면을 적어줘.', en: 'Describe this media role and scene.' })} onChange={(event) => setPromptDraft(event.target.value)} />
-            </label>
-            <SettingsModalFooter>
-              <Button type="button" variant="outline" onClick={() => setPromptItemId(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-              <Button type="button" onClick={() => { updateTimelineItem(promptItem.id, { prompt: promptDraft }); setPromptItemId(null) }}>{t({ ko: '저장', en: 'Save' })}</Button>
-            </SettingsModalFooter>
-          </div>
-        ) : null}
-      </SettingsModal>
     </div>
   )
 }

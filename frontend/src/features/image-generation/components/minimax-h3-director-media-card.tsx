@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import { Film, ImageIcon, MessageSquareText, Music2, RefreshCw, Trash2 } from 'lucide-react'
+import { Film, ImageIcon, Music2, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { buildWorkflowInputAssetUrl, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import { cn } from '@/lib/utils'
@@ -18,12 +18,10 @@ type MiniMaxH3DirectorMediaCardProps = {
   sorting?: boolean
   children?: ReactNode
   replaceLabel: string
-  promptLabel: string
   deleteLabel: string
   menuLabel: string
   onToggleMenu: () => void
   onRequestReplace: () => void
-  onOpenPrompt?: () => void
   onDelete: () => void
   onReplaceFile: (file: File) => void
   onSortStart: () => void
@@ -110,12 +108,10 @@ export function MiniMaxH3DirectorMediaCard({
   sorting = false,
   children,
   replaceLabel,
-  promptLabel,
   deleteLabel,
   menuLabel,
   onToggleMenu,
   onRequestReplace,
-  onOpenPrompt,
   onDelete,
   onReplaceFile,
   onSortStart,
@@ -257,11 +253,6 @@ export function MiniMaxH3DirectorMediaCard({
       <div className="relative flex min-h-28 max-h-64 w-full items-center justify-center overflow-hidden bg-black/20 p-1">
         <MiniMaxDirectorMediaPreview item={item} asset={asset} />
         <Badge className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate bg-background/88">{label}</Badge>
-        {String(item.prompt ?? '').trim() && item.type !== 'audio' ? (
-          <Badge variant="outline" className="absolute right-2 top-2 bg-background/88 px-1.5" title={promptLabel}>
-            <MessageSquareText className="h-3.5 w-3.5" />
-          </Badge>
-        ) : null}
       </div>
 
       {children ? <div data-minimax-interactive="true" className="space-y-2 border-t border-border/70 p-3" onClick={(event) => event.stopPropagation()}>{children}</div> : null}
@@ -271,11 +262,6 @@ export function MiniMaxH3DirectorMediaCard({
           <button type="button" role="menuitem" className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-xs text-foreground hover:bg-surface-high" onClick={(event) => { event.stopPropagation(); onRequestReplace() }}>
             <RefreshCw className="h-4 w-4" />{replaceLabel}
           </button>
-          {onOpenPrompt ? (
-            <button type="button" role="menuitem" className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-xs text-foreground hover:bg-surface-high" onClick={(event) => { event.stopPropagation(); onOpenPrompt() }}>
-              <MessageSquareText className="h-4 w-4" />{promptLabel}
-            </button>
-          ) : null}
           <button type="button" role="menuitem" className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-xs text-destructive hover:bg-destructive/10" onClick={(event) => { event.stopPropagation(); onDelete() }}>
             <Trash2 className="h-4 w-4" />{deleteLabel}
           </button>
