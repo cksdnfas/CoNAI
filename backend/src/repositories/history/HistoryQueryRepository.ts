@@ -398,27 +398,6 @@ export class HistoryQueryRepository {
     return this.findAll({ ...filters, workflow_id: workflowId });
   }
 
-  static getWorkflowStatistics(workflowId: number): GenerationWorkflowStatistics {
-    const result = apiGenDb.prepare(`
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN generation_status = 'completed' THEN 1 ELSE 0 END) as completed,
-        SUM(CASE WHEN generation_status = 'failed' THEN 1 ELSE 0 END) as failed,
-        SUM(CASE WHEN generation_status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN generation_status = 'processing' THEN 1 ELSE 0 END) as processing
-      FROM api_generation_history
-      WHERE workflow_id = ?
-    `).get(workflowId) as Partial<GenerationWorkflowStatistics> | undefined;
-
-    return {
-      total: result?.total || 0,
-      completed: result?.completed || 0,
-      failed: result?.failed || 0,
-      pending: result?.pending || 0,
-      processing: result?.processing || 0,
-    };
-  }
-
   static getWorkflowListStatistics(workflowId: number): GenerationWorkflowStatistics {
     let sql = `
       SELECT

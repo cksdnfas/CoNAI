@@ -48,7 +48,6 @@ function createFakeDependencies(
     stopGenerationHistoryCleanupScheduler: () => record('scheduler:history-cleanup'),
     cleanupTempFiles: () => record('temp:cleanup'),
     stopTaggerDaemon: () => record('tagger'),
-    shutdownJobTracker: () => record('job-tracker'),
     shutdownRuntimeJobs: () => {
       record('runtime-jobs');
       return 3;
@@ -140,7 +139,6 @@ async function verifyFullShutdownOrderAndIdempotency() {
     'scheduler:history-cleanup',
     'temp:cleanup',
     'tagger',
-    'job-tracker',
     'runtime-jobs',
     'db:main',
     'db:user',
@@ -253,7 +251,6 @@ async function verifySafeSmokeBranch() {
     'http:close-idle',
     'http:close-all',
     'temp:cleanup',
-    'job-tracker',
     'runtime-jobs',
     'db:main',
     'db:user',

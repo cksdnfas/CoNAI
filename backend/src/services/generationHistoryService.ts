@@ -299,26 +299,6 @@ export class GenerationHistoryService {
   }
 
   /**
-   * Delete generation history.
-   * When image deletion is needed, resolve it from the main DB via composite_hash.
-   */
-  static async deleteHistory(id: number): Promise<void> {
-    const history = HistoryQueryRepository.findById(id);
-    if (!history) {
-      throw new Error(`Generation history ${id} not found`);
-    }
-
-    if (history.composite_hash) {
-      const { DeletionService } = await import('./deletionService');
-      await DeletionService.deleteImage(history.composite_hash);
-    }
-
-    HistoryCommandService.delete(id);
-
-    console.log(`✓ Generation history ${id} deleted`);
-  }
-
-  /**
    * Get statistics
    */
   static async getStatistics(
@@ -364,19 +344,6 @@ export class GenerationHistoryService {
     });
 
     return { records, total };
-  }
-
-  /**
-   * Get workflow statistics
-   */
-  static async getWorkflowStatistics(workflowId: number): Promise<{
-    total: number;
-    completed: number;
-    failed: number;
-    pending: number;
-    processing: number;
-  }> {
-    return HistoryQueryRepository.getWorkflowStatistics(workflowId);
   }
 
   /**

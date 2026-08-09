@@ -135,24 +135,6 @@ export class ImageUploadService {
   }
 
   /**
-   * 레거시: images 테이블에도 저장 (호환성 유지)
-   * @deprecated 새 구조 안정화 후 제거 예정
-   */
-  static getLegacyImageId(compositeHash: string): number | null {
-    // image_files를 통해 images.id 조회
-    const { db } = require('../database/init');
-    const row = db.prepare(`
-      SELECT i.id
-      FROM image_files if
-      JOIN images i ON if.original_file_path LIKE '%' || i.file_path
-      WHERE if.composite_hash = ?
-      LIMIT 1
-    `).get(compositeHash) as { id: number } | undefined;
-
-    return row?.id || null;
-  }
-
-  /**
    * composite_hash로 메타데이터 조회
    */
   static getMetadataByHash(compositeHash: string): ImageMetadataRecord | null {

@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import { routeParam } from './routeParam';
-import multer from 'multer';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
@@ -17,19 +16,10 @@ import {
   handleHistoryBatchDownload,
   handleHistoryFile,
   handleHistoryImageDetail,
-  handleHistoryImageUpload,
   handleHistoryThumbnail,
 } from './generation-history/mediaRouteHandlers';
 
 const router = express.Router();
-
-// Multer configuration for image upload (memory storage)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB limit
-  }
-});
 
 /**
  * GET /api/generation-history
@@ -181,111 +171,6 @@ router.get(
 );
 
 /**
- * POST /api/generation-history/comfyui
- * Create ComfyUI generation history
- *
- * Body:
- * - workflow?: object (legacy compatibility input, no longer required)
- * - workflowId: number
- * - workflowName: string
- * - promptId?: string (legacy compatibility field)
- * - positivePrompt?: string (legacy compatibility input)
- * - negativePrompt?: string (legacy compatibility input)
- * - width?: number (legacy compatibility input, no longer stored in history)
- * - height?: number (legacy compatibility input, no longer stored in history)
- * - metadata?: object (legacy compatibility input)
- */
-router.post(
-  '/comfyui',
-  asyncHandler(async (req: Request, res: Response) => {
-    const {
-      workflowId,
-      workflowName,
-      promptId,
-    } = req.body;
-
-    // Validation
-    if (!workflowId || !workflowName) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields: workflowId, workflowName'
-      });
-      return;
-    }
-
-    const historyId = await GenerationHistoryService.createComfyUIHistory({
-      workflowId,
-      workflowName,
-      promptId,
-    });
-
-    res.status(201).json({
-      success: true,
-      historyId,
-      message: 'ComfyUI generation history created'
-    });
-  })
-);
-
-/**
- * POST /api/generation-history/novelai
- * Create NovelAI generation history
- *
- * Body:
- * - model: string
- * - sampler?: string (legacy compatibility input)
- * - seed?: number (legacy compatibility input)
- * - steps?: number (legacy compatibility input)
- * - scale?: number (legacy compatibility input)
- * - parameters?: object (legacy compatibility input)
- * - positivePrompt?: string (legacy compatibility input)
- * - negativePrompt?: string (legacy compatibility input)
- * - width?: number (legacy compatibility input, no longer stored in history)
- * - height?: number (legacy compatibility input, no longer stored in history)
- * - metadata?: object (legacy compatibility input)
- */
-router.post(
-  '/novelai',
-  asyncHandler(async (req: Request, res: Response) => {
-    const {
-      model,
-    } = req.body;
-
-    // Validation
-    if (!model) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields: model'
-      });
-      return;
-    }
-
-    const historyId = await GenerationHistoryService.createNAIHistory({
-      model,
-    });
-
-    res.status(201).json({
-      success: true,
-      historyId,
-      message: 'NovelAI generation history created'
-    });
-  })
-);
-
-/**
- * POST /api/generation-history/:id/upload-image
- * Process and upload generated image
- * Expects multipart/form-data with 'image' field
- */
-router.post(
-  '/:id/upload-image',
-  upload.single('image'),
-  asyncHandler(async (req: Request, res: Response) => {
-    await handleHistoryImageUpload(req, res, routeParam(req.params.id));
-  })
-);
-
-/**
  * DELETE /api/generation-history/:id
  * Delete generation history (통합 삭제 서비스 사용)
  *
@@ -415,42 +300,6 @@ router.post(
   '/cleanup-failed',
   asyncHandler(async (req: Request, res: Response) => {
     await handleFailedGenerationHistoryCleanup(req, res);
-  })
-);
-
-/**
- * GET /api/generation-history/job/:jobId
- * Get job status and progress
- * Returns temporary job info before DB records are created
- */
-router.get(
-  '/job/:jobId',
-  asyncHandler(async (req: Request, res: Response) => {
-    const jobId = routeParam(req.params.jobId);
-
-    const { JobTracker } = await import('../services/jobTracker');
-    const job = JobTracker.getJob(jobId);
-
-    if (!job) {
-      res.status(404).json({
-        success: false,
-        error: 'Job not found or expired'
-      });
-      return;
-    }
-
-    res.json({
-      success: true,
-      job: {
-        jobId: job.jobId,
-        status: job.status,
-        progress: job.progress,
-        historyIds: job.historyIds,
-        error: job.error,
-        createdAt: job.createdAt,
-        updatedAt: job.updatedAt
-      }
-    });
   })
 );
 

@@ -193,10 +193,6 @@ async function startServer() {
       console.log('🧩 Worker startup cleanup skipped in API/smoke runtime');
     }
 
-    // 5-2. Job Tracker 초기화 (generation progress tracking)
-    const { JobTracker } = await import('./services/jobTracker');
-    JobTracker.initialize();
-
     // 6. 쿼리 캐시 서비스 초기화
     QueryCacheService.initialize();
 

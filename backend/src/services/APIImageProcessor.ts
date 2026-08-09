@@ -99,20 +99,6 @@ export class APIImageProcessor {
   }
 
   /**
-   * Delete generated images
-   *
-   * @deprecated Use DeletionService.deleteGeneratedImages() instead
-   */
-  static async deleteGeneratedImages(paths: {
-    originalPath: string;
-    thumbnailPath?: string;
-  }): Promise<void> {
-    // DeletionService로 위임
-    const { DeletionService } = await import('./deletionService');
-    await DeletionService.deleteGeneratedImages(paths);
-  }
-
-  /**
    * Extract metadata from generated image buffer (ComfyUI only)
    * Uses existing ImageProcessor.extractMetadata() logic
    *

@@ -1,5 +1,5 @@
 import { db } from '../../database/init';
-import { ImageRecord, ImageMetadataRecord } from '../../types/image';
+import { ImageMetadataRecord } from '../../types/image';
 import {
   SimilarImage,
   DuplicateGroup,
@@ -225,27 +225,6 @@ export class ImageSimilarityModel {
     `).run(perceptualHash, dHash, aHash, colorHistogram, compositeHash);
 
     return info.changes > 0;
-  }
-
-  /**
-   * 이미지 해시 업데이트 (레거시: imageId 기반)
-   * @deprecated 새 코드에서는 composite_hash 버전 사용 권장
-   */
-  static async updateHashByImageId(
-    imageId: number,
-    perceptualHash: string,
-    dHash: string,
-    aHash: string,
-    colorHistogram: string
-  ): Promise<boolean> {
-    const file = this.findCompositeHashByImageId(imageId);
-
-    if (!file) {
-      console.warn(`Could not find composite_hash for image ID ${imageId}`);
-      return false;
-    }
-
-    return await this.updateHash(file.composite_hash, perceptualHash, dHash, aHash, colorHistogram);
   }
 
   /** Normalize search weights without widening the public options contract. */
@@ -580,25 +559,4 @@ export class ImageSimilarityModel {
     ).all(limit) as ImageMetadataRecord[];
   }
 
-  /**
-   * 해시가 없는 이미지 개수 조회 (레거시: images 테이블)
-   * @deprecated 새 코드에서는 media_metadata 버전 사용
-   */
-  static async countImagesWithoutHashLegacy(): Promise<number> {
-    const result = db.prepare(
-      'SELECT COUNT(*) as count FROM images WHERE perceptual_hash IS NULL'
-    ).get() as { count: number };
-
-    return result.count;
-  }
-
-  /**
-   * 해시가 없는 이미지 목록 조회 (레거시: images 테이블)
-   * @deprecated 새 코드에서는 media_metadata 버전 사용
-   */
-  static async getImagesWithoutHashLegacy(limit: number = 100): Promise<ImageRecord[]> {
-    return db.prepare(
-      'SELECT * FROM images WHERE perceptual_hash IS NULL LIMIT ?'
-    ).all(limit) as ImageRecord[];
-  }
 }

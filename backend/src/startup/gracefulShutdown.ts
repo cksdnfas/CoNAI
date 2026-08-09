@@ -21,7 +21,6 @@ export interface GracefulShutdownDependencies {
   stopGenerationHistoryCleanupScheduler(): void | Promise<void>;
   cleanupTempFiles(): void | Promise<void>;
   stopTaggerDaemon(): void | Promise<void>;
-  shutdownJobTracker(): void | Promise<void>;
   shutdownRuntimeJobs(): number | Promise<number>;
   closeMainDatabase(): void | Promise<void>;
   closeUserSettingsDatabase(): void | Promise<void>;
@@ -87,10 +86,6 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
     stopTaggerDaemon: async () => {
       const { imageTaggerService } = await import('../services/imageTaggerService');
       await imageTaggerService.stopDaemon();
-    },
-    shutdownJobTracker: async () => {
-      const { JobTracker } = await import('../services/jobTracker');
-      JobTracker.shutdown();
     },
     shutdownRuntimeJobs: async () => {
       const { RuntimeJobRunner } = await import('../services/runtimeJobs/runtimeJobRunner');
@@ -260,12 +255,6 @@ export function createGracefulShutdownCoordinator(options: GracefulShutdownOptio
       );
     }
 
-    await runCleanupStep(
-      dependencies.shutdownJobTracker,
-      () => undefined,
-      '⚠️  Error stopping job tracker:',
-      logger,
-    );
     await runCleanupStep(
       dependencies.shutdownRuntimeJobs,
       (interruptedJobCount) => {

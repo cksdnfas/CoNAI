@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
-import { GenerationHistoryService } from '../../services/generationHistoryService';
 import { MediaMetadataFileQueries } from '../../models/Image/MediaMetadataFileQueries';
 import {
   getExistingActiveFilePathOrBlock,
@@ -106,35 +105,5 @@ export async function handleHistoryImageDetail(req: Request, res: Response, id: 
       thumbnail_url: `${historyMediaBaseUrl}/thumbnail`,
       image_url: `${historyMediaBaseUrl}/file`,
     },
-  });
-}
-
-export async function handleHistoryImageUpload(req: Request, res: Response, id: string) {
-  if (!req.file) {
-    res.status(400).json({
-      success: false,
-      error: 'No image file uploaded',
-    });
-    return;
-  }
-
-  const history = HistoryQueryRepository.findById(parseInt(id));
-  if (!history) {
-    res.status(404).json({
-      success: false,
-      error: 'Generation history not found',
-    });
-    return;
-  }
-
-  await GenerationHistoryService.processAndUploadImage(
-    parseInt(id),
-    req.file.buffer,
-    history.service_type,
-  );
-
-  res.json({
-    success: true,
-    message: 'Image processed and uploaded successfully',
   });
 }

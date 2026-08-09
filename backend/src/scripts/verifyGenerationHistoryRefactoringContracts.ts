@@ -383,6 +383,17 @@ async function main() {
     const guestHeaders = { 'x-test-account-id': '7', 'x-test-account-type': 'guest' };
     const otherGuestHeaders = { 'x-test-account-id': '9', 'x-test-account-type': 'guest' };
 
+    const removedLegacyRoutes = [
+      ['POST', `${baseUrl}/comfyui`],
+      ['POST', `${baseUrl}/novelai`],
+      ['POST', `${baseUrl}/${readyMediaHistoryId}/upload-image`],
+      ['GET', `${baseUrl}/job/obsolete-job-id`],
+    ] as const;
+    for (const [method, url] of removedLegacyRoutes) {
+      const response = await fetch(url, { method, headers: guestHeaders });
+      assert.equal(response.status, 404, `${method} ${url} must stay removed after the queue/runtime-job migration`);
+    }
+
     const ownerDetailResponse = await fetch(`${baseUrl}/${readyMediaHistoryId}`, { headers: guestHeaders });
     assert.equal(ownerDetailResponse.status, 200, 'an owner history detail request must return 200');
     const ownerDetail = await ownerDetailResponse.json() as { record: { actual_composite_hash?: string | null } };
@@ -426,12 +437,18 @@ async function main() {
     await waitForTurn();
 
     const compatibilityModelPath = path.resolve(process.cwd(), 'src/models/GenerationHistory.ts');
+    const legacyJobTrackerPath = path.resolve(process.cwd(), 'src/services/jobTracker.ts');
     const queueTypesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/types/generationQueue.ts'), 'utf8');
     const historyTypesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/types/generationHistory.ts'), 'utf8');
     assert.equal(
       fs.existsSync(compatibilityModelPath),
       false,
       'the unused GenerationHistory compatibility model must not be restored',
+    );
+    assert.equal(
+      fs.existsSync(legacyJobTrackerPath),
+      false,
+      'the unused in-memory JobTracker must not be restored alongside the database-backed runtime job system',
     );
     assert.doesNotMatch(
       queueTypesSource,

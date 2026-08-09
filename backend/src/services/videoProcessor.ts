@@ -428,22 +428,4 @@ export class VideoProcessor {
     }
   }
 
-  /**
-   * 동영상 파일 삭제
-   *
-   * @deprecated Use DeletionService.deleteVideoFiles() instead
-   *             통합 삭제 서비스(DeletionService)를 사용하세요.
-   *             - RecycleBin 지원
-   *             - composite_hash 중복 검사
-   *             - 일관된 에러 핸들링
-   */
-  static async deleteVideoFiles(
-    originalPath: string,
-    thumbnailPath: string,
-    baseUploadPath: string
-  ): Promise<void> {
-    // DeletionService로 위임
-    const { DeletionService } = await import('./deletionService');
-    await DeletionService.deleteVideoFiles(originalPath, thumbnailPath);
-  }
 }
