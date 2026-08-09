@@ -144,13 +144,13 @@ async function verifyActualContentAndCleanupContracts(): Promise<void> {
  * else — including anonymous-reachable search routes — is bounded far below it.
  */
 function verifyScopedJsonBodyLimitContracts(): void {
-  const index = readSource('backend/src/index.ts');
+  const middleware = readSource('backend/src/startup/configureAppMiddleware.ts');
   assert.doesNotMatch(
-    index,
+    middleware,
     /express\.json\(\{\s*limit:\s*`\$\{IMAGE_PROCESSING\.MAX_FILE_SIZE_MB\}mb`/,
     'the global express.json parser must no longer grant the media upload limit to every route',
   );
-  assert.match(index, /createTieredBodyParsers\(\)/, 'index must install the tiered body parsers');
+  assert.match(middleware, /createTieredBodyParsers\(\)/, 'configureAppMiddleware must install the tiered body parsers');
 
   const limitsMb = resolveRequestBodyLimitsMb();
   assert.equal(limitsMb.media, 50, 'base64-carrying routes must keep the 50MB budget');

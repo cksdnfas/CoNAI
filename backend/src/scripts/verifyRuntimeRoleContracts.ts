@@ -58,6 +58,7 @@ const runnerSource = fs.readFileSync(path.join(projectRoot, 'scripts', 'run-buil
 const stopExistingRuntimeSource = fs.readFileSync(path.join(projectRoot, 'scripts', 'stop-existing-runtime.js'), 'utf8');
 const checkpointRuntimeDatabasesSource = fs.readFileSync(path.join(projectRoot, 'scripts', 'checkpoint-runtime-databases.js'), 'utf8');
 const indexSource = fs.readFileSync(path.join(projectRoot, 'backend', 'src', 'index.ts'), 'utf8');
+const gracefulShutdownSource = fs.readFileSync(path.join(projectRoot, 'backend', 'src', 'startup', 'gracefulShutdown.ts'), 'utf8');
 const dockerfileSource = fs.readFileSync(path.join(projectRoot, 'Dockerfile'), 'utf8');
 const rootPackageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
 const rootPackageLock = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package-lock.json'), 'utf8'));
@@ -90,6 +91,8 @@ assert.match(indexSource, /Custom node sync: skipped in API\/smoke runtime/);
 assert.match(indexSource, /wasSplitRuntimeRoleDemoted/);
 assert.match(indexSource, /Split runtime role demoted to "all"/);
 assert.match(indexSource, /shouldOwnTempFileLifecycle/);
+assert.match(indexSource, /createGracefulShutdownCoordinator\(\{[\s\S]*shouldOwnTempFileLifecycle/);
+assert.match(gracefulShutdownSource, /if \(shouldOwnTempFileLifecycle\)/);
 assert.match(dockerfileSource, /^FROM node:24-bookworm-slim AS build$/m);
 assert.match(dockerfileSource, /^FROM node:24-bookworm-slim AS runtime$/m);
 assert.doesNotMatch(dockerfileSource, /^FROM node:20-/m);

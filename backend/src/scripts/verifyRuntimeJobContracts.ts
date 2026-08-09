@@ -25,6 +25,7 @@ const storeSource = readSource('services', 'runtimeJobs', 'runtimeJobStore.ts')
 const jobRoutesSource = readSource('routes', 'runtime-jobs.routes.ts')
 const registerAppRoutesSource = readSource('startup', 'registerAppRoutes.ts')
 const indexSource = readSource('index.ts')
+const gracefulShutdownSource = readSource('startup', 'gracefulShutdown.ts')
 const thumbnailRouteSource = readSource('routes', 'thumbnails.ts')
 const thumbnailServiceSource = readSource('services', 'thumbnailRegenerationService.ts')
 const watchedFolderRouteSource = readSource('routes', 'watchedFolders.ts')
@@ -100,9 +101,9 @@ assert.match(
   'index.ts must recover interrupted runtime jobs on startup',
 )
 // 셧다운에서 잡을 마감하지 않으면 다음 기동까지 running 으로 남아 클라이언트가 계속 폴링한다.
-const runnerShutdownIndex = indexSource.indexOf('RuntimeJobRunner.shutdown()')
-const userDbCloseIndex = indexSource.indexOf('closeUserSettingsDb()')
-assert.ok(runnerShutdownIndex > 0, 'index.ts must close out in-flight runtime jobs during shutdown')
+const runnerShutdownIndex = gracefulShutdownSource.lastIndexOf('dependencies.shutdownRuntimeJobs')
+const userDbCloseIndex = gracefulShutdownSource.lastIndexOf('dependencies.closeUserSettingsDatabase')
+assert.ok(runnerShutdownIndex > 0, 'gracefulShutdown.ts must close out in-flight runtime jobs during shutdown')
 assert.ok(
   runnerShutdownIndex < userDbCloseIndex,
   'RuntimeJobRunner.shutdown() must run before the user database closes, or the interrupted marks are lost',

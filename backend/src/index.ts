@@ -34,35 +34,25 @@ if (isProductionEnvironment || isPackagedRuntime()) {
 }
 
 import https from 'https';
-import express, { type Request, type Response as ExpressResponse } from 'express';
-import compression from 'compression';
-import cors from 'cors';
-import helmet from 'helmet';
-import crypto from 'crypto';
-import rateLimit from 'express-rate-limit';
-import session from 'express-session';
-import BetterSqlite3Store from 'better-sqlite3-session-store';
-import type { Store as SessionStore } from 'express-session';
+import express from 'express';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
 import { configureSharpRuntime } from './config/sharpRuntime';
-import { resolveSessionSecret } from './utils/sessionSecret';
-import { throttleSessionStoreTouch } from './utils/sessionTouchThrottle';
-import { createTieredBodyParsers, resolveRequestBodyLimitsMb } from './middleware/requestBodyLimits';
 import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
 import { StartupCheck } from './utils/startupCheck';
 
 import { initializeDatabase } from './database/init';
-import { initializeUserSettingsDb } from './database/userSettingsDb';
-import { initializeAuthDb, getAuthDb } from './database/authDb';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
-import { imageTaggerService } from './services/imageTaggerService';
 import { APIImageProcessor } from './services/APIImageProcessor';
 import { PORTS } from '@conai/shared';
-import { AutoScanScheduler } from './services/autoScanScheduler';
-import { autoTagScheduler } from './services/autoTagScheduler';
 import { QueryCacheService } from './services/QueryCacheService';
 import { WatchedFolderService } from './services/watchedFolderService';
+import { configureAppMiddleware } from './startup/configureAppMiddleware';
+import {
+  createGracefulShutdownCoordinator,
+  registerGracefulShutdownSignalHandlers,
+} from './startup/gracefulShutdown';
+import { assembleSessionApiRoutes, initializeSessionMiddleware } from './startup/initializeSessionMiddleware';
 import { registerAppRoutes } from './startup/registerAppRoutes';
 import { startRuntimeSideEffectServices } from './startup/startRuntimeSideEffectServices';
 import {
@@ -89,217 +79,22 @@ configureSharpRuntime();
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
-const isDevelopment = isDevelopmentEnvironment;
 const isSafeSmokeMode = process.env.SAFE_SMOKE_MODE === 'true';
 const runtimeRole = resolveRuntimeSideEffectRole();
 const splitRuntimeRoleDemoted = wasSplitRuntimeRoleDemoted();
 const shouldStartHttpServer = !shouldSkipHttpServerForRuntimeRole(runtimeRole);
 // split 런타임은 프로세스 간 상태를 공유하지 못한다. temp/canvas 정리는 워커 역할 프로세스만 담당한다.
 const shouldOwnTempFileLifecycle = runtimeRole !== 'api';
-// 종료 시 진행 중인 요청을 기다려 주는 상한. 이 시간이 지나면 남은 소켓을 끊고 정리 단계로 넘어간다.
-const SHUTDOWN_DRAIN_TIMEOUT_MS = 3000;
-
-/** Resolve the Express trust-proxy setting for direct and proxied deployments. */
-function resolveTrustProxySetting() {
-  const configuredValue = process.env.TRUST_PROXY?.trim();
-
-  if (!configuredValue) {
-    const hasExternalOriginHint = Boolean(process.env.PUBLIC_BASE_URL || process.env.BACKEND_HOST || process.env.PUBLIC_HOST);
-    const usesHttpsOrigin = (process.env.BACKEND_PROTOCOL || '').toLowerCase() === 'https';
-    return hasExternalOriginHint || usesHttpsOrigin ? 1 : false;
-  }
-
-  if (configuredValue === 'true') {
-    return true;
-  }
-
-  if (configuredValue === 'false') {
-    return false;
-  }
-
-  const numericValue = Number(configuredValue);
-  if (Number.isInteger(numericValue) && numericValue >= 0) {
-    return numericValue;
-  }
-
-  return configuredValue;
-}
-
-const trustProxySetting = resolveTrustProxySetting();
-app.set('trust proxy', trustProxySetting);
-console.log(`[Config] Express trust proxy: ${String(trustProxySetting)}`);
-
-const skipAdminRateLimit = (req: Request): boolean => req.session?.accountType === 'admin';
-
-// SSE 스트림은 연결 1건이 요청 1건으로 카운트된다. 재접속 백오프가 겹치면 일반 API 예산을
-// 갉아먹으므로 스트림 경로만 레이트 리밋에서 제외한다.
-const isRuntimeEventStreamRequest = (req: Request): boolean => req.originalUrl.startsWith('/api/events/');
-
-const skipApiRateLimit = (req: Request): boolean => skipAdminRateLimit(req) || isRuntimeEventStreamRequest(req);
-
-// Rate limiting for login endpoint (prevent brute-force attacks)
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15분
-  max: 5, // 최대 5회 시도
-  message: 'Too many login attempts, please try again later',
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true // 성공한 요청은 카운트 제외
-});
-
-// General API rate limiting - Increased for UI intensive operations
-const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1분
-  max: 1000, // 최대 1000 요청 (from 100, increased for heavy UI operations)
-  message: 'Too many requests from this IP',
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: skipApiRateLimit,
-});
-
-// Stricter rate limiting for upload endpoints
-const uploadLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1분
-  max: 10, // 권한 보유 비관리자 기준 최대 10 업로드 요청
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: skipAdminRateLimit,
-  handler: (req, res) => {
-    logger.warn(`[UploadAudit] ${JSON.stringify({
-      event: 'upload.denied',
-      scope: 'rate-limit',
-      method: req.method,
-      path: req.originalUrl.split('?')[0],
-      statusCode: 429,
-      accountId: req.session?.accountId ?? null,
-      accountType: req.session?.accountType ?? (req.session?.authenticated ? 'bootstrap' : 'anonymous'),
-      ip: req.ip,
-      fileCount: 0,
-      totalBytes: 0,
-      reason: 'rate_limit',
-    })}`);
-    res.status(429).json({ error: 'Too many upload requests, please slow down' });
-  },
-});
-
-// Lenient rate limiting for read-only endpoints (metadata, groups, etc.)
-const readOnlyLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1분
-  max: 2000, // 최대 2000 요청 (very lenient for UI browsing)
-  message: 'Too many read requests from this IP',
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: skipAdminRateLimit,
-});
-
-// Middleware
-const isSecureContext = (process.env.BACKEND_PROTOCOL || '').toLowerCase() === 'https';
-
-app.use((_req, res, next) => {
-  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
-  next();
-});
-
-app.use(helmet({
-
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-
-  crossOriginEmbedderPolicy: false,
-
-  crossOriginOpenerPolicy: isSecureContext ? { policy: 'same-origin' } : false,
-
-  originAgentCluster: isSecureContext,
-
-  hsts: isSecureContext ? { maxAge: 60 * 60 * 24 * 365, includeSubDomains: true } : false,
-
-  contentSecurityPolicy: {
-    directives: {
-      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      'script-src': [
-        "'self'",
-        (_req, res) => `'nonce-${(res as ExpressResponse).locals.cspNonce as string}'`,
-      ],
-      'upgrade-insecure-requests': null, // HTTP 접속 허용
-      'connect-src': ["'self'", 'http://localhost:*', 'ws:', 'wss:'], // API 연결 허용
-      'img-src': ["'self'", 'data:', 'blob:', 'http:', 'https:'], // 외부 네트워크 이미지 + 로컬 blob 미리보기 허용
-      'media-src': ["'self'", 'blob:', 'http:', 'https:'], // 비디오/오디오 미디어 + 로컬 blob 미리보기 허용
-    },
-  },
-
-}));
-
-const allowedOrigins = [
-  'http://localhost:5555',
-  'http://localhost:1677',
-  process.env.FRONTEND_URL
-].filter(Boolean) as string[];
-
-app.use(cors({
-  origin: (_origin, callback) => {
-    callback(null, true);
-  },
-  credentials: true
-}));
-app.use(compression({
-  threshold: 1024,
-  filter: (req, res) => {
-    // SSE responses must never be buffered by compression
-    const contentType = String(res.getHeader('Content-Type') ?? '');
-    if (contentType.includes('event-stream')) {
-      return false;
-    }
-    return compression.filter(req, res);
-  },
-}));
-// 요청 바디 한도는 API 마운트별로 스코프된다. 50MB 전역 한도는 익명 접근 가능한 검색 라우트까지
-// 단일 이벤트 루프에서 50MB 버퍼링+동기 파싱을 하도록 허용했다. 상세 근거는 requestBodyLimits.ts 참고.
-const tieredBodyParsers = createTieredBodyParsers();
-app.use(tieredBodyParsers.json);
-app.use(tieredBodyParsers.urlencoded);
-console.log(
-  `[Config] JSON body limits (MB): ${Object.entries(resolveRequestBodyLimitsMb())
-    .map(([tier, limitMb]) => `${tier}=${limitMb}`)
-    .join(', ')}`
-);
+const {
+  isSecureContext,
+  apiLimiter,
+  uploadLimiter,
+  readOnlyLimiter,
+} = configureAppMiddleware(app);
 
 const uploadsDir = runtimePaths.uploadsDir;
 const tempDir = runtimePaths.tempDir;
 const saveDir = runtimePaths.saveDir;
-
-// Initialize session middleware early (will be configured in initializeSessionMiddleware)
-async function initializeSessionMiddleware() {
-  initializeAuthDb(); // Synchronous call (better-sqlite3)
-  initializeUserSettingsDb(); // Synchronous call (better-sqlite3)
-
-  const SqliteStore = BetterSqlite3Store(session);
-  const sessionSecret = resolveSessionSecret().secret;
-
-  const sessionStore = new SqliteStore({
-    client: getAuthDb(), // Changed from getUserSettingsDb() to getAuthDb()
-    expired: {
-      clear: true,
-      intervalMs: 900000 // 15분마다 만료 세션 정리
-    }
-  }) as SessionStore;
-
-  const sessionMiddleware = session({
-    store: throttleSessionStoreTouch(sessionStore),
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
-      httpOnly: true,
-      // 개발 환경: sameSite='lax'로 동일 사이트 정책 완화, secure=false
-      // 프로덕션: sameSite='lax', secure는 HTTPS 여부에 따라
-      secure: isSecureContext && !isDevelopment, // 개발에서는 false
-      sameSite: 'lax' // 개발/프로덕션 모두 lax (localhost는 동일 사이트로 간주)
-    },
-    name: 'conai.sid' // Custom session cookie name
-  });
-
-  app.use(sessionMiddleware);
-}
 
 
 // 데이터베이스 초기화 및 서버 시작
@@ -338,32 +133,37 @@ async function startServer() {
       console.log('💡 자동 스캔 스케줄러가 곧 첫 스캔을 시작합니다');
     }
 
-    // 4. Initialize session middleware (User Settings DB + Session configuration)
-    await initializeSessionMiddleware();
-
-    // Apply API throttling after sessions are available so admins can bypass UI browsing limits.
-    // Scoped to /api so static assets, image bytes, and the SPA shell are never rate limited.
-    app.use('/api', apiLimiter);
-
-    // 4-1. Sync file-based custom nodes into the module registry.
+    // 4. Initialize sessions, install API throttling, sync custom nodes, then register routes.
     const customNodeSyncSkipped = !shouldRunWorkerStartupTasks;
-    const customNodeSyncResult = customNodeSyncSkipped
-      ? { nodes: [], errors: [] }
-      : await (async () => {
-          const { CustomNodeRegistryService } = await import('./services/customNodeRegistryService');
-          return CustomNodeRegistryService.syncCustomNodesFromFileSystem();
-        })();
-    if (customNodeSyncSkipped) {
-      console.log('🧩 Custom node filesystem sync skipped in API/smoke runtime');
-    }
-
-    // 4-2. Register all routes (after session middleware is configured)
-    const routeRegistration = registerAppRoutes(app, {
-      uploadsDir,
-      tempDir,
-      saveDir,
-      readOnlyLimiter,
-      uploadLimiter,
+    const {
+      beforeRoutesResult: customNodeSyncResult,
+      routeRegistration,
+    } = await assembleSessionApiRoutes({
+      app,
+      apiLimiter,
+      initializeSession: () => initializeSessionMiddleware(app, {
+        isSecureContext,
+        isDevelopment: isDevelopmentEnvironment,
+      }),
+      beforeRoutes: async () => {
+        const result = customNodeSyncSkipped
+          ? { nodes: [], errors: [] }
+          : await (async () => {
+              const { CustomNodeRegistryService } = await import('./services/customNodeRegistryService');
+              return CustomNodeRegistryService.syncCustomNodesFromFileSystem();
+            })();
+        if (customNodeSyncSkipped) {
+          console.log('🧩 Custom node filesystem sync skipped in API/smoke runtime');
+        }
+        return result;
+      },
+      registerRoutes: () => registerAppRoutes(app, {
+        uploadsDir,
+        tempDir,
+        saveDir,
+        readOnlyLimiter,
+        uploadLimiter,
+      }),
     });
 
     // 4-3. Runtime event broadcaster (SSE fan-out for queue/history/schedule/execution state)
@@ -616,188 +416,12 @@ ${tips.join('\n')}
       (server as any).headersTimeout = 66000;
     }
 
-    // Graceful shutdown
-    let isShuttingDown = false;
-
-    const shutdown = async (signal: string) => {
-      if (isShuttingDown) {
-        console.log(`Received ${signal}, but shutdown is already in progress...`);
-        return;
-      }
-      isShuttingDown = true;
-      console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
-
-      // Force exit after 10 seconds
-      const forceExitTimer = setTimeout(() => {
-        console.error('❌ Forced shutdown after timeout');
-        process.exit(1);
-      }, 10000);
-      forceExitTimer.unref();
-
-      // 열린 SSE 스트림은 idle 소켓이 아니라서 서버 close 가 영원히 resolve 되지 않는다.
-      // 반드시 서버를 닫기 전에 모든 스트림을 먼저 닫아야 드레인이 제때 끝난다.
-      try {
-        const closedStreamCount = RuntimeEventBroadcaster.shutdown();
-        if (closedStreamCount > 0) {
-          console.log(`✅ Runtime event streams closed (${closedStreamCount})`);
-        }
-      } catch (error) {
-        console.warn('⚠️  Error closing runtime event streams:', error);
-      }
-
-      // Stop accepting connections and drain in-flight requests first,
-      // so nothing is still being served when services and databases go away.
-      const activeServer = server;
-      if (activeServer) {
-        // 스트리밍/장시간 요청 하나가 드레인을 무한정 붙잡으면 강제 종료 타이머(10초)가 먼저 터져
-        // DB조차 닫지 못한 채 종료된다. 드레인을 제한하고 남은 소켓은 직접 끊는다.
-        await Promise.race([
-          new Promise<void>((resolve) => {
-            activeServer.close(() => resolve());
-            activeServer.closeIdleConnections?.();
-          }),
-          new Promise<void>((resolve) => {
-            setTimeout(resolve, SHUTDOWN_DRAIN_TIMEOUT_MS).unref();
-          }),
-        ]);
-        activeServer.closeAllConnections?.();
-        console.log('✅ Server closed');
-      } else {
-        console.log('✅ Server was not running or already closed');
-      }
-
-      if (!isSafeSmokeMode) {
-        // Stop file watcher service (first to prevent new events)
-        try {
-          const { FileWatcherService } = await import('./services/fileWatcherService');
-          await FileWatcherService.stopAll();
-          console.log('✅ File watcher service stopped');
-        } catch (error) {
-          console.warn('⚠️  Error stopping file watcher service:', error);
-        }
-
-        // Stop custom node watcher service
-        try {
-          const { CustomNodeWatcherService } = await import('./services/customNodeWatcherService');
-          await CustomNodeWatcherService.stopAll();
-          console.log('✅ Custom node watcher service stopped');
-        } catch (error) {
-          console.warn('⚠️  Error stopping custom node watcher service:', error);
-        }
-
-        // Stop auto-scan scheduler
-        try {
-          AutoScanScheduler.stop();
-          console.log('✅ Auto-scan scheduler stopped');
-        } catch (error) {
-          console.warn('⚠️  Error stopping auto-scan scheduler:', error);
-        }
-
-        // Stop auto-tag scheduler
-        try {
-          autoTagScheduler.stop();
-          console.log('✅ Auto-tag scheduler stopped');
-        } catch (error) {
-          console.warn('⚠️  Error stopping auto-tag scheduler:', error);
-        }
-
-        // Stop temp image cleanup scheduler
-        try {
-          const { TempImageCleanupScheduler } = await import('./cron/tempImageCleanup');
-          TempImageCleanupScheduler.stop();
-          console.log('✅ Temp image cleanup scheduler stopped');
-        } catch (error) {
-          console.warn('⚠️  Error stopping temp image cleanup scheduler:', error);
-        }
-
-        // Stop generation history cleanup scheduler
-        try {
-          const { CleanupService } = await import('./services/cleanupService');
-          CleanupService.stopPeriodicCleanup();
-          console.log('✅ Generation history cleanup scheduler stopped');
-        } catch (error) {
-          console.warn('⚠️  Error stopping generation history cleanup scheduler:', error);
-        }
-      }
-
-      // Cleanup all temp files on shutdown
-      // API 역할 프로세스는 공유 temp/canvas 디렉터리의 소유자가 아니므로 정리하지 않는다.
-      if (shouldOwnTempFileLifecycle) {
-        try {
-          const { TempImageService } = await import('./services/tempImageService');
-          const { settingsService } = await import('./services/settingsService');
-
-          // Check user setting for canvas cleanup
-          const settings = settingsService.loadSettings();
-          const shouldCleanupCanvas = settings.general.autoCleanupCanvasOnShutdown ?? false;
-
-          await TempImageService.cleanupAll(!shouldCleanupCanvas);  // skipCanvas = !shouldCleanup
-          console.log('✅ All temp files cleaned up');
-        } catch (error) {
-          console.warn('⚠️  Error cleaning up temp files:', error);
-        }
-      }
-
-      if (!isSafeSmokeMode) {
-        // Stop tagger daemon
-        try {
-          await imageTaggerService.stopDaemon();
-          console.log('✅ Tagger daemon stopped');
-        } catch (error) {
-          console.warn('⚠️  Error stopping tagger daemon:', error);
-        }
-      }
-
-      // Stop job tracker
-      try {
-        const { JobTracker } = await import('./services/jobTracker');
-        JobTracker.shutdown();
-      } catch (error) {
-        console.warn('⚠️  Error stopping job tracker:', error);
-      }
-
-      // Mark in-flight runtime jobs as interrupted while user.db is still open.
-      // 이걸 건너뛰면 다음 기동의 복구 루틴이 돌 때까지 잡이 running 으로 남아 클라이언트가 계속 폴링한다.
-      try {
-        const { RuntimeJobRunner } = await import('./services/runtimeJobs/runtimeJobRunner');
-        const interruptedJobCount = RuntimeJobRunner.shutdown();
-        if (interruptedJobCount > 0) {
-          console.log(`✅ Runtime jobs marked as interrupted (${interruptedJobCount})`);
-        }
-      } catch (error) {
-        console.warn('⚠️  Error closing runtime jobs:', error);
-      }
-
-      // Close database connections last so drained requests never hit closed handles
-      try {
-        const { closeDatabase } = await import('./database/init');
-        closeDatabase();
-        console.log('✅ Main database connection closed');
-      } catch (error) {
-        console.warn('⚠️  Error closing main database:', error);
-      }
-
-      try {
-        const { closeUserSettingsDb } = await import('./database/userSettingsDb');
-        closeUserSettingsDb();
-        console.log('✅ User settings database connection closed');
-      } catch (error) {
-        console.warn('⚠️  Error closing user settings database:', error);
-      }
-
-      try {
-        const { closeApiGenerationDb } = await import('./database/apiGenerationDb');
-        closeApiGenerationDb();
-        console.log('✅ API generation database connection closed');
-      } catch (error) {
-        console.warn('⚠️  Error closing API generation database:', error);
-      }
-
-      process.exit(0);
-    };
-
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    const shutdown = createGracefulShutdownCoordinator({
+      server,
+      isSafeSmokeMode,
+      shouldOwnTempFileLifecycle,
+    });
+    registerGracefulShutdownSignalHandlers(shutdown);
 
   } catch (error) {
     console.error('❌ Failed to start server:', error);
