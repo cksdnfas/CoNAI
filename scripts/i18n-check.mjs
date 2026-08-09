@@ -7,8 +7,9 @@ const I18N_RESOURCES_DIR = path.join(ROOT, 'frontend', 'src', 'i18n', 'resources
 const FRONTEND_SRC_DIR = path.join(ROOT, 'frontend', 'src')
 const FRONTEND_FEATURES_DIR = path.join(ROOT, 'frontend', 'src', 'features')
 const FRONTEND_LIB_DIR = path.join(ROOT, 'frontend', 'src', 'lib')
-const OUTPUT_MD = path.join(ROOT, 'docs', 'i18n-gap-report.md')
-const OUTPUT_JSON = path.join(ROOT, 'docs', 'i18n-gap-report.json')
+const OUTPUT_DIR = path.join(ROOT, '.tmp', 'reports')
+const OUTPUT_MD = path.join(OUTPUT_DIR, 'i18n-gap-report.md')
+const OUTPUT_JSON = path.join(OUTPUT_DIR, 'i18n-gap-report.json')
 
 const BASE_LANG = 'ko'
 const TARGET_LANGS = ['en']

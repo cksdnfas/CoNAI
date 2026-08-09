@@ -70,7 +70,7 @@ function assertSplitRuntimeOptIn() {
   }
 
   if (isSplitRuntime) {
-    console.warn('⚠️  Split runtime is unsupported (see docs/Work_Plan/wave2/04-split-mode-consistency.md).');
+    console.warn('⚠️  Split runtime is unsupported because cross-process state propagation is incomplete.');
     console.warn(`    Falling back to single-process --all. Set ${SPLIT_OPT_IN_ENV}=true to force it.`);
     isSplitRuntime = false;
     runtimeRole = 'all';

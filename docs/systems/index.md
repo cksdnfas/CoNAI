@@ -10,22 +10,10 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 3. [생성 저장 파이프라인](/systems/generation-pipeline)
 4. [워크플로우 실행 엔진](/systems/module-workflow-engine)
 5. [MCP와 자동화 인터페이스](/systems/mcp-and-automation)
-6. [agent MCP opt-in operation contracts](/systems/agent-mcp-opt-in-operation-contracts)
-7. [agent MCP local evidence export](/systems/agent-mcp-local-evidence-export)
-8. [local evidence export hardening contracts](/systems/local-evidence-export-hardening-contracts)
-9. [local automation context operations map](/systems/local-automation-context-operations-map)
-10. [26.6.19 workflow-media-alpha-operations](/systems/26.6.19-workflow-media-alpha-operations)
-11. [26.6.17 generation history follow-up readiness](/systems/26.6.17-generation-history-followup-readiness)
-12. [26.6.9 alpha release handoff packet](/systems/26.6.9-alpha-release-handoff)
-13. [26.6.9 demo operation readiness checklist](/systems/26.6.9-demo-operation-readiness)
-14. [workflow recovery runbook evidence](/systems/workflow-recovery-runbook-evidence)
-15. [26.6.9 final readiness trend evidence](/systems/26.6.9-final-readiness-trend-evidence)
-16. [operator evidence review console](/systems/operator-evidence-review-console)
-17. [automation rehearsal contracts](/systems/automation-rehearsal-contracts)
-18. [media/runtime release risk dashboard contracts](/systems/media-runtime-release-risk-dashboard-contracts)
-19. [local automation context completion evidence](/systems/local-automation-context-completion-evidence)
-20. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
-21. [26.6.8 hardening-evidence-observability readiness](/systems/26.6.8-hardening-evidence-observability-readiness)
+6. [Codex 이미지 생성 공급자 연동](/systems/codex-image-provider-integration)
+7. [Danbooru 읽기 전용 탐색](/systems/danbooru-readonly-browser)
+8. [Agent MCP opt-in 운영 계약](/systems/agent-mcp-opt-in-operation-contracts)
+9. [Agent MCP 로컬 evidence 내보내기](/systems/agent-mcp-local-evidence-export)
 
 ## 왜 이 순서인가
 
@@ -49,66 +37,18 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 - 화면 밖에서 CoNAI를 호출하는 자동화 진입점입니다.
 - AI 에이전트 연동과 외부 도구 호출의 연결부입니다.
 
-### 6) agent MCP opt-in operation contracts
-- HTTP MCP의 opt-in, method boundary, agent preflight, dry-run stop conditions를 정리합니다.
-- agent가 live MCP 작업을 시작하기 전에 확인해야 할 승인 경계를 제공합니다.
+### 6) Codex 이미지 생성 공급자 연동
+- Codex CLI 기반 생성·편집 요청이 백엔드와 실행 환경을 통과하는 경계를 설명합니다.
+- 공급자 설정과 결과 전달 흐름을 확인할 때 사용합니다.
 
-### 7) agent MCP local evidence export
+### 7) Danbooru 읽기 전용 탐색
+- 프롬프트 작성에 사용하는 Danbooru 읽기 전용 검색 흐름을 설명합니다.
+- 외부 데이터 조회와 로컬 프롬프트 반영 경계를 확인할 때 사용합니다.
+
+### 8) Agent MCP opt-in 운영 계약
+- HTTP MCP의 opt-in, method boundary, agent preflight, dry-run stop conditions를 정리합니다.
+- 에이전트가 live MCP 작업을 시작하기 전에 확인해야 할 승인 경계를 제공합니다.
+
+### 9) Agent MCP 로컬 evidence 내보내기
 - `npm run export:mcp-dry-run-evidence`로 로컬 review packet을 stdout JSON으로 내보내는 계약입니다.
 - MCP tool side-effect class, `approvalRequired`, `dryRunOnly`, `externalSideEffects`를 기록하되 live MCP tools는 호출하지 않습니다.
-
-### 8) local evidence export hardening contracts
-- readiness Markdown, MCP dry-run JSON, recovery comparison bundle을 같은 로컬 export hardening 계약으로 묶습니다.
-- live MCP 호출, rerun, cleanup, push/deploy/restart 없이 Settings readiness history와 Markdown handoff에 비교 가능한 근거를 남깁니다.
-
-### 9) local automation context operations map
-- 릴리즈 준비, 워크플로우 런타임, 미디어 리뷰, MCP 자동화 표면을 다음 로컬 작업 단위로 묶는 기준입니다.
-- push, deploy, restart, package version bump 없이 agent/operator가 먼저 확인할 context map을 제공합니다.
-
-### 10) 26.6.19 workflow-media-alpha-operations
-- 모듈 워크플로 운영 UX, 미디어 라이브러리 검수, 제한 알파 데모/MCP 운영 안정화를 하나의 다음 로컬 작업선으로 묶습니다.
-- push, deploy, restart, protected service `3999`, package version bump 없이 검토 가능한 경계와 산출물을 정리합니다.
-
-### 11) 26.6.17 generation history follow-up readiness
-- 생성 이력 재실행과 미디어 badge 확인을 로컬 검토 가능한 운영 메모로 묶습니다.
-- push, deploy, restart, package version bump 없이 retry 경계와 검증 기준만 정리합니다.
-
-### 12) 26.6.9 alpha release handoff packet
-- `alphatest` 로컬 커밋 범위, 로컬 검증, live smoke 계획, 롤백 경계를 M2-CU1 기준으로 묶습니다.
-- push, deploy, restart, protected service `3999` 조작 없이 승인 검토용 handoff packet을 제공합니다.
-
-### 13) 26.6.9 demo operation readiness checklist
-- alpha push, demo host update, configured demo service restart, live target `2999` smoke, rollback handoff의 승인 후 순서를 고정합니다.
-- 실행 명령, 대상, 확인 기준, 중단 조건을 분리해 사용자 승인 전 외부 작업이 일어나지 않게 합니다.
-
-### 14) workflow recovery runbook evidence
-- 워크플로우 런타임 화면에 재실행, 롤백 인계, 중단 조건 evidence card를 추가한 로컬 runbook 기준입니다.
-- queue/retry/recovery/terminal/retention 신호를 기존 health data에서 읽고, rollback/restart/destructive cleanup은 승인 경계로 유지합니다.
-
-### 15) 26.6.9 final readiness trend evidence
-- dependency/security 결과, release handoff, media/runtime observability, final local verification을 하나의 exportable trend evidence로 묶습니다.
-- package version bump, push, deploy, restart, protected service `3999`, destructive cleanup은 사용자 승인 결정으로 분리합니다.
-
-### 16) operator evidence review console
-- Settings > Release readiness의 MCP dry-run, workflow recovery handoff, media approval packet 비교 콘솔 기준입니다.
-- local storage snapshot과 Markdown export까지만 허용하고 MCP 호출, cleanup, rerun, push/deploy/restart는 승인 경계로 둡니다.
-
-### 17) automation rehearsal contracts
-- cleanup staging, workflow recovery replay, release-candidate command plan을 dry-run/local diff 리허설로 묶습니다.
-- deletion, rerun, push/deploy/restart, external service 호출은 실행하지 않고 승인 경계로 유지합니다.
-
-### 18) media/runtime release risk dashboard contracts
-- media/runtime readiness와 release risk를 로컬 대시보드 계약으로 묶는 기준입니다.
-- 외부 반영 전 risk signal과 approval boundary를 비교할 수 있게 둡니다.
-
-### 19) local automation context completion evidence
-- automation context handoff, workflow recovery, media review continuity 로드맵의 최종 로컬 evidence packet입니다.
-- push, deploy, restart, package version bump, auth/security/data/public API 변경, destructive cleanup, external side effect 없이 완료된 범위와 남은 승인 결정을 분리합니다.
-
-### 20) 26.6.8 workflow-media-operations
-- 워크플로우·미디어 운영 업그레이드를 로컬 검토 전에 어떤 순서로 검증할지 정리합니다.
-- push, deploy, restart, protected service 조작 없이 확인 가능한 로컬 준비 경계입니다.
-
-### 21) 26.6.8 hardening-evidence-observability readiness
-- dependency hardening, readiness evidence, media/runtime observability 로드맵의 최종 로컬 준비 경계를 정리합니다.
-- 남은 `better-queue -> uuid`, `vitepress -> vite -> esbuild`, retention/destructive cleanup 승인 결정을 분리합니다.

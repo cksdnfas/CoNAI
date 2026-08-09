@@ -8,7 +8,7 @@ const SCAN_TARGETS = [
   { area: 'backend', dir: path.join(ROOT, 'backend', 'src') },
   { area: 'shared', dir: path.join(ROOT, 'shared', 'src') },
 ]
-const OUTPUT_DIR = path.join(ROOT, 'docs')
+const OUTPUT_DIR = path.join(ROOT, '.tmp', 'reports')
 const OUTPUT_JSON = path.join(OUTPUT_DIR, 'english-only-preprocess-report.json')
 const OUTPUT_MD = path.join(OUTPUT_DIR, 'english-only-preprocess-report.md')
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']

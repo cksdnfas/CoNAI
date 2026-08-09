@@ -41,8 +41,6 @@
 
 ### 로컬 확인
 
-운영 메모와 검증 기준은 [`docs/systems/26.6.19-workflow-media-alpha-operations.md`](../systems/26.6.19-workflow-media-alpha-operations.md)에 정리했습니다.
-
 기준 명령:
 
 ```bash

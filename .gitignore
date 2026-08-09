@@ -149,10 +149,6 @@ shared/tsconfig.tsbuildinfo
 /TOOLS.md
 /USER.md
 
-# Generated verification reports
-/docs/i18n-gap-report.json
-/docs/i18n-gap-report.md
-
 # Hermes Steward generated/tool artifacts
 # Keep analysis dumps and local Steward scratch out of commits.
 graphify-out/

@@ -52,8 +52,6 @@
 
 ### 릴리즈 준비 체크리스트
 
-로컬 확인 절차와 승인 경계는 [`docs/systems/26.6.8-workflow-media-operations.md`](../systems/26.6.8-workflow-media-operations.md)에 따로 정리했습니다.
-
 릴리즈 준비 워크스페이스는 다음 핸드오프 근거를 로컬에서 캡처할 수 있게 정리합니다. 이 항목들은 검토 상태이며 push, deploy, restart, smoke를 실행하지 않습니다.
 
 - 로컬 커밋 스냅샷과 원격 대비 커밋 범위

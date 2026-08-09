@@ -29,8 +29,6 @@
 
 ### 로컬 확인
 
-운영 메모와 검증 기준은 [`docs/systems/26.6.17-generation-history-followup-readiness.md`](../systems/26.6.17-generation-history-followup-readiness.md)에 정리했습니다.
-
 기준 명령:
 
 ```bash

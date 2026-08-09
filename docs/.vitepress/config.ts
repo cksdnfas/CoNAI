@@ -8,7 +8,6 @@ export default {
   base,
   lastUpdated: true,
   cleanUrls: true,
-  srcExclude: ['english-only-preprocess-report.md'],
   ignoreDeadLinks: true,
   themeConfig: {
     nav: [
