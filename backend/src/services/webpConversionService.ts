@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import type { OutputInfo } from 'sharp';
 import { ConaiWebPXmpPayload } from './metadata/webpMetadata';
 import { ImageMetadataWriteService } from './imageMetadataWriteService';
 
@@ -12,7 +12,7 @@ interface WebPConversionOptions {
 
 interface WebPConversionResult {
   buffer: Buffer;
-  info: sharp.OutputInfo;
+  info: OutputInfo;
   embeddedPayload: ConaiWebPXmpPayload | null;
 }
 

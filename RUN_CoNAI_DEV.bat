@@ -11,7 +11,7 @@ echo.
 where node >nul 2>nul
 if errorlevel 1 (
   echo [ERROR] Node.js is not installed or not in PATH.
-  echo Please install Node.js 18+ first.
+  echo Please install Node.js 20.19+ first.
   pause
   exit /b 1
 )

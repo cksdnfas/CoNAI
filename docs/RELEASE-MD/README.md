@@ -1,24 +1,9 @@
 # 릴리즈 노트
 
-버전별 변경 사항과 다음 작업 노트를 모아보는 섹션입니다.
+현재 안정 버전은 **26.8.9**입니다.
 
-## 최신 문서
+## 바로가기
 
 - [최신 안정 릴리즈 26.8.9](./RELEASE_26.8.9.md)
-- [이전 안정 릴리즈 26.8.6](./RELEASE_26.8.6.md)
-- [26.6.19 workflow-media-alpha-operations 작업 노트](./RELEASE_26.6.19.md)
-- [26.6.17 feature-refactor-followup 작업 노트](./RELEASE_26.6.17.md)
-- [26.6.8 workflow-media-operations 작업 노트](./RELEASE_26.6.8.md)
-- [이전 안정 릴리즈 26.07.12](./RELEASE_26.07.12.md)
-- [이전 안정 릴리즈 26.7.1](./RELEASE_26.7.1.md)
-- [이전 안정 릴리즈 26.6.3](./RELEASE_26.6.3.md)
-- [26.05.23](./RELEASE_26.05.23.md)
-- [26.5.17](./RELEASE_26.5.17.md)
-- [26.4.27](./RELEASE_26.4.27.md)
-- [26.4.20](./RELEASE_26.4.20.md)
-- [26.4.15](./RELEASE_26.4.15.md)
-- [26.4.13](./RELEASE_26.4.13.md)
-- [26.4.8](./RELEASE_26.4.8.md)
-- [26.4.5](./RELEASE_26.4.5.md)
-- [26.3.26](./RELEASE_26.3.26.md)
-- [26.3.14](./RELEASE_26.3.14.md)
+- [GitHub Release 26.8.9](https://github.com/cksdnfas/CoNAI/releases/tag/26.8.9)
+- [전체 릴리즈 문서](./index.md)

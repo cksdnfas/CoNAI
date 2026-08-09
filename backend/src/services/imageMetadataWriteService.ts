@@ -1,5 +1,5 @@
 import fs from 'fs';
-import sharp from 'sharp';
+import sharp, { type Exif, type OutputInfo, type Sharp } from 'sharp';
 import { MetadataExtractor } from './metadata';
 import { AIMetadata } from './metadata/types';
 import { buildConaiWebPXmp, buildPrimaryMetadataText, createConaiWebPXmpPayload, ConaiWebPXmpPayload } from './metadata/webpMetadata';
@@ -22,12 +22,12 @@ export interface ImageMetadataWriteOptions {
 interface ImageMetadataArtifacts {
   payload: ConaiWebPXmpPayload | null;
   xmp: string | null;
-  exif: sharp.Exif | null;
+  exif: Exif | null;
 }
 
 export interface ImageMetadataWriteResult {
   buffer: Buffer;
-  info: sharp.OutputInfo;
+  info: OutputInfo;
   embeddedPayload: ConaiWebPXmpPayload | null;
   xmpApplied: boolean;
   exifApplied: boolean;
@@ -141,7 +141,7 @@ async function buildMetadataArtifacts(options: Pick<ImageMetadataWriteOptions, '
 }
 
 /** Build a format-specific Sharp pipeline for metadata-aware image output. */
-function buildFormatPipeline(input: string | Buffer, options: ImageMetadataWriteOptions): sharp.Sharp {
+function buildFormatPipeline(input: string | Buffer, options: ImageMetadataWriteOptions): Sharp {
   let pipeline = typeof input === 'string'
     ? sharp(toWindowsLongPathIfNeeded(input))
     : sharp(input);
@@ -174,7 +174,7 @@ function buildFormatPipeline(input: string | Buffer, options: ImageMetadataWrite
 }
 
 /** Apply EXIF/XMP carriers onto an output pipeline when available. */
-function applyMetadataArtifacts(pipeline: sharp.Sharp, artifacts: ImageMetadataArtifacts): sharp.Sharp {
+function applyMetadataArtifacts(pipeline: Sharp, artifacts: ImageMetadataArtifacts): Sharp {
   let nextPipeline = pipeline;
 
   if (artifacts.exif) {

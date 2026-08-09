@@ -5,16 +5,9 @@
 ## 빠르게 보기
 
 - [최신 안정 릴리즈 26.8.9](./RELEASE_26.8.9.md)
-- [이전 안정 릴리즈 26.8.6](./RELEASE_26.8.6.md)
-- [26.6.19 workflow-media-alpha-operations 작업 노트](./RELEASE_26.6.19.md)
-- [26.6.17 feature-refactor-followup 작업 노트](./RELEASE_26.6.17.md)
-- [26.6.8 workflow-media-operations 작업 노트](./RELEASE_26.6.8.md)
-- [이전 안정 릴리즈 26.07.12](./RELEASE_26.07.12.md)
-- [이전 안정 릴리즈 26.7.1](./RELEASE_26.7.1.md)
-- [이전 안정 릴리즈 26.6.3](./RELEASE_26.6.3.md)
-- [이전 릴리즈 26.05.23](./RELEASE_26.05.23.md)
+- [GitHub Release 26.8.9](https://github.com/cksdnfas/CoNAI/releases/tag/26.8.9)
 
-## 전체 릴리즈
+## 전체 문서
 
 - [26.8.9](./RELEASE_26.8.9.md)
 - [26.8.6](./RELEASE_26.8.6.md)

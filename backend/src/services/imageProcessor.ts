@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import path from 'path';
 import fs from 'fs';
 import { ImageMetadata, AITool, LoRAModel } from '../types/image';
@@ -74,7 +74,7 @@ export class ImageProcessor {
     inputPath: string,
     outputPath: string,
     customSize?: number,
-    sourceImage?: sharp.Sharp
+    sourceImage?: Sharp
   ): Promise<void> {
     // Load settings
     const settings = settingsService.loadSettings();

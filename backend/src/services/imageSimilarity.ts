@@ -1,5 +1,5 @@
 import fs from 'fs';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import { ColorDescriptor, ColorHistogram } from '../types/similarity';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 
@@ -537,7 +537,7 @@ export class ImageSimilarityService {
    *
    * @param knownFileSize 이미 알고 있는 파일 크기 (있으면 stat 재호출을 생략)
    */
-  static async createSharedSourceImage(imagePath: string, knownFileSize?: number): Promise<sharp.Sharp> {
+  static async createSharedSourceImage(imagePath: string, knownFileSize?: number): Promise<Sharp> {
     const resolvedPath = toWindowsLongPathIfNeeded(imagePath);
 
     try {
@@ -557,7 +557,7 @@ export class ImageSimilarityService {
    * 단일 sharp 인스턴스를 clone()해 파생 파이프라인 생성 (원본 메타데이터 포함)
    * @param sourceImage 재사용할 sharp 인스턴스 (없으면 imagePath로 생성)
    */
-  static async generateHashAndHistogram(imagePath: string, sourceImage?: sharp.Sharp): Promise<{
+  static async generateHashAndHistogram(imagePath: string, sourceImage?: Sharp): Promise<{
     hashes: {
       compositeHash: string;
       perceptualHash: string;

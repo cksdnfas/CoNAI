@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type sharp from 'sharp';
+import type { Sharp } from 'sharp';
 import { runtimePaths } from '../config/runtimePaths';
 import { ImageProcessor } from '../services/imageProcessor';
 
@@ -25,7 +25,7 @@ export class ThumbnailGenerator {
   static async generateThumbnail(
     inputPath: string,
     compositeHash: string,
-    sourceImage?: sharp.Sharp
+    sourceImage?: Sharp
   ): Promise<string> {
     // Create date-based directory structure
     const dateStr = new Date().toISOString().split('T')[0];
