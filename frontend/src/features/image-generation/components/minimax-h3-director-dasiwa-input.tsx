@@ -571,7 +571,11 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
       </div>
 
       {hasVisibleDimensionField ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          data-minimax-dimension-grid
+          className="grid gap-4"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 12rem), 1fr))' }}
+        >
           {isFieldVisible('width') ? (
             <FormField label={t({ ko: '너비', en: 'Width' })}>
               <NumberStepperInput min={numericBounds?.width?.min} max={numericBounds?.width?.max} step={1} value={widthValue} onValueCommit={(nextValue) => emit({ width: Number(nextValue) })} />
@@ -598,7 +602,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
             </FormField>
           ) : null}
           {isFieldVisible('ref_image_size') ? (
-            <FormField label={t({ ko: '참조 이미지 크기', en: 'Reference image size' })}>
+            <FormField label={t({ ko: '이미지 크기', en: 'Image size' })}>
               <Select value={refImageSizeValue} onChange={(event) => emit({ ref_image_size: event.target.value })}>
                 {refImageSizeValue === '' ? <option value="">{t({ ko: '선택', en: 'Select' })}</option> : null}
                 <option value="match">match</option>

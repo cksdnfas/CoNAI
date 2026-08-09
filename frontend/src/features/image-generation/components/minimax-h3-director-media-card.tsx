@@ -137,7 +137,12 @@ export function MiniMaxH3DirectorMediaCard({
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pointerRef = useRef<{ id: number; x: number; y: number; activated: boolean } | null>(null)
   const suppressClickRef = useRef(false)
-  const [aspectRatio, setAspectRatio] = useState<string | null>(null)
+  const aspectRatioSourceKey = `${item.type}:${asset?.id ?? item.value}`
+  const [aspectRatioState, setAspectRatioState] = useState<{ sourceKey: string; value: string } | null>(null)
+  const aspectRatio = aspectRatioState?.sourceKey === aspectRatioSourceKey ? aspectRatioState.value : null
+  const handleAspectRatioChange = (nextAspectRatio: string | null) => {
+    setAspectRatioState(nextAspectRatio ? { sourceKey: aspectRatioSourceKey, value: nextAspectRatio } : null)
+  }
 
   const cancelLongPress = () => {
     if (longPressTimerRef.current) {
@@ -151,10 +156,6 @@ export function MiniMaxH3DirectorMediaCard({
       clearTimeout(longPressTimerRef.current)
     }
   }, [])
-
-  useEffect(() => {
-    setAspectRatio(null)
-  }, [asset?.id, item.type, item.value])
 
   const finishPointer = (event: PointerEvent<HTMLDivElement>) => {
     cancelLongPress()
@@ -271,17 +272,20 @@ export function MiniMaxH3DirectorMediaCard({
       )}
     >
       <div className="relative flex min-h-28 max-h-64 w-full items-center justify-center overflow-hidden bg-black/20 p-1">
-        <MiniMaxDirectorMediaPreview item={item} asset={asset} onAspectRatioChange={setAspectRatio} />
+        <MiniMaxDirectorMediaPreview item={item} asset={asset} onAspectRatioChange={handleAspectRatioChange} />
         <Badge className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate bg-background/88">{label}</Badge>
       </div>
 
-      {aspectRatio ? (
-        <div data-minimax-aspect-ratio className="border-t border-border/70 bg-background/40 px-3 py-1.5 text-center text-[11px] font-medium tabular-nums text-muted-foreground">
-          {aspectRatio}
+      {aspectRatio || children ? (
+        <div data-minimax-interactive="true" className="space-y-2 border-t border-border/70 p-3" onClick={(event) => event.stopPropagation()}>
+          {aspectRatio ? (
+            <Badge data-minimax-aspect-ratio variant="outline" className="normal-case tracking-normal tabular-nums">
+              {aspectRatio}
+            </Badge>
+          ) : null}
+          {children}
         </div>
       ) : null}
-
-      {children ? <div data-minimax-interactive="true" className="space-y-2 border-t border-border/70 p-3" onClick={(event) => event.stopPropagation()}>{children}</div> : null}
 
       {menuOpen && !disabled ? (
         <div data-minimax-interactive="true" role="menu" aria-label={menuLabel} className="absolute inset-x-2 top-11 z-20 overflow-hidden rounded-sm border border-border bg-background/96 p-1 shadow-xl backdrop-blur">

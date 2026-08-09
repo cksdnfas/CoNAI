@@ -265,8 +265,13 @@ assert.match(mediaCardSource, /videoPoster/, 'video references must derive trans
 assert.match(mediaCardSource, /naturalWidth.*naturalHeight/, 'image cards must read their intrinsic dimensions')
 assert.match(mediaCardSource, /videoWidth.*videoHeight/, 'video cards must read their intrinsic dimensions')
 assert.match(mediaCardSource, /data-minimax-aspect-ratio/, 'visual media cards must render their aspect ratio beneath the preview')
+assert.match(mediaCardSource, /data-minimax-interactive="true"[\s\S]*data-minimax-aspect-ratio/, 'the aspect-ratio badge must live in the card interaction area')
+assert.match(mediaCardSource, /<Badge data-minimax-aspect-ratio/, 'the aspect ratio must use the shared Badge component')
 assert.match(mediaCardSource, /LONG_PRESS_DELAY_MS/, 'media cards must support delayed pointer sorting')
 assert.match(mediaCardSource, /onReplaceFile/, 'dropping a file on a media card must replace that card')
 assert.doesNotMatch(mediaCardSource, /object-cover/, 'media previews must preserve their intrinsic aspect ratio')
+assert.match(directorInputSource, /data-minimax-dimension-grid[\s\S]*repeat\(auto-fit, minmax\(min\(100%, 12rem\), 1fr\)\)/, 'Director dimensions must reflow from their available width')
+assert.doesNotMatch(directorInputSource, /sm:grid-cols-2 lg:grid-cols-4/, 'Director dimensions must not force four cramped viewport-based columns')
+assert.match(directorInputSource, /ko: '이미지 크기', en: 'Image size'/, 'the reference image-size field must use its compact label')
 
 console.log('MiniMax H3 Director frontend contracts verified')
