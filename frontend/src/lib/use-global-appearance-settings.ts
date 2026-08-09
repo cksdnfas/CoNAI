@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { getPublicAppearanceSettings } from '@/lib/api-settings'
-import type { AppearanceSettings } from '@/types/settings'
+import { getPublicAppearanceSettings } from '@/lib/api-settings-appearance'
+import type { AppearanceSettings } from '@conai/shared'
 
 export const GLOBAL_APPEARANCE_QUERY_KEY = ['global-appearance-settings'] as const
 

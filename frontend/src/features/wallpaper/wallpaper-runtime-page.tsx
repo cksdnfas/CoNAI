@@ -3,10 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { getWallpaperRuntimeSettings } from '@/lib/api-settings'
+import { getWallpaperRuntimeSettings } from '@/lib/api-settings-appearance'
 import { getWallpaperCanvasPreset } from './wallpaper-canvas-presets'
 import { buildWallpaperStarterLayout, cloneWallpaperPresetToDraft, findWallpaperPresetByQuery, loadWallpaperLayoutDraft } from './wallpaper-layout-utils'
 import { WallpaperCanvasView } from './wallpaper-shared'
+import { toWallpaperLayoutPresetViewModels } from './wallpaper-types'
 
 export function WallpaperRuntimePage() {
   const { t } = useI18n()
@@ -29,13 +30,16 @@ export function WallpaperRuntimePage() {
     }
 
     const runtimeSettings = wallpaperSettingsQuery.data
+    const serverPresets = runtimeSettings
+      ? toWallpaperLayoutPresetViewModels(runtimeSettings.wallpaperLayoutPresets)
+      : []
     const serverPreset = runtimeSettings
-      ? (runtimeSettings.wallpaperLayoutPresets.find((preset) => preset.id === runtimeSettings.wallpaperActivePresetId) ?? runtimeSettings.wallpaperLayoutPresets[0] ?? null)
+      ? (serverPresets.find((preset) => preset.id === runtimeSettings.wallpaperActivePresetId) ?? serverPresets[0] ?? null)
       : null
 
     if (presetQuery) {
       const matchedPreset = runtimeSettings
-        ? findWallpaperPresetByQuery(runtimeSettings.wallpaperLayoutPresets, presetQuery)
+        ? findWallpaperPresetByQuery(serverPresets, presetQuery)
         : null
       return matchedPreset ? cloneWallpaperPresetToDraft(matchedPreset) : null
     }

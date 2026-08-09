@@ -1,4 +1,4 @@
-import type { AppearancePresetSlot, AppearanceSettings, AppearanceThemeSettings } from '@/types/settings'
+import type { AppearancePresetSlot, AppearanceSettings, AppearanceThemeSettings } from '@conai/shared'
 import { createDefaultAppearancePresetSlots, DEFAULT_APPEARANCE_THEME } from './appearance-presets'
 import { normalizeHexPair } from './appearance-color-utils'
 

@@ -4,7 +4,7 @@ import fs from 'fs';
 import readline from 'readline';
 import { runtimePaths } from '../config/runtimePaths';
 import { settingsService } from './settingsService';
-import { TaggerModel } from '../types/settings';
+import type { TaggerModel, TaggerServerStatus } from '@conai/shared';
 
 export interface TaggerResult {
   success: boolean;
@@ -20,14 +20,6 @@ export interface TaggerResult {
   };
   error?: string;
   error_type?: string;
-}
-
-export interface TaggerServerStatus {
-  isRunning: boolean;
-  modelLoaded: boolean;
-  currentModel: TaggerModel | null;
-  currentDevice: string | null;
-  lastUsedAt: string | null;
 }
 
 interface DaemonCommand {

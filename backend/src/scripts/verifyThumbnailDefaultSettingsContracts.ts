@@ -1,12 +1,12 @@
 import * as assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import verifyHelpers from '../../../scripts/verify-helpers';
 
-const backendRoot = process.cwd();
-const settingsStorage = readFileSync(resolve(backendRoot, 'src/services/settingsServiceStorage.ts'), 'utf8');
-const mediaSettingsRoutes = readFileSync(resolve(backendRoot, 'src/routes/settings/media-settings.routes.ts'), 'utf8');
-const imageProcessor = readFileSync(resolve(backendRoot, 'src/services/imageProcessor.ts'), 'utf8');
-const bundledSettings = JSON.parse(readFileSync(resolve(backendRoot, 'config/settings.json'), 'utf8')) as {
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers;
+const source = createSourceReader(process.cwd());
+const settingsStorage = source('src/services/settingsServiceStorage.ts');
+const mediaSettingsRoutes = source('src/routes/settings/media-settings.routes.ts');
+const imageProcessor = source('src/services/imageProcessor.ts');
+const bundledSettings = JSON.parse(source('config/settings.json')) as {
   thumbnail?: {
     size?: unknown;
     quality?: unknown;
@@ -64,4 +64,4 @@ assert.match(
   'thumbnail generation must pass configured quality to WebP output',
 );
 
-console.log('✅ Thumbnail default settings contracts verified');
+reportVerificationSuccess('✅ Thumbnail default settings contracts verified');

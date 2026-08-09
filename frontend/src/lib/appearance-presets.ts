@@ -11,7 +11,7 @@ import type {
   ShadowPreset,
   SurfacePreset,
   ThemeMode,
-} from '@/types/settings'
+} from '@conai/shared'
 
 interface AccentPresetDefinition {
   label: string

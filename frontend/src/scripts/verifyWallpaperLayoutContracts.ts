@@ -18,6 +18,13 @@ import {
   upsertWallpaperLayoutPreset,
 } from '../features/wallpaper/wallpaper-layout-utils'
 import {
+  toWallpaperLayoutPresetViewModels,
+  toWallpaperLayoutPresetWireModels,
+} from '../features/wallpaper/wallpaper-types'
+import type {
+  WallpaperLayoutPreset as WallpaperLayoutPresetWire,
+} from '@conai/shared'
+import {
   createWallpaperWidgetInstance,
   getWallpaperWidgetDefinition,
   listWallpaperWidgetDefinitions,
@@ -342,5 +349,33 @@ const movedLayout = moveWallpaperWidgetToOrder(reorderedLayout, starterWidgetIds
 const movedFrontToBack = getWallpaperWidgetsFrontToBack(movedLayout.widgets)
 assert(movedFrontToBack[0].id === starterWidgetIds[1], 'move to order 1 must place the widget at the front')
 assert(moveWallpaperWidgetToOrder(starterLayout, 'missing-widget', 1) === starterLayout, 'moving an unknown widget must leave the layout unchanged')
+
+const futureWidgetPreset: WallpaperLayoutPresetWire = {
+  id: 'future-widget-preset',
+  name: 'Future widget preset',
+  canvasPresetId: canvasPreset.id,
+  widgets: [{
+    id: 'future-widget',
+    type: 'future-weather-widget',
+    x: 2,
+    y: 3,
+    w: 4,
+    h: 5,
+    zIndex: 7,
+    locked: true,
+    hidden: false,
+    settings: { location: 'Seoul', units: 'metric' },
+  }],
+  createdAt: '2026-08-09T00:00:00.000Z',
+  updatedAt: '2026-08-09T00:00:00.000Z',
+}
+const [futureWidgetViewModel] = toWallpaperLayoutPresetViewModels([futureWidgetPreset])
+assert(futureWidgetViewModel.widgets.length === 0, 'unknown wallpaper widgets must stay hidden from an older editor')
+assert(futureWidgetViewModel.unsupportedWidgets?.length === 1, 'unknown wallpaper widgets must be retained outside the editable view model')
+const [futureWidgetRoundTrip] = toWallpaperLayoutPresetWireModels([futureWidgetViewModel])
+assert(futureWidgetRoundTrip.widgets.length === 1, 'opening and saving a preset must not delete unknown wallpaper widgets')
+assert(futureWidgetRoundTrip.widgets[0].type === 'future-weather-widget', 'unknown wallpaper widget type must round-trip unchanged')
+assert(futureWidgetRoundTrip.widgets[0].settings.location === 'Seoul', 'unknown wallpaper widget settings must round-trip unchanged')
+assert(!('unsupportedWidgets' in futureWidgetRoundTrip), 'view-only unsupported widget storage must not leak into the wire payload')
 
 console.log('Wallpaper layout contracts verified.')

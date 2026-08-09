@@ -7,7 +7,7 @@ import { updateSimilaritySettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
 import type { ImageRecord } from '@/types/image'
 import type { PromptSimilarImage, SimilarImage } from '@/types/similarity'
-import type { RelatedImageCardAspectRatio, SimilaritySettings } from '@/types/settings'
+import type { RelatedImageCardAspectRatio, SimilaritySettings } from '@conai/shared'
 import {
   getValidImageRecords,
   normalizeSimilarityResultRows,

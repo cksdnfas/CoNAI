@@ -3,16 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import {
-  getAppSettings,
-  reextractAllImageMetadata,
-  updateGeneralSettings,
-  updateGenerationThrottleSettings,
-  updateImageSaveSettings,
-  updateMetadataSettings,
-  updateThumbnailSettings,
-  updateVideoOptimizationSettings,
-} from '@/lib/api-settings'
+import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings } from '@/lib/api-settings'
+import { getAppSettings, updateGeneralSettings } from '@/lib/api-settings-general'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -26,7 +18,7 @@ import type {
   MetadataExtractionSettings,
   ThumbnailSettings,
   VideoOptimizationSettings,
-} from '@/types/settings'
+} from '@conai/shared'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import { parseSettingsTab, type SettingsTab } from './settings-tabs'
 import { useFolderSettingsTab } from './use-folder-settings-tab'

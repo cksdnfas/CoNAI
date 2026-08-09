@@ -1,10 +1,10 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { equal } from 'node:assert/strict'
+import verifyHelpers from '../../../scripts/verify-helpers'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const foldersTabSource = readFileSync(resolve(__dirname, '../features/settings/components/folders-tab.tsx'), 'utf8')
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+
+const source = createSourceReader(new URL('../', import.meta.url))
+const foldersTabSource = source('features/settings/components/folders-tab.tsx')
 
 equal(
   foldersTabSource.includes('const foldersById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder] as const)), [folders])'),
@@ -57,4 +57,4 @@ equal(
   'Folders tab should not rescan backup sources to clean stale selection ids',
 )
 
-console.log('Settings folder selection lookup contracts verified')
+reportVerificationSuccess('Settings folder selection lookup contracts verified')

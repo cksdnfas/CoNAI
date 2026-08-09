@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { getNaiCostEstimate, getNaiUserData } from '@/lib/api-image-generation-nai'
-import { getAppSettings } from '@/lib/api-settings'
+import { getAppSettings } from '@/lib/api-settings-general'
 import {
   clampNaiSampleCount,
   getErrorMessage,

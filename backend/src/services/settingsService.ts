@@ -17,7 +17,7 @@ import {
   TaggerModel,
   TaggerModelInfo,
   SupportedLanguage,
-} from '../types/settings';
+} from '@conai/shared';
 import { cleanupUnusedAppearanceFontFiles } from './appearanceFontAssetService';
 import {
   SETTINGS_FILE_PATH,

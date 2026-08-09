@@ -4,7 +4,9 @@
   "version": "26.8.6",
   "type": "module",
   "scripts": {
+    "predev": "npm run build --prefix ../shared",
     "dev": "vite",
+    "prebuild": "npm run build --prefix ../shared",
     "build": "node scripts/build-production.mjs",
     "build:compiler-off": "node scripts/build-production.mjs --compiler=off",
     "build:compiler-on": "node scripts/build-production.mjs --compiler=on",
@@ -68,6 +70,7 @@
     "verify:module-graph-bypass-contracts": "tsx src/scripts/verifyModuleGraphBypassContracts.ts"
   },
   "dependencies": {
+    "@conai/shared": "file:../shared",
     "@tanstack/react-query": "^5.91.3",
     "@virtuoso.dev/masonry": "^1.4.2",
     "@viselect/vanilla": "^3.9.0",

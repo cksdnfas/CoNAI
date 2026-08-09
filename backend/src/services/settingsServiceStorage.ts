@@ -5,7 +5,6 @@ import {
   AppSettings,
   AppearancePresetSlot,
   AppearanceThemeSettings,
-  DEFAULT_ARTIST_LINK_URL_TEMPLATE,
   HEADER_NAVIGATION_ITEM_KEYS,
   HeaderNavigationSettings,
   LlmPresetRecord,
@@ -13,8 +12,8 @@ import {
   TaggerDevice,
   WallpaperLayoutPreset,
   WallpaperWidgetInstance,
-  WallpaperWidgetType,
-} from '../types/settings';
+} from '@conai/shared';
+import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '../constants/settings';
 import {
   DEFAULT_GENERATION_HISTORY_MAX_ITEMS,
   normalizeGenerationHistoryMaxItems,
@@ -23,7 +22,6 @@ import {
 export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
 const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
-const WALLPAPER_WIDGET_TYPES: WallpaperWidgetType[] = ['clock', 'queue-status', 'recent-results', 'activity-pulse', 'group-image-view', 'image-showcase', 'floating-collage', 'text-note'];
 
 /** Build a complete top-header navigation visibility map. */
 export function getDefaultHeaderNavigationSettings(): HeaderNavigationSettings {
@@ -108,7 +106,7 @@ function normalizeWallpaperWidget(rawWidget: unknown): WallpaperWidgetInstance |
   }
 
   const record = rawWidget as Record<string, unknown>;
-  if (typeof record.id !== 'string' || !WALLPAPER_WIDGET_TYPES.includes(record.type as WallpaperWidgetType)) {
+  if (typeof record.id !== 'string' || typeof record.type !== 'string' || record.type.trim().length === 0) {
     return null;
   }
 
@@ -123,9 +121,13 @@ function normalizeWallpaperWidget(rawWidget: unknown): WallpaperWidgetInstance |
     return null;
   }
 
-  return {
+  const settings = record.settings && typeof record.settings === 'object' && !Array.isArray(record.settings)
+    ? { ...(record.settings as Record<string, unknown>) }
+    : {};
+  const normalizedWidget: WallpaperWidgetInstance = {
+    ...record,
     id: record.id,
-    type: record.type as WallpaperWidgetType,
+    type: record.type,
     x: Number(record.x),
     y: Number(record.y),
     w: Number(record.w),
@@ -133,8 +135,9 @@ function normalizeWallpaperWidget(rawWidget: unknown): WallpaperWidgetInstance |
     zIndex: Number(record.zIndex),
     locked: record.locked,
     hidden: record.hidden,
-    settings: record.settings && typeof record.settings === 'object' ? record.settings as Record<string, unknown> : {},
+    settings,
   };
+  return normalizedWidget;
 }
 
 /** Normalize raw wallpaper layout presets from persisted settings into the canonical shape. */

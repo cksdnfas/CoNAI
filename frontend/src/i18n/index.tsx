@@ -8,8 +8,8 @@ import {
   type PropsWithChildren,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getAppSettings } from '@/lib/api-settings'
-import type { GeneralSettings } from '@/types/settings'
+import { getAppSettings } from '@/lib/api-settings-general'
+import type { GeneralSettings } from '@conai/shared'
 import { authCatalog } from './resources/auth'
 import { shellCatalog } from './resources/shell'
 

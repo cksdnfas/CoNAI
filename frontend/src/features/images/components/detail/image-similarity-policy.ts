@@ -1,4 +1,4 @@
-import type { GeneralSettings, ImageSimilarityCheckMode } from '../../../../types/settings'
+import type { GeneralSettings, ImageSimilarityCheckMode } from '@conai/shared'
 
 export const DEFAULT_IMAGE_SIMILARITY_CHECK_MODE: ImageSimilarityCheckMode = 'manual'
 

@@ -1,4 +1,4 @@
-import type { AppearanceThemeSettings } from '@/types/settings'
+import type { AppearanceThemeSettings } from '@conai/shared'
 import {
   APPEARANCE_PRESETS,
   DENSITY_PRESETS,

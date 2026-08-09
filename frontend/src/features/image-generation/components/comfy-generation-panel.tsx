@@ -21,7 +21,7 @@ import {
   updateGenerationCustomDropdownList,
 } from '@/lib/api-image-generation-workflows'
 import { createComfyModuleFromWorkflow, getModuleDefinitions } from '@/lib/api-module-graph'
-import { getAppSettings } from '@/lib/api-settings'
+import { getAppSettings } from '@/lib/api-settings-general'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
 import {

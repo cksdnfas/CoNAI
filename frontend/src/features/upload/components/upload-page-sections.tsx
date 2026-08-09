@@ -25,11 +25,12 @@ import { getUploadResultDetailPath } from '../upload-result-links'
 import { getVisibleUploadResultLists } from '../upload-result-list'
 import { useLocalFilePreviews, type LocalFilePreview } from '../use-local-file-previews'
 import type { UploadBatchResult, UploadTransferProgress } from '@/lib/api-images'
-import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from '@/lib/api-settings'
+import type { AutoTestTaggerResult } from '@/lib/api-settings-tagger'
+import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import type { ExtractedPromptActionScope, ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
 import type { ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageRecord } from '@/types/image'
-import type { ImageSaveSettings } from '@/types/settings'
+import type { ImageSaveSettings } from '@conai/shared'
 
 const MAX_VISIBLE_FILES = 6
 

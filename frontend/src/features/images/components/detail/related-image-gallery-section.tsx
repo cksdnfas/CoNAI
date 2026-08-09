@@ -8,7 +8,7 @@ import { useImageViewModal } from '@/features/images/components/detail/image-vie
 import { useI18n } from '@/i18n'
 import { ImageListItem } from '@/features/images/components/image-list/image-list-item'
 import type { ImageRecord } from '@/types/image'
-import type { RelatedImageCardAspectRatio } from '@/types/settings'
+import type { RelatedImageCardAspectRatio } from '@conai/shared'
 
 interface RelatedImageGallerySectionProps {
   title: string

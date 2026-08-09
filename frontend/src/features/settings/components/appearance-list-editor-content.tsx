@@ -1,5 +1,5 @@
 import { Select } from '@/components/ui/select'
-import type { AppearanceSettings } from '@/types/settings'
+import type { AppearanceSettings } from '@conai/shared'
 import {
   type AppearanceTabEditorSectionProps,
   EditorSectionLead,

@@ -1,4 +1,6 @@
-import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult, RatingWeightsRecord } from '@/lib/api-settings'
+import type { AutoTestMediaRecord, RatingWeightsRecord } from '@/lib/api-settings'
+import type { AutoTestTaggerResult } from '@/lib/api-settings-tagger'
+import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 import type {
@@ -8,7 +10,7 @@ import type {
   TaggerModelInfo,
   TaggerServerStatus,
   TaggerSettings,
-} from '@/types/settings'
+} from '@conai/shared'
 
 export interface AutoTabProps {
   taggerDraft: TaggerSettings | null

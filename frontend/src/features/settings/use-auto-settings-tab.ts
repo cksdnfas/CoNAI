@@ -2,32 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getImage } from '@/lib/api-images'
 import { getRatingTiers } from '@/lib/api-search'
-import {
-  checkTaggerDependencies,
-  getKaloscopeStatus,
-  getRandomAutoTestMedia,
-  getRatingWeights,
-  getTaggerModels,
-  getTaggerStatus,
-  resolveAutoTestMedia,
-  runKaloscopeAutoTest,
-  runTaggerAutoTest,
-  updateKaloscopeSettings,
-  updateRatingTiers,
-  updateRatingWeights,
-  updateTaggerSettings,
-  type AutoTestKaloscopeResult,
-  type AutoTestMediaRecord,
-  type AutoTestTaggerResult,
-  type RatingWeightsRecord,
-} from '@/lib/api-settings'
+import { getRandomAutoTestMedia, getRatingWeights, resolveAutoTestMedia, updateRatingTiers, updateRatingWeights, type AutoTestMediaRecord, type RatingWeightsRecord } from '@/lib/api-settings'
+import { checkTaggerDependencies, getTaggerModels, getTaggerStatus, runTaggerAutoTest, updateTaggerSettings, type AutoTestTaggerResult } from '@/lib/api-settings-tagger'
+import { getKaloscopeStatus, runKaloscopeAutoTest, updateKaloscopeSettings, type AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 import type {
   KaloscopeSettings,
   TaggerDependencyCheckResult,
   TaggerSettings,
-} from '@/types/settings'
+} from '@conai/shared'
 import type { AutoTabProps } from './components/auto-tab-types'
 import { useI18n } from '@/i18n'
 

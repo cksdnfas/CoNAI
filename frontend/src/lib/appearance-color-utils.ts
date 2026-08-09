@@ -1,4 +1,4 @@
-import type { ThemeMode } from '@/types/settings'
+import type { ThemeMode } from '@conai/shared'
 
 export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))

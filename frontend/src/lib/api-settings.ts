@@ -1,26 +1,15 @@
 import { fetchJson } from '@/lib/api-client'
-import { requestJson } from '@/lib/api-request'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import type { ApiResponse } from '@/types/image'
 import type {
-  AppearanceSettings,
   AppSettings,
   GenerationThrottleSettings,
-  GeneralSettings,
-  HeaderNavigationSettings,
   ImageSaveSettings,
-  KaloscopeServerStatus,
-  KaloscopeSettings,
-  LlmSettings,
   MetadataExtractionSettings,
   SimilaritySettings,
-  TaggerDependencyCheckResult,
-  TaggerModelInfo,
-  TaggerServerStatus,
-  TaggerSettings,
   ThumbnailSettings,
   VideoOptimizationSettings,
-} from '@/types/settings'
+} from '@conai/shared'
 import type { RatingTierRecord } from '@/features/search/search-types'
 
 export interface RatingTierUpdateInput {
@@ -56,56 +45,8 @@ export interface AutoTestMediaRecord {
   imageUrl: string | null
 }
 
-export interface AutoTestTaggerResult {
-  caption?: string
-  taglist?: string
-  model?: string
-  rating?: Record<string, number>
-  general?: Record<string, number>
-  character?: Record<string, number>
-  thresholds?: {
-    general: number
-    character: number
-  }
-}
-
-export interface AutoTestKaloscopeResult {
-  model?: string
-  topk?: number
-  artists?: Record<string, number>
-  taglist?: string
-  tagged_at?: string
-}
-
-export interface AppearanceFontUploadResult {
-  target: 'sans' | 'mono'
-  fileName: string
-  originalName: string
-  url: string
-  mimeType: string
-  size: number
-}
-
-export interface WallpaperRuntimeSettings {
-  wallpaperLayoutPresets: AppearanceSettings['wallpaperLayoutPresets']
-  wallpaperActivePresetId: string | null
-}
-
 export interface RuntimeGenerationHistorySettings {
   applyRatingSafetyToGenerationHistory: boolean
-}
-
-export interface LlmPresetOptionRecord {
-  id: string
-  name: string
-  content: string
-  updatedAt: string
-}
-
-export interface LlmPresetOptionCollections {
-  systemPromptPresets: LlmPresetOptionRecord[]
-  promptPresets: LlmPresetOptionRecord[]
-  structuredOutputJsonPresets: LlmPresetOptionRecord[]
 }
 
 export interface FileVerificationRunResult {
@@ -176,30 +117,6 @@ export interface DataRematchJobSnapshot {
   maintenanceLock: SystemMaintenanceLockSnapshot
 }
 
-export async function getAppSettings() {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.app.load')
-  }
-  return response.data
-}
-
-export async function getPublicAppearanceSettings() {
-  const response = await fetchJson<ApiResponse<AppearanceSettings>>('/api/settings/appearance-public')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.appearancePublic.load')
-  }
-  return response.data
-}
-
-export async function getPublicHeaderNavigationSettings() {
-  const response = await fetchJson<ApiResponse<HeaderNavigationSettings>>('/api/settings/header-navigation-public')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.headerNavigationPublic.load')
-  }
-  return response.data
-}
-
 export async function getRuntimeSimilaritySettings(init?: RequestInit) {
   const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity', init)
   if (!response.success) {
@@ -217,14 +134,6 @@ export async function getRuntimeGenerationHistorySettings() {
   return response.data
 }
 
-export async function getWallpaperRuntimeSettings() {
-  const response = await fetchJson<ApiResponse<WallpaperRuntimeSettings>>('/api/wallpaper-runtime/settings')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.wallpaperRuntime.load')
-  }
-  return response.data
-}
-
 export async function runFileVerification() {
   const response = await fetchJson<{ success: boolean; result?: FileVerificationRunResult; error?: string }>('/api/file-verification/verify', {
     method: 'POST',
@@ -235,22 +144,6 @@ export async function runFileVerification() {
   }
 
   return response.result
-}
-
-export async function updateGeneralSettings(settings: Partial<GeneralSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/general', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(settings),
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.general.update')
-  }
-
-  return response.data
 }
 
 export async function updateMetadataSettings(settings: Partial<MetadataExtractionSettings>) {
@@ -300,22 +193,6 @@ export async function startDataRematchJob(request: DataRematchStartRequest) {
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.dataRematch.start')
-  }
-
-  return response.data
-}
-
-export async function updateAppearanceSettings(settings: Partial<AppearanceSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/appearance', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(settings),
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.appearance.update')
   }
 
   return response.data
@@ -385,105 +262,6 @@ export async function updateVideoOptimizationSettings(settings: Partial<VideoOpt
   return response.data
 }
 
-export async function updateLlmSettings(settings: Partial<LlmSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/llm', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(settings),
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.llm.update')
-  }
-
-  return response.data
-}
-
-export async function getLlmPresetOptions() {
-  const response = await fetchJson<ApiResponse<LlmPresetOptionCollections>>('/api/settings/llm-presets/options')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.llmPresets.load')
-  }
-  return response.data
-}
-
-export async function uploadAppearanceFont(file: File, target: 'sans' | 'mono') {
-  const formData = new FormData()
-  formData.append('font', file)
-  formData.append('target', target)
-
-  const payload = await requestJson<ApiResponse<AppearanceFontUploadResult>>('/api/settings/appearance/font-upload', {
-    method: 'POST',
-    body: formData,
-  })
-
-  if (!payload.success) {
-    throw createApiFallbackError(payload.error, 'settings.appearanceFont.upload')
-  }
-
-  return payload.data
-}
-
-export async function updateTaggerSettings(settings: Partial<TaggerSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/tagger', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(settings),
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.tagger.update')
-  }
-
-  return response.data
-}
-
-export async function getTaggerModels() {
-  const response = await fetchJson<ApiResponse<TaggerModelInfo[]>>('/api/settings/tagger/models')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.taggerModels.load')
-  }
-  return response.data
-}
-
-export async function getTaggerStatus() {
-  const response = await fetchJson<ApiResponse<TaggerServerStatus>>('/api/settings/tagger/status')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.taggerStatus.load')
-  }
-  return response.data
-}
-
-export async function checkTaggerDependencies() {
-  const response = await fetchJson<ApiResponse<TaggerDependencyCheckResult>>('/api/settings/tagger/check-dependencies', {
-    method: 'POST',
-  })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.taggerDependencies.check')
-  }
-  return response.data
-}
-
-export async function updateKaloscopeSettings(settings: Partial<KaloscopeSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/kaloscope', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(settings),
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.kaloscope.update')
-  }
-
-  return response.data
-}
-
 export async function getRatingWeights() {
   const response = await fetchJson<ApiResponse<RatingWeightsRecord>>('/api/settings/rating/weights')
   if (!response.success || !response.data) {
@@ -524,14 +302,6 @@ export async function updateRatingTiers(tiers: RatingTierUpdateInput[]) {
   return response.data
 }
 
-export async function getKaloscopeStatus() {
-  const response = await fetchJson<ApiResponse<KaloscopeServerStatus>>('/api/settings/kaloscope/status')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.kaloscopeStatus.load')
-  }
-  return response.data
-}
-
 export async function resolveAutoTestMedia(imageId: string) {
   const response = await fetchJson<ApiResponse<AutoTestMediaRecord>>(`/api/settings/auto-test/media/${encodeURIComponent(imageId)}`)
   if (!response.success) {
@@ -544,34 +314,6 @@ export async function getRandomAutoTestMedia() {
   const response = await fetchJson<ApiResponse<AutoTestMediaRecord>>('/api/settings/auto-test/random')
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.autoTestMedia.random')
-  }
-  return response.data
-}
-
-export async function runTaggerAutoTest(imageId: string) {
-  const response = await fetchJson<ApiResponse<AutoTestTaggerResult>>('/api/settings/tagger/test', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ imageId }),
-  })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.taggerAutoTest.run')
-  }
-  return response.data
-}
-
-export async function runKaloscopeAutoTest(imageId: string) {
-  const response = await fetchJson<ApiResponse<AutoTestKaloscopeResult>>('/api/settings/kaloscope/test', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ imageId }),
-  })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.kaloscopeAutoTest.run')
   }
   return response.data
 }

@@ -11,10 +11,11 @@ import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { registerTranslationCatalog, useI18n } from '@/i18n'
-import { getPublicHeaderNavigationSettings } from '@/lib/api-settings'
+import { getPublicHeaderNavigationSettings } from '@/lib/api-settings-general'
 import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
-import { DEFAULT_HEADER_NAVIGATION_SETTINGS, type HeaderNavigationItemKey } from '@/types/settings'
+import type { HeaderNavigationItemKey } from '@conai/shared'
+import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
 
 const GenerationQueueHeaderWidgetLazy = lazy(async () => {

@@ -5,7 +5,7 @@ import { useGroupPreviewImage } from '@/features/groups/hooks/use-group-preview-
 import { useI18n } from '@/i18n'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
-import type { GroupExplorerCardStyle } from '@/types/settings'
+import type { GroupExplorerCardStyle } from '@conai/shared'
 
 interface GroupChildCardProps {
   group: GroupWithHierarchy

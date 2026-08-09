@@ -6,7 +6,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import { calculateImageSaveOutputSize, resolveImageSaveFormat, type ImageSaveSourceInfo } from '@/lib/image-save-output'
-import type { ImageSaveSettings } from '@/types/settings'
+import type { ImageSaveSettings } from '@conai/shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface ImageSaveOptionsModalProps {

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
-import type { VideoOptimizationSettings } from '../types/settings';
+import type { VideoOptimizationSettings } from '@conai/shared';
 
 export type VideoOptimizationRunOptions = Pick<VideoOptimizationSettings, 'crf' | 'audioBitrateKbps'> & {
   logLabel?: string;

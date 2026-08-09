@@ -15,7 +15,7 @@ import {
   type ExternalApiProviderRecord,
   type ExternalApiProviderType,
 } from '@/lib/api-external-api'
-import type { LlmPresetRecord } from '@/types/settings'
+import type { LlmPresetRecord } from '@conai/shared'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { SettingsModal } from './settings-modal'

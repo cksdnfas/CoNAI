@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { extractAppearanceTheme, resolveAppearanceColors, resolveSurfacePalette } from '@/lib/appearance'
 import { cn } from '@/lib/utils'
-import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
+import type { AppearancePresetSlot, AppearanceSettings } from '@conai/shared'
 import { areThemeSettingsEqual, formatSlotTimestamp } from './appearance-tab.utils'
 
 interface AppearanceTabSlotSectionProps {

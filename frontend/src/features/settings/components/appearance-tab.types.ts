@@ -1,4 +1,4 @@
-import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
+import type { AppearancePresetSlot, AppearanceSettings } from '@conai/shared'
 
 export interface AppearanceTabProps {
   appearanceDraft: AppearanceSettings | null

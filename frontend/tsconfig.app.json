@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@conai/shared": ["../shared/src/index.ts"]
     },
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,

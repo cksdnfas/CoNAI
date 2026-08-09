@@ -1,4 +1,11 @@
-export type WallpaperWidgetType = 'clock' | 'queue-status' | 'recent-results' | 'activity-pulse' | 'group-image-view' | 'image-showcase' | 'floating-collage' | 'text-note'
+import {
+  WALLPAPER_WIDGET_TYPES,
+  type WallpaperWidgetType,
+  type WallpaperLayoutPreset as WallpaperLayoutPresetWire,
+  type WallpaperWidgetInstance as WallpaperWidgetInstanceWire,
+} from '@conai/shared'
+
+export type { WallpaperWidgetType }
 
 export interface WallpaperCanvasPreset {
   id: string
@@ -37,17 +44,11 @@ export interface WallpaperBaseWidgetSettings {
 }
 
 export type WallpaperImageTransitionStyle = 'none' | 'fade' | 'zoom' | 'slide' | 'blur' | 'flip' | 'shuffle'
-
 export type WallpaperImageTransitionSpeed = 'fast' | 'normal' | 'slow'
-
 export type WallpaperAnimationEasingPreset = 'linear' | 'easeInOutSine' | 'easeOutCubic' | 'easeInOutCubic' | 'easeOutExpo' | 'easeOutBack' | 'easeOutBounce'
-
 export type WallpaperAnimationEasing = WallpaperAnimationEasingPreset | `cubic-bezier(${string})` | `linear(${string})`
-
 export type WallpaperImageHoverMotion = number
-
 export type WallpaperFloatingCollageSwapMode = 'time' | 'bounce'
-
 export type WallpaperClockVisualStyle = 'clean' | 'glass' | 'editorial' | 'minimal' | 'glow' | 'split'
 
 export interface WallpaperClockWidgetSettings extends WallpaperBaseWidgetSettings {
@@ -157,15 +158,9 @@ interface WallpaperWidgetDefinitionBase<T extends WallpaperWidgetType> {
   defaultSettings: WallpaperWidgetSettingsMap[T]
 }
 
-export type WallpaperWidgetDefinition =
-  | WallpaperWidgetDefinitionBase<'clock'>
-  | WallpaperWidgetDefinitionBase<'queue-status'>
-  | WallpaperWidgetDefinitionBase<'recent-results'>
-  | WallpaperWidgetDefinitionBase<'activity-pulse'>
-  | WallpaperWidgetDefinitionBase<'group-image-view'>
-  | WallpaperWidgetDefinitionBase<'image-showcase'>
-  | WallpaperWidgetDefinitionBase<'floating-collage'>
-  | WallpaperWidgetDefinitionBase<'text-note'>
+export type WallpaperWidgetDefinition = {
+  [T in WallpaperWidgetType]: WallpaperWidgetDefinitionBase<T>
+}[WallpaperWidgetType]
 
 interface WallpaperWidgetInstanceBase<T extends WallpaperWidgetType> extends WallpaperWidgetFrame {
   id: string
@@ -176,15 +171,9 @@ interface WallpaperWidgetInstanceBase<T extends WallpaperWidgetType> extends Wal
   settings: WallpaperWidgetSettingsMap[T]
 }
 
-export type WallpaperWidgetInstance =
-  | WallpaperWidgetInstanceBase<'clock'>
-  | WallpaperWidgetInstanceBase<'queue-status'>
-  | WallpaperWidgetInstanceBase<'recent-results'>
-  | WallpaperWidgetInstanceBase<'activity-pulse'>
-  | WallpaperWidgetInstanceBase<'group-image-view'>
-  | WallpaperWidgetInstanceBase<'image-showcase'>
-  | WallpaperWidgetInstanceBase<'floating-collage'>
-  | WallpaperWidgetInstanceBase<'text-note'>
+export type WallpaperWidgetInstance = {
+  [T in WallpaperWidgetType]: WallpaperWidgetInstanceBase<T>
+}[WallpaperWidgetType]
 
 export type WallpaperGroupSourceWidgetInstance =
   | Extract<WallpaperWidgetInstance, { type: 'group-image-view' }>
@@ -206,4 +195,54 @@ export interface WallpaperLayoutPreset {
   widgets: WallpaperWidgetInstance[]
   createdAt: string
   updatedAt: string
+  /** Wire widgets unknown to this frontend build; hidden in the editor but preserved on save. */
+  unsupportedWidgets?: WallpaperWidgetInstanceWire[]
+}
+
+const WALLPAPER_WIDGET_TYPE_SET = new Set<string>(WALLPAPER_WIDGET_TYPES)
+
+function toWallpaperWidgetViewModel(widget: WallpaperWidgetInstanceWire): WallpaperWidgetInstance | null {
+  if (!WALLPAPER_WIDGET_TYPE_SET.has(widget.type)) {
+    return null
+  }
+
+  return {
+    ...widget,
+    settings: { ...widget.settings },
+  } as unknown as WallpaperWidgetInstance
+}
+
+/** Narrow the intentionally loose API wire records at the wallpaper UI boundary. */
+export function toWallpaperLayoutPresetViewModels(presets: readonly WallpaperLayoutPresetWire[]): WallpaperLayoutPreset[] {
+  return presets.map((preset) => {
+    const widgets: WallpaperWidgetInstance[] = []
+    const unsupportedWidgets: WallpaperWidgetInstanceWire[] = []
+    for (const widget of preset.widgets) {
+      const viewModel = toWallpaperWidgetViewModel(widget)
+      if (viewModel) {
+        widgets.push(viewModel)
+      } else {
+        unsupportedWidgets.push({ ...widget, settings: { ...widget.settings } })
+      }
+    }
+    return {
+      ...preset,
+      widgets,
+      ...(unsupportedWidgets.length > 0 ? { unsupportedWidgets } : {}),
+    }
+  })
+}
+
+/** Serialize the detailed editor view model without constraining backend-owned record fields. */
+export function toWallpaperLayoutPresetWireModels(presets: readonly WallpaperLayoutPreset[]): WallpaperLayoutPresetWire[] {
+  return presets.map(({ unsupportedWidgets = [], ...preset }) => ({
+    ...preset,
+    widgets: [
+      ...preset.widgets.map((widget) => ({
+        ...widget,
+        settings: { ...widget.settings } as Record<string, unknown>,
+      })),
+      ...unsupportedWidgets.map((widget) => ({ ...widget, settings: { ...widget.settings } })),
+    ],
+  }))
 }

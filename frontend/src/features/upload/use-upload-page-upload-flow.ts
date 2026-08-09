@@ -2,14 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState, type ChangeEvent } from 'react'
 import { useI18n } from '@/i18n'
 import { uploadMultipleImages, type UploadBatchResult, type UploadTransferProgress } from '@/lib/api-images'
-import { getAppSettings } from '@/lib/api-settings'
+import { getAppSettings } from '@/lib/api-settings-general'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   loadImageSaveSourceInfo,
   shouldBypassImageSaveProcessing,
   type ImageSaveSourceInfo,
 } from '@/lib/image-save-output'
-import type { ImageSaveSettings } from '@/types/settings'
+import type { ImageSaveSettings } from '@conai/shared'
 import { getUploadFileTotalSize } from './upload-file-summary'
 
 export type PendingUploadSaveState = {

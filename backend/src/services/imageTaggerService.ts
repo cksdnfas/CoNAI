@@ -1,12 +1,13 @@
-import { taggerDaemon, TaggerResult, TaggerServerStatus } from './taggerDaemon';
+import { taggerDaemon, type TaggerResult } from './taggerDaemon';
 import { logger } from '../utils/logger';
-import { TaggerDevice, TaggerModel } from '../types/settings';
+import type { TaggerDevice, TaggerModel, TaggerServerStatus } from '@conai/shared';
 import { VideoFrameExtractor } from './videoFrameExtractor';
 import { TagMergeService } from './tagMergeService';
 import path from 'path';
 
-// Re-export types from taggerDaemon
-export type { TaggerResult, TaggerServerStatus } from './taggerDaemon';
+// Re-export the daemon result and canonical wire status contracts.
+export type { TaggerResult } from './taggerDaemon';
+export type { TaggerServerStatus } from '@conai/shared';
 
 /**
  * ImageTaggerService - High-level interface for image and video tagging

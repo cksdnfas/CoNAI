@@ -11,7 +11,7 @@ import type {
   AppearanceSettings,
   AppearanceThemeSettings,
   WallpaperWidgetType,
-} from '../../types/settings'
+} from '@conai/shared'
 
 const router = Router()
 const validAppearanceModes = ['system', 'dark', 'light']

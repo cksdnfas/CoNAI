@@ -1,5 +1,5 @@
 import { readBlobAsDataUrl } from './file-data-url'
-import type { ImageSaveFormat, ImageSaveSettings } from '@/types/settings'
+import type { ImageSaveFormat, ImageSaveSettings } from '@conai/shared'
 
 export const DEFAULT_IMAGE_SAVE_SETTINGS: ImageSaveSettings = {
   defaultFormat: 'webp',

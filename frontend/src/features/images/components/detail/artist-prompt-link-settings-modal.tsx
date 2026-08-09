@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
-import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/types/settings'
+import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
 
 interface ArtistPromptLinkSettingsModalProps {
   open: boolean

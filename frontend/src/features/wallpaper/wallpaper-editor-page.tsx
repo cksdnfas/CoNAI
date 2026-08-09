@@ -8,7 +8,8 @@ import { Select } from '@/components/ui/select'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { useI18n } from '@/i18n'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
-import { getAppSettings, updateAppearanceSettings } from '@/lib/api-settings'
+import { getAppSettings } from '@/lib/api-settings-general'
+import { updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
 import {
@@ -34,7 +35,13 @@ import {
 } from './wallpaper-layout-utils'
 import { WallpaperCanvasView } from './wallpaper-shared'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
-import type { WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from './wallpaper-types'
+import {
+  toWallpaperLayoutPresetViewModels,
+  toWallpaperLayoutPresetWireModels,
+  type WallpaperLayoutPreset,
+  type WallpaperWidgetInstance,
+  type WallpaperWidgetType,
+} from './wallpaper-types'
 import { WallpaperWidgetInspector } from './wallpaper-widget-inspector'
 import { WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
 import { WallpaperLivelyHelpModal } from './wallpaper-lively-help-modal'
@@ -117,7 +124,10 @@ export function WallpaperEditorPage() {
 
   const wallpaperPresetMutation = useMutation({
     mutationFn: ({ wallpaperLayoutPresets, wallpaperActivePresetId }: { wallpaperLayoutPresets: WallpaperLayoutPreset[]; wallpaperActivePresetId: string | null }) => (
-      updateAppearanceSettings({ wallpaperLayoutPresets, wallpaperActivePresetId })
+      updateAppearanceSettings({
+        wallpaperLayoutPresets: toWallpaperLayoutPresetWireModels(wallpaperLayoutPresets),
+        wallpaperActivePresetId,
+      })
     ),
   })
 
@@ -168,7 +178,7 @@ export function WallpaperEditorPage() {
     }
 
     hasHydratedServerPresetsRef.current = true
-    const serverPresets = wallpaperSettingsQuery.data.appearance.wallpaperLayoutPresets
+    const serverPresets = toWallpaperLayoutPresetViewModels(wallpaperSettingsQuery.data.appearance.wallpaperLayoutPresets)
     const serverActivePresetId = wallpaperSettingsQuery.data.appearance.wallpaperActivePresetId
 
     if (serverPresets.length === 0 && serverActivePresetId === null) {
@@ -195,7 +205,7 @@ export function WallpaperEditorPage() {
       },
       {
         onSuccess: (settings) => {
-          setSavedPresets(settings.appearance.wallpaperLayoutPresets)
+          setSavedPresets(toWallpaperLayoutPresetViewModels(settings.appearance.wallpaperLayoutPresets))
           setActivePresetId(settings.appearance.wallpaperActivePresetId)
           if (successMessage) {
             notifyInfo(successMessage)

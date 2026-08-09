@@ -1,6 +1,6 @@
 import { normalizeAppearanceSettings } from '@/lib/appearance'
-import type { AppearanceSettings, AppearanceThemeSettings } from '@/types/settings'
-import type { AppearanceFontUploadResult } from '@/lib/api-settings'
+import type { AppearanceSettings, AppearanceThemeSettings } from '@conai/shared'
+import type { AppearanceFontUploadResult } from '@/lib/api-settings-appearance'
 
 export interface AppearancePackageFontAsset {
   target: 'sans' | 'mono'

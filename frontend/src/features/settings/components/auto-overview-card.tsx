@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
-import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@/types/settings'
+import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@conai/shared'
 import { SettingsSection, SettingsValueTile } from './settings-primitives'
 import { useI18n, type TranslationInput } from '@/i18n'
 

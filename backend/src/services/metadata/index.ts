@@ -244,7 +244,7 @@ export class MetadataExtractor {
   private static async secondaryExtraction(
     buffer: Buffer,
     existingAiInfo: AIMetadata,
-    scanMode: import('../../types/settings').StealthScanMode = 'fast'
+    scanMode: import('@conai/shared').StealthScanMode = 'fast'
   ): Promise<AIMetadata> {
     try {
       logger.debug(`🔍 [secondaryExtraction] Starting Stealth PNG Info extraction (mode: ${scanMode})...`);

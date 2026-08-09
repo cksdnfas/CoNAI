@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import type { AppearanceSettings, AppearanceThemeSettings } from '../types/settings'
+import type { AppearanceSettings, AppearanceThemeSettings } from '@conai/shared'
 import { runtimePaths, publicUrls } from '../config/runtimePaths'
 
 const appearanceFontDir = path.join(runtimePaths.uploadsDir, 'theme-fonts')

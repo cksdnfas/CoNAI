@@ -12,7 +12,7 @@ import {
 } from '../routeValidation';
 import { BackgroundQueueService } from '../../services/backgroundQueue';
 import { settingsService } from '../../services/settingsService';
-import { GenerationThrottleSettings, ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings, VideoOptimizationSettings } from '../../types/settings';
+import { GenerationThrottleSettings, ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared';
 
 const router = Router();
 

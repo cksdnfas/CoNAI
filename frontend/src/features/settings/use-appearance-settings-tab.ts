@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import {
-  updateAppearanceSettings,
-  uploadAppearanceFont,
-} from '@/lib/api-settings'
+import { updateAppearanceSettings, uploadAppearanceFont } from '@/lib/api-settings-appearance'
 import { DEFAULT_APPEARANCE_SETTINGS, applyAppearanceTheme, extractAppearanceTheme } from '@/lib/appearance'
 import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearance-package'
 import type { AppearanceTabProps } from './components/appearance-tab.types'
-import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
+import type { AppearancePresetSlot, AppearanceSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 
 interface UseAppearanceSettingsTabOptions {

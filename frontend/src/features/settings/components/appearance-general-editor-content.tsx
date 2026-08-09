@@ -1,6 +1,6 @@
 import { Select } from '@/components/ui/select'
 import { DENSITY_PRESETS, FONT_PRESETS, GLASS_PRESETS, RADIUS_PRESETS, SHADOW_PRESETS } from '@/lib/appearance'
-import type { AppearanceSettings } from '@/types/settings'
+import type { AppearanceSettings } from '@conai/shared'
 import {
   type AppearanceTabEditorSectionProps,
   EditorSectionLead,

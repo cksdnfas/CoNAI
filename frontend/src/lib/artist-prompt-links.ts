@@ -1,4 +1,4 @@
-import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/types/settings'
+import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
 
 export function normalizeArtistLinkUrlTemplate(template: string | null | undefined) {
   const normalized = template?.trim()

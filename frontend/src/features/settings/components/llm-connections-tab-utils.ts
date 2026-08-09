@@ -1,7 +1,7 @@
 import { normalizeOptionalString } from '@/lib/primitive-normalizers'
 import type { ExternalApiProviderRecord, ExternalApiProviderType } from '@/lib/api-external-api'
 import type { TranslationDictionary } from '@/i18n'
-import type { LlmPresetRecord, LlmSettings } from '@/types/settings'
+import type { LlmPresetRecord, LlmSettings } from '@conai/shared'
 
 export type LlmConnectionDraft = {
   providerName: string

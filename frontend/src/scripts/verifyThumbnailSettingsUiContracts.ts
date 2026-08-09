@@ -1,11 +1,12 @@
 import * as assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import verifyHelpers from '../../../scripts/verify-helpers';
 
-const root = resolve(process.cwd(), 'src');
-const apiSettings = readFileSync(resolve(root, 'lib/api-settings.ts'), 'utf8');
-const settingsPage = readFileSync(resolve(root, 'features/settings/settings-page.tsx'), 'utf8');
-const imageSaveTab = readFileSync(resolve(root, 'features/settings/components/image-save-tab.tsx'), 'utf8');
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers;
+
+const source = createSourceReader(new URL('../', import.meta.url));
+const apiSettings = source('lib/api-settings.ts');
+const settingsPage = source('features/settings/settings-page.tsx');
+const imageSaveTab = source('features/settings/components/image-save-tab.tsx');
 
 assert.ok(apiSettings.includes('ThumbnailSettings'), 'ThumbnailSettings type must be imported in api-settings');
 assert.ok(apiSettings.includes('updateThumbnailSettings'), 'updateThumbnailSettings helper missing');
@@ -36,4 +37,4 @@ for (const option of ['original', '2048', '1080', '720', '512']) {
 assert.match(imageSaveTab, /min=\{60\}[\s\S]*max=\{100\}[\s\S]*value=\{thumbnailDraft\.quality\}/, 'thumbnail quality input must use backend 60-100 range');
 assert.ok(imageSaveTab.includes('기존 썸네일은 재생성'), 'UI must warn that existing thumbnails need regeneration');
 
-console.log('✅ Thumbnail settings UI contracts verified');
+reportVerificationSuccess('✅ Thumbnail settings UI contracts verified');

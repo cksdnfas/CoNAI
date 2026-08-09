@@ -9,7 +9,7 @@
 import sharp from 'sharp';
 import zlib from 'zlib';
 import { StealthPngSignature } from '../types';
-import type { StealthScanMode } from '../../../types/settings';
+import type { StealthScanMode } from '@conai/shared';
 
 export class StealthPngExtractor {
   private static readonly SIGNATURES = {

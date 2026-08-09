@@ -14,7 +14,7 @@ import {
 } from '@/lib/api-groups'
 import type { GroupBreadcrumbItem, GroupFileCounts, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
-import type { GroupExplorerCardStyle } from '@/types/settings'
+import type { GroupExplorerCardStyle } from '@conai/shared'
 
 export const groupSources = {
   custom: {

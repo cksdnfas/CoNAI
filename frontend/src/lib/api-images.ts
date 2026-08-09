@@ -3,9 +3,10 @@ import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { getDownloadFileName, readDownloadBlob } from '@/lib/download-utils'
 import { requestApiData } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
-import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
+import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@conai/shared'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
-import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from './api-settings'
+import type { AutoTestKaloscopeResult } from './api-settings-kaloscope'
+import type { AutoTestTaggerResult } from './api-settings-tagger'
 
 interface ComplexImageSearchRequest {
   complex_filter: {

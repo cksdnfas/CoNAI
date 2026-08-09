@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { getExistingImageEditorSourceUrl, saveEditedImageToCanvas } from '@/lib/api-images'
-import { getAppSettings } from '@/lib/api-settings'
+import { getAppSettings } from '@/lib/api-settings-general'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   buildImageSaveOutput,
@@ -14,7 +14,7 @@ import {
   type ImageSaveSourceInfo,
 } from '@/lib/image-save-output'
 import type { ImageRecord } from '@/types/image'
-import type { ImageSaveSettings } from '@/types/settings'
+import type { ImageSaveSettings } from '@conai/shared'
 
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 

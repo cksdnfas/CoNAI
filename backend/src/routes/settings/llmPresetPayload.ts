@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { LlmPresetRecord } from '../../types/settings';
+import type { LlmPresetRecord } from '@conai/shared';
 
 function normalizeOptionalText(value: unknown) {
   return typeof value === 'string' ? value : '';

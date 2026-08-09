@@ -5,7 +5,7 @@ import { ChildProcess, spawn } from 'child_process';
 import { runtimePaths } from '../config/runtimePaths';
 import { settingsService } from './settingsService';
 import { KaloscopeResult } from './autoTagsComposeService';
-import { KaloscopeServerStatus, KaloscopeSettings } from '../types/settings';
+import { KaloscopeServerStatus, KaloscopeSettings } from '@conai/shared';
 import { VideoFrameExtractor } from './videoFrameExtractor';
 
 interface KaloscopeServiceOptions {

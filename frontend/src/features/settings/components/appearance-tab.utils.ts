@@ -1,5 +1,5 @@
 import { DEFAULT_APPEARANCE_SETTINGS, extractAppearanceTheme, resolveCustomSurfaceToneColors } from '@/lib/appearance'
-import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
+import type { AppearancePresetSlot, AppearanceSettings } from '@conai/shared'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
 
 export function isHexColor(value: string) {

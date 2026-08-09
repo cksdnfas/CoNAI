@@ -10,7 +10,7 @@ import type {
   TaggerSettings,
   ThumbnailSettings,
   VideoOptimizationSettings,
-} from '../types/settings';
+} from '@conai/shared';
 
 /** Build the next settings state after applying a general-settings patch. */
 export function applyGeneralSettingsUpdate(currentSettings: AppSettings, generalSettings: Partial<GeneralSettings>): AppSettings {

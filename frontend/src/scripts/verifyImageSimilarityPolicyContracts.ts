@@ -15,21 +15,19 @@ function verifyPolicyHelper() {
 }
 
 function verifyStaticContracts() {
-  const generalTab = source('src/features/settings/components/general-tab.tsx')
+  const generalTab = source('src/features/settings/components/general-preferences-sections.tsx')
   const imageDetailView = source('src/features/images/image-detail-view.tsx')
   const imageDetailSimilaritySection = source('src/features/images/components/detail/image-detail-similarity-section.tsx')
   const relatedImageGallerySection = source('src/features/images/components/detail/related-image-gallery-section.tsx')
   const apiImages = source('src/lib/api-images.ts')
   const apiSettings = source('src/lib/api-settings.ts')
   const scoreOverlay = source('src/features/images/components/detail/similarity-score-overlay.tsx')
-  const settingsTypes = source('src/types/settings.ts')
-  const backendSettingsTypes = source('../backend/src/types/settings.ts')
+  const settingsTypes = source('../shared/src/types/settings.ts')
   const backendDefaults = source('../backend/src/services/settingsServiceStorage.ts')
-  const backendSettingsRoutes = source('../backend/src/routes/settings.ts')
+  const backendSettingsRoutes = source('../backend/src/routes/settings/general-settings.routes.ts')
 
 
-  match(settingsTypes, /export type ImageSimilarityCheckMode = 'manual' \| 'always'/, 'frontend settings type should expose manual/always modes')
-  match(backendSettingsTypes, /export type ImageSimilarityCheckMode = 'manual' \| 'always'/, 'backend settings type should expose manual/always modes')
+  match(settingsTypes, /export type ImageSimilarityCheckMode = 'manual' \| 'always'/, 'shared settings type should expose manual/always modes')
   match(backendDefaults, /imageSimilarityCheckMode: 'manual'/, 'default settings should keep expensive checks manual')
   match(backendSettingsRoutes, /validImageSimilarityCheckModes[\s\S]*\['manual', 'always'\]/, 'settings route should validate policy modes')
   match(generalTab, /유사\/중복 검사/, 'general settings tab should label the policy in Korean')
@@ -45,7 +43,7 @@ function verifyStaticContracts() {
   match(imageDetailView, /queryFn: \(\{ signal \}\) => getPromptSimilarImages\(compositeHash, promptSimilarLimit, \{ signal \}\)/, 'prompt similarity query should consume React Query abort signals')
   match(imageDetailView, /isSimilarityInspectionRequested \? \(/, 'detail view should hide heavy result sections until requested or auto policy allows')
   match(imageDetailView, /const renderDuplicateImageOverlay = useCallback\(\(duplicateImage: ImageRecord\): ReactNode => \{[\s\S]*?duplicateImageItemByHash\.get\(compositeHash\)[\s\S]*?\}, \[duplicateImageItemByHash\]\)/, 'duplicate image score overlay renderer should stay stable while the result map is unchanged')
-  match(imageDetailView, /const refreshImage = useCallback\(\(\) => \{[\s\S]*?imageQuery\.refetch\(\)[\s\S]*?\}, \[imageQuery\.refetch\]\)/, 'detail refresh callback should not depend on the whole query result object')
+  match(imageDetailView, /const refetchImage = imageQuery\.refetch[\s\S]*?const refreshImage = useCallback\(\(\) => \{[\s\S]*?refetchImage\(\)[\s\S]*?\}, \[refetchImage\]\)/, 'detail refresh callback should not depend on the whole query result object')
   match(imageDetailView, /const headerControls = useMemo<ImageDetailViewHeaderControls>\(\(\) => \(\{[\s\S]*?refresh: refreshImage[\s\S]*?\}\), \[downloadName, downloadUrl, image, imageQuery\.isFetching, refreshImage\]\)/, 'detail header controls should keep a stable object while displayed header inputs are unchanged')
   match(relatedImageGallerySection, /const handleActivate = useCallback\(\(_image: ImageRecord, imageId: string, href\?: string\) => \{[\s\S]*?imageViewModal\.openImageView[\s\S]*?navigate\(href\)[\s\S]*?\}, \[activationMode, imageViewModal, itemCompositeHashes, navigate\]\)/, 'related image gallery should keep one stable activation callback for modal and route launches')
   match(relatedImageGallerySection, /const gridStyle = useMemo\([\s\S]*?--related-image-grid-columns-base[\s\S]*?\[resolvedMobileCardColumns, resolvedDesktopCardColumns\]/, 'related image gallery should memoize responsive grid style objects for large result lists')

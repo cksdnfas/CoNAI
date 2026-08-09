@@ -18,7 +18,7 @@ import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
 import { listGenerationSaveImages } from '@/lib/api-image-generation-history'
 import type { SaveBrowserImageRecord } from '@/lib/api-image-generation-types'
 import { getImages } from '@/lib/api-images'
-import { getAppSettings } from '@/lib/api-settings'
+import { getAppSettings } from '@/lib/api-settings-general'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   buildImageSaveOutput,
@@ -28,7 +28,7 @@ import {
   type ImageSaveSourceInfo,
 } from '@/lib/image-save-output'
 import type { ImageRecord } from '@/types/image'
-import type { ImageSaveSettings } from '@/types/settings'
+import type { ImageSaveSettings } from '@conai/shared'
 import {
   buildSelectedImageDraftFromDataUrl,
   readFileAsDataUrl,

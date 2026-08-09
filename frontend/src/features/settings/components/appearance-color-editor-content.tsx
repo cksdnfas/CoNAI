@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import { APPEARANCE_PRESETS, DEFAULT_APPEARANCE_SETTINGS, SURFACE_PRESETS, resolveCustomSurfaceToneColors } from '@/lib/appearance'
-import type { AppearanceSettings } from '@/types/settings'
+import type { AppearanceSettings } from '@conai/shared'
 import {
   type AppearanceTabEditorSectionProps,
   AppearanceColorControl,
