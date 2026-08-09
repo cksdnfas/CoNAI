@@ -4,7 +4,8 @@
 
 ## 최신 문서
 
-- [최신 안정 릴리즈 26.8.6](./RELEASE_26.8.6.md)
+- [최신 안정 릴리즈 26.8.9](./RELEASE_26.8.9.md)
+- [이전 안정 릴리즈 26.8.6](./RELEASE_26.8.6.md)
 - [26.6.19 workflow-media-alpha-operations 작업 노트](./RELEASE_26.6.19.md)
 - [26.6.17 feature-refactor-followup 작업 노트](./RELEASE_26.6.17.md)
 - [26.6.8 workflow-media-operations 작업 노트](./RELEASE_26.6.8.md)

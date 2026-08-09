@@ -58,9 +58,11 @@
     <ul class="feature-list dense">
       <li>NAI 기반 이미지 생성</li>
       <li>ComfyUI 기반 이미지 생성</li>
+      <li>MiniMax H3 Director 타임라인과 프롬프트 구성</li>
       <li>Codex 기반 이미지 생성</li>
       <li>와일드카드 조합 생성</li>
       <li>생성 이력과 예약 큐 관리</li>
+      <li>노드별 실시간 진행률과 큐 상태 확인</li>
       <li>재사용 가능한 워크플로우 구성</li>
       <li>워크플로우 실행 결과와 산출물 관리</li>
     </ul>
