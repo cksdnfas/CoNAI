@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import verifyHelpers from '../../../scripts/verify-helpers'
+
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+const source = createSourceReader(process.cwd())
 
 async function main() {
   const tempBasePath = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-result-retention-'))
@@ -15,7 +19,8 @@ async function main() {
     const mainDatabase = await import('../database/init')
     const userSettings = await import('../database/userSettingsDb')
     const { initializeApiGenerationDb } = await import('../database/apiGenerationDb')
-    const { GenerationHistoryModel } = await import('../models/GenerationHistory')
+    const { HistoryQueryRepository } = await import('../repositories/history/HistoryQueryRepository')
+    const { HistoryCommandService } = await import('../services/historyCommandService')
     const {
       pruneGenerationResultRetention,
       pruneGenerationResultRetentionBatch,
@@ -25,10 +30,10 @@ async function main() {
       findGraphWorkflowRetentionOverflowArtifactIds,
       pruneGraphWorkflowOutputRetention,
     } = await import('../services/graphWorkflowOutputRetentionService')
-    const graphWorkflowExecutorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/graphWorkflowExecutor.ts'), 'utf8')
-    const graphWorkflowRetentionScannerSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/graphWorkflowRetentionScanner.ts'), 'utf8')
-    const generationHistoryModelSource = fs.readFileSync(path.resolve(process.cwd(), 'src/models/GenerationHistory.ts'), 'utf8')
-    const generationHistoryRetentionSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationResultRetentionService.ts'), 'utf8')
+    const graphWorkflowExecutorSource = source('src/services/graphWorkflowExecutor.ts')
+    const graphWorkflowRetentionScannerSource = source('src/services/graphWorkflowRetentionScanner.ts')
+    const historyCommandServiceSource = source('src/services/historyCommandService.ts')
+    const generationHistoryRetentionSource = source('src/services/generationResultRetentionService.ts')
 
     closeUserSettingsDb = userSettings.closeUserSettingsDb
     closeMainDatabase = mainDatabase.closeDatabase
@@ -72,24 +77,24 @@ async function main() {
 
     const historyIds: number[] = []
     for (let index = 0; index < 4; index += 1) {
-      historyIds.push(GenerationHistoryModel.create({
+      historyIds.push(HistoryCommandService.create({
         service_type: 'codex',
         generation_status: 'completed',
         nai_model: 'codex',
         completed_at: `2026-05-29T00:0${index}:00.000Z`,
       }))
     }
-    const pendingHistoryId = GenerationHistoryModel.create({
+    const pendingHistoryId = HistoryCommandService.create({
       service_type: 'codex',
       generation_status: 'pending',
       nai_model: 'codex',
     })
-    const failedHistoryId = GenerationHistoryModel.create({
+    const failedHistoryId = HistoryCommandService.create({
       service_type: 'codex',
       generation_status: 'failed',
       nai_model: 'codex',
     })
-    GenerationHistoryModel.updateImagePaths(historyIds[0], { compositeHash: retainedMediaHash })
+    HistoryCommandService.updateImagePaths(historyIds[0], { compositeHash: retainedMediaHash })
 
     const firstHistoryRetentionBatch = pruneGenerationResultRetentionBatch(2, 2)
     assert.equal(firstHistoryRetentionBatch.deleted_count, 2)
@@ -97,9 +102,9 @@ async function main() {
     const historyRetention = await pruneGenerationResultRetention(2)
     assert.equal(historyRetention.deleted_count, 2)
     assert.equal(historyRetention.remaining_overflow_count, 0)
-    historyIds.forEach((historyId) => assert.equal(GenerationHistoryModel.findById(historyId), null))
-    assert.notEqual(GenerationHistoryModel.findById(pendingHistoryId), null)
-    assert.notEqual(GenerationHistoryModel.findById(failedHistoryId), null)
+    historyIds.forEach((historyId) => assert.equal(HistoryQueryRepository.findById(historyId), null))
+    assert.notEqual(HistoryQueryRepository.findById(pendingHistoryId), null)
+    assert.notEqual(HistoryQueryRepository.findById(failedHistoryId), null)
     assert.equal(fs.existsSync(retainedMediaPath), true, 'history retention must not delete generated media files')
     assert.equal(
       (mediaDb.prepare('SELECT COUNT(*) as total FROM media_metadata WHERE composite_hash = ?').get(retainedMediaHash) as { total: number }).total,
@@ -122,13 +127,13 @@ async function main() {
       'history retention must not include generated-media deletion paths',
     )
     assert.match(
-      generationHistoryModelSource,
-      /static updateStatus[\s\S]*?requestGenerationResultRetentionPrune\(\)[\s\S]*?static updateImagePaths/,
+      historyCommandServiceSource,
+      /static updateStatus[\s\S]*?requestRetention: status === 'completed' \|\| status === 'failed'[\s\S]*?static updateImagePaths/,
       'terminal status updates should request the shared retention pass',
     )
     assert.match(
-      generationHistoryModelSource,
-      /static recordError[\s\S]*?requestGenerationResultRetentionPrune\(\)[\s\S]*?static recordErrorByQueueJobIds/,
+      historyCommandServiceSource,
+      /static recordError[\s\S]*?requestRetention: true[\s\S]*?static recordErrorByQueueJobIds/,
       'failed histories should request the same retention pass',
     )
 
@@ -274,7 +279,7 @@ async function main() {
       'graph workflow retention must not load all workflow artifacts at once',
     )
 
-    console.log('✅ Result retention contracts verified (generation history, graph outputs, text artifacts)')
+    reportVerificationSuccess('✅ Result retention contracts verified (generation history, graph outputs, text artifacts)')
   } finally {
     try {
       closeUserSettingsDb?.()

@@ -1,55 +1,35 @@
 import { doesNotMatch, match } from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import verifyHelpers from '../../../scripts/verify-helpers'
 import { getGenerationHistoryFeedProgressSummary } from '../features/image-generation/generation-history-feed-progress'
 import { getImageListPreviewUrl } from '../features/images/components/image-list/image-list-utils'
 import { getImageDetailQueryKey, getImageDetailRequestUrl } from '../lib/api-images'
 
-const generationHistoryPanelSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel.tsx'),
-  'utf8',
-)
-const lazyRoutesSource = readFileSync(
-  resolve(process.cwd(), 'src/app/lazy-routes.tsx'),
-  'utf8',
-)
-const generationHistoryPanelHelpersSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel-helpers.ts'),
-  'utf8',
-)
-const generationHistoryRetryActionsSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/components/generation-history-retry-actions.ts'),
-  'utf8',
-)
-const generationHistoryStatusSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/generation-history-status.ts'),
-  'utf8',
-)
-const generationHistoryRouteHelpersSource = readFileSync(
-  resolve(process.cwd(), '../backend/src/routes/generation-history/historyRouteHelpers.ts'),
-  'utf8',
-)
-const generationHistoryModelSource = readFileSync(
-  resolve(process.cwd(), '../backend/src/models/GenerationHistory.ts'),
-  'utf8',
-)
-const backendSettingsTypesSource = readFileSync(resolve(process.cwd(), '../backend/src/types/settings.ts'), 'utf8')
-const backendSettingsDefaultsSource = readFileSync(resolve(process.cwd(), '../backend/src/services/settingsServiceStorage.ts'), 'utf8')
-const backendSettingsRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/settings.ts'), 'utf8')
-const runtimeMediaSettingsRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/runtime-media-settings.routes.ts'), 'utf8')
-const registerAppRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/startup/registerAppRoutes.ts'), 'utf8')
-const publicWorkflowRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/public-workflows.routes.ts'), 'utf8')
-const frontendSettingsTypesSource = readFileSync(resolve(process.cwd(), 'src/types/settings.ts'), 'utf8')
-const apiSettingsSource = readFileSync(resolve(process.cwd(), 'src/lib/api-settings.ts'), 'utf8')
-const generalPreferencesSource = readFileSync(resolve(process.cwd(), 'src/features/settings/components/general-preferences-sections.tsx'), 'utf8')
-const generationHistoryRoutesSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/generation-history.routes.ts'), 'utf8')
-const generationHistoryMediaHandlersSource = readFileSync(resolve(process.cwd(), '../backend/src/routes/generation-history/mediaRouteHandlers.ts'), 'utf8')
-const mediaMetadataFileQueriesSource = readFileSync(resolve(process.cwd(), '../backend/src/models/Image/MediaMetadataFileQueries.ts'), 'utf8')
-const imageListSource = readFileSync(resolve(process.cwd(), 'src/features/images/components/image-list/image-list.tsx'), 'utf8')
-const imageModalProviderSource = readFileSync(resolve(process.cwd(), 'src/features/images/components/detail/image-view-modal-provider.tsx'), 'utf8')
-const imageDetailViewSource = readFileSync(resolve(process.cwd(), 'src/features/images/image-detail-view.tsx'), 'utf8')
-const imageDetailUtilsSource = readFileSync(resolve(process.cwd(), 'src/features/images/components/detail/image-detail-utils.ts'), 'utf8')
-const imageDownloadTriggerSource = readFileSync(resolve(process.cwd(), 'src/features/images/components/image-download-trigger-button.tsx'), 'utf8')
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+const source = createSourceReader(resolve(process.cwd(), '..'))
+const generationHistoryPanelSource = source('frontend/src/features/image-generation/components/generation-history-panel.tsx')
+const lazyRoutesSource = source('frontend/src/app/lazy-routes.tsx')
+const generationHistoryPanelHelpersSource = source('frontend/src/features/image-generation/components/generation-history-panel-helpers.ts')
+const generationHistoryRetryActionsSource = source('frontend/src/features/image-generation/components/generation-history-retry-actions.ts')
+const generationHistoryStatusSource = source('frontend/src/features/image-generation/generation-history-status.ts')
+const generationHistoryRouteHelpersSource = source('backend/src/routes/generation-history/historyRouteHelpers.ts')
+const generationHistoryQueryRepositorySource = source('backend/src/repositories/history/HistoryQueryRepository.ts')
+const sharedSettingsTypesSource = source('shared/src/types/settings.ts')
+const backendSettingsDefaultsSource = source('backend/src/services/settingsServiceStorage.ts')
+const backendSettingsRoutesSource = source('backend/src/routes/settings/general-settings.routes.ts')
+const runtimeMediaSettingsRoutesSource = source('backend/src/routes/runtime-media-settings.routes.ts')
+const registerAppRoutesSource = source('backend/src/startup/registerAppRoutes.ts')
+const publicWorkflowRoutesSource = source('backend/src/routes/public-workflows.routes.ts')
+const apiSettingsSource = source('frontend/src/lib/api-settings.ts')
+const generalPreferencesSource = source('frontend/src/features/settings/components/general-preferences-sections.tsx')
+const generationHistoryRoutesSource = source('backend/src/routes/generation-history.routes.ts')
+const generationHistoryMediaHandlersSource = source('backend/src/routes/generation-history/mediaRouteHandlers.ts')
+const mediaMetadataFileQueriesSource = source('backend/src/models/Image/MediaMetadataFileQueries.ts')
+const imageListSource = source('frontend/src/features/images/components/image-list/image-list.tsx')
+const imageModalProviderSource = source('frontend/src/features/images/components/detail/image-view-modal-provider.tsx')
+const imageDetailViewSource = source('frontend/src/features/images/image-detail-view.tsx')
+const imageDetailUtilsSource = source('frontend/src/features/images/components/detail/image-detail-utils.ts')
+const imageDownloadTriggerSource = source('frontend/src/features/images/components/image-download-trigger-button.tsx')
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -212,7 +192,7 @@ function assertRefreshPolicySource() {
  * 20만행 `image_files` 를 히스토리 행마다 다시 탐색하면 페이지 요청 1회가 목록 크기에 비례한다.
  */
 function assertHistoryListLookupCostPolicy() {
-  const listQuery = /static findAllWithMetadata\([\s\S]*?\n {2}\}/.exec(generationHistoryModelSource)?.[0] ?? ''
+  const listQuery = /static findAllWithMetadata\([\s\S]*?\n {2}\}/.exec(generationHistoryQueryRepositorySource)?.[0] ?? ''
   if (listQuery.length === 0) {
     throw new Error('generation history model must keep a findAllWithMetadata list surface')
   }
@@ -233,23 +213,23 @@ function assertHistoryListLookupCostPolicy() {
     'history list rows should resolve display media through one precomputed lookup',
   )
   match(
-    generationHistoryModelSource,
+    generationHistoryQueryRepositorySource,
     /private static readResultMediaViews\(compositeHashes: string\[\]\)[\s\S]*?FROM main_db\.image_files matched_file[\s\S]*?WHERE matched_file\.composite_hash IN \(/,
     'history result media should be read with one indexed IN lookup per page',
   )
   match(
-    generationHistoryModelSource,
-    /function isPreferredResultFile\(candidate: HistoryResultMediaRow, current: HistoryResultMediaRow\)[\s\S]*?candidate\.file_status === 'active' \? 0 : 1[\s\S]*?candidate\.file_id > current\.file_id/,
+    generationHistoryQueryRepositorySource,
+    /function isPreferredHistoryResultFile\([\s\S]*?candidate\.file_status === 'active' \? 0 : 1[\s\S]*?candidate\.file_id > current\.file_id/,
     'the in-memory file preference must reproduce the previous "active first, newest id" SQL ordering',
   )
   match(
-    generationHistoryModelSource,
+    generationHistoryQueryRepositorySource,
     /static countListRecords\([\s\S]*?historyListCountCache\.get\(cacheKey\)[\s\S]*?HISTORY_LIST_COUNT_CACHE_TTL_MS/,
     'history list counts should be memoized for a few seconds instead of rerunning per page request',
   )
   match(
-    generationHistoryModelSource,
-    /function invalidateHistoryListCountCache\(\)/,
+    generationHistoryQueryRepositorySource,
+    /static invalidateListCountCache\(\): void/,
     'history writes must be able to invalidate the cached list count immediately',
   )
 }
@@ -341,12 +321,12 @@ function assertDownloadReadinessSourcePolicy() {
     'completed history rows without any active ready result file should be classified as missing linked results',
   )
   match(
-    generationHistoryModelSource,
+    generationHistoryQueryRepositorySource,
     /CASE WHEN matched_file\.file_status = 'active' THEN im\.composite_hash ELSE NULL END as actual_composite_hash/,
     'generation history should expose ready media hashes only for active backing files',
   )
   match(
-    generationHistoryModelSource,
+    generationHistoryQueryRepositorySource,
     /matched_file\.file_status as result_file_status/,
     'generation history should return backing file state for display classification',
   )
@@ -420,24 +400,14 @@ function assertNoImageBadgeOverlaySourcePolicy() {
 
 function assertHistoryRatingSafetySettingSourcePolicy() {
   match(
-    backendSettingsTypesSource,
+    sharedSettingsTypesSource,
     /applyRatingSafetyToGenerationHistory: boolean/,
-    'backend general settings should type the generation history rating-safety option',
+    'shared general settings should type the generation history rating-safety option',
   )
   match(
-    frontendSettingsTypesSource,
-    /applyRatingSafetyToGenerationHistory: boolean/,
-    'frontend general settings should type the generation history rating-safety option',
-  )
-  match(
-    backendSettingsTypesSource,
+    sharedSettingsTypesSource,
     /generationHistoryMaxItems: number/,
-    'backend general settings should type the generation history row limit',
-  )
-  match(
-    frontendSettingsTypesSource,
-    /generationHistoryMaxItems: number/,
-    'frontend general settings should type the generation history row limit',
+    'shared general settings should type the generation history row limit',
   )
   match(
     backendSettingsDefaultsSource,
@@ -506,7 +476,7 @@ function assertHistoryRatingSafetySettingSourcePolicy() {
   )
   match(
     publicWorkflowRoutesSource,
-    /router\.post\('\/:slug\/cleanup-failed'[\s\S]*?applyHistoryAccessScope\(req, historyFilters, false\)[\s\S]*?GenerationHistoryModel\.findAll\(\{[\s\S]*?\.\.\.historyFilters/,
+    /router\.post\('\/:slug\/cleanup-failed'[\s\S]*?applyHistoryAccessScope\(req, historyFilters, false\)[\s\S]*?HistoryQueryRepository\.findAll\(\{[\s\S]*?\.\.\.historyFilters/,
     'public workflow failed-history cleanup should match the same account scope as its list',
   )
   match(
@@ -657,4 +627,4 @@ assertHistoryVideoSourcePolicy()
 assertHistoryScopedDetailSourcePolicy()
 assertHistoryTranslationCatalogSourcePolicy()
 
-console.log('Generation history feed progress UI contracts verified.')
+reportVerificationSuccess('Generation history feed progress UI contracts verified.')

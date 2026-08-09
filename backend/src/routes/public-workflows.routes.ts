@@ -7,7 +7,8 @@ import { userSettingsDb } from '../database/userSettingsDb';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
 import { CustomDropdownListModel, type CustomDropdownListWithParsedItems } from '../models/CustomDropdownList';
-import { GenerationHistoryModel } from '../models/GenerationHistory';
+import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepository';
+import { HistoryCommandService } from '../services/historyCommandService';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { GenerationQueueService } from '../services/generationQueueService';
@@ -522,13 +523,13 @@ router.post('/:slug/cleanup-failed', asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  const failedRecords = GenerationHistoryModel.findAll({
+  const failedRecords = HistoryQueryRepository.findAll({
     workflow_id: workflow.id,
     generation_status: 'failed',
     ...historyFilters,
   });
 
-  const deleted = GenerationHistoryModel.deleteMany(
+  const deleted = HistoryCommandService.deleteMany(
     failedRecords
       .map((record) => record.id)
       .filter((id): id is number => typeof id === 'number'),

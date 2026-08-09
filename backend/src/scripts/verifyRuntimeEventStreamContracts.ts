@@ -19,6 +19,8 @@ const streamAuthSource = readSource('routes', 'events', 'event-stream-auth.ts');
 const broadcasterSource = readSource('services', 'runtime-events', 'runtimeEventBroadcaster.ts');
 const busSource = readSource('services', 'runtime-events', 'runtimeEventBus.ts');
 const indexSource = readSource('index.ts');
+const middlewareSource = readSource('startup', 'configureAppMiddleware.ts');
+const gracefulShutdownSource = readSource('startup', 'gracefulShutdown.ts');
 const registerAppRoutesSource = readSource('startup', 'registerAppRoutes.ts');
 const userSettingsSchemaSource = readSource('database', 'userSettingsSchema.ts');
 const queueJobExecutorsSource = readSource('services', 'generation-queue', 'queueJobExecutors.ts');
@@ -49,10 +51,10 @@ assert.ok(
  * RK-2: 셧다운 순서 — 스트림을 먼저 닫아야 server.close() 가 drain 된다.
  * ------------------------------------------------------------------ */
 
-const broadcasterShutdownIndex = indexSource.indexOf('RuntimeEventBroadcaster.shutdown()');
-const serverCloseIndex = indexSource.indexOf('activeServer.close(');
-assert.ok(broadcasterShutdownIndex > 0, 'index.ts must close runtime event streams during shutdown');
-assert.ok(serverCloseIndex > 0, 'index.ts must still close the HTTP server during shutdown');
+const broadcasterShutdownIndex = gracefulShutdownSource.lastIndexOf('dependencies.shutdownRuntimeEventStreams');
+const serverCloseIndex = gracefulShutdownSource.indexOf('activeServer.close(');
+assert.ok(broadcasterShutdownIndex > 0, 'gracefulShutdown.ts must close runtime event streams during shutdown');
+assert.ok(serverCloseIndex > 0, 'gracefulShutdown.ts must still close the HTTP server during shutdown');
 assert.ok(
   broadcasterShutdownIndex < serverCloseIndex,
   'RuntimeEventBroadcaster.shutdown() must run before activeServer.close(), otherwise open SSE sockets block the drain',
@@ -93,8 +95,8 @@ assert.ok(
   'registerAppRoutes must mount the event stream without the shared session-mutating auth middlewares',
 );
 assert.ok(
-  /const isRuntimeEventStreamRequest[\s\S]*?originalUrl\.startsWith\('\/api\/events\/'\)/.test(indexSource),
-  'index.ts must exclude the stream path from the shared API rate limiter budget',
+  /const isRuntimeEventStreamRequest[\s\S]*?originalUrl\.startsWith\('\/api\/events\/'\)/.test(middlewareSource),
+  'configureAppMiddleware.ts must exclude the stream path from the shared API rate limiter budget',
 );
 
 /* ------------------------------------------------------------------ *
@@ -138,7 +140,7 @@ const emitSiteFiles: Array<[string, string[]]> = [
   ['services/graph-workflow-executor/execute-comfy.ts', ['queue.job.created']],
   ['services/graph-workflow-executor/execute-nai.ts', ['queue.job.created']],
   ['services/graph-workflow-executor/system-codex-operations.ts', ['queue.job.created']],
-  ['models/GenerationHistory.ts', ['history.record.created', 'history.record.status']],
+  ['services/historyCommandService.ts', ['history.record.created', 'history.record.status']],
   ['models/GraphWorkflowSchedule.ts', ['publishGraphScheduleEvent']],
   ['models/GraphExecution.ts', ['publishGraphExecutionEvent']],
 ];
@@ -167,11 +169,12 @@ assert.ok(
   'both the single-hash markReady and the batch release must publish linked history events',
 );
 
-// 범용 update 도 generation_status 를 쓰면 발행해야 한다(큐 실행기의 pending -> processing 경로).
-const generationHistoryModelSource = readSource('models', 'GenerationHistory.ts');
+// 범용 update 도 generation_status 를 쓰면 command service의 공용 부수효과 경로를 지난다.
+// 상태별 실제 이벤트 발행은 verifyGenerationHistoryRefactoringContracts의 임시 DB 스모크가 검증한다.
+const historyCommandServiceSource = readSource('services', 'historyCommandService.ts');
 assert.ok(
-  /if \(typeof updates\.generation_status === 'string'\) \{[\s\S]*?publishHistoryEventById\(id, 'history\.record\.status'\)/.test(generationHistoryModelSource),
-  'GenerationHistoryModel.update must publish history.record.status whenever it writes generation_status',
+  /const hasStatusTransition = typeof status === 'string';[\s\S]*?runHistoryCommandSideEffects\(id,[\s\S]*?eventName: hasStatusTransition \? 'history\.record\.status' : undefined/.test(historyCommandServiceSource),
+  'HistoryCommandService.update must route generation_status writes through the shared status-event effect',
 );
 
 // E1 이 큐 전이를 전부 덮는다는 전제: 실행기는 자체 상태 쓰기를 하지 않고 transitionJob 을 경유한다.

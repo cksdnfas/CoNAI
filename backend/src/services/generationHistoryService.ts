@@ -1,7 +1,15 @@
-import { GenerationHistoryModel, GenerationHistoryRecord, GenerationHistoryListRecord, GenerationHistoryDetailRecord, ServiceType } from '../models/GenerationHistory';
-import type { AuthAccountType } from '../models/AuthAccount';
+import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepository';
+import type {
+  GenerationHistoryDetailRecord,
+  GenerationHistoryFilterOptions,
+  GenerationHistoryListRecord,
+  GenerationHistoryRecord,
+  ServiceType,
+} from '../types/generationHistory';
+import type { AuthAccountType } from '../types/authAccount';
 import { APIImageProcessor } from './APIImageProcessor';
 import { BackgroundProcessorService } from './backgroundProcessorService';
+import { HistoryCommandService } from './historyCommandService';
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
 
 const SLOW_GENERATION_POSTPROCESS_MS = 3000;
@@ -58,7 +66,7 @@ export class GenerationHistoryService {
     };
 
     // Model calls are now synchronous
-    return GenerationHistoryModel.create(historyRecord);
+    return HistoryCommandService.create(historyRecord);
   }
 
   /**
@@ -84,7 +92,7 @@ export class GenerationHistoryService {
     };
 
     // Model calls are now synchronous
-    return GenerationHistoryModel.create(historyRecord);
+    return HistoryCommandService.create(historyRecord);
   }
 
   /**
@@ -113,7 +121,7 @@ export class GenerationHistoryService {
       metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
     };
 
-    return GenerationHistoryModel.create(historyRecord);
+    return HistoryCommandService.create(historyRecord);
   }
 
   /**
@@ -130,7 +138,7 @@ export class GenerationHistoryService {
     try {
       const totalStartedAt = Date.now();
       // Step 1: Update status to processing
-      GenerationHistoryModel.updateStatus(historyId, 'processing');
+      HistoryCommandService.updateStatus(historyId, 'processing');
 
       // Step 2: Save original file only to uploads/API/images/YYYY-MM-DD/
       const mediaPipelineStartedAt = Date.now();
@@ -144,7 +152,7 @@ export class GenerationHistoryService {
       });
 
       // Step 3: Update API history with the main-DB linkage key only.
-      GenerationHistoryModel.updateImagePaths(historyId, {
+      HistoryCommandService.updateImagePaths(historyId, {
         compositeHash: processedPaths.compositeHash
       });
 
@@ -161,7 +169,7 @@ export class GenerationHistoryService {
       });
 
       // Step 4: Update status to completed (file save complete)
-      GenerationHistoryModel.updateStatus(historyId, 'completed');
+      HistoryCommandService.updateStatus(historyId, 'completed');
 
       console.log(`✅ ${serviceType.toUpperCase()} image saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
@@ -175,7 +183,7 @@ export class GenerationHistoryService {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      GenerationHistoryModel.recordError(historyId, errorMessage);
+      HistoryCommandService.recordError(historyId, errorMessage);
       console.error(`✗ Failed to process generation history ${historyId}:`, errorMessage);
       throw error;
     }
@@ -192,7 +200,7 @@ export class GenerationHistoryService {
   ): Promise<void> {
     try {
       const totalStartedAt = Date.now();
-      GenerationHistoryModel.updateStatus(historyId, 'processing');
+      HistoryCommandService.updateStatus(historyId, 'processing');
 
       const mediaPipelineStartedAt = Date.now();
       const processedPaths = await APIImageProcessor.processGeneratedFile(sourceFilePath, serviceType, saveOptions);
@@ -204,7 +212,7 @@ export class GenerationHistoryService {
         extra: processedPaths.originalPath,
       });
 
-      GenerationHistoryModel.updateImagePaths(historyId, {
+      HistoryCommandService.updateImagePaths(historyId, {
         compositeHash: processedPaths.compositeHash
       });
 
@@ -218,7 +226,7 @@ export class GenerationHistoryService {
         extra: processedPaths.compositeHash,
       });
 
-      GenerationHistoryModel.updateStatus(historyId, 'completed');
+      HistoryCommandService.updateStatus(historyId, 'completed');
 
       console.log(`✅ ${serviceType.toUpperCase()} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
@@ -232,7 +240,7 @@ export class GenerationHistoryService {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      GenerationHistoryModel.recordError(historyId, errorMessage);
+      HistoryCommandService.recordError(historyId, errorMessage);
       console.error(`✗ Failed to process generated file history ${historyId}:`, errorMessage);
       throw error;
     }
@@ -243,7 +251,7 @@ export class GenerationHistoryService {
    * This is broader than the main list surface and exists mainly for internal or compatibility consumers.
    */
   static async getHistoryDetail(id: number): Promise<GenerationHistoryDetailRecord | null> {
-    return GenerationHistoryModel.findByIdWithMetadata(id);
+    return HistoryQueryRepository.findByIdWithMetadata(id);
   }
 
   /**
@@ -261,8 +269,8 @@ export class GenerationHistoryService {
     offset?: number;
   }): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
-    const records = GenerationHistoryModel.findAllWithMetadata(filters);
-    const total = GenerationHistoryModel.countListRecords({
+    const records = HistoryQueryRepository.findAllWithMetadata(filters);
+    const total = HistoryQueryRepository.countListRecords({
       service_type: filters?.service_type,
       generation_status: filters?.generation_status,
       queue_job_id: filters?.queue_job_id,
@@ -278,8 +286,16 @@ export class GenerationHistoryService {
    * Get recent compact generation-history list records.
    * Recent reads should stay aligned with the main hash-first list contract.
    */
-  static async getRecentHistory(limit: number = 50): Promise<GenerationHistoryListRecord[]> {
-    return GenerationHistoryModel.getRecent(limit);
+  static async getRecentHistory(
+    limit: number = 50,
+    filters: Omit<GenerationHistoryFilterOptions, 'limit' | 'offset'> = {},
+  ): Promise<GenerationHistoryListRecord[]> {
+    return HistoryQueryRepository.findAllWithMetadata({
+      ...filters,
+      limit,
+      order_by: 'created_at',
+      order_direction: 'DESC',
+    });
   }
 
   /**
@@ -287,7 +303,7 @@ export class GenerationHistoryService {
    * When image deletion is needed, resolve it from the main DB via composite_hash.
    */
   static async deleteHistory(id: number): Promise<void> {
-    const history = GenerationHistoryModel.findById(id);
+    const history = HistoryQueryRepository.findById(id);
     if (!history) {
       throw new Error(`Generation history ${id} not found`);
     }
@@ -297,7 +313,7 @@ export class GenerationHistoryService {
       await DeletionService.deleteImage(history.composite_hash);
     }
 
-    GenerationHistoryModel.delete(id);
+    HistoryCommandService.delete(id);
 
     console.log(`✓ Generation history ${id} deleted`);
   }
@@ -305,7 +321,9 @@ export class GenerationHistoryService {
   /**
    * Get statistics
    */
-  static async getStatistics(): Promise<{
+  static async getStatistics(
+    filters: Omit<GenerationHistoryFilterOptions, 'limit' | 'offset'> = {},
+  ): Promise<{
     total: number;
     comfyui: number;
     novelai: number;
@@ -315,7 +333,7 @@ export class GenerationHistoryService {
     pending: number;
     processing: number;
   }> {
-    return GenerationHistoryModel.getListStatistics();
+    return HistoryQueryRepository.getListStatistics(filters);
   }
 
   /**
@@ -335,8 +353,8 @@ export class GenerationHistoryService {
     }
   ): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
-    const records = GenerationHistoryModel.findAllWithMetadata({ ...filters, workflow_id: workflowId });
-    const total = GenerationHistoryModel.countListRecords({
+    const records = HistoryQueryRepository.findAllWithMetadata({ ...filters, workflow_id: workflowId });
+    const total = HistoryQueryRepository.countListRecords({
       workflow_id: workflowId,
       generation_status: filters?.generation_status,
       queue_job_id: filters?.queue_job_id,
@@ -358,7 +376,7 @@ export class GenerationHistoryService {
     pending: number;
     processing: number;
   }> {
-    return GenerationHistoryModel.getWorkflowStatistics(workflowId);
+    return HistoryQueryRepository.getWorkflowStatistics(workflowId);
   }
 
   /**
@@ -371,6 +389,6 @@ export class GenerationHistoryService {
     pending: number;
     processing: number;
   }> {
-    return GenerationHistoryModel.getWorkflowListStatistics(workflowId);
+    return HistoryQueryRepository.getWorkflowListStatistics(workflowId);
   }
 }

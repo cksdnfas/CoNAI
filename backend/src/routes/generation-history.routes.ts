@@ -92,7 +92,7 @@ router.get(
  */
 router.get(
   '/statistics',
-  asyncHandler(async (req: Request, res: Response) => {
+  asyncHandler(async (_req: Request, res: Response) => {
     const stats = await GenerationHistoryService.getStatistics();
 
     res.json({

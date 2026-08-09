@@ -1,8 +1,9 @@
 import { getAuthDb } from '../database/authDb';
 import { AuthService } from '../services/authService';
 import { invalidateResolvedAuthAccessCache } from '../services/authAccessControlService';
+import type { AuthAccountType } from '../types/authAccount';
 
-export type AuthAccountType = 'admin' | 'guest';
+export type { AuthAccountType } from '../types/authAccount';
 export type AuthAccountStatus = 'active' | 'disabled';
 export type AssignableSystemGroupKey = 'admin' | 'guest';
 

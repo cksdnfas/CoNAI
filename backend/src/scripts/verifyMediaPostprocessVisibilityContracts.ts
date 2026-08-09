@@ -3,11 +3,14 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import verifyHelpers from '../../../scripts/verify-helpers';
 
 import type { ComplexFilter } from '@conai/shared';
 
 const runtimeBase = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-postprocess-visibility-'));
 process.env.RUNTIME_BASE_PATH = runtimeBase;
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers;
+const source = createSourceReader(process.cwd());
 
 async function main() {
   const { db, closeDatabase } = await import('../database/init');
@@ -22,13 +25,11 @@ async function main() {
   const { BackgroundProcessorService } = await import('../services/backgroundProcessorService');
   const { settingsService } = await import('../services/settingsService');
   const { AutoTagsComposeService } = await import('../services/autoTagsComposeService');
-  const { GenerationHistoryModel } = await import('../models/GenerationHistory');
+  const { HistoryQueryRepository } = await import('../repositories/history/HistoryQueryRepository');
+  const { HistoryCommandService } = await import('../services/historyCommandService');
 
   try {
-    const visibilityServiceSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/services/mediaPostprocessVisibilityService.ts'),
-      'utf8',
-    );
+    const visibilityServiceSource = source('src/services/mediaPostprocessVisibilityService.ts');
     const batchReleaseStart = visibilityServiceSource.indexOf('static markReadyRowsWithoutPendingImmediateWork');
     const batchReleaseSource = visibilityServiceSource.slice(batchReleaseStart);
     assert.match(
@@ -197,22 +198,22 @@ async function main() {
     seed('ready-hash', 1, 'ready', '01');
     seed('pending-hash', 2, 'pending', '02');
 
-    const readyHistoryId = GenerationHistoryModel.create({
+    const readyHistoryId = HistoryCommandService.create({
       service_type: 'novelai',
       generation_status: 'completed',
       nai_model: 'model',
       composite_hash: 'ready-hash',
     });
-    const pendingHistoryId = GenerationHistoryModel.create({
+    const pendingHistoryId = HistoryCommandService.create({
       service_type: 'novelai',
       generation_status: 'completed',
       nai_model: 'model',
       composite_hash: 'pending-hash',
     });
-    GenerationHistoryModel.updateImagePaths(readyHistoryId, { compositeHash: 'ready-hash' });
-    GenerationHistoryModel.updateImagePaths(pendingHistoryId, { compositeHash: 'pending-hash' });
+    HistoryCommandService.updateImagePaths(readyHistoryId, { compositeHash: 'ready-hash' });
+    HistoryCommandService.updateImagePaths(pendingHistoryId, { compositeHash: 'pending-hash' });
 
-    const generationHistoryRecords = GenerationHistoryModel.findAllWithMetadata({ service_type: 'novelai', limit: 10 });
+    const generationHistoryRecords = HistoryQueryRepository.findAllWithMetadata({ service_type: 'novelai', limit: 10 });
     const historyByHash = new Map(generationHistoryRecords.map((record) => [record.composite_hash, record]));
     assert.equal(
       historyByHash.get('ready-hash')?.actual_composite_hash,
@@ -225,12 +226,12 @@ async function main() {
       'generation history lists must not expose pending postprocessed media as display-ready'
     );
     assert.equal(
-      GenerationHistoryModel.findByIdWithMetadata(readyHistoryId)?.actual_composite_hash,
+      HistoryQueryRepository.findByIdWithMetadata(readyHistoryId)?.actual_composite_hash,
       'ready-hash',
       'generation history detail should resolve ready media metadata'
     );
     assert.equal(
-      GenerationHistoryModel.findByIdWithMetadata(pendingHistoryId)?.actual_composite_hash ?? null,
+      HistoryQueryRepository.findByIdWithMetadata(pendingHistoryId)?.actual_composite_hash ?? null,
       null,
       'generation history detail must not expose pending postprocessed media as display-ready'
     );
@@ -454,13 +455,13 @@ async function main() {
     );
 
     seed('group-assignment-hash', 80, 'ready', '08', '{"tagger":{"taglist":"shared"}}', false);
-    const linkedProcessingHistoryId = GenerationHistoryModel.create({
+    const linkedProcessingHistoryId = HistoryCommandService.create({
       service_type: 'novelai',
       generation_status: 'processing',
       nai_model: 'model',
       assigned_group_id: 1,
     });
-    GenerationHistoryModel.updateImagePaths(linkedProcessingHistoryId, { compositeHash: 'group-assignment-hash' });
+    HistoryCommandService.updateImagePaths(linkedProcessingHistoryId, { compositeHash: 'group-assignment-hash' });
     await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash('group-assignment-hash');
     const assignedGroupRow = db.prepare(`
       SELECT group_id, composite_hash
@@ -474,7 +475,7 @@ async function main() {
       'generation group assignment should run after media linkage even before history is marked completed'
     );
 
-    console.log('✅ Media postprocess visibility contracts passed');
+    reportVerificationSuccess('✅ Media postprocess visibility contracts passed');
   } finally {
     closeUserSettingsDb();
     closeDatabase();

@@ -60,8 +60,8 @@ export class MediaPostprocessVisibilityService {
    */
   private static publishLinkedGenerationHistoryEvents(compositeHashes: string[]): void {
     try {
-      const { GenerationHistoryModel } = require('../models/GenerationHistory') as typeof import('../models/GenerationHistory');
-      GenerationHistoryModel.publishStatusEventsByCompositeHashes(compositeHashes);
+      const { HistoryCommandService } = require('./historyCommandService') as typeof import('./historyCommandService');
+      HistoryCommandService.publishStatusEventsByCompositeHashes(compositeHashes);
     } catch (error) {
       console.warn('⚠️ Postprocess visibility history event publish failed:', error instanceof Error ? error.message : error);
     }

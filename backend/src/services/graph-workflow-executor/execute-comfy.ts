@@ -10,7 +10,7 @@ import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPol
 import { settingsService } from '../settingsService'
 import { WorkflowModel } from '../../models/Workflow'
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer'
-import { GenerationHistoryModel } from '../../models/GenerationHistory'
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { GenerationQueueService } from '../generationQueueService'
@@ -207,7 +207,7 @@ async function resolveQueueBackedOutput(params: {
 
   const historyId = parsePositiveIntegerish(debug.history_id)
   const compositeHash = normalizeOptionalString(debug.result_composite_hash)
-    ?? (historyId ? normalizeOptionalString(GenerationHistoryModel.findById(historyId)?.composite_hash) : null)
+    ?? (historyId ? normalizeOptionalString(HistoryQueryRepository.findById(historyId)?.composite_hash) : null)
   const fallbackOriginalPath = normalizeOptionalString(debug.result_original_path)
   const originalPath = fallbackOriginalPath
     ?? (compositeHash ? ImageUploadService.getActiveFilePath(compositeHash) : null)

@@ -1,6 +1,7 @@
 import { getToken } from '../../utils/nai/auth'
 import { WorkflowModel } from '../../models/Workflow'
-import { GenerationHistoryModel } from '../../models/GenerationHistory'
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
+import { HistoryCommandService } from '../historyCommandService'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { GenerationHistoryService } from '../generationHistoryService'
 import { BackgroundProcessorService } from '../backgroundProcessorService'
@@ -255,7 +256,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
           return
         }
 
-        GenerationHistoryModel.update(historyId, {
+        HistoryCommandService.update(historyId, {
           generation_status: 'processing',
         })
       },
@@ -267,7 +268,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       }
 
       if (historyId) {
-        GenerationHistoryModel.updateStatus(historyId, 'completed')
+        HistoryCommandService.updateStatus(historyId, 'completed')
       }
 
       updateQueueRequestDebugMeta(job, {
@@ -283,11 +284,11 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       }
 
       if (historyId) {
-        GenerationHistoryModel.updateImagePaths(historyId, {
+        HistoryCommandService.updateImagePaths(historyId, {
           compositeHash: result.representativeImage.compositeHash,
         })
         await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash)
-        GenerationHistoryModel.updateStatus(historyId, 'completed')
+        HistoryCommandService.updateStatus(historyId, 'completed')
       }
 
       updateQueueRequestDebugMeta(job, {
@@ -352,7 +353,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       })
 
       if (historyId) {
-        GenerationHistoryModel.recordError(historyId, 'Cancelled by user')
+        HistoryCommandService.recordError(historyId, 'Cancelled by user')
       }
 
       throw new Error(GENERATION_QUEUE_CANCELLATION_MESSAGE)
@@ -367,7 +368,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     })
 
     if (historyId) {
-      GenerationHistoryModel.recordError(historyId, failureMessage)
+      HistoryCommandService.recordError(historyId, failureMessage)
     }
     throw error
   } finally {
@@ -417,7 +418,7 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
         })
 
         if (placeholderHistoryId) {
-          GenerationHistoryModel.updateStatus(placeholderHistoryId, 'processing')
+          HistoryCommandService.updateStatus(placeholderHistoryId, 'processing')
         }
       },
       onUpstreamAccepted: () => {
@@ -444,7 +445,7 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
       let historyId: number
       if (index === 0 && placeholderHistoryId) {
         historyId = placeholderHistoryId
-        GenerationHistoryModel.update(historyId, {
+        HistoryCommandService.update(historyId, {
           nai_model: metadata.model || 'unknown',
           assigned_group_id: job.requested_group_id ?? metadata.groupId,
           requested_by_account_id: job.requested_by_account_id ?? undefined,
@@ -489,9 +490,9 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
       const failureMessage = cancelState?.status === 'cancelled' || cancelState?.cancelRequested === true
         ? 'Cancelled by user'
         : resolveFailureMessage(error)
-      const placeholderHistory = GenerationHistoryModel.findById(placeholderHistoryId)
+      const placeholderHistory = HistoryQueryRepository.findById(placeholderHistoryId)
       if (placeholderHistory && placeholderHistory.generation_status !== 'completed') {
-        GenerationHistoryModel.recordError(placeholderHistoryId, failureMessage)
+        HistoryCommandService.recordError(placeholderHistoryId, failureMessage)
       }
     }
 
@@ -523,7 +524,7 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
     })
 
     if (placeholderHistoryId) {
-      GenerationHistoryModel.updateStatus(placeholderHistoryId, 'processing')
+      HistoryCommandService.updateStatus(placeholderHistoryId, 'processing')
     }
 
     GenerationQueueModel.markProviderSubmitState(job.id, 'in_flight', {
@@ -560,7 +561,7 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
 
       if (index === 0 && placeholderHistoryId) {
         historyId = placeholderHistoryId
-        GenerationHistoryModel.update(historyId, {
+        HistoryCommandService.update(historyId, {
           metadata: JSON.stringify({
             codex_job_directory: result.jobDirectory,
             codex_output_file: output.absolutePath,
@@ -599,9 +600,9 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
     await Promise.all(processPromises)
 
     const representativeHistory = historyIds
-      .map((historyId) => GenerationHistoryModel.findById(historyId))
+      .map((historyId) => HistoryQueryRepository.findById(historyId))
       .find((history) => Boolean(history?.composite_hash))
-      ?? (historyIds.length > 0 ? GenerationHistoryModel.findById(historyIds[0]) : null)
+      ?? (historyIds.length > 0 ? HistoryQueryRepository.findById(historyIds[0]) : null)
     const representativeCompositeHash = representativeHistory?.composite_hash ?? null
     const representativeOriginalPath = representativeCompositeHash
       ? ImageUploadService.getActiveFilePath(representativeCompositeHash)
@@ -635,9 +636,9 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
       const failureMessage = cancelState?.status === 'cancelled' || cancelState?.cancelRequested === true
         ? 'Cancelled by user'
         : resolveFailureMessage(error)
-      const placeholderHistory = GenerationHistoryModel.findById(placeholderHistoryId)
+      const placeholderHistory = HistoryQueryRepository.findById(placeholderHistoryId)
       if (placeholderHistory && placeholderHistory.generation_status !== 'completed') {
-        GenerationHistoryModel.recordError(placeholderHistoryId, failureMessage)
+        HistoryCommandService.recordError(placeholderHistoryId, failureMessage)
       }
     }
 

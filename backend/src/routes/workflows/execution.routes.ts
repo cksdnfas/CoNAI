@@ -13,7 +13,8 @@ import { GenerationHistoryService } from '../../services/generationHistoryServic
 import { BackgroundProcessorService } from '../../services/backgroundProcessorService';
 import type { GeneratedImageSaveOptions } from '../../utils/fileSaver';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
-import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
+import { HistoryCommandService } from '../../services/historyCommandService';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
 import { reconcileComfyModelSelectionValues } from '../../services/comfyModelSelectionResolver';
 import { resolveWorkflowPromptValues } from '../../services/workflowPromptValueResolver';
@@ -154,7 +155,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
             }
 
             try {
-              GenerationHistoryModel.update(historyId, {
+              HistoryCommandService.update(historyId, {
                 generation_status: 'processing',
               });
               console.log(`✅ History ${historyId} marked processing after prompt submit: ${promptId}`);
@@ -167,23 +168,23 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         if (historyId) {
           if (workflow.result_view_mode === 'artifact_explorer') {
             if (result.savedArtifactCount > 0) {
-              GenerationHistoryModel.updateStatus(historyId, 'completed');
+              HistoryCommandService.updateStatus(historyId, 'completed');
               console.log(`✅ ComfyUI artifact workflow completed for history ID ${historyId} (${result.savedArtifactCount}/${result.attemptedArtifactCount} artifacts saved)`);
             } else {
-              GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no artifact file could be saved');
+              HistoryCommandService.recordError(historyId, 'ComfyUI generation finished but no artifact file could be saved');
               console.error(`❌ ComfyUI artifact workflow ${historyId} has no saved artifacts after generation`);
             }
           } else if (result.representativeImage) {
-            GenerationHistoryModel.updateImagePaths(historyId, {
+            HistoryCommandService.updateImagePaths(historyId, {
               compositeHash: result.representativeImage.compositeHash,
             });
             await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash);
-            GenerationHistoryModel.updateStatus(historyId, 'completed');
+            HistoryCommandService.updateStatus(historyId, 'completed');
 
             console.log(`✅ ComfyUI history ${historyId} linked to representative output: ${result.representativeImage.compositeHash.substring(0, 16)}...`);
             console.log(`✅ Image generation completed for history ID ${historyId} (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`);
           } else {
-            GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output file could be saved');
+            HistoryCommandService.recordError(historyId, 'ComfyUI generation finished but no output file could be saved');
             console.error(`❌ ComfyUI history ${historyId} has no saved representative output after generation`);
           }
         } else if (workflow.result_view_mode === 'artifact_explorer') {
@@ -197,9 +198,9 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         // 실패 처리
         if (historyId) {
           try {
-            const history = GenerationHistoryModel.findById(historyId);
+            const history = HistoryQueryRepository.findById(historyId);
             if (history) {
-              GenerationHistoryModel.recordError(historyId, (error as Error).message);
+              HistoryCommandService.recordError(historyId, (error as Error).message);
               console.log(`✅ History ${historyId} marked as failed`);
             }
           } catch (recordError) {
@@ -251,9 +252,9 @@ router.get('/:id/history', asyncHandler(async (req: Request, res: Response) => {
   try {
     // API Generation History에서 조회
     const offset = (page - 1) * limit;
-    const histories = GenerationHistoryModel.findAllWithMetadata({ workflow_id: id, limit, offset });
-    const total = GenerationHistoryModel.countListRecords({ workflow_id: id });
-    const stats = GenerationHistoryModel.getWorkflowListStatistics(id);
+    const histories = HistoryQueryRepository.findAllWithMetadata({ workflow_id: id, limit, offset });
+    const total = HistoryQueryRepository.countListRecords({ workflow_id: id });
+    const stats = HistoryQueryRepository.getWorkflowListStatistics(id);
 
     const response: WorkflowResponse = {
       success: true,
@@ -295,7 +296,7 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
   }
 
   try {
-    const history = GenerationHistoryModel.findById(historyId);
+    const history = HistoryQueryRepository.findById(historyId);
 
     if (!history) {
       return res.status(404).json({

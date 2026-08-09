@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
-import { GenerationHistoryModel } from '../models/GenerationHistory';
+import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepository';
+import { HistoryCommandService } from './historyCommandService';
 import { PromptCollectionService } from './promptCollectionService';
 import { settingsService } from './settingsService';
 import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin';
@@ -75,7 +76,7 @@ export class DeletionService {
 
   /** Remove generation-history rows linked to a hash and keep log wording consistent. */
   private static cleanupGenerationHistoryForHash(compositeHash: string, orphaned = false): number {
-    const deletedHistoryCount = GenerationHistoryModel.deleteByCompositeHash(compositeHash);
+    const deletedHistoryCount = HistoryCommandService.deleteByCompositeHash(compositeHash);
     if (deletedHistoryCount > 0) {
       const label = orphaned ? 'orphaned generation history record(s) for' : 'generation history record(s) linked to';
       console.log(`🧹 Removed ${deletedHistoryCount} ${label} ${compositeHash}`);
@@ -262,7 +263,7 @@ export class DeletionService {
    * @returns 삭제 성공 여부
    */
   static async deleteGenerationHistoryOnly(historyId: number): Promise<boolean> {
-    const history = GenerationHistoryModel.findById(historyId);
+    const history = HistoryQueryRepository.findById(historyId);
 
     if (!history) {
       throw new Error('Generation history not found');
@@ -271,7 +272,7 @@ export class DeletionService {
     console.log(`🗑️ Deleting generation history only: ${historyId}`);
 
     // 히스토리 DB에서만 삭제
-    GenerationHistoryModel.delete(historyId);
+    HistoryCommandService.delete(historyId);
 
     console.log(`✅ Generation history ${historyId} deleted successfully`);
     return true;
@@ -284,7 +285,7 @@ export class DeletionService {
    * @returns 삭제 성공 여부
    */
   static async deleteGenerationHistoryWithFiles(historyId: number): Promise<boolean> {
-    const history = GenerationHistoryModel.findById(historyId);
+    const history = HistoryQueryRepository.findById(historyId);
 
     if (!history) {
       throw new Error('Generation history not found');
@@ -302,7 +303,7 @@ export class DeletionService {
     }
 
     // 2. 히스토리 레코드 삭제
-    GenerationHistoryModel.delete(historyId);
+    HistoryCommandService.delete(historyId);
 
     console.log(`✅ Generation history ${historyId} and files deleted successfully`);
     return true;

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
-import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
+import { HistoryCommandService } from '../../services/historyCommandService';
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers';
 
 export async function handleGenerationHistoryCleanup(req: Request, res: Response) {
@@ -54,7 +55,7 @@ function handleScopedFailedGenerationHistoryCleanup(req: Request, res: Response,
     return;
   }
 
-  const failedRecords = GenerationHistoryModel.findAll({
+  const failedRecords = HistoryQueryRepository.findAll({
     generation_status: 'failed',
     requested_by_account_id: requesterAccountId,
     requested_by_account_type: requesterAccountType,
@@ -62,7 +63,7 @@ function handleScopedFailedGenerationHistoryCleanup(req: Request, res: Response,
 
   const deleted = dryRun
     ? failedRecords.length
-    : GenerationHistoryModel.deleteMany(
+    : HistoryCommandService.deleteMany(
         failedRecords
           .map((record) => record.id)
           .filter((id): id is number => typeof id === 'number'),

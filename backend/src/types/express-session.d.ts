@@ -1,5 +1,5 @@
 import 'express-session';
-import type { AuthAccountType } from '../models/AuthAccount';
+import type { AuthAccountType } from './authAccount';
 
 declare module 'express-session' {
   interface SessionData {

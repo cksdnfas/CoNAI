@@ -19,7 +19,8 @@ import { QueueServiceThrottle, type ThrottledServiceType } from './generation-qu
 import { QueueTerminalJobWaiters } from './generation-queue/queueTerminalWaiters'
 import { publishQueueJobEvent } from './runtime-events/runtimeEventPublishers'
 import { ALLOWED_QUEUE_TRANSITIONS, buildQueueTransitionUpdates } from './generation-queue/queueTransitions'
-import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
+import type { ServiceType } from '../types/generationHistory'
+import { HistoryCommandService } from './historyCommandService'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type {
   GenerationQueueCancelOrigin,
@@ -575,19 +576,19 @@ export class GenerationQueueService {
       `).run(nowIso).changes
 
       // 아직 확정하지 않은 잡의 history 를 미리 error 로 만들지 않는다.
-      const cancelledHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+      const cancelledHistoryRecords = HistoryCommandService.recordErrorByQueueJobIds(
         cancelledBeforeDispatchJobIds,
         'Cancelled before dispatch.',
       )
-      const failedDispatchingHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+      const failedDispatchingHistoryRecords = HistoryCommandService.recordErrorByQueueJobIds(
         interruptedDispatchingJobIds,
         'Backend restarted while this queue job was dispatching. Retry is required.',
       )
-      const failedRunningHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+      const failedRunningHistoryRecords = HistoryCommandService.recordErrorByQueueJobIds(
         interruptedRunningJobIds,
         'Backend restarted while this queue job was running. Retry is required.',
       )
-      const expiredOrphanHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+      const expiredOrphanHistoryRecords = HistoryCommandService.recordErrorByQueueJobIds(
         expiredOrphanJobIds,
         'Backend restarted while upstream work may have been running, and it could not be recovered in time.',
       )

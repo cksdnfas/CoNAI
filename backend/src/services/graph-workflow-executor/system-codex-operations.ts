@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { resolveUploadsPath } from '../../config/runtimePaths'
-import { GenerationHistoryModel } from '../../models/GenerationHistory'
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { ImageUploadService } from '../imageUploadService'
@@ -180,8 +180,8 @@ async function resolveQueueBackedCodexOutput(params: {
   const debug = readQueueDebugMeta(completedJob.id) ?? {}
 
   const historyId = resolveQueueHistoryId(debug)
-  const preferredHistoryRecord = historyId ? GenerationHistoryModel.findById(historyId) : null
-  const queueHistoryRecords = GenerationHistoryModel.findAll({
+  const preferredHistoryRecord = historyId ? HistoryQueryRepository.findById(historyId) : null
+  const queueHistoryRecords = HistoryQueryRepository.findAll({
     service_type: 'codex',
     queue_job_id: completedJob.id,
     order_by: 'created_at',

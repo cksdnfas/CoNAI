@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
-import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { AutoTagSearchService } from '../../services/autoTagSearchService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { AutoTagSearchParams, TagFilter } from '../../types/autoTag';
@@ -128,8 +128,8 @@ export function registerImageTools(server: McpServer): void {
         if (service_type) filters.service_type = service_type;
         if (generation_status) filters.generation_status = generation_status;
 
-        const records = GenerationHistoryModel.findAllWithMetadata(filters);
-        const total = GenerationHistoryModel.countListRecords(filters);
+        const records = HistoryQueryRepository.findAllWithMetadata(filters);
+        const total = HistoryQueryRepository.countListRecords(filters);
 
         // 응답 크기를 줄이기 위해 핵심 필드만 추출
         const summary = records.map(r => ({

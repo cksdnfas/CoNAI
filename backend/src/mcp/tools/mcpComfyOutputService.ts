@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { HistoryCommandService } from '../../services/historyCommandService';
 import { APIImageProcessor } from '../../services/APIImageProcessor';
 import { BackgroundProcessorService } from '../../services/backgroundProcessorService';
 
@@ -17,23 +17,23 @@ export async function cleanupMcpComfyTempFile(filePath: string): Promise<void> {
 /** Save one MCP Comfy output through the same media pipeline used by normal generation. */
 export async function processMcpComfyOutput(historyId: number, sourceFilePath: string): Promise<string | null> {
   try {
-    GenerationHistoryModel.updateStatus(historyId, 'processing');
+    HistoryCommandService.updateStatus(historyId, 'processing');
 
     const processedPaths = await APIImageProcessor.processGeneratedFile(sourceFilePath, 'comfyui', {
       sourcePathForMetadata: sourceFilePath,
       originalFileName: path.basename(sourceFilePath),
     });
 
-    GenerationHistoryModel.updateImagePaths(historyId, {
+    HistoryCommandService.updateImagePaths(historyId, {
       compositeHash: processedPaths.compositeHash,
     });
     await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(processedPaths.compositeHash);
-    GenerationHistoryModel.updateStatus(historyId, 'completed');
+    HistoryCommandService.updateStatus(historyId, 'completed');
 
     return processedPaths.originalPath;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    GenerationHistoryModel.recordError(historyId, errorMessage);
+    HistoryCommandService.recordError(historyId, errorMessage);
     console.error(`[MCP ComfyUI] Failed to process generated output for history ${historyId}:`, errorMessage);
     return null;
   } finally {

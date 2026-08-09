@@ -5,7 +5,7 @@ import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUISer
 import { ComfyUIService } from '../../services/comfyuiService';
 import { ParallelGenerationService } from '../../services/comfyui/parallelGenerationService';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
-import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { HistoryCommandService } from '../../services/historyCommandService';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
 import { registerNovelAiGenerationTools } from './generationNovelAiTools';
 import { cleanupMcpComfyTempFile, processMcpComfyOutput } from './mcpComfyOutputService';
@@ -135,7 +135,7 @@ function registerComfyGenerationTools(server: McpServer): void {
 
         // submit 이후에는 history에 promptId를 쓰지 않고 상태만 올린다
         try {
-          GenerationHistoryModel.update(historyId, {
+          HistoryCommandService.update(historyId, {
             generation_status: 'processing' as const
           });
         } catch (e) {
@@ -176,7 +176,7 @@ function registerComfyGenerationTools(server: McpServer): void {
         }
         if (savedPaths.length === 0 && failedSaveCount === 0) {
           failedSaveCount = 1;
-          GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output file was returned');
+          HistoryCommandService.recordError(historyId, 'ComfyUI generation finished but no output file was returned');
         }
 
         return {
@@ -286,7 +286,7 @@ function registerComfyGenerationTools(server: McpServer): void {
               serverId: result.serverId,
             });
 
-            GenerationHistoryModel.update(historyId, {
+            HistoryCommandService.update(historyId, {
               generation_status: 'processing' as const
             });
           } catch (historyError) {

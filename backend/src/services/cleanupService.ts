@@ -1,5 +1,7 @@
 import { db } from '../database/init';
-import { GenerationHistoryModel, GenerationHistoryRecord, GenerationStatus } from '../models/GenerationHistory';
+import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepository';
+import type { GenerationHistoryRecord, GenerationStatus } from '../types/generationHistory';
+import { HistoryCommandService } from './historyCommandService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { requestGenerationResultRetentionPrune } from './generationResultRetentionService';
 
@@ -71,7 +73,7 @@ export class CleanupService {
   static findFailedRecords(olderThanHours: number = 24): GenerationHistoryRecord[] {
     const cutoffTime = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString();
 
-    return GenerationHistoryModel.findByStatus('failed', cutoffTime);
+    return HistoryQueryRepository.findByStatus('failed', cutoffTime);
   }
 
   /**
@@ -79,7 +81,7 @@ export class CleanupService {
    * History should follow the main image DB through composite_hash, not raw stored paths.
    */
   static async findOrphanedRecords(): Promise<GenerationHistoryRecord[]> {
-    const allRecords = GenerationHistoryModel.findAll({
+    const allRecords = HistoryQueryRepository.findAll({
       generation_status: 'completed'
     }).filter(record => record.composite_hash);
 
@@ -125,7 +127,7 @@ export class CleanupService {
   static findStaleRecords(olderThanHours: number = 1): GenerationHistoryRecord[] {
     const cutoffTime = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString();
 
-    return GenerationHistoryModel.findByStatuses(['pending', 'processing'], cutoffTime);
+    return HistoryQueryRepository.findByStatuses(['pending', 'processing'], cutoffTime);
   }
 
   /**
@@ -135,7 +137,7 @@ export class CleanupService {
   static findRecordsWithoutHash(olderThanHours: number = 24): GenerationHistoryRecord[] {
     const cutoffTime = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString();
 
-    const allCompleted = GenerationHistoryModel.findAll({
+    const allCompleted = HistoryQueryRepository.findAll({
       generation_status: 'completed'
     });
 
@@ -171,7 +173,7 @@ export class CleanupService {
       }));
 
       if (!dryRun) {
-        GenerationHistoryModel.delete(record.id!);
+        HistoryCommandService.delete(record.id!);
       }
       summary.failed_deleted++;
     }
@@ -184,7 +186,7 @@ export class CleanupService {
       }));
 
       if (!dryRun) {
-        GenerationHistoryModel.delete(record.id!);
+        HistoryCommandService.delete(record.id!);
       }
       summary.orphaned_deleted++;
     }
@@ -195,7 +197,7 @@ export class CleanupService {
       details.push(cleanupDetailForRecord(record, 'no_hash'));
 
       if (!dryRun) {
-        GenerationHistoryModel.delete(record.id!);
+        HistoryCommandService.delete(record.id!);
       }
       summary.no_hash_deleted++;
     }
@@ -206,7 +208,7 @@ export class CleanupService {
       details.push(cleanupDetailForRecord(record, 'stale'));
 
       if (!dryRun) {
-        GenerationHistoryModel.recordError(
+        HistoryCommandService.recordError(
           record.id!,
           'Generation timeout - auto-cleaned by cleanup service'
         );
@@ -278,7 +280,7 @@ export class CleanupService {
       }));
 
       if (!dryRun) {
-        GenerationHistoryModel.delete(record.id!);
+        HistoryCommandService.delete(record.id!);
       }
       summary.failed_deleted++;
     }

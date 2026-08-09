@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
 import { MediaMetadataFileQueries } from '../../models/Image/MediaMetadataFileQueries';
 import {
@@ -32,7 +32,7 @@ export async function handleHistoryBatchDownload(req: Request, res: Response) {
     return;
   }
 
-  const records = GenerationHistoryModel.findAllWithMetadata({ ids: uniqueHistoryIds, limit: uniqueHistoryIds.length })
+  const records = HistoryQueryRepository.findAllWithMetadata({ ids: uniqueHistoryIds, limit: uniqueHistoryIds.length })
     .filter((record) => canAccessHistoryRecord(req, record));
   const compositeHashes = Array.from(new Set(records.map(getHistoryCompositeHash).filter((hash): hash is string => Boolean(hash))));
 
@@ -118,7 +118,7 @@ export async function handleHistoryImageUpload(req: Request, res: Response, id: 
     return;
   }
 
-  const history = GenerationHistoryModel.findById(parseInt(id));
+  const history = HistoryQueryRepository.findById(parseInt(id));
   if (!history) {
     res.status(404).json({
       success: false,

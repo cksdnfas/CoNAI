@@ -247,54 +247,54 @@ function verifyMissingSourceArtifactWarningContract() {
 }
 
 function verifyArtifactOnlyHistoryListContract() {
-  const modelSource = readFileSync(resolve(process.cwd(), 'src/models/GenerationHistory.ts'), 'utf8')
+  const queryRepositorySource = readFileSync(resolve(process.cwd(), 'src/repositories/history/HistoryQueryRepository.ts'), 'utf8')
   const serviceSource = readFileSync(resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
   const mcpImageToolsSource = readFileSync(resolve(process.cwd(), 'src/mcp/tools/imageTools.ts'), 'utf8')
   const workflowExecutionRoutesSource = readFileSync(resolve(process.cwd(), 'src/routes/workflows/execution.routes.ts'), 'utf8')
 
   assert.match(
-    modelSource,
+    queryRepositorySource,
     /LEFT JOIN workflows workflow ON workflow\.id = gh\.workflow_id/,
     'generation history list reads should recognize artifact-explorer placeholder rows',
   )
   assert.match(
-    modelSource,
+    queryRepositorySource,
     /AND NOT \([\s\S]*?gh\.generation_status = 'completed'[\s\S]*?gh\.composite_hash IS NULL[\s\S]*?COALESCE\(workflow\.result_view_mode, ''\) = 'artifact_explorer'[\s\S]*?\)/,
     'completed artifact-only workflow placeholders must not appear as missing image results in history lists',
   )
   assert.doesNotMatch(
-    modelSource,
+    queryRepositorySource,
     /AND NOT \([\s\S]*?gh\.composite_hash IS NULL[\s\S]*?AND workflow\.result_view_mode = 'artifact_explorer'[\s\S]*?\)/,
     'history list visibility filter must keep NULL workflow modes visible instead of letting SQL NULL exclude rows',
   )
   assert.match(
-    modelSource,
+    queryRepositorySource,
     /static findAllWithMetadata\([\s\S]*?FROM api_generation_history gh[\s\S]*?LEFT JOIN workflows workflow ON workflow\.id = gh\.workflow_id[\s\S]*?appendHistoryListVisibilityFilter\(sql\)/,
     'generation history metadata list query should join workflow metadata before applying the list visibility filter',
   )
   assert.match(
     serviceSource,
-    /GenerationHistoryModel\.countListRecords\(/,
+    /HistoryQueryRepository\.countListRecords\(/,
     'generation history list totals should use the same visibility filter as history list rows',
   )
   assert.match(
-    modelSource,
+    queryRepositorySource,
     /static getWorkflowListStatistics\([\s\S]*?appendHistoryListVisibilityFilter\(/,
     'workflow history stats should have a list-visible variant for artifact-explorer placeholders',
   )
   assert.match(
-    modelSource,
+    queryRepositorySource,
     /static getListStatistics\([\s\S]*?SUM\(CASE WHEN gh\.service_type = 'comfyui'[\s\S]*?SUM\(CASE WHEN gh\.generation_status = 'completed'[\s\S]*?appendHistoryListVisibilityFilter\(/,
     'global generation-history statistics should aggregate the same list-visible rows as history lists',
   )
   assert.match(
     serviceSource,
-    /static async getStatistics\([\s\S]*?return GenerationHistoryModel\.getListStatistics\(\)/,
+    /static async getStatistics\([\s\S]*?return HistoryQueryRepository\.getListStatistics\(filters\)/,
     'generation-history statistics endpoint should use list-visible aggregate statistics',
   )
   assert.match(
     mcpImageToolsSource,
-    /get_generation_history[\s\S]*?GenerationHistoryModel\.findAllWithMetadata\(filters\)[\s\S]*?GenerationHistoryModel\.countListRecords\(filters\)/,
+    /get_generation_history[\s\S]*?HistoryQueryRepository\.findAllWithMetadata\(filters\)[\s\S]*?HistoryQueryRepository\.countListRecords\(filters\)/,
     'MCP generation-history tool should keep records and totals aligned with list visibility',
   )
   assert.match(
@@ -310,7 +310,7 @@ function verifyArtifactOnlyHistoryListContract() {
   assert.match(
     readFileSync(resolve(process.cwd(), 'src/routes/generation-history.routes.ts'), 'utf8'),
     /\/workflow\/:workflowId\/statistics[\s\S]*?GenerationHistoryService\.getWorkflowListStatistics\(parseInt\(workflowId\)\)/,
-    'workflow generation-history statistics endpoint should use the same list-visible stats as workflow history rows',
+    'workflow generation-history statistics endpoint should preserve its global list-visible statistics contract',
   )
 }
 

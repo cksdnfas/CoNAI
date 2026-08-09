@@ -93,7 +93,8 @@ async function main() {
     const { initializeApiGenerationDb } = await import('../database/apiGenerationDb')
     const mainDatabase = await import('../database/init')
     const { GenerationQueueModel } = await import('../models/GenerationQueue')
-    const { GenerationHistoryModel } = await import('../models/GenerationHistory')
+    const { HistoryQueryRepository } = await import('../repositories/history/HistoryQueryRepository')
+    const { HistoryCommandService } = await import('../services/historyCommandService')
     const { GenerationQueueService } = await import('../services/generationQueueService')
     const { settingsService } = await import('../services/settingsService')
 
@@ -175,19 +176,19 @@ async function main() {
       request_summary: 'interrupted running job',
     })
 
-    const cancelledHistoryId = GenerationHistoryModel.create({
+    const cancelledHistoryId = HistoryCommandService.create({
       service_type: 'novelai',
       generation_status: 'pending',
       nai_model: 'test',
       queue_job_id: cancelledQueuedJobId,
     })
-    const interruptedDispatchingHistoryId = GenerationHistoryModel.create({
+    const interruptedDispatchingHistoryId = HistoryCommandService.create({
       service_type: 'novelai',
       generation_status: 'processing',
       nai_model: 'test',
       queue_job_id: interruptedDispatchingJobId,
     })
-    const interruptedRunningHistoryId = GenerationHistoryModel.create({
+    const interruptedRunningHistoryId = HistoryCommandService.create({
       service_type: 'novelai',
       generation_status: 'processing',
       nai_model: 'test',
@@ -206,9 +207,9 @@ async function main() {
     }
     assertRestartFailure(GenerationQueueModel.findById(interruptedDispatchingJobId), 'interrupted dispatching recovery job')
     assertRestartFailure(GenerationQueueModel.findById(interruptedRunningJobId), 'interrupted running recovery job')
-    assertHistoryFailure(GenerationHistoryModel.findById(cancelledHistoryId), 'cancelled queued recovery history', 'Cancelled before dispatch')
-    assertHistoryFailure(GenerationHistoryModel.findById(interruptedDispatchingHistoryId), 'interrupted dispatching recovery history', 'dispatching')
-    assertHistoryFailure(GenerationHistoryModel.findById(interruptedRunningHistoryId), 'interrupted running recovery history', 'running')
+    assertHistoryFailure(HistoryQueryRepository.findById(cancelledHistoryId), 'cancelled queued recovery history', 'Cancelled before dispatch')
+    assertHistoryFailure(HistoryQueryRepository.findById(interruptedDispatchingHistoryId), 'interrupted dispatching recovery history', 'dispatching')
+    assertHistoryFailure(HistoryQueryRepository.findById(interruptedRunningHistoryId), 'interrupted running recovery history', 'running')
 
     await waitFor(() => startedJobs.length === 1, 500)
     if (startedJobs[0] !== firstJobId) {

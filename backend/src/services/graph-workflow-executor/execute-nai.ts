@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { type NAIMetadataInputParams } from '../../utils/nai/metadata'
-import { GenerationHistoryModel } from '../../models/GenerationHistory'
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
@@ -51,7 +51,7 @@ async function resolveQueueBackedNaiOutput(params: {
     throw new Error(`Completed queue job ${params.completedJobId} is no longer available`)
   }
 
-  const historyRecords = GenerationHistoryModel.findAll({
+  const historyRecords = HistoryQueryRepository.findAll({
     service_type: 'novelai',
     queue_job_id: completedJob.id,
     order_by: 'created_at',

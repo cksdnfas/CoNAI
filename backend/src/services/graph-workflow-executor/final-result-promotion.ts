@@ -2,7 +2,9 @@ import fs from 'fs'
 import path from 'path'
 import { resolveUploadsPath, runtimePaths } from '../../config/runtimePaths'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
-import { GenerationHistoryModel, type ServiceType } from '../../models/GenerationHistory'
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
+import type { ServiceType } from '../../types/generationHistory'
+import { HistoryCommandService } from '../historyCommandService'
 import { GenerationHistoryService } from '../generationHistoryService'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
@@ -395,7 +397,7 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
   const storagePath = candidate.storagePath as string
   await fs.promises.access(storagePath, fs.constants.R_OK)
 
-  const historyId = GenerationHistoryModel.create({
+  const historyId = HistoryCommandService.create({
     service_type: serviceType,
     generation_status: 'pending',
     workflow_id: params.workflowId,
@@ -429,7 +431,7 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     metadataPatch: buildMetadataPatch(params, metadata, serviceType, candidate),
   })
 
-  const completedHistory = GenerationHistoryModel.findById(historyId)
+  const completedHistory = HistoryQueryRepository.findById(historyId)
   return {
     ...candidate,
     reason: 'promoted',

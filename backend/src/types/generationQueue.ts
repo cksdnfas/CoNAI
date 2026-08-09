@@ -1,5 +1,5 @@
-import type { AuthAccountType } from '../models/AuthAccount'
-import type { ServiceType } from '../models/GenerationHistory'
+import type { AuthAccountType } from './authAccount'
+import type { ServiceType } from './generationHistory'
 
 export type GenerationQueueJobStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
 
