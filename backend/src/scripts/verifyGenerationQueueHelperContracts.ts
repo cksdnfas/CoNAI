@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { settingsService } from '../services/settingsService'
 import { QueueServiceThrottle } from '../services/generation-queue/queueServiceThrottle'
 import { buildQueueTransitionUpdates } from '../services/generation-queue/queueTransitions'
-import type { AppSettings } from '../types/settings'
+import type { AppSettings } from '@conai/shared'
 import type { GenerationQueueJobRecord } from '../types/generationQueue'
 
 const NOW_ISO = '2026-07-09T00:00:00.000Z'

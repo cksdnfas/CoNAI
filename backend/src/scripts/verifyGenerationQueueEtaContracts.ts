@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import verifyHelpers from '../../../scripts/verify-helpers'
 import { computeQueueEtas, computeQueuePositions } from '../routes/generation-queue/queue-eta'
 import { getGenerationQueueServerCapacity } from '../services/generationQueueRouting'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type { GenerationQueueJobRecord } from '../types/generationQueue'
 
 const ISO = '2026-05-14T00:00:00.000Z'
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+const source = createSourceReader(process.cwd())
 
 function server(overrides: Partial<ComfyUIServerRecord> & Pick<ComfyUIServerRecord, 'id' | 'name'>): ComfyUIServerRecord {
   return {
@@ -77,7 +78,7 @@ function assertEta(
 }
 
 function main() {
-  const queueEtaSource = readFileSync(resolve(process.cwd(), 'src/routes/generation-queue/queue-eta.ts'), 'utf8')
+  const queueEtaSource = source('src/routes/generation-queue/queue-eta.ts')
   assert.match(
     queueEtaSource,
     /const eligibleServerIdSet = new Set\(queuePosition\.eligibleServerIds\)/,
@@ -169,7 +170,7 @@ function main() {
   const unavailableTagEtas = computeQueueEtas(unavailableTagQueue, unavailableTagPositions, durationSamples, activeServers)
   assertEta(unavailableTagEtas, 51, { waitSeconds: null, totalSeconds: null, durationSeconds: 40 })
 
-  console.log('✅ Generation queue ETA contracts passed (capacity-aware ComfyUI lanes, queued-ahead distribution, missing samples)')
+  reportVerificationSuccess('✅ Generation queue ETA contracts passed (capacity-aware ComfyUI lanes, queued-ahead distribution, missing samples)')
 }
 
 main()

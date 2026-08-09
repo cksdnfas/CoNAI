@@ -115,6 +115,7 @@
     "verify:generation-queue-ui-contracts": "cd frontend && npm run verify:generation-queue-ui-contracts",
     "verify:comfy-workflow-routing-contracts": "cd frontend && npm run verify:comfy-workflow-routing-contracts",
     "verify:generation-history-feed-progress-ui-contracts": "cd frontend && npm run verify:generation-history-feed-progress-ui-contracts",
+    "verify:generation-history-refactoring-contracts": "cd backend && npm run verify:generation-history-refactoring-contracts",
     "verify:workflow-reservations-ui-contracts": "cd frontend && npm run verify:workflow-reservations-ui-contracts",
     "verify:home-feed-progress-ui-contracts": "cd frontend && npm run verify:home-feed-progress-ui-contracts",
     "verify:group-image-feed-progress-ui-contracts": "cd frontend && npm run verify:group-image-feed-progress-ui-contracts",
@@ -158,6 +159,8 @@
     "verify:group-rematch-job-contracts": "cd backend && npm run verify:group-rematch-job-contracts",
     "verify:group-rematch-polling-contracts": "cd frontend && npm run verify:group-rematch-polling-contracts",
     "verify:runtime-job-contracts": "cd backend && npm run verify:runtime-job-contracts",
+    "verify:watcher-lifecycle-contracts": "cd backend && npm run verify:watcher-lifecycle-contracts",
+    "verify:video-poster-contracts": "cd backend && npm run verify:video-poster-contracts",
     "verify:runtime-job-ui-contracts": "cd frontend && npm run verify:runtime-job-ui-contracts",
     "verify:supported-extension-contracts": "cd backend && npm run verify:supported-extension-contracts",
     "verify:recycle-bin-deletion-contracts": "cd backend && npm run verify:recycle-bin-deletion-contracts",
@@ -175,7 +178,7 @@
     "verify:migration:full": "npm run verify:migration && npm run verify:policy:generated-artifact && npm run verify:no-ui-signatures:generated && npm run verify:no-ui-signatures:full",
     "i18n:check": "node scripts/i18n-check.mjs",
     "verify:thumbnail-default-settings-contracts": "cd backend && npm run verify:thumbnail-default-settings-contracts",
-    "verify:bundle-budget": "cd frontend && npm run verify:bundle-budget",
+    "verify:bundle-budget": "npm run build:frontend && cd frontend && npm run verify:bundle-budget",
     "verify:optimization-hot-path-contracts": "node scripts/verify-optimization-hot-path-contracts.mjs",
     "verify:module-definition-reconcile-contracts": "cd backend && npm run verify:module-definition-reconcile-contracts",
     "verify:comfy-workflow-authoring-contracts": "cd frontend && npm run verify:comfy-workflow-authoring-contracts",
@@ -199,6 +202,7 @@
     "verify:mcp-local-evidence-export": "cd backend && npm run verify:mcp-local-evidence-export",
     "verify:runtime-role-contracts": "cd backend && npm run verify:runtime-role-contracts",
     "verify:runtime-event-stream-contracts": "cd backend && npm run verify:runtime-event-stream-contracts",
+    "verify:graceful-shutdown-contracts": "cd backend && npm run verify:graceful-shutdown-contracts",
     "verify:runtime-event-stream-ui-contracts": "cd frontend && npm run verify:runtime-event-stream-ui-contracts"
   },
   "devDependencies": {

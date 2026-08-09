@@ -3,9 +3,13 @@ import * as fs from 'node:fs'
 import * as http from 'node:http'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import verifyHelpers from '../../../scripts/verify-helpers'
 
 const runtimeBase = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-queue-cancel-protocol-'))
 process.env.RUNTIME_BASE_PATH = runtimeBase
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+// Source contracts must stay independent of CRLF checkouts on Windows.
+const readSource = createSourceReader(process.cwd(), { normalizeLineEndings: true })
 
 type QueryPlanRow = { detail: string }
 
@@ -36,11 +40,6 @@ async function removeRuntimeBaseWithRetries(attempts = 10) {
   }
 
   console.warn(`⚠️ Failed to remove cancel protocol contract temp directory ${runtimeBase}`)
-}
-
-function readSource(relativePath: string) {
-  // 소스 패턴 계약은 줄바꿈 방식에 좌우되면 안 된다(워킹트리는 CRLF 로 체크아웃될 수 있다).
-  return fs.readFileSync(path.resolve(process.cwd(), relativePath), 'utf8').replace(/\r\n/g, '\n')
 }
 
 /** Extract one `CREATE TABLE generation_queue_jobs (...)` column name set from schema source. */
@@ -354,7 +353,7 @@ async function assertComfyQueueTupleContract() {
   const liveQueue = await readLiveComfyQueue() as { queue_running?: unknown[] } | null
   const liveRunning = Array.isArray(liveQueue?.queue_running) ? liveQueue.queue_running : []
   if (liveRunning.length === 0) {
-    console.log('ℹ️ Live ComfyUI queue_running was empty or unreachable; tuple contract verified against the pinned synthetic shape only')
+    reportVerificationSuccess('ℹ️ Live ComfyUI queue_running was empty or unreachable; tuple contract verified against the pinned synthetic shape only')
     return
   }
 
@@ -365,7 +364,7 @@ async function assertComfyQueueTupleContract() {
     liveEntry[3] !== null && typeof liveEntry[3] === 'object' && !Array.isArray(liveEntry[3]),
     'live /queue running entry index 3 must expose extra_data (PJ-3 premise)',
   )
-  console.log('✅ Live ComfyUI /queue running entry exposes extra_data at index 3')
+  reportVerificationSuccess('✅ Live ComfyUI /queue running entry exposes extra_data at index 3')
 }
 
 function assertSubmitFailureClassifier(classifySubmitFailure: (error: unknown) => string) {
@@ -549,7 +548,7 @@ async function main() {
       'readCancelState must return the full lean cancellation snapshot (CR-4)',
     )
 
-    console.log('✅ Generation queue cancel protocol contracts passed (schema rebuild, CR-1/CR-2, PJ-1/PJ-2/PJ-3, stale sweeper, restart reconcile)')
+    reportVerificationSuccess('✅ Generation queue cancel protocol contracts passed (schema rebuild, CR-1/CR-2, PJ-1/PJ-2/PJ-3, stale sweeper, restart reconcile)')
   } finally {
     GenerationQueueService.stop()
     closeUserSettingsDb()

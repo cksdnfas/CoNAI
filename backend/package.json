@@ -31,6 +31,8 @@
     "verify:mcp-local-evidence-export": "tsx src/scripts/verifyMcpLocalEvidenceExportContracts.ts",
     "verify:runtime-role-contracts": "tsx src/scripts/verifyRuntimeRoleContracts.ts",
     "verify:runtime-event-stream-contracts": "tsx src/scripts/verifyRuntimeEventStreamContracts.ts",
+    "verify:graceful-shutdown-contracts": "tsx src/scripts/verifyGracefulShutdownContracts.ts",
+    "verify:generation-history-refactoring-contracts": "tsx src/scripts/verifyGenerationHistoryRefactoringContracts.ts",
     "verify:result-retention-contracts": "tsx src/scripts/verifyResultRetentionContracts.ts",
     "verify:video-optimization": "tsx src/scripts/verifyVideoOptimizationContracts.ts",
     "verify:builtin-system-modules": "tsx src/scripts/verifyBuiltinSystemModuleDefinitions.ts",

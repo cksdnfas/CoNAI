@@ -1,9 +1,35 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { gzipSync } from 'node:zlib'
 
 const distDir = path.resolve(process.cwd(), 'dist')
-const indexHtml = readFileSync(path.join(distDir, 'index.html'), 'utf8')
+const distIndexPath = path.join(distDir, 'index.html')
+
+function newestMtimeMs(targetPath) {
+  const stat = statSync(targetPath)
+  if (!stat.isDirectory()) return stat.mtimeMs
+  return readdirSync(targetPath, { withFileTypes: true }).reduce(
+    (newest, entry) => Math.max(newest, newestMtimeMs(path.join(targetPath, entry.name))),
+    stat.mtimeMs,
+  )
+}
+
+const buildInputPaths = [
+  'src',
+  'index.html',
+  'package.json',
+  'tsconfig.app.json',
+  'tsconfig.node.json',
+  'vite.config.ts',
+].map((relativePath) => path.resolve(process.cwd(), relativePath))
+const newestBuildInputMtimeMs = Math.max(...buildInputPaths.map(newestMtimeMs))
+const distIndexMtimeMs = statSync(distIndexPath).mtimeMs
+
+if (distIndexMtimeMs < newestBuildInputMtimeMs) {
+  console.warn('Bundle budget is reading dist output older than a build input; run the frontend production build for a source-current measurement')
+}
+
+const indexHtml = readFileSync(distIndexPath, 'utf8')
 const initialAssetMatches = [
   ...indexHtml.matchAll(/<script[^>]+src="\.?\/assets\/([^"]+\.js)"/g),
   ...indexHtml.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="\.?\/assets\/([^"]+\.js)"/g),
