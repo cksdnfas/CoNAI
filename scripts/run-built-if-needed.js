@@ -12,6 +12,15 @@ const FRONTEND_INDEX = path.join(BACKEND_DIR, 'dist', 'frontend', 'index.html');
 
 const SPLIT_OPT_IN_ENV = 'CONAI_ALLOW_SPLIT_RUNTIME';
 
+// libuv 스레드풀 기본값은 4로, 비동기 fs/crypto 호출 전부가 이 4개 스레드를
+// 공유한다. 기동 직후 chokidar 초기 스캔·폴더 스캔·해시 작업이 큐를 채우면
+// HTTP 이미지 스트리밍까지 같은 큐에서 대기하므로 웹 탐색 전체가 밀린다.
+// 반드시 프로세스 시작 전에 주입해야 하며(첫 스레드풀 사용 시 고정), .env 는
+// 프로세스 시작 후에 로드되므로 여기 런처가 유일하게 안전한 주입 지점이다.
+const runtimeThreadPoolEnv = process.env.UV_THREADPOOL_SIZE
+  ? {}
+  : { UV_THREADPOOL_SIZE: '16' };
+
 const cliArgs = process.argv.slice(2);
 const args = new Set(cliArgs);
 const isCheckOnly = args.has('--check');
@@ -254,6 +263,7 @@ function startRuntimeChild(label, role, extraEnv = {}) {
     shell: false,
     env: {
       ...process.env,
+      ...runtimeThreadPoolEnv,
       NODE_ENV: 'production',
       CONAI_RUNTIME_ROLE: role,
       // 자식도 격하 게이트를 통과해야 하므로 opt-in 을 그대로 전달한다.
@@ -411,6 +421,7 @@ function main() {
     cwd: BACKEND_DIR,
     shell: false,
     env: {
+      ...runtimeThreadPoolEnv,
       NODE_ENV: 'production',
       ...runtimeEnv,
     },

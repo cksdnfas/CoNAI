@@ -14,6 +14,16 @@ import type { RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner';
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 const isVerboseAutoScanLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
+// 재시작 직후에는 모든 폴더의 last_scan_date 가 한꺼번에 만료돼 첫 주기에 전체
+// 폴더가 연속으로 풀스캔되고, 그동안 디스크·스레드풀이 점유돼 웹 탐색이 밀린다.
+// 주기당 스캔 폴더 수를 제한해 밀린 폴더를 여러 주기(1분 간격)에 분산한다.
+// getFoldersNeedingScan 이 오래된 순으로 정렬하므로 다음 주기가 이어서 처리한다.
+function resolveAutoScanMaxFoldersPerTick(): number {
+  const parsed = Number.parseInt(process.env.CONAI_AUTO_SCAN_MAX_FOLDERS_PER_TICK ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 2;
+}
+const AUTO_SCAN_MAX_FOLDERS_PER_TICK = resolveAutoScanMaxFoldersPerTick();
+
 interface ScanFolderOptions {
   quietIfNoChanges?: boolean;
   candidateFiles?: string[];
@@ -251,8 +261,16 @@ export class FolderScanService {
 
     const results: ScanResult[] = [];
     let didLogAutoScanStart = false;
+    let scannedThisTick = 0;
+    let deferredCount = 0;
 
     for (const folder of folders) {
+      // 워처 스킵 폴더는 상한을 소모하지 않도록 실제 스캔 수만 센다.
+      if (scannedThisTick >= AUTO_SCAN_MAX_FOLDERS_PER_TICK) {
+        deferredCount++;
+        continue;
+      }
+
       try {
         // 워처 상태 확인
         const watcherStatus = getWatcherRuntimeStatus(folder.id);
@@ -283,6 +301,8 @@ export class FolderScanService {
         if (isVerboseAutoScanLoggingEnabled) {
           console.log(`\n🔍 자동 스캔: ${folder.folder_name}`);
         }
+        // 실패한 시도도 I/O 를 소모하므로 성공 여부와 무관하게 상한을 소모한다.
+        scannedThisTick++;
         const result = await this.scanFolder(folder.id, false, { quietIfNoChanges: true });
         results.push(result);
       } catch (error) {
@@ -303,6 +323,10 @@ export class FolderScanService {
           backgroundTasks: 0
         });
       }
+    }
+
+    if (deferredCount > 0) {
+      console.log(`  ⏳ 자동 스캔 분산: 이번 주기 ${scannedThisTick}개 처리, ${deferredCount}개 폴더는 다음 주기로 연기`);
     }
 
     if (isVerboseAutoScanLoggingEnabled && didLogAutoScanStart) {

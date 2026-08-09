@@ -11,6 +11,7 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import path from 'path';
 import fs from 'fs';
+import pLimit from 'p-limit';
 import { FolderScanService } from './folderScan';
 import { shouldProcessFileExtension } from '../constants/supportedExtensions';
 import {
@@ -317,6 +318,13 @@ export class FileWatcherService {
   private static readonly MAX_RETRY_ATTEMPTS = parseInt(process.env.WATCHER_RETRY_ATTEMPTS || '3');
   private static readonly RETRY_DELAY_MS = parseInt(process.env.WATCHER_RETRY_DELAY_MS || '5000');
   private static readonly READY_TIMEOUT_MS = resolveWatcherReadyTimeoutMs();
+  // chokidar 초기 스캔은 트리 전체를 readdir/stat 하며(alwaysStat), 모든 폴더를
+  // 동시에 시작하면 libuv 스레드풀이 stat 로 포화되어 HTTP 응답까지 밀린다.
+  // ready 타임아웃은 폴더별로 슬롯을 얻은 시점부터 시작하므로 직렬화와 무관하다.
+  private static readonly INIT_CONCURRENCY = Math.max(
+    1,
+    parseInt(process.env.CONAI_WATCHER_INIT_CONCURRENCY || '2', 10) || 2,
+  );
 
   private static syncRuntimeStatus(entry: WatcherEntry): void {
     setWatcherRuntimeStatus({
@@ -344,9 +352,11 @@ export class FileWatcherService {
       let errorCount = 0;
 
       // 폴더별 ready 대기(chokidar 초기 스캔, 최대 READY_TIMEOUT_MS)가 기동 시간을
-      // 지배하므로 순차가 아닌 병렬로 시작한다.
+      // 지배하므로 순차가 아닌 병렬로 시작하되, 무제한 병렬은 초기 스캔 I/O 가
+      // 스레드풀을 독점해 웹 응답을 막으므로 INIT_CONCURRENCY 로 제한한다.
+      const initLimit = pLimit(this.INIT_CONCURRENCY);
       await Promise.all(
-        enabledFolders.map(async (folder) => {
+        enabledFolders.map((folder) => initLimit(async () => {
           try {
             const validation = validateInitialWatcherPath(folder.folder_path);
             if (!validation.isValid) {
@@ -370,7 +380,7 @@ export class FileWatcherService {
               console.error('  ❌ DB 업데이트 실패:', dbError);
             }
           }
-        }),
+        })),
       );
 
       if (startedCount > 0) {

@@ -6,6 +6,18 @@ import { EXCLUDE_PATTERN_CASE_SENSITIVE, normalizeExcludeGlobPatterns } from './
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
+// fast-glob 의 readdir 호출은 libuv 스레드풀을 거친다. 동시성을 스레드풀 크기보다
+// 크게 잡으면 대기열이 스캔 작업으로만 채워져, 같은 풀을 쓰는 HTTP 파일 응답이
+// 스캔이 끝날 때까지 밀린다. 스레드풀(기본 16, 런처가 주입)과 균형을 맞춘다.
+function resolveScanGlobConcurrency(): number {
+  const parsed = Number.parseInt(process.env.CONAI_SCAN_GLOB_CONCURRENCY ?? '', 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.min(parsed, 256);
+  }
+  return 16;
+}
+const SCAN_GLOB_CONCURRENCY = resolveScanGlobConcurrency();
+
 /**
  * 파일 검색 및 수집 서비스
  */
@@ -50,7 +62,7 @@ export class FileDiscoveryService {
         ignore: normalizeExcludeGlobPatterns(options.excludePatterns, normalizedPath),
         absolute: true,
         onlyFiles: true,
-        concurrency: 256,
+        concurrency: SCAN_GLOB_CONCURRENCY,
         // chokidar matcher와 동일한 대소문자 규칙을 공유 (excludePatternUtils 참고)
         caseSensitiveMatch: EXCLUDE_PATTERN_CASE_SENSITIVE,
         suppressErrors: true  // 권한 문제 등의 에러 무시

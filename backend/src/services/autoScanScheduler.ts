@@ -4,6 +4,26 @@ import { BackgroundProcessorService } from './backgroundProcessorService';
 import { SystemSettingsService } from './systemSettingsService';
 import { FileVerificationService } from './fileVerificationService';
 
+function parsePositiveIntEnv(rawValue: string | undefined, defaultValue: number): number {
+  const parsed = Number.parseInt(rawValue ?? '', 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : defaultValue;
+}
+
+// 기동 직후에는 chokidar 초기 스캔이 스레드풀·디스크 I/O 를 이미 점유하고 있어,
+// 백업 전체 스캔과 해시 배치까지 겹치면 HTTP 응답(웹 탐색)이 눈에 띄게 밀린다.
+// 첫 자동 스캔 주기와 첫 Phase 2 배치를 유예해 기동 체감 성능을 보호한다.
+// 유예 기준은 스케줄러 재시작이 아니라 프로세스 기동 시각이다(설정 변경으로
+// restart() 가 호출돼도 유예가 다시 걸리지 않도록).
+const PROCESS_BOOT_MS = Date.now();
+const AUTO_SCAN_STARTUP_GRACE_MS = parsePositiveIntEnv(
+  process.env.CONAI_AUTO_SCAN_STARTUP_GRACE_MS,
+  180_000,
+);
+const PHASE2_STARTUP_DELAY_MS = parsePositiveIntEnv(
+  process.env.CONAI_PHASE2_STARTUP_DELAY_MS,
+  15_000,
+);
+
 /**
  * 자동 스캔 스케줄러
  * - 폴더별 scan_interval 설정에 따라 주기적으로 스캔 실행
@@ -34,6 +54,12 @@ export class AutoScanScheduler {
         return;
       }
 
+      // 기동 유예: 워처 초기 스캔이 끝날 시간을 벌어준다. 유예가 지나면 밀린
+      // 폴더들은 runAutoScan 의 주기별 상한에 따라 여러 주기에 나눠 처리된다.
+      if (Date.now() - PROCESS_BOOT_MS < AUTO_SCAN_STARTUP_GRACE_MS) {
+        return;
+      }
+
       this.isRunning = true;
 
       try {
@@ -59,9 +85,9 @@ export class AutoScanScheduler {
       this.isPhase2Running = true;
 
       try {
-        const unprocessedCount = BackgroundProcessorService.getUnprocessedCount();
-        if (unprocessedCount > 0) {
-          // console.log(`🔨 백그라운드 처리 시작: ${unprocessedCount}개 대기 중`);
+        // 매초 도는 게이트이므로 COUNT(*) 대신 존재 여부만 확인한다(백로그가
+        // 클수록 COUNT 비용이 커져 이벤트 루프를 그만큼 잡는다).
+        if (BackgroundProcessorService.hasUnprocessedFiles()) {
           try {
             await BackgroundProcessorService.processUnhashedImages();
           } catch (error) {
@@ -73,11 +99,12 @@ export class AutoScanScheduler {
       }
     };
 
-    // 즉시 한 번 실행
-    runPhase2();
-
-    // 주기적 실행
-    this.phase2Timer = setInterval(runPhase2, phase2IntervalMs);
+    // 첫 배치는 기동 직후 워처 초기화·정적 리소스 로딩과 겹치지 않게 잠시 미룬다.
+    // setTimeout/setInterval 핸들은 stop() 의 clearInterval 로 함께 정리된다.
+    this.phase2Timer = setTimeout(() => {
+      runPhase2();
+      this.phase2Timer = setInterval(runPhase2, phase2IntervalMs);
+    }, PHASE2_STARTUP_DELAY_MS);
 
     // Phase 3 파일 검증 스케줄러 (초 단위로 동작, 활성화 시만)
     const startFileVerification = () => {

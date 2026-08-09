@@ -76,7 +76,7 @@ export class BackgroundProcessorService {
   /** Process one bounded batch and reschedule without blocking request handling. */
   static async processUnhashedImages(options: BackgroundProcessorOptions = {}): Promise<ProcessingResult> {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
-      if (this.getUnprocessedCount() > 0) {
+      if (this.hasUnprocessedFiles()) {
         this.scheduleHashGenerationAfterMaintenanceLock(options);
       }
       if (!options.quietIfIdle) {
@@ -166,7 +166,7 @@ export class BackgroundProcessorService {
         maybeTruncateImagesWal('background-video-processed');
       }
 
-      if (SystemMaintenanceLockService.isExclusiveActive() && this.getUnprocessedCount() > 0) {
+      if (SystemMaintenanceLockService.isExclusiveActive() && this.hasUnprocessedFiles()) {
         this.scheduleHashGenerationAfterMaintenanceLock(options);
         this.processing = false;
         if (!options.quietIfIdle) {
@@ -215,15 +215,14 @@ export class BackgroundProcessorService {
 
   static triggerHashGeneration(options: BackgroundProcessorOptions = {}): void {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
-      if (this.getUnprocessedCount() > 0) {
+      if (this.hasUnprocessedFiles()) {
         this.scheduleHashGenerationAfterMaintenanceLock(options);
       }
       return;
     }
 
     if (!this.processing) {
-      const pendingCount = this.getUnprocessedCount();
-      if (pendingCount === 0 && options.quietIfIdle) {
+      if (!this.hasUnprocessedFiles() && options.quietIfIdle) {
         return;
       }
 
@@ -254,6 +253,18 @@ export class BackgroundProcessorService {
         AND file_status = 'active'
     `).get() as { count: number };
     return result.count;
+  }
+
+  /** Existence-only gate for per-second scheduling — O(1) where COUNT scales with backlog size. */
+  static hasUnprocessedFiles(): boolean {
+    const row = db.prepare(`
+      SELECT 1 AS present
+      FROM image_files
+      WHERE composite_hash IS NULL
+        AND file_status = 'active'
+      LIMIT 1
+    `).get() as { present: number } | undefined;
+    return row !== undefined;
   }
 
   static isProcessing(): boolean {
