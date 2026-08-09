@@ -137,6 +137,25 @@ function asFiniteNumber(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+/** Reduce intrinsic media dimensions to a readable width:height ratio. */
+export function formatMiniMaxH3DirectorAspectRatio(width: number, height: number) {
+  const normalizedWidth = Math.round(width)
+  const normalizedHeight = Math.round(height)
+  if (!Number.isFinite(normalizedWidth) || !Number.isFinite(normalizedHeight) || normalizedWidth <= 0 || normalizedHeight <= 0) {
+    return null
+  }
+
+  let left = normalizedWidth
+  let right = normalizedHeight
+  while (right !== 0) {
+    const remainder = left % right
+    left = right
+    right = remainder
+  }
+
+  return `${normalizedWidth / left}:${normalizedHeight / left}`
+}
+
 function asString(value: unknown) {
   return typeof value === 'string' ? value : ''
 }

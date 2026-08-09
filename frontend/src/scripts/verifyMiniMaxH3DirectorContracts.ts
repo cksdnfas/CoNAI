@@ -6,6 +6,7 @@ import {
   buildMiniMaxH3DirectorPrompt,
   buildMiniMaxH3DirectorNodeValue,
   createMiniMaxH3DirectorBuilderState,
+  formatMiniMaxH3DirectorAspectRatio,
   getMiniMaxH3DirectorActiveItems,
   isMiniMaxH3DirectorInputLink,
   normalizeMiniMaxH3DirectorBuilderState,
@@ -36,6 +37,11 @@ function item(
     ...patch,
   }
 }
+
+assert.equal(formatMiniMaxH3DirectorAspectRatio(1920, 1080), '16:9', 'landscape media must expose a reduced aspect ratio')
+assert.equal(formatMiniMaxH3DirectorAspectRatio(1080, 1920), '9:16', 'portrait media must expose a reduced aspect ratio')
+assert.equal(formatMiniMaxH3DirectorAspectRatio(1344, 768), '7:4', 'non-standard dimensions must retain their exact reduced ratio')
+assert.equal(formatMiniMaxH3DirectorAspectRatio(0, 1080), null, 'invalid media dimensions must not produce an aspect ratio')
 
 const asset: WorkflowInputAssetRef = {
   __ref: 'workflow-input-asset',
@@ -256,6 +262,9 @@ assert.match(directorInputSource, /MiniMaxH3DirectorPromptBuilder/, 'the composi
 assert.match(promptBuilderSource, /prefillMiniMaxH3DirectorRefBuilder/, 'REF2VA must expose label and summary prefill')
 assert.match(promptBuilderSource, /buildMiniMaxH3DirectorPrompt/, 'the UI must preview the canonical DaSiWa prompt')
 assert.match(mediaCardSource, /videoPoster/, 'video references must derive transient posters without persisting base64 in timeline_data')
+assert.match(mediaCardSource, /naturalWidth.*naturalHeight/, 'image cards must read their intrinsic dimensions')
+assert.match(mediaCardSource, /videoWidth.*videoHeight/, 'video cards must read their intrinsic dimensions')
+assert.match(mediaCardSource, /data-minimax-aspect-ratio/, 'visual media cards must render their aspect ratio beneath the preview')
 assert.match(mediaCardSource, /LONG_PRESS_DELAY_MS/, 'media cards must support delayed pointer sorting')
 assert.match(mediaCardSource, /onReplaceFile/, 'dropping a file on a media card must replace that card')
 assert.doesNotMatch(mediaCardSource, /object-cover/, 'media previews must preserve their intrinsic aspect ratio')
