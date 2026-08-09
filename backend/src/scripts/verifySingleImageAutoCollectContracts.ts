@@ -8,14 +8,14 @@ function readSource(relativePath: string): string {
   return fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
 }
 
-const backgroundProcessor = readSource('backend/src/services/backgroundProcessorService.ts');
+const imageMediaProcessor = readSource('backend/src/services/background-media/imageMediaProcessor.ts');
 const backgroundQueue = readSource('backend/src/services/backgroundQueue.ts');
 const autoTagScheduler = readSource('backend/src/services/autoTagScheduler.ts');
 const autoCollectionOrchestrator = readSource('backend/src/services/autoCollection/autoCollectionOrchestrator.ts');
 
 assert.match(
-  backgroundProcessor,
-  /runAutoCollectionForNewImage\(\s*hashes\.compositeHash\s*\)/s,
+  imageMediaProcessor,
+  /runAutoCollectionForNewImage\(\s*hashes\.compositeHash,?\s*\)/s,
   'hash generation path must run single-image auto collection, not wait for full rematch',
 );
 

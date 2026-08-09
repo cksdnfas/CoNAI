@@ -2,9 +2,12 @@ import * as assert from 'node:assert/strict'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import verifyHelpers from '../../../scripts/verify-helpers'
 
 const runtimeBase = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-generation-queue-hot-path-'))
 process.env.RUNTIME_BASE_PATH = runtimeBase
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+const source = createSourceReader(process.cwd())
 
 type QueryPlanRow = { detail: string }
 
@@ -122,16 +125,19 @@ async function main() {
       `recent completed ETA query must not sort through a temp B-tree, got: ${plan.map((row) => row.detail).join(' | ')}`,
     )
 
-    const queueServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationQueueService.ts'), 'utf8')
-    const generationQueueModelSource = fs.readFileSync(path.resolve(process.cwd(), 'src/models/GenerationQueue.ts'), 'utf8')
-    const queueReadRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-read-routes.ts'), 'utf8')
-    const queueListServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-list-service.ts'), 'utf8')
-    const publicWorkflowRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/public-workflows.routes.ts'), 'utf8')
-    const generationHistoryServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
-    const apiImageProcessorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/APIImageProcessor.ts'), 'utf8')
-    const backgroundQueueSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundQueue.ts'), 'utf8')
-    const backgroundProcessorServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundProcessorService.ts'), 'utf8')
-    const autoTagSchedulerSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/autoTagScheduler.ts'), 'utf8')
+    const queueServiceSource = source('src/services/generationQueueService.ts')
+    const generationQueueModelSource = source('src/models/GenerationQueue.ts')
+    const queueReadRoutesSource = source('src/routes/generation-queue/queue-read-routes.ts')
+    const queueListServiceSource = source('src/routes/generation-queue/queue-list-service.ts')
+    const publicWorkflowRoutesSource = source('src/routes/public-workflows.routes.ts')
+    const generationHistoryServiceSource = source('src/services/generationHistoryService.ts')
+    const apiImageProcessorSource = source('src/services/APIImageProcessor.ts')
+    const backgroundQueueSource = source('src/services/backgroundQueue.ts')
+    const backgroundProcessorServiceSource = source('src/services/backgroundProcessorService.ts')
+    const mediaProcessingTypesSource = source('src/services/background-media/mediaProcessingTypes.ts')
+    const mediaPostprocessCoordinatorSource = source('src/services/background-media/mediaPostprocessCoordinator.ts')
+    const savedMediaOrchestratorSource = source('src/services/background-media/savedMediaOrchestrator.ts')
+    const autoTagSchedulerSource = source('src/services/autoTagScheduler.ts')
     assert.match(
       queueServiceSource,
       /const compatibleServerIdsByJobId = new Map<number, Set<number>>\(\)/,
@@ -198,7 +204,7 @@ async function main() {
     )
     // PAYLOAD-1: only the dispatch claim may hydrate the multi-MB request payload.
     // Everything else on the job lifecycle reads the lean list projection.
-    const queueRouteHelperSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-route-helpers.ts'), 'utf8')
+    const queueRouteHelperSource = source('src/routes/generation-queue/queue-route-helpers.ts')
     const stripComments = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
     const sliceMethod = (source: string, start: string, end: string) => {
       const startIndex = source.indexOf(start)
@@ -300,17 +306,17 @@ async function main() {
       'generated-image media registration should queue AI metadata extraction instead of blocking queue completion on it',
     )
     assert.match(
-      backgroundProcessorServiceSource,
+      mediaProcessingTypesSource,
       /metadataMode\?: 'inline' \| 'background'/,
       'saved-media processing should expose an explicit metadata scheduling mode',
     )
     assert.match(
-      backgroundProcessorServiceSource,
-      /options\.metadataMode === 'background'[\s\S]*?queueMetadataExtraction\(filePath, compositeHash, logLabel\)/,
+      mediaPostprocessCoordinatorSource,
+      /options\.metadataMode === 'background'[\s\S]*?return this\.queueMetadataExtraction\(filePath, compositeHash, logLabel\)/,
       'background metadata mode should hand processed media to the background queue without awaiting extraction',
     )
     assert.doesNotMatch(
-      backgroundProcessorServiceSource.match(/const processedRecord =[\s\S]*?if \(!options\.quiet\)/)?.[0] ?? '',
+      savedMediaOrchestratorSource.match(/const processedRecord =[\s\S]*?if \(!options\.quiet\)/)?.[0] ?? '',
       /processApiGenerationGroupAssignment\(compositeHash\)/,
       'saved-media processing must not rerun API generation group assignment after processFile already handled the hash-level handoff',
     )
@@ -559,7 +565,7 @@ async function main() {
     assert.equal(released.releasedInputFiles, 1, 'compacting every referencing payload must release the shared input once')
     assert.equal(fs.existsSync(resolveQueueInputPath(sharedSha)), false, 'a fully released input file must be deleted')
 
-    console.log('✅ Generation queue hot-path contracts passed (SQL filters, recent-completed index, lean ETA samples, lean lifecycle reads, covered debug state, refcounted image inputs)')
+    reportVerificationSuccess('✅ Generation queue hot-path contracts passed (SQL filters, recent-completed index, lean ETA samples, lean lifecycle reads, covered debug state, refcounted image inputs)')
   } finally {
     closeUserSettingsDb()
     fs.rmSync(runtimeBase, { recursive: true, force: true })

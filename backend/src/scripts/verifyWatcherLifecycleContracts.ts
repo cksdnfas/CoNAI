@@ -8,10 +8,26 @@ import {
   resolveWatcherReadyTimeoutMs,
   waitForChokidarReady,
 } from '../services/watcherLifecycleUtils';
+import {
+  MIN_WATCHER_POLLING_INTERVAL_MS,
+  resolveWatcherPollingOptions,
+} from '../services/fileWatcher/fileWatcherPathUtils';
 
 const projectRoot = path.resolve(__dirname, '../../..');
 const fileWatcherSource = fs.readFileSync(
   path.join(projectRoot, 'backend/src/services/fileWatcherService.ts'),
+  'utf8',
+);
+const watcherMigrationSource = fs.readFileSync(
+  path.join(projectRoot, 'backend/src/database/migrations/033_reset_prefilled_watcher_polling.ts'),
+  'utf8',
+);
+const watchedFolderServiceSource = fs.readFileSync(
+  path.join(projectRoot, 'backend/src/services/watchedFolderService.ts'),
+  'utf8',
+);
+const runtimeStartupSource = fs.readFileSync(
+  path.join(projectRoot, 'backend/src/startup/startRuntimeSideEffectServices.ts'),
   'utf8',
 );
 
@@ -19,6 +35,17 @@ assert.equal(DEFAULT_WATCHER_READY_TIMEOUT_MS, 120_000);
 assert.equal(resolveWatcherReadyTimeoutMs('45000'), 45_000);
 assert.equal(resolveWatcherReadyTimeoutMs('0'), DEFAULT_WATCHER_READY_TIMEOUT_MS);
 assert.equal(resolveWatcherReadyTimeoutMs('invalid'), DEFAULT_WATCHER_READY_TIMEOUT_MS);
+assert.equal(MIN_WATCHER_POLLING_INTERVAL_MS, 2_000);
+assert.deepEqual(
+  resolveWatcherPollingOptions({ watcher_polling_interval: null }, 'C:\\local-media'),
+  { usePolling: false, pollingInterval: undefined, pollingReason: 'default' },
+  'a local folder with the null default must use the native watcher',
+);
+assert.deepEqual(
+  resolveWatcherPollingOptions({ watcher_polling_interval: 100 }, 'C:\\local-media'),
+  { usePolling: true, pollingInterval: 2_000, pollingReason: 'user-configured' },
+  'explicit polling must retain the 2-second storm-safe floor',
+);
 
 async function verifyReadyListenerCleanup(): Promise<void> {
   const emitter = new EventEmitter();
@@ -57,6 +84,21 @@ assert.match(
   fileWatcherSource,
   /await waitForWatcherReady[\s\S]*?catch \(error\)[\s\S]*?await watcher\.close\(\)/,
   'a watcher that fails readiness must be closed before the error escapes',
+);
+assert.match(
+  watcherMigrationSource,
+  /SET watcher_polling_interval = NULL[\s\S]*WHERE watcher_polling_interval = 2000/,
+  'migration 033 must reset the old forced-polling prefill to the null native default',
+);
+assert.match(
+  watchedFolderServiceSource,
+  /folderData\.watcher_polling_interval \?\? null/,
+  'new watched folders must persist null instead of forcing polling',
+);
+assert.match(
+  runtimeStartupSource,
+  /void \(async \(\) => \{[\s\S]*FileWatcherService\.initialize\(\)[\s\S]*\}\)\(\)/,
+  'watcher readiness must remain detached so HTTP listen is not blocked',
 );
 assert.match(
   fileWatcherSource,

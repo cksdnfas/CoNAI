@@ -1,16 +1,11 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
+import { resolve } from 'node:path';
+import verifyHelpers from '../../../scripts/verify-helpers';
 
-const projectRoot = path.resolve(__dirname, '../../..');
-const folderScanSource = fs.readFileSync(
-  path.join(projectRoot, 'backend/src/services/folderScan/index.ts'),
-  'utf8',
-);
-const fileWatcherSource = fs.readFileSync(
-  path.join(projectRoot, 'backend/src/services/fileWatcherService.ts'),
-  'utf8',
-);
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers;
+const source = createSourceReader(resolve(__dirname, '../../..'));
+const folderScanSource = source('backend/src/services/folderScan/index.ts');
+const fileWatcherSource = source('backend/src/services/fileWatcherService.ts');
 
 assert.match(
   folderScanSource,
@@ -53,4 +48,4 @@ assert.match(
   'events arriving during a scan must schedule a follow-up batch',
 );
 
-console.log('✅ Watched-folder scan efficiency contracts verified');
+reportVerificationSuccess('✅ Watched-folder scan efficiency contracts verified');

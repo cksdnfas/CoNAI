@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
+import { resolve } from 'node:path';
+import verifyHelpers from '../../../scripts/verify-helpers';
 
-const projectRoot = path.resolve(__dirname, '../../..');
-
-function readSource(relativePath: string): string {
-  return fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
-}
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers;
+const readSource = createSourceReader(resolve(__dirname, '../../..'));
 
 const walMaintenanceSource = readSource('backend/src/database/walMaintenance.ts');
 const backgroundProcessorSource = readSource('backend/src/services/backgroundProcessorService.ts');
+const savedMediaOrchestratorSource = readSource('backend/src/services/background-media/savedMediaOrchestrator.ts');
 const autoCollectionSource = readSource('backend/src/services/autoCollection/autoCollectionOrchestrator.ts');
 const autoFolderGroupSource = readSource('backend/src/services/autoFolderGroupService.ts');
 const folderScanSource = readSource('backend/src/services/folderScan/index.ts');
@@ -41,6 +39,11 @@ assert.match(
   'image background processing should check WAL after write-heavy processing',
 );
 assert.match(
+  savedMediaOrchestratorSource,
+  /maybeTruncateImagesWal\('background-image-processed'\)/,
+  'immediate saved-media processing should preserve its gated image WAL check',
+);
+assert.match(
   backgroundProcessorSource,
   /maybeTruncateImagesWal\('background-video-processed'\)/,
   'video background processing should check WAL after write-heavy processing',
@@ -61,4 +64,4 @@ assert.match(
   'whole-folder scans should check WAL after bulk file reconciliation writes',
 );
 
-console.log('✅ SQLite WAL maintenance contracts verified');
+reportVerificationSuccess('✅ SQLite WAL maintenance contracts verified');

@@ -13,7 +13,7 @@ const autoTagIndexMigration = readSource('backend/src/database/migrations/022_ad
 const autoTagIndexPruneMigration = readSource('backend/src/database/migrations/023_prune_media_auto_tag_index_variants.ts');
 const autoTagStateMigration = readSource('backend/src/database/migrations/028_add_media_auto_tag_state.ts');
 const autoTagStateService = readSource('backend/src/services/autoTagStateService.ts');
-const backgroundProcessorService = readSource('backend/src/services/backgroundProcessorService.ts');
+const mediaPostprocessCoordinator = readSource('backend/src/services/background-media/mediaPostprocessCoordinator.ts');
 const redundantIndexPruneMigration = readSource('backend/src/database/migrations/026_prune_redundant_indexes.ts');
 const autoTagSearchTerms = readSource('backend/src/services/autoTagSearch/autoTagSearchTerms.ts');
 const autoTagIndexService = readSource('backend/src/services/autoTagIndexService.ts');
@@ -400,7 +400,7 @@ assert.match(
   'saved-media tagging must look up one row instead of re-scanning for pending work',
 );
 assert.match(
-  backgroundProcessorService,
+  mediaPostprocessCoordinator,
   /autoTagScheduler\.triggerManualProcessing\(compositeHash\)/,
   'background processing must hand the saved composite hash to the auto-tag scheduler',
 );

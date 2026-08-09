@@ -1,55 +1,9 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import path from 'node:path'
+import { resolve } from 'node:path'
+import verifyHelpers from '../../../scripts/verify-helpers'
 
-const projectRoot = path.resolve(__dirname, '../../..')
-
-function readSource(relativePath: string) {
-  return fs.readFileSync(path.join(projectRoot, relativePath), 'utf8')
-}
-
-function extractFunctionBody(source: string, functionName: string) {
-  const marker = `async function ${functionName}`
-  const start = source.indexOf(marker)
-  assert.notEqual(start, -1, `${functionName} should exist`)
-
-  const signatureStart = source.indexOf('(', start)
-  assert.notEqual(signatureStart, -1, `${functionName} should have a parameter signature`)
-
-  let parenDepth = 0
-  let signatureEnd = -1
-  for (let index = signatureStart; index < source.length; index += 1) {
-    const char = source[index]
-    if (char === '(') {
-      parenDepth += 1
-    } else if (char === ')') {
-      parenDepth -= 1
-      if (parenDepth === 0) {
-        signatureEnd = index
-        break
-      }
-    }
-  }
-  assert.notEqual(signatureEnd, -1, `${functionName} should close its parameter signature`)
-
-  const bodyStart = source.indexOf('{', signatureEnd)
-  assert.notEqual(bodyStart, -1, `${functionName} should have a body`)
-
-  let depth = 0
-  for (let index = bodyStart; index < source.length; index += 1) {
-    const char = source[index]
-    if (char === '{') {
-      depth += 1
-    } else if (char === '}') {
-      depth -= 1
-      if (depth === 0) {
-        return source.slice(bodyStart, index + 1)
-      }
-    }
-  }
-
-  throw new Error(`${functionName} body could not be parsed`)
-}
+const { createSourceReader, extractFunction: extractFunctionBody, reportVerificationSuccess } = verifyHelpers
+const readSource = createSourceReader(resolve(__dirname, '../../..'))
 
 function assertQueueBackedResolverUsesCanonicalReference(relativePath: string, functionName: string) {
   const body = extractFunctionBody(readSource(relativePath), functionName)
@@ -141,4 +95,4 @@ assertQueueBackedResolverUsesCanonicalReference(
 assertCanonicalMediaHelperCarriesHashMetadata()
 assertPromotedFinalResultsUseCanonicalMediaReference()
 
-console.log('Graph canonical media contract verification passed')
+reportVerificationSuccess('Graph canonical media contract verification passed')
