@@ -11,7 +11,7 @@ import type { SelectedImageDraft } from '@/features/image-generation/image-gener
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
-import { getLlmPresetOptions } from '@/lib/api-settings'
+import { getLlmPresetOptions } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphKeyValueListInput } from './module-graph-key-value-list-input'

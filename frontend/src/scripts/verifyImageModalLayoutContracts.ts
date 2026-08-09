@@ -1,12 +1,11 @@
 /// <reference types="node" />
 
 import { doesNotMatch, match, ok } from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import verifyHelpers from '../../../scripts/verify-helpers'
 
-function source(relativePath: string) {
-  return readFileSync(join(process.cwd(), relativePath), 'utf8').replace(/\r\n/g, '\n')
-}
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+
+const source = createSourceReader(process.cwd(), { normalizeLineEndings: true })
 
 function sliceRequiredSource(sourceText: string, start: string, end: string) {
   const startIndex = sourceText.indexOf(start)
@@ -431,34 +430,35 @@ function verifyImageNavigationButtonsRemainAvailableInSingleColumn() {
 
 function verifyImageModalMediaStartsFromContainedCenter() {
   const mediaSource = source('src/features/images/components/detail/image-detail-media.tsx')
+  const gestureSource = source('src/features/images/components/detail/use-image-detail-media-gestures.ts')
 
   match(
-    mediaSource,
+    gestureSource,
     /const \[naturalMediaSize, setNaturalMediaSize\] = useState<MediaSize \| null>\(null\)/,
     'modal image should track natural media dimensions before calculating the fitted frame',
   )
   match(
-    mediaSource,
+    gestureSource,
     /new ResizeObserver\(\(\[entry\]\) => \{[\s\S]*?setViewportSize\(getElementSize\(entry\.target\)\)/,
     'modal image should observe the real viewport size instead of relying on intrinsic CSS max-height behavior',
   )
   match(
-    mediaSource,
+    gestureSource,
     /const fitScale = Math\.min\(viewportSize\.width \/ naturalMediaSize\.width, viewportSize\.height \/ naturalMediaSize\.height\)/,
     'modal image fit should use contain math against both viewport axes',
   )
   match(
-    mediaSource,
-    /const resetView = useCallback\(\(\) => \{[\s\S]*?scaleRef\.current = DEFAULT_SCALE[\s\S]*?setScale\(DEFAULT_SCALE\)[\s\S]*?setOffset\(\{ x: 0, y: 0 \}\)[\s\S]*?\}, \[\]\)/,
+    gestureSource,
+    /const resetView = useCallback\(\(\) => \{[\s\S]*?scaleRef\.current = DEFAULT_SCALE[\s\S]*?setScale\(DEFAULT_SCALE\)[\s\S]*?setOffset\(\{ x: 0, y: 0 \}\)/,
     'modal reset should return to the fitted contain scale and centered offset',
   )
   match(
-    mediaSource,
+    gestureSource,
     /useEffect\(\(\) => \{[\s\S]*?setNaturalMediaSize\(null\)[\s\S]*?scaleRef\.current = DEFAULT_SCALE[\s\S]*?setScale\(DEFAULT_SCALE\)[\s\S]*?\}, \[[^\]]*renderUrl[^\]]*\]\)/,
     'changing modal images should not inherit a stale zoom level from a previous image',
   )
   doesNotMatch(
-    mediaSource,
+    `${mediaSource}\n${gestureSource}`,
     /IMAGE_DETAIL_SCALE_STORAGE_KEY|loadImageDetailScale|persistImageDetailScale/,
     'modal image zoom scale must not be persisted across images because default view should always be fitted contain',
   )
@@ -478,4 +478,4 @@ verifyDesktopInfoTogglesAreDesktopOnly()
 verifySingleColumnInfoViewerReservesImageHeight()
 verifyImageNavigationButtonsRemainAvailableInSingleColumn()
 verifyImageModalMediaStartsFromContainedCenter()
-console.log('Image modal layout contracts verified.')
+reportVerificationSuccess('Image modal layout contracts verified.')

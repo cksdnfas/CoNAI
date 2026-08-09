@@ -1,5 +1,5 @@
 import { deepEqual, equal, ok } from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import verifyHelpers from '../../../scripts/verify-helpers'
 import type { ComfyUIServer } from '../lib/api-image-generation-types'
 import type { ComfyUIServerTestState } from '../features/image-generation/image-generation-shared'
 import {
@@ -8,6 +8,9 @@ import {
   isComfyWorkflowServerActive,
   isComfyWorkflowServerRoutable,
 } from '../features/image-generation/components/comfy-workflow-routing'
+
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+const source = createSourceReader(new URL('../', import.meta.url))
 
 function makeServer(overrides: Partial<ComfyUIServer>): ComfyUIServer {
   return {
@@ -73,7 +76,7 @@ function assertRoutingSummary() {
 }
 
 function assertControllerUsesIndexedRoutingSummary() {
-  const controllerSource = readFileSync(new URL('../features/image-generation/components/comfy-workflow-controller-panel.tsx', import.meta.url), 'utf8')
+  const controllerSource = source('features/image-generation/components/comfy-workflow-controller-panel.tsx')
 
   ok(
     controllerSource.includes('buildComfyWorkflowServerRoutingSummary(servers, serverTests)'),
@@ -95,9 +98,9 @@ function assertControllerUsesIndexedRoutingSummary() {
 }
 
 function assertServerManagementKeepsInactiveRecordsOutOfRouting() {
-  const panelSource = readFileSync(new URL('../features/image-generation/components/comfy-generation-panel.tsx', import.meta.url), 'utf8')
-  const controllerSource = readFileSync(new URL('../features/image-generation/components/use-comfy-server-controller.ts', import.meta.url), 'utf8')
-  const nodeCardSource = readFileSync(new URL('../features/module-graph/components/module-graph-node-card.tsx', import.meta.url), 'utf8')
+  const panelSource = source('features/image-generation/components/comfy-generation-panel.tsx')
+  const controllerSource = source('features/image-generation/components/use-comfy-server-controller.ts')
+  const nodeCardCustomControlsSource = source('features/module-graph/components/module-graph-node-custom-controls.tsx')
 
   ok(
     panelSource.includes('getGenerationComfyUIServers(false)'),
@@ -112,7 +115,7 @@ function assertServerManagementKeepsInactiveRecordsOutOfRouting() {
     'Comfy server controller should expose an active/inactive toggle instead of deleting saved records',
   )
   ok(
-    nodeCardSource.includes('isActiveComfyWorkflowServerCandidate') && nodeCardSource.includes('linkedComfyServers.length > 0 ? activeLinkedComfyServers : activeGlobalComfyServers'),
+    nodeCardCustomControlsSource.includes('isActiveComfyWorkflowServerCandidate') && nodeCardCustomControlsSource.includes('linkedComfyServers.length > 0 ? activeLinkedComfyServers : activeGlobalComfyServers'),
     'module graph Comfy target picker should exclude inactive workflow-linked servers without falling back to global servers',
   )
 }
@@ -121,4 +124,4 @@ assertRoutingSummary()
 assertControllerUsesIndexedRoutingSummary()
 assertServerManagementKeepsInactiveRecordsOutOfRouting()
 
-console.log('Comfy workflow routing contracts verified.')
+reportVerificationSuccess('Comfy workflow routing contracts verified.')

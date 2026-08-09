@@ -1,14 +1,8 @@
-import { readFileSync } from 'node:fs'
+import verifyHelpers from '../../../scripts/verify-helpers'
 
-function assert(condition: unknown, message: string) {
-  if (!condition) {
-    throw new Error(message)
-  }
-}
+const { assertContract, createSourceReader, reportVerificationSuccess } = verifyHelpers
 
-function source(path: string) {
-  return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
-}
+const source = createSourceReader(new URL('../', import.meta.url))
 
 function verifySavedGraphDisabledFlagContract() {
   const apiSource = source('lib/api-module-graph.ts')
@@ -18,16 +12,16 @@ function verifySavedGraphDisabledFlagContract() {
   const viewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
   const interactionsSource = source('features/module-graph/use-module-graph-editor-interactions.ts')
 
-  assert(apiSource.includes('GraphWorkflowNode'), 'graph workflow API module should re-export the workflow node type')
-  assert(apiTypeSource.includes('disabled?: boolean'), 'graph workflow node API type should expose disabled flag')
-  assert(sharedSource.includes('disabled: node.data.disabled === true ? true : undefined'), 'graph payload should persist disabled nodes')
-  assert(sharedSource.includes('if (node.disabled === true)'), 'saved graph loading should restore disabled node state')
-  assert(sharedSource.includes("(node.disabled === undefined || typeof node.disabled === 'boolean')"), 'clipboard parser should accept only boolean disabled node state')
-  assert(interactionsSource.includes('disabled: nodeToDuplicate.data.disabled === true ? true : undefined'), 'node duplication should preserve disabled node state')
-  assert(interactionsSource.includes('disabled: copiedNode.disabled === true ? true : undefined'), 'clipboard paste should preserve disabled node state')
-  assert(validationSource.includes('const activeNodes = nodes.filter((node) => node.disabled !== true)'), 'workflow validation should ignore disabled nodes')
-  assert(viewModelSource.includes('disabled: node.data.disabled === true'), 'editor validation should pass disabled node state')
-  assert(viewModelSource.includes('disabled: node.disabled === true'), 'saved-workflow validation should pass disabled node state')
+  assertContract(apiSource.includes('GraphWorkflowNode'), 'graph workflow API module should re-export the workflow node type')
+  assertContract(apiTypeSource.includes('disabled?: boolean'), 'graph workflow node API type should expose disabled flag')
+  assertContract(sharedSource.includes('disabled: node.data.disabled === true ? true : undefined'), 'graph payload should persist disabled nodes')
+  assertContract(sharedSource.includes('if (node.disabled === true)'), 'saved graph loading should restore disabled node state')
+  assertContract(sharedSource.includes("(node.disabled === undefined || typeof node.disabled === 'boolean')"), 'clipboard parser should accept only boolean disabled node state')
+  assertContract(interactionsSource.includes('disabled: nodeToDuplicate.data.disabled === true ? true : undefined'), 'node duplication should preserve disabled node state')
+  assertContract(interactionsSource.includes('disabled: copiedNode.disabled === true ? true : undefined'), 'clipboard paste should preserve disabled node state')
+  assertContract(validationSource.includes('const activeNodes = nodes.filter((node) => node.disabled !== true)'), 'workflow validation should ignore disabled nodes')
+  assertContract(viewModelSource.includes('disabled: node.data.disabled === true'), 'editor validation should pass disabled node state')
+  assertContract(viewModelSource.includes('disabled: node.disabled === true'), 'saved-workflow validation should pass disabled node state')
 }
 
 function verifyCanvasBypassActionContract() {
@@ -38,29 +32,29 @@ function verifyCanvasBypassActionContract() {
   const pageActionsSource = source('features/module-graph/use-module-graph-page-actions.ts')
   const pagePanelsSource = source('features/module-graph/use-module-graph-page-editor-panels.tsx')
 
-  assert(actionMenuSource.includes('PowerOff'), 'node quick menu should expose a disable/enable icon action')
-  assert(actionMenuSource.includes("aria-label={state.disabled"), 'node quick menu disable action should expose state-aware labels')
-  assert(canvasSource.includes('disabled: node.data.disabled === true'), 'node action menu should receive disabled state')
-  assert(canvasSource.includes('onToggleNodeDisabled(actionMenuState.nodeId)'), 'node action menu should invoke disabled toggle handler')
-  assert(interactionsSource.includes('const handleToggleNodeDisabled = useCallback'), 'editor interactions should own disabled toggle state')
-  assert(pageActionsSource.includes('handleToggleNodeDisabled'), 'page actions should return disabled toggle handler')
-  assert(pagePanelsSource.includes('onToggleNodeDisabled={onToggleNodeDisabled}'), 'page panels should wire disabled toggle into canvas')
-  assert(nodeCardSource.includes("t({ ko: '비활성', en: 'Disabled' })"), 'node card should show disabled status badge')
-  assert(nodeCardSource.includes("data.disabled === true ? 'opacity-60 grayscale'"), 'node card should visually dim disabled nodes')
+  assertContract(actionMenuSource.includes('PowerOff'), 'node quick menu should expose a disable/enable icon action')
+  assertContract(actionMenuSource.includes("aria-label={state.disabled"), 'node quick menu disable action should expose state-aware labels')
+  assertContract(canvasSource.includes('disabled: node.data.disabled === true'), 'node action menu should receive disabled state')
+  assertContract(canvasSource.includes('onToggleNodeDisabled(actionMenuState.nodeId)'), 'node action menu should invoke disabled toggle handler')
+  assertContract(interactionsSource.includes('const handleToggleNodeDisabled = useCallback'), 'editor interactions should own disabled toggle state')
+  assertContract(pageActionsSource.includes('handleToggleNodeDisabled'), 'page actions should return disabled toggle handler')
+  assertContract(pagePanelsSource.includes('onToggleNodeDisabled={onToggleNodeDisabled}'), 'page panels should wire disabled toggle into canvas')
+  assertContract(nodeCardSource.includes("t({ ko: '비활성', en: 'Disabled' })"), 'node card should show disabled status badge')
+  assertContract(nodeCardSource.includes("data.disabled === true ? 'opacity-60 grayscale'"), 'node card should visually dim disabled nodes')
 }
 
 function verifyEditorInteractionLookupContract() {
   const interactionsSource = source('features/module-graph/use-module-graph-editor-interactions.ts')
 
-  assert(interactionsSource.includes('const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])'), 'editor interactions should build one node-id map per node snapshot')
-  assert(interactionsSource.includes('nodeById.get(connection.source)'), 'connection validation should use the node-id map')
-  assert(interactionsSource.includes('nodeById.get(connectionStart.nodeId)'), 'drag-connect node creation should use the node-id map')
-  assert(interactionsSource.includes('nodeById.get(nodeId)'), 'node duplication should use the node-id map')
-  assert(!interactionsSource.includes('nodes.find((node) => node.id ==='), 'editor interactions should avoid repeated node array scans by id')
+  assertContract(interactionsSource.includes('const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])'), 'editor interactions should build one node-id map per node snapshot')
+  assertContract(interactionsSource.includes('nodeById.get(connection.source)'), 'connection validation should use the node-id map')
+  assertContract(interactionsSource.includes('nodeById.get(connectionStart.nodeId)'), 'drag-connect node creation should use the node-id map')
+  assertContract(interactionsSource.includes('nodeById.get(nodeId)'), 'node duplication should use the node-id map')
+  assertContract(!interactionsSource.includes('nodes.find((node) => node.id ==='), 'editor interactions should avoid repeated node array scans by id')
 }
 
 verifySavedGraphDisabledFlagContract()
 verifyCanvasBypassActionContract()
 verifyEditorInteractionLookupContract()
 
-console.log('Module graph bypass UI contracts verified.')
+reportVerificationSuccess('Module graph bypass UI contracts verified.')

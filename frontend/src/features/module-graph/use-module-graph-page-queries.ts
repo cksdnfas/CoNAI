@@ -11,7 +11,7 @@ import {
   getModuleDefinitions,
   type GraphExecutionRecord,
 } from '@/lib/api-module-graph'
-import { getAppSettings } from '@/lib/api-settings'
+import { getAppSettings } from '@/lib/api-settings-general'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'

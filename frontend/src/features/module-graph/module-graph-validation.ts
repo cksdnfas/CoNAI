@@ -3,7 +3,7 @@ import type {
   ModuleDefinitionRecord,
 } from '@/lib/api-module-graph'
 import type { TranslationInput, TranslationParams } from '@/i18n'
-import type { AppSettings } from '@/types/settings'
+import type { AppSettings } from '@conai/shared'
 import type { WorkflowValidationIssue } from './module-graph-types'
 import { hasMeaningfulValue } from './module-graph-value-utils'
 import { isFinalResultModule } from './module-graph-module-helpers'

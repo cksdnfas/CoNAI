@@ -1,23 +1,14 @@
 import { doesNotMatch, match } from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import verifyHelpers from '../../../scripts/verify-helpers'
 
-const imageGenerationPageSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/image-generation-page.tsx'),
-  'utf8',
-)
-const imageGenerationSharedSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/image-generation-shared.tsx'),
-  'utf8',
-)
-const imageGenerationDraftsSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/image-generation-drafts.ts'),
-  'utf8',
-)
-const comfyGenerationPanelSource = readFileSync(
-  resolve(process.cwd(), 'src/features/image-generation/components/comfy-generation-panel.tsx'),
-  'utf8',
-)
+const { createSourceReader, reportVerificationSuccess } = verifyHelpers
+
+const source = createSourceReader(process.cwd())
+
+const imageGenerationPageSource = source('src/features/image-generation/image-generation-page.tsx')
+const imageGenerationSharedSource = source('src/features/image-generation/image-generation-shared.tsx')
+const imageGenerationDraftsSource = source('src/features/image-generation/image-generation-drafts.ts')
+const comfyGenerationPanelSource = source('src/features/image-generation/components/comfy-generation-panel.tsx')
 
 match(
   imageGenerationPageSource,
@@ -75,4 +66,4 @@ match(
   'Saved ComfyUI modules should continue into the workflow graph entry tab',
 )
 
-console.log('Comfy workflow entry contracts verified.')
+reportVerificationSuccess('Comfy workflow entry contracts verified.')
