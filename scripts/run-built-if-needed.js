@@ -94,16 +94,30 @@ function assertSplitRuntimeOptIn() {
 }
 
 const SOURCE_TARGETS = [
+  path.join(ROOT_DIR, '.env'),
+  path.join(ROOT_DIR, '.env.example'),
+  path.join(ROOT_DIR, '.env.local'),
+  path.join(ROOT_DIR, '.env.production'),
+  path.join(ROOT_DIR, '.env.production.local'),
   path.join(ROOT_DIR, 'package.json'),
   path.join(ROOT_DIR, 'package-lock.json'),
   path.join(ROOT_DIR, 'scripts', 'build-integrated.js'),
+  path.join(ROOT_DIR, 'scripts', 'ensure-workspace-dependencies.js'),
   path.join(ROOT_DIR, 'frontend', 'package.json'),
   path.join(ROOT_DIR, 'frontend', 'index.html'),
+  path.join(ROOT_DIR, 'frontend', 'public'),
+  path.join(ROOT_DIR, 'frontend', 'scripts'),
   path.join(ROOT_DIR, 'frontend', 'src'),
+  path.join(ROOT_DIR, 'frontend', 'tsconfig.app.json'),
+  path.join(ROOT_DIR, 'frontend', 'tsconfig.json'),
+  path.join(ROOT_DIR, 'frontend', 'tsconfig.node.json'),
+  path.join(ROOT_DIR, 'frontend', 'vite.config.ts'),
   path.join(ROOT_DIR, 'backend', 'package.json'),
   path.join(ROOT_DIR, 'backend', 'src'),
+  path.join(ROOT_DIR, 'backend', 'tsconfig.json'),
   path.join(ROOT_DIR, 'shared', 'package.json'),
   path.join(ROOT_DIR, 'shared', 'src'),
+  path.join(ROOT_DIR, 'shared', 'tsconfig.json'),
 ];
 
 const OUTPUT_TARGETS = [BACKEND_ENTRY, FRONTEND_INDEX];

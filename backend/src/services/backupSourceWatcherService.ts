@@ -142,21 +142,31 @@ async function collectExistingSupportedFiles(rootPath: string, recursive: boolea
 export class BackupSourceWatcherService {
   private static watcherRegistry = new Map<number, BackupWatcherEntry>();
   private static pendingImports = new Set<string>();
+  private static activeTasks = new Set<Promise<unknown>>();
   // 초기 임포트는 오래 걸릴 수 있으므로 이 간격마다 소스 활성 여부를 다시 읽는다.
   private static readonly INITIAL_IMPORT_ACTIVE_RECHECK_INTERVAL = 100;
 
   /** Start all enabled backup source watchers on boot. */
-  static async initialize(): Promise<void> {
+  static async initialize(signal?: AbortSignal): Promise<void> {
     const sources = await BackupSourceService.listSources({ active_only: true });
 
     for (const source of sources) {
+      if (signal?.aborted) {
+        break;
+      }
+
       if (source.watcher_enabled !== 1) {
         continue;
       }
 
       try {
-        await this.startWatcher(source.id);
+        await this.startWatcher(source.id, signal);
       } catch (error) {
+        if (signal?.aborted) {
+          await this.stopWatcher(source.id);
+          break;
+        }
+
         const message = error instanceof Error ? error.message : 'Unknown error';
         console.warn(`⚠️  백업 소스 워처 시작 실패: ${source.display_name || source.source_path}`);
         BackupSourceService.updateWatcherState(source.id, 'error', message);
@@ -167,7 +177,9 @@ export class BackupSourceWatcherService {
   }
 
   /** Start a watcher for one backup source. */
-  static async startWatcher(sourceId: number): Promise<void> {
+  static async startWatcher(sourceId: number, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+
     const existing = this.watcherRegistry.get(sourceId);
     if (existing && existing.state === 'watching') {
       return;
@@ -176,6 +188,8 @@ export class BackupSourceWatcherService {
     if (existing) {
       await this.stopWatcher(sourceId);
     }
+
+    signal?.throwIfAborted();
 
     const source = await BackupSourceService.getSource(sourceId);
     if (!source || source.is_active !== 1) {
@@ -224,7 +238,7 @@ export class BackupSourceWatcherService {
     BackupSourceService.updateWatcherState(sourceId, 'initializing', null);
 
     watcher.on('add', (filePath) => {
-      void this.handleAddEvent(sourceId, filePath);
+      this.trackTask(this.handleAddEvent(sourceId, filePath));
     });
 
     watcher.on('error', (error) => {
@@ -233,15 +247,31 @@ export class BackupSourceWatcherService {
       BackupSourceService.updateWatcherState(sourceId, 'error', message);
     });
 
-    await waitForChokidarReady({
-      watcher,
-      timeoutMessage: '백업 소스 워처 초기화 타임아웃',
-      onReady: () => {
-        entry.state = 'watching';
-        BackupSourceService.updateWatcherState(sourceId, 'watching', null);
-        void this.runInitialImport(sourceId);
-      },
-    });
+    try {
+      await waitForChokidarReady({
+        watcher,
+        signal,
+        timeoutMessage: '백업 소스 워처 초기화 타임아웃',
+        onReady: () => {
+          entry.state = 'watching';
+          BackupSourceService.updateWatcherState(sourceId, 'watching', null);
+          this.trackTask(this.runInitialImport(sourceId));
+        },
+      });
+    } catch (error) {
+      await watcher.close();
+      if (this.watcherRegistry.get(sourceId) === entry) {
+        this.watcherRegistry.delete(sourceId);
+      }
+      if (!signal?.aborted) {
+        BackupSourceService.updateWatcherState(
+          sourceId,
+          'error',
+          error instanceof Error ? error.message : 'Unknown error',
+        );
+      }
+      throw error;
+    }
   }
 
   /** Stop a watcher for one backup source. */
@@ -255,6 +285,20 @@ export class BackupSourceWatcherService {
     await entry.watcher.close();
     this.watcherRegistry.delete(sourceId);
     BackupSourceService.updateWatcherState(sourceId, 'stopped', null);
+  }
+
+  /** Close every watcher, then drain imports that already own filesystem work. */
+  static async stopAll(): Promise<void> {
+    const sourceIds = [...this.watcherRegistry.keys()];
+    await Promise.allSettled(sourceIds.map((sourceId) => this.stopWatcher(sourceId)));
+    await Promise.allSettled([...this.activeTasks]);
+  }
+
+  private static trackTask(task: Promise<unknown>): void {
+    this.activeTasks.add(task);
+    void task.finally(() => {
+      this.activeTasks.delete(task);
+    });
   }
 
   /** Restart a watcher for one backup source. */

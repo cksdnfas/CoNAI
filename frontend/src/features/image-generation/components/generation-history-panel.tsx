@@ -32,7 +32,11 @@ import {
   getRetryableHistoryQueueJobId,
 } from '../image-generation-shared'
 import { getGenerationHistoryFeedProgressSummary } from '../generation-history-feed-progress'
-import { getUniqueRetryableHistoryQueueJobIds, retryGenerationHistoryRecords } from './generation-history-retry-actions'
+import {
+  getUniqueRetryableHistoryQueueJobIds,
+  retryGenerationHistoryRecords,
+  runGenerationHistoryMutationBatch,
+} from './generation-history-retry-actions'
 import {
   GENERATION_HISTORY_ACTIVE_REFRESH_MS,
   GENERATION_HISTORY_PAGE_SIZE,
@@ -359,10 +363,26 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
     try {
       setIsDeletingSelection(true)
-      await Promise.all(selectedHistoryRecords.map((record) => deleteGenerationHistoryRecord(record.id, true)))
-      setSelectedHistoryIds([])
+      const result = await runGenerationHistoryMutationBatch(
+        selectedHistoryRecords,
+        (record) => deleteGenerationHistoryRecord(record.id, true),
+      )
+      const failedSelectionIds = new Set(result.failedItems.map(({ item }) => getGenerationHistorySelectionId(item)))
+      setSelectedHistoryIds((current) => current.filter((id) => failedSelectionIds.has(id)))
       await refreshHistory()
-      showSnackbar({ message: t('image-generation.components.generation.history.panel.valueresults.moved.to.recyclebin', { count: formatNumber(selectedCount) }), tone: 'info' })
+      if (result.failedItems.length === 0) {
+        showSnackbar({ message: t('image-generation.components.generation.history.panel.valueresults.moved.to.recyclebin', { count: formatNumber(selectedCount) }), tone: 'info' })
+      } else if (result.successfulItems.length > 0) {
+        showSnackbar({
+          message: t(
+            { ko: '{deleted}개 삭제, {failed}개 실패했어.', en: '{deleted} deleted, {failed} failed.' },
+            { deleted: formatNumber(result.successfulItems.length), failed: formatNumber(result.failedItems.length) },
+          ),
+          tone: 'error',
+        })
+      } else {
+        showSnackbar({ message: getErrorMessage(result.failedItems[0]?.error, t('image-generation.components.generation.history.panel.failed.to.delete.history')), tone: 'error' })
+      }
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.delete.history')), tone: 'error' })
     } finally {
@@ -425,21 +445,29 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
     try {
       setRetryingQueueJobIds(new Set(queueJobIds))
-      const retryQueued = await retryGenerationHistoryRecords({
+      const retryResult = await retryGenerationHistoryRecords({
         records: retryableRecords,
         queryClient,
         refreshHistory,
         showSnackbar,
         successMessage: options.successMessage,
         failureMessage: options.failureMessage,
+        partialFailureMessage: (successCount, failureCount) => t(
+          { ko: '{succeeded}개 재실행 등록, {failed}개 실패했어.', en: '{succeeded} retries queued, {failed} failed.' },
+          { succeeded: formatNumber(successCount), failed: formatNumber(failureCount) },
+        ),
       })
-      if (retryQueued) {
-        acknowledgeRecoveryRecords(retryableRecords)
+      if (retryResult.successfulItems.length > 0) {
+        const succeededQueueJobIds = new Set(retryResult.successfulItems)
+        acknowledgeRecoveryRecords(retryableRecords.filter((record) => {
+          const queueJobId = getRetryableHistoryQueueJobId(record)
+          return queueJobId !== null && succeededQueueJobIds.has(queueJobId)
+        }))
       }
     } finally {
       setRetryingQueueJobIds(new Set())
     }
-  }, [acknowledgeRecoveryRecords, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar])
+  }, [acknowledgeRecoveryRecords, formatNumber, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar, t])
 
   const handleRetryHistoryRecord = useCallback(async (record: GenerationHistoryRecord) => {
     await handleRetryHistoryRecords([record], {

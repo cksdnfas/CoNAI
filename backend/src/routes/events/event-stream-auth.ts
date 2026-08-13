@@ -3,6 +3,7 @@ import { AuthAccount } from '../../models/AuthAccount'
 import { AuthAccessControlService } from '../../services/authAccessControlService'
 import { hasConfiguredAuth } from '../auth-route-helpers'
 import { RUNTIME_EVENT_TOPIC_PERMISSION_KEY, type RuntimeEventTopic } from '../../types/runtimeEvents'
+import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
 
 /**
  * SSE 전용 read-only 접근 가드.
@@ -48,6 +49,10 @@ export function eventStreamTopicsRequirePagePermission(topics: RuntimeEventTopic
 /** Resolve stream access for one request without mutating the session. */
 export function resolveEventStreamAccess(req: Request): EventStreamAccess {
   if (!hasConfiguredAuth()) {
+    if (!isDirectLoopbackRequest(req)) {
+      return { ok: false, status: 401 }
+    }
+
     // 부트스트랩(개인) 모드. 신뢰 세션을 "쓰지 않고" 권한만 해석한다.
     // 판정 기준은 생성 라우트의 권한 가드와 동일하게 맞춘다.
     const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess()

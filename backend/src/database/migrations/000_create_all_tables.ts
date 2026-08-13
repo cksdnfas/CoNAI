@@ -456,6 +456,9 @@ export const up = async (db: Database.Database): Promise<void> => {
       file_modified_date DATETIME,
       scan_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_verified_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      background_attempt_count INTEGER NOT NULL DEFAULT 0,
+      background_next_retry_at DATETIME DEFAULT NULL,
+      background_last_error TEXT DEFAULT NULL,
       FOREIGN KEY (folder_id) REFERENCES watched_folders(id) ON DELETE CASCADE,
       FOREIGN KEY (composite_hash) REFERENCES media_metadata(composite_hash) ON DELETE SET NULL
     )
@@ -497,7 +500,10 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_files_hash_folder ON image_files(composite_hash, folder_id)',
     // Thumbnail loading indexes (from migration 005)
     "CREATE INDEX IF NOT EXISTS idx_files_composite_status ON image_files(composite_hash, file_status) WHERE file_status = 'active'",
-    'CREATE INDEX IF NOT EXISTS idx_files_scan_date_desc ON image_files(scan_date DESC)'
+    'CREATE INDEX IF NOT EXISTS idx_files_scan_date_desc ON image_files(scan_date DESC)',
+    `CREATE INDEX IF NOT EXISTS idx_files_background_retry
+      ON image_files(background_next_retry_at, scan_date)
+      WHERE composite_hash IS NULL AND file_status = 'active'`
   ];
 
   folderIndexes.forEach(sql => {

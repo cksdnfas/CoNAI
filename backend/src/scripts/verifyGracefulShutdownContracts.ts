@@ -40,6 +40,12 @@ function createFakeDependencies(
       record('sse');
       return 2;
     },
+    stopGenerationQueue: () => record('queue:generation'),
+    stopGraphWorkflowExecutionQueue: () => record('queue:graph-execution'),
+    stopGraphWorkflowScheduleService: () => record('scheduler:graph-workflow'),
+    cancelRuntimeWatcherStartup: () => record('startup:watchers:cancel'),
+    waitForRuntimeWatcherStartup: () => record('startup:watchers'),
+    stopBackupSourceWatcher: () => record('watcher:backup-source'),
     stopFileWatcher: () => record('watcher:file'),
     stopCustomNodeWatcher: () => record('watcher:custom-node'),
     stopAutoScanScheduler: () => record('scheduler:auto-scan'),
@@ -86,7 +92,7 @@ function createImmediateCloseServer(events: string[]): GracefulShutdownServer {
 }
 
 async function waitForTimer(timers: FakeTimer[], delayMs: number): Promise<FakeTimer> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
     const timer = timers.find((candidate) => candidate.delayMs === delayMs);
     if (timer) return timer;
     await Promise.resolve();
@@ -127,10 +133,14 @@ async function verifyFullShutdownOrderAndIdempotency() {
   });
 
   assert.deepEqual(result.events, [
-    'sse',
     'http:close',
     'http:close-idle',
-    'http:close-all',
+    'scheduler:graph-workflow',
+    'queue:graph-execution',
+    'queue:generation',
+    'startup:watchers:cancel',
+    'startup:watchers',
+    'watcher:backup-source',
     'watcher:file',
     'watcher:custom-node',
     'scheduler:auto-scan',
@@ -140,6 +150,8 @@ async function verifyFullShutdownOrderAndIdempotency() {
     'temp:cleanup',
     'tagger',
     'runtime-jobs',
+    'sse',
+    'http:close-all',
     'db:main',
     'db:user',
     'db:api-generation',
@@ -193,7 +205,8 @@ async function verifyDrainAndForceTimeoutCallbacks() {
   drainTimer.callback();
   await shutdownPromise;
 
-  assert.ok(events.indexOf('http:close-all') < events.indexOf('watcher:file'), 'the 3s drain timeout must close remaining sockets before service cleanup');
+  assert.ok(events.indexOf('watcher:file') < events.indexOf('sse'), 'runtime producers must stop before event streams close');
+  assert.ok(events.indexOf('sse') < events.indexOf('http:close-all'), 'the HTTP drain fallback must run after event streams close');
   assert.ok(events.includes('db:api-generation'), 'drain timeout fallback must continue through final database cleanup');
 }
 
@@ -230,7 +243,8 @@ async function verifyServerCloseErrorsStayIsolated() {
 
   await shutdown('SIGTERM');
 
-  assert.deepEqual(events.slice(0, 4), ['sse', 'http:close:throw', 'http:close-idle:throw', 'http:close-all:throw']);
+  assert.deepEqual(events.slice(0, 2), ['http:close:throw', 'http:close-idle:throw']);
+  assert.ok(events.indexOf('sse') < events.indexOf('http:close-all:throw'));
   assert.ok(events.includes('watcher:file') && events.includes('db:api-generation') && events.includes('exit:0'));
   assert.deepEqual(warnings.slice(0, 3), [
     '⚠️  Error closing HTTP server:',
@@ -246,12 +260,12 @@ async function verifySafeSmokeBranch() {
   });
 
   assert.deepEqual(result.events, [
-    'sse',
     'http:close',
     'http:close-idle',
-    'http:close-all',
     'temp:cleanup',
     'runtime-jobs',
+    'sse',
+    'http:close-all',
     'db:main',
     'db:user',
     'db:api-generation',

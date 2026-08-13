@@ -14,13 +14,16 @@ export class CustomNodeWatcherService {
   private static hasPendingSync = false;
 
   /** Start one chokidar watcher for local file-based custom node folders. */
-  static async initialize(): Promise<void> {
+  static async initialize(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+
     if (this.watcher) {
       return;
     }
 
     this.state = 'initializing';
     await CustomNodeRegistryService.ensureCustomNodesDirectory();
+    signal?.throwIfAborted();
 
     const watcher = chokidar.watch(runtimePaths.customNodesDir, {
       persistent: true,
@@ -53,6 +56,10 @@ export class CustomNodeWatcherService {
       });
 
     this.watcher = watcher;
+    if (signal?.aborted) {
+      await this.stopAll();
+      signal.throwIfAborted();
+    }
   }
 
   /** Stop the watcher and clear any pending debounce timer. */

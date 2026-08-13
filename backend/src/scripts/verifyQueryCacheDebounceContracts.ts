@@ -28,9 +28,30 @@ async function main() {
     'scheduled gallery invalidation must clear the gallery cache after the debounce window',
   )
 
+  verifySingleImageInvalidation()
   verifyGalleryTotalCache()
 
   console.log('✅ Query cache debounce contracts passed (background invalidations coalesce)')
+}
+
+/** Verify one image change invalidates every cached gallery page and sort. */
+function verifySingleImageInvalidation() {
+  QueryCacheService.initialize()
+  QueryCacheService.setGalleryCache(1, 20, 'first_seen_date', 'DESC', { items: ['default-page'] })
+  QueryCacheService.setGalleryCache(2, 37, 'height', 'ASC', { items: ['custom-page'] })
+
+  QueryCacheService.invalidateImageCache('changed-image')
+
+  assert.equal(
+    QueryCacheService.getGalleryCache(1, 20, 'first_seen_date', 'DESC'),
+    null,
+    'single-image invalidation must clear the default gallery cache key',
+  )
+  assert.equal(
+    QueryCacheService.getGalleryCache(2, 37, 'height', 'ASC'),
+    null,
+    'single-image invalidation must clear non-default pages, limits, and sorts',
+  )
 }
 
 /**

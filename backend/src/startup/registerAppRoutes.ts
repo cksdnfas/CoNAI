@@ -48,6 +48,7 @@ import {
   allowAnonymousAnyPermission,
   allowAnonymousPermission,
   optionalAuth,
+  requireAdmin,
   requireAuth,
   requirePermission,
 } from '../middleware/authMiddleware';
@@ -67,20 +68,12 @@ export interface RegisterAppRoutesResult {
   frontendDistPath: string | null;
 }
 
-/** Register one trusted-mode static runtime directory with shared CORS and cache headers. */
+/** Register one authenticated runtime directory with shared cache headers. */
 function registerRuntimeStaticDirectory(app: Express, mountPath: string, directoryPath: string): void {
-  app.use(mountPath, express.static(directoryPath, {
-    setHeaders: (res, filePath) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-
-      if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filePath)) {
-        // Files under /uploads, /temp, and /save can be replaced in place at the
-        // same URL, so clients must revalidate instead of caching immutably.
-        res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
-      }
+  app.use(mountPath, requireAuth, express.static(directoryPath, {
+    setHeaders: (res) => {
+      // Files can be replaced in place at the same URL and may contain private user media.
+      res.setHeader('Cache-Control', 'private, max-age=86400, must-revalidate');
     },
     etag: true,
     lastModified: true,
@@ -294,8 +287,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/wildcards', optionalAuth, wildcardUtilityRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardMutationRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardReadRoutes);
-  app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
-  app.use('/api/backup-sources', optionalAuth, backupSourcesRoutes);
+  app.use('/api/folders', requireAdmin, watchedFoldersRoutes);
+  app.use('/api/backup-sources', requireAdmin, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
   app.use('/api/search-options', options.readOnlyLimiter, allowReadAccess(HOME_IMAGE_READ_PERMISSION_KEYS), searchOptionsRoutes);
   app.use('/api/background-queue', optionalAuth, requirePermission('page.generation.view'), backgroundQueueRoutes);

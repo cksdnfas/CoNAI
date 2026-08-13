@@ -79,6 +79,18 @@ interface FileWatcherScanState {
   processingFolders: Set<number>;
   folderScanTimers: Map<number, NodeJS.Timeout>;
   pendingFiles: Map<number, Set<string>>;
+  folderScanRetryAttempts: Map<number, number>;
+}
+
+const MAX_BATCH_SCAN_RETRY_DELAY_MS = 60_000;
+
+export function resolveWatcherBatchRetryDelayMs(
+  retryAttempts: number,
+  baseDelayMs: number,
+  maxDelayMs = MAX_BATCH_SCAN_RETRY_DELAY_MS,
+): number {
+  const safeAttempt = Math.max(1, Math.floor(retryAttempts));
+  return Math.min(baseDelayMs * Math.pow(2, safeAttempt - 1), maxDelayMs);
 }
 
 /** Build the parsed watcher rules that are reused across startup and events. */
@@ -132,6 +144,7 @@ function recordWatcherEvent(entry: WatcherEntry, updateLastEventTime: (folderId:
 /** Clear queued scan timers and pending files for one folder. */
 function cleanupFolderScanState(scanState: FileWatcherScanState, folderId: number): void {
   scanState.pendingFiles.delete(folderId);
+  scanState.folderScanRetryAttempts.delete(folderId);
 
   const timer = scanState.folderScanTimers.get(folderId);
   if (timer) {
@@ -191,6 +204,7 @@ async function runQueuedFolderScan(
   folderId: number,
   scanDebounceMs: number,
   runBatchScan: (folderId: number) => void,
+  shouldSchedule: (folderId: number) => boolean,
 ): Promise<void> {
   scanState.folderScanTimers.delete(folderId);
 
@@ -234,17 +248,29 @@ async function runQueuedFolderScan(
     }
 
     completed = true;
+    scanState.folderScanRetryAttempts.delete(folderId);
   } catch (error) {
     const retryFiles = scanState.pendingFiles.get(folderId) ?? new Set<string>();
     for (const filePath of pendingFiles) {
       retryFiles.add(filePath);
     }
     scanState.pendingFiles.set(folderId, retryFiles);
+    scanState.folderScanRetryAttempts.set(
+      folderId,
+      (scanState.folderScanRetryAttempts.get(folderId) ?? 0) + 1,
+    );
     console.error(`  ❌ 배치 스캔 실패: folderId=${folderId}`, error);
   } finally {
     scanState.processingFolders.delete(folderId);
-    if (completed && (scanState.pendingFiles.get(folderId)?.size ?? 0) > 0) {
-      scheduleFolderBatchScan(scanState, folderId, scanDebounceMs, runBatchScan);
+    const pendingCount = scanState.pendingFiles.get(folderId)?.size ?? 0;
+    if (pendingCount > 0 && shouldSchedule(folderId)) {
+      const retryAttempts = scanState.folderScanRetryAttempts.get(folderId) ?? 0;
+      const retryDelayMs = completed
+        ? scanDebounceMs
+        : resolveWatcherBatchRetryDelayMs(retryAttempts, scanDebounceMs);
+      scheduleFolderBatchScan(scanState, folderId, retryDelayMs, runBatchScan);
+    } else if (!shouldSchedule(folderId)) {
+      cleanupFolderScanState(scanState, folderId);
     }
   }
 }
@@ -280,9 +306,11 @@ async function waitForWatcherReady(
   entry: WatcherEntry,
   updateWatcherStatus: (folderId: number, status: string, error: string | null) => void,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<void> {
   await waitForChokidarReady({
     watcher: entry.watcher,
+    signal,
     timeoutMs,
     timeoutMessage: '워처 초기화 타임아웃',
     onReady: () => {
@@ -309,6 +337,7 @@ export class FileWatcherService {
     processingFolders: new Set<number>(),
     folderScanTimers: new Map<number, NodeJS.Timeout>(),
     pendingFiles: new Map<number, Set<string>>(),
+    folderScanRetryAttempts: new Map<number, number>(),
   };
 
   // 설정
@@ -343,7 +372,7 @@ export class FileWatcherService {
   /**
    * 서비스 초기화
    */
-  static async initialize(): Promise<void> {
+  static async initialize(signal?: AbortSignal): Promise<void> {
     try {
       const folders = listAutoScanWatcherFolders();
       const enabledFolders = folders.filter((folder) => folder.watcher_enabled === 1);
@@ -357,6 +386,10 @@ export class FileWatcherService {
       const initLimit = pLimit(this.INIT_CONCURRENCY);
       await Promise.all(
         enabledFolders.map((folder) => initLimit(async () => {
+          if (signal?.aborted) {
+            return;
+          }
+
           try {
             const validation = validateInitialWatcherPath(folder.folder_path);
             if (!validation.isValid) {
@@ -367,9 +400,13 @@ export class FileWatcherService {
               return;
             }
 
-            await this.startWatcher(folder.id);
+            await this.startWatcher(folder.id, { retryAttempts: 0, isRetrying: false }, signal);
             startedCount++;
           } catch (error) {
+            if (signal?.aborted) {
+              return;
+            }
+
             errorCount++;
             console.error(`  ❌ 워처 시작 실패: ${folder.folder_name}`, error);
 
@@ -402,7 +439,10 @@ export class FileWatcherService {
   static async startWatcher(
     folderId: number,
     retryState: WatcherRetryState = { retryAttempts: 0, isRetrying: false },
+    signal?: AbortSignal,
   ): Promise<void> {
+    signal?.throwIfAborted();
+
     if (this.watcherRegistry.size >= this.MAX_WATCHERS) {
       throw new Error(`최대 워처 수 초과 (${this.MAX_WATCHERS})`);
     }
@@ -415,6 +455,8 @@ export class FileWatcherService {
     if (existing) {
       await this.stopWatcher(folderId);
     }
+
+    signal?.throwIfAborted();
 
     const folder = findWatchedFolderForWatcher(folderId);
     if (!folder) {
@@ -460,9 +502,23 @@ export class FileWatcherService {
     this.syncRuntimeStatus(entry);
     this.registerEventHandlers(entry, watcherOptions.excludeExtensions);
     try {
-      await waitForWatcherReady(entry, this.updateWatcherStatus.bind(this), this.READY_TIMEOUT_MS);
+      await waitForWatcherReady(entry, this.updateWatcherStatus.bind(this), this.READY_TIMEOUT_MS, signal);
       this.syncRuntimeStatus(entry);
     } catch (error) {
+      if (signal?.aborted) {
+        if (this.watcherRegistry.get(folderId) === entry) {
+          this.watcherRegistry.delete(folderId);
+        }
+        removeWatcherRuntimeStatus(folderId);
+        this.cleanupFolderState(folderId);
+        try {
+          await watcher.close();
+        } catch (closeError) {
+          console.warn(`  ⚠️  중단된 워처 정리 실패: ${entry.folderName}`, closeError);
+        }
+        throw error;
+      }
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       entry.state = 'error';
       entry.error = errorMessage;
@@ -557,7 +613,7 @@ export class FileWatcherService {
   private static async executeBatchScan(folderId: number): Promise<void> {
     await runQueuedFolderScan(this.scanState, folderId, this.SCAN_DEBOUNCE_MS, (queuedFolderId) => {
       void this.executeBatchScan(queuedFolderId);
-    });
+    }, (queuedFolderId) => this.watcherRegistry.has(queuedFolderId));
   }
 
   /**

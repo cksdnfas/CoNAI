@@ -48,6 +48,7 @@
     "verify:upload-response-contracts": "tsx src/scripts/verifyUploadResponseContracts.ts",
     "verify:upload-security-contracts": "tsx src/scripts/verifyUploadSecurityContracts.ts",
     "verify:auth-db-bootstrap": "tsx src/scripts/verifyAuthDbBootstrap.ts",
+    "verify:security-boundary-contracts": "tsx src/scripts/verifySecurityBoundaryContracts.ts",
     "verify:anonymous-image-demo-access-contracts": "tsx src/scripts/verifyAnonymousImageDemoAccessContracts.ts",
     "verify:header-navigation-settings-contracts": "tsx src/scripts/verifyHeaderNavigationSettingsContracts.ts",
     "verify:nai-user-data-contracts": "tsx src/scripts/verifyNaiUserDataContracts.ts",

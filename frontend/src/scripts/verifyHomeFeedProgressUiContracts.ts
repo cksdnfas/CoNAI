@@ -1,4 +1,12 @@
+import { match } from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { getHomeFeedProgressSummary } from '../features/home/home-feed-progress'
+
+const homeDataSource = readFileSync(resolve(process.cwd(), 'src/features/home/use-home-page-data.ts'), 'utf8')
+const apiImagesSource = readFileSync(resolve(process.cwd(), 'src/lib/api-images.ts'), 'utf8')
+const apiClientSource = readFileSync(resolve(process.cwd(), 'src/lib/api-client.ts'), 'utf8')
+const apiRequestSource = readFileSync(resolve(process.cwd(), 'src/lib/api-request.ts'), 'utf8')
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -89,6 +97,40 @@ function assertVisibleCountNormalization() {
   assertEqual(nanSummary.visibleCount, 0, 'non-finite visible count should clamp to zero')
 }
 
+function assertHomeRequestCancellationPolicy() {
+  match(
+    homeDataSource,
+    /queryFn: \(\{ pageParam, signal \}\)[\s\S]*?searchImagesComplex\([\s\S]*?\}, \{ signal \}\)[\s\S]*?getImages\([\s\S]*?\}, \{ signal \}\)/,
+    'home feed pages must forward the React Query abort signal to both search and gallery requests',
+  )
+  match(
+    homeDataSource,
+    /queryFn: async \(\{ signal \}\)[\s\S]*?searchImagesComplex\([\s\S]*?\}, \{ signal \}\)[\s\S]*?getImagesCount\(\{ signal \}\)/,
+    'the deferred feed total must also be cancellable when the query becomes obsolete',
+  )
+  match(apiImagesSource, /export async function getImages\([\s\S]*?init\?: RequestInit[\s\S]*?fetchJson[\s\S]*?, init\)/)
+  match(apiImagesSource, /export async function getImagesCount\(init\?: RequestInit\)/)
+  match(apiImagesSource, /export async function searchImagesComplex\(input: ComplexImageSearchRequest, init\?: RequestInit\)/)
+  match(
+    apiClientSource,
+    /return requestJson<T>\(path, init\)/,
+    'legacy fetchJson callers must share the bounded common request helper',
+  )
+  match(
+    apiRequestSource,
+    /AbortSignal\.timeout\(timeoutMs\)[\s\S]*?AbortSignal\.any\(\[init\.signal, timeoutSignal\]\)/,
+    'caller cancellation and the bounded request timeout must remain active together',
+  )
+}
+
+function assertSelectionDownloadFailurePolicy() {
+  match(
+    homeDataSource,
+    /const handleDownloadSelected = async[\s\S]*?await downloadImageSelection[\s\S]*?catch \(error\)[\s\S]*?notifyError/,
+    'home selection download failures must reach the standard error snackbar',
+  )
+}
+
 assertEmptyFeedSummary()
 assertPagedFeedSummary()
 assertTotalNeverFallsBelowLoaded()
@@ -96,5 +138,7 @@ assertCursorFeedUsesLoadedCountWhenTotalUnknown()
 assertDeferredTotalArrival()
 assertExactPageTotalWinsOverDeferred()
 assertVisibleCountNormalization()
+assertHomeRequestCancellationPolicy()
+assertSelectionDownloadFailurePolicy()
 
 console.log('Home feed progress UI contracts verified.')

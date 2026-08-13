@@ -7,6 +7,7 @@ import {
   invalidateResolvedAuthAccessCache,
   type ResolvedAuthAccessRecord,
 } from '../services/authAccessControlService';
+import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 
 let configuredAuthCache: boolean | null = null;
 const TRUSTED_BOOTSTRAP_USERNAME = 'Bootstrap';
@@ -171,6 +172,19 @@ export function buildAuthStatusPayload(req: Request): AuthStatusPayload {
   const accountId = req.session?.accountId;
 
   if (!hasCredentials) {
+    if (!isDirectLoopbackRequest(req)) {
+      return {
+        hasCredentials,
+        authenticated: false,
+        username: null,
+        accountId: null,
+        accountType: null,
+        isAdmin: false,
+        groupKeys: [],
+        permissionKeys: [],
+      };
+    }
+
     const bootstrapAccess = AuthAccessControlService.resolveBootstrapAccess();
     setTrustedBootstrapSession(req, bootstrapAccess);
     return {

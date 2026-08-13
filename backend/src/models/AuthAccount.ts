@@ -35,6 +35,23 @@ export interface AuthAccountListRecord {
 
 /** Resolve and mutate local auth accounts in the new access-control model. */
 export class AuthAccount {
+  /** Revoke persisted sessions for an account after identity or credential changes. */
+  static revokeSessions(accountId: number, exceptSessionId?: string): number {
+    const db = getAuthDb();
+    const result = exceptSessionId
+      ? db.prepare(`
+          DELETE FROM sessions
+          WHERE sid != ?
+            AND CAST(json_extract(CASE WHEN json_valid(sess) THEN sess ELSE '{}' END, '$.accountId') AS INTEGER) = ?
+        `).run(exceptSessionId, accountId)
+      : db.prepare(`
+          DELETE FROM sessions
+          WHERE CAST(json_extract(CASE WHEN json_valid(sess) THEN sess ELSE '{}' END, '$.accountId') AS INTEGER) = ?
+        `).run(accountId);
+
+    return result.changes;
+  }
+
   /** Check whether any local auth account exists. */
   static exists(): boolean {
     const db = getAuthDb();
@@ -212,6 +229,7 @@ export class AuthAccount {
 
     updateTransaction();
     invalidateResolvedAuthAccessCache();
+    this.revokeSessions(accountId);
 
     const updatedAccount = this.findById(accountId);
     if (!updatedAccount) {
@@ -241,6 +259,7 @@ export class AuthAccount {
       SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(passwordHash, accountId);
+    this.revokeSessions(accountId);
 
     const updatedAccount = this.findById(accountId);
     if (!updatedAccount) {
@@ -271,6 +290,7 @@ export class AuthAccount {
 
     deleteTransaction();
     invalidateResolvedAuthAccessCache();
+    this.revokeSessions(accountId);
   }
 
   /** Count active admin accounts for lockout protection. */

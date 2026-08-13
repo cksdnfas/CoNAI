@@ -97,12 +97,20 @@ export class GenerationQueueService {
       clearInterval(this.orphanReconcileHandle)
       this.orphanReconcileHandle = null
     }
-    this.activeWorkerKeys.clear()
     queueCancellationRegistry.abortAll('queue_service_stopped')
     this.terminalJobWaiters.resolve(null)
     this.serviceThrottle.reset()
     this.comfyDispatchSkipStateByServerId.clear()
     return true
+  }
+
+  /** Stop accepting work, cancel owned workers, and keep the DB open until they settle. */
+  static async stopAndDrain() {
+    const stopped = this.stop()
+    while (this.activeWorkerKeys.size > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+    }
+    return stopped
   }
 
   /**
@@ -693,27 +701,97 @@ export class GenerationQueueService {
       return
     }
 
-    const availableLocalSlotCount = serversWithLocalCapacity.reduce((sum, server) => {
+    const routingContext = createGenerationQueueRoutingContext(activeServers)
+    const probeableServers = serversWithLocalCapacity.filter((server) => server.backend_type !== 'modal')
+    const runtimeStatuses = await getComfyUIServerRuntimeStatuses(probeableServers)
+    const statusByServerId = new Map(runtimeStatuses.map((status) => [status.server_id, status]))
+    const dispatchableServers: Array<{ server: ComfyUIServerRecord; availableSlots: number }> = []
+
+    for (const server of serversWithLocalCapacity) {
+      const runtimeStatus = server.backend_type === 'modal'
+        ? { is_connected: true, running_count: 0, pending_count: 0 }
+        : statusByServerId.get(server.id)
+      if (!runtimeStatus?.is_connected) {
+        if (this.comfyDispatchSkipStateByServerId.get(server.id) !== 'unreachable') {
+          this.comfyDispatchSkipStateByServerId.set(server.id, 'unreachable')
+          console.log(`⏭️ Skipping ComfyUI server ${server.name} (${server.id}), unreachable`)
+        }
+        continue
+      }
+
       const capacity = getGenerationQueueServerCapacity(server)
       const localRunning = this.getActiveComfyWorkerCount(server.id)
-      return sum + Math.max(0, capacity - localRunning)
-    }, 0)
-    const candidateLimit = Math.min(
-      COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT,
-      Math.max(COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT, availableLocalSlotCount * COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT),
-    )
-    const queuedJobs = GenerationQueueModel.findQueuedComfyDispatchCandidates(candidateLimit)
+      const upstreamOccupied = server.backend_type === 'modal'
+        ? 0
+        : Math.max(0, runtimeStatus.running_count ?? 0) + Math.max(0, runtimeStatus.pending_count ?? 0)
+      const occupiedSlots = Math.max(localRunning, upstreamOccupied)
+      const availableSlots = Math.max(0, capacity - occupiedSlots)
+      if (availableSlots === 0) {
+        if (this.comfyDispatchSkipStateByServerId.get(server.id) !== 'busy') {
+          this.comfyDispatchSkipStateByServerId.set(server.id, 'busy')
+          console.log(
+            `⏭️ Skipping ComfyUI server ${server.name} (${server.id}), capacity full (local=${localRunning}, running=${runtimeStatus.running_count ?? 0}, pending=${runtimeStatus.pending_count ?? 0}, capacity=${capacity})`,
+          )
+        }
+        continue
+      }
+
+      this.comfyDispatchSkipStateByServerId.delete(server.id)
+      dispatchableServers.push({ server, availableSlots })
+    }
+
+    if (dispatchableServers.length === 0) {
+      return
+    }
+
+    // Validate the oldest global window so jobs whose target disappeared still fail
+    // promptly, while server-scoped reads keep one blocked lane from hiding another.
+    const validationJobs = GenerationQueueModel.findQueuedComfyDispatchCandidates(COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT)
+    const failedJobIds = new Set<number>()
+    for (const job of validationJobs) {
+      if (getGenerationQueueEligibleServerIds(job, routingContext).length > 0) {
+        continue
+      }
+
+      await this.failJobIfActive(job.id, new Error(`No active linked ComfyUI server matches this job target for workflow ${job.workflow_id ?? 'unknown'}`))
+      failedJobIds.add(job.id)
+    }
+
+    const queuedJobsById = new Map<number, GenerationQueueDispatchCandidateRecord>()
+    for (const { server, availableSlots } of dispatchableServers) {
+      const candidateLimit = Math.min(
+        COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT,
+        Math.max(COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT, availableSlots * COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT),
+      )
+      const serverCandidates = GenerationQueueModel.findQueuedComfyDispatchCandidatesForServer({
+        serverId: server.id,
+        routingTags: server.routing_tags ?? [],
+        includeAuto: server.backend_type !== 'modal',
+        limit: candidateLimit,
+      })
+      for (const job of serverCandidates) {
+        if (!failedJobIds.has(job.id)) {
+          queuedJobsById.set(job.id, job)
+        }
+      }
+    }
+
+    const queuedJobs = [...queuedJobsById.values()].sort((left, right) => {
+      if (left.priority !== right.priority) {
+        return left.priority - right.priority
+      }
+      const queuedAtOrder = left.queued_at.localeCompare(right.queued_at)
+      return queuedAtOrder !== 0 ? queuedAtOrder : left.id - right.id
+    })
     if (queuedJobs.length === 0) {
       return
     }
 
-    const routingContext = createGenerationQueueRoutingContext(activeServers)
     const compatibleServerIdsByJobId = new Map<number, Set<number>>()
     for (const job of queuedJobs) {
       compatibleServerIdsByJobId.set(job.id, new Set(getGenerationQueueEligibleServerIds(job, routingContext)))
     }
 
-    const failedJobIds = new Set<number>()
     for (const job of queuedJobs) {
       const compatibleServerIds = compatibleServerIdsByJobId.get(job.id)
       if (compatibleServerIds && compatibleServerIds.size > 0) {
@@ -741,9 +819,6 @@ export class GenerationQueueService {
       }
     }
 
-    const probeableServers = serversWithLocalCapacity.filter((server) => server.backend_type !== 'modal')
-    const runtimeStatuses = await getComfyUIServerRuntimeStatuses(probeableServers)
-    const statusByServerId = new Map(runtimeStatuses.map((status) => [status.server_id, status]))
     const reservedJobIds = new Set<number>()
     const nextRunnableJobIndexByServerId = new Map<number, number>()
     const takeNextRunnableJobForServer = (serverId: number) => {
@@ -766,39 +841,8 @@ export class GenerationQueueService {
       return null
     }
 
-    for (const server of serversWithLocalCapacity) {
-      const runtimeStatus = server.backend_type === 'modal'
-        ? { is_connected: true, is_idle: true, running_count: 0, pending_count: 0 }
-        : statusByServerId.get(server.id)
-      if (!runtimeStatus?.is_connected) {
-        // Log only on state change so the 3s dispatch tick does not repeat skip lines.
-        if (this.comfyDispatchSkipStateByServerId.get(server.id) !== 'unreachable') {
-          this.comfyDispatchSkipStateByServerId.set(server.id, 'unreachable')
-          console.log(`⏭️ Skipping ComfyUI server ${server.name} (${server.id}), unreachable`)
-        }
-        continue
-      }
-
-      const capacity = getGenerationQueueServerCapacity(server)
-      const localRunning = this.getActiveComfyWorkerCount(server.id)
-      const availableLocalSlots = Math.max(0, capacity - localRunning)
-      if (availableLocalSlots === 0) {
-        continue
-      }
-
-      if (server.backend_type !== 'modal' && runtimeStatus.is_idle !== true) {
-        if (this.comfyDispatchSkipStateByServerId.get(server.id) !== 'busy') {
-          this.comfyDispatchSkipStateByServerId.set(server.id, 'busy')
-          console.log(
-            `⏭️ Skipping ComfyUI server ${server.name} (${server.id}), busy (running=${runtimeStatus.running_count ?? 0}, pending=${runtimeStatus.pending_count ?? 0})`,
-          )
-        }
-        continue
-      }
-
-      this.comfyDispatchSkipStateByServerId.delete(server.id)
-
-      for (let slotIndex = 0; slotIndex < availableLocalSlots; slotIndex += 1) {
+    for (const { server, availableSlots } of dispatchableServers) {
+      for (let slotIndex = 0; slotIndex < availableSlots; slotIndex += 1) {
         const candidateJob = takeNextRunnableJobForServer(server.id)
         if (!candidateJob) {
           break

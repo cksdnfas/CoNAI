@@ -61,6 +61,11 @@ function assertTypeMirrorHasNoDrift() {
     'ComfyUI progress events must preserve their trusted source, phase, and optional real percent',
   )
   match(streamSource, /'queue\.job\.progress'/, 'the single EventSource must subscribe to live queue progress events')
+  match(
+    streamSource,
+    /const RUNTIME_EVENT_NAMES:[\s\S]*?'job\.status'/,
+    'the single EventSource must subscribe to runtime job status hints handled by the cache bridge',
+  )
 }
 
 function assertSingleConnectionPolicy() {

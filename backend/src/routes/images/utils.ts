@@ -1,28 +1,13 @@
-import { toUploadsUrl } from '../../config/runtimePaths';
-
-function toRuntimeRelativeUrl(relativePath: string | null | undefined): string | null {
-  const absoluteOrPublicUrl = toUploadsUrl(relativePath);
-  if (!absoluteOrPublicUrl) {
-    return null;
-  }
-
-  try {
-    const parsed = new URL(absoluteOrPublicUrl);
-    return `${parsed.pathname}${parsed.search}`;
-  } catch {
-    return absoluteOrPublicUrl;
-  }
-}
-
 /**
  * 이미지 레코드에 URL과 구조화된 메타데이터 추가 (레거시)
  * @deprecated 새 코드에서는 enrichImageWithFileView 사용
  */
 export function enrichImageRecord(image: any) {
+  const imageMediaBaseUrl = image.composite_hash ? `/api/images/${image.composite_hash}` : null;
   const enriched = {
     ...image,
-    thumbnail_url: toRuntimeRelativeUrl(image.thumbnail_path as string)!,
-    image_url: toRuntimeRelativeUrl(image.file_path as string)!,
+    thumbnail_url: imageMediaBaseUrl ? `${imageMediaBaseUrl}/thumbnail` : null,
+    image_url: imageMediaBaseUrl ? `${imageMediaBaseUrl}/file` : null,
 
     // 그룹 정보 (이미 있는 경우 그대로 유지)
     groups: image.groups || [],
@@ -86,9 +71,8 @@ export function enrichImageRecord(image: any) {
  * Phase 1 지원: composite_hash가 NULL인 경우 원본 파일 사용
  */
 function buildBaseImageWithFileView(image: any) {
-  const isExternalImage = image.original_file_path && require('path').isAbsolute(image.original_file_path);
   const isProcessing = !image.composite_hash;
-  const staticThumbnailUrl = image.thumbnail_path ? toRuntimeRelativeUrl(image.thumbnail_path) : null;
+  const imageMediaBaseUrl = image.composite_hash ? `/api/images/${image.composite_hash}` : null;
 
   return {
     ...image,
@@ -96,12 +80,10 @@ function buildBaseImageWithFileView(image: any) {
     is_processing: isProcessing,
     thumbnail_url: isProcessing
       ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
-      : (staticThumbnailUrl || `/api/images/${image.composite_hash}/thumbnail`),
+      : `${imageMediaBaseUrl}/thumbnail`,
     image_url: isProcessing
       ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
-      : (isExternalImage
-        ? `/api/images/${image.composite_hash}/download/original`
-        : (image.original_file_path ? toRuntimeRelativeUrl(image.original_file_path) : null)),
+      : `${imageMediaBaseUrl}/file`,
     groups: image.groups || [],
   };
 }

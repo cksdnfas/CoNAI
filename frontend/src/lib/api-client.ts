@@ -1,25 +1,10 @@
-const API_BASE = import.meta.env?.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+import { requestJson } from '@/lib/api-request'
 
 export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: init?.credentials ?? 'include',
-    headers: {
-      Accept: 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
-  }
-
-  return response.json() as Promise<T>
+  return requestJson<T>(path, init)
 }
 
-export function buildApiUrl(path: string) {
-  return `${API_BASE}${path}`
-}
+export { buildApiUrl } from '@/lib/api-url'
 
 export function triggerBrowserDownload(url: string, filename?: string) {
   const anchor = document.createElement('a')

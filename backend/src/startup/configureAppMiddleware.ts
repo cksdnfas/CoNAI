@@ -26,6 +26,23 @@ export interface AppMiddlewareDependencies {
   resolveBodyLimitsMb(): ReturnType<typeof resolveRequestBodyLimitsMb>;
 }
 
+/** Resolve the explicit browser origins allowed to send credentialed cross-origin requests. */
+export function resolveAllowedCorsOrigins(env: NodeJS.ProcessEnv = process.env): Set<string> {
+  const configuredOrigins = [env.CORS_ORIGIN, env.FRONTEND_URL, env.PUBLIC_BASE_URL, env.BACKEND_ORIGIN]
+    .flatMap((value) => value?.split(',') ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => {
+      try {
+        return new URL(value).origin;
+      } catch {
+        return value.replace(/\/$/, '');
+      }
+    });
+
+  return new Set(configuredOrigins);
+}
+
 const productionMiddlewareDependencies: AppMiddlewareDependencies = {
   createBodyParsers: () => createTieredBodyParsers(),
   createCompression: (options) => compression(options),
@@ -124,6 +141,7 @@ export function configureAppMiddleware(
   });
 
   const isSecureContext = (env.BACKEND_PROTOCOL || '').toLowerCase() === 'https';
+  const allowedCorsOrigins = resolveAllowedCorsOrigins(env);
 
   app.use((_req, res, next) => {
     res.locals.cspNonce = dependencies.randomNonce();
@@ -152,8 +170,13 @@ export function configureAppMiddleware(
   }));
 
   app.use(dependencies.createCors({
-    origin: (_origin, callback) => {
-      callback(null, true);
+    origin: (origin, callback) => {
+      if (!origin || allowedCorsOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Cross-origin request is not allowed'));
     },
     credentials: true,
   }));

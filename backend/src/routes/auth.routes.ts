@@ -14,6 +14,7 @@ import {
   invalidateConfiguredAuthCache,
   setAuthenticatedSession,
 } from './auth-route-helpers';
+import { hasValidRemoteSetupToken, isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 
 const router = Router();
 
@@ -35,6 +36,18 @@ const guestAccountLimiter = rateLimit({
     res.status(429).json({ error: 'Too many guest account creation attempts, please try again later' });
   },
 });
+
+/** Permit first-admin setup locally, or remotely only with the operator-provided one-time token. */
+export const requireInitialSetupAccess: RequestHandler = (req, res, next) => {
+  if (isDirectLoopbackRequest(req) || hasValidRemoteSetupToken(req)) {
+    next();
+    return;
+  }
+
+  res.status(403).json({
+    error: 'Remote initial setup requires the x-conai-setup-token header',
+  });
+};
 
 /** Send the auth route's legacy 400 payload shape without changing response contracts. */
 function sendAuthBadRequest(res: Response, error: string) {
@@ -261,8 +274,13 @@ const handleUpdateCredentials: RequestHandler = async (req, res) => {
   }
 
   try {
+    const previousAccount = AuthAccount.findByUsername(current.username);
     const updated = await AuthCredentials.update(newUsername, newPassword);
     const syncedAccount = AuthAccount.findByUsername(updated.username);
+
+    if (previousAccount) {
+      AuthAccount.revokeSessions(previousAccount.id, req.sessionID);
+    }
 
     req.session.username = updated.username;
     if (syncedAccount) {
@@ -682,7 +700,7 @@ router.get('/me', requireAuth, asyncHandler(handleMe));
 router.get('/database-info', asyncHandler(handleDatabaseInfo));
 router.post('/login', loginLimiter, asyncHandler(handleLogin));
 router.post('/logout', asyncHandler(handleLogout));
-router.post('/setup', asyncHandler(handleSetup));
+router.post('/setup', requireInitialSetupAccess, asyncHandler(handleSetup));
 router.put('/credentials', requireAdmin, asyncHandler(handleUpdateCredentials));
 router.post('/guest-accounts', guestAccountLimiter, allowAnonymousPermission('auth.guest.create'), asyncHandler(handleGuestAccountCreate));
 router.get('/accounts', requireAdmin, asyncHandler(handleAccountsList));

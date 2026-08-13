@@ -82,6 +82,7 @@ function normalizeRunEnqueueCount(value?: number | null) {
 export class GraphWorkflowScheduleService {
   private static pollTimer: NodeJS.Timeout | null = null
   private static isPolling = false
+  private static activePoll: Promise<void> | null = null
 
   /** Build one stable signature for stored schedule input values. */
   static buildInputSignature(inputValues?: Record<string, unknown> | null) {
@@ -118,9 +119,9 @@ export class GraphWorkflowScheduleService {
       return false
     }
 
-    void this.pollDueSchedules()
+    this.requestPoll()
     this.pollTimer = setInterval(() => {
-      void this.pollDueSchedules()
+      this.requestPoll()
     }, DEFAULT_POLL_INTERVAL_MS)
 
     console.log(`⏰ Graph workflow schedule service ready (${DEFAULT_POLL_INTERVAL_MS}ms)`)
@@ -136,6 +137,26 @@ export class GraphWorkflowScheduleService {
     clearInterval(this.pollTimer)
     this.pollTimer = null
     return true
+  }
+
+  /** Stop future polling and wait for the current reservation pass to finish. */
+  static async stopAndDrain() {
+    const stopped = this.stop()
+    await this.activePoll
+    return stopped
+  }
+
+  private static requestPoll() {
+    if (this.activePoll) {
+      return
+    }
+
+    const poll = this.pollDueSchedules().finally(() => {
+      if (this.activePoll === poll) {
+        this.activePoll = null
+      }
+    })
+    this.activePoll = poll
   }
 
   /** Pause schedules after their workflow changed and clear queued schedule jobs. */

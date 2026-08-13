@@ -268,6 +268,14 @@ function createMockResponse() {
   }
 }
 
+function createMockRequest(session: Record<string, unknown> = {}, remoteAddress = '127.0.0.1') {
+  return {
+    headers: {},
+    session,
+    socket: { remoteAddress },
+  }
+}
+
 function assertTrustedBootstrapAdminMode() {
   const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
   const authMiddleware = require('../middleware/authMiddleware') as typeof import('../middleware/authMiddleware')
@@ -275,7 +283,7 @@ function assertTrustedBootstrapAdminMode() {
 
   assert.equal(authHelpers.hasConfiguredAuth(), false, 'Auth must be unconfigured after auth.db credentials are removed')
 
-  const statusRequest = { session: {} }
+  const statusRequest = createMockRequest()
   const statusPayload = authHelpers.buildAuthStatusPayload(statusRequest as any)
   assert.equal(statusPayload.hasCredentials, false)
   assert.equal(statusPayload.authenticated, true, 'Bootstrap mode must behave as an authenticated trusted session')
@@ -283,7 +291,7 @@ function assertTrustedBootstrapAdminMode() {
   assert.equal(statusPayload.isAdmin, true, 'Bootstrap mode must expose admin-equivalent UI state')
   assert.ok(statusPayload.permissionKeys.includes('page.settings.view'))
 
-  const adminRequest = { session: {} }
+  const adminRequest = createMockRequest()
   const adminResponse = createMockResponse()
   let nextCalled = false
   authMiddleware.requireAdmin(adminRequest as any, adminResponse as any, () => {
@@ -292,6 +300,76 @@ function assertTrustedBootstrapAdminMode() {
 
   assert.equal(nextCalled, true, 'requireAdmin must allow trusted bootstrap mode')
   assert.equal(adminResponse.statusCode, 200)
+
+  const remoteStatusPayload = authHelpers.buildAuthStatusPayload(createMockRequest({}, '203.0.113.8') as any)
+  assert.equal(remoteStatusPayload.authenticated, false, 'remote first-run status must not receive bootstrap authentication')
+  assert.equal(remoteStatusPayload.isAdmin, false, 'remote first-run status must not advertise admin access')
+
+  const remoteAdminResponse = createMockResponse()
+  let remoteNextCalled = false
+  authMiddleware.requireAdmin(createMockRequest({}, '203.0.113.8') as any, remoteAdminResponse as any, () => {
+    remoteNextCalled = true
+  })
+  assert.equal(remoteNextCalled, false, 'requireAdmin must reject non-loopback bootstrap requests')
+  assert.equal(remoteAdminResponse.statusCode, 401)
+}
+
+function assertAdminSessionRevalidationAndRevocation(authDbModule: AuthDbModule) {
+  const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
+  const authMiddleware = require('../middleware/authMiddleware') as typeof import('../middleware/authMiddleware')
+  const { AuthAccount } = require('../models/AuthAccount') as typeof import('../models/AuthAccount')
+  const db = authDbModule.getAuthDb()
+  const admin = getRequiredRow<{ id: number }>(
+    db,
+    'SELECT id FROM auth_accounts WHERE username = ?',
+    'standalone-admin',
+  )
+  const adminGroup = getRequiredRow<{ id: number }>(
+    db,
+    'SELECT id FROM auth_permission_groups WHERE group_key = ?',
+    'admin',
+  )
+  const guardAdminId = db.prepare(`
+    INSERT INTO auth_accounts (
+      username, password_hash, account_type, status, created_at, updated_at
+    ) VALUES ('session-guard-admin', 'hashed-password', 'admin', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `).run().lastInsertRowid as number
+  db.prepare(`
+    INSERT INTO auth_account_group_memberships (account_id, group_id, created_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+  `).run(guardAdminId, adminGroup.id)
+
+  const staleAdminSession = {
+    authenticated: true,
+    accountId: admin.id,
+    accountType: 'admin',
+    username: 'standalone-admin',
+  }
+
+  db.prepare("UPDATE auth_accounts SET account_type = 'guest' WHERE id = ?").run(admin.id)
+  authHelpers.invalidateConfiguredAuthCache()
+
+  const response = createMockResponse()
+  let nextCalled = false
+  authMiddleware.requireAdmin(createMockRequest(staleAdminSession) as any, response as any, () => {
+    nextCalled = true
+  })
+  assert.equal(nextCalled, false, 'requireAdmin must revalidate stale admin session claims against the account row')
+  assert.equal(response.statusCode, 403)
+
+  db.prepare("UPDATE auth_accounts SET account_type = 'admin' WHERE id = ?").run(admin.id)
+  authHelpers.invalidateConfiguredAuthCache()
+
+  const insertSession = db.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expire) VALUES (?, ?, ?)')
+  const sessionPayload = JSON.stringify({ authenticated: true, accountId: admin.id, accountType: 'admin' })
+  insertSession.run('keep-admin-session', sessionPayload, 4102444800000)
+  insertSession.run('revoke-admin-session', sessionPayload, 4102444800000)
+  insertSession.run('unrelated-session', JSON.stringify({ authenticated: true, accountId: admin.id + 999 }), 4102444800000)
+
+  assert.equal(AuthAccount.revokeSessions(admin.id, 'keep-admin-session'), 1)
+  assert.equal(getCount(db, 'SELECT COUNT(*) AS count FROM sessions WHERE sid = ?', 'keep-admin-session'), 1)
+  assert.equal(getCount(db, 'SELECT COUNT(*) AS count FROM sessions WHERE sid = ?', 'revoke-admin-session'), 0)
+  assert.equal(getCount(db, 'SELECT COUNT(*) AS count FROM sessions WHERE sid = ?', 'unrelated-session'), 1)
 }
 
 function assertAuthConfigurationRequiresUsableAdmin(authDbModule: AuthDbModule) {
@@ -630,6 +708,7 @@ function main() {
     assertLegacySyncedAdminCleanup(authDbModule)
     assertTrustedBootstrapAdminMode()
     assertAuthConfigurationRequiresUsableAdmin(authDbModule)
+    assertAdminSessionRevalidationAndRevocation(authDbModule)
     assertAnonymousSessionAccessIsNotRewrittenPerRequest()
     assertAuthStatusPayloadReusesSessionAccessCache(authDbModule)
     assertSessionTouchThrottleContracts()

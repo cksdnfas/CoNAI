@@ -282,26 +282,14 @@ export class QueryCacheService {
         this.thumbnailCache.clear();
         logger.debug('🗑️ All image caches invalidated (bulk operation)');
       } else {
-        const commonPageSizes = [25, 50, 100];
-        const sortOptions = [
-          { sortBy: 'first_seen_date', sortOrder: 'DESC' },
-          { sortBy: 'first_seen_date', sortOrder: 'ASC' },
-        ];
-
-        commonPageSizes.forEach(limit => {
-          sortOptions.forEach(({ sortBy, sortOrder }) => {
-            const key = this.getGalleryCacheKey(1, limit, sortBy, sortOrder);
-            this.galleryCache.delete(key);
-          });
-        });
-
-        // A single added/removed image still moves the library total.
-        this.galleryTotalCache?.clear();
-
+        // One image can move or disappear from any page and any supported sort.
+        // The gallery cache is intentionally small, so clearing it is both safer
+        // and cheaper than trying to predict every affected cache key.
+        this.invalidateGalleryCache();
         this.invalidateMetadataCache(compositeHash);
         this.invalidateThumbnailCache(compositeHash);
 
-        logger.debug(`🔄 First page cache invalidated for image: ${compositeHash}`);
+        logger.debug(`🔄 Gallery cache invalidated for image: ${compositeHash}`);
       }
     } catch (error) {
       logger.warn('⚠️ Image cache invalidate error:', error instanceof Error ? error.message : error);

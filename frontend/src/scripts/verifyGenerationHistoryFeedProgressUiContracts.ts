@@ -370,13 +370,38 @@ function assertSelectionRecoverySourcePolicy() {
   )
   match(
     generationHistoryPanelSource,
-    /const handleRetryHistoryRecords = useCallback\(async \([\s\S]*?retryGenerationHistoryRecords\(\{[\s\S]*?records: retryableRecords,[\s\S]*?queryClient,[\s\S]*?refreshHistory,[\s\S]*?acknowledgeRecoveryRecords\(retryableRecords\)[\s\S]*?\}, \[acknowledgeRecoveryRecords, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar\]\)/,
+    /const handleRetryHistoryRecords = useCallback\(async \([\s\S]*?retryGenerationHistoryRecords\(\{[\s\S]*?records: retryableRecords,[\s\S]*?queryClient,[\s\S]*?refreshHistory,[\s\S]*?succeededQueueJobIds[\s\S]*?acknowledgeRecoveryRecords\(retryableRecords\.filter/,
     'single, visible-bulk, and selected-bulk retry flows should share one queue mutation path',
   )
   match(
     generationHistoryRetryActionsSource,
     /function getUniqueRetryableHistoryQueueJobIds\(records: readonly GenerationHistoryRecord\[\]\) \{[\s\S]*?new Set\(getRetryableHistoryQueueJobIds\(records\)\)/,
     'history retry boundary should dedupe queue job ids before calling the queue retry API',
+  )
+  match(
+    generationHistoryRetryActionsSource,
+    /GENERATION_HISTORY_MUTATION_CONCURRENCY = 4[\s\S]*?workerCount[\s\S]*?Promise\.all\(Array\.from\(\{ length: workerCount \}/,
+    'generation history mutations must use a bounded worker pool',
+  )
+  doesNotMatch(
+    generationHistoryRetryActionsSource,
+    /Promise\.all\(queueJobIds\.map/,
+    'bulk retry must not fan every selected queue job out at once',
+  )
+  doesNotMatch(
+    generationHistoryPanelSource,
+    /Promise\.all\(selectedHistoryRecords\.map/,
+    'bulk deletion must not fan every selected history record out at once',
+  )
+  match(
+    generationHistoryPanelSource,
+    /runGenerationHistoryMutationBatch\([\s\S]*?failedSelectionIds[\s\S]*?await refreshHistory\(\)[\s\S]*?result\.failedItems\.length/,
+    'bulk deletion must refresh after settled partial results and retain failed selections',
+  )
+  match(
+    generationHistoryRetryActionsSource,
+    /runGenerationHistoryMutationBatch\(queueJobIds[\s\S]*?refreshHistory\(\{ watchForNewRows: true \}\)[\s\S]*?partialFailureMessage/,
+    'bulk retry must refresh after settled partial results and report a partial failure',
   )
   match(
     generationHistoryPanelSource,

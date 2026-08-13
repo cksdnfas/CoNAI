@@ -13,6 +13,12 @@ export interface ShutdownTimerHandle {
 
 export interface GracefulShutdownDependencies {
   shutdownRuntimeEventStreams(): number | Promise<number>;
+  stopGenerationQueue(): void | Promise<void>;
+  stopGraphWorkflowExecutionQueue(): void | Promise<void>;
+  stopGraphWorkflowScheduleService(): void | Promise<void>;
+  cancelRuntimeWatcherStartup(): void | Promise<void>;
+  waitForRuntimeWatcherStartup(): void | Promise<void>;
+  stopBackupSourceWatcher(): void | Promise<void>;
   stopFileWatcher(): void | Promise<void>;
   stopCustomNodeWatcher(): void | Promise<void>;
   stopAutoScanScheduler(): void | Promise<void>;
@@ -51,6 +57,30 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
     shutdownRuntimeEventStreams: async () => {
       const { RuntimeEventBroadcaster } = await import('../services/runtime-events/runtimeEventBroadcaster');
       return RuntimeEventBroadcaster.shutdown();
+    },
+    stopGenerationQueue: async () => {
+      const { GenerationQueueService } = await import('../services/generationQueueService');
+      await GenerationQueueService.stopAndDrain();
+    },
+    stopGraphWorkflowExecutionQueue: async () => {
+      const { GraphWorkflowExecutionQueue } = await import('../services/graphWorkflowExecutionQueue');
+      await GraphWorkflowExecutionQueue.stop();
+    },
+    stopGraphWorkflowScheduleService: async () => {
+      const { GraphWorkflowScheduleService } = await import('../services/graphWorkflowScheduleService');
+      await GraphWorkflowScheduleService.stopAndDrain();
+    },
+    cancelRuntimeWatcherStartup: async () => {
+      const { cancelRuntimeWatcherStartup } = await import('./startRuntimeSideEffectServices');
+      cancelRuntimeWatcherStartup();
+    },
+    waitForRuntimeWatcherStartup: async () => {
+      const { waitForRuntimeWatcherStartup } = await import('./startRuntimeSideEffectServices');
+      await waitForRuntimeWatcherStartup();
+    },
+    stopBackupSourceWatcher: async () => {
+      const { BackupSourceWatcherService } = await import('../services/backupSourceWatcherService');
+      await BackupSourceWatcherService.stopAll();
     },
     stopFileWatcher: async () => {
       const { FileWatcherService } = await import('../services/fileWatcherService');
@@ -150,52 +180,69 @@ export function createGracefulShutdownCoordinator(options: GracefulShutdownOptio
     }, forceExitTimeoutMs);
     forceExitTimer.unref();
 
-    await runCleanupStep(
-      dependencies.shutdownRuntimeEventStreams,
-      (closedStreamCount) => {
-        if (closedStreamCount > 0) {
-          logger.log(`✅ Runtime event streams closed (${closedStreamCount})`);
-        }
-      },
-      '⚠️  Error closing runtime event streams:',
-      logger,
-    );
-
     const activeServer = server;
+    let serverClosePromise: Promise<void> | null = null;
     if (activeServer) {
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          try {
-            activeServer.close((error) => {
-              if (error) {
-                logger.warn('⚠️  Error closing HTTP server:', error);
-              }
-              resolve();
-            });
-          } catch (error) {
-            logger.warn('⚠️  Error closing HTTP server:', error);
+      // Stop accepting new requests first, but keep SSE alive while workers drain
+      // so their final state remains observable.
+      serverClosePromise = new Promise<void>((resolve) => {
+        try {
+          activeServer.close((error) => {
+            if (error) {
+              logger.warn('⚠️  Error closing HTTP server:', error);
+            }
             resolve();
-          }
+          });
+        } catch (error) {
+          logger.warn('⚠️  Error closing HTTP server:', error);
+          resolve();
+        }
 
-          try {
-            activeServer.closeIdleConnections?.();
-          } catch (error) {
-            logger.warn('⚠️  Error closing idle HTTP connections:', error);
-          }
-        }),
-        new Promise<void>((resolve) => {
-          dependencies.scheduleTimeout(resolve, drainTimeoutMs).unref();
-        }),
-      ]);
+        try {
+          activeServer.closeIdleConnections?.();
+        } catch (error) {
+          logger.warn('⚠️  Error closing idle HTTP connections:', error);
+        }
+      });
+    }
 
-      try {
-        activeServer.closeAllConnections?.();
-      } catch (error) {
-        logger.warn('⚠️  Error closing remaining HTTP connections:', error);
-      }
-      logger.log('✅ Server closed');
-    } else {
-      logger.log('✅ Server was not running or already closed');
+    if (!isSafeSmokeMode) {
+      await runCleanupStep(
+        dependencies.stopGraphWorkflowScheduleService,
+        () => logger.log('✅ Graph workflow schedule service stopped'),
+        '⚠️  Error stopping graph workflow schedule service:',
+        logger,
+      );
+      await runCleanupStep(
+        dependencies.stopGraphWorkflowExecutionQueue,
+        () => logger.log('✅ Graph workflow execution queue drained'),
+        '⚠️  Error stopping graph workflow execution queue:',
+        logger,
+      );
+      await runCleanupStep(
+        dependencies.stopGenerationQueue,
+        () => logger.log('✅ Generation queue drained'),
+        '⚠️  Error stopping generation queue:',
+        logger,
+      );
+      await runCleanupStep(
+        dependencies.cancelRuntimeWatcherStartup,
+        () => undefined,
+        '⚠️  Error cancelling runtime watcher startup:',
+        logger,
+      );
+      await runCleanupStep(
+        dependencies.waitForRuntimeWatcherStartup,
+        () => undefined,
+        '⚠️  Error waiting for runtime watcher startup:',
+        logger,
+      );
+      await runCleanupStep(
+        dependencies.stopBackupSourceWatcher,
+        () => logger.log('✅ Backup source watcher service stopped'),
+        '⚠️  Error stopping backup source watcher service:',
+        logger,
+      );
     }
 
     if (!isSafeSmokeMode) {
@@ -265,6 +312,36 @@ export function createGracefulShutdownCoordinator(options: GracefulShutdownOptio
       '⚠️  Error closing runtime jobs:',
       logger,
     );
+
+    await runCleanupStep(
+      dependencies.shutdownRuntimeEventStreams,
+      (closedStreamCount) => {
+        if (closedStreamCount > 0) {
+          logger.log(`✅ Runtime event streams closed (${closedStreamCount})`);
+        }
+      },
+      '⚠️  Error closing runtime event streams:',
+      logger,
+    );
+
+    if (activeServer && serverClosePromise) {
+      await Promise.race([
+        serverClosePromise,
+        new Promise<void>((resolve) => {
+          dependencies.scheduleTimeout(resolve, drainTimeoutMs).unref();
+        }),
+      ]);
+
+      try {
+        activeServer.closeAllConnections?.();
+      } catch (error) {
+        logger.warn('⚠️  Error closing remaining HTTP connections:', error);
+      }
+      logger.log('✅ Server closed');
+    } else {
+      logger.log('✅ Server was not running or already closed');
+    }
+
     await runCleanupStep(
       dependencies.closeMainDatabase,
       () => logger.log('✅ Main database connection closed'),

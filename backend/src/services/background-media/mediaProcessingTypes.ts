@@ -6,6 +6,7 @@ export interface UnhashedMediaFile {
   folder_id: number;
   mime_type: string;
   file_type: string;
+  background_attempt_count?: number;
 }
 
 export interface BackgroundProcessorOptions {

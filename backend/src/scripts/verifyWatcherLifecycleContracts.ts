@@ -80,6 +80,22 @@ async function verifyTimeoutListenerCleanup(): Promise<void> {
   assert.equal(emitter.listenerCount('error'), 0);
 }
 
+async function verifyAbortListenerCleanup(): Promise<void> {
+  const emitter = new EventEmitter();
+  const controller = new AbortController();
+  const readyPromise = waitForChokidarReady({
+    watcher: emitter as unknown as FSWatcher,
+    signal: controller.signal,
+    timeoutMs: 50,
+    timeoutMessage: 'timeout',
+  });
+
+  controller.abort(new Error('shutdown'));
+  await assert.rejects(readyPromise, /shutdown/);
+  assert.equal(emitter.listenerCount('ready'), 0);
+  assert.equal(emitter.listenerCount('error'), 0);
+}
+
 assert.match(
   fileWatcherSource,
   /await waitForWatcherReady[\s\S]*?catch \(error\)[\s\S]*?await watcher\.close\(\)/,
@@ -97,8 +113,8 @@ assert.match(
 );
 assert.match(
   runtimeStartupSource,
-  /void \(async \(\) => \{[\s\S]*FileWatcherService\.initialize\(\)[\s\S]*\}\)\(\)/,
-  'watcher readiness must remain detached so HTTP listen is not blocked',
+  /watcherStartupController\?\.abort[\s\S]*watcherStartupPromise = \(async \(\) => \{[\s\S]*FileWatcherService\.initialize\(startupController\.signal\)[\s\S]*void watcherStartupPromise/,
+  'watcher readiness must remain detached and abortable before shutdown drains it',
 );
 assert.match(
   fileWatcherSource,
@@ -116,7 +132,7 @@ assert.match(
   'restart failures must continue from the replacement entry instead of the stale entry',
 );
 
-Promise.all([verifyReadyListenerCleanup(), verifyTimeoutListenerCleanup()])
+Promise.all([verifyReadyListenerCleanup(), verifyTimeoutListenerCleanup(), verifyAbortListenerCleanup()])
   .then(() => {
     console.log('✅ Watcher lifecycle contracts verified');
   })

@@ -65,7 +65,10 @@ export class FileDiscoveryService {
         concurrency: SCAN_GLOB_CONCURRENCY,
         // chokidar matcher와 동일한 대소문자 규칙을 공유 (excludePatternUtils 참고)
         caseSensitiveMatch: EXCLUDE_PATTERN_CASE_SENSITIVE,
-        suppressErrors: true  // 권한 문제 등의 에러 무시
+        // A full rescan uses this list as the authority for missing-file
+        // reconciliation. Suppressing traversal errors would turn a partial
+        // directory listing into a successful empty scan and hide valid media.
+        suppressErrors: false
       });
 
       if (isVerboseScanDebugEnabled) {
@@ -93,7 +96,8 @@ export class FileDiscoveryService {
       return filteredFiles;
     } catch (error) {
       console.error(`파일 스캔 실패: ${dirPath}`, error);
-      return [];
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`파일 탐색을 완료하지 못했습니다: ${dirPath} (${message})`);
     }
   }
 

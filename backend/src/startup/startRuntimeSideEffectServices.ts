@@ -11,6 +11,19 @@ import {
   type RuntimeSideEffectRole,
 } from './runtimeRole'
 
+let watcherStartupPromise: Promise<void> | null = null
+let watcherStartupController: AbortController | null = null
+
+/** Cancel detached watcher startup before shutdown drains watcher registries. */
+export function cancelRuntimeWatcherStartup(): void {
+  watcherStartupController?.abort(new Error('Runtime watcher startup cancelled for shutdown'))
+}
+
+/** Let shutdown wait until detached watcher startup can no longer add new handles. */
+export async function waitForRuntimeWatcherStartup(): Promise<void> {
+  await watcherStartupPromise
+}
+
 function warnUnknownRuntimeSideEffectRole() {
   const rawRole = process.env.CONAI_RUNTIME_ROLE || process.env.CONAI_SIDE_EFFECT_ROLE
   if (rawRole && !normalizeRuntimeSideEffectRole(rawRole)) {
@@ -55,21 +68,34 @@ export async function startRuntimeSideEffectServices(
   if (process.env.ENABLE_FILE_WATCHING !== 'false') {
     // Watcher readiness waits on chokidar's initial scan (minutes on large or
     // network folders), so it must not block the HTTP server from listening.
-    void (async () => {
+    const startupController = new AbortController()
+    watcherStartupController = startupController
+    watcherStartupPromise = (async () => {
       try {
         const { FileWatcherService } = await import('../services/fileWatcherService')
-        await FileWatcherService.initialize()
+        await FileWatcherService.initialize(startupController.signal)
+        startupController.signal.throwIfAborted()
 
         const { BackupSourceWatcherService } = await import('../services/backupSourceWatcherService')
-        await BackupSourceWatcherService.initialize()
+        await BackupSourceWatcherService.initialize(startupController.signal)
+        startupController.signal.throwIfAborted()
 
         const { CustomNodeWatcherService } = await import('../services/customNodeWatcherService')
-        await CustomNodeWatcherService.initialize()
+        await CustomNodeWatcherService.initialize(startupController.signal)
       } catch (error) {
+        if (startupController.signal.aborted) {
+          return
+        }
         console.warn('⚠️  Failed to start file watcher service:', error instanceof Error ? error.message : error)
         console.warn('   Falling back to scheduled scans only')
       }
-    })()
+    })().finally(() => {
+      if (watcherStartupController === startupController) {
+        watcherStartupController = null
+        watcherStartupPromise = null
+      }
+    })
+    void watcherStartupPromise
   } else {
     console.log('👀 File watching disabled, scheduled scans only')
   }

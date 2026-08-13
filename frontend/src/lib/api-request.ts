@@ -1,4 +1,4 @@
-import { buildApiUrl } from '@/lib/api-client'
+import { buildApiUrl } from '@/lib/api-url'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const LONG_RUNNING_TIMEOUT_MS = 300_000
@@ -45,12 +45,13 @@ function resolveRequestTimeoutMs(path: string, init?: RequestInit) {
 }
 
 function resolveRequestSignal(path: string, init: RequestInit | undefined, options: RequestJsonOptions) {
-  if (init?.signal) {
-    return init.signal
+  const timeoutMs = options.timeoutMs ?? resolveRequestTimeoutMs(path, init)
+  const timeoutSignal = timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
+  if (init?.signal && timeoutSignal) {
+    return AbortSignal.any([init.signal, timeoutSignal])
   }
 
-  const timeoutMs = options.timeoutMs ?? resolveRequestTimeoutMs(path, init)
-  return timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
+  return init?.signal ?? timeoutSignal
 }
 
 type ResponsePayload = unknown

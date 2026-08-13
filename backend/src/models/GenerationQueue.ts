@@ -103,6 +103,12 @@ type GenerationQueueFindAllInput = GenerationQueueJobStatus[] | GenerationQueueF
 type GenerationQueueStatusCountFilters = Pick<GenerationQueueFilters, 'serviceType' | 'workflowId'>
 type GenerationQueueRecentCompletedFilters = GenerationQueueStatusCountFilters & { limit?: number }
 type GenerationQueueCountFilters = Pick<GenerationQueueFilters, 'statuses' | 'serviceType' | 'workflowId' | 'requesterAccountId'>
+type GenerationQueueServerDispatchCandidateFilters = {
+  serverId: number
+  routingTags: string[]
+  includeAuto: boolean
+  limit?: number
+}
 type GenerationQueuePayloadPruneInput = {
   retainRecentTerminalJobs?: number
 }
@@ -550,6 +556,60 @@ export class GenerationQueueModel {
       ORDER BY priority ASC, queued_at ASC, id ASC
       LIMIT ?
     `).all(safeLimit) as GenerationQueueDispatchCandidateRecord[]
+  }
+
+  /** List lean queued candidates that can use one active server lane. */
+  static findQueuedComfyDispatchCandidatesForServer(filters: GenerationQueueServerDispatchCandidateFilters) {
+    const db = getUserSettingsDb()
+    const safeLimit = Math.max(1, Math.floor(filters.limit ?? 200))
+    const normalizedTags = [...new Set(filters.routingTags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))]
+    const laneClauses = ['requested_server_id = ?']
+    const laneValues: Array<string | number> = [filters.serverId]
+
+    if (normalizedTags.length > 0) {
+      laneClauses.push(`(
+        requested_server_id IS NULL
+        AND requested_server_tag IN (${normalizedTags.map(() => '?').join(', ')})
+      )`)
+      laneValues.push(...normalizedTags)
+    }
+
+    if (filters.includeAuto) {
+      laneClauses.push('(requested_server_id IS NULL AND requested_server_tag IS NULL)')
+    }
+
+    return db.prepare(`
+      SELECT ${GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS}
+      FROM generation_queue_jobs AS job
+      WHERE status = 'queued'
+        AND service_type = 'comfyui'
+        AND cancel_requested = 0
+        AND (${laneClauses.join(' OR ')})
+        AND (
+          workflow_id IS NULL
+          OR NOT EXISTS (
+            SELECT 1
+            FROM workflow_servers AS workflow_link
+            INNER JOIN comfyui_servers AS linked_server
+              ON linked_server.id = workflow_link.server_id
+            WHERE workflow_link.workflow_id = job.workflow_id
+              AND workflow_link.is_enabled = 1
+              AND linked_server.is_active = 1
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM workflow_servers AS workflow_link
+            INNER JOIN comfyui_servers AS linked_server
+              ON linked_server.id = workflow_link.server_id
+            WHERE workflow_link.workflow_id = job.workflow_id
+              AND workflow_link.server_id = ?
+              AND workflow_link.is_enabled = 1
+              AND linked_server.is_active = 1
+          )
+        )
+      ORDER BY priority ASC, queued_at ASC, id ASC
+      LIMIT ?
+    `).all(...laneValues, filters.serverId, safeLimit) as GenerationQueueDispatchCandidateRecord[]
   }
 
   /** List lean recent completed queue jobs for ETA sampling without scanning or hydrating whole history. */

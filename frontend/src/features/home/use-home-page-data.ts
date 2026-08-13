@@ -60,7 +60,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     // so keying on the chips themselves would never hit the query cache.
     queryKey: ['home-images', imageListResetKey],
     initialPageParam: {} as HomeImagesPageParam,
-    queryFn: ({ pageParam }) => {
+    queryFn: ({ pageParam, signal }) => {
       const typedPageParam = pageParam as HomeImagesPageParam
 
       if (isSearchMode) {
@@ -76,7 +76,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
           // Counting the match set is the expensive half of the query. The grid does
           // not need it to render, so it is fetched separately once the feed is up.
           includeTotal: false,
-        })
+        }, { signal })
       }
 
       const cursor = typeof typedPageParam === 'number' ? {} : typedPageParam
@@ -86,7 +86,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         cursorDate: cursor.cursorDate,
         cursorHash: cursor.cursorHash,
         includeTotal: false,
-      })
+      }, { signal })
     },
     getNextPageParam: (lastPage) => {
       if (!lastPage.hasMore) {
@@ -126,7 +126,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
    */
   const feedTotalQuery = useQuery({
     queryKey: ['home-images-total', imageListResetKey],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (isSearchMode) {
         const result = await searchImagesComplex({
           complex_filter: buildComplexFilterPayload(appliedChips),
@@ -135,11 +135,11 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
           sortBy: 'upload_date',
           sortOrder: 'DESC',
           includeTotal: true,
-        })
+        }, { signal })
         return result.totalKnown === false ? null : result.total
       }
 
-      const result = await getImagesCount()
+      const result = await getImagesCount({ signal })
       return result.total
     },
     enabled: canViewHome && hasFirstFeedPage,
@@ -246,6 +246,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     try {
       setIsDownloading(true)
       await downloadImageSelection(selectedCompositeHashes, type)
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : t('useHomePageData.failedToDownloadSelectedItems'))
     } finally {
       setIsDownloading(false)
     }

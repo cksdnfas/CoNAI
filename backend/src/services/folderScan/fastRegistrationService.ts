@@ -121,8 +121,7 @@ function isSameModifiedTimestamp(stored: string | null, actual: Date): boolean {
  * saw, so an unchanged 200k-file library produced 200k UPDATEs and a WAL explosion
  * on each pass. A row only needs a write when something a scan can observe actually
  * changed — size, mtime, mime type — or when its status must be brought back to
- * `active` (which is also what a `fullRescan` relies on, since that marks every row
- * `missing` before Phase 1 runs).
+ * `active`. Full rescans reconcile missing rows only after this phase completes.
  */
 function needsScanWrite(existing: ExistingFileScanRecord, stats: fs.Stats, mimeType: string): boolean {
   if (existing.file_status !== 'active' && existing.file_status !== 'deleted') {

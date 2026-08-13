@@ -31,6 +31,7 @@ const RUNTIME_EVENT_NAMES: readonly RuntimeEventName[] = [
   'queue.job.progress',
   'history.record.created',
   'history.record.status',
+  'job.status',
   'graph.schedule.changed',
   'graph.execution.status',
 ]

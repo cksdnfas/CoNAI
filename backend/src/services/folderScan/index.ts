@@ -29,6 +29,11 @@ interface ScanFolderOptions {
   candidateFiles?: string[];
 }
 
+interface ActiveFolderFileRow {
+  id: number;
+  original_file_path: string;
+}
+
 /**
  * 폴더 스캔 오케스트레이터
  * Facade 패턴으로 모든 하위 서비스를 조율
@@ -42,6 +47,73 @@ interface ScanFolderOptions {
  * - DuplicateDetectionService: 중복 감지
  */
 export class FolderScanService {
+  private static readonly MISSING_RECONCILE_PAGE_SIZE = 5000;
+  private static readonly MISSING_RECONCILE_WRITE_BATCH_SIZE = 500;
+
+  /**
+   * Mark only active rows that were absent from one completely successful full scan.
+   * Discovery and per-file stat/registration must finish first, otherwise a transient
+   * filesystem failure could incorrectly hide a whole library.
+   */
+  private static async reconcileMissingFiles(
+    folderId: number,
+    discoveredFiles: readonly string[],
+  ): Promise<number> {
+    const discoveredPaths = new Set(discoveredFiles);
+    const selectPage = db.prepare(`
+      SELECT id, original_file_path
+      FROM image_files
+      WHERE folder_id = ?
+        AND file_status = 'active'
+        AND id > ?
+      ORDER BY id
+      LIMIT ?
+    `);
+    const markMissing = db.prepare(`
+      UPDATE image_files
+      SET file_status = 'missing'
+      WHERE id = ?
+        AND folder_id = ?
+        AND file_status = 'active'
+    `);
+    const markBatch = db.transaction((ids: number[]) => {
+      let changed = 0;
+      for (const id of ids) {
+        changed += markMissing.run(id, folderId).changes;
+      }
+      return changed;
+    });
+
+    let lastId = 0;
+    let missingCount = 0;
+    for (;;) {
+      const rows = selectPage.all(
+        folderId,
+        lastId,
+        this.MISSING_RECONCILE_PAGE_SIZE,
+      ) as ActiveFolderFileRow[];
+      if (rows.length === 0) {
+        break;
+      }
+
+      const missingIds = rows
+        .filter((row) => !discoveredPaths.has(row.original_file_path))
+        .map((row) => row.id);
+      for (let index = 0; index < missingIds.length; index += this.MISSING_RECONCILE_WRITE_BATCH_SIZE) {
+        missingCount += markBatch(missingIds.slice(index, index + this.MISSING_RECONCILE_WRITE_BATCH_SIZE));
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      lastId = rows.at(-1)!.id;
+      if (rows.length < this.MISSING_RECONCILE_PAGE_SIZE) {
+        break;
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    return missingCount;
+  }
+
   /**
    * 폴더 스캔 실행 (병렬 처리 최적화)
    */
@@ -115,22 +187,19 @@ export class FolderScanService {
         console.log(`ℹ️ [Scan Debug] 빈 스캔 결과: recursive=${folder.recursive === 1}, exclude_extensions=${folder.exclude_extensions}`);
       }
 
-      // 6. 전체 재스캔인 경우 기존 파일들을 'missing'으로 표시
-      if (fullRescan) {
-        const updateInfo = db.prepare(`
-          UPDATE image_files SET file_status = 'missing'
-          WHERE folder_id = ? AND file_status = 'active'
-        `).run(folderId);
-        result.missingImages = updateInfo.changes;
+      // 6. 배치별로 파일 처리 (Phase 1: 빠른 등록)
+      await FastRegistrationService.processFastRegistration(files, folderId, result, {
+        quietIfIdle: options.quietIfNoChanges === true,
+      });
+
+      // 7. 전체 재스캔의 누락 판정은 완전한 탐색과 모든 파일 stat/등록이
+      // 성공한 뒤에만 실행한다. 일부 탐색 결과로 기존 행을 숨기지 않는다.
+      if (fullRescan && !options.candidateFiles && result.errors.length === 0) {
+        result.missingImages = await this.reconcileMissingFiles(folderId, files);
         if (!quietScan || isVerboseScanDebugEnabled || result.missingImages > 0) {
           console.log(`  🔄 전체 재스캔: ${result.missingImages}개 파일 상태 변경`);
         }
       }
-
-      // 7. 배치별로 파일 처리 (Phase 1: 빠른 등록)
-      await FastRegistrationService.processFastRegistration(files, folderId, result, {
-        quietIfIdle: options.quietIfNoChanges === true,
-      });
 
       // 7.5. Phase 2 백그라운드 처리 트리거
       BackgroundProcessorService.triggerHashGeneration({

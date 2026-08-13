@@ -7,6 +7,18 @@ import {
   setTrustedBootstrapSession,
 } from '../routes/auth-route-helpers';
 import { AuthAccessControlService, getResolvedAuthAccessEpoch } from '../services/authAccessControlService';
+import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
+
+/** Keep trusted bootstrap mode on the local console only. */
+function allowLocalBootstrapOrReject(req: Request, res: Response, next: NextFunction): void {
+  if (!isDirectLoopbackRequest(req)) {
+    res.status(401).json({ error: 'Authentication setup required from a trusted local connection' });
+    return;
+  }
+
+  setTrustedBootstrapSession(req, AuthAccessControlService.resolveBootstrapAccess());
+  next();
+}
 
 /**
  * Require authentication middleware.
@@ -14,8 +26,7 @@ import { AuthAccessControlService, getResolvedAuthAccessEpoch } from '../service
  */
 export const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
   if (!hasConfiguredAuth()) {
-    setTrustedBootstrapSession(req, AuthAccessControlService.resolveBootstrapAccess());
-    next();
+    allowLocalBootstrapOrReject(req, res, next);
     return;
   }
 
@@ -32,18 +43,12 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction): vo
  */
 export const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
   if (!hasConfiguredAuth()) {
-    setTrustedBootstrapSession(req, AuthAccessControlService.resolveBootstrapAccess());
-    next();
+    allowLocalBootstrapOrReject(req, res, next);
     return;
   }
 
   if (req.session?.authenticated !== true) {
     res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
-  if (req.session.accountType === 'admin') {
-    next();
     return;
   }
 
@@ -73,6 +78,22 @@ function refreshSessionAccess(req: Request): string[] {
   if (typeof accountId !== 'number') {
     return req.session?.permissionKeys ?? [];
   }
+
+  const account = AuthAccount.findById(accountId);
+  if (!account || account.status !== 'active') {
+    req.session.authenticated = false;
+    delete req.session.username;
+    delete req.session.accountId;
+    delete req.session.accountType;
+    delete req.session.groupKeys;
+    delete req.session.permissionKeys;
+    delete req.session.accessCacheAccountId;
+    delete req.session.accessCacheEpoch;
+    return [];
+  }
+
+  req.session.username = account.username;
+  req.session.accountType = account.account_type;
 
   if (hasFreshSessionAccessCache(req, accountId)) {
     return req.session.permissionKeys ?? [];
@@ -122,6 +143,10 @@ function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[];
   const hasCredentials = hasConfiguredAuth();
 
   if (!hasCredentials) {
+    if (!isDirectLoopbackRequest(req)) {
+      return { permissionKeys: [], authenticated: false };
+    }
+
     const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess();
     setTrustedBootstrapSession(req, resolvedAccess);
     return { permissionKeys: resolvedAccess.permissionKeys, authenticated: true };
@@ -142,15 +167,13 @@ export const requirePermission = (permissionKey: string) => (req: Request, res: 
   const hasCredentials = hasConfiguredAuth();
 
   if (!hasCredentials) {
-    const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess();
-    setTrustedBootstrapSession(req, resolvedAccess);
-
-    if (resolvedAccess.permissionKeys.includes(permissionKey)) {
-      next();
-      return;
-    }
-
-    res.status(403).json({ error: 'Forbidden' });
+    allowLocalBootstrapOrReject(req, res, () => {
+      if (req.session.permissionKeys?.includes(permissionKey)) {
+        next();
+        return;
+      }
+      res.status(403).json({ error: 'Forbidden' });
+    });
     return;
   }
 
@@ -222,8 +245,7 @@ export const optionalAuth = (req: Request, res: Response, next: NextFunction): v
   const hasCredentials = hasConfiguredAuth();
 
   if (!hasCredentials) {
-    setTrustedBootstrapSession(req, AuthAccessControlService.resolveBootstrapAccess());
-    next();
+    allowLocalBootstrapOrReject(req, res, next);
     return;
   }
 

@@ -9,6 +9,10 @@ import { MediaProcessingDiagnostics } from './background-media/mediaProcessingDi
 import { MediaPostprocessCoordinator } from './background-media/mediaPostprocessCoordinator';
 import { SavedMediaOrchestrator } from './background-media/savedMediaOrchestrator';
 import {
+  resolveBackgroundMediaRetryDelayMs,
+  toSqliteUtcDateTime,
+} from './background-media/backgroundMediaRetryPolicy';
+import {
   getMediaProcessingResultFromError,
   throwIfRetryableMediaFailure,
   type BackgroundProcessorOptions,
@@ -98,10 +102,14 @@ export class BackgroundProcessorService {
 
     try {
       const unhashedFiles = db.prepare(`
-        SELECT id, original_file_path, folder_id, mime_type, file_type
+        SELECT id, original_file_path, folder_id, mime_type, file_type, background_attempt_count
         FROM image_files
         WHERE composite_hash IS NULL
           AND file_status = 'active'
+          AND (
+            background_next_retry_at IS NULL
+            OR background_next_retry_at <= CURRENT_TIMESTAMP
+          )
         ORDER BY scan_date ASC
         LIMIT ?
       `).all(this.BATCH_SIZE) as UnhashedMediaFile[];
@@ -138,6 +146,16 @@ export class BackgroundProcessorService {
           throwIfRetryableMediaFailure(fileResult);
           await yieldToHttpRequests();
 
+          if ((file.background_attempt_count ?? 0) > 0) {
+            db.prepare(`
+              UPDATE image_files
+              SET background_attempt_count = 0,
+                  background_next_retry_at = NULL,
+                  background_last_error = NULL
+              WHERE id = ?
+            `).run(file.id);
+          }
+
           // Preserve the former accounting: missing, empty, and unsupported files
           // resolve normally and therefore count as processed, not errors.
           result.processed += 1;
@@ -148,6 +166,26 @@ export class BackgroundProcessorService {
           }
         } catch (error) {
           const stageResult = getMediaProcessingResultFromError(error);
+          if (!stageResult || stageResult.retryable) {
+            const nextAttemptCount = (file.background_attempt_count ?? 0) + 1;
+            const retryAt = toSqliteUtcDateTime(
+              Date.now() + resolveBackgroundMediaRetryDelayMs(nextAttemptCount),
+            );
+            db.prepare(`
+              UPDATE image_files
+              SET background_attempt_count = ?,
+                  background_next_retry_at = ?,
+                  background_last_error = ?
+              WHERE id = ?
+                AND composite_hash IS NULL
+                AND file_status = 'active'
+            `).run(
+              nextAttemptCount,
+              retryAt,
+              (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+              file.id,
+            );
+          }
           console.error(
             `  ❌ Failed to process: ${path.basename(file.original_file_path)}`,
             error instanceof Error ? error.message : error,
@@ -262,6 +300,10 @@ export class BackgroundProcessorService {
       FROM image_files
       WHERE composite_hash IS NULL
         AND file_status = 'active'
+        AND (
+          background_next_retry_at IS NULL
+          OR background_next_retry_at <= CURRENT_TIMESTAMP
+        )
       LIMIT 1
     `).get() as { present: number } | undefined;
     return row !== undefined;

@@ -13,6 +13,7 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
+const databaseFileHadContentAtOpen = fs.existsSync(DB_PATH) && fs.statSync(DB_PATH).size > 0;
 export const db: Database.Database = new Database(DB_PATH);
 configureSqliteConnection(db, { label: 'images.db' });
 export const migrationManager = new MigrationManager(db);
@@ -20,7 +21,7 @@ export const migrationManager = new MigrationManager(db);
 export const initializeDatabase = async (): Promise<void> => {
   try {
     // 데이터베이스 파일이 새로 생성되는지 확인
-    const isNewDatabase = !fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size === 0;
+    const isNewDatabase = !databaseFileHadContentAtOpen;
 
     if (!isNewDatabase) {
       // 기존 데이터베이스 - 레거시 버전 체크
@@ -39,7 +40,7 @@ export const initializeDatabase = async (): Promise<void> => {
 
     // 마이그레이션 실행 (신규 시스템 테이블 생성)
     console.log('🔄 마이그레이션 실행 중...');
-    await migrationManager.migrate();
+    await migrationManager.migrate({ requireBaseline: isNewDatabase });
 
     console.log('🎉 데이터베이스 초기화가 완료되었습니다!');
   } catch (error) {

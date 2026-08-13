@@ -130,6 +130,7 @@ function collectExecutionNodeIds(graph: ReturnType<typeof parseGraphWorkflowReco
 export class GraphWorkflowExecutionQueue {
   private static initialized = false
   private static runningJobs = new Map<number, QueuedExecutionJob>()
+  private static runningJobPromises = new Map<number, Promise<void>>()
   private static cancelRequestedExecutionIds = new Set<number>()
   private static processRetryTimer: NodeJS.Timeout | null = null
   private static lastStartupRecovery: StartupRecoverySnapshot | null = null
@@ -150,6 +151,23 @@ export class GraphWorkflowExecutionQueue {
     console.log(`🧩 Graph workflow execution queue ready (queued_backlog=${recovery.queuedBacklog}, failed_running=${recovery.failedRunning})`)
     this.processQueue()
     return true
+  }
+
+  /** Stop claiming work, abort in-process executions, and drain them before DB shutdown. */
+  static async stop() {
+    const wasInitialized = this.initialized
+    this.initialized = false
+    this.clearProcessRetry()
+
+    for (const executionId of this.runningJobs.keys()) {
+      this.cancelRequestedExecutionIds.add(executionId)
+      requestGraphExecutionAbort(executionId, { kind: 'shutdown' })
+    }
+
+    await Promise.allSettled([...this.runningJobPromises.values()])
+    this.cancelRequestedExecutionIds.clear()
+    this.reservationLaneCache.clear()
+    return wasInitialized
   }
 
   /** Keep queued backlog durable while failing only work that was actively running during restart. */
@@ -688,15 +706,17 @@ export class GraphWorkflowExecutionQueue {
   private static startJob(job: QueuedExecutionJob) {
     this.runningJobs.set(job.executionId, job)
 
-    void this.runJob(job)
+    const runningPromise = this.runJob(job)
       .catch((error) => {
         console.error('Background graph execution failed:', error)
       })
       .finally(() => {
         this.cancelRequestedExecutionIds.delete(job.executionId)
         this.runningJobs.delete(job.executionId)
+        this.runningJobPromises.delete(job.executionId)
         this.processQueue()
       })
+    this.runningJobPromises.set(job.executionId, runningPromise)
   }
 
   /** Execute one claimed job after moving it to running. */

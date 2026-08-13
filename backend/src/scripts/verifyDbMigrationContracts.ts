@@ -8,6 +8,8 @@ import { up as upInitialSchema } from '../database/migrations/000_create_all_tab
 import { up as upVisibilityIndex } from '../database/migrations/027_add_media_visibility_index'
 import { up as upAutoTagState } from '../database/migrations/028_add_media_auto_tag_state'
 import { up as upPromptSearchIndex } from '../database/migrations/031_add_media_prompt_search_index'
+import { up as upBackgroundMediaRetryState } from '../database/migrations/034_add_background_media_retry_state'
+import { resolveBackgroundMediaRetryDelayMs } from '../services/background-media/backgroundMediaRetryPolicy'
 import { ensureUserSettingsCompatibility, migrateExistingUserSettingsTables } from '../database/userSettingsCompatibility'
 import { createUserSettingsSchema } from '../database/userSettingsSchema'
 
@@ -733,6 +735,103 @@ async function assertMigrationManagerFailsFastAndRollsBack() {
   }
 }
 
+async function assertMigrationDiscoveryAndBaselineContracts() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-migration-discovery-'))
+  const missingDir = path.join(tempDir, 'missing-migrations')
+  const emptyDir = path.join(tempDir, 'empty-migrations')
+  const nonBaselineDir = path.join(tempDir, 'non-baseline-migrations')
+  fs.mkdirSync(emptyDir)
+  fs.mkdirSync(nonBaselineDir)
+  fs.writeFileSync(
+    path.join(nonBaselineDir, '001_noop.js'),
+    'exports.up = async () => {}; exports.down = async () => {};',
+    'utf8',
+  )
+
+  const db = new Database(':memory:')
+  try {
+    const missingManager = new MigrationManager(db)
+    ;(missingManager as unknown as { migrationsPath: string }).migrationsPath = missingDir
+    await assert.rejects(
+      () => missingManager.migrate(),
+      /마이그레이션 폴더를 찾을 수 없습니다/,
+      'a missing packaged migrations directory must fail startup',
+    )
+
+    const existingManager = new MigrationManager(db)
+    ;(existingManager as unknown as { migrationsPath: string }).migrationsPath = emptyDir
+    await existingManager.migrate()
+    assert.equal(
+      getCount(db, "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'migrations'"),
+      1,
+      'an already-initialized deployment may legitimately have no pending migration files',
+    )
+
+    const newDb = new Database(':memory:')
+    try {
+      const noBaselineManager = new MigrationManager(newDb)
+      ;(noBaselineManager as unknown as { migrationsPath: string }).migrationsPath = nonBaselineDir
+      await assert.rejects(
+        () => noBaselineManager.migrate({ requireBaseline: true }),
+        /baseline migration\(000_create_all_tables\)/,
+        'a new database must refuse an incomplete migration package',
+      )
+    } finally {
+      newDb.close()
+    }
+  } finally {
+    db.close()
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
+async function assertBackgroundMediaRetrySchemaContracts() {
+  const db = new Database(':memory:')
+  try {
+    db.exec(`
+      CREATE TABLE image_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        composite_hash TEXT,
+        file_status TEXT NOT NULL DEFAULT 'active',
+        scan_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    await upBackgroundMediaRetryState(db)
+    await upBackgroundMediaRetryState(db)
+
+    const columns = getTableColumns(db, 'image_files')
+    for (const column of ['background_attempt_count', 'background_next_retry_at', 'background_last_error']) {
+      assert.equal(columns.has(column), true, `image_files.${column} must be available for durable retry state`)
+    }
+    assert.equal(
+      getCount(db, "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'idx_files_background_retry'"),
+      1,
+      'the due-work lookup must have one partial retry index',
+    )
+  } finally {
+    db.close()
+  }
+
+  assert.equal(resolveBackgroundMediaRetryDelayMs(1, 5_000, 60_000), 5_000)
+  assert.equal(resolveBackgroundMediaRetryDelayMs(4, 5_000, 60_000), 40_000)
+  assert.equal(resolveBackgroundMediaRetryDelayMs(10, 5_000, 60_000), 60_000)
+
+  const processorSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/services/backgroundProcessorService.ts'),
+    'utf8',
+  )
+  assert.match(
+    processorSource,
+    /background_next_retry_at IS NULL[\s\S]*?background_next_retry_at <= CURRENT_TIMESTAMP/,
+    'background batches must skip poison rows until their persisted retry time is due',
+  )
+  assert.match(
+    processorSource,
+    /SET background_attempt_count = \?[\s\S]*?background_next_retry_at = \?[\s\S]*?background_last_error = \?/,
+    'retryable media failures must persist attempt, retry time, and diagnostic state',
+  )
+}
+
 async function main() {
   assertComfyServerRebuildPreservesRoutingTags()
   assertModuleDefinitionRebuildPreservesExternalSourceColumns()
@@ -744,6 +843,8 @@ async function main() {
   await assertLegacyApiHistoryCollisionIsRemapped()
   await assertNoPendingMigrationsDoNotRequireWriteLock()
   await assertMigrationManagerFailsFastAndRollsBack()
+  await assertMigrationDiscoveryAndBaselineContracts()
+  await assertBackgroundMediaRetrySchemaContracts()
 
   console.log('✅ DB migration compatibility contracts verified')
 }

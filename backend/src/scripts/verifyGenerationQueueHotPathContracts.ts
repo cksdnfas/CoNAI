@@ -170,8 +170,8 @@ async function main() {
     )
     assert.match(
       queueServiceSource,
-      /GenerationQueueModel\.findQueuedComfyDispatchCandidates\(candidateLimit\)/,
-      'ComfyUI dispatcher should read a bounded lean queued-candidate window before hydrating a claimed queue job payload',
+      /GenerationQueueModel\.findQueuedComfyDispatchCandidatesForServer\(\{[\s\S]*?serverId: server\.id,[\s\S]*?limit: candidateLimit/,
+      'ComfyUI dispatcher should read bounded lean candidates per available server lane before hydrating a claimed queue job payload',
     )
     assert.match(
       queueServiceSource,
@@ -179,13 +179,23 @@ async function main() {
       'ComfyUI dispatcher must cap queued candidate scans so cold backlog size cannot dominate each dispatch tick',
     )
     assert.ok(
-      queueServiceSource.indexOf('const serversWithLocalCapacity = activeServers.filter') < queueServiceSource.indexOf('GenerationQueueModel.findQueuedComfyDispatchCandidates(candidateLimit)'),
+      queueServiceSource.indexOf('const serversWithLocalCapacity = activeServers.filter') < queueServiceSource.indexOf('GenerationQueueModel.findQueuedComfyDispatchCandidatesForServer({'),
       'ComfyUI dispatcher should return early on zero local capacity before reading queued candidates',
     )
     assert.doesNotMatch(
       queueServiceSource,
       /isGenerationQueueComfyJobCompatibleWithServer/,
       'ComfyUI dispatcher must not recompute full job/server compatibility inside nested dispatch loops',
+    )
+    assert.match(
+      queueServiceSource,
+      /const upstreamOccupied =[\s\S]*?runtimeStatus\.running_count[\s\S]*?runtimeStatus\.pending_count[\s\S]*?const occupiedSlots = Math\.max\(localRunning, upstreamOccupied\)/,
+      'ComfyUI dispatcher must subtract upstream running and pending work from configured capacity without double-counting local workers',
+    )
+    assert.doesNotMatch(
+      queueServiceSource,
+      /runtimeStatus\.is_idle/,
+      'ComfyUI dispatcher must not require a fully idle upstream queue when configured capacity still has free slots',
     )
     assert.match(
       generationQueueModelSource,
@@ -201,6 +211,11 @@ async function main() {
       generationQueueModelSource,
       /findQueuedComfyDispatchCandidates\(limit = 200\)[\s\S]*SELECT \$\{GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS\}[\s\S]*LIMIT \?/,
       'queued ComfyUI dispatch candidates should use a lean explicit column set with a bounded LIMIT',
+    )
+    assert.match(
+      generationQueueModelSource,
+      /findQueuedComfyDispatchCandidatesForServer\([\s\S]*?requested_server_id = \?[\s\S]*?requested_server_tag IN[\s\S]*?workflow_servers[\s\S]*?LIMIT \?/,
+      'server-lane candidate reads must filter target and workflow compatibility in SQL with a bounded LIMIT',
     )
     // PAYLOAD-1: only the dispatch claim may hydrate the multi-MB request payload.
     // Everything else on the job lifecycle reads the lean list projection.
@@ -456,6 +471,32 @@ async function main() {
       dispatchCandidates.every((job) => !('request_payload' in job) && !('request_summary' in job)),
       'dispatch candidates must not hydrate heavyweight request payload/summary columns',
     )
+
+    const insertHeadOfLineJobs = db.transaction(() => {
+      const insert = db.prepare(`
+        INSERT INTO generation_queue_jobs (
+          service_type, status, priority, workflow_id, requested_server_id,
+          request_payload, request_summary, queued_at
+        ) VALUES ('comfyui', 'queued', ?, NULL, ?, '{}', 'hol-test', ?)
+      `)
+      for (let index = 0; index < 300; index += 1) {
+        insert.run(1, 1, new Date(now + index).toISOString())
+      }
+      return Number(insert.run(2, 2, new Date(now + 1_000).toISOString()).lastInsertRowid)
+    })
+    const idleLaneJobId = insertHeadOfLineJobs()
+    const idleLaneCandidates = GenerationQueueModel.findQueuedComfyDispatchCandidatesForServer({
+      serverId: 2,
+      routingTags: [],
+      includeAuto: true,
+      limit: 3,
+    })
+    assert.deepEqual(
+      idleLaneCandidates.map((job) => job.id),
+      [idleLaneJobId],
+      'more than one global candidate window of another server backlog must not hide work runnable on an idle server',
+    )
+    db.prepare("DELETE FROM generation_queue_jobs WHERE request_summary = 'hol-test'").run()
 
     const completedSamples = GenerationQueueModel.findRecentCompleted({ serviceType: 'comfyui', workflowId: 7, limit: 5 })
     assert.equal(completedSamples.length, 3)

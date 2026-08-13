@@ -31,7 +31,7 @@ export async function getImages(params?: {
   cursorDate?: string | null
   cursorHash?: string | null
   includeTotal?: boolean
-}) {
+}, init?: RequestInit) {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('limit', String(params?.limit ?? 12))
@@ -48,7 +48,7 @@ export async function getImages(params?: {
     }
   }
 
-  const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images?${searchParams.toString()}`)
+  const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images?${searchParams.toString()}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.list.load')
   }
@@ -62,19 +62,21 @@ export async function getImages(params?: {
  * library is the single most expensive query on that path, so the grid renders
  * first and this fills the counter in afterwards.
  */
-export async function getImagesCount() {
-  const response = await fetchJson<ApiResponse<{ total: number }>>('/api/images/count')
+export async function getImagesCount(init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<{ total: number }>>('/api/images/count', init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.list.load')
   }
   return response.data
 }
 
-export async function searchImagesComplex(input: ComplexImageSearchRequest) {
+export async function searchImagesComplex(input: ComplexImageSearchRequest, init?: RequestInit) {
   const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images/search/complex`, {
+    ...init,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
     },
     body: JSON.stringify(input),
   })

@@ -8,6 +8,12 @@ interface Migration {
   down: (db: Database.Database) => Promise<void>;
 }
 
+export interface MigrationOptions {
+  requireBaseline?: boolean;
+}
+
+const BASELINE_MIGRATION_VERSION = '000_create_all_tables';
+
 function escapeSavepointName(value: string): string {
   return value.replace(/[^a-zA-Z0-9_]/g, '_');
 }
@@ -78,9 +84,7 @@ export class MigrationManager {
     }
 
     if (!migrationsPath) {
-      console.warn('⚠️  마이그레이션 폴더를 찾을 수 없습니다.');
-      console.warn('   시도한 경로:', possiblePaths);
-      return migrations;
+      throw new Error(`마이그레이션 폴더를 찾을 수 없습니다. 시도한 경로: ${possiblePaths.join(', ')}`);
     }
 
     const files = fs.readdirSync(migrationsPath)
@@ -111,10 +115,19 @@ export class MigrationManager {
   }
 
   // 마이그레이션 실행 (up)
-  async migrate(): Promise<void> {
+  async migrate(options: MigrationOptions = {}): Promise<void> {
     let transactionStarted = false;
     try {
       const availableMigrations = await this.getAvailableMigrations();
+
+      if (
+        options.requireBaseline === true
+        && !availableMigrations.some((migration) => migration.version === BASELINE_MIGRATION_VERSION)
+      ) {
+        throw new Error(
+          `신규 데이터베이스 초기화에 필요한 baseline migration(${BASELINE_MIGRATION_VERSION})을 찾을 수 없습니다.`,
+        );
+      }
 
       if (!this.hasMigrationsTable()) {
         this.createMigrationsTable();

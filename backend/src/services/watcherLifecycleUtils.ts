@@ -2,6 +2,7 @@ import type { FSWatcher } from 'chokidar';
 
 interface WaitForChokidarReadyOptions {
   watcher: FSWatcher;
+  signal?: AbortSignal;
   timeoutMs?: number;
   timeoutMessage: string;
   onReady?: () => void;
@@ -23,9 +24,14 @@ export function sleep(ms: number): Promise<void> {
 }
 
 export async function waitForChokidarReady(options: WaitForChokidarReadyOptions): Promise<void> {
-  const { watcher, timeoutMs = DEFAULT_WATCHER_READY_TIMEOUT_MS, timeoutMessage, onReady, onError } = options;
+  const { watcher, signal, timeoutMs = DEFAULT_WATCHER_READY_TIMEOUT_MS, timeoutMessage, onReady, onError } = options;
 
   await new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason instanceof Error ? signal.reason : new Error('Watcher startup aborted'));
+      return;
+    }
+
     const timeout = setTimeout(() => {
       cleanup();
       reject(new Error(timeoutMessage));
@@ -35,6 +41,7 @@ export async function waitForChokidarReady(options: WaitForChokidarReadyOptions)
       clearTimeout(timeout);
       watcher.off('ready', handleReady);
       watcher.off('error', handleError);
+      signal?.removeEventListener('abort', handleAbort);
     }
 
     function handleReady(): void {
@@ -50,7 +57,13 @@ export async function waitForChokidarReady(options: WaitForChokidarReadyOptions)
       reject(error instanceof Error ? error : new Error(errorMessage));
     }
 
+    function handleAbort(): void {
+      cleanup();
+      reject(signal?.reason instanceof Error ? signal.reason : new Error('Watcher startup aborted'));
+    }
+
     watcher.on('ready', handleReady);
     watcher.on('error', handleError);
+    signal?.addEventListener('abort', handleAbort, { once: true });
   });
 }
