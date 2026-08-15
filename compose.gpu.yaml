@@ -1,0 +1,10 @@
+# NVIDIA GPU opt-in:
+# docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
+services:
+  conai:
+    image: conai:gpu
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime-gpu
+    gpus: all

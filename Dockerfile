@@ -24,7 +24,7 @@ RUN npm pkg delete devDependencies.lightningcss-win32-x64-msvc \
   && NODE_ENV=development npm install --include=dev --no-audit --no-fund lightningcss-linux-x64-gnu@1.32.0 \
   && npm run build:integrated
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime-base
 
 WORKDIR /app/backend
 
@@ -49,11 +49,6 @@ COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/shared /app/shared
 COPY --from=build /app/backend /app/backend
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    --index-url https://download.pytorch.org/whl/cpu \
-    --extra-index-url https://pypi.org/simple \
-    -r /app/backend/python/requirements.txt
-
 ENV NODE_ENV=production \
     PORT=1666 \
     BIND_ADDRESS=0.0.0.0 \
@@ -71,3 +66,29 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
   CMD node -e "require('http').get('http://127.0.0.1:1666/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 CMD ["node", "dist/backend/src/index.js"]
+
+# CPU is the default and keeps the normal image free of CUDA libraries.
+FROM runtime-base AS runtime-cpu
+
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.org/simple \
+    -r /app/backend/python/requirements.txt
+
+# GPU users opt into this target explicitly. PyTorch wheels provide the CUDA
+# runtime libraries, so a second CUDA base image is not needed.
+FROM runtime-base AS runtime-gpu
+
+ARG PYTORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu121
+
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
+    --index-url "${PYTORCH_CUDA_INDEX_URL}" \
+    torch torchvision \
+  && python3 -m pip install --break-system-packages --no-cache-dir \
+    -r /app/backend/python/requirements-gpu.txt
+
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# An ordinary `docker build .` ends here and therefore remains CPU-only.
+FROM runtime-cpu AS runtime

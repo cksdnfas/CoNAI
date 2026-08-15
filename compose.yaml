@@ -1,0 +1,15 @@
+# Default CPU deployment: docker compose up -d --build
+services:
+  conai:
+    image: conai:cpu
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "1666:1666"
+    volumes:
+      - conai-data:/app/data/user
+    restart: unless-stopped
+
+volumes:
+  conai-data:

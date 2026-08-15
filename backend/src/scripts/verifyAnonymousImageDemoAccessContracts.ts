@@ -11,6 +11,11 @@ const routeRegistrationSource = readSource('src/startup/registerAppRoutes.ts');
 const permissionGroupSource = readSource('src/models/AuthPermissionGroup.ts');
 const securityTabDataSource = readSource('../frontend/src/features/settings/components/security-tab-data.ts');
 const dockerfileSource = readSource('../Dockerfile');
+const dockerBuildScriptSource = readSource('../scripts/build-docker.js');
+const composeSource = readSource('../compose.yaml');
+const gpuComposeSource = readSource('../compose.gpu.yaml');
+const cpuPythonRequirementsSource = readSource('python/requirements.txt');
+const gpuPythonRequirementsSource = readSource('python/requirements-gpu.txt');
 
 assert.ok(
   authMiddlewareSource.includes('export const allowAnonymousAnyPermission'),
@@ -133,5 +138,37 @@ assert.ok(
   dockerfileSource.includes('https://download.pytorch.org/whl/cpu'),
   'Coolify Docker runtime should prefer CPU PyTorch wheels for the public demo host',
 );
+
+assert.match(
+  dockerfileSource,
+  /^FROM runtime-cpu AS runtime$/m,
+  'an ordinary Docker build must finish on the CPU runtime target',
+);
+
+assert.match(
+  dockerfileSource,
+  /^FROM runtime-base AS runtime-gpu$/m,
+  'Docker must expose an explicit opt-in GPU runtime target',
+);
+
+assert.ok(
+  dockerfileSource.includes('https://download.pytorch.org/whl/cu121'),
+  'the GPU target must install CUDA-enabled PyTorch wheels',
+);
+
+assert.match(cpuPythonRequirementsSource, /^onnxruntime>=/m);
+assert.doesNotMatch(cpuPythonRequirementsSource, /^onnxruntime-gpu>=/m);
+assert.match(gpuPythonRequirementsSource, /^onnxruntime-gpu>=/m);
+
+assert.match(composeSource, /image: conai:cpu/);
+assert.doesNotMatch(composeSource, /target: runtime-gpu/);
+assert.match(gpuComposeSource, /image: conai:gpu/);
+assert.match(gpuComposeSource, /target: runtime-gpu/);
+assert.match(gpuComposeSource, /gpus: all/);
+
+assert.ok(dockerBuildScriptSource.includes("'requirements-common.txt'"));
+assert.ok(dockerBuildScriptSource.includes("'requirements-gpu.txt'"));
+assert.doesNotMatch(dockerBuildScriptSource, /FROM nvidia\/cuda/);
+assert.match(dockerBuildScriptSource, /--index-url https:\/\/download\.pytorch\.org\/whl\/cu121[\s\\]+torch torchvision/);
 
 console.log('✅ Anonymous image demo access contracts verified');

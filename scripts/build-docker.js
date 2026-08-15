@@ -126,7 +126,14 @@ const safeRemove = async (dirPath) => {
 
     if (fs.existsSync(pythonSource)) {
       fs.ensureDirSync(pythonTarget);
-      const pythonFiles = ['wdv3_tagger_daemon.py', 'kaloscope_tagger_daemon.py', 'requirements.txt', 'README.md'];
+      const pythonFiles = [
+        'wdv3_tagger_daemon.py',
+        'kaloscope_tagger_daemon.py',
+        'requirements.txt',
+        'requirements-common.txt',
+        'requirements-gpu.txt',
+        'README.md'
+      ];
       let copiedCount = 0;
 
       for (const file of pythonFiles) {
@@ -227,11 +234,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy Python requirements
-COPY python/requirements.txt ./python/requirements.txt
+COPY python/requirements*.txt ./python/
 
 # Install Python dependencies (CPU)
 RUN pip3 install --break-system-packages --no-cache-dir \\
-    --extra-index-url https://download.pytorch.org/whl/cpu \\
+    --index-url https://download.pytorch.org/whl/cpu \\
+    --extra-index-url https://pypi.org/simple \\
     -r python/requirements.txt && \\
     find /usr/local/lib/python3* -name '*.pyc' -delete && \\
     find /usr/local/lib/python3* -name '__pycache__' -delete && \\
@@ -275,17 +283,15 @@ RUN npm install --production --no-package-lock && \\
     npm rebuild sharp better-sqlite3 argon2
 
 # ============================================================================
-# Runtime Stage (CUDA)
+# Runtime Stage (CUDA wheels are installed only in this opt-in image)
 # ============================================================================
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+FROM node:20-slim
 
-ENV DEBIAN_FRONTEND=noninteractive \\
-    NVIDIA_VISIBLE_DEVICES=all \\
+ENV NVIDIA_VISIBLE_DEVICES=all \\
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \\
-    curl \\
     ca-certificates \\
     ffmpeg \\
     python3 \\
@@ -293,23 +299,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     python3-venv \\
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20.x
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \\
-    apt-get install -y nodejs
-
 WORKDIR /app
 
 # Copy Node modules
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy Python requirements
-COPY python/requirements.txt ./python/requirements.txt
+COPY python/requirements*.txt ./python/
 
 # Install Python dependencies (GPU)
-# Using --extra-index-url to allow PyPI access for non-torch packages
 RUN pip3 install --break-system-packages --no-cache-dir \\
-    --extra-index-url https://download.pytorch.org/whl/cu121 \\
-    -r python/requirements.txt && \\
+    --index-url https://download.pytorch.org/whl/cu121 \\
+    torch torchvision && \\
+    pip3 install --break-system-packages --no-cache-dir \\
+    -r python/requirements-gpu.txt && \\
+    find /usr/local/lib/python3* -name '*.pyc' -delete && \\
+    find /usr/local/lib/python3* -name '__pycache__' -delete && \\
     rm -rf /root/.cache/pip
 
 # Create data directories
