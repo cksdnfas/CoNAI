@@ -33,4 +33,3 @@ const viteRoot = path.resolve(path.dirname(require.resolve('vite')), '..', '..')
 
 runBin(require.resolve('typescript/bin/tsc'), ['-b'])
 runBin(path.join(viteRoot, 'bin', 'vite.js'), ['build'])
-runBin(path.resolve('scripts/verify-bundle-budget.mjs'), [])

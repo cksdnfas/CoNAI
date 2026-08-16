@@ -2,8 +2,7 @@
  * 책임형 잡 러너 계약.
  *
  * 이 파일은 `frontend/src/types/runtime-job.ts` 와 1:1 미러이며,
- * 두 파일의 `RuntimeJobKind` / `RuntimeJobStatus` 유니온 집합이 어긋나면
- * `verify:runtime-job-ui-contracts` 가 실패한다.
+ * 두 파일의 `RuntimeJobKind` / `RuntimeJobStatus` 유니온 집합은 항상 일치해야 한다.
  *
  * 상태 정본은 `user.db` 의 `runtime_jobs` 테이블이다. SSE 힌트는 무효화 신호일 뿐이고
  * 진행률 수치를 싣지 않는다 — 정본 조회 경로는 언제나 `GET /api/jobs/:jobId` 다.

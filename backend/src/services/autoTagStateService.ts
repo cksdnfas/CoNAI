@@ -22,8 +22,8 @@ const META_TABLE = 'auto_tag_state_meta';
 const PENDING_STATE = 'pending';
 const DEFAULT_PRUNE_LIMIT = 500;
 
-// Literal table name (not the META_TABLE constant) so verify:auto-tag-index-contracts
-// can compare these expressions against migration 028 character for character.
+// Keep the literal table name so these expressions stay character-for-character
+// identical to migration 028.
 const CAPABILITY_TAGGER_SQL = `COALESCE((SELECT tagger_enabled FROM auto_tag_state_meta WHERE id = 1), 1) = 1`;
 const CAPABILITY_KALOSCOPE_SQL = `COALESCE((SELECT kaloscope_enabled FROM auto_tag_state_meta WHERE id = 1), 1) = 1`;
 
@@ -226,11 +226,5 @@ export class AutoTagStateService {
       console.warn('[AutoTagState] Failed to prune ineligible pending rows:', error instanceof Error ? error.message : error);
       return 0;
     }
-  }
-
-  /** Test/verify hook: drop the cached schema probe and capability signature. */
-  static resetProbeCacheForTests(): void {
-    hasIndexedStateCache = undefined;
-    syncedCapabilitySignature = null;
   }
 }

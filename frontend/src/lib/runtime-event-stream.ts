@@ -18,8 +18,7 @@ import {
  * 탭당 단일 EventSource 래퍼.
  *
  * HTTP/1.1 오리진당 커넥션 상한이 6이므로 스트림은 **탭 전체에서 정확히 1개**여야 한다.
- * 이 파일이 앱 전체에서 유일하게 `new EventSource(...)` 를 호출하는 곳이며,
- * 그 사실을 `verify:runtime-event-stream-ui-contracts` 가 강제한다.
+ * 이 파일이 앱 전체에서 유일하게 `new EventSource(...)` 를 호출하는 곳이다.
  */
 
 const RUNTIME_EVENT_STREAM_PATH = '/api/events/stream'

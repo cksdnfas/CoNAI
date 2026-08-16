@@ -14,7 +14,6 @@ import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
  * 세션 행을 덮어써 로그아웃을 되돌린다. 따라서 `requirePermission`/`optionalAuth`/
  * `setTrustedBootstrapSession` 같은 세션 변조 미들웨어는 이 경로에서 절대 쓰지 않고,
  * 권한은 매번 `AuthAccessControlService` 로 직접 해석한다.
- * (`verify:runtime-event-stream-contracts` 가 이 금지를 소스 레벨로 못박는다.)
  */
 
 export type EventStreamAccess =

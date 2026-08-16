@@ -62,18 +62,6 @@ const defaultSideEffectDependencies: HistoryCommandSideEffectDependencies = {
   publishEvent: publishHistoryEventById,
   requestRetention: requestGenerationResultRetentionPrune,
 };
-let activeSideEffectDependencies = defaultSideEffectDependencies;
-
-/** Install observable side effects for one isolated verification and return a restorer. */
-export function overrideHistoryCommandSideEffectsForTests(
-  dependencies: HistoryCommandSideEffectDependencies,
-): () => void {
-  const previous = activeSideEffectDependencies;
-  activeSideEffectDependencies = dependencies;
-  return () => {
-    activeSideEffectDependencies = previous;
-  };
-}
 
 /**
  * The write-side contract is intentionally centralized and observable:
@@ -82,7 +70,7 @@ export function overrideHistoryCommandSideEffectsForTests(
 export function runHistoryCommandSideEffects(
   historyIds: number | number[],
   options: { eventName?: HistoryRecordEventName; requestRetention?: boolean } = {},
-  dependencies: HistoryCommandSideEffectDependencies = activeSideEffectDependencies,
+  dependencies: HistoryCommandSideEffectDependencies = defaultSideEffectDependencies,
 ): void {
   dependencies.invalidateCache();
   if (options.eventName) {
@@ -96,7 +84,7 @@ export function runHistoryCommandSideEffects(
 function publishHistoryEvents(
   historyIds: number | number[],
   eventName: HistoryRecordEventName,
-  dependencies: HistoryCommandSideEffectDependencies = activeSideEffectDependencies,
+  dependencies: HistoryCommandSideEffectDependencies = defaultSideEffectDependencies,
 ): void {
   const ids = Array.isArray(historyIds) ? historyIds : [historyIds];
   for (const historyId of ids) {

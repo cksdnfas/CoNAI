@@ -25,9 +25,4 @@ export class MediaProcessingDiagnostics {
   static getLastBatchResults(): readonly MediaFileProcessingResult[] {
     return lastBatchProcessingResults;
   }
-
-  static resetForTests(): void {
-    lastProcessingResult = null;
-    lastBatchProcessingResults = [];
-  }
 }

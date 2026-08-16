@@ -29,25 +29,6 @@ Before an agent uses CoNAI MCP for anything beyond local contract review, it mus
 | Generation/external service | `generate_comfyui`, `generate_comfyui_all_servers`, `generate_nai` | Requires explicit operator approval for each run scope; confirm workflow/server/token readiness first. |
 | Safety prerequisite | `backup_prompt_data`, list/detail tools used before mutation | Preferred before local mutation; still record the backup filename in evidence. |
 
-## Dry-run evidence packet
-
-A safe dry-run does not call mutating MCP tools and does not generate media. The local evidence exporter is documented in [`agent-mcp-local-evidence-export`](./agent-mcp-local-evidence-export.md) and can be run with `npm run export:mcp-dry-run-evidence`. It records:
-
-```json
-{
-  "backendHealth": "checked",
-  "mcpHttpOptIn": "enabled-or-disabled-observed",
-  "targetUrl": "http://localhost:1666/mcp",
-  "client": "claude-code|hermes|other",
-  "toolsReviewed": ["search_prompts", "search_images"],
-  "mutationApproved": false,
-  "generationApproved": false,
-  "backupRequiredBeforeMutation": true,
-  "dryRunOnly": true,
-  "externalSideEffects": false
-}
-```
-
 ## Stop conditions
 
 Stop and ask for approval when:
@@ -56,14 +37,3 @@ Stop and ask for approval when:
 - A requested tool creates, moves, restores, deletes, generates, uploads, or calls an external service.
 - The target backend, runtime data path, or port cannot be proven.
 - The requested work would require auth/security/public API/package version changes, deployment, restart, credential changes, or destructive cleanup.
-
-## Verification
-
-The local contract check is:
-
-```bash
-npm run verify:mcp-opt-in-operation-contracts
-npm run verify:mcp-local-evidence-export
-```
-
-These checks verify the HTTP opt-in guard, method boundary, package script aliases, dry-run evidence export schema, and this operations contract without starting a server or touching runtime data.

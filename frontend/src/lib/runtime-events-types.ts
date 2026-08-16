@@ -1,8 +1,7 @@
 /**
  * 런타임 이벤트 스트림(SSE) 타입 미러.
  *
- * `backend/src/types/runtimeEvents.ts` 와 유니온 리터럴 집합이 정확히 일치해야 하며,
- * 어긋나면 `npm run verify:runtime-event-stream-ui-contracts` 가 실패한다.
+ * `backend/src/types/runtimeEvents.ts` 와 유니온 리터럴 집합이 정확히 일치해야 한다.
  */
 
 export type RuntimeEventTopic =

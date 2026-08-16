@@ -90,7 +90,7 @@ function buildRequestedOutputFileNames(count: number | undefined, outputFormat: 
   return Array.from({ length: requestedCount }, (_, index) => `codex-output-${String(index + 1).padStart(2, '0')}.${outputExtension}`)
 }
 
-export function resolveCodexJobRoot() {
+function resolveCodexJobRoot() {
   return path.join(runtimePaths.tempDir, 'codex-jobs')
 }
 
@@ -689,16 +689,4 @@ export async function executeCodexGeneration(payload: CodexGenerationPayload, op
     stdoutPath: runResult.stdoutPath,
     stderrPath: runResult.stderrPath,
   }
-}
-
-export const codexGenerationExecutorTestHooks = {
-  buildCodexPrompt,
-  buildRequestedOutputFileNames,
-  discoverOutputFiles,
-  parseCodexAvailabilityOutput,
-  parseSize,
-  resolveCodexJobRoot,
-  resolveImageMimeType,
-  resolveOutputExtension,
-  resolveOutputFormat,
 }

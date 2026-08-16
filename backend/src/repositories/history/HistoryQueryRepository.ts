@@ -21,7 +21,6 @@ const HISTORY_RESULT_MEDIA_LOOKUP_CHUNK_SIZE = 400;
 
 type HistoryListCountCacheEntry = { expiresAt: number; total: number };
 const historyListCountCache = new Map<string, HistoryListCountCacheEntry>();
-let historyListCountCacheStats = { hits: 0, misses: 0, invalidations: 0 };
 
 type HistoryResultMediaView = {
   actual_composite_hash: string | null;
@@ -72,21 +71,6 @@ export class HistoryQueryRepository {
     if (historyListCountCache.size > 0) {
       historyListCountCache.clear();
     }
-
-    historyListCountCacheStats.invalidations += 1;
-  }
-
-  static getListCountCacheStats() {
-    return {
-      ...historyListCountCacheStats,
-      entries: historyListCountCache.size,
-      ttl_ms: HISTORY_LIST_COUNT_CACHE_TTL_MS,
-    };
-  }
-
-  static resetListCountCacheForTests(): void {
-    historyListCountCache.clear();
-    historyListCountCacheStats = { hits: 0, misses: 0, invalidations: 0 };
   }
 
   private static appendHistoryListVisibilityFilter(sql: string): string {
@@ -153,11 +137,8 @@ export class HistoryQueryRepository {
     const now = Date.now();
     const cached = historyListCountCache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
-      historyListCountCacheStats.hits += 1;
       return cached.total;
     }
-
-    historyListCountCacheStats.misses += 1;
 
     let sql = `
       SELECT COUNT(*) as total
@@ -448,12 +429,4 @@ export class HistoryQueryRepository {
     sql += ' ORDER BY created_at DESC, id DESC';
     return apiGenDb.prepare(sql).all(...params) as GenerationHistoryRecord[];
   }
-}
-
-export function getGenerationHistoryListCountCacheStats() {
-  return HistoryQueryRepository.getListCountCacheStats();
-}
-
-export function resetGenerationHistoryListCountCacheForTests(): void {
-  HistoryQueryRepository.resetListCountCacheForTests();
 }

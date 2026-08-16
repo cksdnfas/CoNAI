@@ -46,8 +46,7 @@ interface AutoTagCapabilities {
  * statistics. Same fix HOME applied to the gallery count in `MediaMetadataFileQueries`.
  *
  * The predicate itself is term for term the eligibility filter migration 028 and
- * `AutoTagStateService` use to maintain `auto_tag_state` (guarded by
- * verify:auto-tag-index-contracts), so the stored state stays a superset of what this
+ * `AutoTagStateService` use to maintain `auto_tag_state`, so the stored state stays a superset of what this
  * selects and the chosen rows are the set the join produced (one row per metadata row now;
  * see `taggableFileColumn` below).
  */

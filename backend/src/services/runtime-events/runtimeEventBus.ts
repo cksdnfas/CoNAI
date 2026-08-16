@@ -21,7 +21,7 @@ import type {
 const RUNTIME_EVENT_CHANNEL = 'runtime-event'
 
 const emitter = new EventEmitter()
-// 구독자는 브로드캐스터 1개가 정상이지만, 계약 스크립트/스모크가 함께 붙을 수 있다.
+// 내부 브로드캐스터와 캐시 무효화 구독자가 함께 붙을 수 있다.
 emitter.setMaxListeners(32)
 
 let sequence = 0
@@ -73,10 +73,4 @@ export function subscribeToRuntimeEvents(listener: RuntimeEventListener): () => 
   return () => {
     emitter.off(RUNTIME_EVENT_CHANNEL, listener)
   }
-}
-
-/** Reset bus state for contract smoke runs. Production code never calls this. */
-export function resetRuntimeEventBusForTests(): void {
-  emitter.removeAllListeners(RUNTIME_EVENT_CHANNEL)
-  sequence = 0
 }

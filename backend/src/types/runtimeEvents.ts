@@ -2,8 +2,7 @@
  * 런타임 이벤트 스트림(SSE) 계약.
  *
  * 이 파일은 `frontend/src/lib/runtime-events-types.ts` 와 1:1 미러이며,
- * 두 파일의 `RuntimeEventTopic` / `RuntimeEventName` 유니온 집합이 어긋나면
- * `verify:runtime-event-stream-ui-contracts` 가 실패한다.
+ * 두 파일의 `RuntimeEventTopic` / `RuntimeEventName` 유니온 집합은 항상 일치해야 한다.
  */
 
 export type RuntimeEventTopic =

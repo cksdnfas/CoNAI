@@ -41,17 +41,7 @@ export type QueueListSnapshotCacheKeyInput = {
   offset: number
 }
 
-export type QueueListSnapshotCacheStats = {
-  hits: number
-  misses: number
-  computations: number
-  invalidations: number
-  entries: number
-  ttl_ms: number
-}
-
 const snapshots = new Map<string, QueueListSnapshotCacheEntry>()
-let stats = { hits: 0, misses: 0, computations: 0, invalidations: 0 }
 let invalidationSubscribed = false
 
 /**
@@ -121,12 +111,9 @@ export function readQueueListSnapshot<T>(key: string, compute: () => T): T {
   const now = Date.now()
   const cached = snapshots.get(key)
   if (cached && cached.expiresAt > now) {
-    stats.hits += 1
     return cached.snapshot as T
   }
 
-  stats.misses += 1
-  stats.computations += 1
   const snapshot = compute()
   snapshots.set(key, { expiresAt: now + QUEUE_LIST_SNAPSHOT_TTL_MS, snapshot })
   pruneExpiredSnapshots(now)
@@ -147,21 +134,4 @@ export function invalidateQueueListSnapshots(): void {
     }
   }
 
-  stats.invalidations += 1
-}
-
-/** Report cache effectiveness for diagnostics and the polling load smoke run. */
-export function getQueueListSnapshotCacheStats(): QueueListSnapshotCacheStats {
-  return {
-    ...stats,
-    entries: snapshots.size,
-    ttl_ms: QUEUE_LIST_SNAPSHOT_TTL_MS,
-  }
-}
-
-/** Reset cache state for contract smoke runs. Production code never calls this. */
-export function resetQueueListSnapshotCacheForTests(): void {
-  snapshots.clear()
-  stats = { hits: 0, misses: 0, computations: 0, invalidations: 0 }
-  invalidationSubscribed = false
 }

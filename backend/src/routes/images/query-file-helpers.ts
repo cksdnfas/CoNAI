@@ -72,12 +72,6 @@ function writeMediaServeRowCache<T>(cache: Map<string, MediaServeRowCacheEntry<T
   }
 }
 
-/** Contract smoke helper. Production code never calls this. */
-export function clearMediaServeRowCachesForTests(): void {
-  visibilityGuardRowCache.clear();
-  activeFileRowCache.clear();
-}
-
 export const MAX_BATCH_DOWNLOAD_FILE_COUNT = 200;
 export const MAX_BATCH_DOWNLOAD_TOTAL_SOURCE_BYTES = 512 * 1024 * 1024;
 

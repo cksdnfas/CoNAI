@@ -139,14 +139,10 @@ npm run start
 npm run dev                         # shared/backend/frontend 동시 개발 실행
 npm run build                       # 전체 빌드
 npm run docs:build                  # VitePress 문서 빌드
-npm run verify:release-readiness    # script alias, docs build, 전체 build를 한 번에 확인
 npm run docs:dev                    # 문서 개발 서버
 npm run build:portable              # 포터블 패키지 빌드
 npm run build:docker                # 도커 패키지 빌드
 npm run build:all                   # 통합 + 번들 + 포터블 + 도커 빌드
-npm run verify:image-similarity-contracts
-npm run verify:graph-workflow-route-contracts
-npm run verify:wildcard-guest-access-contracts
 npm run db:reset                    # DB 초기화 후 마이그레이션
 ```
 

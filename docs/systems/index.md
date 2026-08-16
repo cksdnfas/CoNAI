@@ -13,7 +13,6 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 6. [Codex 이미지 생성 공급자 연동](/systems/codex-image-provider-integration)
 7. [Danbooru 읽기 전용 탐색](/systems/danbooru-readonly-browser)
 8. [Agent MCP opt-in 운영 계약](/systems/agent-mcp-opt-in-operation-contracts)
-9. [Agent MCP 로컬 evidence 내보내기](/systems/agent-mcp-local-evidence-export)
 
 ## 왜 이 순서인가
 
@@ -48,7 +47,3 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 ### 8) Agent MCP opt-in 운영 계약
 - HTTP MCP의 opt-in, method boundary, agent preflight, dry-run stop conditions를 정리합니다.
 - 에이전트가 live MCP 작업을 시작하기 전에 확인해야 할 승인 경계를 제공합니다.
-
-### 9) Agent MCP 로컬 evidence 내보내기
-- `npm run export:mcp-dry-run-evidence`로 로컬 review packet을 stdout JSON으로 내보내는 계약입니다.
-- MCP tool side-effect class, `approvalRequired`, `dryRunOnly`, `externalSideEffects`를 기록하되 live MCP tools는 호출하지 않습니다.

@@ -313,7 +313,7 @@ export class RuntimeEventBroadcaster {
     return closedCount
   }
 
-  /** Report live stream state for diagnostics and contract smoke runs. */
+  /** Report live stream state to the status endpoint. */
   static getStatus() {
     return {
       subscriber_count: this.subscribers.size,

@@ -27,7 +27,7 @@ import { Database } from 'better-sqlite3';
  * This file stays dependency-free on purpose: portable/SEA builds copy the
  * compiled migrations directory on its own, so it cannot import project modules.
  * `backend/src/services/autoTagStateService.ts` keeps the runtime copy of these
- * expressions in sync (guarded by verify:auto-tag-index-contracts).
+ * expressions in sync.
  */
 
 const CAPABILITY_TAGGER_SQL = `COALESCE((SELECT tagger_enabled FROM auto_tag_state_meta WHERE id = 1), 1) = 1`;
