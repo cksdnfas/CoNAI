@@ -7,6 +7,8 @@ import rateLimit from 'express-rate-limit';
 import { createTieredBodyParsers, resolveRequestBodyLimitsMb } from '../middleware/requestBodyLimits';
 import { logger } from '../utils/logger';
 
+type CorsMiddlewareOptions = Parameters<typeof cors<Request>>[0];
+
 export interface AppMiddlewareConfiguration {
   isSecureContext: boolean;
   apiLimiter: RequestHandler;
@@ -17,7 +19,7 @@ export interface AppMiddlewareConfiguration {
 export interface AppMiddlewareDependencies {
   createBodyParsers(): ReturnType<typeof createTieredBodyParsers>;
   createCompression(options: Parameters<typeof compression>[0]): RequestHandler;
-  createCors(options: Parameters<typeof cors>[0]): RequestHandler;
+  createCors(options: CorsMiddlewareOptions): RequestHandler;
   createHelmet(options: Parameters<typeof helmet>[0]): RequestHandler;
   createRateLimiter(options: Parameters<typeof rateLimit>[0]): RequestHandler;
   defaultCompressionFilter: typeof compression.filter;
@@ -41,6 +43,20 @@ export function resolveAllowedCorsOrigins(env: NodeJS.ProcessEnv = process.env):
     });
 
   return new Set(configuredOrigins);
+}
+
+/** Accept browser Origin headers that match the address serving this request. */
+function isSameRequestOrigin(req: Request, origin: string): boolean {
+  const host = req.get('host');
+  if (!host) {
+    return false;
+  }
+
+  try {
+    return new URL(origin).origin === new URL(`${req.protocol}://${host}`).origin;
+  } catch {
+    return false;
+  }
 }
 
 const productionMiddlewareDependencies: AppMiddlewareDependencies = {
@@ -169,16 +185,18 @@ export function configureAppMiddleware(
     },
   }));
 
-  app.use(dependencies.createCors({
-    origin: (origin, callback) => {
-      if (!origin || allowedCorsOrigins.has(origin)) {
-        callback(null, true);
-        return;
-      }
+  app.use(dependencies.createCors((req, callback) => {
+    const origin = req.get('Origin');
 
-      callback(new Error('Cross-origin request is not allowed'));
-    },
-    credentials: true,
+    if (!origin || isSameRequestOrigin(req, origin) || allowedCorsOrigins.has(origin)) {
+      callback(null, {
+        origin: true,
+        credentials: true,
+      });
+      return;
+    }
+
+    callback(new Error('Cross-origin request is not allowed'));
   }));
 
   app.use(dependencies.createCompression({
