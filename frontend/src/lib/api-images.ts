@@ -1,6 +1,6 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { getDownloadFileName, readDownloadBlob } from '@/lib/download-utils'
+import { getDownloadFileName, getSingleImageDownloadFallbackName, readDownloadBlob } from '@/lib/download-utils'
 import { requestApiData } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@conai/shared'
@@ -300,38 +300,6 @@ export function buildImageDownloadUrl(compositeHash: string, type: ImageDownload
   const searchParams = new URLSearchParams()
   searchParams.set('type', type)
   return buildApiUrl(`/api/images/${compositeHash}/download?${searchParams.toString()}`)
-}
-
-function getSingleImageDownloadFallbackName(compositeHash: string, type: ImageDownloadType, contentType: string | null) {
-  const normalizedContentType = contentType?.toLowerCase() ?? ''
-
-  if (type === 'thumbnail') {
-    return `${compositeHash}-thumbnail.webp`
-  }
-
-  if (normalizedContentType.includes('image/png')) {
-    return `${compositeHash}.png`
-  }
-  if (normalizedContentType.includes('image/jpeg')) {
-    return `${compositeHash}.jpg`
-  }
-  if (normalizedContentType.includes('image/webp')) {
-    return `${compositeHash}.webp`
-  }
-  if (normalizedContentType.includes('image/gif')) {
-    return `${compositeHash}.gif`
-  }
-  if (normalizedContentType.includes('video/mp4')) {
-    return `${compositeHash}.mp4`
-  }
-  if (normalizedContentType.includes('video/webm')) {
-    return `${compositeHash}.webm`
-  }
-  if (normalizedContentType.includes('video/quicktime')) {
-    return `${compositeHash}.mov`
-  }
-
-  return `${compositeHash}.bin`
 }
 
 async function downloadSingleImage(compositeHash: string, type: ImageDownloadType = 'original') {

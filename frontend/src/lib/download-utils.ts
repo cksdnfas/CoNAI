@@ -21,6 +21,39 @@ export function getDownloadFileName(contentDisposition: string | null, fallbackF
   return fallbackFileName
 }
 
+/** Build a usable filename when a single media response omits Content-Disposition. */
+export function getSingleImageDownloadFallbackName(identifier: string, type: 'thumbnail' | 'original', contentType: string | null) {
+  const normalizedContentType = contentType?.toLowerCase() ?? ''
+
+  if (type === 'thumbnail') {
+    return `${identifier}-thumbnail.webp`
+  }
+
+  if (normalizedContentType.includes('image/png')) {
+    return `${identifier}.png`
+  }
+  if (normalizedContentType.includes('image/jpeg')) {
+    return `${identifier}.jpg`
+  }
+  if (normalizedContentType.includes('image/webp')) {
+    return `${identifier}.webp`
+  }
+  if (normalizedContentType.includes('image/gif')) {
+    return `${identifier}.gif`
+  }
+  if (normalizedContentType.includes('video/mp4')) {
+    return `${identifier}.mp4`
+  }
+  if (normalizedContentType.includes('video/webm')) {
+    return `${identifier}.webm`
+  }
+  if (normalizedContentType.includes('video/quicktime')) {
+    return `${identifier}.mov`
+  }
+
+  return `${identifier}.bin`
+}
+
 /** Read a useful message from failed blob download responses. */
 export async function readDownloadError(response: Response, fallbackMessage?: string) {
   const contentType = response.headers.get('Content-Type') || ''

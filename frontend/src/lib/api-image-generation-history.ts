@@ -1,5 +1,5 @@
 import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
-import { readDownloadBlob } from '@/lib/download-utils'
+import { getDownloadFileName, getSingleImageDownloadFallbackName, readDownloadBlob } from '@/lib/download-utils'
 import { requestJson } from './api-image-generation-request'
 import type { ImageDownloadType } from './api-images'
 import type { GenerationHistoryRecord, GenerationServiceType, SaveBrowserImageRecord } from './api-image-generation-types'
@@ -93,6 +93,28 @@ export async function cleanupFailedGenerationHistory() {
 /** Download selected generation-history outputs without applying gallery safety hiding. */
 export async function downloadGenerationHistorySelection(historyIds: number[], type: ImageDownloadType = 'original') {
   if (historyIds.length === 0) {
+    return
+  }
+
+  if (historyIds.length === 1) {
+    const historyId = historyIds[0]
+    const mediaPath = type === 'thumbnail' ? 'thumbnail' : 'file'
+    const response = await fetch(buildApiUrl(`/api/generation-history/${historyId}/${mediaPath}`), {
+      credentials: 'include',
+      headers: {
+        Accept: type === 'thumbnail' ? 'image/webp' : 'application/octet-stream',
+      },
+    })
+
+    const blob = await readDownloadBlob(response, `Generation history download failed: ${response.status}`)
+    const fallbackFileName = getSingleImageDownloadFallbackName(
+      `generation-history-${historyId}`,
+      type,
+      response.headers.get('Content-Type'),
+    )
+    const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
+
+    triggerBlobDownload(blob, fileName)
     return
   }
 
