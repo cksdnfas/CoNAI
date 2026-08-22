@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MiniMaxH3DirectorDasiwaInput } from '@/features/image-generation/components/minimax-h3-director-dasiwa-input'
+import type { MiniMaxH3DirectorGraphInputKey } from '@/features/image-generation/components/minimax-h3-director-dasiwa-utils'
 import { useI18n } from '@/i18n'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { WORKFLOW_INPUT_ENABLED_KEY, isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
@@ -14,6 +15,7 @@ import {
 } from './module-graph-node-card-layouts'
 import {
   MODULE_GRAPH_INLINE_CONTROL_CLASS,
+  PortCell,
   SourceNodeOutputPorts,
   buildModuleUiFieldMap,
   getInputPortState,
@@ -33,6 +35,11 @@ import {
 import { ModuleGraphNodeCustomControls, useModuleGraphNodeCustomControls } from './module-graph-node-custom-controls'
 import { resolveModuleGraphNodeDynamicInputPortKeys, resolveModuleGraphNodeLayout } from './module-graph-node-card-operation-registry'
 import { ModuleGraphNodeLayoutRenderer } from './module-graph-node-layout-renderer'
+import {
+  getMiniMaxDirectorInputPort,
+  isMiniMaxDirectorInputPort,
+  isMiniMaxDirectorInputPortActive,
+} from '../module-graph-minimax-director-ports'
 
 function normalizeBooleanFlag(value: unknown) {
   if (typeof value === 'boolean') {
@@ -67,11 +74,16 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
   const powerLoraUiFieldKeys = new Set(powerLoraUiFields.map((field) => field.key))
   const miniMaxDirectorUiFields = (module.ui_schema ?? []).filter((field) => field.node_editor === 'minimax_h3_director_dasiwa')
   const miniMaxDirectorUiFieldKeys = new Set(miniMaxDirectorUiFields.map((field) => field.key))
+  const miniMaxDirectorInputPorts = (module.exposed_inputs ?? []).filter(isMiniMaxDirectorInputPort)
+  const activeMiniMaxDirectorInputPorts = miniMaxDirectorInputPorts.filter((port) => (
+    isMiniMaxDirectorInputPortActive(module, data.inputValues, port)
+  ))
   const inputPorts = (module.exposed_inputs ?? []).filter((port) => {
     const uiField = uiFieldByKey.get(port.key)
     const value = data.inputValues?.[port.key] ?? port.default_value ?? uiField?.default_value
     return !powerLoraUiFieldKeys.has(port.key)
       && !miniMaxDirectorUiFieldKeys.has(port.key)
+      && !isMiniMaxDirectorInputPort(port)
       && !isPowerLoraLoaderUiField(uiField)
       && !hasPowerLoraLoaderEntries(value)
   })
@@ -85,7 +97,8 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
     && normalizeBooleanFlag(data.inputValues?.[WORKFLOW_INPUT_ENABLED_KEY])
     && inputPorts.some((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing)
   const sourceOutputPorts = isWorkflowInputSource ? outputPorts : []
-  const missingRequiredInputCount = inputPorts.filter((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing).length
+  const statusInputPorts = [...inputPorts, ...activeMiniMaxDirectorInputPorts]
+  const missingRequiredInputCount = statusInputPorts.filter((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing).length
 
   const nodeDisplayLabel = getModuleNodeDisplayLabelFromData(data)
   const moduleBaseLabel = getModuleBaseDisplayName(module)
@@ -199,6 +212,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
     : (usesRegisteredLayout ? outputPorts : visibleOutputPorts)
   const renderedHandleSignature = [
     ...renderedInputPorts.map((port) => `in:${port.key}`),
+    ...activeMiniMaxDirectorInputPorts.map((port) => `in:${port.key}`),
     ...resolveModuleGraphNodeDynamicInputPortKeys(module, data).map((portKey) => `in:${portKey}`),
     ...renderedOutputPorts.map((port) => `out:${port.key}`),
   ].join('|')
@@ -337,6 +351,23 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
                 visibleFields={field.node_visible_fields}
                 numericBounds={field.node_numeric_bounds}
                 onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
+                renderInputPort={(inputKey: MiniMaxH3DirectorGraphInputKey) => {
+                  const port = getMiniMaxDirectorInputPort(module, data.inputValues, field.key, inputKey)
+                  if (!port) return null
+                  const portState = getInputPortState(data, port, connectedInputKeys)
+                  return (
+                    <PortCell
+                      nodeId={id}
+                      port={port}
+                      side="input"
+                      accentColor={accentColor}
+                      connected={portState.connected}
+                      satisfied={portState.satisfied}
+                      requiredMissing={portState.requiredMissing}
+                      onDisconnectInput={data.onDisconnectNodeInput}
+                    />
+                  )
+                }}
               />
             </div>
           ))}

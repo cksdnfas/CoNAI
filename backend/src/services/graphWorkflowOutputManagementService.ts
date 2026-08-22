@@ -100,7 +100,7 @@ function isVisualArtifact(artifact: GraphExecutionArtifactRecord | GraphExecutio
     return true
   }
 
-  return artifact.artifact_type === 'image'
+  return artifact.artifact_type === 'image' || artifact.artifact_type === 'video'
 }
 
 function getWorkflowNameByExecutionId(workflows: GraphWorkflowRecord[]) {

@@ -67,7 +67,7 @@ export function resolveComfyGraphOutputDescriptor(params: {
   explicitKind?: string | null
 }): ComfyGraphOutputDescriptor {
   const outputKind = inferComfyGraphOutputKind(params)
-  const artifactType: ModulePortDataType | 'file' = outputKind === 'video' || outputKind === 'file' ? 'file' : 'image'
+  const artifactType: ModulePortDataType | 'file' = outputKind === 'video' ? 'video' : outputKind === 'file' ? 'file' : 'image'
   const mimeType = (params.mimeType || '').trim() || (outputKind === 'file' ? 'application/octet-stream' : outputKind === 'video' ? 'video/mp4' : 'image/png')
 
   return {

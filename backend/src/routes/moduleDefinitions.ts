@@ -21,6 +21,7 @@ import {
   splitFixedValues,
 } from '../services/moduleDefinitions/schemaBuilder'
 import { parseOptionalTargetModuleId, persistModuleDefinitionUpsert, resolveTargetModule } from '../services/moduleDefinitions/upsert'
+import { hydrateMiniMaxDirectorModulePorts } from '../services/moduleDefinitions/minimaxDirectorPorts'
 
 const router = Router()
 
@@ -97,7 +98,7 @@ function hydrateCompositeNodeEditorSettings(uiSchema: any[], templateDefaults: R
 }
 
 function parseModuleRecord(record: any, dropdownListMap = buildCustomDropdownListMap()) {
-  const parsed = {
+  const rawParsed = {
     ...record,
     template_defaults: record.template_defaults ? JSON.parse(record.template_defaults) : {},
     exposed_inputs: record.exposed_inputs ? JSON.parse(record.exposed_inputs) : [],
@@ -105,8 +106,9 @@ function parseModuleRecord(record: any, dropdownListMap = buildCustomDropdownLis
     internal_fixed_values: record.internal_fixed_values ? JSON.parse(record.internal_fixed_values) : {},
     ui_schema: record.ui_schema ? JSON.parse(record.ui_schema) : [],
   }
-  const compositeHydratedUiSchema = hydrateCompositeNodeEditorSettings(parsed.ui_schema, parsed.template_defaults)
-  const hydratedUiSchema = hydrateDynamicSelectOptions(compositeHydratedUiSchema, dropdownListMap)
+  const compositeHydratedUiSchema = hydrateCompositeNodeEditorSettings(rawParsed.ui_schema, rawParsed.template_defaults)
+  const parsed = hydrateMiniMaxDirectorModulePorts({ ...rawParsed, ui_schema: compositeHydratedUiSchema })
+  const hydratedUiSchema = hydrateDynamicSelectOptions(parsed.ui_schema, dropdownListMap)
   const configOnlyFieldKeys = getConfigOnlyFieldKeys(parsed.ui_schema, parsed.exposed_inputs)
 
   return {
@@ -338,7 +340,7 @@ router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request
       source_workflow_id: workflow.id,
       template_defaults: templateDefaults,
       exposed_inputs: exposedInputs,
-      output_ports: Array.isArray(output_ports) && output_ports.length > 0 ? output_ports : createDefaultOutputPorts('comfyui'),
+      output_ports: Array.isArray(output_ports) && output_ports.length > 0 ? output_ports : createDefaultOutputPorts('comfyui', markedFields),
       internal_fixed_values: splitFixedValues(defaultInputValues, exposedInputs),
       ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromMarkedFields(markedFields, exposed_field_ids),
       is_active,

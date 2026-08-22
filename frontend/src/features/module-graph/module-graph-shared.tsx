@@ -1,6 +1,10 @@
 import { MarkerType } from '@xyflow/react'
 import { applySavedWorkflowInputMetadataToNodes } from './module-graph-workflow-inputs'
 import {
+  isMiniMaxDirectorInputPortActive,
+  resolveMiniMaxDirectorLegacyOutputPortKey,
+} from './module-graph-minimax-director-ports'
+import {
   getModuleNodeDisplayLabel,
   getModuleOperationKey,
   getPortTypeColor,
@@ -506,6 +510,9 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
   const portList = direction === 'out' ? node.data.module.output_ports : node.data.module.exposed_inputs
   const directPort = portList.find((port) => port.key === portKey)
   if (directPort) {
+    if (direction === 'in' && !isMiniMaxDirectorInputPortActive(node.data.module, node.data.inputValues, directPort)) {
+      return null
+    }
     return directPort
   }
 
@@ -627,21 +634,27 @@ export function buildFlowFromGraphRecord(graph: GraphWorkflowRecord, modules: Mo
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]))
 
-  const edges: ModuleGraphEdge[] = graph.graph.edges.map((edge) => {
+  const edges: ModuleGraphEdge[] = graph.graph.edges.flatMap((edge) => {
     const sourceNode = nodeById.get(edge.source_node_id)
     const targetNode = nodeById.get(edge.target_node_id)
-    const sourcePort = findNodePort(sourceNode, 'out', edge.source_port_key)
+    const sourcePortKey = sourceNode
+      ? resolveMiniMaxDirectorLegacyOutputPortKey(sourceNode.data.module, edge.source_port_key)
+      : edge.source_port_key
+    const sourcePort = findNodePort(sourceNode, 'out', sourcePortKey)
     const targetPort = findNodePort(targetNode, 'in', edge.target_port_key)
+    if (!sourcePort || !targetPort || getModulePortCompatibility(sourcePort.data_type, targetPort.data_type) === 'incompatible') {
+      return []
+    }
 
-    return {
+    return [{
       id: edge.id,
       source: edge.source_node_id,
       target: edge.target_node_id,
-      sourceHandle: buildHandleId('out', edge.source_port_key),
+      sourceHandle: buildHandleId('out', sourcePortKey),
       targetHandle: buildHandleId('in', edge.target_port_key),
       markerEnd: { type: MarkerType.ArrowClosed },
       ...buildModuleEdgePresentation(sourcePort, targetPort),
-    }
+    }]
   })
 
   return { nodes, edges }

@@ -15,6 +15,23 @@ export type MiniMaxH3DirectorMode = typeof MINIMAX_H3_DIRECTOR_MODES[number]
 export type MiniMaxH3DirectorMediaType = 'image' | 'video' | 'audio'
 export type MiniMaxH3DirectorVideoMode = 'video' | 'audio' | 'video_audio'
 export type MiniMaxH3DirectorInputLink = [string | number, number]
+export type MiniMaxH3DirectorGraphInputKey =
+  | 'width'
+  | 'height'
+  | 'duration'
+  | 'ref_image_size'
+  | 'start_image'
+  | 'end_image'
+  | 'reference_image'
+  | 'reference_video'
+  | 'reference_audio'
+  | 'prompt.imd'
+  | 'prompt.subject_definitions'
+  | 'prompt.summary'
+  | 'prompt.retention_analysis'
+  | 'prompt.detailed_description'
+  | 'prompt.soundscape'
+  | 'prompt.music'
 export const MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS = [
   'mode',
   'width',

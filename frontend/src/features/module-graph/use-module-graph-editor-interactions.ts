@@ -21,6 +21,7 @@ import {
   type ModuleGraphEdge,
   type ModuleGraphNode,
 } from './module-graph-shared'
+import { getActiveModuleInputPorts } from './module-graph-minimax-director-ports'
 
 /** Own local canvas/editor interactions for the module-graph page. */
 export function useModuleGraphEditorInteractions({
@@ -185,7 +186,7 @@ export function useModuleGraphEditorInteractions({
         if (connectionStart.handleType === 'source') {
           const sourcePort = findNodePort(existingNode, 'out', parsedHandle.portKey)
           const compatibleTargetPort = sourcePort
-            ? module.exposed_inputs.find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) !== 'incompatible')
+            ? getActiveModuleInputPorts(module).find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) !== 'incompatible')
             : null
 
           if (sourcePort && compatibleTargetPort) {
@@ -443,6 +444,29 @@ export function useModuleGraphEditorInteractions({
 
   /** Update one node input value in local editor state. */
   const handleNodeValueChange = useCallback((nodeId: string, portKey: string, value: unknown) => {
+    const currentNode = nodeById.get(nodeId)
+    const isMiniMaxDirectorCompositeField = currentNode?.data.module.ui_schema?.some((field) => (
+      field.key === portKey && field.node_editor === 'minimax_h3_director_dasiwa'
+    )) === true
+
+    if (currentNode && isMiniMaxDirectorCompositeField) {
+      const nextNode: ModuleGraphNode = {
+        ...currentNode,
+        data: {
+          ...currentNode.data,
+          inputValues: {
+            ...currentNode.data.inputValues,
+            [portKey]: value,
+          },
+        },
+      }
+      setEdges((currentEdges) => currentEdges.filter((edge) => {
+        if (edge.target !== nodeId) return true
+        const targetHandle = parseHandleId(edge.targetHandle)
+        return Boolean(findNodePort(nextNode, 'in', targetHandle?.portKey))
+      }))
+    }
+
     setNodes((currentNodes) =>
       currentNodes.map((node) =>
         node.id === nodeId
@@ -459,7 +483,7 @@ export function useModuleGraphEditorInteractions({
           : node,
       ),
     )
-  }, [setNodes])
+  }, [nodeById, setEdges, setNodes])
 
   /** Remove one node input value from local editor state. */
   const handleNodeValueClear = useCallback((nodeId: string, portKey: string) => {

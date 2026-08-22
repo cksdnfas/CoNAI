@@ -4,6 +4,7 @@ import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact
 import { runtimePaths } from '../../config/runtimePaths'
 import { ImageMetadataWriteService, type ImageOutputFormat } from '../imageMetadataWriteService'
 import { settingsService } from '../settingsService'
+import { applyMiniMaxDirectorPortInputs } from '../moduleDefinitions/minimaxDirectorPorts'
 import { isGraphExecutionAborted, throwIfGraphExecutionAborted } from './execution-abort'
 import {
   type GraphExecutionArtifactRecord,
@@ -218,12 +219,22 @@ export function getSourceArtifact(context: ExecutionContext, edge: GraphWorkflow
 
 /** Collect all incoming artifacts for a target node, materializing binary values only when the target needs inline data. */
 export async function getIncomingArtifacts(context: ExecutionContext, nodeId: string) {
-  const incomingArtifacts: Record<string, RuntimeArtifact> = {}
+  const incomingArtifacts: Record<string, RuntimeArtifact | RuntimeArtifact[]> = {}
 
   for (const edge of getExecutionGraphIndex(context).edgesByTarget.get(nodeId) ?? []) {
     const artifact = getSourceArtifact(context, edge)
     if (artifact) {
-      incomingArtifacts[edge.target_port_key] = await resolveArtifactForTarget(context, edge, artifact)
+      const resolvedArtifact = await resolveArtifactForTarget(context, edge, artifact)
+      const targetModule = getTargetModuleForEdge(context, edge)
+      const targetPort = targetModule?.exposed_inputs.find((input) => input.key === edge.target_port_key)
+      if (targetPort?.multiple) {
+        const current = incomingArtifacts[edge.target_port_key]
+        incomingArtifacts[edge.target_port_key] = Array.isArray(current)
+          ? [...current, resolvedArtifact]
+          : current ? [current, resolvedArtifact] : [resolvedArtifact]
+      } else {
+        incomingArtifacts[edge.target_port_key] = resolvedArtifact
+      }
     }
   }
 
@@ -245,7 +256,7 @@ function canTargetConsumeFileReference(context: ExecutionContext, edge: GraphWor
     return true
   }
 
-  if (artifactType !== 'image' && artifactType !== 'mask') {
+  if (artifactType !== 'image' && artifactType !== 'video' && artifactType !== 'audio' && artifactType !== 'mask') {
     return false
   }
 
@@ -255,11 +266,11 @@ function canTargetConsumeFileReference(context: ExecutionContext, edge: GraphWor
   }
 
   const targetInput = targetModule.exposed_inputs.find((input) => input.key === edge.target_port_key)
-  return targetInput?.data_type === 'image' || targetInput?.data_type === 'mask' || targetInput?.data_type === 'any'
+  return targetInput?.data_type === artifactType || targetInput?.data_type === 'any'
 }
 
 function isBinaryArtifactType(artifactType: ModulePortDataType | 'file') {
-  return artifactType === 'image' || artifactType === 'mask' || artifactType === 'file'
+  return artifactType === 'image' || artifactType === 'video' || artifactType === 'audio' || artifactType === 'mask' || artifactType === 'file'
 }
 
 function normalizeArtifactMetadata(metadata: Record<string, unknown> | string) {
@@ -277,6 +288,12 @@ function inferMimeTypeFromPath(storagePath: string, fallback: string) {
   if (extension === '.mp4') return 'video/mp4'
   if (extension === '.webm') return 'video/webm'
   if (extension === '.mov') return 'video/quicktime'
+  if (extension === '.mkv') return 'video/x-matroska'
+  if (extension === '.mp3') return 'audio/mpeg'
+  if (extension === '.wav') return 'audio/wav'
+  if (extension === '.m4a') return 'audio/mp4'
+  if (extension === '.ogg') return 'audio/ogg'
+  if (extension === '.flac') return 'audio/flac'
   return fallback
 }
 
@@ -286,7 +303,14 @@ function resolveArtifactMimeType(storagePath: string, metadata: Record<string, u
     return explicitMimeType
   }
 
-  return inferMimeTypeFromPath(storagePath, artifactType === 'file' ? 'application/octet-stream' : 'image/png')
+  const fallbackMimeType = artifactType === 'file'
+    ? 'application/octet-stream'
+    : artifactType === 'video'
+      ? 'video/mp4'
+      : artifactType === 'audio'
+        ? 'audio/mpeg'
+        : 'image/png'
+  return inferMimeTypeFromPath(storagePath, fallbackMimeType)
 }
 
 function optionalMetadataString(value: unknown) {
@@ -346,7 +370,11 @@ export function shouldMaterializeRuntimeArtifactValue(
 }
 
 /** Merge template defaults, fixed values, explicit inputs, and upstream artifacts. */
-export function resolveNodeInputs(node: GraphWorkflowNode, moduleDefinition: ParsedModuleDefinition, incomingArtifacts: Record<string, RuntimeArtifact>) {
+export function resolveNodeInputs(
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  incomingArtifacts: Record<string, RuntimeArtifact | RuntimeArtifact[]>,
+) {
   const templateDefaults = { ...(moduleDefinition.template_defaults || {}) }
   const internalFixedValues = { ...(moduleDefinition.internal_fixed_values || {}) }
   const explicitInputs = { ...(node.input_values || {}) }
@@ -371,10 +399,10 @@ export function resolveNodeInputs(node: GraphWorkflowNode, moduleDefinition: Par
   Object.assign(resolvedInputs, explicitInputs)
 
   for (const [portKey, artifact] of Object.entries(incomingArtifacts)) {
-    resolvedInputs[portKey] = artifact.value
+    resolvedInputs[portKey] = Array.isArray(artifact) ? artifact.map((item) => item.value) : artifact.value
   }
 
-  return resolvedInputs
+  return applyMiniMaxDirectorPortInputs(resolvedInputs, moduleDefinition)
 }
 
 /** Create the standard metadata artifact row for a node execution. */
@@ -397,7 +425,7 @@ export function saveMetadataArtifact(executionId: number, nodeId: string, metada
 async function loadRuntimeArtifactFromRecord(artifact: GraphExecutionArtifactRecord): Promise<RuntimeArtifact | null> {
   const parsedMetadata = artifact.metadata ? parseJson<Record<string, unknown> | string>(artifact.metadata, {}) : {}
 
-  if (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask' || artifact.artifact_type === 'file') {
+  if (artifact.artifact_type === 'image' || artifact.artifact_type === 'video' || artifact.artifact_type === 'audio' || artifact.artifact_type === 'mask' || artifact.artifact_type === 'file') {
     if (!artifact.storage_path) {
       return null
     }

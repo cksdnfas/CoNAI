@@ -152,6 +152,14 @@ export function resolveGraphArtifactMimeType(artifact: GraphArtifactPreviewLike)
     return inferArtifactMimeTypeFromPath(storagePath) ?? 'image/png'
   }
 
+  if (artifact.artifact_type === 'video') {
+    return inferArtifactMimeTypeFromPath(storagePath) ?? 'video/mp4'
+  }
+
+  if (artifact.artifact_type === 'audio') {
+    return inferArtifactMimeTypeFromPath(storagePath) ?? 'audio/mpeg'
+  }
+
   return inferArtifactMimeTypeFromPath(storagePath)
 }
 
@@ -162,7 +170,7 @@ export function isGraphArtifactVisualMedia(artifact: GraphArtifactPreviewLike) {
     return true
   }
 
-  return artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
+  return artifact.artifact_type === 'image' || artifact.artifact_type === 'video' || artifact.artifact_type === 'mask'
 }
 
 /** Check whether one execution artifact has a usable visual preview URL and media type. */

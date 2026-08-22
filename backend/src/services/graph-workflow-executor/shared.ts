@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { GraphExecutionLogModel } from '../../models/GraphExecutionLog'
+import { hydrateMiniMaxDirectorModulePorts } from '../moduleDefinitions/minimaxDirectorPorts'
 import { type GraphAbortReason } from './execution-abort'
 export { normalizeOptionalString, parsePositiveIntegerish } from '../../utils/valueNormalization'
 export { resolveSystemOperationKey } from './operation-key'
@@ -165,14 +166,14 @@ export function parseJson<T>(value: string | null | undefined, fallback: T): T {
 
 /** Decode a stored module definition row into executable shapes. */
 export function parseModuleDefinition(record: ModuleDefinitionRecord): ParsedModuleDefinition {
-  return {
+  return hydrateMiniMaxDirectorModulePorts({
     ...record,
     template_defaults: parseJson(record.template_defaults as unknown as string, {}),
     exposed_inputs: parseJson(record.exposed_inputs as unknown as string, []),
     output_ports: parseJson(record.output_ports as unknown as string, []),
     internal_fixed_values: parseJson(record.internal_fixed_values as unknown as string, {}),
     ui_schema: parseJson(record.ui_schema as unknown as string, []),
-  }
+  })
 }
 
 /** Decode a stored graph workflow row into an executable document. */

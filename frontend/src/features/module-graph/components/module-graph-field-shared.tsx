@@ -6,6 +6,8 @@ export { hasMeaningfulValue } from '../module-graph-value-utils'
 
 const MODULE_GRAPH_PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], TranslationDictionary> = {
   image: { ko: '이미지', en: 'Image' },
+  video: { ko: '영상', en: 'Video' },
+  audio: { ko: '오디오', en: 'Audio' },
   mask: { ko: '마스크', en: 'Mask' },
   prompt: { ko: '프롬프트', en: 'Prompt' },
   text: { ko: '텍스트', en: 'Text' },

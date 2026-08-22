@@ -6,6 +6,7 @@ import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module
 import { ModuleGraphQuickCreateMenu } from './module-graph-quick-create-menu'
 import { ModuleGraphNodeCard } from './module-graph-node-card'
 import { ADVANCED_OUTPUT_PORTS_ENABLED_KEY, buildHandleId, getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModulePortCompatibility, getVisibleModuleOutputPorts, hasAdvancedModuleOutputPorts, isAdvancedOutputPortsEnabled, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getActiveModuleInputPorts } from '../module-graph-minimax-director-ports'
 
 const MODULE_GRAPH_NODE_TYPES = { module: ModuleGraphNodeCard }
 const MOBILE_NODE_DRAG_HANDLE_SELECTOR = '.module-graph-drag-handle'
@@ -109,7 +110,7 @@ function getRecommendedModulesFromConnectionStart(
         }
 
         return modules.flatMap((module) => {
-          const bestCompatibility = module.exposed_inputs.reduce<'exact' | 'string-bridge' | 'incompatible'>((best, port) => {
+          const bestCompatibility = getActiveModuleInputPorts(module).reduce<'exact' | 'string-bridge' | 'incompatible'>((best, port) => {
             const compatibility = getModulePortCompatibility(sourcePort.data_type, port.data_type)
             return getCompatibilityRank(compatibility) > getCompatibilityRank(best) ? compatibility : best
           }, 'incompatible')
@@ -120,7 +121,7 @@ function getRecommendedModulesFromConnectionStart(
         })
       })()
     : (() => {
-        const targetPort = existingNode.data.module.exposed_inputs.find((port) => port.key === parsedHandle.portKey)
+        const targetPort = getActiveModuleInputPorts(existingNode.data.module, existingNode.data.inputValues).find((port) => port.key === parsedHandle.portKey)
         if (!targetPort) {
           return []
         }

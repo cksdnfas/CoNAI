@@ -6,10 +6,21 @@ import {
 // and validate.ts must stay side-effect free for contract scripts that set env overrides first.
 import { resolveSystemOperationKey } from './operation-key'
 import { type ParsedModuleDefinition } from './shared'
+import { isMiniMaxDirectorPortActive } from '../moduleDefinitions/minimaxDirectorPorts'
 
-function resolveInputPort(moduleDefinition: ParsedModuleDefinition, portKey: string) {
+function resolveInputPort(moduleDefinition: ParsedModuleDefinition, portKey: string, node?: GraphWorkflowNode) {
   const directPort = moduleDefinition.exposed_inputs.find((port) => port.key === portKey)
   if (directPort) {
+    const binding = directPort.node_binding
+    if (binding?.node_editor === 'minimax_h3_director_dasiwa') {
+      const uiField = moduleDefinition.ui_schema?.find((field) => field.key === binding.field_key)
+      const fieldValue = node?.input_values?.[binding.field_key]
+        ?? moduleDefinition.internal_fixed_values?.[binding.field_key]
+        ?? uiField?.default_value
+      if (!isMiniMaxDirectorPortActive(directPort, fieldValue, uiField?.default_value)) {
+        return null
+      }
+    }
     return directPort
   }
 
@@ -164,7 +175,7 @@ export function validateGraphTypes(graph: GraphWorkflowDocument, modulesById: Ma
     }
 
     const sourcePort = sourceModule.output_ports.find((port) => port.key === edge.source_port_key)
-    const targetPort = resolveInputPort(targetModule, edge.target_port_key)
+    const targetPort = resolveInputPort(targetModule, edge.target_port_key, targetNode)
     if (!sourcePort || !targetPort) {
       throw new Error(`Invalid edge ${edge.id}: source or target port not found`)
     }

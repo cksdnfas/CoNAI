@@ -13,6 +13,7 @@ import { executeCodexImageGenerationNode } from './graph-workflow-executor/syste
 import { executeSystemModule } from './graph-workflow-executor/execute-system'
 import { compactCompletedGraphExecutionArtifacts, persistCompactGraphExecutionNodeIo } from './graphWorkflowExecutionCompactor'
 import { requestGraphWorkflowOutputRetentionPrune } from './graphWorkflowOutputRetentionService'
+import { normalizeMiniMaxDirectorLegacyGraphEdges } from './moduleDefinitions/minimaxDirectorPorts'
 import {
   applyWorkflowRuntimeInputs,
   buildRuntimeInputSignature,
@@ -305,6 +306,7 @@ export class GraphWorkflowExecutor {
     })
 
     const modulesById = new Map(modules.map((module) => [module.id, module]))
+    workflow.graph = normalizeMiniMaxDirectorLegacyGraphEdges(workflow.graph, modulesById)
     validateGraphTypes(workflow.graph, modulesById)
     const moduleByNodeId = new Map(workflow.graph.nodes.map((node) => {
       const moduleDefinition = modulesById.get(node.module_id)

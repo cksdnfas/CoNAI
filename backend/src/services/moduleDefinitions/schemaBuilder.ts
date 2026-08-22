@@ -1,5 +1,6 @@
 import type { ModulePortDataType, ModulePortDefinition, ModuleUiFieldDefinition } from '../../types/moduleGraph';
 import { inferPortLabel } from './labels';
+import { buildMiniMaxDirectorPorts, isMiniMaxDirectorField } from './minimaxDirectorPorts';
 
 function isPowerLoraLoaderEntryValue(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -55,7 +56,10 @@ function mapComfyFieldTypeToUiType(type: unknown): ModuleUiFieldDefinition['data
   return mapComfyFieldTypeToPortType(type);
 }
 
-export function createDefaultOutputPorts(engineType: 'nai' | 'codex' | 'comfyui' | 'system'): ModulePortDefinition[] {
+export function createDefaultOutputPorts(
+  engineType: 'nai' | 'codex' | 'comfyui' | 'system',
+  markedFields: any[] = [],
+): ModulePortDefinition[] {
   if (engineType === 'system') {
     return [
       {
@@ -77,12 +81,14 @@ export function createDefaultOutputPorts(engineType: 'nai' | 'codex' | 'comfyui'
     ];
   }
 
+  const isVideoWorkflow = engineType === 'comfyui' && markedFields.some(isMiniMaxDirectorField);
+
   return [
     {
-      key: 'image',
-      label: engineType === 'comfyui' ? 'Workflow Image' : 'Generated Image',
+      key: isVideoWorkflow ? 'video' : 'image',
+      label: isVideoWorkflow ? 'Workflow Video' : engineType === 'comfyui' ? 'Workflow Image' : 'Generated Image',
       direction: 'output',
-      data_type: 'image',
+      data_type: isVideoWorkflow ? 'video' : 'image',
       required: true,
       multiple: false,
     },
@@ -152,19 +158,27 @@ export function convertMarkedFieldsToPorts(markedFields: any[], exposedFieldIds?
   const allowedIds = exposedFieldIds && exposedFieldIds.length > 0 ? new Set(exposedFieldIds) : null;
 
   return markedFields
-    .filter((field) => (!allowedIds || allowedIds.has(field.id)) && !isCompositeNodeEditorField(field))
-    .map((field): ModulePortDefinition => ({
-      key: field.id,
-      label: field.label || inferPortLabel(field.id),
-      direction: 'input' as const,
-      data_type: mapComfyFieldTypeToPortType(field.type),
-      description: field.description,
-      required: field.required ?? false,
-      multiple: false,
-      default_value: field.default_value ?? null,
-      ui_hint: field.dropdown_list_name || field.placeholder,
-      source_path: field.jsonPath || field.id,
-    }));
+    .filter((field) => !allowedIds || allowedIds.has(field.id))
+    .flatMap((field): ModulePortDefinition[] => {
+      if (isMiniMaxDirectorField(field)) {
+        return buildMiniMaxDirectorPorts(field);
+      }
+      if (isCompositeNodeEditorField(field)) {
+        return [];
+      }
+      return [{
+        key: field.id,
+        label: field.label || inferPortLabel(field.id),
+        direction: 'input' as const,
+        data_type: mapComfyFieldTypeToPortType(field.type),
+        description: field.description,
+        required: field.required ?? false,
+        multiple: false,
+        default_value: field.default_value ?? null,
+        ui_hint: field.dropdown_list_name || field.placeholder,
+        source_path: field.jsonPath || field.id,
+      }];
+    });
 }
 
 /** Preserve ComfyUI select fields in module UI schema so graph nodes can render dropdowns. */

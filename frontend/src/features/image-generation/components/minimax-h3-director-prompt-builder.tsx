@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Copy, Eye, Plus, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -11,6 +11,7 @@ import {
   buildMiniMaxH3DirectorPrompt,
   prefillMiniMaxH3DirectorRefBuilder,
   type MiniMaxH3DirectorBuilderState,
+  type MiniMaxH3DirectorGraphInputKey,
   type MiniMaxH3DirectorTimelineItem,
 } from './minimax-h3-director-dasiwa-utils'
 
@@ -20,6 +21,7 @@ type MiniMaxH3DirectorPromptBuilderProps = {
   invalid?: boolean
   onChange: (state: MiniMaxH3DirectorBuilderState) => void
   onStatus: (status: string) => void
+  renderInputPort?: (inputKey: MiniMaxH3DirectorGraphInputKey) => ReactNode
 }
 
 /** Mode-specific DaSiWa prompt builder with canonical preview and REF scaffolding. */
@@ -29,12 +31,19 @@ export function MiniMaxH3DirectorPromptBuilder({
   invalid = false,
   onChange,
   onStatus,
+  renderInputPort,
 }: MiniMaxH3DirectorPromptBuilderProps) {
   const { t } = useI18n()
   const [previewOpen, setPreviewOpen] = useState(false)
   const preview = buildMiniMaxH3DirectorPrompt(state)
   const patchState = (patch: Partial<MiniMaxH3DirectorBuilderState>) => onChange({ ...state, ...patch })
   const patchRef = (patch: Partial<MiniMaxH3DirectorBuilderState['ref']>) => onChange({ ...state, ref: { ...state.ref, ...patch } })
+  const renderPortedField = (inputKey: MiniMaxH3DirectorGraphInputKey, content: ReactNode) => (
+    <div className="space-y-1">
+      {renderInputPort?.(inputKey)}
+      {content}
+    </div>
+  )
   const insertShotMarker = () => {
     const shotNumber = window.prompt(t({ ko: '샷 번호', en: 'Shot number' }), '1')?.trim()
     if (!shotNumber) return
@@ -70,39 +79,39 @@ export function MiniMaxH3DirectorPromptBuilder({
 
       {state.mode === 'REF2VA' ? (
         <div className="grid gap-4">
-          <FormField label="subject_definitions">
+          {renderPortedField('prompt.subject_definitions', <FormField label="subject_definitions">
             <Textarea rows={4} value={state.ref.subject_definitions} placeholder="<Subject 1> ... / <Picture 1> ..." onChange={(event) => patchRef({ subject_definitions: event.target.value })} />
-          </FormField>
-          <FormField label="summary">
+          </FormField>)}
+          {renderPortedField('prompt.summary', <FormField label="summary">
             <Textarea rows={3} value={state.ref.summary} placeholder="[reference generation] Use <Picture 1> ..." onChange={(event) => patchRef({ summary: event.target.value })} />
-          </FormField>
-          <FormField label="retention_analysis">
+          </FormField>)}
+          {renderPortedField('prompt.retention_analysis', <FormField label="retention_analysis">
             <Textarea rows={4} value={state.ref.retention_analysis} placeholder="<Subject 1>: fully_preserved - ..." onChange={(event) => patchRef({ retention_analysis: event.target.value })} />
-          </FormField>
-          <FormField label="detailed_description">
+          </FormField>)}
+          {renderPortedField('prompt.detailed_description', <FormField label="detailed_description">
             <Textarea rows={6} value={state.ref.detailed_description} placeholder="[Shot 1] ... [Shot 2] At 00:04.500, ..." className={cn(invalid && 'border-destructive')} onChange={(event) => patchRef({ detailed_description: event.target.value })} />
-          </FormField>
+          </FormField>)}
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="overall_soundscape">
+            {renderPortedField('prompt.soundscape', <FormField label="overall_soundscape">
               <Textarea rows={3} value={state.ref.soundscape} onChange={(event) => patchRef({ soundscape: event.target.value })} />
-            </FormField>
-            <FormField label="non_diegetic_music">
+            </FormField>)}
+            {renderPortedField('prompt.music', <FormField label="non_diegetic_music">
               <Textarea rows={3} value={state.ref.music} onChange={(event) => patchRef({ music: event.target.value })} />
-            </FormField>
+            </FormField>)}
           </div>
         </div>
       ) : (
         <div className="grid gap-4">
-          <FormField label="integrated_multimodal_description">
+          {renderPortedField('prompt.imd', <FormField label="integrated_multimodal_description">
             <Textarea rows={6} value={state.imd} placeholder="[Shot 1] Start your scene description here..." className={cn(invalid && 'border-destructive')} onChange={(event) => patchState({ imd: event.target.value })} />
-          </FormField>
+          </FormField>)}
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="overall_soundscape">
+            {renderPortedField('prompt.soundscape', <FormField label="overall_soundscape">
               <Textarea rows={3} value={state.soundscape} onChange={(event) => patchState({ soundscape: event.target.value })} />
-            </FormField>
-            <FormField label="non_diegetic_music">
+            </FormField>)}
+            {renderPortedField('prompt.music', <FormField label="non_diegetic_music">
               <Textarea rows={3} value={state.music} onChange={(event) => patchState({ music: event.target.value })} />
-            </FormField>
+            </FormField>)}
           </div>
         </div>
       )}

@@ -7,7 +7,7 @@ import type { WorkflowNodeNumericBounds } from './workflow'
 export type ModuleEngineType = 'nai' | 'codex' | 'comfyui' | 'system' | 'custom_js'
 export type ModuleAuthoringSource = 'nai_form_snapshot' | 'codex_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
 export type ModulePortDirection = 'input' | 'output'
-export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
+export type ModulePortDataType = 'image' | 'video' | 'audio' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type ModuleSelectOption = string | { value: string; label: string }
 export type GraphExecutionStatus = 'draft' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 export type GraphExecutionTriggerType = 'manual' | 'schedule'
@@ -26,6 +26,12 @@ export interface ModulePortDefinition {
   default_value?: unknown
   ui_hint?: string
   source_path?: string
+  node_binding?: {
+    node_editor: 'minimax_h3_director_dasiwa'
+    field_key: string
+    input_key: string
+    active_modes?: string[]
+  }
 }
 
 export interface ModuleUiFieldDefinition {

@@ -6,6 +6,8 @@ import type { ModuleGraphNode, ModuleGraphNodeData } from './module-graph-types'
 
 const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
   image: '#4fc3f7',
+  video: '#7e9cff',
+  audio: '#c084fc',
   mask: '#ffb74d',
   prompt: '#4db6ac',
   text: '#81c784',
