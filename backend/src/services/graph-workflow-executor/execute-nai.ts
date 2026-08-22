@@ -110,6 +110,7 @@ async function resolveQueueBackedNaiOutput(params: {
     characters: params.requestInput.characters,
     vibes: params.requestInput.vibes,
     character_refs: params.requestInput.character_refs,
+    transparent_background: params.requestInput.transparent_background,
     model: params.requestInput.model,
     action: params.requestInput.action,
     width: params.requestInput.width,

@@ -86,6 +86,7 @@ export type NAIFormDraft = {
   vibes: NAIVibeDraft[]
   characterReferences: NAICharacterReferenceDraft[]
   varietyPlus: boolean
+  transparentBackground: boolean
   strength: string
   noise: string
   addOriginalImage: boolean
@@ -139,6 +140,7 @@ const NAI_MODULE_FIELD_LABEL_KEYS = {
   samples: 'image-generation.image.generation.shared.sample.count',
   seed: 'image-generation.image.generation.shared.seed',
   varietyPlus: 'image-generation.image.generation.shared.variety',
+  transparentBackground: 'image-generation.image.generation.shared.transparent.background',
   characters: 'image-generation.image.generation.shared.character.prompt',
   vibes: 'image-generation.image.generation.shared.send.vibe',
   characterRefs: 'image-generation.image.generation.shared.character.reference',
@@ -218,6 +220,7 @@ export const DEFAULT_NAI_FORM: NAIFormDraft = {
   vibes: [],
   characterReferences: [],
   varietyPlus: false,
+  transparentBackground: false,
   strength: '0.3',
   noise: '0',
   addOriginalImage: true,
@@ -324,6 +327,11 @@ export function supportsNaiCharacterPrompts(model: string) {
   return model.includes('nai-diffusion-4') || model.includes('nai-diffusion-5')
 }
 
+/** Check whether the selected NAI model can generate an alpha channel from prompt tags. */
+export function supportsNaiTransparentBackground(model: string) {
+  return model.includes('nai-diffusion-5')
+}
+
 /** Check whether the selected NAI model supports 4.5-only character references. */
 export function supportsNaiCharacterReferences(model: string) {
   return model.includes('nai-diffusion-4-5')
@@ -392,6 +400,7 @@ export function buildNaiModuleSnapshot(form: NAIFormDraft) {
     vibes: buildNaiVibePayload(form.vibes),
     character_refs: buildNaiCharacterReferencePayload(form.characterReferences),
     variety_plus: form.varietyPlus,
+    transparent_background: form.transparentBackground && supportsNaiTransparentBackground(form.model),
     image: form.action !== 'generate' ? form.sourceImage?.dataUrl || null : null,
     mask: form.action === 'infill' ? form.maskImage?.dataUrl || null : null,
     strength: form.action !== 'generate' ? parseNumberInput(form.strength, 0.3) : null,
@@ -421,6 +430,10 @@ export function buildNaiModuleFieldOptions(form: NAIFormDraft, t: TranslateResou
 
   if (supportsNaiCharacterPrompts(form.model)) {
     options.push({ key: 'characters', label: label('characters'), dataType: 'json' })
+  }
+
+  if (supportsNaiTransparentBackground(form.model)) {
+    options.push({ key: 'transparent_background', label: label('transparentBackground'), dataType: 'boolean' })
   }
 
   options.push({ key: 'vibes', label: label('vibes'), dataType: 'json' })

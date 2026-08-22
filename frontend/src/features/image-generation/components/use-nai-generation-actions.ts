@@ -14,6 +14,7 @@ import {
   clampNaiSampleCount,
   getErrorMessage,
   shouldUseNaiCharacterPositions,
+  supportsNaiTransparentBackground,
   type NAIFormDraft,
   type NAIVibeDraft,
 } from '../image-generation-shared'
@@ -110,6 +111,7 @@ export function useNaiGenerationActions({
           vibes: buildNaiVibePayload(encodedVibes),
           character_refs: buildNaiCharacterReferencePayload(naiForm.characterReferences),
           variety_plus: naiForm.varietyPlus,
+          transparent_background: naiForm.transparentBackground && supportsNaiTransparentBackground(naiForm.model),
           image: naiForm.action !== 'generate' ? naiForm.sourceImage?.dataUrl : undefined,
           mask: naiForm.action === 'infill' ? naiForm.maskImage?.dataUrl : undefined,
           strength: naiForm.action !== 'generate' ? Number(naiForm.strength) : undefined,

@@ -53,11 +53,31 @@ function buildCharacterPromptPayload(characters: NAICharacterPrompt[]) {
     })
 }
 
+const NAI_V5_TRANSPARENT_BACKGROUND_PROMPT_SEGMENTS = [
+  { needle: 'transparent background', segment: '2.0::transparent background::' },
+  { needle: 'has alpha', segment: '1.7::has alpha::' },
+  { needle: 'alpha transparency', segment: '1.5::alpha transparency::' },
+] as const
+
+/** Add the V5 alpha prompt segments while preserving manually supplied equivalents. */
+function buildTransparentBackgroundPrompt(prompt: string) {
+  const normalizedPrompt = prompt.trim()
+  const lowerPrompt = normalizedPrompt.toLowerCase()
+  const missingSegments = NAI_V5_TRANSPARENT_BACKGROUND_PROMPT_SEGMENTS
+    .filter(({ needle }) => !lowerPrompt.includes(needle))
+    .map(({ segment }) => segment)
+
+  return [...missingSegments, normalizedPrompt].filter(Boolean).join(', ')
+}
+
 /** Build a direct NovelAI request body from normalized metadata. */
 export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   const isV4Family = metadata.model?.includes('nai-diffusion-4')
   const isV5Family = metadata.model?.includes('nai-diffusion-5')
   const usesStructuredPrompts = isV4Family || isV5Family
+  const effectivePrompt = isV5Family && metadata.transparent_background
+    ? buildTransparentBackgroundPrompt(metadata.prompt)
+    : metadata.prompt
   const baseParams: Record<string, unknown> = {
     params_version: isV5Family ? 4 : 3,
     width: metadata.width,
@@ -97,7 +117,7 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
     baseParams.use_coords = useCoords
     baseParams.v4_prompt = {
       caption: {
-        base_caption: metadata.prompt,
+        base_caption: effectivePrompt,
         char_captions: characterPrompts.map((entry) => ({
           char_caption: entry.prompt,
           centers: [entry.center],
@@ -178,7 +198,7 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   }
 
   return {
-    input: metadata.prompt,
+    input: effectivePrompt,
     model: metadata.action === 'infill' && metadata.model && !metadata.model.endsWith('-inpainting')
       ? metadata.model === 'nai-diffusion-5-curated'
         ? 'nai-diffusion-4-5-curated-inpainting'

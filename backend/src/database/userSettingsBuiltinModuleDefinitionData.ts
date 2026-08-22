@@ -1245,6 +1245,16 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         default_value: false,
       },
       {
+        key: 'transparent_background',
+        label: '투명 배경',
+        direction: 'input',
+        data_type: 'boolean',
+        required: false,
+        multiple: false,
+        default_value: false,
+        description: 'NAI V5 요청 프롬프트에 알파 채널 태그를 자동으로 추가해.',
+      },
+      {
         key: 'use_coords',
         label: '캐릭터 위치 사용',
         direction: 'input',
@@ -1439,6 +1449,13 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         label: 'Variety+',
         data_type: 'boolean',
         default_value: false,
+      },
+      {
+        key: 'transparent_background',
+        label: 'Transparent BG',
+        data_type: 'boolean',
+        default_value: false,
+        description: 'NAI V5 요청 프롬프트에 알파 채널 태그를 자동으로 추가해.',
       },
       {
         key: 'use_coords',

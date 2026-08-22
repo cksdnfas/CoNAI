@@ -310,6 +310,7 @@ export interface NAIImageGenerationPayload {
   seed?: number
   use_coords?: boolean
   variety_plus?: boolean
+  transparent_background?: boolean
   image?: string
   mask?: string
   strength?: number

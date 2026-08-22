@@ -16,6 +16,7 @@ import {
   NAI_SAMPLE_COUNT_MIN,
   NAI_SAMPLER_OPTIONS,
   NAI_SCHEDULER_OPTIONS,
+  supportsNaiTransparentBackground,
   type NAIFormDraft,
   type SelectedImageDraft,
 } from '../image-generation-shared'
@@ -289,7 +290,7 @@ export function NaiGenerationEditorSections({
           <div className="space-y-3">
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '출력', en: 'Output' })}</div>
             <NaiControllerInsetBlock>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <FormField label="Preset">
                   <Select value={naiForm.resolutionPreset} onChange={(event) => handleResolutionPresetChange(event.target.value)}>
                     {NAI_RESOLUTION_PRESETS.map((preset) => (
@@ -322,6 +323,20 @@ export function NaiGenerationEditorSections({
                     <input type="checkbox" checked={naiForm.varietyPlus} onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))} />
                   </ToggleRow>
                 </div>
+
+                {supportsNaiTransparentBackground(naiForm.model) ? (
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-foreground">Transparent BG</div>
+                    <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
+                      <div className="text-sm text-foreground">{t('image-generation.components.nai.generation.editor.sections.use')}</div>
+                      <input
+                        type="checkbox"
+                        checked={naiForm.transparentBackground}
+                        onChange={(event) => setNaiForm((current) => ({ ...current, transparentBackground: event.target.checked }))}
+                      />
+                    </ToggleRow>
+                  </div>
+                ) : null}
               </div>
             </NaiControllerInsetBlock>
           </div>

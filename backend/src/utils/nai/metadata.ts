@@ -35,6 +35,7 @@ export interface NAIMetadataParams {
   scale?: number
   sampler?: string
   variety_plus?: boolean
+  transparent_background?: boolean
   use_coords?: boolean
   n_samples?: number
   seed?: number

@@ -27,9 +27,10 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
       sampler: z.string().default('k_euler_ancestral').describe('Sampler name'),
       seed: z.number().int().optional().describe('Random seed (auto-generated if not provided)'),
       n_samples: z.number().int().min(1).max(4).default(1).describe('Number of images to generate'),
+      transparent_background: z.boolean().default(false).describe('Add the NAI V5 prompt tags that request an alpha channel'),
       group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
     },
-    async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, group_id }) => {
+    async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, transparent_background, group_id }) => {
       try {
         const token = getToken();
         if (!token) {
@@ -52,6 +53,7 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
           sampler,
           seed: actualSeed,
           n_samples,
+          transparent_background,
           action: 'generate',
           noise_schedule: 'karras',
         }, token);
