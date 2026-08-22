@@ -87,12 +87,6 @@ export function NaiGenerationPanel({
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
   const {
-    loginMode,
-    setLoginMode,
-    usernameInput: naiUsernameInput,
-    setUsernameInput: setNaiUsernameInput,
-    passwordInput: naiPasswordInput,
-    setPasswordInput: setNaiPasswordInput,
     tokenInput: naiTokenInput,
     setTokenInput: setNaiTokenInput,
     isAuthModalOpen: isNaiAuthModalOpen,
@@ -388,17 +382,11 @@ export function NaiGenerationPanel({
 
       <NaiAuthModal
         open={isNaiAuthModalOpen}
-        loginMode={loginMode}
         isSubmitting={isNaiLoggingIn}
-        username={naiUsernameInput}
-        password={naiPasswordInput}
         token={naiTokenInput}
         connectionHint={naiConnectionHint}
         showStatusHint={naiUserQuery.isError}
         onClose={handleCloseNaiAuthModal}
-        onLoginModeChange={setLoginMode}
-        onUsernameChange={setNaiUsernameInput}
-        onPasswordChange={setNaiPasswordInput}
         onTokenChange={setNaiTokenInput}
         onSubmit={handleSubmitNaiAuthModal}
       />

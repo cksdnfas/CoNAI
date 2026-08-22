@@ -13,17 +13,6 @@ import type {
 
 type NAICostEstimateResponse = NAICostEstimate
 
-/** Login to NovelAI with username/password and store the returned token on the backend. */
-export async function loginNai(username: string, password: string) {
-  return requestJson<NAILoginResponse>('/api/nai/auth/login', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ username, password }),
-  })
-}
-
 /** Validate and store a NovelAI access token on the backend. */
 export async function loginNaiWithToken(token: string) {
   return requestJson<NAILoginResponse>('/api/nai/auth/login-with-token', {

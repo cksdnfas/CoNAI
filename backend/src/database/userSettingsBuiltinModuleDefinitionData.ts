@@ -7,6 +7,8 @@ const CODEX_MESSAGE_MODEL_OPTIONS = [
 ] as const;
 
 const NAI_IMAGE_MODEL_OPTIONS = [
+  'nai-diffusion-5-curated',
+  'nai-diffusion-5-full',
   'nai-diffusion-4-5-curated',
   'nai-diffusion-4-5-full',
   'nai-diffusion-4-curated-preview',

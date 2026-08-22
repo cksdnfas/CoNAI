@@ -56,8 +56,10 @@ function buildCharacterPromptPayload(characters: NAICharacterPrompt[]) {
 /** Build a direct NovelAI request body from normalized metadata. */
 export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   const isV4Family = metadata.model?.includes('nai-diffusion-4')
+  const isV5Family = metadata.model?.includes('nai-diffusion-5')
+  const usesStructuredPrompts = isV4Family || isV5Family
   const baseParams: Record<string, unknown> = {
-    params_version: 3,
+    params_version: isV5Family ? 4 : 3,
     width: metadata.width,
     height: metadata.height,
     scale: metadata.scale,
@@ -69,7 +71,7 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
     legacy: false,
   }
 
-  if (isV4Family) {
+  if (usesStructuredPrompts) {
     baseParams.autoSmea = false
     baseParams.variety_plus = metadata.variety_plus ?? false
     baseParams.uncond_scale = metadata.uncond_scale ?? 1.0
@@ -103,6 +105,7 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
       },
       use_coords: useCoords,
       use_order: true,
+      legacy_uc: false,
     }
     baseParams.v4_negative_prompt = {
       caption: {
@@ -112,6 +115,8 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
           centers: [entry.center],
         })),
       },
+      use_coords: useCoords,
+      use_order: false,
       legacy_uc: false,
     }
   } else {
@@ -175,7 +180,9 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   return {
     input: metadata.prompt,
     model: metadata.action === 'infill' && metadata.model && !metadata.model.endsWith('-inpainting')
-      ? `${metadata.model}-inpainting`
+      ? metadata.model === 'nai-diffusion-5-curated'
+        ? 'nai-diffusion-4-5-curated-inpainting'
+        : `${metadata.model}-inpainting`
       : metadata.model,
     action: metadata.action,
     parameters: baseParams,

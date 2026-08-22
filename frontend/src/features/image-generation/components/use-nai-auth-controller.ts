@@ -1,9 +1,7 @@
-import { useMemo, useState } from 'react'
-import { loginNai, loginNaiWithToken } from '@/lib/api-image-generation-nai'
+import { useState } from 'react'
+import { loginNaiWithToken } from '@/lib/api-image-generation-nai'
 import { useI18n } from '@/i18n'
 import { getErrorMessage } from '../image-generation-shared'
-
-export type NaiLoginMode = 'account' | 'token'
 
 /** Manage NovelAI authentication modal state and login actions for the generation panel. */
 export function useNaiAuthController({
@@ -14,41 +12,10 @@ export function useNaiAuthController({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t } = useI18n()
-  const [loginMode, setLoginMode] = useState<NaiLoginMode>('account')
-  const [usernameInput, setUsernameInput] = useState('')
-  const [passwordInput, setPasswordInput] = useState('')
   const [tokenInput, setTokenInput] = useState('')
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
-
-  const connectionHint = useMemo(
-    () => loginMode === 'account'
-      ? t('image-generation.components.use.nai.auth.controller.novelai.authentication.is.required.log.in.with')
-      : t('image-generation.components.use.nai.auth.controller.novelai.authentication.is.required.enter.an.access'),
-    [loginMode, t],
-  )
-
-  /** Submit one account login flow and refresh server-side user state on success. */
-  const handleAccountLogin = async () => {
-    const username = usernameInput.trim()
-    const password = passwordInput
-    if (username.length === 0 || password.length === 0 || isLoggingIn) {
-      return
-    }
-
-    try {
-      setIsLoggingIn(true)
-      await loginNai(username, password)
-      await refetchUserData()
-      setPasswordInput('')
-      setIsAuthModalOpen(false)
-      showSnackbar({ message: t('image-generation.components.use.nai.auth.controller.novelai.login.complete'), tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.auth.controller.novelai.login.failed')), tone: 'error' })
-    } finally {
-      setIsLoggingIn(false)
-    }
-  }
+  const connectionHint = t('image-generation.components.use.nai.auth.controller.novelai.authentication.is.required.enter.an.access')
 
   /** Submit one token login flow and refresh server-side user state on success. */
   const handleTokenLogin = async () => {
@@ -71,29 +38,13 @@ export function useNaiAuthController({
     }
   }
 
-  /** Submit whichever authentication flow is selected in the current modal. */
-  const handleSubmit = async () => {
-    if (loginMode === 'account') {
-      await handleAccountLogin()
-      return
-    }
-
-    await handleTokenLogin()
-  }
-
   return {
-    loginMode,
-    setLoginMode,
-    usernameInput,
-    setUsernameInput,
-    passwordInput,
-    setPasswordInput,
     tokenInput,
     setTokenInput,
     isAuthModalOpen,
     setIsAuthModalOpen,
     isLoggingIn,
     connectionHint,
-    handleSubmit,
+    handleSubmit: handleTokenLogin,
   }
 }

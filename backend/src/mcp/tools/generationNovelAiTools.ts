@@ -1,11 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import axios from 'axios';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
+import { executeNaiGeneration } from '../../services/naiGenerationExecutor';
 import { getToken } from '../../utils/nai/auth';
-import { preprocessMetadata } from '../../utils/nai/metadata';
-// @ts-ignore - no types available
-import AdmZip from 'adm-zip';
 
 export function registerNovelAiGenerationTools(server: McpServer): void {
   // NovelAI 이미지 생성
@@ -15,7 +12,14 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
     {
       prompt: z.string().describe('Positive prompt for image generation'),
       negative_prompt: z.string().default('').describe('Negative prompt'),
-      model: z.enum(['nai-diffusion', 'nai-diffusion-4', 'nai-diffusion-4-5']).default('nai-diffusion-4-5').describe('NAI model to use'),
+      model: z.enum([
+        'nai-diffusion-5-curated',
+        'nai-diffusion-5-full',
+        'nai-diffusion-4-5-curated',
+        'nai-diffusion-4-5-full',
+        'nai-diffusion-4-curated-preview',
+        'nai-diffusion-3',
+      ]).default('nai-diffusion-4-5-curated').describe('NAI model to use'),
       width: z.number().int().default(1024).describe('Image width in pixels'),
       height: z.number().int().default(1024).describe('Image height in pixels'),
       steps: z.number().int().min(1).max(50).default(28).describe('Number of diffusion steps'),
@@ -31,14 +35,13 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
         if (!token) {
           return {
             isError: true,
-            content: [{ type: 'text' as const, text: 'NovelAI token not configured. Please login via the web UI first (/api/nai/auth/login or /api/nai/auth/login-with-token).' }],
+            content: [{ type: 'text' as const, text: 'NovelAI token not configured. Please connect a persistent API token via the web UI first (/api/nai/auth/login-with-token).' }],
           };
         }
 
         const actualSeed = seed ?? Math.floor(Math.random() * 4294967295);
 
-        // 메타데이터 전처리 (기존 유틸리티 사용)
-        const metadata = preprocessMetadata({
+        const result = await executeNaiGeneration({
           prompt,
           negative_prompt,
           model,
@@ -51,90 +54,11 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
           n_samples,
           action: 'generate',
           noise_schedule: 'karras',
-        });
-
-        // V4/V4.5 파라미터 구성
-        const isV4_5 = model.includes('nai-diffusion-4-5');
-        const isV4 = model.includes('nai-diffusion-4');
-
-        const baseParams: any = {
-          params_version: (isV4_5 || isV4) ? 3 : 1,
-          width: metadata.width,
-          height: metadata.height,
-          scale: metadata.scale,
-          sampler: metadata.sampler,
-          steps: metadata.steps,
-          n_samples: metadata.n_samples,
-          seed: metadata.seed,
-          noise_schedule: metadata.noise_schedule,
-          legacy: false,
-        };
-
-        if (isV4_5 || isV4) {
-          baseParams.autoSmea = false;
-          baseParams.variety_plus = false;
-          baseParams.uncond_scale = 1.0;
-          baseParams.cfg_rescale = 0.7;
-          baseParams.dynamic_thresholding = false;
-          baseParams.controlnet_strength = 1.0;
-          baseParams.ucPreset = 0;
-          baseParams.add_original_image = true;
-          baseParams.legacy_v3_extend = false;
-          baseParams.skip_cfg_above_sigma = null;
-          baseParams.use_coords = false;
-          baseParams.normalize_reference_strength_multiple = true;
-          baseParams.inpaintImg2ImgStrength = 1;
-          baseParams.legacy_uc = false;
-          baseParams.characterPrompts = [];
-          baseParams.deliberate_euler_ancestral_bug = false;
-          baseParams.prefer_brownian = true;
-          baseParams.stream = 'msgpack';
-          baseParams.negative_prompt = metadata.negative_prompt || '';
-
-          baseParams.v4_prompt = {
-            caption: { base_caption: metadata.prompt, char_captions: [] },
-            use_coords: false,
-            use_order: true,
-          };
-          baseParams.v4_negative_prompt = {
-            caption: { base_caption: metadata.negative_prompt || '', char_captions: [] },
-            legacy_uc: false,
-          };
-        } else {
-          baseParams.ucPreset = 0;
-          baseParams.negative_prompt = metadata.negative_prompt || '';
-        }
-
-        const requestBody = {
-          input: metadata.prompt,
-          model: metadata.model,
-          action: 'generate',
-          parameters: baseParams,
-          use_new_shared_trial: true,
-        };
-
-        // NovelAI API 호출
-        const response = await axios.post(
-          'https://image.novelai.net/ai/generate-image',
-          requestBody,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-              'Origin': 'https://novelai.net',
-              'Referer': 'https://novelai.net',
-            },
-            responseType: 'arraybuffer',
-            timeout: 120000,
-          }
-        );
-
-        // ZIP 파일 파싱
-        const zip = new AdmZip(Buffer.from(response.data));
-        const zipEntries = zip.getEntries();
-        const images = zipEntries.map((entry: any, index: number) => ({
+        }, token);
+        const metadata = result.metadata;
+        const images = result.imageBuffers.map((imageBuffer, index) => ({
           filename: `nai_${Date.now()}_${index}.png`,
-          data: entry.getData().toString('base64'),
+          data: imageBuffer.toString('base64'),
         }));
 
         // 히스토리 저장

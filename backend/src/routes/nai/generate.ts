@@ -201,7 +201,7 @@ router.post('/upscale', async (req: Request<{}, {}, { image?: string; scale?: nu
 
     const imageBuffer = Buffer.from(image, 'base64')
     const imageMetadata = await sharp(imageBuffer).metadata()
-    const response = await axios.post('https://api.novelai.net/ai/upscale', {
+    const response = await axios.post('https://image.novelai.net/ai/upscale', {
       image,
       width: imageMetadata.width,
       height: imageMetadata.height,

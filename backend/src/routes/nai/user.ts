@@ -19,7 +19,7 @@ router.get('/data', async (req: Request, res: Response) => {
     }
 
     try {
-      const response = await fetch('https://api.novelai.net/user/data', {
+      const response = await fetch('https://image.novelai.net/user/data', {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -60,7 +60,7 @@ router.get('/data', async (req: Request, res: Response) => {
       // }
 
       // Anlas는 별도 API로 조회
-      const anlasResponse = await fetch('https://api.novelai.net/user/subscription', {
+      const anlasResponse = await fetch('https://image.novelai.net/user/subscription', {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,

@@ -152,6 +152,8 @@ const NAI_MODULE_FIELD_LABEL_KEYS = {
 type NaiModuleFieldLabelKey = keyof typeof NAI_MODULE_FIELD_LABEL_KEYS
 
 export const NAI_MODEL_OPTIONS = [
+  { value: 'nai-diffusion-5-curated', label: 'NAI Diffusion V5 Curated' },
+  { value: 'nai-diffusion-5-full', label: 'NAI Diffusion V5 Full' },
   { value: 'nai-diffusion-4-5-curated', label: 'NAI Diffusion 4.5 Curated' },
   { value: 'nai-diffusion-4-5-full', label: 'NAI Diffusion 4.5 Full' },
   { value: 'nai-diffusion-4-curated-preview', label: 'NAI Diffusion 4 Curated' },
@@ -317,9 +319,9 @@ export function shouldUseNaiCharacterPositions(form: Pick<NAIFormDraft, 'charact
   return canUseNaiCharacterPositions(form.characters.length) && !form.characterPositionAiChoice
 }
 
-/** Check whether the selected NAI model supports v4 character prompts. */
+/** Check whether the selected NAI model supports structured character prompts. */
 export function supportsNaiCharacterPrompts(model: string) {
-  return model.includes('nai-diffusion-4')
+  return model.includes('nai-diffusion-4') || model.includes('nai-diffusion-5')
 }
 
 /** Check whether the selected NAI model supports 4.5-only character references. */

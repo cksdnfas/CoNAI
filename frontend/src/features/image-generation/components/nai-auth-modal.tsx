@@ -1,25 +1,17 @@
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import { FormField } from '../image-generation-shared'
-import type { NaiLoginMode } from './use-nai-auth-controller'
 
 type NaiAuthModalProps = {
   open: boolean
-  loginMode: NaiLoginMode
   isSubmitting: boolean
-  username: string
-  password: string
   token: string
   connectionHint: string
   showStatusHint: boolean
   onClose: () => void
-  onLoginModeChange: (mode: NaiLoginMode) => void
-  onUsernameChange: (value: string) => void
-  onPasswordChange: (value: string) => void
   onTokenChange: (value: string) => void
   onSubmit: () => void
 }
@@ -27,62 +19,35 @@ type NaiAuthModalProps = {
 /** Render the NovelAI authentication modal used from the status header. */
 export function NaiAuthModal({
   open,
-  loginMode,
   isSubmitting,
-  username,
-  password,
   token,
   connectionHint,
   showStatusHint,
   onClose,
-  onLoginModeChange,
-  onUsernameChange,
-  onPasswordChange,
   onTokenChange,
   onSubmit,
 }: NaiAuthModalProps) {
   const { t } = useI18n()
-  const submitDisabled = isSubmitting || (loginMode === 'account' ? username.trim().length === 0 || password.length === 0 : token.trim().length === 0)
+  const submitDisabled = isSubmitting || token.trim().length === 0
 
   return (
     <SettingsModal
       open={open}
       onClose={onClose}
-      title={t('image-generation.components.nai.auth.modal.novelai.login')}
-      description={t('image-generation.components.nai.auth.modal.connect.with.account.login.or.by.saving')}
+      title={t({ ko: 'NovelAI 토큰 연결', en: 'Connect NovelAI Token' })}
+      description={t({ ko: 'NovelAI 영구 API 토큰을 저장해서 연결해.', en: 'Connect by saving a NovelAI persistent API token.' })}
       widthClassName="max-w-2xl"
     >
       <SettingsModalBody>
-        <SegmentedTabBar
-          value={loginMode}
-          items={[
-            { value: 'account', label: t('image-generation.components.nai.auth.modal.log.in') },
-            { value: 'token', label: t('image-generation.components.nai.auth.modal.token') },
-          ]}
-          onChange={(nextMode) => onLoginModeChange(nextMode as NaiLoginMode)}
-          fullWidth
-          size="sm"
-        />
-
-        {loginMode === 'account' ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <FormField label={t({ ko: '사용자 이름', en: 'Username' })}>
-              <Input value={username} onChange={(event) => onUsernameChange(event.target.value)} autoComplete="username" />
-            </FormField>
-            <FormField label={t({ ko: '비밀번호', en: 'Password' })}>
-              <Input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete="current-password" />
-            </FormField>
-          </div>
-        ) : (
-          <FormField label={t({ ko: '액세스 토큰', en: 'Access Token' })}>
-            <Input
-              value={token}
-              onChange={(event) => onTokenChange(event.target.value)}
-              placeholder=""
-              autoComplete="off"
-            />
-          </FormField>
-        )}
+        <FormField label={t({ ko: '영구 API 토큰', en: 'Persistent API Token' })}>
+          <Input
+            type="password"
+            value={token}
+            onChange={(event) => onTokenChange(event.target.value)}
+            placeholder="pst-…"
+            autoComplete="off"
+          />
+        </FormField>
 
         {showStatusHint ? <div className="text-xs text-[#ffb4ab]">{connectionHint}</div> : null}
 
@@ -93,9 +58,7 @@ export function NaiAuthModal({
           <Button type="button" onClick={onSubmit} disabled={submitDisabled}>
             {isSubmitting
               ? t('image-generation.components.nai.auth.modal.connecting')
-              : loginMode === 'account'
-                ? t('image-generation.components.nai.auth.modal.log.in')
-                : t('image-generation.components.nai.auth.modal.save.token')}
+              : t('image-generation.components.nai.auth.modal.save.token')}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>
