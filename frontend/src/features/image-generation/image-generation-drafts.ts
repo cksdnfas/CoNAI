@@ -200,7 +200,11 @@ function normalizeWorkflowDraftValue(field: WorkflowMarkedField, value: unknown)
     return isSelectedImageDraft(value) ? value : ''
   }
 
-  return typeof value === 'string' ? value : ''
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  return ''
 }
 
 /** Restore one persisted Comfy workflow draft, limited to text/select/number fields. */
