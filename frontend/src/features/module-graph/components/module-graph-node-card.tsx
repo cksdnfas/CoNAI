@@ -4,6 +4,7 @@ import { GripVertical, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MiniMaxH3DirectorDasiwaInput } from '@/features/image-generation/components/minimax-h3-director-dasiwa-input'
 import { useI18n } from '@/i18n'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { WORKFLOW_INPUT_ENABLED_KEY, isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
@@ -47,6 +48,13 @@ function normalizeBooleanFlag(value: unknown) {
   return false
 }
 
+/** Normalize one composite module field value for its node-native editor. */
+function normalizeCompositeNodeValue(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
 /** Render a cleaner module graph node card with source-node specific layout. */
 function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGraphNode>) {
   const { t } = useI18n()
@@ -57,10 +65,15 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
     isPowerLoraLoaderUiField(field) || hasPowerLoraLoaderEntries(data.inputValues?.[field.key] ?? field.default_value)
   ))
   const powerLoraUiFieldKeys = new Set(powerLoraUiFields.map((field) => field.key))
+  const miniMaxDirectorUiFields = (module.ui_schema ?? []).filter((field) => field.node_editor === 'minimax_h3_director_dasiwa')
+  const miniMaxDirectorUiFieldKeys = new Set(miniMaxDirectorUiFields.map((field) => field.key))
   const inputPorts = (module.exposed_inputs ?? []).filter((port) => {
     const uiField = uiFieldByKey.get(port.key)
     const value = data.inputValues?.[port.key] ?? port.default_value ?? uiField?.default_value
-    return !powerLoraUiFieldKeys.has(port.key) && !isPowerLoraLoaderUiField(uiField) && !hasPowerLoraLoaderEntries(value)
+    return !powerLoraUiFieldKeys.has(port.key)
+      && !miniMaxDirectorUiFieldKeys.has(port.key)
+      && !isPowerLoraLoaderUiField(uiField)
+      && !hasPowerLoraLoaderEntries(value)
   })
   const outputPorts = module.output_ports ?? []
   const accentColor = getModuleColor(module)
@@ -196,7 +209,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
 
   return (
     <div
-      className={`w-[340px] max-w-[340px] rounded-sm border bg-surface-container px-2.5 py-2 text-foreground shadow-lg ${data.disabled === true ? 'opacity-60 grayscale' : ''}`}
+      className={`${miniMaxDirectorUiFields.length > 0 ? 'w-[560px] max-w-[560px]' : 'w-[340px] max-w-[340px]'} rounded-sm border bg-surface-container px-2.5 py-2 text-foreground shadow-lg ${data.disabled === true ? 'opacity-60 grayscale' : ''}`}
       style={{
         borderColor: selected ? accentColor : statusBorderColor,
         boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,
@@ -307,6 +320,28 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
       ) : null}
 
       <ModuleGraphNodeCustomControls data={data} state={customControlState} />
+
+      {miniMaxDirectorUiFields.length > 0 ? (
+        <div
+          className="nodrag nowheel mt-2 space-y-3 border-t border-border/30 pt-3"
+          onMouseDown={stopNodeInteraction}
+          onClick={stopNodeInteraction}
+        >
+          {miniMaxDirectorUiFields.map((field) => (
+            <div key={field.key} className="space-y-2">
+              {miniMaxDirectorUiFields.length > 1 ? (
+                <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{field.label}</div>
+              ) : null}
+              <MiniMaxH3DirectorDasiwaInput
+                value={normalizeCompositeNodeValue(data.inputValues?.[field.key] ?? field.default_value)}
+                visibleFields={field.node_visible_fields}
+                numericBounds={field.node_numeric_bounds}
+                onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {isWorkflowInputSource ? <SourceNodeOutputPorts nodeId={id} ports={sourceOutputPorts} connectedOutputKeys={connectedOutputKeys} accentColor={accentColor} /> : null}
       {isWorkflowInputSource ? <InlineWorkflowInputEditor id={id} data={data} /> : null}

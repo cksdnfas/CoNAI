@@ -2,6 +2,8 @@
  * Generic module-graph types for modular image generation workflows.
  */
 
+import type { WorkflowNodeNumericBounds } from './workflow'
+
 export type ModuleEngineType = 'nai' | 'codex' | 'comfyui' | 'system' | 'custom_js'
 export type ModuleAuthoringSource = 'nai_form_snapshot' | 'codex_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
 export type ModulePortDirection = 'input' | 'output'
@@ -39,6 +41,8 @@ export interface ModuleUiFieldDefinition {
   placeholder?: string
   ui_hint?: string
   node_editor?: 'power_lora_loader_rgthree' | 'minimax_h3_director_dasiwa'
+  node_visible_fields?: string[]
+  node_numeric_bounds?: WorkflowNodeNumericBounds
   node_items?: Array<{
     key: string
     label: string

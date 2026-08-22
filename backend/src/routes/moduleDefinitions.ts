@@ -75,6 +75,27 @@ function hydrateDynamicSelectOptions(uiSchema: any[], dropdownListMap: Map<strin
   })
 }
 
+/** Restore composite-editor settings omitted by module definitions saved before schema support. */
+function hydrateCompositeNodeEditorSettings(uiSchema: any[], templateDefaults: Record<string, unknown>) {
+  const markedFields = Array.isArray(templateDefaults.marked_fields) ? templateDefaults.marked_fields : []
+  const markedFieldById = new Map(markedFields
+    .filter((field: any) => typeof field?.id === 'string')
+    .map((field: any) => [field.id, field]))
+
+  return uiSchema.map((field: any) => {
+    const markedField = markedFieldById.get(field?.key) as any
+    if (!field?.node_editor || markedField?.node_editor !== field.node_editor) {
+      return field
+    }
+
+    return {
+      ...field,
+      node_visible_fields: field.node_visible_fields ?? markedField.node_visible_fields,
+      node_numeric_bounds: field.node_numeric_bounds ?? markedField.node_numeric_bounds,
+    }
+  })
+}
+
 function parseModuleRecord(record: any, dropdownListMap = buildCustomDropdownListMap()) {
   const parsed = {
     ...record,
@@ -84,7 +105,8 @@ function parseModuleRecord(record: any, dropdownListMap = buildCustomDropdownLis
     internal_fixed_values: record.internal_fixed_values ? JSON.parse(record.internal_fixed_values) : {},
     ui_schema: record.ui_schema ? JSON.parse(record.ui_schema) : [],
   }
-  const hydratedUiSchema = hydrateDynamicSelectOptions(parsed.ui_schema, dropdownListMap)
+  const compositeHydratedUiSchema = hydrateCompositeNodeEditorSettings(parsed.ui_schema, parsed.template_defaults)
+  const hydratedUiSchema = hydrateDynamicSelectOptions(compositeHydratedUiSchema, dropdownListMap)
   const configOnlyFieldKeys = getConfigOnlyFieldKeys(parsed.ui_schema, parsed.exposed_inputs)
 
   return {

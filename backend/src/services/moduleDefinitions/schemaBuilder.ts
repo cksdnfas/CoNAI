@@ -186,6 +186,8 @@ export function buildUiSchemaFromMarkedFields(markedFields: any[], exposedFieldI
       placeholder: field.placeholder,
       ui_hint: field.dropdown_list_name,
       node_editor: field.node_editor,
+      node_visible_fields: Array.isArray(field.node_visible_fields) ? field.node_visible_fields : undefined,
+      node_numeric_bounds: field.node_numeric_bounds,
       node_items: Array.isArray(field.node_items) ? field.node_items : undefined,
     }));
 }

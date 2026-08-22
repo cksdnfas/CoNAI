@@ -33,7 +33,7 @@ export type ModuleDefinitionGraphReconcileResult = {
   removedExposedInputIds: string[]
 }
 
-type ModuleDefinitionGraphReconcilePorts = Pick<ModuleDefinitionUpdateData, 'exposed_inputs' | 'output_ports'>
+type ModuleDefinitionGraphReconcilePorts = Pick<ModuleDefinitionUpdateData, 'exposed_inputs' | 'output_ports' | 'ui_schema'>
 
 function parseGraphJson(value: string): GraphWorkflowDocument | null {
   try {
@@ -51,18 +51,32 @@ function createPortKeySet(ports: ModulePortDefinition[] | undefined) {
   return ports ? new Set(ports.map((port) => port.key)) : null
 }
 
+/** Preserve node-local UI values while pruning values for removed input ports. */
+function createPersistedInputValueKeySet(ports: ModuleDefinitionGraphReconcilePorts) {
+  const inputPortKeys = createPortKeySet(ports.exposed_inputs)
+  if (!inputPortKeys) {
+    return null
+  }
+
+  return new Set([
+    ...inputPortKeys,
+    ...(ports.ui_schema ?? []).map((field) => field.key),
+  ])
+}
+
 export function reconcileGraphForModuleDefinitionUpdate(
   graph: GraphWorkflowDocument,
   moduleId: number,
   ports: ModuleDefinitionGraphReconcilePorts,
 ): ModuleDefinitionGraphReconcileResult {
-  const inputKeys = createPortKeySet(ports.exposed_inputs)
+  const inputPortKeys = createPortKeySet(ports.exposed_inputs)
+  const persistedInputValueKeys = createPersistedInputValueKeySet(ports)
   const outputKeys = createPortKeySet(ports.output_ports)
   const affectedNodeIds = new Set(graph.nodes
     .filter((node) => node.module_id === moduleId)
     .map((node) => node.id))
 
-  if (affectedNodeIds.size === 0 || (!inputKeys && !outputKeys)) {
+  if (affectedNodeIds.size === 0 || (!inputPortKeys && !outputKeys)) {
     return {
       graph,
       changed: false,
@@ -74,14 +88,14 @@ export function reconcileGraphForModuleDefinitionUpdate(
 
   const prunedInputValueKeys: Array<{ nodeId: string; keys: string[] }> = []
   const nodes = graph.nodes.map((node) => {
-    if (!inputKeys || !affectedNodeIds.has(node.id) || !node.input_values) {
+    if (!persistedInputValueKeys || !affectedNodeIds.has(node.id) || !node.input_values) {
       return node
     }
 
     const nextInputValues = Object.fromEntries(
-      Object.entries(node.input_values).filter(([key]) => inputKeys.has(key)),
+      Object.entries(node.input_values).filter(([key]) => persistedInputValueKeys.has(key)),
     )
-    const removedKeys = Object.keys(node.input_values).filter((key) => !inputKeys.has(key))
+    const removedKeys = Object.keys(node.input_values).filter((key) => !persistedInputValueKeys.has(key))
     if (removedKeys.length === 0) {
       return node
     }
@@ -101,9 +115,9 @@ export function reconcileGraphForModuleDefinitionUpdate(
     const sourcePortRemoved = outputKeys
       && affectedNodeIds.has(edge.source_node_id)
       && !outputKeys.has(edge.source_port_key)
-    const targetPortRemoved = inputKeys
+    const targetPortRemoved = inputPortKeys
       && affectedNodeIds.has(edge.target_node_id)
-      && !inputKeys.has(edge.target_port_key)
+      && !inputPortKeys.has(edge.target_port_key)
 
     if (sourcePortRemoved || targetPortRemoved) {
       removedEdgeIds.push(edge.id)
@@ -114,10 +128,10 @@ export function reconcileGraphForModuleDefinitionUpdate(
 
   let metadata = graph.metadata
   const removedExposedInputIds: string[] = []
-  if (inputKeys && graph.metadata?.exposed_inputs) {
+  if (inputPortKeys && graph.metadata?.exposed_inputs) {
     const exposedInputs = graph.metadata.exposed_inputs.filter((input) => {
       const belongsToUpdatedModule = input.module_id === moduleId || affectedNodeIds.has(input.node_id)
-      const removed = belongsToUpdatedModule && !inputKeys.has(input.port_key)
+      const removed = belongsToUpdatedModule && !inputPortKeys.has(input.port_key)
       if (removed) {
         removedExposedInputIds.push(input.id)
         return false
