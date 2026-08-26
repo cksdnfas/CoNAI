@@ -1,5 +1,11 @@
-import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
-import { getDownloadFileName, getSingleImageDownloadFallbackName, readDownloadBlob } from '@/lib/download-utils'
+import { buildApiUrl } from '@/lib/api-client'
+import {
+  getDownloadFileName,
+  getSingleImageDownloadFallbackName,
+  prepareDownloadTarget,
+  readDownloadBlob,
+  saveDownloadBlob,
+} from '@/lib/download-utils'
 import { requestJson } from './api-image-generation-request'
 import type { ImageDownloadType } from './api-images'
 import type { GenerationHistoryRecord, GenerationServiceType, SaveBrowserImageRecord } from './api-image-generation-types'
@@ -91,13 +97,24 @@ export async function cleanupFailedGenerationHistory() {
 }
 
 /** Download selected generation-history outputs without applying gallery safety hiding. */
-export async function downloadGenerationHistorySelection(historyIds: number[], type: ImageDownloadType = 'original') {
+export async function downloadGenerationHistorySelection(
+  historyIds: number[],
+  type: ImageDownloadType = 'original',
+  options?: { suggestedFileName?: string },
+) {
   if (historyIds.length === 0) {
     return
   }
 
   if (historyIds.length === 1) {
     const historyId = historyIds[0]
+    const suggestedFileName = options?.suggestedFileName
+      ?? (type === 'thumbnail' ? `generation-history-${historyId}-thumbnail.webp` : `generation-history-${historyId}.png`)
+    const target = await prepareDownloadTarget(suggestedFileName)
+    if (!target) {
+      return
+    }
+
     const mediaPath = type === 'thumbnail' ? 'thumbnail' : 'file'
     const response = await fetch(buildApiUrl(`/api/generation-history/${historyId}/${mediaPath}`), {
       credentials: 'include',
@@ -114,7 +131,13 @@ export async function downloadGenerationHistorySelection(historyIds: number[], t
     )
     const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
 
-    triggerBlobDownload(blob, fileName)
+    await saveDownloadBlob(target, blob, fileName)
+    return
+  }
+
+  const fallbackFileName = `conai-generation-history-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`
+  const target = await prepareDownloadTarget(options?.suggestedFileName ?? fallbackFileName)
+  if (!target) {
     return
   }
 
@@ -129,7 +152,8 @@ export async function downloadGenerationHistorySelection(historyIds: number[], t
   })
 
   const blob = await readDownloadBlob(response, `Generation history download failed: ${response.status}`)
-  triggerBlobDownload(blob, `conai-generation-history-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`)
+  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
+  await saveDownloadBlob(target, blob, fileName)
 }
 
 /** Load browser-ready image entries from the runtime save directory. */

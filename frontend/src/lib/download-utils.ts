@@ -1,5 +1,79 @@
+import type { AppSettings } from '@conai/shared'
+import { triggerBlobDownload } from '@/lib/api-client'
+import { appQueryClient } from '@/lib/app-query-client'
+
 type ApiErrorPayload = {
   error?: unknown
+}
+
+interface DownloadWritableFileStream {
+  write(data: Blob): Promise<void>
+  close(): Promise<void>
+  abort?(): Promise<void>
+}
+
+interface DownloadFileHandle {
+  createWritable(): Promise<DownloadWritableFileStream>
+}
+
+interface DownloadFilePickerWindow extends Window {
+  showSaveFilePicker?: (options: { suggestedName: string }) => Promise<DownloadFileHandle>
+}
+
+export interface PreparedDownloadTarget {
+  fileHandle: DownloadFileHandle | null
+}
+
+function getSafeSuggestedDownloadName(filename: string) {
+  return filename.replace(/\\/g, '/').split('/').at(-1)?.trim() || 'download'
+}
+
+function isDownloadPickerCancelled(error: unknown) {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError'
+}
+
+/** Open the native save dialog before asynchronous download work consumes user activation. */
+export async function prepareDownloadTarget(suggestedFileName: string): Promise<PreparedDownloadTarget | null> {
+  const settings = appQueryClient.getQueryData<AppSettings>(['app-settings'])
+  if (!settings?.general.promptForDownloadLocation) {
+    return { fileHandle: null }
+  }
+
+  const showSaveFilePicker = (window as DownloadFilePickerWindow).showSaveFilePicker
+  if (!showSaveFilePicker) {
+    throw new Error(settings.general.language === 'en'
+      ? 'This browser cannot choose a save location. Use Chrome or Edge, or turn off this option.'
+      : '현재 브라우저는 저장 위치 선택을 지원하지 않습니다. Chrome 또는 Edge를 사용하거나 해당 옵션을 꺼주세요.')
+  }
+
+  try {
+    const fileHandle = await showSaveFilePicker.call(window, {
+      suggestedName: getSafeSuggestedDownloadName(suggestedFileName),
+    })
+    return { fileHandle }
+  } catch (error) {
+    if (isDownloadPickerCancelled(error)) {
+      return null
+    }
+    throw error
+  }
+}
+
+/** Write a blob to the selected file, or keep the existing browser-download behavior. */
+export async function saveDownloadBlob(target: PreparedDownloadTarget, blob: Blob, filename: string) {
+  if (!target.fileHandle) {
+    triggerBlobDownload(blob, filename)
+    return
+  }
+
+  const writable = await target.fileHandle.createWritable()
+  try {
+    await writable.write(blob)
+    await writable.close()
+  } catch (error) {
+    await writable.abort?.().catch(() => undefined)
+    throw error
+  }
 }
 
 /** Extract a suggested filename from Content-Disposition when available. */

@@ -392,6 +392,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
   return {
     general: {
       language: 'ko',
+      promptForDownloadLocation: false,
       deleteProtection: {
         enabled: true,
         recycleBinPath: 'RecycleBin'

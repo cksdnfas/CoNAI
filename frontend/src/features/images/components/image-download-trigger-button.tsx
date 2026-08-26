@@ -6,7 +6,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { downloadImageSelection, type ImageDownloadType } from '@/lib/api-images'
 import { downloadGenerationHistorySelection } from '@/lib/api-image-generation-history'
-import { triggerBlobDownload } from '@/lib/api-client'
+import { prepareDownloadTarget, saveDownloadBlob } from '@/lib/download-utils'
 import { getErrorMessage } from '@/lib/error-message'
 import type { ImageRecord } from '@/types/image'
 import { getImageListMediaKind } from './image-list/image-list-utils'
@@ -75,10 +75,14 @@ export function ImageDownloadTriggerButton({
 
     try {
       setIsDownloading(true)
+      const originalName = getDownloadName(image?.original_file_path, compositeHash)
+      const suggestedFileName = type === 'thumbnail'
+        ? `${originalName.replace(/\.[^/.]+$/, '') || compositeHash}-thumbnail.webp`
+        : originalName
       if (generationHistoryId) {
-        await downloadGenerationHistorySelection([generationHistoryId], type)
+        await downloadGenerationHistorySelection([generationHistoryId], type, { suggestedFileName })
       } else {
-        await downloadImageSelection([compositeHash], type)
+        await downloadImageSelection([compositeHash], type, { suggestedFileName })
       }
       setIsOpen(false)
     } catch (error) {
@@ -93,22 +97,27 @@ export function ImageDownloadTriggerButton({
       return
     }
 
-    const { getActivePixelPreviewProfile, renderPixelPreviewPngBlob } = await import('./detail/image-detail-pixel-preview')
-    const pixelPreviewProfile = getActivePixelPreviewProfile()
-    if (!pixelPreviewProfile) {
-      return
-    }
-
-    const visibleMode = getVisibleDownloadMode(image)
-    const visibleRenderUrl = getImageDetailRenderUrl(image, visibleMode)
-    if (!visibleRenderUrl) {
-      return
-    }
-
     try {
       setIsDownloading(true)
+      const visibleMode = getVisibleDownloadMode(image)
+      const target = await prepareDownloadTarget(getFilteredDownloadName(image, visibleMode))
+      if (!target) {
+        return
+      }
+
+      const { getActivePixelPreviewProfile, renderPixelPreviewPngBlob } = await import('./detail/image-detail-pixel-preview')
+      const pixelPreviewProfile = getActivePixelPreviewProfile()
+      if (!pixelPreviewProfile) {
+        return
+      }
+
+      const visibleRenderUrl = getImageDetailRenderUrl(image, visibleMode)
+      if (!visibleRenderUrl) {
+        return
+      }
+
       const blob = await renderPixelPreviewPngBlob(visibleRenderUrl, pixelPreviewProfile)
-      triggerBlobDownload(blob, getFilteredDownloadName(image, visibleMode))
+      await saveDownloadBlob(target, blob, getFilteredDownloadName(image, visibleMode))
       setIsOpen(false)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('images.components.image.download.trigger.button.image.download.failed')), tone: 'error' })

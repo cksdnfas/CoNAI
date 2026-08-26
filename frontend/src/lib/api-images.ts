@@ -1,6 +1,12 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { getDownloadFileName, getSingleImageDownloadFallbackName, readDownloadBlob } from '@/lib/download-utils'
+import {
+  getDownloadFileName,
+  getSingleImageDownloadFallbackName,
+  prepareDownloadTarget,
+  readDownloadBlob,
+  saveDownloadBlob,
+} from '@/lib/download-utils'
 import { requestApiData } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@conai/shared'
@@ -302,7 +308,14 @@ export function buildImageDownloadUrl(compositeHash: string, type: ImageDownload
   return buildApiUrl(`/api/images/${compositeHash}/download?${searchParams.toString()}`)
 }
 
-async function downloadSingleImage(compositeHash: string, type: ImageDownloadType = 'original') {
+async function downloadSingleImage(compositeHash: string, type: ImageDownloadType = 'original', suggestedFileName?: string) {
+  const target = await prepareDownloadTarget(
+    suggestedFileName ?? (type === 'thumbnail' ? `${compositeHash}-thumbnail.webp` : `${compositeHash}.png`),
+  )
+  if (!target) {
+    return
+  }
+
   const response = await fetch(buildImageDownloadUrl(compositeHash, type), {
     method: 'GET',
     credentials: 'include',
@@ -320,16 +333,26 @@ async function downloadSingleImage(compositeHash: string, type: ImageDownloadTyp
   const fallbackFileName = getSingleImageDownloadFallbackName(compositeHash, type, response.headers.get('Content-Type'))
   const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
 
-  triggerBlobDownload(blob, fileName)
+  await saveDownloadBlob(target, blob, fileName)
 }
 
-export async function downloadImageSelection(compositeHashes: string[], type: ImageDownloadType = 'original') {
+export async function downloadImageSelection(
+  compositeHashes: string[],
+  type: ImageDownloadType = 'original',
+  options?: { suggestedFileName?: string },
+) {
   if (compositeHashes.length === 0) {
     return
   }
 
   if (compositeHashes.length === 1) {
-    await downloadSingleImage(compositeHashes[0], type)
+    await downloadSingleImage(compositeHashes[0], type, options?.suggestedFileName)
+    return
+  }
+
+  const fallbackFileName = `conai-images-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`
+  const target = await prepareDownloadTarget(options?.suggestedFileName ?? fallbackFileName)
+  if (!target) {
     return
   }
 
@@ -344,10 +367,9 @@ export async function downloadImageSelection(compositeHashes: string[], type: Im
   })
 
   const blob = await readDownloadBlob(response, `Batch download failed: ${response.status}`)
-  const fallbackFileName = `conai-images-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`
   const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
 
-  triggerBlobDownload(blob, fileName)
+  await saveDownloadBlob(target, blob, fileName)
 }
 
 export interface UploadBatchResultItem {

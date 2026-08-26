@@ -90,6 +90,14 @@ export function GeneralPreferencesSections({
                 <option value="en">{t({ ko: '영어', en: 'English' })}</option>
               </Select>
             </SettingsField>
+            <SettingsToggleRow>
+              <input
+                type="checkbox"
+                checked={generalDraft.promptForDownloadLocation ?? false}
+                onChange={(event) => onPatchGeneral({ promptForDownloadLocation: event.target.checked })}
+              />
+              {t({ ko: '다운로드할 때 파일명과 저장 위치 확인', en: 'Ask for file name and save location' })}
+            </SettingsToggleRow>
           </div>
         </SettingsSection>
       ) : null}

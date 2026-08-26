@@ -27,6 +27,7 @@ export type ImageSimilarityCheckMode = 'manual' | 'always';
 
 export interface GeneralSettings {
   language: SupportedLanguage;
+  promptForDownloadLocation: boolean;
   deleteProtection: DeleteProtectionSettings;
   headerNavigation: HeaderNavigationSettings;
   enableGallery?: boolean;

@@ -31,6 +31,7 @@ router.put(
 
     if (!validateStringEnumIfDefined(res, generalSettings.language, validLanguages, `Invalid language. Must be one of: ${validLanguages.join(', ')}`)) return;
     if (!validateStringEnumIfDefined(res, generalSettings.imageSimilarityCheckMode, validImageSimilarityCheckModes, `Invalid image similarity check mode. Must be one of: ${validImageSimilarityCheckModes.join(', ')}`)) return;
+    if (!validateBooleanIfDefined(res, generalSettings.promptForDownloadLocation, 'promptForDownloadLocation must be a boolean')) return;
     if (!validateBooleanIfDefined(res, generalSettings.applyRatingSafetyToGenerationHistory, 'applyRatingSafetyToGenerationHistory must be a boolean')) return;
     if (!validateIntegerInRangeIfDefined(
       res,
