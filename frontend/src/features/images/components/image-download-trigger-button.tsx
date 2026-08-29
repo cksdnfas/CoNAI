@@ -49,7 +49,7 @@ function hasActivePixelPreviewDownloadOption() {
   return savedValue === 'soft' || savedValue === 'medium' || savedValue === 'strong' || savedValue === 'custom' || savedValue === 'true'
 }
 
-/** Render one download button that opens the global thumbnail/original choice modal. */
+/** Render one download button; videos download directly while images open the download option menu. */
 export function ImageDownloadTriggerButton({
   image,
   size = 'icon-sm',
@@ -66,7 +66,9 @@ export function ImageDownloadTriggerButton({
   const containerRef = useRef<HTMLSpanElement | null>(null)
   const compositeHash = typeof image?.composite_hash === 'string' && image.composite_hash.length > 0 ? image.composite_hash : null
   const generationHistoryId = typeof image?.generation_history_id === 'number' ? image.generation_history_id : null
-  const filteredDownloadMode = image && getImageListMediaKind(image) === 'image' && hasActivePixelPreviewDownloadOption() ? getVisibleDownloadMode(image) : null
+  const mediaKind = image ? getImageListMediaKind(image) : null
+  const isVideo = mediaKind === 'video'
+  const filteredDownloadMode = image && mediaKind === 'image' && hasActivePixelPreviewDownloadOption() ? getVisibleDownloadMode(image) : null
 
   const handleSelect = async (type: 'thumbnail' | 'original') => {
     if (!compositeHash || isDownloading) {
@@ -137,7 +139,15 @@ export function ImageDownloadTriggerButton({
         size={size}
         variant={variant}
         className={className}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => {
+          if (isVideo) {
+            void handleSelect('original')
+            return
+          }
+
+          setIsOpen((current) => !current)
+        }}
+        disabled={isDownloading}
         aria-label={ariaLabel ?? t('images.components.image.download.trigger.button.download')}
         title={title ?? t('images.components.image.download.trigger.button.download')}
         data-no-select-drag="true"
@@ -145,15 +155,17 @@ export function ImageDownloadTriggerButton({
         {children ?? <Download className="h-4 w-4" />}
       </Button>
 
-      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
-        <ImageDownloadOptionMenu
-          targetCount={1}
-          isDownloading={isDownloading}
-          filteredMode={filteredDownloadMode}
-          onSelect={handleSelect}
-          onSelectFiltered={handleFilteredSelect}
-        />
-      </AnchoredPopup>
+      {!isVideo ? (
+        <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
+          <ImageDownloadOptionMenu
+            targetCount={1}
+            isDownloading={isDownloading}
+            filteredMode={filteredDownloadMode}
+            onSelect={handleSelect}
+            onSelectFiltered={handleFilteredSelect}
+          />
+        </AnchoredPopup>
+      ) : null}
     </span>
   )
 }
