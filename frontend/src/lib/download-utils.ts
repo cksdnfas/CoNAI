@@ -24,6 +24,11 @@ export interface PreparedDownloadTarget {
   fileHandle: DownloadFileHandle | null
 }
 
+export interface SingleMediaDownloadSource {
+  originalFilePath?: string | null
+  contentType?: string | null
+}
+
 function getSafeSuggestedDownloadName(filename: string) {
   return filename.replace(/\\/g, '/').split('/').at(-1)?.trim() || 'download'
 }
@@ -96,7 +101,7 @@ export function getDownloadFileName(contentDisposition: string | null, fallbackF
 }
 
 /** Build a usable filename when a single media response omits Content-Disposition. */
-export function getSingleImageDownloadFallbackName(identifier: string, type: 'thumbnail' | 'original', contentType: string | null) {
+function getSingleMediaDownloadFallbackName(identifier: string, type: 'thumbnail' | 'original', contentType: string | null) {
   const normalizedContentType = contentType?.toLowerCase() ?? ''
 
   if (type === 'thumbnail') {
@@ -126,6 +131,60 @@ export function getSingleImageDownloadFallbackName(identifier: string, type: 'th
   }
 
   return `${identifier}.bin`
+}
+
+/** Build the native save-dialog name from the same media metadata on every screen. */
+function getSingleMediaDownloadSuggestedName(
+  identifier: string,
+  type: 'thumbnail' | 'original',
+  source?: SingleMediaDownloadSource,
+) {
+  const originalFileName = source?.originalFilePath?.trim()
+    ? getSafeSuggestedDownloadName(source.originalFilePath)
+    : null
+
+  if (type === 'thumbnail') {
+    const baseName = originalFileName?.replace(/\.[^/.]+$/, '') || identifier
+    return `${baseName}-thumbnail.webp`
+  }
+
+  return originalFileName ?? getSingleMediaDownloadFallbackName(identifier, type, source?.contentType ?? null)
+}
+
+/** Download one original or thumbnail through the shared picker, response, and save flow. */
+export async function downloadSingleMedia(
+  url: string,
+  identifier: string,
+  type: 'thumbnail' | 'original',
+  source?: SingleMediaDownloadSource,
+  fallbackErrorMessage?: string,
+) {
+  const suggestedFileName = getSingleMediaDownloadSuggestedName(identifier, type, source)
+  const target = await prepareDownloadTarget(suggestedFileName)
+  if (!target) {
+    return
+  }
+
+  const response = await fetch(url, {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      Accept: type === 'thumbnail' ? 'image/webp' : 'application/octet-stream',
+    },
+  })
+
+  const blob = await readDownloadBlob(
+    response,
+    fallbackErrorMessage ? `${fallbackErrorMessage}: ${response.status}` : undefined,
+  )
+  const responseContentType = response.headers.get('Content-Type')
+  const fallbackFileName = getSingleMediaDownloadSuggestedName(identifier, type, {
+    originalFilePath: source?.originalFilePath,
+    contentType: responseContentType ?? source?.contentType,
+  })
+  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
+
+  await saveDownloadBlob(target, blob, fileName)
 }
 
 /** Read a useful message from failed blob download responses. */

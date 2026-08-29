@@ -49,6 +49,7 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   actual_width?: number | null;
   actual_height?: number | null;
   actual_mime_type?: string | null;
+  actual_file_name?: string | null;
   result_file_status?: 'active' | 'missing' | 'deleted' | null;
   rating_score?: number | null;
   requested_server_id?: number | null;

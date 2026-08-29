@@ -291,12 +291,14 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => collectRetryableHistoryRecords(selectedHistoryRecords),
     [selectedHistoryRecords],
   )
-  const downloadableHistoryIds = useMemo(
+  const downloadableHistoryRecords = useMemo(
     () => selectedHistoryRecords
-      .filter(isHistoryRecordDownloadReady)
-      .map((record) => record.id)
-      .filter((id): id is number => typeof id === 'number'),
+      .filter(isHistoryRecordDownloadReady),
     [selectedHistoryRecords],
+  )
+  const downloadableHistoryIds = useMemo(
+    () => downloadableHistoryRecords.map((record) => record.id),
+    [downloadableHistoryRecords],
   )
   const selectionStatusText = useMemo(() => {
     if (downloadableHistoryIds.length > 0 && selectedRetryableHistoryRecords.length > 0) {
@@ -503,13 +505,17 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
     try {
       setIsDownloadingSelection(true)
-      await downloadGenerationHistorySelection(downloadableHistoryIds, type)
+      const selectedRecord = downloadableHistoryRecords.length === 1 ? downloadableHistoryRecords[0] : null
+      await downloadGenerationHistorySelection(downloadableHistoryIds, type, selectedRecord ? {
+        originalFilePath: selectedRecord.actual_file_name,
+        contentType: selectedRecord.actual_mime_type,
+      } : undefined)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.download.the.selected.images')), tone: 'error' })
     } finally {
       setIsDownloadingSelection(false)
     }
-  }, [downloadableHistoryIds, isDownloadingSelection, showSnackbar, t])
+  }, [downloadableHistoryIds, downloadableHistoryRecords, isDownloadingSelection, showSnackbar, t])
 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>

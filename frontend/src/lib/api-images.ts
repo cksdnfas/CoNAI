@@ -1,11 +1,12 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import {
+  downloadSingleMedia,
   getDownloadFileName,
-  getSingleImageDownloadFallbackName,
   prepareDownloadTarget,
   readDownloadBlob,
   saveDownloadBlob,
+  type SingleMediaDownloadSource,
 } from '@/lib/download-utils'
 import { requestApiData } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
@@ -308,50 +309,29 @@ export function buildImageDownloadUrl(compositeHash: string, type: ImageDownload
   return buildApiUrl(`/api/images/${compositeHash}/download?${searchParams.toString()}`)
 }
 
-async function downloadSingleImage(compositeHash: string, type: ImageDownloadType = 'original', suggestedFileName?: string) {
-  const target = await prepareDownloadTarget(
-    suggestedFileName ?? (type === 'thumbnail' ? `${compositeHash}-thumbnail.webp` : `${compositeHash}.png`),
-  )
-  if (!target) {
-    return
-  }
-
-  const response = await fetch(buildImageDownloadUrl(compositeHash, type), {
-    method: 'GET',
-    credentials: 'include',
-    headers: {
-      Accept: type === 'thumbnail' ? 'image/webp' : 'application/octet-stream',
-    },
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(text || `Single download failed: ${response.status}`)
-  }
-
-  const blob = await response.blob()
-  const fallbackFileName = getSingleImageDownloadFallbackName(compositeHash, type, response.headers.get('Content-Type'))
-  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
-
-  await saveDownloadBlob(target, blob, fileName)
-}
-
 export async function downloadImageSelection(
   compositeHashes: string[],
   type: ImageDownloadType = 'original',
-  options?: { suggestedFileName?: string },
+  source?: SingleMediaDownloadSource,
 ) {
   if (compositeHashes.length === 0) {
     return
   }
 
   if (compositeHashes.length === 1) {
-    await downloadSingleImage(compositeHashes[0], type, options?.suggestedFileName)
+    const compositeHash = compositeHashes[0]
+    await downloadSingleMedia(
+      buildImageDownloadUrl(compositeHash, type),
+      compositeHash,
+      type,
+      source,
+      'Single download failed',
+    )
     return
   }
 
   const fallbackFileName = `conai-images-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`
-  const target = await prepareDownloadTarget(options?.suggestedFileName ?? fallbackFileName)
+  const target = await prepareDownloadTarget(fallbackFileName)
   if (!target) {
     return
   }

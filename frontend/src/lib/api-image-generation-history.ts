@@ -1,10 +1,11 @@
 import { buildApiUrl } from '@/lib/api-client'
 import {
+  downloadSingleMedia,
   getDownloadFileName,
-  getSingleImageDownloadFallbackName,
   prepareDownloadTarget,
   readDownloadBlob,
   saveDownloadBlob,
+  type SingleMediaDownloadSource,
 } from '@/lib/download-utils'
 import { requestJson } from './api-image-generation-request'
 import type { ImageDownloadType } from './api-images'
@@ -100,7 +101,7 @@ export async function cleanupFailedGenerationHistory() {
 export async function downloadGenerationHistorySelection(
   historyIds: number[],
   type: ImageDownloadType = 'original',
-  options?: { suggestedFileName?: string },
+  source?: SingleMediaDownloadSource,
 ) {
   if (historyIds.length === 0) {
     return
@@ -108,35 +109,19 @@ export async function downloadGenerationHistorySelection(
 
   if (historyIds.length === 1) {
     const historyId = historyIds[0]
-    const suggestedFileName = options?.suggestedFileName
-      ?? (type === 'thumbnail' ? `generation-history-${historyId}-thumbnail.webp` : `generation-history-${historyId}.png`)
-    const target = await prepareDownloadTarget(suggestedFileName)
-    if (!target) {
-      return
-    }
-
     const mediaPath = type === 'thumbnail' ? 'thumbnail' : 'file'
-    const response = await fetch(buildApiUrl(`/api/generation-history/${historyId}/${mediaPath}`), {
-      credentials: 'include',
-      headers: {
-        Accept: type === 'thumbnail' ? 'image/webp' : 'application/octet-stream',
-      },
-    })
-
-    const blob = await readDownloadBlob(response, `Generation history download failed: ${response.status}`)
-    const fallbackFileName = getSingleImageDownloadFallbackName(
+    await downloadSingleMedia(
+      buildApiUrl(`/api/generation-history/${historyId}/${mediaPath}`),
       `generation-history-${historyId}`,
       type,
-      response.headers.get('Content-Type'),
+      source,
+      'Generation history download failed',
     )
-    const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
-
-    await saveDownloadBlob(target, blob, fileName)
     return
   }
 
   const fallbackFileName = `conai-generation-history-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`
-  const target = await prepareDownloadTarget(options?.suggestedFileName ?? fallbackFileName)
+  const target = await prepareDownloadTarget(fallbackFileName)
   if (!target) {
     return
   }

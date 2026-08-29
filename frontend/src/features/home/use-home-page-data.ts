@@ -209,13 +209,19 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   })
 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
-  const selectedCompositeHashes = useMemo(
-    () =>
-      visibleImages
-        .filter((image) => selectedIdSet.has(String(image.composite_hash ?? image.id)))
-        .map((image) => image.composite_hash)
-        .filter((value): value is string => typeof value === 'string' && value.length > 0),
+  const selectedDownloadImages = useMemo(
+    () => visibleImages.filter((image) => (
+      selectedIdSet.has(String(image.composite_hash ?? image.id))
+      && typeof image.composite_hash === 'string'
+      && image.composite_hash.length > 0
+    )),
     [visibleImages, selectedIdSet],
+  )
+  const selectedCompositeHashes = useMemo(
+    () => selectedDownloadImages
+      .map((image) => image.composite_hash)
+      .filter((compositeHash): compositeHash is string => typeof compositeHash === 'string'),
+    [selectedDownloadImages],
   )
 
   const emptyStateTitle = isSearchMode ? t('useHomePageData.noSearchResults') : t('useHomePageData.noImagesToShowYet')
@@ -245,7 +251,11 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
 
     try {
       setIsDownloading(true)
-      await downloadImageSelection(selectedCompositeHashes, type)
+      const selectedImage = selectedDownloadImages.length === 1 ? selectedDownloadImages[0] : null
+      await downloadImageSelection(selectedCompositeHashes, type, selectedImage ? {
+        originalFilePath: selectedImage.original_file_path,
+        contentType: selectedImage.mime_type,
+      } : undefined)
     } catch (error) {
       notifyError(error instanceof Error ? error.message : t('useHomePageData.failedToDownloadSelectedItems'))
     } finally {

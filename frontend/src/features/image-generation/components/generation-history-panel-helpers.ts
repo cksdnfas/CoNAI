@@ -191,7 +191,7 @@ export function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse[
   return {
     id: `generation-history-${record.id}`,
     composite_hash: hasLinkedImage ? imageSource.compositeHash : null,
-    original_file_path: null,
+    original_file_path: record.actual_file_name ?? null,
     thumbnail_url: hasLinkedImage ? `${historyMediaBaseUrl}/thumbnail?v=${historyMediaVersion}` : null,
     image_url: hasLinkedImage ? `${historyMediaBaseUrl}/file?v=${historyMediaVersion}` : null,
     detail_url: hasLinkedImage ? `${historyMediaBaseUrl}/image` : null,

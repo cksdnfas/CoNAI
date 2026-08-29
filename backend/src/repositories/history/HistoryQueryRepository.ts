@@ -27,6 +27,7 @@ type HistoryResultMediaView = {
   actual_width: number | null;
   actual_height: number | null;
   actual_mime_type: string | null;
+  actual_file_name: string | null;
   result_file_status: 'active' | 'missing' | 'deleted' | null;
   rating_score: number | null;
 };
@@ -36,6 +37,7 @@ const EMPTY_HISTORY_RESULT_MEDIA_VIEW: HistoryResultMediaView = {
   actual_width: null,
   actual_height: null,
   actual_mime_type: null,
+  actual_file_name: null,
   result_file_status: null,
   rating_score: null,
 };
@@ -45,6 +47,7 @@ type HistoryResultMediaRow = {
   file_id: number;
   file_status: 'active' | 'missing' | 'deleted' | null;
   mime_type: string | null;
+  original_file_path: string | null;
   media_composite_hash: string | null;
   media_width: number | null;
   media_height: number | null;
@@ -339,6 +342,7 @@ export class HistoryQueryRepository {
           matched_file.id as file_id,
           matched_file.file_status as file_status,
           matched_file.mime_type as mime_type,
+          matched_file.original_file_path as original_file_path,
           im.composite_hash as media_composite_hash,
           im.width as media_width,
           im.height as media_height,
@@ -364,6 +368,9 @@ export class HistoryQueryRepository {
         actual_width: isActiveFile ? row.media_width ?? null : null,
         actual_height: isActiveFile ? row.media_height ?? null : null,
         actual_mime_type: isActiveFile ? row.mime_type ?? null : null,
+        actual_file_name: isActiveFile
+          ? row.original_file_path?.replace(/\\/g, '/').split('/').at(-1) ?? null
+          : null,
         result_file_status: row.file_status ?? null,
         rating_score: isActiveFile ? row.media_rating_score ?? null : null,
       });

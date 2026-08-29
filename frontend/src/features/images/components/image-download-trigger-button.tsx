@@ -77,14 +77,14 @@ export function ImageDownloadTriggerButton({
 
     try {
       setIsDownloading(true)
-      const originalName = getDownloadName(image?.original_file_path, compositeHash)
-      const suggestedFileName = type === 'thumbnail'
-        ? `${originalName.replace(/\.[^/.]+$/, '') || compositeHash}-thumbnail.webp`
-        : originalName
+      const downloadSource = {
+        originalFilePath: image?.original_file_path,
+        contentType: image?.mime_type,
+      }
       if (generationHistoryId) {
-        await downloadGenerationHistorySelection([generationHistoryId], type, { suggestedFileName })
+        await downloadGenerationHistorySelection([generationHistoryId], type, downloadSource)
       } else {
-        await downloadImageSelection([compositeHash], type, { suggestedFileName })
+        await downloadImageSelection([compositeHash], type, downloadSource)
       }
       setIsOpen(false)
     } catch (error) {
