@@ -27,6 +27,7 @@ type MiniMaxH3DirectorMediaCardProps = {
   onRequestReplace: () => void
   onDelete: () => void
   onReplaceFile: (file: File) => void
+  onSourceDimensionsChange: (width: number, height: number) => void
   onSortStart: () => void
   onSortOver: (targetItemId: string) => void
   onSortEnd: () => void
@@ -40,11 +41,11 @@ function isInteractiveTarget(target: EventTarget | null) {
 function MiniMaxDirectorMediaPreview({
   item,
   asset,
-  onAspectRatioChange,
+  onSourceDimensionsChange,
 }: {
   item: MiniMaxH3DirectorTimelineItem
   asset?: WorkflowInputAssetRef
-  onAspectRatioChange: (aspectRatio: string | null) => void
+  onSourceDimensionsChange: (width: number, height: number) => void
 }) {
   const src = asset ? buildWorkflowInputAssetUrl(asset) : null
   const [videoPoster, setVideoPoster] = useState<string | null>(null)
@@ -86,8 +87,7 @@ function MiniMaxDirectorMediaPreview({
         alt={asset?.fileName || item.value}
         draggable={false}
         className="block h-auto max-h-64 w-auto max-w-full object-contain"
-        onLoad={(event) => onAspectRatioChange(formatMiniMaxH3DirectorAspectRatio(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight))}
-        onError={() => onAspectRatioChange(null)}
+        onLoad={(event) => onSourceDimensionsChange(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight)}
       />
     )
   }
@@ -102,8 +102,7 @@ function MiniMaxDirectorMediaPreview({
         playsInline
         draggable={false}
         className="block h-auto max-h-64 w-auto max-w-full bg-black object-contain"
-        onLoadedMetadata={(event) => onAspectRatioChange(formatMiniMaxH3DirectorAspectRatio(event.currentTarget.videoWidth, event.currentTarget.videoHeight))}
-        onError={() => onAspectRatioChange(null)}
+        onLoadedMetadata={(event) => onSourceDimensionsChange(event.currentTarget.videoWidth, event.currentTarget.videoHeight)}
       />
     )
   }
@@ -129,6 +128,7 @@ export function MiniMaxH3DirectorMediaCard({
   onRequestReplace,
   onDelete,
   onReplaceFile,
+  onSourceDimensionsChange,
   onSortStart,
   onSortOver,
   onSortEnd,
@@ -138,10 +138,15 @@ export function MiniMaxH3DirectorMediaCard({
   const pointerRef = useRef<{ id: number; x: number; y: number; activated: boolean } | null>(null)
   const suppressClickRef = useRef(false)
   const aspectRatioSourceKey = `${item.type}:${asset?.id ?? item.value}`
+  const storedAspectRatio = formatMiniMaxH3DirectorAspectRatio(Number(item.source_width), Number(item.source_height))
   const [aspectRatioState, setAspectRatioState] = useState<{ sourceKey: string; value: string } | null>(null)
-  const aspectRatio = aspectRatioState?.sourceKey === aspectRatioSourceKey ? aspectRatioState.value : null
-  const handleAspectRatioChange = (nextAspectRatio: string | null) => {
+  const aspectRatio = storedAspectRatio ?? (aspectRatioState?.sourceKey === aspectRatioSourceKey ? aspectRatioState.value : null)
+  const handleSourceDimensionsChange = (width: number, height: number) => {
+    const nextAspectRatio = formatMiniMaxH3DirectorAspectRatio(width, height)
     setAspectRatioState(nextAspectRatio ? { sourceKey: aspectRatioSourceKey, value: nextAspectRatio } : null)
+    if (width > 0 && height > 0 && (Number(item.source_width) !== width || Number(item.source_height) !== height)) {
+      onSourceDimensionsChange(width, height)
+    }
   }
 
   const cancelLongPress = () => {
@@ -272,7 +277,7 @@ export function MiniMaxH3DirectorMediaCard({
       )}
     >
       <div className="relative flex min-h-28 max-h-64 w-full items-center justify-center overflow-hidden bg-black/20 p-1">
-        <MiniMaxDirectorMediaPreview item={item} asset={asset} onAspectRatioChange={handleAspectRatioChange} />
+        <MiniMaxDirectorMediaPreview item={item} asset={asset} onSourceDimensionsChange={handleSourceDimensionsChange} />
         <Badge className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate bg-background/88">{label}</Badge>
       </div>
 

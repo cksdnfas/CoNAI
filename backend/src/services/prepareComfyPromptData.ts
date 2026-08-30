@@ -129,7 +129,7 @@ function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null 
 
 const MINIMAX_H3_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
 const MINIMAX_H3_DIRECTOR_META_KEY = '__conai_minimax_h3_director'
-const MINIMAX_H3_DIRECTOR_MODES = new Set(['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA'])
+const MINIMAX_H3_DIRECTOR_MODES = new Set(['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA', 'Image Inpaint'])
 
 function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -159,16 +159,18 @@ function createMiniMaxBuilderState(mode: string, duration: number) {
     version: mode === 'REF2VA' ? 2 : 1,
     mode,
     duration,
+    prompt_mode: 'structured',
+    simple_prompt: '',
     imd: '',
     soundscape: '',
-    music: 'N/A',
+    music: '',
     ref: {
       subject_definitions: '',
       summary: '',
       retention_analysis: '',
       detailed_description: '',
       soundscape: '',
-      music: 'N/A',
+      music: '',
       ...(mode === 'REF2VA' ? {} : {
         subject_defs: [],
         summary_types: ['reference generation'],
@@ -179,6 +181,18 @@ function createMiniMaxBuilderState(mode: string, duration: number) {
       }),
     },
   }
+}
+
+function hasMiniMaxBuilderContent(builder: Record<string, any>) {
+  if (typeof builder.simple_prompt === 'string' && builder.simple_prompt.trim()) return true
+  if (typeof builder.imd === 'string' && builder.imd.trim()) return true
+  if (typeof builder.soundscape === 'string' && builder.soundscape.trim()) return true
+  if (typeof builder.music === 'string' && builder.music.trim()) return true
+  const ref = isRecord(builder.ref) ? builder.ref : {}
+  return ['subject_definitions', 'summary', 'retention_analysis', 'detailed_description', 'soundscape', 'music']
+    .some((key) => typeof ref[key] === 'string' && ref[key].trim())
+    || (Array.isArray(ref.subject_defs) && ref.subject_defs.length > 0)
+    || (Array.isArray(ref.retention) && ref.retention.length > 0)
 }
 
 function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Record<string, any>) {
@@ -195,9 +209,11 @@ function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Reco
     version: mode === 'REF2VA' ? 2 : 1,
     mode,
     duration,
+    prompt_mode: source.prompt_mode === 'simple' || source.prompt_mode === 'structured' ? source.prompt_mode : 'structured',
+    simple_prompt: typeof source.simple_prompt === 'string' ? source.simple_prompt : '',
     imd: typeof source.imd === 'string' ? source.imd : '',
     soundscape: typeof source.soundscape === 'string' ? source.soundscape : '',
-    music: typeof source.music === 'string' ? source.music : 'N/A',
+    music: typeof source.music === 'string' ? source.music : '',
     ref: {
       ...defaults.ref,
       ...sourceRef,
@@ -206,7 +222,7 @@ function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Reco
       retention_analysis: typeof sourceRef.retention_analysis === 'string' ? sourceRef.retention_analysis : '',
       detailed_description: typeof sourceRef.detailed_description === 'string' ? sourceRef.detailed_description : '',
       soundscape: typeof sourceRef.soundscape === 'string' ? sourceRef.soundscape : '',
-      music: typeof sourceRef.music === 'string' ? sourceRef.music : 'N/A',
+      music: typeof sourceRef.music === 'string' ? sourceRef.music : '',
     },
   }
 
@@ -242,7 +258,7 @@ function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Reco
       .join('\n')
   }
 
-  const legacyPrompt = [
+  const assembledLegacyPrompt = [
     typeof value.prompt === 'string' ? value.prompt.trim() : '',
     ...(Array.isArray(timeline.prompt_blocks)
       ? timeline.prompt_blocks
@@ -251,12 +267,11 @@ function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Reco
           .map((block: Record<string, any>) => block.text.trim())
       : []),
   ].filter(Boolean).join('\n')
-  if (legacyPrompt) {
-    if (mode === 'REF2VA' && !builder.ref.detailed_description.trim()) {
-      builder.ref.detailed_description = legacyPrompt
-    } else if (mode !== 'REF2VA' && !builder.imd.trim()) {
-      builder.imd = legacyPrompt
-    }
+  const legacyPrompt = [timeline.resolved_prompt, timeline.full_prompt, assembledLegacyPrompt]
+    .find((candidate) => typeof candidate === 'string' && candidate.trim())
+  if (typeof legacyPrompt === 'string' && legacyPrompt.trim() && !hasMiniMaxBuilderContent(builder)) {
+    builder.prompt_mode = 'simple'
+    builder.simple_prompt = legacyPrompt.trim()
   }
   return builder
 }
@@ -273,6 +288,12 @@ function getMiniMaxDirectorActiveItems(mode: unknown, timeline: Record<string, a
   }
   if (mode === 'T2VA') {
     return []
+  }
+  if (mode === 'Image Inpaint') {
+    return ordered
+      .filter(({ item }) => item.type === 'image')
+      .slice(0, 1)
+      .map(({ item }) => item)
   }
   const frameSlots = mode === 'I2VA' ? [0] : mode === 'L2VA' ? [1] : [0, 1]
   return ordered
@@ -314,6 +335,15 @@ async function prepareMiniMaxDirectorNodeValue(
   const nextItems = Array.isArray(timeline.items)
     ? timeline.items.map((item: unknown) => isRecord(item) ? { ...item } : item)
     : []
+  if (value.mode === 'Image Inpaint') {
+    const enabledItems = nextItems.filter((item): item is Record<string, any> => isRecord(item) && item.enabled !== false)
+    if (enabledItems.some((item) => item.type !== 'image')) {
+      throw new Error(`MiniMax H3 Director field ${fieldId} Image Inpaint does not support video or audio references`)
+    }
+    if (enabledItems.length !== 1) {
+      throw new Error(`MiniMax H3 Director field ${fieldId} Image Inpaint requires exactly one enabled image`)
+    }
+  }
   const builderState = normalizeMiniMaxBuilderState(value, timeline)
   const nextTimeline = { ...timeline, version: 1, items: nextItems, builder_state: builderState }
   const activeItemIds = new Set(getMiniMaxDirectorActiveItems(value.mode, nextTimeline).map((item) => String(item.id ?? '')))

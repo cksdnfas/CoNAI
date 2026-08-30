@@ -25,6 +25,7 @@ const MINIMAX_H3_DIRECTOR_VISIBLE_FIELD_OPTIONS: Array<{
   { key: 'width', ko: '너비', en: 'Width' },
   { key: 'height', ko: '높이', en: 'Height' },
   { key: 'duration', ko: '길이', en: 'Duration' },
+  { key: 'frame_rate', ko: '프레임 레이트', en: 'Frame rate' },
   { key: 'ref_image_size', ko: '참조 이미지 크기', en: 'Reference image size' },
   { key: 'timeline_data', ko: '참조 미디어', en: 'Reference media' },
   { key: 'prompt', ko: '프롬프트 빌더', en: 'Prompt builder' },
@@ -34,6 +35,7 @@ const MINIMAX_H3_DIRECTOR_NUMERIC_BOUND_OPTIONS = [
   { key: 'width', ko: '너비', en: 'Width' },
   { key: 'height', ko: '높이', en: 'Height' },
   { key: 'duration', ko: '길이', en: 'Duration', min: 1, max: 60 },
+  { key: 'frame_rate', ko: '프레임 레이트', en: 'Frame rate', min: 0.1, max: 240 },
 ] as const
 
 type ComfyWorkflowMarkedFieldsEditorProps = {

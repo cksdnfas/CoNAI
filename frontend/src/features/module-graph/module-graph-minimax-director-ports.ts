@@ -4,7 +4,7 @@ import type {
 } from '@/lib/api-module-graph'
 
 const MINIMAX_DIRECTOR_NODE_EDITOR = 'minimax_h3_director_dasiwa'
-const MINIMAX_DIRECTOR_MODES = new Set(['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA'])
+const MINIMAX_DIRECTOR_MODES = new Set(['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA', 'Image Inpaint'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -57,8 +57,8 @@ export function getMiniMaxDirectorInputPort(
 }
 
 export function resolveMiniMaxDirectorLegacyOutputPortKey(module: ModuleDefinitionRecord, portKey: string) {
-  if (portKey !== 'image') return portKey
+  if (portKey !== 'image' && portKey !== 'video') return portKey
   const isDirectorModule = module.ui_schema?.some((field) => field.node_editor === MINIMAX_DIRECTOR_NODE_EDITOR) === true
-  const hasVideoOutput = module.output_ports.some((port) => port.key === 'video' && port.data_type === 'video')
-  return isDirectorModule && hasVideoOutput ? 'video' : portKey
+  const hasMediaOutput = module.output_ports.some((port) => port.key === 'media' && port.data_type === 'any')
+  return isDirectorModule && hasMediaOutput ? 'media' : portKey
 }

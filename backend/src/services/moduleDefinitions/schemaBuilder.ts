@@ -81,14 +81,14 @@ export function createDefaultOutputPorts(
     ];
   }
 
-  const isVideoWorkflow = engineType === 'comfyui' && markedFields.some(isMiniMaxDirectorField);
+  const isMiniMaxDirectorWorkflow = engineType === 'comfyui' && markedFields.some(isMiniMaxDirectorField);
 
   return [
     {
-      key: isVideoWorkflow ? 'video' : 'image',
-      label: isVideoWorkflow ? 'Workflow Video' : engineType === 'comfyui' ? 'Workflow Image' : 'Generated Image',
+      key: isMiniMaxDirectorWorkflow ? 'media' : 'image',
+      label: isMiniMaxDirectorWorkflow ? 'Workflow Media' : engineType === 'comfyui' ? 'Workflow Image' : 'Generated Image',
       direction: 'output',
-      data_type: isVideoWorkflow ? 'video' : 'image',
+      data_type: isMiniMaxDirectorWorkflow ? 'any' : 'image',
       required: true,
       multiple: false,
     },

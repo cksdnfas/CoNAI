@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Copy, Eye, Plus, Sparkles } from 'lucide-react'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -48,11 +49,26 @@ export function MiniMaxH3DirectorPromptBuilder({
     const shotNumber = window.prompt(t({ ko: '샷 번호', en: 'Shot number' }), '1')?.trim()
     if (!shotNumber) return
     const marker = `[Shot ${shotNumber}] `
-    if (state.mode === 'REF2VA') {
+    if (state.prompt_mode === 'simple') {
+      patchState({ simple_prompt: `${state.simple_prompt}${state.simple_prompt ? '\n' : ''}${marker}` })
+    } else if (state.mode === 'REF2VA') {
       patchRef({ detailed_description: `${state.ref.detailed_description}${state.ref.detailed_description ? '\n' : ''}${marker}` })
     } else {
       patchState({ imd: `${state.imd}${state.imd ? '\n' : ''}${marker}` })
     }
+  }
+  const setPromptMode = (nextPromptMode: string) => {
+    if (nextPromptMode !== 'simple' && nextPromptMode !== 'structured') return
+    if (nextPromptMode === state.prompt_mode) return
+    if (nextPromptMode === 'simple') {
+      onChange({
+        ...state,
+        prompt_mode: 'simple',
+        simple_prompt: buildMiniMaxH3DirectorPrompt({ ...state, prompt_mode: 'structured' }),
+      })
+      return
+    }
+    patchState({ prompt_mode: 'structured' })
   }
 
   return <>
@@ -77,7 +93,31 @@ export function MiniMaxH3DirectorPromptBuilder({
         </div>
       </div>
 
-      {state.mode === 'REF2VA' ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {renderInputPort?.('prompt.mode')}
+        <span className="text-xs font-medium text-muted-foreground">{t({ ko: '프롬프트 모드', en: 'Prompt mode' })}</span>
+        <SegmentedControl
+          size="xs"
+          value={state.prompt_mode}
+          items={[
+            { value: 'simple', label: t({ ko: '간단', en: 'Simple' }) },
+            { value: 'structured', label: t({ ko: '구조화', en: 'Structured' }) },
+          ]}
+          onChange={setPromptMode}
+        />
+      </div>
+
+      {state.prompt_mode === 'simple' ? (
+        renderPortedField('prompt.simple_prompt', <FormField label={t({ ko: '프롬프트', en: 'Prompt' })}>
+          <Textarea
+            rows={10}
+            value={state.simple_prompt}
+            placeholder={t({ ko: 'MiniMax H3에 전달할 전체 프롬프트를 작성해줘.', en: 'Write the complete prompt for MiniMax H3.' })}
+            className={cn(invalid && 'border-destructive')}
+            onChange={(event) => patchState({ simple_prompt: event.target.value })}
+          />
+        </FormField>)
+      ) : state.mode === 'REF2VA' ? (
         <div className="grid gap-4">
           {renderPortedField('prompt.subject_definitions', <FormField label="subject_definitions">
             <Textarea rows={4} value={state.ref.subject_definitions} placeholder="<Subject 1> ... / <Picture 1> ..." onChange={(event) => patchRef({ subject_definitions: event.target.value })} />

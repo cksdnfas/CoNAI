@@ -9,9 +9,77 @@ export const MINIMAX_H3_DIRECTOR_NODE_INPUT_KEY = '__minimax_h3_director_node__'
 export const MINIMAX_H3_DIRECTOR_META_KEY = '__conai_minimax_h3_director'
 export const MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS = 1
 export const MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS = 60
+export const MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN = 0.1
+export const MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX = 240
+export const MINIMAX_H3_DIRECTOR_CANVAS_MULTIPLE = 32
 
-export const MINIMAX_H3_DIRECTOR_MODES = ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA'] as const
+export const MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS = [
+  ['auto', 'Auto'],
+  ['1:1', '1:1'],
+  ['16:9', '16:9'],
+  ['9:16', '9:16'],
+  ['2:1', '2:1'],
+  ['1:2', '1:2'],
+  ['3:2', '3:2'],
+  ['2:3', '2:3'],
+  ['4:3', '4:3'],
+  ['3:4', '3:4'],
+  ['4:5', '4:5'],
+  ['5:4', '5:4'],
+  ['custom', 'CUSTOM'],
+] as const
+
+export const MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS = {
+  '144p': 0.0352,
+  '240p': 0.0977,
+  '360p': 0.22,
+  '480p': 0.391,
+  '540p': 0.494,
+  '576p': 0.396,
+  '720p': 0.879,
+  '900p': 1.373,
+  '1024p': 1,
+  '1080p': 1.978,
+  '1152p': 2.25,
+  '1440p': 3.516,
+  '2160p': 7.91,
+  '2K': 3.906,
+  '4K': 7.91,
+  '0.26 MP - Preview': 0.26,
+  '0.36 MP - Small': 0.36,
+  '0.52 MP - SD': 0.52,
+  '0.65 MP - Balanced': 0.65,
+  '0.83 MP - HD': 0.83,
+  '1.00 MP - 1024p': 1,
+  '1.05 MP - HD+': 1.05,
+  '1.20 MP - HD++': 1.2,
+  '1.35 MP - 2K lite': 1.35,
+  '1.55 MP - 2K': 1.55,
+  '1.65 MP - 2K+': 1.65,
+  '1.75 MP - QHD': 1.75,
+  '2.10 MP - FHD': 2.1,
+  '3.30 MP - QHD+': 3.3,
+  '4.75 MP - 2K Pro': 4.75,
+  '6.50 MP - Production': 6.5,
+  '8.30 MP - UHD': 8.3,
+} as const
+
+export const MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS = [
+  'Off',
+  'Auto',
+  'Target',
+  'Fit',
+  'Fill and crop',
+  'Fit and pad',
+  'Long side with divisible crop',
+] as const
+
+export const MINIMAX_H3_DIRECTOR_MODES = ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA', 'Image Inpaint'] as const
 export type MiniMaxH3DirectorMode = typeof MINIMAX_H3_DIRECTOR_MODES[number]
+export type MiniMaxH3DirectorPromptMode = 'simple' | 'structured'
+export type MiniMaxH3DirectorAspect = typeof MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS[number][0]
+export type MiniMaxH3DirectorResolutionPreset = 'auto' | 'custom' | keyof typeof MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS
+export type MiniMaxH3DirectorInputScaling = typeof MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS[number]
 export type MiniMaxH3DirectorMediaType = 'image' | 'video' | 'audio'
 export type MiniMaxH3DirectorVideoMode = 'video' | 'audio' | 'video_audio'
 export type MiniMaxH3DirectorInputLink = [string | number, number]
@@ -19,12 +87,29 @@ export type MiniMaxH3DirectorGraphInputKey =
   | 'width'
   | 'height'
   | 'duration'
+  | 'frame_rate'
   | 'ref_image_size'
   | 'start_image'
   | 'end_image'
   | 'reference_image'
   | 'reference_video'
   | 'reference_audio'
+  | 'resolution.aspect'
+  | 'resolution.resolution'
+  | 'resolution.input_scaling'
+  | 'resolution.custom_aspect_w'
+  | 'resolution.custom_aspect_h'
+  | 'resolution.custom_mode'
+  | 'resolution.custom_mp'
+  | 'resolution.custom_width'
+  | 'resolution.custom_height'
+  | 'postprocess.simple.enabled'
+  | 'postprocess.model.enabled'
+  | 'postprocess.model.model_name'
+  | 'postprocess.rtx.enabled'
+  | `postprocess.rtx.${string}`
+  | 'prompt.mode'
+  | 'prompt.simple_prompt'
   | 'prompt.imd'
   | 'prompt.subject_definitions'
   | 'prompt.summary'
@@ -37,6 +122,7 @@ export const MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS = [
   'width',
   'height',
   'duration',
+  'frame_rate',
   'ref_image_size',
   'timeline_data',
   'prompt',
@@ -58,7 +144,49 @@ export type MiniMaxH3DirectorTimelineItem = {
   media_mode?: MiniMaxH3DirectorVideoMode
   prompt?: string
   waveform_peaks?: number[]
+  source_width?: number
+  source_height?: number
   [key: string]: unknown
+}
+
+export type MiniMaxH3DirectorResolutionState = {
+  aspect: MiniMaxH3DirectorAspect
+  resolution: MiniMaxH3DirectorResolutionPreset
+  input_scaling: MiniMaxH3DirectorInputScaling
+  custom_aspect_w: number
+  custom_aspect_h: number
+  custom_mode: 'mp' | 'fixed'
+  custom_mp: number
+  custom_width: number
+  custom_height: number
+}
+
+export type MiniMaxH3DirectorRtxSettings = {
+  enabled: boolean
+  denoise: boolean
+  denoise_quality: 'Low' | 'Medium' | 'High' | 'Ultra'
+  deblur: boolean
+  deblur_quality: 'Low' | 'Medium' | 'High' | 'Ultra'
+  upscale: 'Off' | 'VSR' | 'High Bitrate'
+  upscale_quality: 'Low' | 'Medium' | 'High' | 'Ultra'
+  resize_type: 'Keep Ratio' | 'Manual' | 'Preset Ratio' | 'Scale' | 'Same Size'
+  scale: number
+  megapixels: number
+  width: number
+  height: number
+  divisible_by: '8' | '16' | '32' | '64' | '128'
+  ratio_preset: '1:1' | '4:3' | '3:2' | '16:9' | '21:9'
+  resize_method: 'Center Crop (Fill)' | 'Letterbox (Fit)'
+  device_id: number
+  empty_cache: boolean
+  use_mmap: boolean
+  auto_unload_models: boolean
+}
+
+export type MiniMaxH3DirectorPostprocessState = {
+  simple: { enabled: boolean }
+  model: { enabled: boolean; model_name: string }
+  rtx: MiniMaxH3DirectorRtxSettings
 }
 
 export type MiniMaxH3DirectorPromptBlock = {
@@ -75,6 +203,8 @@ export type MiniMaxH3DirectorTimeline = {
   items: MiniMaxH3DirectorTimelineItem[]
   prompt_blocks: MiniMaxH3DirectorPromptBlock[]
   builder_state?: Record<string, unknown>
+  resolution?: MiniMaxH3DirectorResolutionState
+  postprocess?: MiniMaxH3DirectorPostprocessState
   [key: string]: unknown
 }
 
@@ -98,6 +228,8 @@ export type MiniMaxH3DirectorBuilderState = {
   version: number
   mode: MiniMaxH3DirectorMode
   duration: number
+  prompt_mode: MiniMaxH3DirectorPromptMode
+  simple_prompt: string
   imd: string
   soundscape: string
   music: string
@@ -113,7 +245,7 @@ export type MiniMaxH3DirectorIssue = {
   code: string
   ko: string
   en: string
-  field?: 'mode' | 'width' | 'height' | 'duration' | 'timeline' | 'prompt'
+  field?: 'mode' | 'width' | 'height' | 'duration' | 'frame_rate' | 'timeline' | 'prompt'
   itemId?: string
 }
 
@@ -129,7 +261,7 @@ const DEFAULT_REF_BUILDER_STATE: MiniMaxH3DirectorBuilderRefState = {
   retention_analysis: '',
   detailed_description: '',
   soundscape: '',
-  music: 'N/A',
+  music: '',
 }
 
 const IMAGE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'heic', 'heif', 'jpeg', 'jpg', 'jxl', 'png', 'tif', 'tiff', 'webp'])
@@ -152,6 +284,117 @@ export function isMiniMaxH3DirectorInputLink(value: unknown): value is MiniMaxH3
 function asFiniteNumber(value: unknown, fallback: number) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function isMiniMaxAspect(value: unknown): value is MiniMaxH3DirectorAspect {
+  return typeof value === 'string' && MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS.some(([candidate]) => candidate === value)
+}
+
+function isMiniMaxResolutionPreset(value: unknown): value is MiniMaxH3DirectorResolutionPreset {
+  return value === 'auto'
+    || value === 'custom'
+    || (typeof value === 'string' && Object.prototype.hasOwnProperty.call(MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS, value))
+}
+
+function isMiniMaxInputScaling(value: unknown): value is MiniMaxH3DirectorInputScaling {
+  return typeof value === 'string' && MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS.includes(value as MiniMaxH3DirectorInputScaling)
+}
+
+export function normalizeMiniMaxH3DirectorResolution(value: unknown): MiniMaxH3DirectorResolutionState {
+  const source = isRecord(value) ? value : {}
+  return {
+    aspect: isMiniMaxAspect(source.aspect) ? source.aspect : DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION.aspect,
+    resolution: isMiniMaxResolutionPreset(source.resolution) ? source.resolution : DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION.resolution,
+    input_scaling: isMiniMaxInputScaling(source.input_scaling) ? source.input_scaling : DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION.input_scaling,
+    custom_aspect_w: Math.max(1, asFiniteNumber(source.custom_aspect_w, DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION.custom_aspect_w)),
+    custom_aspect_h: Math.max(1, asFiniteNumber(source.custom_aspect_h, DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION.custom_aspect_h)),
+    custom_mode: source.custom_mode === 'fixed' ? 'fixed' : 'mp',
+    custom_mp: Math.max(0.01, asFiniteNumber(source.custom_mp, DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION.custom_mp)),
+    custom_width: Math.max(16, asFiniteNumber(source.custom_width, DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION.custom_width)),
+    custom_height: Math.max(16, asFiniteNumber(source.custom_height, DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION.custom_height)),
+  }
+}
+
+export function normalizeMiniMaxH3DirectorPostprocess(value: unknown): MiniMaxH3DirectorPostprocessState {
+  const source = isRecord(value) ? value : {}
+  const simple = isRecord(source.simple) ? source.simple : {}
+  const model = isRecord(source.model) ? source.model : {}
+  const rtx = isRecord(source.rtx) ? source.rtx : {}
+  const quality = (candidate: unknown) => candidate === 'Low' || candidate === 'Medium' || candidate === 'High' || candidate === 'Ultra' ? candidate : 'Ultra'
+  return {
+    simple: { enabled: simple.enabled === true },
+    model: {
+      enabled: model.enabled === true,
+      model_name: typeof model.model_name === 'string' && model.model_name.trim()
+        ? model.model_name
+        : DEFAULT_MINIMAX_H3_DIRECTOR_POSTPROCESS.model.model_name,
+    },
+    rtx: {
+      enabled: rtx.enabled === true,
+      denoise: rtx.denoise !== false,
+      denoise_quality: quality(rtx.denoise_quality),
+      deblur: rtx.deblur !== false,
+      deblur_quality: quality(rtx.deblur_quality),
+      upscale: rtx.upscale === 'Off' || rtx.upscale === 'High Bitrate' ? rtx.upscale : 'VSR',
+      upscale_quality: quality(rtx.upscale_quality),
+      resize_type: rtx.resize_type === 'Keep Ratio' || rtx.resize_type === 'Manual' || rtx.resize_type === 'Preset Ratio' || rtx.resize_type === 'Same Size' ? rtx.resize_type : 'Scale',
+      scale: Math.min(4, Math.max(1, asFiniteNumber(rtx.scale, DEFAULT_MINIMAX_H3_DIRECTOR_POSTPROCESS.rtx.scale))),
+      megapixels: Math.min(64, Math.max(0.01, asFiniteNumber(rtx.megapixels, DEFAULT_MINIMAX_H3_DIRECTOR_POSTPROCESS.rtx.megapixels))),
+      width: Math.min(8192, Math.max(64, asFiniteNumber(rtx.width, DEFAULT_MINIMAX_H3_DIRECTOR_POSTPROCESS.rtx.width))),
+      height: Math.min(8192, Math.max(64, asFiniteNumber(rtx.height, DEFAULT_MINIMAX_H3_DIRECTOR_POSTPROCESS.rtx.height))),
+      divisible_by: rtx.divisible_by === '8' || rtx.divisible_by === '16' || rtx.divisible_by === '64' || rtx.divisible_by === '128' ? rtx.divisible_by : '32',
+      ratio_preset: rtx.ratio_preset === '1:1' || rtx.ratio_preset === '4:3' || rtx.ratio_preset === '3:2' || rtx.ratio_preset === '21:9' ? rtx.ratio_preset : '16:9',
+      resize_method: rtx.resize_method === 'Letterbox (Fit)' ? 'Letterbox (Fit)' : 'Center Crop (Fill)',
+      device_id: Math.min(8, Math.max(0, Math.trunc(asFiniteNumber(rtx.device_id, DEFAULT_MINIMAX_H3_DIRECTOR_POSTPROCESS.rtx.device_id)))),
+      empty_cache: rtx.empty_cache === true,
+      use_mmap: rtx.use_mmap === true,
+      auto_unload_models: rtx.auto_unload_models !== false,
+    },
+  }
+}
+
+function snapMiniMaxCanvas(value: number) {
+  return Math.max(MINIMAX_H3_DIRECTOR_CANVAS_MULTIPLE, Math.round(value / MINIMAX_H3_DIRECTOR_CANVAS_MULTIPLE) * MINIMAX_H3_DIRECTOR_CANVAS_MULTIPLE)
+}
+
+function getMiniMaxH3DirectorSourceAspect(timeline: MiniMaxH3DirectorTimeline) {
+  const source = timeline.items
+    .filter((item) => item.enabled !== false && (item.type === 'image' || item.type === 'video') && Number(item.source_width) > 0 && Number(item.source_height) > 0)
+    .sort((left, right) => left.slot - right.slot || left.order - right.order)[0]
+  return source ? Number(source.source_width) / Number(source.source_height) : null
+}
+
+/** Resolve the Director canvas exactly like DaSiWa's v0.4.30 resolution panel. */
+export function resolveMiniMaxH3DirectorCanvas(
+  timeline: MiniMaxH3DirectorTimeline,
+  resolutionValue: unknown = timeline.resolution,
+): [number, number] {
+  const settings = normalizeMiniMaxH3DirectorResolution(resolutionValue)
+  if (settings.resolution === 'custom' && settings.custom_mode === 'fixed') {
+    return [snapMiniMaxCanvas(settings.custom_width), snapMiniMaxCanvas(settings.custom_height)]
+  }
+
+  const aspect = settings.aspect === 'auto'
+    ? getMiniMaxH3DirectorSourceAspect(timeline) ?? 4 / 3
+    : settings.aspect === 'custom'
+      ? settings.custom_aspect_w / settings.custom_aspect_h
+      : (() => {
+          const [width, height] = settings.aspect.split(':').map(Number)
+          return width / height
+        })()
+  if (settings.resolution === 'auto') {
+    const shortSide = 768
+    return aspect >= 1
+      ? [snapMiniMaxCanvas(shortSide * aspect), shortSide]
+      : [shortSide, snapMiniMaxCanvas(shortSide / aspect)]
+  }
+
+  const megapixels = settings.resolution === 'custom'
+    ? settings.custom_mp
+    : MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS[settings.resolution]
+  const pixels = megapixels * 1024 * 1024
+  const height = Math.sqrt(pixels / aspect)
+  return [snapMiniMaxCanvas(height * aspect), snapMiniMaxCanvas(height)]
 }
 
 /** Reduce intrinsic media dimensions to a readable width:height ratio. */
@@ -205,9 +448,11 @@ export function createMiniMaxH3DirectorBuilderState(
     version: mode === 'REF2VA' ? 2 : 1,
     mode,
     duration,
+    prompt_mode: 'structured',
+    simple_prompt: '',
     imd: '',
     soundscape: '',
-    music: 'N/A',
+    music: '',
     ref: {
       ...structuredClone(DEFAULT_REF_BUILDER_STATE),
       ...(mode === 'REF2VA' ? {} : {
@@ -223,16 +468,59 @@ export function createMiniMaxH3DirectorBuilderState(
 }
 
 function buildLegacyPrompt(prompt: unknown, timeline: MiniMaxH3DirectorTimeline) {
-  return [
+  const assembled = [
     typeof prompt === 'string' ? prompt.trim() : '',
     ...timeline.prompt_blocks
       .filter((block) => block.enabled !== false && block.text.trim().length > 0)
       .sort((left, right) => left.start - right.start || left.order - right.order)
       .map((block) => block.text.trim()),
   ].filter(Boolean).join('\n')
+  for (const candidate of [timeline.resolved_prompt, timeline.full_prompt, assembled]) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) return candidate.trim()
+  }
+  return ''
+}
+
+export const DEFAULT_MINIMAX_H3_DIRECTOR_RESOLUTION: MiniMaxH3DirectorResolutionState = {
+  aspect: 'auto',
+  resolution: 'auto',
+  input_scaling: 'Auto',
+  custom_aspect_w: 16,
+  custom_aspect_h: 9,
+  custom_mode: 'mp',
+  custom_mp: 1,
+  custom_width: 1344,
+  custom_height: 768,
+}
+
+export const DEFAULT_MINIMAX_H3_DIRECTOR_POSTPROCESS: MiniMaxH3DirectorPostprocessState = {
+  simple: { enabled: false },
+  model: { enabled: false, model_name: '2x-AnimeSharpV4_RCAN.safetensors' },
+  rtx: {
+    enabled: false,
+    denoise: true,
+    denoise_quality: 'Ultra',
+    deblur: true,
+    deblur_quality: 'Ultra',
+    upscale: 'VSR',
+    upscale_quality: 'Ultra',
+    resize_type: 'Scale',
+    scale: 2,
+    megapixels: 2,
+    width: 1920,
+    height: 1080,
+    divisible_by: '32',
+    ratio_preset: '16:9',
+    resize_method: 'Center Crop (Fill)',
+    device_id: 0,
+    empty_cache: false,
+    use_mmap: false,
+    auto_unload_models: true,
+  },
 }
 
 export function hasMiniMaxH3DirectorBuilderContent(state: MiniMaxH3DirectorBuilderState) {
+  if (state.simple_prompt.trim().length > 0) return true
   if (state.mode === 'REF2VA') {
     return [
       state.ref.subject_definitions,
@@ -240,10 +528,10 @@ export function hasMiniMaxH3DirectorBuilderContent(state: MiniMaxH3DirectorBuild
       state.ref.retention_analysis,
       state.ref.detailed_description,
       state.ref.soundscape,
-      state.ref.music === 'N/A' ? '' : state.ref.music,
+      state.ref.music,
     ].some((value) => value.trim().length > 0)
   }
-  return [state.imd, state.soundscape, state.music === 'N/A' ? '' : state.music]
+  return [state.imd, state.soundscape, state.music]
     .some((value) => value.trim().length > 0)
 }
 
@@ -269,9 +557,11 @@ export function normalizeMiniMaxH3DirectorBuilderState(
     version: mode === 'REF2VA' ? 2 : 1,
     mode,
     duration,
+    prompt_mode: source.prompt_mode === 'simple' || source.prompt_mode === 'structured' ? source.prompt_mode : 'structured',
+    simple_prompt: asString(source.simple_prompt),
     imd: asString(source.imd),
     soundscape: asString(source.soundscape),
-    music: typeof source.music === 'string' ? source.music : 'N/A',
+    music: typeof source.music === 'string' ? source.music : '',
     ref: {
       ...defaults.ref,
       ...sourceRef,
@@ -280,7 +570,7 @@ export function normalizeMiniMaxH3DirectorBuilderState(
       retention_analysis: asString(sourceRef.retention_analysis),
       detailed_description: asString(sourceRef.detailed_description),
       soundscape: asString(sourceRef.soundscape),
-      music: typeof sourceRef.music === 'string' ? sourceRef.music : 'N/A',
+      music: typeof sourceRef.music === 'string' ? sourceRef.music : '',
     },
   }
 
@@ -317,12 +607,9 @@ export function normalizeMiniMaxH3DirectorBuilderState(
   }
 
   const legacy = buildLegacyPrompt(legacyPrompt, timeline)
-  if (legacy) {
-    if (mode === 'REF2VA' && !normalized.ref.detailed_description.trim()) {
-      normalized.ref.detailed_description = legacy
-    } else if (mode !== 'REF2VA' && !normalized.imd.trim()) {
-      normalized.imd = legacy
-    }
+  if (legacy && !hasMiniMaxH3DirectorBuilderContent(normalized)) {
+    normalized.prompt_mode = 'simple'
+    normalized.simple_prompt = legacy
   }
   return normalized
 }
@@ -340,6 +627,10 @@ function formatMiniMaxAlignedSeconds(duration: number) {
 
 /** Build the same canonical prompt text as DaSiWa's Python prompt helper. */
 export function buildMiniMaxH3DirectorPrompt(state: MiniMaxH3DirectorBuilderState) {
+  if (state.prompt_mode === 'simple') {
+    return state.simple_prompt.trim()
+  }
+
   if (state.mode === 'REF2VA') {
     return [
       `subject_definitions:\n${state.ref.subject_definitions.trim()}`,
@@ -453,12 +744,16 @@ export function parseMiniMaxH3DirectorTimeline(value: unknown): { timeline: Mini
       : []
 
     const { builder_state: rawBuilderState, ...timelineSource } = parsed
+    const resolution = normalizeMiniMaxH3DirectorResolution(parsed.resolution)
+    const postprocess = normalizeMiniMaxH3DirectorPostprocess(parsed.postprocess)
     return {
       timeline: {
         ...timelineSource,
         version: 1,
         items,
         prompt_blocks: promptBlocks,
+        resolution,
+        postprocess,
         ...(isRecord(rawBuilderState) ? { builder_state: rawBuilderState } : {}),
       },
       error: null,
@@ -492,6 +787,7 @@ export function normalizeMiniMaxH3DirectorNodeValue(value: unknown): Record<stri
   width: number | MiniMaxH3DirectorInputLink
   height: number | MiniMaxH3DirectorInputLink
   duration: number | MiniMaxH3DirectorInputLink
+  frame_rate: number | MiniMaxH3DirectorInputLink
   ref_image_size: 'match' | 'max' | MiniMaxH3DirectorInputLink
   timeline_data: string | MiniMaxH3DirectorInputLink
   builder_state: string | MiniMaxH3DirectorInputLink
@@ -504,6 +800,7 @@ export function normalizeMiniMaxH3DirectorNodeValue(value: unknown): Record<stri
     width: isMiniMaxH3DirectorInputLink(source.width) ? source.width : asFiniteNumber(source.width, 1344),
     height: isMiniMaxH3DirectorInputLink(source.height) ? source.height : asFiniteNumber(source.height, 768),
     duration: isMiniMaxH3DirectorInputLink(source.duration) ? source.duration : asFiniteNumber(source.duration, 5),
+    frame_rate: isMiniMaxH3DirectorInputLink(source.frame_rate) ? source.frame_rate : asFiniteNumber(source.frame_rate, 24),
     ref_image_size: isMiniMaxH3DirectorInputLink(source.ref_image_size) ? source.ref_image_size : source.ref_image_size === 'max' ? 'max' : 'match',
     timeline_data: isMiniMaxH3DirectorInputLink(source.timeline_data)
       ? source.timeline_data
@@ -578,10 +875,21 @@ export function buildMiniMaxH3DirectorNodeValue(
   const builderStateValue = isMiniMaxH3DirectorInputLink(current.builder_state) && !builderState && !('builder_state' in inputPatch)
     ? current.builder_state
     : JSON.stringify(normalizedBuilder)
+  const promptValue = isMiniMaxH3DirectorInputLink(nextPrompt)
+    ? nextPrompt
+    : buildMiniMaxH3DirectorPrompt(normalizedBuilder)
+  const canvasPatch = timeline && nextTimeline.resolution
+    ? (() => {
+        const [width, height] = resolveMiniMaxH3DirectorCanvas(nextTimeline)
+        return { width, height }
+      })()
+    : {}
 
   return {
     ...current,
+    ...canvasPatch,
     ...inputPatch,
+    prompt: promptValue,
     timeline_data: timelineData,
     builder_state: builderStateValue,
     [MINIMAX_H3_DIRECTOR_META_KEY]: {
@@ -607,6 +915,9 @@ export function getMiniMaxH3DirectorActiveItems(value: unknown) {
   if (nodeValue.mode === 'T2VA') {
     return []
   }
+  if (nodeValue.mode === 'Image Inpaint') {
+    return items.filter((item) => item.type === 'image').slice(0, 1)
+  }
   const frameSlots = nodeValue.mode === 'I2VA' ? [0] : nodeValue.mode === 'L2VA' ? [1] : [0, 1]
   return items
     .filter((item) => item.type === 'image' && frameSlots.includes(item.slot))
@@ -624,7 +935,7 @@ function getSelectedDuration(item: MiniMaxH3DirectorTimelineItem) {
   return trimEnd - trimStart
 }
 
-/** Validate Director inputs against the actual DaSiWa five-mode contract. */
+/** Validate Director inputs against the current DaSiWa Director contract. */
 export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3DirectorIssue[] {
   const nodeValue = normalizeMiniMaxH3DirectorNodeValue(value)
   const issues: MiniMaxH3DirectorIssue[] = []
@@ -636,6 +947,13 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3Dir
     || nodeValue.duration > MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS
   )) {
     issues.push({ code: 'duration-range', field: 'duration', ko: '영상 길이는 1~60초 정수여야 해.', en: 'Duration must be an integer from 1 to 60 seconds.' })
+  }
+
+  if (!isMiniMaxH3DirectorInputLink(nodeValue.frame_rate) && (
+    nodeValue.frame_rate < MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN
+    || nodeValue.frame_rate > MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX
+  )) {
+    issues.push({ code: 'frame-rate-range', field: 'frame_rate', ko: '프레임 레이트는 0.1~240 범위여야 해.', en: 'Frame rate must be from 0.1 to 240.' })
   }
 
   const staticMode = isMiniMaxH3DirectorInputLink(nodeValue.mode) ? null : nodeValue.mode
@@ -674,6 +992,18 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3Dir
         issues.push({ code: 'builder-json', field: 'prompt', ko: '프롬프트 빌더 데이터가 올바른 JSON이 아니야.', en: 'Prompt builder data is not valid JSON.' })
       }
     }
+  }
+
+  if (staticMode === 'Image Inpaint') {
+    const enabledItems = parsedTimeline.timeline.items.filter((item) => item.enabled !== false)
+    const imageItems = enabledItems.filter((item) => item.type === 'image')
+    if (imageItems.length !== 1) {
+      issues.push({ code: 'inpaint-image-count', field: 'timeline', ko: 'Image Inpaint에는 활성 이미지가 정확히 1개 필요해.', en: 'Image Inpaint requires exactly one enabled image.' })
+    }
+    for (const item of enabledItems.filter((item) => item.type !== 'image')) {
+      issues.push({ code: 'inpaint-media-type', itemId: item.id, ko: 'Image Inpaint에서는 영상·오디오 참조를 사용할 수 없어.', en: 'Image Inpaint does not support video or audio references.' })
+    }
+    return issues
   }
 
   if (staticMode === null || staticMode !== 'REF2VA') {

@@ -11,9 +11,11 @@ export type WorkflowNumericFieldLike = {
 }
 
 const MINIMAX_H3_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
-const MINIMAX_H3_DIRECTOR_NUMERIC_FIELDS = ['width', 'height', 'duration'] as const
+const MINIMAX_H3_DIRECTOR_NUMERIC_FIELDS = ['width', 'height', 'duration', 'frame_rate'] as const
 const MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS = 1
 const MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS = 60
+const MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN = 0.1
+const MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX = 240
 
 export class WorkflowNumericFieldValidationError extends Error {
   readonly fieldId: string
@@ -117,6 +119,12 @@ export function getWorkflowNumericFieldDefinitionError(markedFields: unknown): s
           if (fieldKey === 'duration' && max !== undefined && (max < MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS || max > MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS)) {
             return new WorkflowNumericFieldValidationError(numericField, 'must have max between 1 and 60').message
           }
+          if (fieldKey === 'frame_rate' && min !== undefined && (min < MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN || min > MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX)) {
+            return new WorkflowNumericFieldValidationError(numericField, 'must have min between 0.1 and 240').message
+          }
+          if (fieldKey === 'frame_rate' && max !== undefined && (max < MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN || max > MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX)) {
+            return new WorkflowNumericFieldValidationError(numericField, 'must have max between 0.1 and 240').message
+          }
         } catch (error) {
           if (error instanceof WorkflowNumericFieldValidationError) {
             return error.message
@@ -214,7 +222,7 @@ export function normalizeWorkflowNumericPromptValues<T extends Record<string, an
         if (rawValue === undefined || rawValue === null || isComfyInputLink(rawValue)) {
           continue
         }
-        if (fieldKey !== 'duration' && bounds.min === undefined && bounds.max === undefined) {
+        if (fieldKey !== 'duration' && fieldKey !== 'frame_rate' && bounds.min === undefined && bounds.max === undefined) {
           continue
         }
 
@@ -227,7 +235,16 @@ export function normalizeWorkflowNumericPromptValues<T extends Record<string, an
                 ? Math.min(MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS, bounds.max)
                 : MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS,
             }
-          : bounds
+          : fieldKey === 'frame_rate'
+            ? {
+                min: typeof bounds.min === 'number' && Number.isFinite(bounds.min)
+                  ? Math.max(MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN, bounds.min)
+                  : MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN,
+                max: typeof bounds.max === 'number' && Number.isFinite(bounds.max)
+                  ? Math.min(MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX, bounds.max)
+                  : MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX,
+              }
+            : bounds
         const numericField = buildMiniMaxDirectorNumericField(field, fieldKey, effectiveBounds)
         normalizedNodeValue ??= { ...rawNodeValue }
         normalizedNodeValue[fieldKey] = normalizeWorkflowNumericFieldValue(numericField, rawValue)
