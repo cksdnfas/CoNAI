@@ -79,7 +79,7 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 
 ### 외부 연동
 
-- `CONAI_MCP_HTTP_ENABLED=true`일 때 MCP `POST /mcp` 엔드포인트 제공
+- 설정 → 계정 및 시스템에서 API 키 인증 MCP `POST /mcp` 활성화
 - Claude Code, Hermes Agent 등 MCP 클라이언트 연동
 - 프롬프트 검색, 이미지 조회, 생성 이력, NAI/ComfyUI 생성 도구 제공
 
@@ -122,7 +122,7 @@ npm run dev
 
 - Backend: `http://localhost:1666`
 - Frontend: `http://localhost:1677`
-- MCP: `CONAI_MCP_HTTP_ENABLED=true` 설정 후 `http://localhost:1666/mcp`
+- MCP: 설정에서 활성화 후 `http://localhost:1666/mcp`
 
 ### 프로덕션 빌드/실행
 

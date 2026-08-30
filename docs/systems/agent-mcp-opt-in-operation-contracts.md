@@ -5,7 +5,7 @@ CoNAI MCP is an agent-facing local operations surface. This contract keeps it re
 ## Activation boundary
 
 - HTTP MCP is off by default.
-- HTTP MCP may be enabled only with `CONAI_MCP_HTTP_ENABLED=true` for a trusted local or internal-network client.
+- HTTP MCP is enabled from Settings and requires a valid Bearer API key on every request.
 - `POST /mcp` is the only supported HTTP MCP method in stateless mode.
 - `GET /mcp` and `DELETE /mcp` stay method-denied even when HTTP MCP is enabled.
 - Local stdio MCP is still local-only and must be launched from the CoNAI project root.
@@ -15,7 +15,7 @@ CoNAI MCP is an agent-facing local operations surface. This contract keeps it re
 Before an agent uses CoNAI MCP for anything beyond local contract review, it must collect this evidence packet:
 
 1. `curl http://localhost:1666/health` confirms the intended backend is reachable.
-2. The backend process was started with `CONAI_MCP_HTTP_ENABLED=true` only when HTTP MCP is intended.
+2. Settings shows HTTP MCP as enabled and the client holds the current API key.
 3. The MCP client target URL is `http://localhost:1666/mcp` or an approved internal host on port `1666`, not the frontend port `1677`.
 4. The requested MCP tools are listed and classified as read-only, local mutation, generation, or destructive/approval-owned.
 5. The operator has explicitly approved every generation, prompt-group mutation, restore, cleanup, or external-service call that would create data, files, requests, or other side effects.

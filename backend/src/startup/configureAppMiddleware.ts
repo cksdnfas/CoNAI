@@ -12,6 +12,7 @@ type CorsMiddlewareOptions = Parameters<typeof cors<Request>>[0];
 export interface AppMiddlewareConfiguration {
   isSecureContext: boolean;
   apiLimiter: RequestHandler;
+  mcpLimiter: RequestHandler;
   uploadLimiter: RequestHandler;
   readOnlyLimiter: RequestHandler;
 }
@@ -156,6 +157,20 @@ export function configureAppMiddleware(
     skip: skipAdminRateLimit,
   });
 
+  const mcpLimiter = dependencies.createRateLimiter({
+    windowMs: 1 * 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req, res) => {
+      res.status(429).json({
+        jsonrpc: '2.0',
+        error: { code: -32002, message: 'Too many MCP requests from this IP' },
+        id: null,
+      });
+    },
+  });
+
   const isSecureContext = (env.BACKEND_PROTOCOL || '').toLowerCase() === 'https';
   const allowedCorsOrigins = resolveAllowedCorsOrigins(env);
 
@@ -224,6 +239,7 @@ export function configureAppMiddleware(
   return {
     isSecureContext,
     apiLimiter,
+    mcpLimiter,
     uploadLimiter,
     readOnlyLimiter,
   };

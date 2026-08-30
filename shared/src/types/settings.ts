@@ -306,6 +306,12 @@ export interface LlmSettings {
   structuredOutputJsonPresets: LlmPresetRecord[];
 }
 
+export interface McpHttpSettings {
+  enabled: boolean;
+  apiKey: string;
+  updatedAt: string;
+}
+
 export interface AppSettings {
   general: GeneralSettings;
   tagger: TaggerSettings;

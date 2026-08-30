@@ -7,7 +7,7 @@ CoNAI는 MCP(Model Context Protocol) 서버를 제공합니다. Claude Code, Her
 - 기본 HTTP 엔드포인트: `http://localhost:1666/mcp`
 - 전송 방식: Streamable HTTP(권장), stdio(로컬 전용)
 - HTTP 서버는 stateless 방식이라 `POST /mcp`만 사용합니다.
-- HTTP MCP는 기본 비활성입니다. 신뢰된 로컬/내부망 클라이언트에만 `CONAI_MCP_HTTP_ENABLED=true`로 켭니다.
+- HTTP MCP는 기본 비활성이고 API 키 인증이 필수입니다.
 - 기본 백엔드 포트는 `1666`, 프론트엔드 포트는 `1677`입니다. 헷갈리면 바로 터집니다.
 
 ## 사전 조건
@@ -18,13 +18,15 @@ CoNAI 백엔드가 실행 중이어야 합니다.
 npm run dev
 ```
 
-HTTP 방식으로 연결하려면 `.env`에 다음 값을 추가하고 백엔드를 다시 시작합니다.
+HTTP 방식은 설정 → 계정 및 시스템 → MCP에서 활성화합니다. 같은 화면에서 MCP URL과 API 키를 확인·복사·교체할 수 있으며 재시작은 필요 없습니다.
 
-```ini
-CONAI_MCP_HTTP_ENABLED=true
+클라이언트는 모든 `/mcp` 요청에 다음 헤더 중 하나를 전송해야 합니다.
+
+```http
+Authorization: Bearer <MCP_API_KEY>
 ```
 
-MCP 도구는 프롬프트/이미지 조회와 생성 작업을 실행할 수 있습니다. 외부 공개 주소에는 열지 말고, 공개 데모에서는 꺼진 상태를 기본으로 유지하세요. 로컬 stdio 방식은 이 값이 필요 없습니다.
+`X-ConAI-MCP-Key`와 `X-API-Key`도 지원합니다. MCP 도구는 조회뿐 아니라 생성·복원 같은 변경 작업을 포함하므로 API 키를 외부에 공개하지 마세요.
 
 프로덕션 실행 환경에서는 앱을 실행한 뒤 백엔드 URL을 확인합니다.
 
@@ -34,7 +36,7 @@ MCP 도구는 프롬프트/이미지 조회와 생성 작업을 실행할 수 �
 curl http://localhost:1666/health
 ```
 
-MCP 엔드포인트는 브라우저 GET으로 보는 페이지가 아닙니다. `GET /mcp`는 405가 정상입니다.
+MCP 엔드포인트는 브라우저 GET으로 보는 페이지가 아닙니다. 인증된 `GET /mcp`는 405가 정상입니다.
 
 ## 연결 방식 선택
 
@@ -50,13 +52,13 @@ MCP 엔드포인트는 브라우저 GET으로 보는 페이지가 아닙니다. 
 ### HTTP 방식
 
 ```bash
-claude mcp add --transport http conai http://localhost:1666/mcp
+claude mcp add --transport http conai http://localhost:1666/mcp --header "Authorization: Bearer <MCP_API_KEY>"
 ```
 
 다른 PC에서 접근한다면 `localhost` 대신 서버 IP를 씁니다.
 
 ```bash
-claude mcp add --transport http conai http://<서버IP>:1666/mcp
+claude mcp add --transport http conai http://<서버IP>:1666/mcp --header "Authorization: Bearer <MCP_API_KEY>"
 ```
 
 확인:
@@ -93,6 +95,8 @@ Hermes Agent는 native MCP 클라이언트를 지원합니다. `~/.hermes/config
 mcp_servers:
   conai:
     url: "http://localhost:1666/mcp"
+    headers:
+      Authorization: "Bearer <MCP_API_KEY>"
     timeout: 180
     connect_timeout: 30
 ```
@@ -116,7 +120,10 @@ HTTP:
   "mcpServers": {
     "conai": {
       "type": "http",
-      "url": "http://localhost:1666/mcp"
+      "url": "http://localhost:1666/mcp",
+      "headers": {
+        "Authorization": "Bearer <MCP_API_KEY>"
+      }
     }
   }
 }
@@ -349,12 +356,13 @@ Hermes Agent에서는 `~/.hermes/config.yaml`의 `mcp_servers.conai` 항목을 �
 
 - CoNAI 백엔드가 실행 중인지 확인합니다: `curl http://localhost:1666/health`
 - MCP URL이 `http://localhost:1666/mcp`인지 확인합니다.
+- 설정에서 HTTP MCP가 활성인지, 클라이언트가 Bearer API 키를 보내는지 확인합니다.
 - 프론트엔드 포트 `1677`에 연결하지 않았는지 확인합니다.
 - 방화벽/원격 접속이면 서버 IP와 바인딩을 확인합니다.
 
 ### `GET /mcp`가 405를 반환함
 
-정상입니다. CoNAI MCP는 stateless Streamable HTTP 서버라 `POST /mcp` 요청만 처리합니다.
+인증 헤더가 있다면 정상입니다. CoNAI MCP는 stateless Streamable HTTP 서버라 `POST /mcp` 요청만 처리합니다.
 
 ### Claude Code에서 도구가 안 보임
 

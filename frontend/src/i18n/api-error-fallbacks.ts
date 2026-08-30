@@ -167,6 +167,18 @@ export const API_ERROR_FALLBACKS = {
     ko: 'LLM 프리셋 목록을 불러오지 못했어.',
     en: 'Failed to load LLM presets.',
   },
+  'settings.mcp.load': {
+    ko: 'MCP 설정을 불러오지 못했어.',
+    en: 'Failed to load MCP settings.',
+  },
+  'settings.mcp.update': {
+    ko: 'MCP 설정을 저장하지 못했어.',
+    en: 'Failed to save MCP settings.',
+  },
+  'settings.mcp.rotate': {
+    ko: 'MCP 키를 교체하지 못했어.',
+    en: 'Failed to rotate the MCP key.',
+  },
   'settings.appearanceFont.upload': {
     ko: '커스텀 폰트 업로드에 실패했어.',
     en: 'Failed to upload the custom font.',

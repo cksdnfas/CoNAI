@@ -50,6 +50,11 @@ const SecurityTabLazy = lazy(async () => {
   return { default: module.SecurityTab }
 })
 
+const McpHttpSettingsCardLazy = lazy(async () => {
+  const module = await import('./components/mcp-http-settings-card')
+  return { default: module.McpHttpSettingsCard }
+})
+
 const AutoTabLazy = lazy(async () => {
   const module = await import('./components/auto-tab')
   return { default: module.AutoTab }
@@ -449,6 +454,7 @@ export function SettingsPage() {
 
             {activeTab === 'system' ? (
               <div className="space-y-6">
+                <McpHttpSettingsCardLazy />
                 <SecurityTabLazy />
                 <GeneralPreferencesSectionsLazy
                   sections={['safety']}

@@ -102,7 +102,7 @@ CoNAI는 로컬 계정과 권한 그룹으로 페이지 접근과 주요 작업�
 - 게스트/anonymous 권한이 과하지 않은지
 - 삭제 권한이 제한되어 있는지
 - `/settings` 접근 권한이 관리자에게만 있는지
-- HTTP MCP가 필요할 때만 `CONAI_MCP_HTTP_ENABLED=true`로 켜져 있는지
+- HTTP MCP가 필요할 때만 활성이고 API 키가 안전하게 관리되는지
 - `BIND_ADDRESS`, `TRUST_PROXY`, 공개 URL 설정이 의도와 맞는지
 - 리버스 프록시/HTTPS 구성에서 실제 접속 IP가 올바르게 처리되는지
 - 백업 정책이 있는지

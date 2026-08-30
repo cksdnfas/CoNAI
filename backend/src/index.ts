@@ -88,6 +88,7 @@ const shouldOwnTempFileLifecycle = runtimeRole !== 'api';
 const {
   isSecureContext,
   apiLimiter,
+  mcpLimiter,
   uploadLimiter,
   readOnlyLimiter,
 } = configureAppMiddleware(app);
@@ -161,6 +162,7 @@ async function startServer() {
         uploadsDir,
         tempDir,
         saveDir,
+        mcpLimiter,
         readOnlyLimiter,
         uploadLimiter,
       }),

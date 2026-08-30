@@ -59,6 +59,7 @@ export interface RegisterAppRoutesOptions {
   uploadsDir: string;
   tempDir: string;
   saveDir: string;
+  mcpLimiter: RequestHandler;
   readOnlyLimiter: RequestHandler;
   uploadLimiter: RequestHandler;
 }
@@ -299,6 +300,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   // 장기 실행 잡의 진행률/취소 공용 라우트. 잡을 시작하는 라우트는 각자의 기존 권한을 유지한다.
   app.use('/api/jobs', optionalAuth, runtimeJobRoutes);
 
+  app.use('/mcp', options.mcpLimiter);
   app.use('/', mcpRoutes);
 
   const frontendDistCandidates = process.env.FRONTEND_DIST_PATH

@@ -1,20 +1,31 @@
 import { Router, Request, Response } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpServer } from './server';
+import { mcpHttpSettingsService } from '../services/mcpHttpSettingsService';
 
 const router = Router();
 
-function parseEnabledFlag(value: string | undefined): boolean {
-  const normalized = value?.trim().toLowerCase();
-  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
-}
+router.use('/mcp', (_req: Request, res: Response, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
-export function isHttpMcpEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return parseEnabledFlag(env.CONAI_MCP_HTTP_ENABLED);
+function readMcpApiKey(req: Request): string | null {
+  const authorization = req.get('authorization');
+  if (authorization) {
+    const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return req.get('x-conai-mcp-key')?.trim()
+    || req.get('x-api-key')?.trim()
+    || null;
 }
 
 router.use('/mcp', (_req: Request, res: Response, next) => {
-  if (isHttpMcpEnabled()) {
+  if (mcpHttpSettingsService.loadSettings().enabled) {
     next();
     return;
   }
@@ -23,7 +34,24 @@ router.use('/mcp', (_req: Request, res: Response, next) => {
     jsonrpc: '2.0',
     error: {
       code: -32000,
-      message: 'MCP HTTP endpoint is disabled. Set CONAI_MCP_HTTP_ENABLED=true only for trusted clients.',
+      message: 'MCP HTTP endpoint is disabled.',
+    },
+    id: null,
+  });
+});
+
+router.use('/mcp', (req: Request, res: Response, next) => {
+  if (mcpHttpSettingsService.isAuthorized(readMcpApiKey(req))) {
+    next();
+    return;
+  }
+
+  res.setHeader('WWW-Authenticate', 'Bearer realm="CoNAI MCP"');
+  res.status(401).json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32001,
+      message: 'Unauthorized',
     },
     id: null,
   });
