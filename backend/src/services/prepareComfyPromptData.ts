@@ -27,6 +27,16 @@ type ComfyMediaUploadInput = {
   mimeType?: string
 }
 
+function parseBase64UploadData(value: string | undefined) {
+  if (!value || typeof value !== 'string') return null
+  const dataUrlMatch = value.match(/^data:([^;,]+);base64,([\s\S]+)$/i)
+  if (dataUrlMatch) {
+    return { base64: dataUrlMatch[2], mimeType: dataUrlMatch[1] }
+  }
+  const base64 = normalizeBase64ImageData(value)
+  return base64 ? { base64, mimeType: undefined } : null
+}
+
 function sanitizeUploadSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_') || 'image'
 }
@@ -100,27 +110,28 @@ function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null 
       return null
     }
 
-    const base64 = normalizeBase64ImageData(payload.dataUrl)
-    if (!base64) {
+    const parsedData = parseBase64UploadData(payload.dataUrl)
+    if (!parsedData) {
       return null
     }
 
     return {
       fileName: payload.fileName,
-      buffer: Buffer.from(base64, 'base64'),
-      mimeType: payload.mimeType,
+      buffer: Buffer.from(parsedData.base64, 'base64'),
+      mimeType: payload.mimeType || parsedData.mimeType,
     }
   }
 
   if (typeof value === 'string') {
-    const base64 = normalizeBase64ImageData(value)
-    if (!base64) {
+    const parsedData = parseBase64UploadData(value)
+    if (!parsedData) {
       return null
     }
 
     return {
       fileName: undefined,
-      buffer: Buffer.from(base64, 'base64'),
+      buffer: Buffer.from(parsedData.base64, 'base64'),
+      mimeType: parsedData.mimeType,
     }
   }
 
