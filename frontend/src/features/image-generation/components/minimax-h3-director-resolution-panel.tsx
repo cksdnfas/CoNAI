@@ -24,7 +24,7 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, rend
   const patch = (next: Partial<MiniMaxH3DirectorResolutionState>) => onChange({ ...value, ...next })
 
   return (
-    <section className="space-y-3 rounded-sm border border-border/80 bg-surface-low/50 p-3">
+    <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-semibold text-foreground">{t({ ko: '출력 규격', en: 'Output dimensions' })}</div>
         <div className="text-xs tabular-nums text-primary">{canvas[0]} × {canvas[1]} · 32px</div>
@@ -44,7 +44,7 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, rend
           {renderInputPort?.('resolution.resolution')}
           <FormField label={t({ ko: '해상도 / 메가픽셀', en: 'Resolution / megapixels' })}>
             <Select value={value.resolution} onChange={(event) => patch({ resolution: event.target.value as MiniMaxH3DirectorResolutionState['resolution'] })}>
-              <option value="auto">{t({ ko: 'Auto · 짧은 변 768px', en: 'Auto · short edge 768px' })}</option>
+              <option value="auto">Auto</option>
               {Object.keys(MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS).map((preset) => <option key={preset} value={preset}>{preset}</option>)}
               <option value="custom">CUSTOM</option>
             </Select>
@@ -56,7 +56,7 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, rend
           <FormField label={t({ ko: '입력 스케일링', en: 'Input scaling' })}>
             <Select value={value.input_scaling} onChange={(event) => patch({ input_scaling: event.target.value as MiniMaxH3DirectorResolutionState['input_scaling'] })}>
               {MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option === 'Auto' ? t({ ko: 'Auto · 짧은 변 최대 2048px', en: 'Auto · short edge up to 2048px' }) : option}</option>
+                <option key={option} value={option}>{option}</option>
               ))}
             </Select>
           </FormField>
@@ -116,13 +116,6 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, rend
           )}
         </div>
       ) : null}
-
-      <p className="text-[11px] text-muted-foreground">
-        {t({
-          ko: 'Auto 비율은 슬롯·순서상 첫 이미지/영상의 원본 크기를 사용해. 모든 결과는 MiniMax H3용 32픽셀 격자로 맞춰져.',
-          en: 'Auto aspect uses the first image or video by slot and order. Every result is aligned to MiniMax H3\'s 32-pixel grid.',
-        })}
-      </p>
     </section>
   )
 }

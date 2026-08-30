@@ -18,13 +18,12 @@ type MiniMaxH3DirectorPostprocessPanelProps = {
 
 const QUALITY_OPTIONS = ['Low', 'Medium', 'High', 'Ultra'] as const
 
-function ToggleRow({ checked, label, hint, onChange, port }: { checked: boolean; label: string; hint?: string; onChange: (checked: boolean) => void; port?: ReactNode }) {
+function ToggleRow({ checked, label, onChange, port }: { checked: boolean; label: string; onChange: (checked: boolean) => void; port?: ReactNode }) {
   return (
     <label className="flex min-w-0 items-start gap-2 rounded-sm border border-border/70 bg-background/25 px-3 py-2">
       <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={checked} onChange={(event) => onChange(event.target.checked)} />
       <span className="min-w-0 flex-1">
         <span className="block text-xs font-medium text-foreground">{label}</span>
-        {hint ? <span className="block text-[11px] text-muted-foreground">{hint}</span> : null}
       </span>
       {port}
     </label>
@@ -37,31 +36,25 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, onChange, renderInput
   const patchRtx = (next: Partial<MiniMaxH3DirectorRtxSettings>) => onChange({ ...value, rtx: { ...value.rtx, ...next } })
 
   return (
-    <section className="space-y-3 rounded-sm border border-border/80 bg-surface-low/50 p-3">
-      <div>
-        <div className="text-xs font-semibold text-foreground">{t({ ko: '업스케일 및 후처리', en: 'Upscaling and post-processing' })}</div>
-        <div className="text-[11px] text-muted-foreground">{t({ ko: '활성화한 단계는 위에서 아래 순서로 연결돼. 기본값은 전부 꺼짐이야.', en: 'Enabled stages run from top to bottom. All stages are off by default.' })}</div>
-      </div>
+    <section className="space-y-3">
+      <div className="text-xs font-semibold text-foreground">{t({ ko: '업스케일 및 후처리', en: 'Upscaling and post-processing' })}</div>
 
       <div className="grid gap-2 md:grid-cols-3">
         <ToggleRow
           checked={value.simple.enabled}
           label={t({ ko: '단순 2× 리사이즈', en: 'Simple 2× resize' })}
-          hint="DaSiWa Torch Resize · Lanczos"
           port={renderInputPort?.('postprocess.simple.enabled')}
           onChange={(enabled) => onChange({ ...value, simple: { enabled } })}
         />
         <ToggleRow
           checked={value.model.enabled}
           label={t({ ko: '업스케일 모델', en: 'Upscale model' })}
-          hint="ImageUpscaleWithModel"
           port={renderInputPort?.('postprocess.model.enabled')}
           onChange={(enabled) => onChange({ ...value, model: { ...value.model, enabled } })}
         />
         <ToggleRow
           checked={value.rtx.enabled}
           label={t({ ko: 'RTX Upscaler & Refiner', en: 'RTX Upscaler & Refiner' })}
-          hint={t({ ko: 'NVIDIA RTX 전용', en: 'NVIDIA RTX only' })}
           port={renderInputPort?.('postprocess.rtx.enabled')}
           onChange={(enabled) => patchRtx({ enabled })}
         />
