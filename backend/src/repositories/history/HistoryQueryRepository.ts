@@ -132,6 +132,9 @@ export class HistoryQueryRepository {
       filters.service_type ?? null,
       filters.generation_status ?? null,
       filters.workflow_id ?? null,
+      filters.workflow_name ?? null,
+      filters.created_after ?? null,
+      filters.created_before ?? null,
       filters.queue_job_id ?? null,
       filters.requested_by_account_id ?? null,
       filters.requested_by_account_type ?? null,
@@ -222,6 +225,11 @@ export class HistoryQueryRepository {
         gh.requested_by_account_id,
         gh.requested_by_account_type,
         gh.server_id,
+        CASE
+          WHEN gh.workflow_id IS NULL THEN 0
+          WHEN workflow.id IS NULL OR workflow.deleted_at IS NOT NULL THEN 1
+          ELSE 0
+        END as workflow_deleted,
         qj.requested_server_id,
         qj.requested_server_tag,
         requested_server.name as requested_server_name,
@@ -276,6 +284,11 @@ export class HistoryQueryRepository {
         gh.requested_by_account_id,
         gh.requested_by_account_type,
         gh.server_id,
+        CASE
+          WHEN gh.workflow_id IS NULL THEN 0
+          WHEN workflow.id IS NULL OR workflow.deleted_at IS NOT NULL THEN 1
+          ELSE 0
+        END as workflow_deleted,
         qj.requested_server_id,
         qj.requested_server_tag,
         requested_server.name as requested_server_name,
@@ -384,6 +397,17 @@ export class HistoryQueryRepository {
     filters: Omit<GenerationHistoryFilterOptions, 'workflow_id'> = {},
   ): GenerationHistoryRecord[] {
     return this.findAll({ ...filters, workflow_id: workflowId });
+  }
+
+  static findWorkflowReference(workflowId: number): { workflow_id: number; workflow_name: string | null } | null {
+    const row = apiGenDb.prepare(`
+      SELECT workflow_id, workflow_name
+      FROM api_generation_history
+      WHERE workflow_id = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(workflowId) as { workflow_id: number; workflow_name: string | null } | undefined;
+    return row ?? null;
   }
 
   static getWorkflowListStatistics(workflowId: number): GenerationWorkflowStatistics {

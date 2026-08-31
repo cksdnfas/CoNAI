@@ -46,6 +46,21 @@ export function buildHistoryFilterClause(
     params.push(filters.workflow_id);
   }
 
+  if (filters.workflow_name) {
+    clauses.push(`${prefix}workflow_name LIKE ?`);
+    params.push(`%${filters.workflow_name}%`);
+  }
+
+  if (filters.created_after) {
+    clauses.push(`${prefix}created_at >= ?`);
+    params.push(filters.created_after);
+  }
+
+  if (filters.created_before) {
+    clauses.push(`${prefix}created_at <= ?`);
+    params.push(filters.created_before);
+  }
+
   if (filters.queue_job_id !== undefined) {
     clauses.push(`${prefix}queue_job_id = ?`);
     params.push(filters.queue_job_id);

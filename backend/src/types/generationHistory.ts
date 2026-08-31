@@ -45,6 +45,7 @@ export interface GenerationHistoryRecord {
 }
 
 export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
+  workflow_deleted?: number | boolean;
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
@@ -63,6 +64,7 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
 }
 
 export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
+  workflow_deleted?: number | boolean;
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
@@ -84,6 +86,9 @@ export interface GenerationHistoryFilterOptions {
   service_type?: ServiceType;
   generation_status?: GenerationStatus;
   workflow_id?: number;
+  workflow_name?: string;
+  created_after?: string;
+  created_before?: string;
   queue_job_id?: number;
   requested_by_account_id?: number;
   requested_by_account_type?: AuthAccountType;

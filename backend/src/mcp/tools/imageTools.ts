@@ -6,8 +6,18 @@ import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryR
 import { AutoTagSearchService } from '../../services/autoTagSearchService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { AutoTagSearchParams, TagFilter } from '../../types/autoTag';
+import type { McpRequestContext } from '../context';
+import { McpArtifactService } from '../../services/mcpArtifactService';
 
-export function registerImageTools(server: McpServer): void {
+function sanitizeMetadata(metadata: Record<string, unknown>, includeHeavyFields: boolean) {
+  const excluded = new Set(['original_file_path', 'thumbnail_path', 'storage_path', 'path']);
+  const heavy = new Set(['color_histogram', 'raw_metadata', 'raw_exif', 'metadata_json']);
+  return Object.fromEntries(Object.entries(metadata).filter(([key]) => (
+    !excluded.has(key) && (includeHeavyFields || !heavy.has(key))
+  )));
+}
+
+export function registerImageTools(server: McpServer, context: McpRequestContext): void {
   // 이미지 고급 검색
   server.tool(
     'search_images',
@@ -56,7 +66,6 @@ export function registerImageTools(server: McpServer): void {
           sampler: img.sampler,
           first_seen_date: img.first_seen_date,
           file_size: img.file_size,
-          original_file_path: img.original_file_path,
         }));
 
         return {
@@ -85,8 +94,9 @@ export function registerImageTools(server: McpServer): void {
     'Get detailed metadata for a specific image by its composite hash.',
     {
       composite_hash: z.string().describe('The 48-character composite hash of the image'),
+      include_heavy_fields: z.boolean().default(false).describe('Include histogram and raw metadata fields'),
     },
-    async ({ composite_hash }) => {
+    async ({ composite_hash, include_heavy_fields }) => {
       try {
         const metadata = MediaMetadataModel.findByHash(composite_hash);
 
@@ -100,7 +110,7 @@ export function registerImageTools(server: McpServer): void {
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(metadata, null, 2),
+            text: JSON.stringify(sanitizeMetadata(metadata as unknown as Record<string, unknown>, include_heavy_fields), null, 2),
           }],
         };
       } catch (error) {
@@ -119,34 +129,55 @@ export function registerImageTools(server: McpServer): void {
     {
       service_type: z.enum(['comfyui', 'novelai', 'codex']).optional().describe('Filter by service type'),
       generation_status: z.enum(['pending', 'processing', 'completed', 'failed']).optional().describe('Filter by generation status'),
+      history_id: z.number().int().positive().optional().describe('Return one history record by ID'),
+      workflow_id: z.number().int().positive().optional().describe('Filter by workflow ID'),
+      workflow_name: z.string().optional().describe('Filter by workflow name'),
+      created_after: z.string().optional().describe('Filter by inclusive creation timestamp'),
+      created_before: z.string().optional().describe('Filter by inclusive creation timestamp'),
       limit: z.number().int().min(1).max(100).default(20).describe('Number of records to return'),
       offset: z.number().int().min(0).default(0).describe('Offset for pagination'),
     },
-    async ({ service_type, generation_status, limit, offset }) => {
+    async ({ service_type, generation_status, history_id, workflow_id, workflow_name, created_after, created_before, limit, offset }) => {
       try {
         const filters: any = { limit, offset };
+        if (history_id) filters.ids = [history_id];
         if (service_type) filters.service_type = service_type;
         if (generation_status) filters.generation_status = generation_status;
+        if (workflow_id) filters.workflow_id = workflow_id;
+        if (workflow_name) filters.workflow_name = workflow_name;
+        if (created_after) filters.created_after = created_after;
+        if (created_before) filters.created_before = created_before;
 
         const records = HistoryQueryRepository.findAllWithMetadata(filters);
         const total = HistoryQueryRepository.countListRecords(filters);
 
         // 응답 크기를 줄이기 위해 핵심 필드만 추출
-        const summary = records.map(r => ({
-          id: r.id,
-          service_type: r.service_type,
-          generation_status: r.generation_status,
-          created_at: r.created_at,
-          completed_at: r.completed_at,
-          positive_prompt: r.positive_prompt ? (r.positive_prompt.length > 200 ? r.positive_prompt.substring(0, 200) + '...' : r.positive_prompt) : null,
-          negative_prompt: r.negative_prompt ? (r.negative_prompt.length > 100 ? r.negative_prompt.substring(0, 100) + '...' : r.negative_prompt) : null,
-          width: r.width,
-          height: r.height,
-          nai_model: r.nai_model,
-          nai_seed: r.nai_seed,
-          workflow_name: r.workflow_name,
-          composite_hash: r.composite_hash || (r as any).actual_composite_hash,
-          error_message: r.error_message,
+        const summary = await Promise.all(records.map(async (r) => {
+          const workflowDeleted = r.workflow_deleted === true || r.workflow_deleted === 1;
+          const artifact = r.id && context.baseUrl
+            ? await McpArtifactService.createHistoryDescriptor(r.id, context.baseUrl)
+            : null;
+          return {
+            id: r.id,
+            queue_job_id: r.queue_job_id,
+            service_type: r.service_type,
+            generation_status: r.generation_status,
+            created_at: r.created_at,
+            completed_at: r.completed_at,
+            workflow_id: r.workflow_id,
+            workflow_name: r.workflow_name,
+            workflow_deleted: workflowDeleted,
+            workflow_availability: workflowDeleted ? '삭제된 워크플로우(사용 불가)' : 'available',
+            positive_prompt: r.positive_prompt ? (r.positive_prompt.length > 200 ? r.positive_prompt.substring(0, 200) + '...' : r.positive_prompt) : null,
+            negative_prompt: r.negative_prompt ? (r.negative_prompt.length > 100 ? r.negative_prompt.substring(0, 100) + '...' : r.negative_prompt) : null,
+            width: r.actual_width ?? r.width,
+            height: r.actual_height ?? r.height,
+            nai_model: r.nai_model,
+            nai_seed: r.nai_seed,
+            composite_hash: r.actual_composite_hash ?? r.composite_hash,
+            artifact,
+            error_message: r.error_message,
+          };
         }));
 
         return {
@@ -260,7 +291,6 @@ export function registerImageTools(server: McpServer): void {
           seed: img.seed,
           first_seen_date: img.first_seen_date,
           rating_score: img.rating_score,
-          original_file_path: img.original_file_path,
         }));
 
         return {

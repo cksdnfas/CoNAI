@@ -306,9 +306,20 @@ export interface LlmSettings {
   structuredOutputJsonPresets: LlmPresetRecord[];
 }
 
+export type McpHttpScope = 'read' | 'generate' | 'organize' | 'backup' | 'restore';
+
+export interface McpHttpApiKey {
+  id: string;
+  name: string;
+  apiKey: string;
+  scopes: McpHttpScope[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface McpHttpSettings {
   enabled: boolean;
-  apiKey: string;
+  keys: McpHttpApiKey[];
   updatedAt: string;
 }
 

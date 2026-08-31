@@ -22,6 +22,7 @@ import {
   normalizeWorkflowNumericPromptValues,
   WorkflowNumericFieldValidationError,
 } from '../../services/workflowNumericFieldPolicy';
+import { requirePermission } from '../../middleware/authMiddleware';
 
 const router = Router();
 
@@ -29,7 +30,7 @@ const router = Router();
  * 이미지 생성 요청
  * POST /api/workflows/:id/generate
  */
-router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/generate', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
   const { prompt_data, server_id, groupId, source_image, imageSaveOptions } = req.body as {
     prompt_data?: Record<string, any>;

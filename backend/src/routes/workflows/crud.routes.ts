@@ -4,6 +4,7 @@ import { WorkflowModel, normalizePublicQueueRoleLimits, parseWorkflowRoleQueueLi
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
+import { requirePermission } from '../../middleware/authMiddleware';
 
 const router = Router();
 
@@ -87,6 +88,33 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   }
 }));
 
+router.get('/deleted', requirePermission('workflows.view'), asyncHandler(async (_req: Request, res: Response) => {
+  const workflows = WorkflowModel.findDeleted().map((workflow) => ({
+    id: workflow.id,
+    name: workflow.name,
+    deleted_at: workflow.deleted_at,
+    availability: 'deleted_unavailable',
+    message: '삭제된 워크플로우(사용 불가)',
+  }));
+  res.json({ success: true, data: workflows });
+}));
+
+router.get('/:id/export', requirePermission('workflows.view'), asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(routeParam(req.params.id));
+  const workflow = Number.isInteger(id) ? WorkflowModel.findByIdIncludingDeleted(id) : null;
+  if (!workflow) {
+    res.status(404).json({ success: false, error: 'Workflow not found' });
+    return;
+  }
+  res.setHeader('Content-Disposition', `attachment; filename="workflow-${workflow.id}.json"`);
+  res.json({
+    format: 'conai-workflow',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    workflow: { ...workflow, deleted_at: null },
+  });
+}));
+
 /**
  * 특정 워크플로우 조회
  * GET /api/workflows/:id
@@ -138,7 +166,51 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 새 워크플로우 생성
  * POST /api/workflows
  */
-router.post('/', asyncHandler(async (req: Request, res: Response) => {
+router.post('/import', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+  const definition = req.body?.workflow ?? req.body;
+  if (!definition || typeof definition !== 'object' || typeof definition.name !== 'string' || typeof definition.workflow_json !== 'string') {
+    res.status(400).json({ success: false, error: 'Invalid workflow definition' });
+    return;
+  }
+  try {
+    JSON.parse(definition.workflow_json);
+  } catch {
+    res.status(400).json({ success: false, error: 'Invalid workflow_json: must be valid JSON' });
+    return;
+  }
+  if (WorkflowModel.existsByName(definition.name)) {
+    res.status(409).json({ success: false, error: 'Workflow name already exists' });
+    return;
+  }
+  const id = WorkflowModel.create({
+    name: definition.name,
+    description: definition.description,
+    workflow_json: definition.workflow_json,
+    marked_fields: Array.isArray(definition.marked_fields)
+      ? definition.marked_fields
+      : typeof definition.marked_fields === 'string'
+        ? JSON.parse(definition.marked_fields)
+        : [],
+    api_endpoint: definition.api_endpoint,
+    is_active: definition.is_active !== false,
+    color: definition.color,
+    result_view_mode: definition.result_view_mode,
+    artifact_root_path: definition.artifact_root_path,
+    artifact_directory_mode: definition.artifact_directory_mode,
+  });
+  res.status(201).json({ success: true, data: { id } });
+}));
+
+router.post('/:id/restore', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(routeParam(req.params.id));
+  if (!Number.isInteger(id) || !WorkflowModel.restore(id)) {
+    res.status(404).json({ success: false, error: 'Deleted workflow not found' });
+    return;
+  }
+  res.json({ success: true, data: { id, message: 'Workflow restored successfully' } });
+}));
+
+router.post('/', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
 
   if (!name || !workflow_json) {
@@ -232,7 +304,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * 워크플로우 업데이트
  * PUT /api/workflows/:id
  */
-router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
   const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
 
@@ -345,7 +417,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 워크플로우 삭제
  * DELETE /api/workflows/:id
  */
-router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {

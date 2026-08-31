@@ -34,6 +34,7 @@ export interface GenerationQueueJobRecord {
   requested_by_account_type?: 'admin' | 'guest' | null
   workflow_id?: number | null
   workflow_name?: string | null
+  workflow_deleted?: number | boolean
   requested_group_id?: number | null
   requested_server_id?: number | null
   requested_server_tag?: string | null
@@ -102,6 +103,7 @@ export interface GenerationHistoryRecord {
   // Core result-index / operations fields
   workflow_id?: number | null
   workflow_name?: string | null
+  workflow_deleted?: number | boolean
   queue_job_id?: number | null
   requested_by_account_id?: number | null
   requested_by_account_type?: 'admin' | 'guest' | null

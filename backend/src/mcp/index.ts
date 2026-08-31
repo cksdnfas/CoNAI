@@ -1,61 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpServer } from './server';
-import { mcpHttpSettingsService } from '../services/mcpHttpSettingsService';
+import { validateMcpRequestBody } from './requestSecurity';
+import type { McpResponseLocals } from './httpAccess';
+import { appendMcpAuditRecord } from '../services/mcpAuditService';
+import { McpArtifactService } from '../services/mcpArtifactService';
 
 const router = Router();
 
-router.use('/mcp', (_req: Request, res: Response, next) => {
-  res.setHeader('Cache-Control', 'no-store');
-  next();
-});
-
-function readMcpApiKey(req: Request): string | null {
-  const authorization = req.get('authorization');
-  if (authorization) {
-    const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
-    if (match?.[1]) {
-      return match[1].trim();
-    }
-  }
-
-  return req.get('x-conai-mcp-key')?.trim()
-    || req.get('x-api-key')?.trim()
-    || null;
-}
-
-router.use('/mcp', (_req: Request, res: Response, next) => {
-  if (mcpHttpSettingsService.loadSettings().enabled) {
-    next();
-    return;
-  }
-
-  res.status(404).json({
-    jsonrpc: '2.0',
-    error: {
-      code: -32000,
-      message: 'MCP HTTP endpoint is disabled.',
-    },
-    id: null,
-  });
-});
-
-router.use('/mcp', (req: Request, res: Response, next) => {
-  if (mcpHttpSettingsService.isAuthorized(readMcpApiKey(req))) {
-    next();
-    return;
-  }
-
-  res.setHeader('WWW-Authenticate', 'Bearer realm="CoNAI MCP"');
-  res.status(401).json({
-    jsonrpc: '2.0',
-    error: {
-      code: -32001,
-      message: 'Unauthorized',
-    },
-    id: null,
-  });
-});
+router.use('/mcp', validateMcpRequestBody);
 
 /**
  * POST /mcp
@@ -63,8 +16,31 @@ router.use('/mcp', (req: Request, res: Response, next) => {
  * 각 요청마다 새로운 McpServer + Transport 인스턴스를 생성한다.
  */
 router.post('/mcp', async (req: Request, res: Response) => {
+  const startedAt = Date.now();
+  const auth = (res.locals as McpResponseLocals).mcpAuth;
+  const rpcMethod = typeof req.body?.method === 'string' ? req.body.method : null;
+  const toolName = rpcMethod === 'tools/call' && typeof req.body?.params?.name === 'string'
+    ? req.body.params.name
+    : null;
+  res.on('finish', () => appendMcpAuditRecord({
+    timestamp: new Date().toISOString(),
+    keyId: auth?.keyId ?? null,
+    keyName: auth?.keyName ?? null,
+    ip: req.ip || null,
+    rpcMethod,
+    toolName,
+    statusCode: res.statusCode,
+    durationMs: Date.now() - startedAt,
+  }));
+
   try {
-    const server = createMcpServer();
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const server = createMcpServer({
+      scopes: auth?.scopes ?? [],
+      keyId: auth?.keyId,
+      keyName: auth?.keyName,
+      baseUrl,
+    });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // Stateless 모드
     });
@@ -86,6 +62,24 @@ router.post('/mcp', async (req: Request, res: Response) => {
       });
     }
   }
+});
+
+router.get('/mcp/artifacts/:artifactId', async (req: Request, res: Response) => {
+  const artifactId = Array.isArray(req.params.artifactId) ? req.params.artifactId[0] : req.params.artifactId;
+  if (!McpArtifactService.verifyDownloadToken(artifactId, req.query.expires, req.query.token)) {
+    res.status(401).json({ error: 'Invalid or expired artifact URL' });
+    return;
+  }
+
+  const artifact = McpArtifactService.resolve(artifactId);
+  if (!artifact) {
+    res.status(404).json({ error: 'Artifact not found' });
+    return;
+  }
+
+  res.setHeader('Content-Type', artifact.mimeType);
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(artifact.fileName)}`);
+  res.sendFile(artifact.absolutePath);
 });
 
 /**

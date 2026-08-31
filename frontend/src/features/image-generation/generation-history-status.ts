@@ -97,6 +97,9 @@ export type HistoryRunRecoveryState = 'active' | 'completed' | 'retryable-failed
 
 /** Queue replay is only exposed when the backend has a failed/cancelled queue job id to clone. */
 export function getRetryableHistoryQueueJobId(record: GenerationHistoryRecord) {
+  if (record.workflow_deleted === true || record.workflow_deleted === 1) {
+    return null
+  }
   return typeof record.queue_job_id === 'number'
     && record.queue_job_id > 0
     && (record.queue_status === 'failed' || record.queue_status === 'cancelled')

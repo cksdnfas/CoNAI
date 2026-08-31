@@ -25,7 +25,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
       artifact_directory_mode TEXT NOT NULL DEFAULT 'shared',
       color VARCHAR(10) DEFAULT '#2196f3',
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      deleted_at DATETIME
     )
   `);
   // 2. ComfyUI servers table
@@ -451,6 +452,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('workflows', 'artifact_directory_mode')) {
     console.log('  Migrating workflows: adding artifact_directory_mode column');
     db.exec("ALTER TABLE workflows ADD COLUMN artifact_directory_mode TEXT NOT NULL DEFAULT 'shared'");
+  }
+  if (!hasColumn('workflows', 'deleted_at')) {
+    console.log('  Migrating workflows: adding deleted_at column');
+    db.exec('ALTER TABLE workflows ADD COLUMN deleted_at DATETIME');
   }
 
   // Migrate comfyui_servers table

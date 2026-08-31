@@ -18,7 +18,7 @@ import { IMAGE_PROCESSING } from '@conai/shared';
  * Every tier is environment-overridable so an operator can restore the previous behaviour
  * (`JSON_BODY_LIMIT_MB=50`) without a code change.
  */
-export type RequestBodyLimitTier = 'default' | 'bulk' | 'media';
+export type RequestBodyLimitTier = 'default' | 'bulk' | 'media' | 'mcp';
 
 /** Parse a positive numeric env override, ignoring blank/invalid values. */
 function resolveEnvLimitMb(envName: string, fallbackMb: number): number {
@@ -40,6 +40,8 @@ export function resolveRequestBodyLimitsMb(): Record<RequestBodyLimitTier, numbe
     bulk: resolveEnvLimitMb('BULK_JSON_BODY_LIMIT_MB', 25),
     // base64 data URL이 JSON 바디에 그대로 실리는 경로. 기존 동작(50MB)을 그대로 유지한다.
     media: resolveEnvLimitMb('MEDIA_JSON_BODY_LIMIT_MB', IMAGE_PROCESSING.MAX_FILE_SIZE_MB),
+    // MCP media is base64-encoded inside JSON. 70MiB safely carries up to 50MiB decoded media.
+    mcp: 70,
   };
 }
 
@@ -48,6 +50,7 @@ export function resolveRequestBodyLimitsMb(): Record<RequestBodyLimitTier, numbe
  * Anything not listed here falls back to `default`, so a new route is bounded by construction.
  */
 const REQUEST_BODY_LIMIT_TIER_BY_MOUNT: ReadonlyArray<readonly [string, RequestBodyLimitTier]> = [
+  ['/mcp', 'mcp'],
   // --- media: JSON body carries base64 data URLs ---
   // 캔버스 원본 해상도 PNG data URL (image-editor.routes.ts save/save-output/save-webp)
   ['/api/image-editor', 'media'],

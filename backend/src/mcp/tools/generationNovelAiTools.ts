@@ -8,7 +8,7 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
   // NovelAI 이미지 생성
   server.tool(
     'generate_nai',
-    'Generate images using NovelAI. Requires a valid NAI token to be configured in the system (via login).',
+    'Compatibility synchronous NovelAI generation. Prefer submit_generation_job for durable work.',
     {
       prompt: z.string().describe('Positive prompt for image generation'),
       negative_prompt: z.string().default('').describe('Negative prompt'),

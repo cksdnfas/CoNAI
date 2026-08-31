@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { createTieredBodyParsers, resolveRequestBodyLimitsMb } from '../middleware/requestBodyLimits';
 import { logger } from '../utils/logger';
+import { requireMcpHttpAccess } from '../mcp/httpAccess';
 
 type CorsMiddlewareOptions = Parameters<typeof cors<Request>>[0];
 
@@ -225,11 +226,26 @@ export function configureAppMiddleware(
     },
   }));
 
+  // Authenticate and throttle MCP before its large JSON parser reads request bytes.
+  app.use('/mcp', requireMcpHttpAccess, mcpLimiter);
+
   // 요청 바디 한도는 API 마운트별로 스코프된다. 50MB 전역 한도는 익명 접근 가능한 검색 라우트까지
   // 단일 이벤트 루프에서 50MB 버퍼링+동기 파싱을 하도록 허용했다. 상세 근거는 requestBodyLimits.ts 참고.
   const tieredBodyParsers = dependencies.createBodyParsers();
   app.use(tieredBodyParsers.json);
   app.use(tieredBodyParsers.urlencoded);
+  app.use((error: unknown, req: Request, res: ExpressResponse, next: (error?: unknown) => void) => {
+    const bodyError = error as { type?: string; status?: number };
+    if (req.path.startsWith('/mcp') && (bodyError.type === 'entity.too.large' || bodyError.status === 413)) {
+      res.status(413).json({
+        jsonrpc: '2.0',
+        error: { code: -32003, message: 'MCP request body exceeds the 70 MiB JSON limit.' },
+        id: null,
+      });
+      return;
+    }
+    next(error);
+  });
   dependencies.log(
     `[Config] JSON body limits (MB): ${Object.entries(dependencies.resolveBodyLimitsMb())
       .map(([tier, limitMb]) => `${tier}=${limitMb}`)

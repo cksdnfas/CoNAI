@@ -21,6 +21,7 @@ import { publishQueueJobEvent } from './runtime-events/runtimeEventPublishers'
 import { ALLOWED_QUEUE_TRANSITIONS, buildQueueTransitionUpdates } from './generation-queue/queueTransitions'
 import type { ServiceType } from '../types/generationHistory'
 import { HistoryCommandService } from './historyCommandService'
+import { WorkflowModel } from '../models/Workflow'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type {
   GenerationQueueCancelOrigin,
@@ -442,6 +443,13 @@ export class GenerationQueueService {
 
     if (existing.status !== 'failed' && existing.status !== 'cancelled') {
       throw new Error('Only failed or cancelled queue jobs can be retried safely')
+    }
+
+    if (existing.service_type === 'comfyui' && existing.workflow_id) {
+      const workflow = WorkflowModel.findByIdIncludingDeleted(existing.workflow_id)
+      if (!workflow || workflow.deleted_at) {
+        throw new Error(`삭제된 워크플로우(사용 불가): ${existing.workflow_name ?? `ID ${existing.workflow_id}`}`)
+      }
     }
 
     const requestPayload = parseStoredRequestPayload(existing)

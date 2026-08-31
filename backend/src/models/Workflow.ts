@@ -135,6 +135,11 @@ export class WorkflowModel {
    * 워크플로우 조회 (ID)
    */
   static findById(id: number): WorkflowRecord | null {
+    const row = userSettingsDb.prepare('SELECT * FROM workflows WHERE id = ? AND deleted_at IS NULL').get(id) as WorkflowRecord | undefined;
+    return this.normalizeWorkflowRecord(row);
+  }
+
+  static findByIdIncludingDeleted(id: number): WorkflowRecord | null {
     const row = userSettingsDb.prepare('SELECT * FROM workflows WHERE id = ?').get(id) as WorkflowRecord | undefined;
     return this.normalizeWorkflowRecord(row);
   }
@@ -143,9 +148,9 @@ export class WorkflowModel {
    * 모든 워크플로우 조회
    */
   static findAll(activeOnly: boolean = false): WorkflowRecord[] {
-    let query = 'SELECT * FROM workflows';
+    let query = 'SELECT * FROM workflows WHERE deleted_at IS NULL';
     if (activeOnly) {
-      query += ' WHERE is_active = 1';
+      query += ' AND is_active = 1';
     }
     query += ' ORDER BY created_date DESC';
 
@@ -165,11 +170,12 @@ export class WorkflowModel {
       SELECT
         id, name, description, marked_fields, api_endpoint, is_active,
         is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode,
-        artifact_root_path, artifact_directory_mode, color, created_date, updated_date
+        artifact_root_path, artifact_directory_mode, color, created_date, updated_date, deleted_at
       FROM workflows
+      WHERE deleted_at IS NULL
     `;
     if (activeOnly) {
-      query += ' WHERE is_active = 1';
+      query += ' AND is_active = 1';
     }
     query += ' ORDER BY created_date DESC';
 
@@ -192,6 +198,9 @@ export class WorkflowModel {
    * 워크플로우 업데이트
    */
   static update(id: number, workflowData: WorkflowUpdateData): boolean {
+    if (!this.findById(id)) {
+      return false;
+    }
     // 특수 처리가 필요한 필드들 변환
     const cleanData: Record<string, any> = {
       ...workflowData,
@@ -238,8 +247,33 @@ export class WorkflowModel {
    * 워크플로우 삭제
    */
   static delete(id: number): boolean {
-    const info = userSettingsDb.prepare('DELETE FROM workflows WHERE id = ?').run(id);
+    const info = userSettingsDb.prepare(`
+      UPDATE workflows
+      SET deleted_at = CURRENT_TIMESTAMP,
+          is_active = 0,
+          is_public_page = 0,
+          updated_date = CURRENT_TIMESTAMP
+      WHERE id = ? AND deleted_at IS NULL
+    `).run(id);
     return info.changes > 0;
+  }
+
+  static restore(id: number): boolean {
+    const info = userSettingsDb.prepare(`
+      UPDATE workflows
+      SET deleted_at = NULL, updated_date = CURRENT_TIMESTAMP
+      WHERE id = ? AND deleted_at IS NOT NULL
+    `).run(id);
+    return info.changes > 0;
+  }
+
+  static findDeleted(): WorkflowRecord[] {
+    const rows = userSettingsDb.prepare(`
+      SELECT * FROM workflows
+      WHERE deleted_at IS NOT NULL
+      ORDER BY deleted_at DESC, id DESC
+    `).all() as WorkflowRecord[];
+    return rows.map((row) => this.normalizeWorkflowRecord(row)).filter((row): row is WorkflowRecord => row !== null);
   }
 
   /**
@@ -282,6 +316,7 @@ export class WorkflowModel {
       SELECT *
       FROM workflows
       WHERE public_slug = ?
+        AND deleted_at IS NULL
         AND is_public_page = 1
         AND is_active = 1
     `).get(publicSlug) as WorkflowRecord | undefined;
@@ -294,6 +329,7 @@ export class WorkflowModel {
       SELECT *
       FROM workflows
       WHERE is_public_page = 1
+        AND deleted_at IS NULL
         AND is_active = 1
       ORDER BY name COLLATE NOCASE ASC
     `).all() as WorkflowRecord[];

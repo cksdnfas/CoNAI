@@ -9,6 +9,18 @@ import { runtimePaths } from '../../config/runtimePaths';
 
 const BACKUPS_DIR = path.join(runtimePaths.basePath, 'backups');
 
+function resolveBackupPath(filename: string): { filename: string; filePath: string } {
+  const normalized = filename.endsWith('.json') ? filename : `${filename}.json`;
+  if (!/^[A-Za-z0-9._-]+\.json$/.test(normalized) || normalized.includes('..') || path.basename(normalized) !== normalized) {
+    throw new Error('Invalid backup filename');
+  }
+  const filePath = path.resolve(BACKUPS_DIR, normalized);
+  if (path.dirname(filePath) !== path.resolve(BACKUPS_DIR)) {
+    throw new Error('Invalid backup filename');
+  }
+  return { filename: normalized, filePath };
+}
+
 function ensureBackupsDir(): void {
   if (!fs.existsSync(BACKUPS_DIR)) {
     fs.mkdirSync(BACKUPS_DIR, { recursive: true });
@@ -349,7 +361,8 @@ export function registerPromptOrganizationTools(server: McpServer): void {
         };
 
         const actualFilename = filename || `prompt_backup_${new Date().toISOString().replace(/[:.]/g, '-')}`;
-        const filePath = path.join(BACKUPS_DIR, `${actualFilename}.json`);
+        const resolvedBackup = resolveBackupPath(actualFilename);
+        const filePath = resolvedBackup.filePath;
 
         fs.writeFileSync(filePath, JSON.stringify(backup, null, 2), 'utf-8');
 
@@ -358,8 +371,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
             type: 'text' as const,
             text: JSON.stringify({
               success: true,
-              file_path: filePath,
-              filename: `${actualFilename}.json`,
+              filename: resolvedBackup.filename,
               metadata,
             }, null, 2),
           }],
@@ -381,7 +393,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     },
     async ({ filename }) => {
       try {
-        const filePath = path.join(BACKUPS_DIR, filename);
+        const filePath = resolveBackupPath(filename).filePath;
 
         if (!fs.existsSync(filePath)) {
           return {
@@ -508,7 +520,6 @@ export function registerPromptOrganizationTools(server: McpServer): void {
             text: JSON.stringify({
               backups: files,
               total: files.length,
-              backups_dir: BACKUPS_DIR,
             }, null, 2),
           }],
         };

@@ -36,6 +36,7 @@ export interface WorkflowRecord {
   color: string;
   created_date: string;
   updated_date: string;
+  deleted_at?: string | null;
 }
 
 /**

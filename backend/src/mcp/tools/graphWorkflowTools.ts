@@ -7,6 +7,8 @@ import { GraphWorkflowModel } from '../../models/GraphWorkflow'
 import { GraphWorkflowExecutor } from '../../services/graphWorkflowExecutor'
 import { decorateGraphExecutionRecord } from '../../services/graphWorkflowViewService'
 import type { GraphWorkflowDocument, GraphWorkflowExposedInput } from '../../types/moduleGraph'
+import type { McpRequestContext } from '../context'
+import { McpArtifactService } from '../../services/mcpArtifactService'
 
 function parseGraphDocument(graphJson: string): GraphWorkflowDocument {
   const parsed = JSON.parse(graphJson)
@@ -75,7 +77,7 @@ function validateGraphInputs(exposedInputs: GraphWorkflowExposedInput[], supplie
   return runtimeInputs
 }
 
-function compactGraphExecution(executionId: number) {
+async function compactGraphExecution(executionId: number, context: McpRequestContext) {
   const execution = GraphExecutionModel.findById(executionId)
   if (!execution) return null
   const decorated = decorateGraphExecutionRecord(execution)
@@ -95,12 +97,25 @@ function compactGraphExecution(executionId: number) {
       created_date: decorated.created_date,
       updated_date: decorated.updated_date,
     },
-    final_results: GraphExecutionFinalResultModel.findByExecution(executionId),
-    artifacts: GraphExecutionArtifactModel.findByExecution(executionId),
+    final_results: GraphExecutionFinalResultModel.findByExecution(executionId).map((result) => ({
+      id: result.id,
+      execution_id: result.execution_id,
+      final_node_id: result.final_node_id,
+      source_artifact_id: result.source_artifact_id,
+      source_node_id: result.source_node_id,
+      source_port_key: result.source_port_key,
+      artifact_type: result.artifact_type,
+      created_date: result.created_date,
+    })),
+    artifacts: context.baseUrl
+      ? (await Promise.all(GraphExecutionArtifactModel.findByExecution(executionId)
+          .map((artifact) => McpArtifactService.createGraphDescriptor(artifact.id, context.baseUrl as string))))
+          .filter(Boolean)
+      : [],
   }
 }
 
-export function registerGraphWorkflowTools(server: McpServer): void {
+export function registerGraphWorkflowTools(server: McpServer, context: McpRequestContext): void {
   server.tool(
     'list_graph_workflows',
     'List user-built workflows from the /generation?tab=workflows workspace.',
@@ -165,7 +180,7 @@ export function registerGraphWorkflowTools(server: McpServer): void {
         const graph = parseGraphDocument(workflow.graph_json)
         const runtimeInputs = validateGraphInputs(graph.metadata?.exposed_inputs ?? [], input_values as Record<string, unknown>)
         const result = await GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs })
-        const compactResult = compactGraphExecution(result.executionId)
+        const compactResult = await compactGraphExecution(result.executionId, context)
         return { content: [{ type: 'text' as const, text: JSON.stringify(compactResult, null, 2) }] }
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Graph workflow execution error: ${(error as Error).message}` }] }
@@ -179,7 +194,7 @@ export function registerGraphWorkflowTools(server: McpServer): void {
     { execution_id: z.number().int().describe('Graph workflow execution ID') },
     async ({ execution_id }) => {
       try {
-        const result = compactGraphExecution(execution_id)
+        const result = await compactGraphExecution(execution_id, context)
         if (!result) throw new Error(`Graph workflow execution ${execution_id} not found`)
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
       } catch (error) {

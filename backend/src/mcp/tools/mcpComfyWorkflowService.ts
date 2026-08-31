@@ -5,6 +5,7 @@ import { ComfyUIService } from '../../services/comfyuiService'
 import { reconcileComfyModelSelectionValues } from '../../services/comfyModelSelectionResolver'
 import { prepareComfyPromptData } from '../../services/prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from '../../services/workflowPromptValueResolver'
+import { ImageUploadService } from '../../services/imageUploadService'
 
 const MINIMAX_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
 const MINIMAX_META_KEY = '__conai_minimax_h3_director'
@@ -41,6 +42,7 @@ type MiniMaxMediaInput = {
   data_url?: string
   mime_type?: string
   file_path?: string
+  composite_hash?: string
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -118,11 +120,17 @@ function buildMiniMaxAssets(mediaItems: MiniMaxMediaInput[], timelineItems: Arra
     const itemId = String(timelineItems[index]?.id ?? '')
     if (!itemId) return
     const fallbackExtension = media.type === 'video' ? 'mp4' : media.type === 'audio' ? 'wav' : 'png'
+    const managedFilePath = media.composite_hash
+      ? ImageUploadService.getActiveFilePath(media.composite_hash)
+      : null
+    if (media.composite_hash && !managedFilePath) {
+      throw new Error(`Managed media asset not found: ${media.composite_hash}`)
+    }
     const asset = {
       fileName: media.file_name ?? `mcp-${media.type ?? 'image'}-${index}.${fallbackExtension}`,
       dataUrl: media.data_url,
       mimeType: media.mime_type,
-      filePath: media.file_path,
+      filePath: managedFilePath ?? media.file_path,
     }
     if (Object.values(asset).some((value) => hasMeaningfulValue(value))) {
       assets[itemId] = asset
@@ -369,7 +377,7 @@ function miniMaxInputSchema(field: MarkedField) {
       postprocess: { type: 'object', description: 'simple/model/rtx upscaling settings.' },
       media: {
         type: 'array',
-        item_properties: ['id', 'type', 'slot', 'order', 'enabled', 'duration', 'trim_start', 'trim_end', 'source_width', 'source_height', 'file_name', 'data_url', 'mime_type', 'file_path'],
+        item_properties: ['id', 'type', 'slot', 'order', 'enabled', 'duration', 'trim_start', 'trim_end', 'source_width', 'source_height', 'file_name', 'data_url', 'mime_type', 'composite_hash'],
       },
       timeline_data: { type: 'string|object', description: 'Raw CoNAI timeline format; friendly media/resolution keys are preferred.' },
       builder_state: { type: 'string|object', description: 'Raw CoNAI prompt builder format; friendly prompt keys are preferred.' },

@@ -15,12 +15,39 @@ import {
   prepareMcpComfyWorkflow,
   resolveMcpComfyServer,
 } from './mcpComfyWorkflowService';
+import type { McpRequestContext } from '../context';
+import { registerGenerationJobTools } from './generationJobTools';
+import { McpArtifactService } from '../../services/mcpArtifactService';
+import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 
-export function registerGenerationTools(server: McpServer): void {
+export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
-  registerComfyGenerationTools(server);
+  registerComfyGenerationTools(server, context);
   registerWorkflowDetailTools(server);
   registerNovelAiGenerationTools(server);
+  registerGenerationJobTools(server, context);
+}
+
+function resolveUsableWorkflow(workflowId: number): WorkflowRecord {
+  const workflow = WorkflowModel.findByIdIncludingDeleted(workflowId);
+  if (!workflow) {
+    const reference = HistoryQueryRepository.findWorkflowReference(workflowId);
+    if (reference) throw new Error(`삭제된 워크플로우(사용 불가): ${reference.workflow_name ?? `ID ${workflowId}`}`);
+    throw new Error(`Workflow with ID ${workflowId} not found`);
+  }
+  if (workflow.deleted_at) {
+    throw new Error(`삭제된 워크플로우(사용 불가): ${workflow.name}`);
+  }
+  return workflow;
+}
+
+async function replaceOutputPathsWithArtifacts(result: Awaited<ReturnType<typeof saveMcpComfyOutputs>>, context: McpRequestContext) {
+  if (!context.baseUrl) {
+    return result;
+  }
+  const { outputPaths: _internalPaths, ...safeResult } = result;
+  const artifacts = (await Promise.all(result.historyIds.map((id) => McpArtifactService.createHistoryDescriptor(id, context.baseUrl as string)))).filter(Boolean);
+  return { ...safeResult, artifacts };
 }
 
 function registerWorkflowListTools(server: McpServer): void {
@@ -171,7 +198,7 @@ async function saveMcpComfyOutputs(params: {
   }
 }
 
-function registerComfyGenerationTools(server: McpServer): void {
+function registerComfyGenerationTools(server: McpServer, context: McpRequestContext): void {
   const inputSchema = {
     workflow_id: z.number().int().describe('Workflow ID to use'),
     server_id: z.number().int().optional().describe('Optional ComfyUI server ID. If omitted, an enabled workflow-linked server, the active default, or the first active server is selected.'),
@@ -182,12 +209,11 @@ function registerComfyGenerationTools(server: McpServer): void {
 
   server.tool(
     'generate_comfyui',
-    'Run a saved ComfyUI workflow. Call get_workflow_details first for field IDs and JSON formats. Omitted fields use saved defaults; server_id is optional.',
+    'Compatibility synchronous ComfyUI generation. Prefer submit_generation_job for durable work that may exceed the HTTP connection lifetime.',
     inputSchema,
     async ({ workflow_id, server_id, inputs, prompt_data, group_id }) => {
       try {
-        const workflow = WorkflowModel.findById(workflow_id);
-        if (!workflow) throw new Error(`Workflow with ID ${workflow_id} not found`);
+        const workflow = resolveUsableWorkflow(workflow_id);
         if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
         const serverRecord = resolveMcpComfyServer(workflow_id, server_id);
         const result = await saveMcpComfyOutputs({
@@ -196,7 +222,7 @@ function registerComfyGenerationTools(server: McpServer): void {
           suppliedInputs: (inputs ?? prompt_data ?? {}) as Record<string, unknown>,
           groupId: group_id,
         });
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(await replaceOutputPathsWithArtifacts(result, context), null, 2) }] };
       } catch (error) {
         return {
           isError: true,
@@ -208,7 +234,7 @@ function registerComfyGenerationTools(server: McpServer): void {
 
   server.tool(
     'generate_comfyui_all_servers',
-    'Run a saved ComfyUI workflow on all active servers. Input media and model selections are prepared independently for each server.',
+    'Compatibility synchronous generation on all active ComfyUI servers. Prefer submit_generation_job for durable work.',
     {
       workflow_id: z.number().int().describe('Workflow ID to use'),
       inputs: z.record(z.string(), z.unknown()).optional().describe('Workflow inputs keyed by marked field ID.'),
@@ -217,20 +243,20 @@ function registerComfyGenerationTools(server: McpServer): void {
     },
     async ({ workflow_id, inputs, prompt_data, group_id }) => {
       try {
-        const workflow = WorkflowModel.findById(workflow_id);
-        if (!workflow) throw new Error(`Workflow with ID ${workflow_id} not found`);
+        const workflow = resolveUsableWorkflow(workflow_id);
         if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
         const activeServers = ComfyUIServerModel.findAll(true);
         if (activeServers.length === 0) throw new Error('No active ComfyUI servers found');
         const suppliedInputs = (inputs ?? prompt_data ?? {}) as Record<string, unknown>;
         const settled = await Promise.all(activeServers.map(async (serverRecord) => {
           try {
-            return await saveMcpComfyOutputs({
+            const result = await saveMcpComfyOutputs({
               workflow,
               server: serverRecord,
               suppliedInputs,
               groupId: group_id,
             });
+            return await replaceOutputPathsWithArtifacts(result, context);
           } catch (error) {
             return {
               success: false,
@@ -275,11 +301,14 @@ function registerWorkflowDetailTools(server: McpServer): void {
     },
     async ({ workflow_id }) => {
       try {
-        const workflow = WorkflowModel.findById(workflow_id);
-        if (!workflow) {
+        const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);
+        if (!workflow || workflow.deleted_at) {
+          const reference = HistoryQueryRepository.findWorkflowReference(workflow_id);
           return {
             isError: true,
-            content: [{ type: 'text' as const, text: `Workflow with ID ${workflow_id} not found` }],
+            content: [{ type: 'text' as const, text: !workflow && !reference
+              ? `Workflow with ID ${workflow_id} not found`
+              : `삭제된 워크플로우(사용 불가): ${workflow?.name ?? reference?.workflow_name ?? `ID ${workflow_id}`}` }],
           };
         }
 
