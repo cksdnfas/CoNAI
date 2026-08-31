@@ -19,6 +19,7 @@ import type { McpRequestContext } from '../context';
 import { registerGenerationJobTools } from './generationJobTools';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
+import { resolveRequestBodyLimitsMb } from '../../middleware/requestBodyLimits';
 
 export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
@@ -313,6 +314,7 @@ function registerWorkflowDetailTools(server: McpServer): void {
         }
 
         const markedFields = parseMcpMarkedFields(workflow);
+        const mcpBodyLimitMiB = resolveRequestBodyLimitsMb().mcp;
         const selectedServer = (() => {
           try {
             return resolveMcpComfyServer(workflow_id);
@@ -333,9 +335,15 @@ function registerWorkflowDetailTools(server: McpServer): void {
               color: workflow.color,
               input_schema: markedFields.map(describeMcpMarkedField),
               input_values_template: createMcpWorkflowInputTemplate(markedFields),
+              transport_contract: {
+                max_json_body_mib: mcpBodyLimitMiB,
+                preferred_media_reference: 'composite_hash',
+                data_url_note: 'Base64 data URLs count toward the full JSON request limit.',
+              },
               invocation: {
-                tool: 'generate_comfyui',
+                tool: 'submit_generation_job',
                 arguments: {
+                  service_type: 'comfyui',
                   workflow_id: workflow.id,
                   inputs: createMcpWorkflowInputTemplate(markedFields),
                 },
@@ -343,6 +351,8 @@ function registerWorkflowDetailTools(server: McpServer): void {
                   'Every input key is a marked field ID.',
                   'Any omitted field uses its saved workflow default.',
                   'server_id is optional and auto-resolved when omitted.',
+                  'submit_generation_job returns immediately; poll get_generation_job at intervals of at least 2 seconds and back off on HTTP 429.',
+                  'generate_comfyui remains available only as a synchronous compatibility tool.',
                 ],
               },
               auto_selected_server: selectedServer ? { id: selectedServer.id, name: selectedServer.name } : null,

@@ -49,6 +49,21 @@ function parseNodeOrder(nodeId: string): number {
   return match ? Number(match[0]) : -1;
 }
 
+/** Collapse duplicate ComfyUI buckets that point at the same physical output file. */
+function deduplicateComfyOutputs(outputs: CollectedComfyOutput[]): CollectedComfyOutput[] {
+  const seen = new Set<string>();
+  return outputs.filter((output) => {
+    const normalizedLocation = path.posix.normalize(
+      `${String(output.type || 'output').replace(/\\/g, '/')}/${String(output.subfolder || '').replace(/\\/g, '/')}/${String(output.filename || '').replace(/\\/g, '/')}`,
+    );
+    if (seen.has(normalizedLocation)) {
+      return false;
+    }
+    seen.add(normalizedLocation);
+    return true;
+  });
+}
+
 export function extractComfyOutputInfo(
   history: ComfyUIHistoryResponse,
   promptId: string,
@@ -84,13 +99,15 @@ export function extractComfyOutputInfo(
   if (onlyFinalOutput && allOutputs.length > 0) {
     const maxNodeOrder = Math.max(...allOutputs.map((file) => parseNodeOrder(file.nodeId)));
     const finalOutputs = allOutputs.filter((file) => parseNodeOrder(file.nodeId) === maxNodeOrder);
+    const uniqueFinalOutputs = deduplicateComfyOutputs(finalOutputs);
 
-    console.log(`📦 Found ${allOutputs.length} outputs, returning ${finalOutputs.length} final output(s) from node #${maxNodeOrder}`);
-    return finalOutputs;
+    console.log(`📦 Found ${allOutputs.length} outputs, returning ${uniqueFinalOutputs.length} unique final output(s) from node #${maxNodeOrder}`);
+    return uniqueFinalOutputs;
   }
 
-  console.log(`📦 Found ${allOutputs.length} outputs, returning all`);
-  return allOutputs;
+  const uniqueOutputs = deduplicateComfyOutputs(allOutputs);
+  console.log(`📦 Found ${allOutputs.length} outputs, returning ${uniqueOutputs.length} unique output(s)`);
+  return uniqueOutputs;
 }
 
 export function writeModalOutputToTemp(file: ModalComfyFile, fallbackName: string, kind: ComfyOutputKind): CollectedComfyOutput & { tempPath: string } {

@@ -156,6 +156,12 @@ export class McpArtifactService {
     return artifact ? this.createDescriptor(artifact, baseUrl) : null;
   }
 
+  /** Resolve a stable artifact ID and issue a fresh short-lived download URL. */
+  static async refreshDescriptor(artifactId: string, baseUrl: string): Promise<McpArtifactDescriptor | null> {
+    const artifact = this.resolve(artifactId);
+    return artifact ? this.createDescriptor(artifact, baseUrl) : null;
+  }
+
   private static async createDescriptor(artifact: ResolvedMcpArtifact, baseUrl: string): Promise<McpArtifactDescriptor> {
     const artifactId = encodeArtifactId(artifact.payload);
     const expires = Math.floor(Date.now() / 1000) + DEFAULT_ARTIFACT_URL_TTL_SECONDS;

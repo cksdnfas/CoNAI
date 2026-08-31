@@ -152,6 +152,28 @@ function miniMaxMediaDuration(item: Record<string, any>) {
   return Number(item.duration)
 }
 
+/** Enforce the fixed start/end image slots used by frame-conditioned Director modes. */
+function validateMiniMaxFrameMedia(field: MarkedField, mode: string, items: Array<Record<string, any>>) {
+  const requiredSlots = mode === 'I2VA' ? [0] : mode === 'FL2VA' ? [0, 1] : mode === 'L2VA' ? [1] : null
+  if (!requiredSlots) return false
+
+  const invalidItems = items.filter((item) => item.type !== 'image' || !requiredSlots.includes(Number(item.slot)))
+  if (invalidItems.length > 0) {
+    throw new Error(
+      `${field.label || field.id}: ${mode} accepts enabled image media only in slot(s) ${requiredSlots.join(', ')}; received invalid slot or media type`,
+    )
+  }
+
+  for (const slot of requiredSlots) {
+    const count = items.filter((item) => Number(item.slot) === slot).length
+    const role = slot === 0 ? 'start' : 'end'
+    if (count !== 1) {
+      throw new Error(`${field.label || field.id}: ${mode} requires exactly one enabled ${role} image at slot=${slot}; received ${count}`)
+    }
+  }
+  return true
+}
+
 function validateMiniMaxValue(field: MarkedField, value: Record<string, any>) {
   const mode = value.mode
   if (typeof mode !== 'string' || !MINIMAX_MODES.has(mode)) {
@@ -168,6 +190,9 @@ function validateMiniMaxValue(field: MarkedField, value: Record<string, any>) {
   }
 
   const items = activeMiniMaxItems(value)
+  if (validateMiniMaxFrameMedia(field, mode, items)) {
+    return
+  }
   if (mode === 'Image Inpaint') {
     if (items.length !== 1 || items[0].type !== 'image') {
       throw new Error(`${field.label || field.id}: Image Inpaint requires exactly one enabled image and no video or audio`)
@@ -377,6 +402,7 @@ function miniMaxInputSchema(field: MarkedField) {
       postprocess: { type: 'object', description: 'simple/model/rtx upscaling settings.' },
       media: {
         type: 'array',
+        description: 'Mode contract: I2VA uses one start image at slot=0; FL2VA uses one start image at slot=0 and one end image at slot=1; L2VA uses one end image at slot=1. Prefer composite_hash for media already managed by CoNAI.',
         item_properties: ['id', 'type', 'slot', 'order', 'enabled', 'duration', 'trim_start', 'trim_end', 'source_width', 'source_height', 'file_name', 'data_url', 'mime_type', 'composite_hash'],
       },
       timeline_data: { type: 'string|object', description: 'Raw CoNAI timeline format; friendly media/resolution keys are preferred.' },
@@ -384,6 +410,31 @@ function miniMaxInputSchema(field: MarkedField) {
     },
     visible_fields: field.node_visible_fields ?? [],
     numeric_bounds: field.node_numeric_bounds ?? {},
+    media_contracts: {
+      I2VA: { required: [{ type: 'image', slot: 0, role: 'start' }] },
+      FL2VA: { required: [{ type: 'image', slot: 0, role: 'start' }, { type: 'image', slot: 1, role: 'end' }] },
+      L2VA: { required: [{ type: 'image', slot: 1, role: 'end' }] },
+    },
+    examples: {
+      FL2VA_data_url: {
+        mode: 'FL2VA',
+        duration: 5,
+        frame_rate: 24,
+        media: [
+          { type: 'image', slot: 0, order: 0, file_name: 'start.png', data_url: 'data:image/png;base64,...' },
+          { type: 'image', slot: 1, order: 1, file_name: 'end.png', data_url: 'data:image/png;base64,...' },
+        ],
+      },
+      FL2VA_composite_hash: {
+        mode: 'FL2VA',
+        duration: 5,
+        frame_rate: 24,
+        media: [
+          { type: 'image', slot: 0, order: 0, composite_hash: '<start-composite-hash>' },
+          { type: 'image', slot: 1, order: 1, composite_hash: '<end-composite-hash>' },
+        ],
+      },
+    },
   }
 }
 

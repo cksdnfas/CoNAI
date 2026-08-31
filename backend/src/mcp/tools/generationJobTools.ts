@@ -99,13 +99,28 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.tool(
     'get_generation_artifacts',
-    'Get downloadable artifacts for one generation job.',
+    'Get downloadable artifacts for one generation job. Calling it again issues fresh signed download URLs.',
     { job_id: z.number().int().positive() },
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
         ? { content: [{ type: 'text' as const, text: JSON.stringify({ job_id, status: job.status, artifacts: job.artifacts }, null, 2) }] }
         : { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
+    },
+  );
+
+  server.tool(
+    'refresh_artifact_download',
+    'Issue a fresh signed download URL from a stable MCP artifact ID.',
+    { artifact_id: z.string().min(1) },
+    async ({ artifact_id }) => {
+      if (!context.baseUrl) {
+        return { isError: true, content: [{ type: 'text' as const, text: 'Artifact downloads require the Streamable HTTP transport' }] };
+      }
+      const artifact = await McpArtifactService.refreshDescriptor(artifact_id, context.baseUrl);
+      return artifact
+        ? { content: [{ type: 'text' as const, text: JSON.stringify(artifact, null, 2) }] }
+        : { isError: true, content: [{ type: 'text' as const, text: 'Artifact not found or artifact ID is invalid' }] };
     },
   );
 

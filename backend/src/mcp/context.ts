@@ -32,6 +32,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   search_wildcards: 'read',
   get_generation_job: 'read',
   get_generation_artifacts: 'read',
+  refresh_artifact_download: 'read',
   generate_comfyui: 'generate',
   generate_comfyui_all_servers: 'generate',
   generate_nai: 'generate',
