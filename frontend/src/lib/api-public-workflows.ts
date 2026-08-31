@@ -93,3 +93,10 @@ export async function cleanupPublicGenerationWorkflowFailedHistory(publicSlug: s
     method: 'POST',
   })
 }
+
+/** Clear only the current requester's public-workflow history while preserving media. */
+export async function clearPublicGenerationWorkflowHistory(publicSlug: string) {
+  return requestJson<PublicWorkflowCleanupResponse>(`/api/public-workflows/${encodeURIComponent(publicSlug)}/history`, {
+    method: 'DELETE',
+  })
+}

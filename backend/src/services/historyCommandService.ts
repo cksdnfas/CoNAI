@@ -1,10 +1,12 @@
 import { apiGenDb } from '../database/apiGenerationDb';
 import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepository';
 import type {
+  GenerationHistoryFilterOptions,
   GenerationHistoryRecord,
   GenerationStatus,
   ServiceType,
 } from '../types/generationHistory';
+import { buildHistoryFilterClause } from '../repositories/history/historyQueryFilter';
 import { buildUpdateQuery, filterDefined } from '../utils/dynamicUpdate';
 import { requestGenerationResultRetentionPrune } from './generationResultRetentionService';
 import { publishHistoryRecordEvent } from './runtime-events/runtimeEventPublishers';
@@ -283,6 +285,32 @@ export class HistoryCommandService {
     const info = apiGenDb
       .prepare('DELETE FROM api_generation_history WHERE composite_hash = ?')
       .run(compositeHash);
+    runHistoryCommandSideEffects([]);
+    return info.changes;
+  }
+
+  /** Delete history rows in one explicit scope without touching linked media. */
+  static deleteByFilters(
+    filters: Omit<GenerationHistoryFilterOptions, 'limit' | 'offset'>,
+    options: { generationStatuses?: GenerationStatus[] } = {},
+  ): number {
+    const hasScope = filters.service_type !== undefined
+      || filters.workflow_id !== undefined
+      || filters.requested_by_account_id !== undefined;
+    if (!hasScope) {
+      throw new Error('Generation history deletion requires an explicit scope');
+    }
+
+    const built = buildHistoryFilterClause(filters);
+    let sql = `DELETE FROM api_generation_history WHERE 1=1${built.sql}`;
+    const params: Array<string | number> = [...built.params];
+    const generationStatuses = Array.from(new Set(options.generationStatuses ?? []));
+    if (generationStatuses.length > 0) {
+      sql += ` AND generation_status IN (${generationStatuses.map(() => '?').join(',')})`;
+      params.push(...generationStatuses);
+    }
+
+    const info = apiGenDb.prepare(sql).run(...params);
     runHistoryCommandSideEffects([]);
     return info.changes;
   }

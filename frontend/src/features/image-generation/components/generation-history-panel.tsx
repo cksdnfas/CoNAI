@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowLeft, ListX, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -19,12 +19,17 @@ import type { ImageRecord } from '@/types/image'
 import { getRuntimeGenerationHistorySettings } from '@/lib/api-settings'
 import {
   cleanupFailedGenerationHistory,
+  clearGenerationHistoryScope,
   deleteGenerationHistoryRecord,
   downloadGenerationHistorySelection,
   getGenerationHistory,
   getGenerationWorkflowHistory,
 } from '@/lib/api-image-generation-history'
-import { cleanupPublicGenerationWorkflowFailedHistory, getPublicGenerationWorkflowHistory } from '@/lib/api-public-workflows'
+import {
+  cleanupPublicGenerationWorkflowFailedHistory,
+  clearPublicGenerationWorkflowHistory,
+  getPublicGenerationWorkflowHistory,
+} from '@/lib/api-public-workflows'
 import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import {
@@ -89,6 +94,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isDownloadingSelection, setIsDownloadingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
+  const [isClearingHistory, setIsClearingHistory] = useState(false)
   const [retryingQueueJobIds, setRetryingQueueJobIds] = useState<Set<number>>(() => new Set())
   const [historyRefreshWatchUntil, setHistoryRefreshWatchUntil] = useState(0)
   const isAdmin = authStatusQuery.data?.isAdmin === true
@@ -412,6 +418,54 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     }
   }, [isCleaningFailed, isPublicView, publicWorkflowSlug, refreshHistory, showSnackbar, t])
 
+  const handleClearHistory = useCallback(async () => {
+    if (isClearingHistory) {
+      return
+    }
+
+    const confirmed = window.confirm(isPublicView
+      ? t({
+          ko: '이 공용 워크플로에서 내 완료·실패 히스토리 목록을 비울까? 원본 미디어는 유지돼.',
+          en: 'Clear my completed and failed history for this public workflow? Original media will be kept.',
+        })
+      : t({
+          ko: '이 생성 페이지의 완료·실패 히스토리 목록을 비울까? 원본 미디어는 유지돼.',
+          en: 'Clear completed and failed history for this generation page? Original media will be kept.',
+        }))
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setIsClearingHistory(true)
+      const result = isPublicView && publicWorkflowSlug
+        ? await clearPublicGenerationWorkflowHistory(publicWorkflowSlug)
+        : await clearGenerationHistoryScope({
+            serviceType,
+            workflowId,
+            mine: !isAdmin,
+          })
+      setSelectedHistoryIds([])
+      await refreshHistory()
+      showSnackbar({
+        message: result.deleted > 0
+          ? t(
+              { ko: '히스토리 {count}개를 목록에서 지웠어. 원본 미디어는 유지돼.', en: 'Removed {count} history records. Original media was kept.' },
+              { count: formatNumber(result.deleted) },
+            )
+          : t({ ko: '정리할 완료·실패 히스토리가 없어.', en: 'There is no completed or failed history to clear.' }),
+        tone: 'info',
+      })
+    } catch (error) {
+      showSnackbar({
+        message: getErrorMessage(error, t({ ko: '히스토리 목록을 비우지 못했어.', en: 'Failed to clear the history list.' })),
+        tone: 'error',
+      })
+    } finally {
+      setIsClearingHistory(false)
+    }
+  }, [formatNumber, isAdmin, isClearingHistory, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, showSnackbar, t, workflowId])
+
   const acknowledgeRecoveryRecords = useCallback((records: GenerationHistoryRecord[]) => {
     if (records.length === 0) {
       return
@@ -547,6 +601,25 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
         <div className="flex flex-wrap gap-2">
           {inFlightHistoryCount > 0 ? <Badge variant="secondary">{t('image-generation.components.generation.history.panel.processing.value', { inFlightHistoryCount: formatNumber(inFlightHistoryCount) })}</Badge> : null}
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            onClick={() => void handleClearHistory()}
+            disabled={isClearingHistory || historyRecords.length === 0}
+            title={isClearingHistory
+              ? t({ ko: '히스토리 비우는 중', en: 'Clearing history' })
+              : isPublicView
+                ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' })
+                : t({ ko: '히스토리 비우기', en: 'Clear history' })}
+            aria-label={isClearingHistory
+              ? t({ ko: '히스토리 비우는 중', en: 'Clearing history' })
+              : isPublicView
+                ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' })
+                : t({ ko: '히스토리 비우기', en: 'Clear history' })}
+          >
+            {isClearingHistory ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListX className="h-4 w-4" />}
+          </Button>
           <Button
             type="button"
             size="icon-sm"

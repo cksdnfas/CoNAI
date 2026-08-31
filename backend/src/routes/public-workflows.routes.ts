@@ -7,7 +7,6 @@ import { userSettingsDb } from '../database/userSettingsDb';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
 import { CustomDropdownListModel, type CustomDropdownListWithParsedItems } from '../models/CustomDropdownList';
-import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepository';
 import { HistoryCommandService } from '../services/historyCommandService';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
@@ -35,9 +34,24 @@ const router = Router();
 const DROPDOWN_RANDOM_OPTION_VALUE = '__random__';
 const PUBLIC_QUEUE_MAX_COUNT_DEFAULT = 32;
 const COMFY_MODEL_PREVIEW_FOLDERS = new Set(['checkpoints', 'loras', 'diffusion_models', 'unet_gguf']);
+const CLEARABLE_HISTORY_STATUSES = ['completed', 'failed'] as const;
 
 function getPublicWorkflowOrNull(slug: string) {
   return WorkflowModel.findPublicBySlug(slug.trim().toLowerCase());
+}
+
+/** Resolve the exact owner scope used by public-workflow history mutations. */
+function getPublicHistoryRequesterScope(req: Request) {
+  const requestedByAccountId = getRequesterAccountId(req);
+  const requestedByAccountType = getRequesterAccountType(req);
+  if (requestedByAccountId === null || requestedByAccountType === null) {
+    return null;
+  }
+
+  return {
+    requested_by_account_id: requestedByAccountId,
+    requested_by_account_type: requestedByAccountType,
+  } as const;
 }
 
 function parseMarkedFields(markedFieldsJson?: string | null): MarkedField[] {
@@ -396,6 +410,35 @@ router.get('/:slug/history', asyncHandler(async (req: Request, res: Response) =>
   });
 }));
 
+/** DELETE /api/public-workflows/:slug/history - clear only the requester's history rows. */
+router.delete('/:slug/history', asyncHandler(async (req: Request, res: Response) => {
+  const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
+  if (!workflow) {
+    res.status(404).json({ success: false, error: 'Public workflow not found' });
+    return;
+  }
+
+  const requesterScope = getPublicHistoryRequesterScope(req);
+  if (!requesterScope) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
+  }
+
+  const deleted = HistoryCommandService.deleteByFilters({
+    workflow_id: workflow.id,
+    ...requesterScope,
+  }, {
+    generationStatuses: [...CLEARABLE_HISTORY_STATUSES],
+  });
+  res.json({
+    success: true,
+    deleted,
+    message: deleted > 0
+      ? `Removed ${deleted} requester-owned public workflow history records without deleting media`
+      : 'No completed or failed requester-owned history records to remove',
+  });
+}));
+
 /** POST /api/public-workflows/:slug/queue */
 router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => {
   const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
@@ -513,27 +556,17 @@ router.post('/:slug/cleanup-failed', asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  const historyFilters: {
-    requested_by_account_id?: number;
-    requested_by_account_type?: 'admin' | 'guest';
-  } = {};
-  const accessScope = applyHistoryAccessScope(req, historyFilters, false);
-  if (accessScope.forceEmpty) {
+  const requesterScope = getPublicHistoryRequesterScope(req);
+  if (!requesterScope) {
     res.status(401).json({ success: false, error: 'Authentication required' });
     return;
   }
 
-  const failedRecords = HistoryQueryRepository.findAll({
+  const deleted = HistoryCommandService.deleteByFilters({
     workflow_id: workflow.id,
     generation_status: 'failed',
-    ...historyFilters,
+    ...requesterScope,
   });
-
-  const deleted = HistoryCommandService.deleteMany(
-    failedRecords
-      .map((record) => record.id)
-      .filter((id): id is number => typeof id === 'number'),
-  );
 
   res.json({
     success: true,

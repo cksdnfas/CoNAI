@@ -90,6 +90,25 @@ export async function deleteGenerationHistoryRecord(historyId: number, deleteFil
   })
 }
 
+/** Clear completed/failed history rows for one generation page or workflow without deleting media. */
+export async function clearGenerationHistoryScope(params: {
+  serviceType: GenerationServiceType
+  workflowId?: number | null
+  mine?: boolean
+}) {
+  const searchParams = new URLSearchParams({ service_type: params.serviceType })
+  if (params.workflowId) {
+    searchParams.set('workflow_id', String(params.workflowId))
+  }
+  if (params.mine) {
+    searchParams.set('mine', 'true')
+  }
+
+  return requestJson<{ success: boolean; message: string; deleted: number }>(`/api/generation-history/clear?${searchParams.toString()}`, {
+    method: 'POST',
+  })
+}
+
 /** Delete failed generation history records in bulk. */
 export async function cleanupFailedGenerationHistory() {
   return requestJson<{ success: boolean; message: string; deleted: number }>('/api/generation-history/cleanup-failed', {
