@@ -8,8 +8,15 @@ import { externalizeQueueInputDataUrls } from '../../services/generation-queue/q
 import { GenerationQueueService } from '../../services/generationQueueService';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
+import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
 import type { McpRequestContext } from '../context';
 import { normalizeMcpWorkflowInputs, parseMcpMarkedFields } from './mcpComfyWorkflowService';
+import {
+  describeMcpGenerationJobRouting,
+  getMcpGenerationRoutingOptions,
+  getMcpGenerationRoutingRules,
+  resolveMcpGenerationRoutingInput,
+} from './generationJobRouting';
 
 /** Serialize JSON-compatible request values deterministically across object key order. */
 function stringifyStableJson(value: unknown): string {
@@ -49,6 +56,7 @@ async function describeJob(jobId: number, context: McpRequestContext) {
   const workflowDeleted = Boolean(job.workflow_id && (!workflow || workflow.deleted_at));
   return {
     ...job,
+    routing: describeMcpGenerationJobRouting(job),
     workflow_deleted: workflowDeleted,
     workflow_availability: workflowDeleted ? '삭제된 워크플로우(사용 불가)' : 'available',
     history_ids: histories.map((history) => history.id),
@@ -59,25 +67,34 @@ async function describeJob(jobId: number, context: McpRequestContext) {
 export function registerGenerationJobTools(server: McpServer, context: McpRequestContext): void {
   server.tool(
     'submit_generation_job',
-    'Submit a durable asynchronous generation job and return immediately with a job ID.',
+    'Submit a durable asynchronous generation job and return immediately with a job ID. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.',
     {
       service_type: z.enum(['comfyui', 'novelai', 'codex']),
       workflow_id: z.number().int().positive().optional(),
-      server_id: z.number().int().positive().optional(),
+      server_id: z.number().int().positive().optional().describe('ComfyUI only. Target one active workflow-eligible server. Cannot be combined with server_tag.'),
+      server_tag: z.string().trim().min(1).max(64).optional().describe('ComfyUI only. Route to an active workflow-eligible server with this exact normalized tag. Cannot be combined with server_id.'),
       inputs: z.record(z.string(), z.unknown()).optional().describe('ComfyUI marked-field inputs, or a NovelAI/Codex payload alias'),
       request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters'),
       group_id: z.number().int().positive().optional(),
       priority: z.number().int().min(0).max(100000).default(100),
       idempotency_key: z.string().trim().min(1).max(200).optional().describe('Optional retry key. The same MCP key and request return the original job; a different request conflicts.'),
     },
-    async ({ service_type, workflow_id, server_id, inputs, request_payload, group_id, priority, idempotency_key }) => {
+    async ({ service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, priority, idempotency_key }) => {
       try {
+        const normalizedServerTag = parseGenerationQueueRoutingTag(server_tag, 'server_tag');
+        if (server_id != null && normalizedServerTag !== undefined) {
+          throw new Error('server_id and server_tag cannot be combined');
+        }
+        if (service_type !== 'comfyui' && (server_id != null || normalizedServerTag !== undefined)) {
+          throw new Error('server_id and server_tag are only valid for comfyui jobs');
+        }
         const idempotencyScope = idempotency_key ? resolveIdempotencyScope(context) : null;
         const requestHash = idempotency_key
           ? buildIdempotencyRequestHash({
               service_type,
               workflow_id: workflow_id ?? null,
               server_id: server_id ?? null,
+              server_tag: normalizedServerTag ?? null,
               inputs: inputs ?? null,
               request_payload: request_payload ?? null,
               group_id: group_id ?? null,
@@ -104,6 +121,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
         let workflowName: string | null = null;
         let payload = request_payload ?? inputs ?? {};
+        let routing: ReturnType<typeof resolveMcpGenerationRoutingInput>;
         if (service_type === 'comfyui') {
           if (!workflow_id) throw new Error('workflow_id is required for ComfyUI jobs');
           const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);
@@ -114,6 +132,12 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
           }
           if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
           workflowName = workflow.name;
+          routing = resolveMcpGenerationRoutingInput({
+            serviceType: service_type,
+            workflowId: workflow_id,
+            serverId: server_id,
+            serverTag: normalizedServerTag,
+          });
           const markedFields = parseMcpMarkedFields(workflow);
           const rawInputs = (inputs ?? payload.prompt_data ?? {}) as Record<string, unknown>;
           const suppliedInputs = normalizeWorkflowNumericPromptValues(
@@ -126,8 +150,16 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
               normalizeMcpWorkflowInputs(markedFields, suppliedInputs),
             ).value,
           };
-        } else if (Object.keys(payload).length === 0) {
-          throw new Error('request_payload is required for NovelAI and Codex jobs');
+        } else {
+          routing = resolveMcpGenerationRoutingInput({
+            serviceType: service_type,
+            workflowId: workflow_id,
+            serverId: server_id,
+            serverTag: normalizedServerTag,
+          });
+          if (Object.keys(payload).length === 0) {
+            throw new Error('request_payload is required for NovelAI and Codex jobs');
+          }
         }
 
         const createData = {
@@ -136,7 +168,8 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
           workflow_id: workflow_id ?? null,
           workflow_name: workflowName,
           requested_group_id: group_id ?? null,
-          requested_server_id: server_id ?? null,
+          requested_server_id: routing.requestedServerId,
+          requested_server_tag: routing.requestedServerTag,
           request_payload: payload,
           request_summary: `MCP ${service_type} generation`,
         };
@@ -163,6 +196,45 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
         };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Generation job error: ${(error as Error).message}` }] };
+      }
+    },
+  );
+
+  server.tool(
+    'get_generation_routing_options',
+    'Explain ComfyUI queue routing rules and list the active automatic, fixed-server, and tag targets currently available, optionally scoped to one workflow.',
+    {
+      workflow_id: z.number().int().positive().optional().describe('Optional workflow ID. When supplied, explicit workflow-server links constrain the returned targets.'),
+    },
+    async ({ workflow_id }) => {
+      try {
+        let workflow: { id: number; name: string; is_active: boolean } | null = null;
+        if (workflow_id) {
+          const record = WorkflowModel.findByIdIncludingDeleted(workflow_id);
+          if (!record || record.deleted_at) {
+            throw new Error(`Workflow with ID ${workflow_id} not found or deleted`);
+          }
+          workflow = { id: record.id, name: record.name, is_active: record.is_active };
+        }
+
+        const options = getMcpGenerationRoutingOptions(workflow_id);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              workflow,
+              routing_rules: getMcpGenerationRoutingRules(),
+              ...options,
+              examples: {
+                automatic: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', inputs: {} },
+                fixed_server: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', server_id: '<server_id>', inputs: {} },
+                server_tag: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', server_tag: '<routing_tag>', inputs: {} },
+              },
+            }, null, 2),
+          }],
+        };
+      } catch (error) {
+        return { isError: true, content: [{ type: 'text' as const, text: `Generation routing error: ${(error as Error).message}` }] };
       }
     },
   );

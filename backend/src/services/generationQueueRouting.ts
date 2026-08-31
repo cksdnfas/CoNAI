@@ -24,9 +24,30 @@ export type GenerationQueueRoutingContext = {
 
 export type GenerationQueueRoutingSource = ComfyUIServerRecord[] | GenerationQueueRoutingContext
 
+export const GENERATION_QUEUE_ROUTING_TAG_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
+export const GENERATION_QUEUE_ROUTING_TAG_PATTERN_TEXT = '/^[a-z0-9][a-z0-9._-]{0,63}$/'
+
 /** Normalize queue routing tags so server and request matching stays consistent. */
 export function normalizeGenerationQueueRoutingTag(value: string) {
   return value.trim().toLowerCase()
+}
+
+/** Parse one optional routing tag with the queue's canonical normalization and format. */
+export function parseGenerationQueueRoutingTag(value: unknown, fieldName = 'requested_server_tag') {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`)
+  }
+
+  const normalized = normalizeGenerationQueueRoutingTag(value)
+  if (!GENERATION_QUEUE_ROUTING_TAG_PATTERN.test(normalized)) {
+    throw new Error(`${fieldName} must match ${GENERATION_QUEUE_ROUTING_TAG_PATTERN_TEXT}`)
+  }
+
+  return normalized
 }
 
 /** Collect the normalized routing tags exposed by a single active ComfyUI server. */

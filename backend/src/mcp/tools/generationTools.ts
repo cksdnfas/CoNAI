@@ -20,6 +20,7 @@ import { registerGenerationJobTools } from './generationJobTools';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { resolveRequestBodyLimitsMb } from '../../middleware/requestBodyLimits';
+import { getMcpGenerationRoutingOptions, getMcpGenerationRoutingRules } from './generationJobRouting';
 
 export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
@@ -100,7 +101,7 @@ function registerWorkflowListTools(server: McpServer): void {
   // ComfyUI 서버 목록 조회
   server.tool(
     'list_comfyui_servers',
-    'List all ComfyUI servers configured in the system.',
+    'List all configured ComfyUI servers, including backend type, capacity, active state, and routing_tags. Use get_generation_routing_options for effective workflow-scoped routing rules.',
     {
       active_only: z.boolean().default(false).describe('Show only active servers'),
     },
@@ -202,7 +203,7 @@ async function saveMcpComfyOutputs(params: {
 function registerComfyGenerationTools(server: McpServer, context: McpRequestContext): void {
   const inputSchema = {
     workflow_id: z.number().int().describe('Workflow ID to use'),
-    server_id: z.number().int().optional().describe('Optional ComfyUI server ID. If omitted, an enabled workflow-linked server, the active default, or the first active server is selected.'),
+    server_id: z.number().int().optional().describe('Optional server for this synchronous compatibility call. Omitting it selects one default/linked server; it does not use automatic queue distribution. Use submit_generation_job for auto or tag routing.'),
     inputs: z.record(z.string(), z.unknown()).optional().describe('Workflow inputs keyed by marked field ID. Partial MiniMax H3 Director objects and media data URLs are supported.'),
     prompt_data: z.record(z.string(), z.unknown()).optional().describe('Legacy alias for inputs.'),
     group_id: z.number().int().optional().describe('Optional group ID to assign generated outputs to'),
@@ -315,13 +316,7 @@ function registerWorkflowDetailTools(server: McpServer): void {
 
         const markedFields = parseMcpMarkedFields(workflow);
         const mcpBodyLimitMiB = resolveRequestBodyLimitsMb().mcp;
-        const selectedServer = (() => {
-          try {
-            return resolveMcpComfyServer(workflow_id);
-          } catch {
-            return null;
-          }
-        })();
+        const routingOptions = getMcpGenerationRoutingOptions(workflow_id);
 
         return {
           content: [{
@@ -350,13 +345,15 @@ function registerWorkflowDetailTools(server: McpServer): void {
                 notes: [
                   'Every input key is a marked field ID.',
                   'Any omitted field uses its saved workflow default.',
-                  'server_id is optional and auto-resolved when omitted.',
+                  'Omit both server_id and server_tag for automatic queue distribution.',
+                  'Provide server_id for one fixed active workflow-eligible server, or server_tag for exact normalized tag routing. Do not combine them.',
                   'submit_generation_job returns immediately; poll get_generation_job at intervals of at least 2 seconds and back off on HTTP 429.',
                   'Pass idempotency_key when retrying a submission: the same MCP key and request return the original job, while a different request is rejected.',
                   'generate_comfyui remains available only as a synchronous compatibility tool.',
                 ],
               },
-              auto_selected_server: selectedServer ? { id: selectedServer.id, name: selectedServer.name } : null,
+              routing_rules: getMcpGenerationRoutingRules(),
+              routing_options: routingOptions,
               created_date: workflow.created_date,
               updated_date: workflow.updated_date,
             }, null, 2),

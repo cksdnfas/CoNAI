@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { AuthAccount } from '../../models/AuthAccount'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
-import { normalizeGenerationQueueRoutingTag } from '../../services/generationQueueRouting'
+import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting'
 import { AuthAccessControlService } from '../../services/authAccessControlService'
 import { readQueueDebugMeta } from '../../services/generation-queue/queueDebugMeta'
 import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
@@ -67,20 +67,7 @@ export function parsePositiveIntegerQuery(value: unknown, name: string): number 
 }
 
 export function parseRequestedServerTag(value: unknown) {
-  if (value === undefined || value === null || value === '') {
-    return undefined
-  }
-
-  if (typeof value !== 'string') {
-    throw new Error('requested_server_tag must be a string')
-  }
-
-  const normalized = normalizeGenerationQueueRoutingTag(value)
-  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(normalized)) {
-    throw new Error('requested_server_tag must match /^[a-z0-9][a-z0-9._-]{0,63}$/')
-  }
-
-  return normalized
+  return parseGenerationQueueRoutingTag(value)
 }
 
 function canAccessJob(req: Request, job: Pick<GenerationQueueJobRecord, 'requested_by_account_id'>) {

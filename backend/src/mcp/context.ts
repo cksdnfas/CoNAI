@@ -12,6 +12,7 @@ export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organiz
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
   list_workflows: 'read',
   list_comfyui_servers: 'read',
+  get_generation_routing_options: 'read',
   get_workflow_details: 'read',
   list_graph_workflows: 'read',
   get_graph_workflow_details: 'read',
