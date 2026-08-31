@@ -8,14 +8,7 @@ import { McpArtifactService } from '../services/mcpArtifactService';
 
 const router = Router();
 
-router.use('/mcp', validateMcpRequestBody);
-
-/**
- * POST /mcp
- * MCP Streamable HTTP 엔드포인트 (Stateless)
- * 각 요청마다 새로운 McpServer + Transport 인스턴스를 생성한다.
- */
-router.post('/mcp', async (req: Request, res: Response) => {
+router.use('/mcp', (req: Request, res: Response, next) => {
   const startedAt = Date.now();
   const auth = (res.locals as McpResponseLocals).mcpAuth;
   const rpcMethod = typeof req.body?.method === 'string' ? req.body.method : null;
@@ -32,7 +25,18 @@ router.post('/mcp', async (req: Request, res: Response) => {
     statusCode: res.statusCode,
     durationMs: Date.now() - startedAt,
   }));
+  next();
+});
 
+router.use('/mcp', validateMcpRequestBody);
+
+/**
+ * POST /mcp
+ * MCP Streamable HTTP 엔드포인트 (Stateless)
+ * 각 요청마다 새로운 McpServer + Transport 인스턴스를 생성한다.
+ */
+router.post('/mcp', async (req: Request, res: Response) => {
+  const auth = (res.locals as McpResponseLocals).mcpAuth;
   try {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const server = createMcpServer({
