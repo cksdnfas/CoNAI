@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
@@ -8,6 +9,32 @@ import { GenerationQueueService } from '../../services/generationQueueService';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
 import type { McpRequestContext } from '../context';
+import { normalizeMcpWorkflowInputs, parseMcpMarkedFields } from './mcpComfyWorkflowService';
+
+/** Serialize JSON-compatible request values deterministically across object key order. */
+function stringifyStableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stringifyStableJson(entry)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stringifyStableJson(entry)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+/** Build the semantic request hash used to detect conflicting idempotent retries. */
+function buildIdempotencyRequestHash(value: Record<string, unknown>) {
+  return crypto.createHash('sha256').update(stringifyStableJson(value)).digest('hex');
+}
+
+/** Scope idempotency to the authenticated MCP key, with one local transport fallback. */
+function resolveIdempotencyScope(context: McpRequestContext) {
+  return context.keyId ? `mcp-key:${context.keyId}` : 'mcp-local';
+}
 
 async function describeJob(jobId: number, context: McpRequestContext) {
   const job = GenerationQueueModel.findListRecordById(jobId);
@@ -41,9 +68,40 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters'),
       group_id: z.number().int().positive().optional(),
       priority: z.number().int().min(0).max(100000).default(100),
+      idempotency_key: z.string().trim().min(1).max(200).optional().describe('Optional retry key. The same MCP key and request return the original job; a different request conflicts.'),
     },
-    async ({ service_type, workflow_id, server_id, inputs, request_payload, group_id, priority }) => {
+    async ({ service_type, workflow_id, server_id, inputs, request_payload, group_id, priority, idempotency_key }) => {
       try {
+        const idempotencyScope = idempotency_key ? resolveIdempotencyScope(context) : null;
+        const requestHash = idempotency_key
+          ? buildIdempotencyRequestHash({
+              service_type,
+              workflow_id: workflow_id ?? null,
+              server_id: server_id ?? null,
+              inputs: inputs ?? null,
+              request_payload: request_payload ?? null,
+              group_id: group_id ?? null,
+              priority,
+            })
+          : null;
+
+        if (idempotency_key && idempotencyScope && requestHash) {
+          const existing = GenerationQueueModel.findIdempotentJob(idempotencyScope, idempotency_key);
+          if (existing) {
+            if (existing.request_hash !== requestHash) {
+              throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
+            }
+            const job = await describeJob(existing.job_id, context);
+            if (!job) throw new Error(`Idempotent queue job ${existing.job_id} no longer exists`);
+            return {
+              content: [{
+                type: 'text' as const,
+                text: JSON.stringify({ ...job, idempotency_key, idempotency_reused: true }, null, 2),
+              }],
+            };
+          }
+        }
+
         let workflowName: string | null = null;
         let payload = request_payload ?? inputs ?? {};
         if (service_type === 'comfyui') {
@@ -56,18 +114,23 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
           }
           if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
           workflowName = workflow.name;
-          const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
+          const markedFields = parseMcpMarkedFields(workflow);
+          const rawInputs = (inputs ?? payload.prompt_data ?? {}) as Record<string, unknown>;
+          const suppliedInputs = normalizeWorkflowNumericPromptValues(
+            markedFields,
+            rawInputs,
+          );
           payload = {
             ...payload,
             prompt_data: externalizeQueueInputDataUrls(
-              normalizeWorkflowNumericPromptValues(markedFields, inputs ?? payload.prompt_data ?? {}),
+              normalizeMcpWorkflowInputs(markedFields, suppliedInputs),
             ).value,
           };
         } else if (Object.keys(payload).length === 0) {
           throw new Error('request_payload is required for NovelAI and Codex jobs');
         }
 
-        const jobId = GenerationQueueModel.create({
+        const createData = {
           service_type,
           priority,
           workflow_id: workflow_id ?? null,
@@ -76,9 +139,28 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
           requested_server_id: server_id ?? null,
           request_payload: payload,
           request_summary: `MCP ${service_type} generation`,
-        });
+        };
+        const creation = idempotency_key && idempotencyScope && requestHash
+          ? GenerationQueueModel.createIdempotent(createData, {
+              scope: idempotencyScope,
+              key: idempotency_key,
+              requestHash,
+            })
+          : { jobId: GenerationQueueModel.create(createData), requestHash: null, reused: false };
+        if (requestHash && creation.requestHash !== requestHash) {
+          throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
+        }
+
         GenerationQueueService.requestDispatch();
-        return { content: [{ type: 'text' as const, text: JSON.stringify(await describeJob(jobId, context), null, 2) }] };
+        const job = await describeJob(creation.jobId, context);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify(idempotency_key
+              ? { ...job, idempotency_key, idempotency_reused: creation.reused }
+              : job, null, 2),
+          }],
+        };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Generation job error: ${(error as Error).message}` }] };
       }

@@ -335,6 +335,49 @@ export class GenerationQueueModel {
     return jobId
   }
 
+  /** Find the durable queue job claimed by one scoped idempotency key. */
+  static findIdempotentJob(scope: string, idempotencyKey: string) {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT job_id, request_hash
+      FROM generation_queue_idempotency
+      WHERE scope = ? AND idempotency_key = ?
+    `).get(scope, idempotencyKey) as { job_id: number; request_hash: string } | undefined
+
+    return row ?? null
+  }
+
+  /** Atomically create or reuse one queue job for a scoped idempotency key. */
+  static createIdempotent(
+    data: GenerationQueueJobCreateData,
+    idempotency: { scope: string; key: string; requestHash: string },
+  ) {
+    const db = getUserSettingsDb()
+    const findExisting = db.prepare(`
+      SELECT job_id, request_hash
+      FROM generation_queue_idempotency
+      WHERE scope = ? AND idempotency_key = ?
+    `)
+    const insertClaim = db.prepare(`
+      INSERT INTO generation_queue_idempotency (scope, idempotency_key, request_hash, job_id)
+      VALUES (?, ?, ?, ?)
+    `)
+
+    return db.transaction(() => {
+      const existing = findExisting.get(idempotency.scope, idempotency.key) as {
+        job_id: number
+        request_hash: string
+      } | undefined
+      if (existing) {
+        return { jobId: existing.job_id, requestHash: existing.request_hash, reused: true }
+      }
+
+      const jobId = GenerationQueueModel.create(data)
+      insertClaim.run(idempotency.scope, idempotency.key, idempotency.requestHash, jobId)
+      return { jobId, requestHash: idempotency.requestHash, reused: false }
+    }).immediate()
+  }
+
   /** Find one queue job by id. */
   static findById(id: number) {
     const db = getUserSettingsDb()

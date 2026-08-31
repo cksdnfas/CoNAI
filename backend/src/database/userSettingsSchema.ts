@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { applyGenerationQueueDebugColumns } from './migrations/029_add_generation_queue_debug_columns';
 import { applyGenerationQueueInputRefs } from './migrations/032_add_generation_queue_input_refs';
+import { applyGenerationQueueIdempotency } from './migrations/035_add_generation_queue_idempotency';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
@@ -820,6 +821,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   // PAYLOAD-3 (migration 032): refcount for content-addressed queue image inputs.
   applyGenerationQueueInputRefs(db);
+
+  // MCP queue submissions retain one durable job per API-key-scoped idempotency key.
+  applyGenerationQueueIdempotency(db);
 
   db.exec(`
     UPDATE comfyui_servers

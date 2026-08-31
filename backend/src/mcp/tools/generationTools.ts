@@ -352,6 +352,7 @@ function registerWorkflowDetailTools(server: McpServer): void {
                   'Any omitted field uses its saved workflow default.',
                   'server_id is optional and auto-resolved when omitted.',
                   'submit_generation_job returns immediately; poll get_generation_job at intervals of at least 2 seconds and back off on HTTP 429.',
+                  'Pass idempotency_key when retrying a submission: the same MCP key and request return the original job, while a different request is rejected.',
                   'generate_comfyui remains available only as a synchronous compatibility tool.',
                 ],
               },
