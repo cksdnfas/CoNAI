@@ -27,7 +27,7 @@ import {
   normalizeComfyCapacity,
   type ComfyRuntimeStatusMeta,
 } from './comfyui/runtimeStatus';
-import { substituteComfyPromptData } from './comfyui/workflowSubstitution';
+import { findMiniMaxDirectorLinkErrors, substituteComfyPromptData } from './comfyui/workflowSubstitution';
 
 export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
 export const COMFYUI_NODE_VALIDATION_FAILURE_CODE = 'comfy_node_validation';
@@ -59,7 +59,16 @@ export class ComfyUINodeValidationError extends Error {
         : null;
       const inputName = typeof extraInfo?.input_name === 'string' ? ` input ${extraInfo.input_name.slice(0, 80)}` : '';
       const detail = typeof firstError?.message === 'string' ? `: ${firstError.message.slice(0, 240)}` : '';
-      return `node ${boundedNodeId}${classType}${inputName}${detail}`;
+      // Never expose tracebacks, arbitrary exception text, prompts, or filesystem paths.
+      const exceptionType = typeof extraInfo?.exception_type === 'string'
+        ? extraInfo.exception_type.replace(/[^a-zA-Z0-9_.]/g, '').slice(0, 80) : '';
+      const rawDetails = firstError?.details ?? extraInfo?.exception_message;
+      const missingId = typeof rawDetails === 'string' && /^['"]?[\d]+(?::[\d]+)*['"]?$/.test(rawDetails.trim())
+        ? ` [node ${rawDetails.trim().replace(/['"]/g, '')}]` : '';
+      const linkedNode = Array.isArray(extraInfo?.linked_node) ? extraInfo.linked_node : null;
+      const linkedDetail = linkedNode && /^[\w:-]+$/.test(String(linkedNode[0])) && Number.isInteger(linkedNode[1])
+        ? ` [linked ${String(linkedNode[0]).slice(0, 80)}:${linkedNode[1]}]` : '';
+      return `node ${boundedNodeId}${classType}${inputName}${detail}${exceptionType ? ` (${exceptionType})` : ''}${missingId}${linkedDetail}`;
     });
     const summary = summaries.length > 0 ? summaries.slice(0, 4).join('; ') : 'unknown node';
     const message = `ComfyUI node errors: ${summary}`;
@@ -254,6 +263,8 @@ export class ComfyUIService {
    * @returns ComfyUI 프롬프트 ID
    */
   async submitPrompt(workflow: any, options?: ComfySubmitPromptOptions): Promise<string> {
+    const linkErrors = findMiniMaxDirectorLinkErrors(workflow);
+    if (Object.keys(linkErrors).length > 0) throw new ComfyUINodeValidationError(linkErrors);
     const queueJobId = options?.queueJobId ?? null;
     const requestBody: Record<string, unknown> = {
       prompt: workflow

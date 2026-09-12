@@ -306,9 +306,10 @@ function getMiniMaxDirectorActiveItems(mode: unknown, timeline: Record<string, a
       .slice(0, 1)
       .map(({ item }) => item)
   }
-  const frameSlots = mode === 'I2VA' ? [0] : mode === 'L2VA' ? [1] : [0, 1]
+  const hasClosingFrame = ordered.some(({ item, index }) => item.type === 'image' && Number(item.slot ?? index) === 1)
+  const frameSlots = mode === 'I2VA' ? [0] : mode === 'L2VA' ? [hasClosingFrame ? 1 : 0] : [0, 1]
   return ordered
-    .filter(({ item }) => item.type === 'image' && frameSlots.includes(Number(item.slot ?? 0)))
+    .filter(({ item, index }) => item.type === 'image' && frameSlots.includes(Number(item.slot ?? index)))
     .sort((left, right) => Number(left.item.slot ?? left.index) - Number(right.item.slot ?? right.index))
     .slice(0, frameSlots.length)
     .map(({ item }) => item)

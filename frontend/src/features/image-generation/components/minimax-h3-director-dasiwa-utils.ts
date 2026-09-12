@@ -2,6 +2,7 @@ import {
   WORKFLOW_INPUT_ASSET_REF_KIND,
   type WorkflowInputAssetRef,
 } from '@/lib/api-workflow-input-assets'
+import { hasMiniMaxDirectorAudio, sortMiniMaxDirectorMedia } from './minimax-h3-director-media'
 
 export const MINIMAX_H3_DIRECTOR_CLASS_TYPE = 'MiniMaxH3Director'
 export const MINIMAX_H3_DIRECTOR_NODE_EDITOR = 'minimax_h3_director_dasiwa'
@@ -142,6 +143,7 @@ export type MiniMaxH3DirectorTimelineItem = {
   trim_start?: number
   trim_end?: number | null
   media_mode?: MiniMaxH3DirectorVideoMode
+  audioSlot?: number
   prompt?: string
   waveform_peaks?: number[]
   source_width?: number
@@ -663,10 +665,10 @@ export function prefillMiniMaxH3DirectorRefBuilder(
   state: MiniMaxH3DirectorBuilderState,
   items: MiniMaxH3DirectorTimelineItem[],
 ): MiniMaxH3DirectorBuilderState {
-  const ordered = items.filter((item) => item.enabled !== false).sort((left, right) => left.order - right.order)
+  const ordered = sortMiniMaxDirectorMedia(items.filter((item) => item.enabled !== false))
   const pictures = ordered.filter((item) => item.type === 'image')
   const videos = ordered.filter((item) => item.type === 'video' && item.media_mode !== 'audio')
-  const audios = ordered.filter((item) => item.type === 'audio' || (item.type === 'video' && item.media_mode !== 'video'))
+  const audios = ordered.filter(hasMiniMaxDirectorAudio)
   const definitions = [
     ...pictures.map((_, index) => `<Picture ${index + 1}> is the opening-frame anchor.`),
     ...videos.map((_, index) => `<Video ${index + 1}> provides the camera path and pacing structure.`),
@@ -918,7 +920,8 @@ export function getMiniMaxH3DirectorActiveItems(value: unknown) {
   if (nodeValue.mode === 'Image Inpaint') {
     return items.filter((item) => item.type === 'image').slice(0, 1)
   }
-  const frameSlots = nodeValue.mode === 'I2VA' ? [0] : nodeValue.mode === 'L2VA' ? [1] : [0, 1]
+  const hasClosingFrame = items.some((item) => item.type === 'image' && item.slot === 1)
+  const frameSlots = nodeValue.mode === 'I2VA' ? [0] : nodeValue.mode === 'L2VA' ? [hasClosingFrame ? 1 : 0] : [0, 1]
   return items
     .filter((item) => item.type === 'image' && frameSlots.includes(item.slot))
     .sort((left, right) => left.slot - right.slot)
@@ -1014,14 +1017,14 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3Dir
   const videoItems = activeItems.filter((item) => item.type === 'video')
   const audioItems = activeItems.filter((item) => item.type === 'audio')
   const visualVideos = videoItems.filter((item) => item.media_mode !== 'audio')
-  const embeddedAudioVideos = videoItems.filter((item) => item.media_mode === 'audio' || item.media_mode === 'video_audio')
+  const embeddedAudioVideos = videoItems.filter(hasMiniMaxDirectorAudio)
   const audioReferenceCount = audioItems.length + embeddedAudioVideos.length
   const visualReferenceCount = imageItems.length + visualVideos.length
 
   if (imageItems.length > 9) {
     issues.push({ code: 'image-count', ko: 'REF2VA 이미지는 최대 9개까지 사용할 수 있어.', en: 'REF2VA supports at most nine images.' })
   }
-  if (videoItems.length > 3) {
+  if (visualVideos.length > 3) {
     issues.push({ code: 'video-count', ko: 'REF2VA 영상 참조는 최대 3개까지 사용할 수 있어.', en: 'REF2VA supports at most three video references.' })
   }
   if (audioReferenceCount > 3) {
@@ -1044,7 +1047,7 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3Dir
     if (item.type === 'video' && item.media_mode !== 'audio') {
       videoDurationTotal += selectedDuration
     }
-    if (item.type === 'audio' || (item.type === 'video' && item.media_mode !== 'video')) {
+    if (hasMiniMaxDirectorAudio(item)) {
       audioDurationTotal += selectedDuration
     }
   }

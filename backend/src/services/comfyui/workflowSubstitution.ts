@@ -216,7 +216,22 @@ export function substituteComfyPromptData(
   const normalizedPromptData = normalizeWorkflowNumericPromptValues(markedFields, promptData);
 
   for (const field of markedFields) {
-    const value = normalizedPromptData[field.id];
+    let value = normalizedPromptData[field.id] ?? field.default_value;
+    if (field.node_editor === 'minimax_h3_director_dasiwa' && isRecord(value)) {
+      const nodeId = field.jsonPath.endsWith('.inputs') ? field.jsonPath.slice(0, -7) : '';
+      const templateInputs = workflow[nodeId]?.inputs;
+      if (isRecord(templateInputs)) {
+        // Saved editor drafts own values, not connections to template-local node IDs.
+        const editableKeys = new Set(['mode', 'prompt', 'width', 'height', 'duration', 'frame_rate', 'ref_image_size', 'timeline_data', 'builder_state']);
+        const draftInputs = value;
+        value = Object.fromEntries(Object.entries({ ...templateInputs, ...Object.fromEntries(Object.entries(draftInputs).filter(([key]) => editableKeys.has(key))) }).map(([key]) => [
+          key,
+          editableKeys.has(key) && draftInputs[key] !== undefined && !Array.isArray(draftInputs[key])
+            ? draftInputs[key]
+            : templateInputs[key],
+        ]));
+      }
+    }
     if (value !== undefined && value !== null) {
       setValueByPath(workflow, field.jsonPath, value);
     } else if (field.default_value !== undefined) {
@@ -228,4 +243,33 @@ export function substituteComfyPromptData(
   pruneMiniMaxDirectorModeOutputs(workflow);
 
   return workflow;
+}
+
+/** Report missing Director dependencies before ComfyUI loses the failing input context. */
+export function findMiniMaxDirectorLinkErrors(workflow: Record<string, any>): Record<string, unknown> {
+  const errors: Record<string, any> = {};
+  const pending = Object.keys(workflow).filter((id) => workflow[id]?.class_type === 'MiniMaxH3Director');
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const nodeId = pending.pop()!;
+    if (visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    const node = workflow[nodeId];
+    for (const [inputName, value] of Object.entries(node?.inputs ?? {})) {
+      if (!Array.isArray(value) || value.length !== 2 || !Number.isInteger(value[1])) continue;
+      const linkedId = String(value[0]);
+      if (Object.prototype.hasOwnProperty.call(workflow, linkedId)) {
+        pending.push(linkedId);
+        continue;
+      }
+      errors[nodeId] ??= { class_type: node.class_type, errors: [] };
+      errors[nodeId].errors.push({
+        type: 'missing_linked_node',
+        message: 'Referenced workflow node is missing',
+        details: linkedId,
+        extra_info: { input_name: inputName, linked_node: value },
+      });
+    }
+  }
+  return errors;
 }
