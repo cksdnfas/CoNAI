@@ -188,8 +188,17 @@ export function ImageListMasonry({
     onPreviewIntent,
   ])
 
+  /**
+   * VirtuosoMasonry(1.4.x) 는 initialItemCount 를 마운트 때만 읽고, 한 번도 측정되지 않은 컬럼은
+   * 그 초기 개수 안의 인덱스만 그린다. 컬럼 수보다 적은 아이템으로 마운트되면 빈 컬럼이 영구히 죽고,
+   * 이후 배정된 아이템(최신순 prepend 로 밀려난 기존 카드)이 사라진다.
+   * 아이템이 컬럼 수보다 적은 동안만 개수 변화마다 재마운트해 모든 컬럼이 다시 시드되게 한다.
+   */
+  const masonryKey = itemCount < columnCount ? `sparse:${itemCount}:${columnCount}` : 'dense'
+
   const masonry = (
     <VirtuosoMasonry<ImageRecord, ImageListMasonryContext>
+      key={masonryKey}
       data={items}
       context={masonryContext}
       useWindowScroll={usesWindowScroll}
