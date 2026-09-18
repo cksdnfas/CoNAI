@@ -29,9 +29,10 @@ const loginLimiter = rateLimit({
 
 const guestAccountLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 3,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  skipFailedRequests: true,
   handler: (_req, res) => {
     res.status(429).json({ error: 'Too many guest account creation attempts, please try again later' });
   },
