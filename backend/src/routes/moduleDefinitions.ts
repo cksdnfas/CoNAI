@@ -92,6 +92,7 @@ function hydrateCompositeNodeEditorSettings(uiSchema: any[], templateDefaults: R
     return {
       ...field,
       node_visible_fields: field.node_visible_fields ?? markedField.node_visible_fields,
+      node_hidden_controls: field.node_hidden_controls ?? markedField.node_hidden_controls,
       node_numeric_bounds: field.node_numeric_bounds ?? markedField.node_numeric_bounds,
     }
   })

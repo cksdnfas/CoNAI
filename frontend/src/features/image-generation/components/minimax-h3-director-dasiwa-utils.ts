@@ -1,3 +1,4 @@
+import { resolveMiniMaxDirectorCanvas, MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS } from '@conai/shared'
 import {
   WORKFLOW_INPUT_ASSET_REF_KIND,
   type WorkflowInputAssetRef,
@@ -30,40 +31,7 @@ export const MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS = [
   ['custom', 'CUSTOM'],
 ] as const
 
-export const MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS = {
-  '144p': 0.0352,
-  '240p': 0.0977,
-  '360p': 0.22,
-  '480p': 0.391,
-  '540p': 0.494,
-  '576p': 0.396,
-  '720p': 0.879,
-  '900p': 1.373,
-  '1024p': 1,
-  '1080p': 1.978,
-  '1152p': 2.25,
-  '1440p': 3.516,
-  '2160p': 7.91,
-  '2K': 3.906,
-  '4K': 7.91,
-  '0.26 MP - Preview': 0.26,
-  '0.36 MP - Small': 0.36,
-  '0.52 MP - SD': 0.52,
-  '0.65 MP - Balanced': 0.65,
-  '0.83 MP - HD': 0.83,
-  '1.00 MP - 1024p': 1,
-  '1.05 MP - HD+': 1.05,
-  '1.20 MP - HD++': 1.2,
-  '1.35 MP - 2K lite': 1.35,
-  '1.55 MP - 2K': 1.55,
-  '1.65 MP - 2K+': 1.65,
-  '1.75 MP - QHD': 1.75,
-  '2.10 MP - FHD': 2.1,
-  '3.30 MP - QHD+': 3.3,
-  '4.75 MP - 2K Pro': 4.75,
-  '6.50 MP - Production': 6.5,
-  '8.30 MP - UHD': 8.3,
-} as const
+export { MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS } from '@conai/shared'
 
 export const MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS = [
   'Off',
@@ -355,48 +323,12 @@ export function normalizeMiniMaxH3DirectorPostprocess(value: unknown): MiniMaxH3
   }
 }
 
-function snapMiniMaxCanvas(value: number) {
-  return Math.max(MINIMAX_H3_DIRECTOR_CANVAS_MULTIPLE, Math.round(value / MINIMAX_H3_DIRECTOR_CANVAS_MULTIPLE) * MINIMAX_H3_DIRECTOR_CANVAS_MULTIPLE)
-}
-
-function getMiniMaxH3DirectorSourceAspect(timeline: MiniMaxH3DirectorTimeline) {
-  const source = timeline.items
-    .filter((item) => item.enabled !== false && (item.type === 'image' || item.type === 'video') && Number(item.source_width) > 0 && Number(item.source_height) > 0)
-    .sort((left, right) => left.slot - right.slot || left.order - right.order)[0]
-  return source ? Number(source.source_width) / Number(source.source_height) : null
-}
-
-/** Resolve the Director canvas exactly like DaSiWa's v0.4.30 resolution panel. */
+/** Resolve the Director canvas with the shared frontend/backend resolution contract. */
 export function resolveMiniMaxH3DirectorCanvas(
   timeline: MiniMaxH3DirectorTimeline,
   resolutionValue: unknown = timeline.resolution,
 ): [number, number] {
-  const settings = normalizeMiniMaxH3DirectorResolution(resolutionValue)
-  if (settings.resolution === 'custom' && settings.custom_mode === 'fixed') {
-    return [snapMiniMaxCanvas(settings.custom_width), snapMiniMaxCanvas(settings.custom_height)]
-  }
-
-  const aspect = settings.aspect === 'auto'
-    ? getMiniMaxH3DirectorSourceAspect(timeline) ?? 4 / 3
-    : settings.aspect === 'custom'
-      ? settings.custom_aspect_w / settings.custom_aspect_h
-      : (() => {
-          const [width, height] = settings.aspect.split(':').map(Number)
-          return width / height
-        })()
-  if (settings.resolution === 'auto') {
-    const shortSide = 768
-    return aspect >= 1
-      ? [snapMiniMaxCanvas(shortSide * aspect), shortSide]
-      : [shortSide, snapMiniMaxCanvas(shortSide / aspect)]
-  }
-
-  const megapixels = settings.resolution === 'custom'
-    ? settings.custom_mp
-    : MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS[settings.resolution]
-  const pixels = megapixels * 1024 * 1024
-  const height = Math.sqrt(pixels / aspect)
-  return [snapMiniMaxCanvas(height * aspect), snapMiniMaxCanvas(height)]
+  return resolveMiniMaxDirectorCanvas(timeline.items, normalizeMiniMaxH3DirectorResolution(resolutionValue))
 }
 
 /** Reduce intrinsic media dimensions to a readable width:height ratio. */

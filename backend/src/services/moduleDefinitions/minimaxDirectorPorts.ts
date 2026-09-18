@@ -1,3 +1,4 @@
+import { resolveMiniMaxDirectorCanvas } from '@conai/shared'
 import type {
   GraphWorkflowDocument,
   ModulePortDataType,
@@ -10,16 +11,6 @@ export const MINIMAX_DIRECTOR_NODE_EDITOR = 'minimax_h3_director_dasiwa' as cons
 const MINIMAX_DIRECTOR_MODES = ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA', 'Image Inpaint'] as const
 type MiniMaxDirectorMode = typeof MINIMAX_DIRECTOR_MODES[number]
 const MINIMAX_DIRECTOR_VIDEO_MODES: MiniMaxDirectorMode[] = ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA']
-const MINIMAX_CANVAS_MULTIPLE = 32
-const MINIMAX_RESOLUTION_PRESETS: Record<string, number> = {
-  '144p': 0.0352, '240p': 0.0977, '360p': 0.22, '480p': 0.391, '540p': 0.494, '576p': 0.396,
-  '720p': 0.879, '900p': 1.373, '1024p': 1, '1080p': 1.978, '1152p': 2.25, '1440p': 3.516,
-  '2160p': 7.91, '2K': 3.906, '4K': 7.91,
-  '0.26 MP - Preview': 0.26, '0.36 MP - Small': 0.36, '0.52 MP - SD': 0.52, '0.65 MP - Balanced': 0.65,
-  '0.83 MP - HD': 0.83, '1.00 MP - 1024p': 1, '1.05 MP - HD+': 1.05, '1.20 MP - HD++': 1.2,
-  '1.35 MP - 2K lite': 1.35, '1.55 MP - 2K': 1.55, '1.65 MP - 2K+': 1.65, '1.75 MP - QHD': 1.75,
-  '2.10 MP - FHD': 2.1, '3.30 MP - QHD+': 3.3, '4.75 MP - 2K Pro': 4.75, '6.50 MP - Production': 6.5, '8.30 MP - UHD': 8.3,
-}
 
 type MiniMaxDirectorPortSpec = {
   inputKey: string
@@ -113,6 +104,7 @@ export function buildMiniMaxDirectorPorts(field: {
   key?: unknown
   jsonPath?: unknown
   node_visible_fields?: unknown
+  node_hidden_controls?: string[]
 }): ModulePortDefinition[] {
   const fieldKey = getFieldKey(field)
   if (!fieldKey) return []
@@ -123,7 +115,8 @@ export function buildMiniMaxDirectorPorts(field: {
   const sourcePath = typeof field.jsonPath === 'string' && field.jsonPath.trim() ? field.jsonPath : fieldKey
 
   return PORT_SPECS
-    .filter((spec) => visibleFields.has(spec.visibleField))
+    .filter((spec) => visibleFields.has(spec.visibleField)
+      && !field.node_hidden_controls?.some((key) => spec.inputKey === key || spec.inputKey.startsWith(`${key}.`)))
     .map((spec) => ({
       key: buildPortKey(fieldKey, spec.inputKey),
       label: spec.label,
@@ -178,6 +171,7 @@ export function hydrateMiniMaxDirectorModulePorts<T extends {
     return {
       ...field,
       node_visible_fields: field.node_visible_fields ?? markedField.node_visible_fields,
+      node_hidden_controls: field.node_hidden_controls ?? markedField.node_hidden_controls,
       node_numeric_bounds: field.node_numeric_bounds ?? markedField.node_numeric_bounds,
     }
   })
@@ -320,46 +314,6 @@ function normalizeResolution(value: unknown) {
   }
 }
 
-function snapMiniMaxCanvas(value: number) {
-  return Math.max(MINIMAX_CANVAS_MULTIPLE, Math.round(value / MINIMAX_CANVAS_MULTIPLE) * MINIMAX_CANVAS_MULTIPLE)
-}
-
-function resolveMiniMaxCanvas(items: Record<string, any>[], resolutionValue: unknown): [number, number] {
-  const resolution = normalizeResolution(resolutionValue)
-  if (resolution.resolution === 'custom' && resolution.custom_mode === 'fixed') {
-    return [snapMiniMaxCanvas(resolution.custom_width), snapMiniMaxCanvas(resolution.custom_height)]
-  }
-
-  const source = items
-    .filter((item) => item.enabled !== false
-      && (item.type === 'image' || item.type === 'video')
-      && finiteNumber(item.source_width, 0) > 0
-      && finiteNumber(item.source_height, 0) > 0)
-    .sort((left, right) => finiteNumber(left.slot, 0) - finiteNumber(right.slot, 0)
-      || finiteNumber(left.order, 0) - finiteNumber(right.order, 0))[0]
-  const aspect = resolution.aspect === 'auto'
-    ? (source ? finiteNumber(source.source_width, 4) / finiteNumber(source.source_height, 3) : 4 / 3)
-    : resolution.aspect === 'custom'
-      ? resolution.custom_aspect_w / resolution.custom_aspect_h
-      : (() => {
-          const [width, height] = resolution.aspect.split(':').map(Number)
-          return Number.isFinite(width) && Number.isFinite(height) && height > 0 ? width / height : 4 / 3
-        })()
-
-  if (resolution.resolution === 'auto') {
-    const shortSide = 768
-    return aspect >= 1
-      ? [snapMiniMaxCanvas(shortSide * aspect), shortSide]
-      : [shortSide, snapMiniMaxCanvas(shortSide / aspect)]
-  }
-
-  const megapixels = resolution.resolution === 'custom'
-    ? resolution.custom_mp
-    : MINIMAX_RESOLUTION_PRESETS[resolution.resolution] ?? 1
-  const height = Math.sqrt((megapixels * 1024 * 1024) / aspect)
-  return [snapMiniMaxCanvas(height * aspect), snapMiniMaxCanvas(height)]
-}
-
 /** Merge graph-connected Director ports into the composite field consumed by ComfyUI. */
 export function applyMiniMaxDirectorPortInputs(
   resolvedInputs: Record<string, any>,
@@ -470,7 +424,7 @@ export function applyMiniMaxDirectorPortInputs(
     timeline.builder_state = builder
     timeline.resolution = normalizeResolution(resolution)
     timeline.postprocess = postprocess
-    const [resolvedWidth, resolvedHeight] = resolveMiniMaxCanvas(timeline.items, timeline.resolution)
+    const [resolvedWidth, resolvedHeight] = resolveMiniMaxDirectorCanvas(timeline.items, timeline.resolution)
     if (!widthConnected) fieldValue.width = resolvedWidth
     if (!heightConnected) fieldValue.height = resolvedHeight
     fieldValue.timeline_data = JSON.stringify(timeline)

@@ -174,6 +174,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
       <MiniMaxH3DirectorDasiwaInput
         value={nodeValue}
         visibleFields={field.node_visible_fields}
+        hiddenControls={field.node_hidden_controls}
         numericBounds={field.node_numeric_bounds}
         onChange={onChange}
       />,

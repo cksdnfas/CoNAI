@@ -409,6 +409,7 @@ function miniMaxInputSchema(field: MarkedField) {
       builder_state: { type: 'string|object', description: 'Raw CoNAI prompt builder format; friendly prompt keys are preferred.' },
     },
     visible_fields: field.node_visible_fields ?? [],
+    hidden_controls: field.node_hidden_controls ?? [],
     numeric_bounds: field.node_numeric_bounds ?? {},
     media_contracts: {
       I2VA: { required: [{ type: 'image', slot: 0, role: 'start' }] },

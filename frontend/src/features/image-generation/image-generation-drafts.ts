@@ -1,4 +1,5 @@
 import { readBlobAsDataUrl } from '@/lib/file-data-url'
+import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
 import type { NAIFormDraft, SelectedImageDraft, WorkflowFieldDraftValue, WorkflowNodeDraftValue, WorkflowTextDraftSegments } from './image-generation-shared'
@@ -437,7 +438,7 @@ function normalizeWorkflowNodePromptValue(field: WorkflowMarkedField, value: Wor
     normalizedValue[fieldKey] = nextValue
   }
 
-  return normalizedValue
+  return applyMiniMaxDirectorResolutionBounds(normalizedValue, field.node_numeric_bounds)
 }
 
 /** Convert workflow field input strings into the payload expected by the backend. */

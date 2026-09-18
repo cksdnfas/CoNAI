@@ -39,6 +39,7 @@ export interface ModuleUiFieldDefinition {
   ui_hint?: string
   node_editor?: 'power_lora_loader_rgthree' | 'minimax_h3_director_dasiwa'
   node_visible_fields?: string[]
+  node_hidden_controls?: string[]
   node_numeric_bounds?: WorkflowNodeNumericBounds
   node_items?: Array<{
     key: string

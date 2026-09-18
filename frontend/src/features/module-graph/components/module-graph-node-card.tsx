@@ -349,6 +349,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
               <MiniMaxH3DirectorDasiwaInput
                 value={normalizeCompositeNodeValue(data.inputValues?.[field.key] ?? field.default_value)}
                 visibleFields={field.node_visible_fields}
+                hiddenControls={field.node_hidden_controls}
                 numericBounds={field.node_numeric_bounds}
                 onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
                 renderInputPort={(inputKey: MiniMaxH3DirectorGraphInputKey) => {

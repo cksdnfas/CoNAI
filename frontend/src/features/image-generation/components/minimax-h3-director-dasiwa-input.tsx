@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
+import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
 import { Film, ImageIcon, Music2, Plus, RotateCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -63,6 +64,7 @@ const INPAINT_MODE_BACKUP_KEY = '__conai_inpaint_mode_backup'
 type MiniMaxH3DirectorDasiwaInputProps = {
   value: Record<string, unknown>
   visibleFields?: string[]
+  hiddenControls?: string[]
   numericBounds?: WorkflowNodeNumericBounds
   onChange: (value: Record<string, unknown>) => void
   renderInputPort?: (inputKey: MiniMaxH3DirectorGraphInputKey) => ReactNode
@@ -155,7 +157,7 @@ function formatMediaTypeLabel(type: MiniMaxH3DirectorMediaType, index: number) {
 }
 
 /** Render DaSiWa MiniMax H3 Director inputs as a CoNAI-native reference board. */
-export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBounds, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
+export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
   const { t } = useI18n()
   const visualInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -168,7 +170,14 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
   const [selectedLane, setSelectedLane] = useState<MediaLane>('image')
   const [status, setStatus] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const nodeValue = normalizeMiniMaxH3DirectorNodeValue(value)
+  const boundedValue = useMemo(() => {
+    try {
+      return { value: applyMiniMaxDirectorResolutionBounds(value, numericBounds), error: null }
+    } catch (error) {
+      return { value, error: error instanceof Error ? error.message : String(error) }
+    }
+  }, [value, numericBounds])
+  const nodeValue = normalizeMiniMaxH3DirectorNodeValue(boundedValue.value)
   const mode: MiniMaxH3DirectorMode | null = isMiniMaxH3DirectorInputLink(nodeValue.mode) ? null : nodeValue.mode
   const parsedTimeline = parseMiniMaxH3DirectorTimeline(isMiniMaxH3DirectorInputLink(nodeValue.timeline_data) ? '' : nodeValue.timeline_data)
   const timeline = parsedTimeline.timeline
@@ -226,7 +235,23 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
     nextAssets = assets,
     nextBuilderState?: MiniMaxH3DirectorBuilderState,
   ) => {
-    onChange(buildMiniMaxH3DirectorNodeValue(nodeValue, inputPatch, nextTimeline, nextAssets, nextBuilderState))
+    try {
+      if ((inputPatch.width !== undefined || inputPatch.height !== undefined)
+        && ['width', 'height', 'resolution_mp'].some((key) => numericBounds?.[key]?.min !== undefined || numericBounds?.[key]?.max !== undefined)) {
+        nextTimeline = {
+          ...(nextTimeline ?? timeline),
+          resolution: {
+            ...resolution, resolution: 'custom', custom_mode: 'fixed',
+            custom_width: Number(inputPatch.width ?? nodeValue.width),
+            custom_height: Number(inputPatch.height ?? nodeValue.height),
+          },
+        }
+      }
+      const nextValue = buildMiniMaxH3DirectorNodeValue(nodeValue, inputPatch, nextTimeline, nextAssets, nextBuilderState)
+      onChange(applyMiniMaxDirectorResolutionBounds(nextValue, numericBounds))
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
   }
 
   const updateBuilderState = (nextBuilderState: MiniMaxH3DirectorBuilderState) => {
@@ -781,7 +806,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
               <RotateCcw className="h-4 w-4" />
             </Button>
           ) : null}
-          <MiniMaxH3DirectorPackPanel value={nodeValue} onChange={onChange} allowFiles={isFieldVisible('timeline_data')} allowPrompt={isFieldVisible('prompt')} allowMode={isFieldVisible('mode')} disabled={isUploading} />
+          <MiniMaxH3DirectorPackPanel value={nodeValue} onChange={(next) => onChange(applyMiniMaxDirectorResolutionBounds(next, numericBounds))} allowFiles={isFieldVisible('timeline_data')} allowPrompt={isFieldVisible('prompt')} allowMode={isFieldVisible('mode')} disabled={isUploading} />
         </div>
       </div>
 
@@ -791,10 +816,14 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
         </div>
       ) : null}
 
-      {isFieldVisible('timeline_data') ? (
+      {boundedValue.error ? <Alert variant="destructive"><AlertDescription>{boundedValue.error}</AlertDescription></Alert> : null}
+
+      {isFieldVisible('timeline_data') && !hiddenControls?.includes('resolution') ? (
         <MiniMaxH3DirectorResolutionPanel
           value={resolution}
           canvas={resolvedCanvas}
+          numericBounds={numericBounds}
+          hiddenControls={hiddenControls}
           onChange={updateResolution}
           renderInputPort={renderInputPort}
         />
@@ -876,6 +905,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, numericBoun
       {isFieldVisible('timeline_data') ? (
         <MiniMaxH3DirectorPostprocessPanel
           value={postprocess}
+          hiddenControls={hiddenControls}
           onChange={updatePostprocess}
           renderInputPort={renderInputPort}
         />

@@ -12,6 +12,7 @@ import type {
 
 type MiniMaxH3DirectorPostprocessPanelProps = {
   value: MiniMaxH3DirectorPostprocessState
+  hiddenControls?: string[]
   onChange: (value: MiniMaxH3DirectorPostprocessState) => void
   renderInputPort?: (inputKey: MiniMaxH3DirectorGraphInputKey) => ReactNode
 }
@@ -31,36 +32,40 @@ function ToggleRow({ checked, label, onChange, port }: { checked: boolean; label
 }
 
 /** v16 post-processing chain merged behind the v0.4.30 Director output. */
-export function MiniMaxH3DirectorPostprocessPanel({ value, onChange, renderInputPort }: MiniMaxH3DirectorPostprocessPanelProps) {
+export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], onChange, renderInputPort }: MiniMaxH3DirectorPostprocessPanelProps) {
   const { t } = useI18n()
   const patchRtx = (next: Partial<MiniMaxH3DirectorRtxSettings>) => onChange({ ...value, rtx: { ...value.rtx, ...next } })
+  const showSimple = !hiddenControls.includes('postprocess.simple')
+  const showModel = !hiddenControls.includes('postprocess.model')
+  const showRtx = !hiddenControls.includes('postprocess.rtx')
+  if (!showSimple && !showModel && !showRtx) return null
 
   return (
     <section className="space-y-3">
       <div className="text-xs font-semibold text-foreground">{t({ ko: '업스케일 및 후처리', en: 'Upscaling and post-processing' })}</div>
 
       <div className="grid gap-2 md:grid-cols-3">
-        <ToggleRow
+        {showSimple ? <ToggleRow
           checked={value.simple.enabled}
           label={t({ ko: '단순 2× 리사이즈', en: 'Simple 2× resize' })}
           port={renderInputPort?.('postprocess.simple.enabled')}
           onChange={(enabled) => onChange({ ...value, simple: { enabled } })}
-        />
-        <ToggleRow
+        /> : null}
+        {showModel ? <ToggleRow
           checked={value.model.enabled}
           label={t({ ko: '업스케일 모델', en: 'Upscale model' })}
           port={renderInputPort?.('postprocess.model.enabled')}
           onChange={(enabled) => onChange({ ...value, model: { ...value.model, enabled } })}
-        />
-        <ToggleRow
+        /> : null}
+        {showRtx ? <ToggleRow
           checked={value.rtx.enabled}
           label={t({ ko: 'RTX Upscaler & Refiner', en: 'RTX Upscaler & Refiner' })}
           port={renderInputPort?.('postprocess.rtx.enabled')}
           onChange={(enabled) => patchRtx({ enabled })}
-        />
+        /> : null}
       </div>
 
-      {value.model.enabled ? (
+      {showModel && value.model.enabled && !hiddenControls.includes('postprocess.model.model_name') ? (
         <div className="space-y-1">
           {renderInputPort?.('postprocess.model.model_name')}
           <FormField label={t({ ko: '업스케일 모델 파일', en: 'Upscale model file' })}>
@@ -69,7 +74,7 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, onChange, renderInput
         </div>
       ) : null}
 
-      {value.rtx.enabled ? (
+      {showRtx && value.rtx.enabled ? (
         <div className="space-y-3 rounded-sm border border-border/70 bg-background/20 p-3">
           <div className="grid gap-3 md:grid-cols-2">
             <ToggleRow checked={value.rtx.denoise} label={t({ ko: 'RTX 노이즈 제거', en: 'RTX denoise' })} port={renderInputPort?.('postprocess.rtx.denoise')} onChange={(denoise) => patchRtx({ denoise })} />

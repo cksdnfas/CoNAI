@@ -1,3 +1,5 @@
+import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
+
 export type WorkflowNumericFieldLike = {
   id: string
   label?: string
@@ -11,7 +13,7 @@ export type WorkflowNumericFieldLike = {
 }
 
 const MINIMAX_H3_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
-const MINIMAX_H3_DIRECTOR_NUMERIC_FIELDS = ['width', 'height', 'duration', 'frame_rate'] as const
+const MINIMAX_H3_DIRECTOR_NUMERIC_FIELDS = ['width', 'height', 'duration', 'frame_rate', 'resolution_mp'] as const
 const MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS = 1
 const MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS = 60
 const MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN = 0.1
@@ -112,6 +114,13 @@ export function getWorkflowNumericFieldDefinitionError(markedFields: unknown): s
           const max = readFiniteBound(numericField, 'max')
           if (min !== undefined && max !== undefined && min > max) {
             return new WorkflowNumericFieldValidationError(numericField, 'must have min less than or equal to max').message
+          }
+          if (fieldKey === 'resolution_mp' && ((min !== undefined && min < 0.01) || (max !== undefined && max < 0.01))) {
+            return new WorkflowNumericFieldValidationError(numericField, 'must have bounds of at least 0.01 MP').message
+          }
+          if ((fieldKey === 'width' || fieldKey === 'height')
+            && (Math.max(32, Math.ceil((min ?? 32) / 32) * 32) > Math.floor((max ?? Infinity) / 32) * 32)) {
+            return new WorkflowNumericFieldValidationError(numericField, 'must allow a positive multiple of 32 pixels').message
           }
           if (fieldKey === 'duration' && min !== undefined && (min < MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS || min > MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS)) {
             return new WorkflowNumericFieldValidationError(numericField, 'must have min between 1 and 60').message
@@ -216,6 +225,7 @@ export function normalizeWorkflowNumericPromptValues<T extends Record<string, an
       const nodeNumericBounds = isRecord(field.node_numeric_bounds) ? field.node_numeric_bounds : {}
       let normalizedNodeValue: Record<string, unknown> | null = null
       for (const fieldKey of MINIMAX_H3_DIRECTOR_NUMERIC_FIELDS) {
+        if (fieldKey === 'resolution_mp') continue
         const configuredBounds = nodeNumericBounds[fieldKey]
         const bounds = isRecord(configuredBounds) ? configuredBounds : {}
         const rawValue = rawNodeValue[fieldKey]
@@ -250,8 +260,10 @@ export function normalizeWorkflowNumericPromptValues<T extends Record<string, an
         normalizedNodeValue[fieldKey] = normalizeWorkflowNumericFieldValue(numericField, rawValue)
       }
 
-      if (normalizedNodeValue) {
-        normalizedPromptData[field.id] = normalizedNodeValue
+      try {
+        normalizedPromptData[field.id] = applyMiniMaxDirectorResolutionBounds(normalizedNodeValue ?? rawNodeValue, nodeNumericBounds)
+      } catch (error) {
+        throw new WorkflowNumericFieldValidationError(field, error instanceof Error ? error.message : String(error))
       }
       continue
     }

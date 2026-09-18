@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
@@ -14,14 +15,19 @@ import {
 type MiniMaxH3DirectorResolutionPanelProps = {
   value: MiniMaxH3DirectorResolutionState
   canvas: [number, number]
+  numericBounds?: WorkflowNodeNumericBounds
+  hiddenControls?: string[]
   onChange: (value: MiniMaxH3DirectorResolutionState) => void
   renderInputPort?: (inputKey: MiniMaxH3DirectorGraphInputKey) => ReactNode
 }
 
 /** DaSiWa v0.4.30-compatible aspect, pixel-budget, and reference-scaling controls. */
-export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, renderInputPort }: MiniMaxH3DirectorResolutionPanelProps) {
+export function MiniMaxH3DirectorResolutionPanel({ value, canvas, numericBounds, hiddenControls, onChange, renderInputPort }: MiniMaxH3DirectorResolutionPanelProps) {
   const { t } = useI18n()
   const patch = (next: Partial<MiniMaxH3DirectorResolutionState>) => onChange({ ...value, ...next })
+  const mpBounds = numericBounds?.resolution_mp
+  const presets = Object.entries(MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS).filter(([, mp]) =>
+    mp >= (mpBounds?.min ?? 0) && mp <= (mpBounds?.max ?? Infinity))
 
   return (
     <section className="space-y-3">
@@ -45,13 +51,13 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, rend
           <FormField label={t({ ko: '해상도 / 메가픽셀', en: 'Resolution / megapixels' })}>
             <Select value={value.resolution} onChange={(event) => patch({ resolution: event.target.value as MiniMaxH3DirectorResolutionState['resolution'] })}>
               <option value="auto">Auto</option>
-              {Object.keys(MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS).map((preset) => <option key={preset} value={preset}>{preset}</option>)}
+              {presets.map(([preset]) => <option key={preset} value={preset}>{preset}</option>)}
               <option value="custom">CUSTOM</option>
             </Select>
           </FormField>
         </div>
 
-        <div className="space-y-1">
+        {!hiddenControls?.includes('resolution.input_scaling') ? <div className="space-y-1">
           {renderInputPort?.('resolution.input_scaling')}
           <FormField label={t({ ko: '입력 스케일링', en: 'Input scaling' })}>
             <Select value={value.input_scaling} onChange={(event) => patch({ input_scaling: event.target.value as MiniMaxH3DirectorResolutionState['input_scaling'] })}>
@@ -60,7 +66,7 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, rend
               ))}
             </Select>
           </FormField>
-        </div>
+        </div> : null}
       </div>
 
       {value.aspect === 'custom' ? (
@@ -95,7 +101,7 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, rend
             <div className="max-w-xs space-y-1">
               {renderInputPort?.('resolution.custom_mp')}
               <FormField label="MP">
-                <NumberStepperInput min={0.01} step={0.01} value={String(value.custom_mp)} onValueCommit={(next) => patch({ custom_mp: Math.max(0.01, Number(next)) })} />
+                <NumberStepperInput min={mpBounds?.min ?? 0.01} max={mpBounds?.max} step={0.01} value={String(value.custom_mp)} onValueCommit={(next) => patch({ custom_mp: Number(next) })} />
               </FormField>
             </div>
           ) : (
@@ -103,13 +109,13 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, onChange, rend
               <div className="space-y-1">
                 {renderInputPort?.('resolution.custom_width')}
                 <FormField label={t({ ko: '고정 너비', en: 'Fixed width' })}>
-                  <NumberStepperInput min={32} step={32} value={String(value.custom_width)} onValueCommit={(next) => patch({ custom_width: Math.max(32, Number(next)) })} />
+                  <NumberStepperInput min={numericBounds?.width?.min ?? 32} max={numericBounds?.width?.max} step={32} value={String(value.custom_width)} onValueCommit={(next) => patch({ custom_width: Number(next) })} />
                 </FormField>
               </div>
               <div className="space-y-1">
                 {renderInputPort?.('resolution.custom_height')}
                 <FormField label={t({ ko: '고정 높이', en: 'Fixed height' })}>
-                  <NumberStepperInput min={32} step={32} value={String(value.custom_height)} onValueCommit={(next) => patch({ custom_height: Math.max(32, Number(next)) })} />
+                  <NumberStepperInput min={numericBounds?.height?.min ?? 32} max={numericBounds?.height?.max} step={32} value={String(value.custom_height)} onValueCommit={(next) => patch({ custom_height: Number(next) })} />
                 </FormField>
               </div>
             </div>

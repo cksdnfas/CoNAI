@@ -32,10 +32,20 @@ const MINIMAX_H3_DIRECTOR_VISIBLE_FIELD_OPTIONS: Array<{
 ]
 
 const MINIMAX_H3_DIRECTOR_NUMERIC_BOUND_OPTIONS = [
-  { key: 'width', ko: '너비', en: 'Width' },
-  { key: 'height', ko: '높이', en: 'Height' },
+  { key: 'resolution_mp', ko: '해상도 (MP)', en: 'Resolution (MP)', min: 0.01 },
+  { key: 'width', ko: '너비 (px)', en: 'Width (px)', min: 32 },
+  { key: 'height', ko: '높이 (px)', en: 'Height (px)', min: 32 },
   { key: 'duration', ko: '길이', en: 'Duration', min: 1, max: 60 },
   { key: 'frame_rate', ko: '프레임 레이트', en: 'Frame rate', min: 0.1, max: 240 },
+] as const
+
+const MINIMAX_H3_DIRECTOR_CONTROL_OPTIONS = [
+  { key: 'resolution', ko: '출력 규격', en: 'Output dimensions' },
+  { key: 'resolution.input_scaling', ko: '입력 스케일링', en: 'Input scaling' },
+  { key: 'postprocess.simple', ko: '단순 2× 리사이즈', en: 'Simple 2× resize' },
+  { key: 'postprocess.model', ko: '업스케일 모델 사용', en: 'Upscale model toggle' },
+  { key: 'postprocess.model.model_name', ko: '업스케일 모델 선택', en: 'Upscale model selection' },
+  { key: 'postprocess.rtx', ko: 'RTX Upscaler & Refiner', en: 'RTX Upscaler & Refiner' },
 ] as const
 
 type ComfyWorkflowMarkedFieldsEditorProps = {
@@ -382,6 +392,26 @@ export function ComfyWorkflowMarkedFieldsEditor({
                                 </SettingsToggleRow>
                               )
                             })}
+                          </div>
+                        </SettingsField>
+
+                        <SettingsField label={t({ ko: '출력·업스케일 표시', en: 'Output and upscale controls' })}>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {MINIMAX_H3_DIRECTOR_CONTROL_OPTIONS.map((option) => (
+                              <SettingsToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                                <input
+                                  type="checkbox"
+                                  checked={!field.node_hidden_controls?.includes(option.key)}
+                                  onChange={(event) => {
+                                    const hiddenControls = new Set(field.node_hidden_controls ?? [])
+                                    if (event.target.checked) hiddenControls.delete(option.key)
+                                    else hiddenControls.add(option.key)
+                                    onFieldPatch(field.id, { node_hidden_controls: hiddenControls.size ? [...hiddenControls] : undefined })
+                                  }}
+                                />
+                                {t({ ko: option.ko, en: option.en })}
+                              </SettingsToggleRow>
+                            ))}
                           </div>
                         </SettingsField>
 
