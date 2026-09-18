@@ -118,7 +118,7 @@ export function configureAppMiddleware(
 
   const apiLimiter = dependencies.createRateLimiter({
     windowMs: 1 * 60 * 1000,
-    max: 1000,
+    max: 5000,
     message: 'Too many requests from this IP',
     standardHeaders: true,
     legacyHeaders: false,
@@ -127,7 +127,7 @@ export function configureAppMiddleware(
 
   const uploadLimiter = dependencies.createRateLimiter({
     windowMs: 1 * 60 * 1000,
-    max: 10,
+    max: 100,
     standardHeaders: true,
     legacyHeaders: false,
     skip: skipAdminRateLimit,
@@ -151,7 +151,7 @@ export function configureAppMiddleware(
 
   const readOnlyLimiter = dependencies.createRateLimiter({
     windowMs: 1 * 60 * 1000,
-    max: 2000,
+    max: 10000,
     message: 'Too many read requests from this IP',
     standardHeaders: true,
     legacyHeaders: false,
