@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 interface UseOverlayBackCloseOptions {
   open: boolean
@@ -25,6 +25,8 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
   const programmaticBackRef = useRef(false)
   const openRef = useRef(open)
   const onCloseRef = useRef(onClose)
+  // Bumped after a browser-back close attempt so a declined close (e.g. discard confirm cancelled) re-pushes the entry.
+  const [backCloseAttempt, setBackCloseAttempt] = useState(0)
 
   useEffect(() => {
     openRef.current = open
@@ -65,7 +67,7 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
       markOverlayHistoryBackBypassWindow()
       window.history.back()
     }
-  }, [enabled, open, overlayId])
+  }, [backCloseAttempt, enabled, open, overlayId])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !enabled) {
@@ -92,6 +94,7 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
 
       if (!wasProgrammaticBack && openRef.current) {
         onCloseRef.current()
+        setBackCloseAttempt((current) => current + 1)
       }
     }
 

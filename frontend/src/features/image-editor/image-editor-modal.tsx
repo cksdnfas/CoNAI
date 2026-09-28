@@ -112,7 +112,7 @@ export function ImageEditorModal({
     return layers.find((layer) => layer.id === activeLayerId) ?? null
   }, [activeLayerId, layers])
 
-  const { historyStack, redoStack, queueHistoryCommit, resetHistory, handleUndo, handleRedo } = useImageEditorHistory({
+  const { historyStack, redoStack, hasDocumentChanges, queueHistoryCommit, resetHistory, handleUndo, handleRedo } = useImageEditorHistory({
     open,
     baseImageDataUrl,
     documentSize,
@@ -336,6 +336,19 @@ export function ImageEditorModal({
     showSnackbar,
   })
 
+  /** Confirm before a user-initiated close (Esc, backdrop, close buttons, browser back) discards edits. */
+  const requestClose = useCallback(() => {
+    if (saving) {
+      return
+    }
+
+    if (hasDocumentChanges && !window.confirm(t({ ko: '저장하지 않은 편집 내용이 사라져. 닫을까?', en: 'Unsaved edits will be discarded. Close the editor?' }))) {
+      return
+    }
+
+    onClose()
+  }, [hasDocumentChanges, onClose, saving, t])
+
   useImageEditorKeyboardShortcuts({
     open,
     enableMaskEditing,
@@ -353,6 +366,7 @@ export function ImageEditorModal({
     handleDeleteSelection,
     handleSelectionTransfer,
     handlePasteStoredSelection,
+    onRequestClose: requestClose,
   })
 
   /** Update the position of one pasted layer after drag movement. */
@@ -463,7 +477,7 @@ export function ImageEditorModal({
       saving={saving}
       title={resolvedTitle}
       sourceFileName={sourceFileName}
-      onClose={onClose}
+      onClose={requestClose}
       onSave={() => void handleSave()}
       sourceSummary={{
         width: documentSize.width,
@@ -576,7 +590,7 @@ export function ImageEditorModal({
           setCropRect((current) => updateRectField(current, field, value))
         },
         onCancelCrop: handleCancelCrop,
-        onClose,
+        onClose: requestClose,
         onSave: () => void handleSave(),
       }}
     />

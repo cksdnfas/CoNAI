@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke } from './image-editor-types'
 
 type ImageEditorDocumentSize = { width: number; height: number }
+
+const IMAGE_EDITOR_HISTORY_LIMIT = 30
 
 export type ImageEditorHistorySnapshot = {
   baseImageDataUrl: string
@@ -150,7 +152,7 @@ export function useImageEditorHistory(options: UseImageEditorHistoryOptions) {
       }
 
       const nextHistory = [...current, snapshot]
-      return nextHistory.slice(-30)
+      return nextHistory.slice(-IMAGE_EDITOR_HISTORY_LIMIT)
     })
     setRedoStack([])
   }, [captureHistorySnapshot, historyCommitToken, open])
@@ -184,9 +186,27 @@ export function useImageEditorHistory(options: UseImageEditorHistoryOptions) {
     await applyHistorySnapshot(nextSnapshot)
   }, [applyHistorySnapshot, redoStack])
 
+  /**
+   * Whether the current document differs from the oldest kept snapshot, ignoring selection/crop marquees.
+   * A full stack means the loaded snapshot was trimmed away, so treat it as edited.
+   */
+  const hasDocumentChanges = useMemo(() => {
+    if (historyStack.length <= 1) {
+      return false
+    }
+
+    if (historyStack.length >= IMAGE_EDITOR_HISTORY_LIMIT) {
+      return true
+    }
+
+    const toDocumentSignature = (snapshot: ImageEditorHistorySnapshot) => JSON.stringify({ ...snapshot, selectionRect: null, cropRect: null })
+    return toDocumentSignature(historyStack[0]) !== toDocumentSignature(historyStack[historyStack.length - 1])
+  }, [historyStack])
+
   return {
     historyStack,
     redoStack,
+    hasDocumentChanges,
     queueHistoryCommit,
     resetHistory,
     handleUndo,

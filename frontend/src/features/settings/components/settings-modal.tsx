@@ -28,7 +28,8 @@ export function SettingsModal({ open, title, description, headerContent, onClose
 
     const previousOverflow = document.body.style.overflow
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      // Content that consumed Esc itself (e.g. clearing an editor selection) calls preventDefault to keep the modal open.
+      if (event.key === 'Escape' && !event.defaultPrevented) {
         onClose()
       }
     }

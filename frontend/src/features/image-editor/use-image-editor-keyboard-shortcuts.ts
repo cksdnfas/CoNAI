@@ -11,7 +11,7 @@ type ImageEditorSelectionClipboardLike = {
   pasteCount: number
 }
 
-/** Register keyboard shortcuts for undo/redo, tool switching, selection actions, and rect nudging. */
+/** Register keyboard shortcuts for undo/redo, tool switching, selection actions, rect nudging, and Esc-to-close. */
 export function useImageEditorKeyboardShortcuts({
   open,
   enableMaskEditing,
@@ -29,6 +29,7 @@ export function useImageEditorKeyboardShortcuts({
   handleDeleteSelection,
   handleSelectionTransfer,
   handlePasteStoredSelection,
+  onRequestClose,
 }: {
   open: boolean
   enableMaskEditing: boolean
@@ -46,6 +47,7 @@ export function useImageEditorKeyboardShortcuts({
   handleDeleteSelection: () => void | Promise<void>
   handleSelectionTransfer: (mode: 'copy' | 'cut' | 'duplicate' | 'promote') => void | Promise<void>
   handlePasteStoredSelection: () => void
+  onRequestClose: () => void
 }) {
   useEffect(() => {
     if (!open) {
@@ -56,6 +58,10 @@ export function useImageEditorKeyboardShortcuts({
       const target = event.target as HTMLElement | null
       const isTypingTarget = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable
       if (isTypingTarget) {
+        // Keep Esc inside editor inputs from also closing the editor or an underlying image view.
+        if (event.key === 'Escape') {
+          event.preventDefault()
+        }
         return
       }
 
@@ -86,6 +92,11 @@ export function useImageEditorKeyboardShortcuts({
           setSelectionRect(null)
           return
         }
+
+        // The editor owns Esc: consume it so neither this modal nor an underlying image view closes without the discard check.
+        event.preventDefault()
+        onRequestClose()
+        return
       }
 
       if (event.key === '[') {
@@ -204,8 +215,9 @@ export function useImageEditorKeyboardShortcuts({
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    // Capture phase so Esc is handled (and defaultPrevented) before any bubble-phase Esc-to-close listener runs.
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [
     cropRect,
     documentSize,
@@ -215,6 +227,7 @@ export function useImageEditorKeyboardShortcuts({
     handleRedo,
     handleSelectionTransfer,
     handleUndo,
+    onRequestClose,
     open,
     queueHistoryCommit,
     selectionClipboardRef,
