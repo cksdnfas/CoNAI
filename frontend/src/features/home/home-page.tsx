@@ -25,6 +25,10 @@ function getHomeImageHref(image: ImageRecord) {
   return image.composite_hash ? `/images/${image.composite_hash}` : undefined
 }
 
+function getHomeImageSelectionId(image: ImageRecord) {
+  return String(image.composite_hash ?? image.id)
+}
+
 /** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
   const { showSnackbar } = useSnackbar()
@@ -290,6 +294,8 @@ export function HomePage() {
             ) : undefined}
             onDownloadSelect={handleDownloadSelected}
             onClear={() => setSelectedIds([])}
+            loadedCount={visibleImages.length}
+            onSelectAllLoaded={() => setSelectedIds(visibleImages.map(getHomeImageSelectionId))}
           />
 
           <GroupAssignModal

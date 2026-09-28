@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Bot, Images, LayoutGrid, Loader2, Minus, Pencil, Plus, RotateCcw } from 'lucide-react'
 import { Inset } from '@/components/ui/inset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -37,6 +37,8 @@ interface GroupImageSectionProps {
   selectable?: boolean
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
+  /** Ids of the loaded images the list actually shows (rating-hidden ones excluded), for "select all loaded". */
+  onVisibleItemIdsChange?: (itemIds: string[]) => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   collectionFilter?: 'all' | 'manual' | 'auto'
   onCollectionFilterChange?: (value: 'all' | 'manual' | 'auto') => void
@@ -71,6 +73,7 @@ export function GroupImageSection({
   selectable = false,
   selectedIds = [],
   onSelectedIdsChange,
+  onVisibleItemIdsChange,
   renderItemOverlay,
   collectionFilter,
   onCollectionFilterChange,
@@ -90,6 +93,10 @@ export function GroupImageSection({
     isLoadingMore,
     onLoadMore,
   })
+  useEffect(() => {
+    onVisibleItemIdsChange?.(visibleGroupImages.map((image) => String(image.composite_hash ?? image.id)))
+  }, [onVisibleItemIdsChange, visibleGroupImages])
+
   const feedProgress = getGroupImageFeedProgressSummary({
     loadedCount: groupImages.length,
     visibleCount: visibleGroupImages.length,

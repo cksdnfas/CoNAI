@@ -43,6 +43,7 @@ export function GroupPage() {
   const [searchParams] = useSearchParams()
   const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
   const [selectedGroupImageIds, setSelectedGroupImageIds] = useState<string[]>([])
+  const [visibleGroupImageIds, setVisibleGroupImageIds] = useState<string[]>([])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [downloadScope, setDownloadScope] = useState<'group' | 'selection' | null>(null)
   const [isExplorerOpen, setIsExplorerOpen] = useState(false)
@@ -309,6 +310,7 @@ export function GroupPage() {
                 selectable={true}
                 selectedIds={selectedGroupImageIds}
                 onSelectedIdsChange={setSelectedGroupImageIds}
+                onVisibleItemIdsChange={setVisibleGroupImageIds}
                 collectionFilter={isCustomSource ? groupImageCollectionFilter : undefined}
                 onCollectionFilterChange={isCustomSource ? setGroupImageCollectionFilter : undefined}
               />
@@ -398,6 +400,8 @@ export function GroupPage() {
         ) : undefined}
         onDownload={handleOpenSelectionDownloadModal}
         onClear={() => setSelectedGroupImageIds([])}
+        loadedCount={visibleGroupImageIds.length}
+        onSelectAllLoaded={() => setSelectedGroupImageIds(visibleGroupImageIds)}
       />
 
       <GroupDownloadModal

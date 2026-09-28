@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Download } from 'lucide-react'
+import { CheckCheck, Download } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,9 @@ interface ImageSelectionBarProps {
   onDownload?: () => void
   onDownloadSelect?: (type: ImageDownloadType) => Promise<void> | void
   onClear?: () => void
+  /** Number of loaded items; "select all loaded" shows while the selection is smaller. */
+  loadedCount?: number
+  onSelectAllLoaded?: () => void
 }
 
 /** Render a minimal bottom action bar for image selection workflows. */
@@ -32,6 +35,8 @@ export function ImageSelectionBar({
   onDownload,
   onDownloadSelect,
   onClear,
+  loadedCount,
+  onSelectAllLoaded,
 }: ImageSelectionBarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLSpanElement | null>(null)
@@ -57,6 +62,19 @@ export function ImageSelectionBar({
       compactActions
       actions={(
         <>
+          {onSelectAllLoaded && loadedCount !== undefined && selectedCount < loadedCount ? (
+            <Button
+              size="icon-sm"
+              variant="secondary"
+              onClick={onSelectAllLoaded}
+              title={t({ ko: '불러온 항목 모두 선택', en: 'Select all loaded' })}
+              aria-label={t({ ko: '불러온 항목 모두 선택', en: 'Select all loaded' })}
+              data-no-select-drag="true"
+            >
+              <CheckCheck className="h-4 w-4" />
+            </Button>
+          ) : null}
+
           {extraActions}
 
           {showDownloadAction ? (

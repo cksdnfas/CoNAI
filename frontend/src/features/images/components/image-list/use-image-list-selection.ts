@@ -9,7 +9,14 @@ interface UseImageListSelectionParams {
   onSelectedIdsChange?: (selectedIds: string[]) => void
   onDragStateChange?: (isDragging: boolean) => void
   selectionAreaClass?: string
+  /** Touch long-press on a tile: toggle that tile. */
+  onLongPressSelect?: (imageId: string) => void
 }
+
+const LONG_PRESS_DELAY_MS = 450
+const LONG_PRESS_MOVE_TOLERANCE_PX = 10
+/** The click a browser fires after lifting a long-pressed finger must not also open or toggle the tile. */
+const LONG_PRESS_CLICK_SUPPRESS_MS = 450
 
 /** Keep DOM selection preview outside React and commit only the final result. */
 export function useImageListSelection({
@@ -19,6 +26,7 @@ export function useImageListSelection({
   onSelectedIdsChange,
   onDragStateChange,
   selectionAreaClass = 'image-list-selection-area',
+  onLongPressSelect,
 }: UseImageListSelectionParams) {
   const selectionRef = useRef<SelectionArea | null>(null)
   const previewElementsRef = useRef<Set<HTMLElement>>(new Set())
@@ -26,6 +34,105 @@ export function useImageListSelection({
   const didDragSelectionRef = useRef(false)
   const canStartSelection = useMultiTouchSelectionStartGuard(containerElement, selectable)
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const onLongPressSelectRef = useRef(onLongPressSelect)
+
+  useEffect(() => {
+    onLongPressSelectRef.current = onLongPressSelect
+  }, [onLongPressSelect])
+
+  /**
+   * One delegated listener set per list (never per tile): a still, single-finger press held for
+   * LONG_PRESS_DELAY_MS selects the tile. Moving, a second finger, or the browser taking the
+   * gesture for scrolling (pointercancel) aborts it.
+   */
+  useEffect(() => {
+    const container = containerElement
+    if (!container || !selectable) return
+
+    let timer = 0
+    let pending: { imageId: string; pointerId: number; x: number; y: number } | null = null
+    let firedPointerId: number | null = null
+
+    const cancelPending = () => {
+      window.clearTimeout(timer)
+      timer = 0
+      pending = null
+    }
+
+    const fire = () => {
+      if (!pending) return
+      const { imageId, pointerId } = pending
+      cancelPending()
+      firedPointerId = pointerId
+      suppressClickUntilRef.current = Number.POSITIVE_INFINITY
+      navigator.vibrate?.(12)
+      onLongPressSelectRef.current?.(imageId)
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !event.isPrimary) {
+        cancelPending()
+        return
+      }
+
+      const target = event.target
+      if (!(target instanceof Element) || target.closest('[data-no-select-drag="true"]')) return
+      const tile = target.closest<HTMLElement>('.image-list-selectable')
+      const imageId = tile?.dataset.imageId
+      if (!tile || !imageId || !container.contains(tile)) return
+
+      cancelPending()
+      pending = { imageId, pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+      timer = window.setTimeout(fire, LONG_PRESS_DELAY_MS)
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!pending || event.pointerId !== pending.pointerId) return
+      if (Math.hypot(event.clientX - pending.x, event.clientY - pending.y) > LONG_PRESS_MOVE_TOLERANCE_PX) {
+        cancelPending()
+      }
+    }
+
+    const handlePointerEnd = (event: PointerEvent) => {
+      if (pending?.pointerId === event.pointerId) {
+        cancelPending()
+      }
+      if (firedPointerId === event.pointerId) {
+        firedPointerId = null
+        suppressClickUntilRef.current = performance.now() + LONG_PRESS_CLICK_SUPPRESS_MS
+      }
+    }
+
+    // Android raises the context menu around the same delay; treat it as the long-press itself.
+    const handleContextMenu = (event: MouseEvent) => {
+      if (pending) {
+        event.preventDefault()
+        fire()
+        return
+      }
+      if (firedPointerId !== null) {
+        event.preventDefault()
+      }
+    }
+
+    container.addEventListener('pointerdown', handlePointerDown, true)
+    container.addEventListener('pointermove', handlePointerMove, true)
+    container.addEventListener('pointerup', handlePointerEnd, true)
+    container.addEventListener('pointercancel', handlePointerEnd, true)
+    container.addEventListener('contextmenu', handleContextMenu, true)
+
+    return () => {
+      cancelPending()
+      container.removeEventListener('pointerdown', handlePointerDown, true)
+      container.removeEventListener('pointermove', handlePointerMove, true)
+      container.removeEventListener('pointerup', handlePointerEnd, true)
+      container.removeEventListener('pointercancel', handlePointerEnd, true)
+      container.removeEventListener('contextmenu', handleContextMenu, true)
+      if (firedPointerId !== null) {
+        suppressClickUntilRef.current = performance.now() + LONG_PRESS_CLICK_SUPPRESS_MS
+      }
+    }
+  }, [containerElement, selectable])
 
   useEffect(() => {
     const container = containerElement

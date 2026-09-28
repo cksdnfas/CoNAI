@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode, type UIEvent } from 'react'
 import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { ImageRecord } from '@/types/image'
-import type { ImageListScrollMode } from './image-list-types'
+import type { ImageListActivateHandler, ImageListScrollMode, ImageListToggleSelectHandler } from './image-list-types'
 import { ImageListItem } from './image-list-item'
 
 const CONTAINER_SCROLL_END_REACHED_THRESHOLD_PX = 800
@@ -16,7 +16,10 @@ interface ImageListMasonryProps {
   rowGap: number
   getItemHref?: (image: ImageRecord) => string | undefined
   getItemId?: (image: ImageRecord) => string
-  onActivate: (image: ImageRecord, imageId: string, href?: string) => void
+  onActivate: ImageListActivateHandler
+  selectable?: boolean
+  alwaysShowSelectionControl?: boolean
+  onToggleSelect?: ImageListToggleSelectHandler
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
   onEndReached?: () => void
@@ -34,7 +37,10 @@ interface ImageListMasonryContext {
   selectionMode: boolean
   getItemHref?: (image: ImageRecord) => string | undefined
   getItemId?: (image: ImageRecord) => string
-  onActivate: (image: ImageRecord, imageId: string, href?: string) => void
+  onActivate: ImageListActivateHandler
+  selectable?: boolean
+  alwaysShowSelectionControl?: boolean
+  onToggleSelect?: ImageListToggleSelectHandler
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
   showDefaultQuickActions?: boolean
@@ -59,6 +65,9 @@ const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({
         selected={context.selectedIdSet.has(itemId)}
         selectionMode={context.selectionMode}
         onActivate={context.onActivate}
+        selectable={context.selectable}
+        alwaysShowSelectionControl={context.alwaysShowSelectionControl}
+        onToggleSelect={context.onToggleSelect}
         renderOverlay={context.renderItemOverlay?.(image)}
         renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
         showDefaultQuickActions={context.showDefaultQuickActions}
@@ -81,6 +90,9 @@ export function ImageListMasonry({
   getItemHref,
   getItemId,
   onActivate,
+  selectable,
+  alwaysShowSelectionControl,
+  onToggleSelect,
   scrollMode,
   viewportHeight,
   onEndReached,
@@ -167,6 +179,9 @@ export function ImageListMasonry({
     getItemHref,
     getItemId,
     onActivate,
+    selectable,
+    alwaysShowSelectionControl,
+    onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
     showDefaultQuickActions,
@@ -180,6 +195,9 @@ export function ImageListMasonry({
     getItemHref,
     getItemId,
     onActivate,
+    selectable,
+    alwaysShowSelectionControl,
+    onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
     showDefaultQuickActions,

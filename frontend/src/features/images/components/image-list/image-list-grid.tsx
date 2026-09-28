@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { VirtuosoGrid, type GridComputeItemKey, type GridItemContent } from 'react-virtuoso'
 import type { ImageRecord } from '@/types/image'
-import type { ImageListScrollMode } from './image-list-types'
+import type { ImageListActivateHandler, ImageListScrollMode, ImageListToggleSelectHandler } from './image-list-types'
 import { ImageListItem } from './image-list-item'
 
 interface ImageListGridProps {
@@ -15,7 +15,10 @@ interface ImageListGridProps {
   gridItemHeight: number
   getItemHref?: (image: ImageRecord) => string | undefined
   getItemId?: (image: ImageRecord) => string
-  onActivate: (image: ImageRecord, imageId: string, href?: string) => void
+  onActivate: ImageListActivateHandler
+  selectable?: boolean
+  alwaysShowSelectionControl?: boolean
+  onToggleSelect?: ImageListToggleSelectHandler
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
   onEndReached?: () => void
@@ -33,7 +36,10 @@ interface ImageListGridContext {
   gridItemHeight: number
   getItemHref?: (image: ImageRecord) => string | undefined
   getItemId?: (image: ImageRecord) => string
-  onActivate: (image: ImageRecord, imageId: string, href?: string) => void
+  onActivate: ImageListActivateHandler
+  selectable?: boolean
+  alwaysShowSelectionControl?: boolean
+  onToggleSelect?: ImageListToggleSelectHandler
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
   showDefaultQuickActions?: boolean
@@ -62,6 +68,9 @@ const ImageGridItemContent: GridItemContent<ImageRecord, ImageListGridContext> =
       selectionMode={context.selectionMode}
       gridItemHeight={context.gridItemHeight}
       onActivate={context.onActivate}
+      selectable={context.selectable}
+      alwaysShowSelectionControl={context.alwaysShowSelectionControl}
+      onToggleSelect={context.onToggleSelect}
       renderOverlay={context.renderItemOverlay?.(image)}
       renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
       showDefaultQuickActions={context.showDefaultQuickActions}
@@ -85,6 +94,9 @@ export function ImageListGrid({
   getItemHref,
   getItemId,
   onActivate,
+  selectable,
+  alwaysShowSelectionControl,
+  onToggleSelect,
   scrollMode,
   viewportHeight,
   onEndReached,
@@ -110,6 +122,9 @@ export function ImageListGrid({
     getItemHref,
     getItemId,
     onActivate,
+    selectable,
+    alwaysShowSelectionControl,
+    onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
     showDefaultQuickActions,
@@ -123,6 +138,9 @@ export function ImageListGrid({
     getItemHref,
     getItemId,
     onActivate,
+    selectable,
+    alwaysShowSelectionControl,
+    onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
     showDefaultQuickActions,

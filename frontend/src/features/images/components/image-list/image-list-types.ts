@@ -5,6 +5,15 @@ import type { ImageRecord } from '@/types/image'
 export type ImageListLayoutMode = 'grid' | 'masonry'
 export type ImageListScrollMode = 'window' | 'container'
 
+/** Keyboard modifiers that change what a tile click does (Shift extends the selection as a range). */
+export interface ImageListActivateModifiers {
+  shiftKey?: boolean
+}
+
+export type ImageListActivateHandler = (image: ImageRecord, imageId: string, href?: string, modifiers?: ImageListActivateModifiers) => void
+
+export type ImageListToggleSelectHandler = (image: ImageRecord, imageId: string, modifiers?: ImageListActivateModifiers) => void
+
 export interface ImageListProps {
   items: ImageRecord[]
   resetKey?: string
