@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, Boxes, CheckCircle2, Copy, RotateCcw, Save, SlidersHorizontal, Trash2, Unplug, Workflow, X } from 'lucide-react'
+import { AlertTriangle, Boxes, Bug, CheckCircle2, Copy, RotateCcw, Save, SlidersHorizontal, Trash2, Unplug, Workflow, X } from 'lucide-react'
 import type { WorkflowValidationIssue } from './workflow-validation-panel'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
@@ -171,40 +172,33 @@ export function ModuleWorkflowEditorView({
         <Section
           headingAs="div"
           heading={
-                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                  <span className="inline-flex items-center gap-2">
+                <Tip content={graphSummaryLabel}>
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold">
                     <Boxes className="h-4 w-4 text-primary" />
                     {t({ ko: '워크플로우 그래프', en: 'Workflow Graph' })}
                   </span>
-                  <span className="text-xs font-medium text-muted-foreground" title={graphSummaryLabel}>
-                    {graphSummaryLabel}
-                  </span>
-                </span>
+                </Tip>
               }
               actions={
                 <>
                   <Button
                     type="button"
                     size="sm"
-                    variant="secondary"
                     onClick={onOpenSaveModal}
                     aria-label={t({ ko: '워크플로우 저장', en: 'Save workflow' })}
-                    title={t({ ko: '워크플로우 저장', en: 'Save workflow' })}
                   >
                     <Save className="h-4 w-4" />
                     {t({ ko: '저장', en: 'Save' })}
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={workflowDebugMode ? 'default' : 'secondary'}
+                  <IconButton
+                    size="icon-sm"
+                    variant="subtle"
                     onClick={onWorkflowDebugModeToggle}
-                    aria-pressed={workflowDebugMode}
-                    aria-label={workflowDebugMode ? t({ ko: '워크플로우 디버그 모드 끄기', en: 'Turn off workflow debug mode' }) : t({ ko: '워크플로우 디버그 모드 켜기', en: 'Turn on workflow debug mode' })}
-                    title={t({ ko: '워크플로우 디버그 모드', en: 'Workflow debug mode' })}
+                    active={workflowDebugMode}
+                    label={workflowDebugMode ? t({ ko: '워크플로우 디버그 모드 끄기', en: 'Turn off workflow debug mode' }) : t({ ko: '워크플로우 디버그 모드 켜기', en: 'Turn on workflow debug mode' })}
                   >
-                    {t({ ko: '디버그', en: 'Debug' })} {workflowDebugMode ? 'ON' : 'OFF'}
-                  </Button>
+                    <Bug className="h-4 w-4" />
+                  </IconButton>
                   <div ref={validationPopupRef} className="relative">
                     <IconButton
                       size="icon-sm"

@@ -1,5 +1,6 @@
 import { type NodeProps } from '@xyflow/react'
-import { Button } from '@/components/ui/button'
+import { Eraser } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
@@ -91,9 +92,9 @@ export function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGra
               onSelect={(image) => void data.onNodeImageChange?.(id, sourcePort.key, image)}
             />
             {hasExplicitValue ? (
-              <Button type="button" size="sm" variant="ghost" onMouseDown={stopNodeActionEvent} onClick={handleValueClear}>
-                {t({ ko: '지우기', en: 'Clear' })}
-              </Button>
+              <IconButton size="icon-sm" variant="ghost" onMouseDown={stopNodeActionEvent} onClick={handleValueClear} label={t({ ko: '지우기', en: 'Clear' })}>
+                <Eraser />
+              </IconButton>
             ) : null}
           </div>
           {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
@@ -104,9 +105,9 @@ export function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGra
 
       {sourcePort.data_type !== 'image' && sourcePort.data_type !== 'mask' && hasExplicitValue ? (
         <div className="flex justify-end">
-          <Button type="button" size="sm" variant="ghost" onMouseDown={stopNodeActionEvent} onClick={handleValueClear}>
-            {t({ ko: '값 지우기', en: 'Clear value' })}
-          </Button>
+          <IconButton size="icon-sm" variant="ghost" onMouseDown={stopNodeActionEvent} onClick={handleValueClear} label={t({ ko: '값 지우기', en: 'Clear value' })}>
+            <Eraser />
+          </IconButton>
         </div>
       ) : null}
     </div>

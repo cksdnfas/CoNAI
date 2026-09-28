@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { Text } from '@/components/ui/text'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useI18n } from '@/i18n'
@@ -205,7 +204,7 @@ export function WorkflowFinalResultsSection({
       sourcePortLabel: getFinalResultSourcePortLabel(finalResult.source_port_key, finalResult.artifact_type),
     }
   }), [artifactsById, finalResults, nodeLabelMap, nodeLabelOverrides])
-  const { visualEntries, registeredVisualEntries, previewOnlyVisualEntries, visualEntryByImageId, nonVisualEntries } = useMemo(() => {
+  const { registeredVisualEntries, previewOnlyVisualEntries, visualEntryByImageId, nonVisualEntries } = useMemo(() => {
     const nextVisualEntries: Array<{ entry: ResolvedFinalResultEntry; image: ImageRecord }> = []
     for (const entry of resolvedEntries) {
       const image = buildFinalResultImageRecord(entry)
@@ -219,7 +218,6 @@ export function WorkflowFinalResultsSection({
     const nextVisualArtifactIds = new Set(nextVisualEntries.map((item) => item.entry.artifact.id))
 
     return {
-      visualEntries: nextVisualEntries,
       registeredVisualEntries: nextRegisteredVisualEntries,
       previewOnlyVisualEntries: nextPreviewOnlyVisualEntries,
       visualEntryByImageId: new Map(nextRegisteredVisualEntries.map((item) => [String(item.image.id), item.entry])),
@@ -229,23 +227,10 @@ export function WorkflowFinalResultsSection({
 
   return (
     <div className="space-y-2.5">
-      <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
-        <span>{t({ ko: '결과물', en: 'Results' })}</span>
-        <Badge variant="outline">{resolvedEntries.length}</Badge>
-        {resolvedEntries.length > 0 ? (
-          <>
-            <Badge variant={visualEntries.length > 0 ? 'secondary' : 'outline'}>{t({ ko: '미디어 {count}', en: 'Media {count}' }, { count: visualEntries.length })}</Badge>
-            {nonVisualEntries.length > 0 ? <Badge variant="outline">{t({ ko: '파일 {count}', en: 'Files {count}' }, { count: nonVisualEntries.length })}</Badge> : null}
-          </>
-        ) : null}
-      </Text>
+      <Text as="div" variant="overline" className="font-semibold">{t({ ko: '결과물', en: 'Results' })}</Text>
 
       {resolvedEntries.length === 0 ? (
-        <EmptyState
-          size="compact"
-          title={resolvedEmptyLabel}
-          description={selectedGraph ? t({ ko: '시스템 모듈의 최종 결과를 추가한 뒤, 최종으로 확정할 출력 포트에 연결해줘.', en: 'Add a final result from a system module, then connect it to the output port you want to finalize.' }) : undefined}
-        />
+        <EmptyState size="compact" title={resolvedEmptyLabel} />
       ) : (
         <div className="space-y-3">
           {registeredVisualEntries.length > 0 ? (

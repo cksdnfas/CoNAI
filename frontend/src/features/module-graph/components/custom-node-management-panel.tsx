@@ -1,8 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Copy, FlaskConical, FolderOpen, PackagePlus, RefreshCw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { IconButton } from '@/components/ui/icon-button'
 import { Heading } from '@/components/ui/heading'
 import { cn } from '@/lib/utils'
 import { Inset } from '@/components/ui/inset'
@@ -52,16 +55,16 @@ function isLikelyFilePath(value: unknown): value is string {
 
 type PanelCardHeaderProps = {
   title: string
-  description: string
+  meta?: ReactNode
   actions?: ReactNode
 }
 
-function PanelCardHeader({ title, description, actions }: PanelCardHeaderProps) {
+function PanelCardHeader({ title, meta, actions }: PanelCardHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-3 pb-1">
-      <div className="min-w-0">
+    <div className="flex items-center justify-between gap-3 pb-1">
+      <div className="flex min-w-0 items-baseline gap-2">
         <Heading level={3}>{title}</Heading>
-        <Text variant="caption" className="mt-1">{description}</Text>
+        {meta ? <Text as="span" variant="caption" className="truncate">{meta}</Text> : null}
       </div>
 
       {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
@@ -246,12 +249,9 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
           <div className="mt-1 break-all text-sm text-foreground">{customNodesQuery.data?.customNodesDir ?? 'user/custom_nodes'}</div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{t({ ko: '로컬 파일 기반', en: 'Local file-based' })}</Badge>
-          <Button type="button" variant="secondary" onClick={() => void rescanMutation.mutateAsync()} disabled={rescanMutation.isPending}>
-            {rescanMutation.isPending ? t({ ko: '재스캔 중...', en: 'Rescanning...' }) : t({ ko: '재스캔', en: 'Rescan' })}
-          </Button>
-        </div>
+        <IconButton variant="secondary" label={t({ ko: '재스캔', en: 'Rescan' })} onClick={() => void rescanMutation.mutateAsync()} disabled={rescanMutation.isPending}>
+          <RefreshCw className={cn(rescanMutation.isPending && 'animate-spin')} />
+        </IconButton>
       </Inset>
 
       {customNodesQuery.isLoading ? (
@@ -268,17 +268,10 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="space-y-4">
           <Section bodyClassName="space-y-3">
-              <PanelCardHeader
-                title={t({ ko: '등록된 커스텀 노드', en: 'Registered custom nodes' })}
-                description={t({ ko: 'user/custom_nodes 아래 폴더를 스캔한 결과야.', en: 'These are the results of scanning folders under user/custom_nodes.' })}
-                actions={<Badge variant="outline">{loadedNodes.length}</Badge>}
-              />
+              <PanelCardHeader title={t({ ko: '등록된 커스텀 노드', en: 'Registered custom nodes' })} />
 
               {loadedNodes.length === 0 ? (
-                <Alert>
-                  <AlertTitle>{t({ ko: '노드 없음', en: 'No nodes' })}</AlertTitle>
-                  <AlertDescription>{t({ ko: '아직 로드된 커스텀 노드가 없어. 스캐폴드로 하나 만들거나 폴더를 추가한 뒤 재스캔해.', en: 'There are no loaded custom nodes yet. Create one with a scaffold or add a folder, then rescan.' })}</AlertDescription>
-                </Alert>
+                <EmptyState size="compact" title={t({ ko: '노드 없음', en: 'No nodes' })} />
               ) : (
                 <div className="space-y-2.5">
                   {loadedNodes.map((node) => {
@@ -293,19 +286,18 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium text-foreground">{node.manifest.name}</span>
-                              {isSelected ? <Badge variant="secondary">{t({ ko: '선택됨', en: 'Selected' })}</Badge> : null}
                               <Badge variant="outline">{node.manifest.key}</Badge>
-                              <Badge variant="outline">{node.manifest.entry}</Badge>
                             </div>
                             {node.manifest.description ? <div className="text-xs text-muted-foreground">{node.manifest.description}</div> : null}
                             <div className="text-2xs text-muted-foreground">{node.folderPath}</div>
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={isSelected ? 'default' : 'secondary'}
+                          <div className="flex flex-wrap gap-1">
+                            <IconButton
+                              size="icon-sm"
+                              variant="ghost"
+                              active={isSelected}
+                              label={isSelected ? t({ ko: '테스트 대상', en: 'Test target' }) : t({ ko: '테스트 선택', en: 'Select for test' })}
                               onClick={() => {
                                 setSelectedTestKey(node.manifest.key)
                                 setTestResultData(null)
@@ -313,21 +305,21 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                                 setInstallResultText('')
                               }}
                             >
-                              {isSelected ? t({ ko: '테스트 대상', en: 'Test target' }) : t({ ko: '테스트 선택', en: 'Select for test' })}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
+                              <FlaskConical />
+                            </IconButton>
+                            <IconButton
+                              size="icon-sm"
+                              variant="ghost"
+                              label={t({ ko: '폴더 열기', en: 'Open folder' })}
                               onClick={() => void openFolderMutation.mutateAsync(node.manifest.key)}
                               disabled={openFolderMutation.isPending}
                             >
-                              {t({ ko: '폴더 열기', en: 'Open folder' })}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
+                              <FolderOpen />
+                            </IconButton>
+                            <IconButton
+                              size="icon-sm"
+                              variant="ghost"
+                              label={t({ ko: '경로 복사', en: 'Copy path' })}
                               onClick={async () => {
                                 try {
                                   await copyTextToClipboard(node.folderPath)
@@ -337,8 +329,8 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                                 }
                               }}
                             >
-                              {t({ ko: '경로 복사', en: 'Copy path' })}
-                            </Button>
+                              <Copy />
+                            </IconButton>
                           </div>
                         </div>
                       </Inset>
@@ -349,17 +341,10 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
           </Section>
 
           <Section bodyClassName="space-y-3">
-              <PanelCardHeader
-                title={t({ ko: '로드 오류', en: 'Load errors' })}
-                description={t({ ko: 'manifest 또는 entry 파일에 문제가 있으면 여기에 보여줘.', en: 'If there is a problem with the manifest or entry file, it appears here.' })}
-                actions={<Badge variant="outline">{loadErrors.length}</Badge>}
-              />
+              <PanelCardHeader title={t({ ko: '로드 오류', en: 'Load errors' })} />
 
               {loadErrors.length === 0 ? (
-                <Alert>
-                  <AlertTitle>{t({ ko: '오류 없음', en: 'No errors' })}</AlertTitle>
-                  <AlertDescription>{t({ ko: '현재 감지된 로드 오류는 없어.', en: 'There are currently no detected load errors.' })}</AlertDescription>
-                </Alert>
+                <EmptyState size="compact" title={t({ ko: '오류 없음', en: 'No errors' })} />
               ) : (
                 <div className="space-y-3">
                   {loadErrors.map((errorItem) => (
@@ -378,7 +363,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
 
         <div className="space-y-4">
           <Section bodyClassName="space-y-3">
-              <PanelCardHeader title={t({ ko: '새 노드 스캐폴드', en: 'New node scaffold' })} description={t({ ko: '기본 폴더와 starter 파일을 바로 만들어.', en: 'Create the base folder and starter files right away.' })} />
+              <PanelCardHeader title={t({ ko: '새 노드 스캐폴드', en: 'New node scaffold' })} />
 
               <div className="grid gap-3">
                 <Field label="folder">
@@ -422,18 +407,12 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
           </Section>
 
           <Section bodyClassName="space-y-3">
-              <PanelCardHeader
-                title={t({ ko: '단건 테스트', en: 'Single test' })}
-                description={selectedTestNode ? t({ ko: '{name} 테스트', en: '{name} test' }, { name: selectedTestNode.manifest.name }) : t({ ko: '먼저 테스트할 노드를 선택해.', en: 'Select a node to test first.' })}
-              />
+              <PanelCardHeader title={t({ ko: '단건 테스트', en: 'Single test' })} meta={selectedTestNode?.manifest.name} />
 
               {selectedNodeSourceQuery.data ? (
                 <Inset className="space-y-3 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium text-foreground">{t({ ko: '소스 정보', en: 'Source info' })}</div>
-                      <div className="text-xs text-muted-foreground">{t({ ko: '선택한 커스텀 노드의 파일 경로와 manifest 요약이야.', en: 'This shows the selected custom node file paths and a manifest summary.' })}</div>
-                    </div>
+                    <div className="text-sm font-medium text-foreground">{t({ ko: '소스 정보', en: 'Source info' })}</div>
                     <Badge variant="outline">{selectedNodeSourceQuery.data.sourceHash.slice(0, 12)}</Badge>
                   </div>
                   <div className="grid gap-2.5 md:grid-cols-2">
@@ -443,14 +422,14 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <StatTile label="package.json" value={selectedNodeSourceQuery.data.packageJsonPath ?? t({ ko: '없음', en: 'None' })} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
                     <StatTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? t({ ko: '없음', en: 'None' })} className="bg-surface-container md:col-span-2" valueClassName="break-all text-xs font-medium" />
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
-                      {t({ ko: '폴더 열기', en: 'Open folder' })}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
+                  <div className="flex flex-wrap gap-1">
+                    <IconButton size="icon-sm" variant="ghost" label={t({ ko: '폴더 열기', en: 'Open folder' })} onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
+                      <FolderOpen />
+                    </IconButton>
+                    <IconButton
+                      size="icon-sm"
+                      variant="ghost"
+                      label={t({ ko: 'Entry 경로 복사', en: 'Copy entry path' })}
                       onClick={async () => {
                         try {
                           await copyTextToClipboard(selectedNodeSourceQuery.data.entryPath)
@@ -460,17 +439,17 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                         }
                       }}
                     >
-                      {t({ ko: 'Entry 경로 복사', en: 'Copy entry path' })}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
+                      <Copy />
+                    </IconButton>
+                    <IconButton
+                      size="icon-sm"
+                      variant="ghost"
+                      label={installDependenciesMutation.isPending ? t({ ko: 'npm install 중...', en: 'Running npm install...' }) : 'npm install'}
                       onClick={() => void installDependenciesMutation.mutateAsync(selectedNodeSourceQuery.data.key)}
                       disabled={installDependenciesMutation.isPending || !selectedNodeSourceQuery.data.packageJsonPath}
                     >
-                      {installDependenciesMutation.isPending ? t({ ko: 'npm install 중...', en: 'Running npm install...' }) : 'npm install'}
-                    </Button>
+                      <PackagePlus />
+                    </IconButton>
                   </div>
                   {selectedNodeSourceQuery.data.packageJsonPath ? (
                     <Textarea variant="settings" rows={8} value={installResultText} placeholder={t({ ko: 'npm install 결과가 여기에 보여.', en: 'The npm install result appears here.' })} readOnly />
@@ -511,7 +490,6 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                   <AlertTitle>{t({ ko: '파일 경로 이미지 출력', en: 'File-path image output' })}</AlertTitle>
                   <AlertDescription>
                     <div className="space-y-1 text-sm">
-                      <div>{t({ ko: '이 테스트 결과는 이미지 포트를 파일 경로 문자열로 반환했어. 현재 패널에서는 경로만 보여주고, 실제 그래프 실행 시 artifact로 저장돼.', en: 'This test result returned an image port as a file-path string. This panel only shows the path, and the real graph run saves it as an artifact.' })}</div>
                       {filePathOutputs.map((output) => (
                         <div key={output.key} className="font-mono text-xs text-muted-foreground">
                           {output.label}: {output.value}

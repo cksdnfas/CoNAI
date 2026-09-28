@@ -4,7 +4,6 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Text } from '@/components/ui/text'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
@@ -202,7 +201,7 @@ export function SavedGraphList({
         variant="nav"
         data-active={selectedGraphId === graph.id}
         onClick={() => onLoadGraph(graph)}
-        className="h-auto flex-col items-stretch gap-1 px-3 py-2"
+        className="px-3"
         style={{ paddingLeft: `${12 + depth * 18}px` }}
         title={titleLines.join('\n')}
       >
@@ -215,11 +214,6 @@ export function SavedGraphList({
             </Badge>
           ) : null}
         </span>
-        <Text as="span" variant="caption" className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-2xs leading-tight">
-          <span>{t({ ko: '노드 {count}', en: 'Nodes {count}' }, { count: formatNumber(summary.nodeCount) })}</span>
-          <span>{t({ ko: '연결 {count}', en: 'Edges {count}' }, { count: formatNumber(summary.edgeCount) })}</span>
-          <span>{t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(summary.finalResultNodeCount) })}</span>
-        </Text>
       </Button>
     )
   }
@@ -297,7 +291,6 @@ export function SavedGraphList({
   return (
     <ExplorerSidebar
       title={t({ ko: '탐색기', en: 'Explorer' })}
-      badge={<Badge variant="outline">{graphs.length}</Badge>}
       floatingFrame
       floatingLockStorageKey={WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY}
       className="sticky top-24 z-30 isolate self-start max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]"
@@ -337,7 +330,6 @@ export function SavedGraphList({
           size="compact"
           icon={FileCode2}
           title={t({ ko: '저장된 워크플로우가 없어', en: 'There are no saved workflows' })}
-          description={t({ ko: '새 폴더나 새 워크플로우를 만들면 여기서 바로 탐색할 수 있어.', en: 'Create a new folder or workflow to browse it here.' })}
         />
       ) : null}
       {(graphs.length > 0 || folders.length > 0) && !hasAnyVisibleItem ? (
@@ -345,7 +337,6 @@ export function SavedGraphList({
           size="compact"
           icon={Search}
           title={t({ ko: '검색 결과가 없어', en: 'No search results' })}
-          description={t({ ko: '다른 키워드로 찾아봐.', en: 'Try a different keyword.' })}
         />
       ) : null}
     </ExplorerSidebar>

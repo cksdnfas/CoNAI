@@ -291,7 +291,6 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
           <Badge variant="outline" title={activationTitle}>{activationLabel}</Badge>
           {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
           {data.executionReuseState === 'reused' ? <Badge variant="outline">{t({ ko: '캐시', en: 'Cache' })}</Badge> : null}
-          {data.executionArtifactCount ? <Badge variant="outline">A {data.executionArtifactCount}</Badge> : null}
           {statusLabel && statusLabel !== activationLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>
       </div>

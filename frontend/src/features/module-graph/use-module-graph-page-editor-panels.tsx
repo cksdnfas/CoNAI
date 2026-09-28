@@ -251,9 +251,6 @@ export function useModuleGraphPageEditorPanels({
       selectedGraphName={selectedGraphRecord?.name ?? null}
       selectedGraphVersion={selectedGraphRecord?.version ?? null}
       isDirty={isDirty}
-      nodesCount={nodes.length}
-      edgesCount={edges.length}
-      selectedExecutionId={selectedExecutionId}
       isSavingGraph={isSavingGraph}
       hasNodes={nodes.length > 0}
       folderPanel={workflowSetupFolderPanel}

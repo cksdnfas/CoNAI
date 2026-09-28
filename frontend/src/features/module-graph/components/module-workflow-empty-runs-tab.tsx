@@ -1,6 +1,5 @@
 import { Square, SquareCheckBig, Trash2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
@@ -96,17 +95,15 @@ export function ModuleWorkflowEmptyRunsTab({
         heading={t({ ko: '예약 실행 현황', en: 'Reservation run status' })}
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant="outline">{formatNumber(queueExecutions.length)}</Badge>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
+            <IconButton
+              size="icon-sm"
+              variant="ghost"
               onClick={onToggleVisibleSelection}
               disabled={queueExecutions.length === 0}
+              label={allQueueSelected ? t({ ko: '선택 해제', en: 'Clear selection' }) : t({ ko: '보이는 항목 선택', en: 'Select visible items' })}
             >
               {allQueueSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              {allQueueSelected ? t({ ko: '선택 해제', en: 'Clear selection' }) : t({ ko: '보이는 항목 선택', en: 'Select visible items' })}
-            </Button>
+            </IconButton>
           </div>
         )}
       >
@@ -122,12 +119,9 @@ export function ModuleWorkflowEmptyRunsTab({
                 <Inset key={execution.id} data-selected={isSelected} className={isSelected ? 'bg-primary/12' : undefined}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Text as="span" variant="label">
-                          {workflowNameById.get(execution.graph_workflow_id) ?? t({ ko: '워크플로우 #{id}', en: 'Workflow #{id}' }, { id: execution.graph_workflow_id })}
-                        </Text>
-                        <Badge variant={isSelected ? 'secondary' : 'outline'}>{isSelected ? t({ ko: '선택됨', en: 'Selected' }) : t({ ko: '선택', en: 'Select' })}</Badge>
-                      </div>
+                      <Text as="div" variant="label">
+                        {workflowNameById.get(execution.graph_workflow_id) ?? t({ ko: '워크플로우 #{id}', en: 'Workflow #{id}' }, { id: execution.graph_workflow_id })}
+                      </Text>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {t({ ko: '실행 #{id} · 생성 {time}', en: 'Run #{id} · Created {time}' }, { id: execution.id, time: formatDateTime(execution.created_date) })}
                       </div>
@@ -145,15 +139,13 @@ export function ModuleWorkflowEmptyRunsTab({
                         {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                       </IconButton>
                       {isCancelable ? (
-                        <Button type="button" size="sm" variant="secondary" onClick={() => onCancelSingle(execution.id)} disabled={isCleaningQueue}>
+                        <IconButton size="icon-sm" variant="ghost" onClick={() => onCancelSingle(execution.id)} disabled={isCleaningQueue} label={t({ ko: '취소', en: 'Cancel' })}>
                           <XCircle className="h-4 w-4" />
-                          {t({ ko: '취소', en: 'Cancel' })}
-                        </Button>
+                        </IconButton>
                       ) : (
-                        <Button type="button" size="sm" onClick={() => onDeleteSingle(execution.id)} disabled={isCleaningQueue}>
+                        <IconButton size="icon-sm" variant="ghost" onClick={() => onDeleteSingle(execution.id)} disabled={isCleaningQueue} label={t({ ko: '삭제', en: 'Delete' })}>
                           <Trash2 className="h-4 w-4" />
-                          {t({ ko: '삭제', en: 'Delete' })}
-                        </Button>
+                        </IconButton>
                       )}
                     </div>
                   </div>

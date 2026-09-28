@@ -1,8 +1,8 @@
-import { Folder, FolderOpen, Plus, Save, Trash2 } from 'lucide-react'
+import { Folder, FolderOpen, PenSquare, Plus, Save, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Heading } from '@/components/ui/heading'
 import { Inset } from '@/components/ui/inset'
 import { Input } from '@/components/ui/input'
@@ -108,12 +108,7 @@ export function WorkflowFolderSettingsPanel({
   return (
     <div className="space-y-4">
       {showHeader ? (
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <Heading level={3}>{selectedWorkflow ? t({ ko: '워크플로우', en: 'Workflow' }) : t({ ko: '폴더', en: 'Folder' })}</Heading>
-          </div>
-          <Badge variant="outline">{selectedWorkflow ? t({ ko: '워크플로우', en: 'Workflow' }) : isRootSelected ? t({ ko: '루트', en: 'Root' }) : t({ ko: '폴더', en: 'Folder' })}</Badge>
-        </div>
+        <Heading level={3}>{selectedWorkflow ? t({ ko: '워크플로우', en: 'Workflow' }) : t({ ko: '폴더', en: 'Folder' })}</Heading>
       ) : null}
 
       {selectedWorkflow ? (
@@ -139,21 +134,20 @@ export function WorkflowFolderSettingsPanel({
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>
               <Save className="h-4 w-4" />
               {t({ ko: '할당 저장', en: 'Save assignment' })}
             </Button>
             {onEditWorkflow ? (
-              <Button type="button" variant="secondary" onClick={onEditWorkflow}>
-                {t({ ko: '편집 열기', en: 'Open editor' })}
-              </Button>
+              <IconButton variant="secondary" onClick={onEditWorkflow} label={t({ ko: '편집 열기', en: 'Open editor' })}>
+                <PenSquare className="h-4 w-4" />
+              </IconButton>
             ) : null}
             {onDeleteWorkflow ? (
-              <Button type="button" variant="destructive" onClick={() => void onDeleteWorkflow()}>
+              <IconButton variant="destructive" onClick={() => void onDeleteWorkflow()} label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
                 <Trash2 className="h-4 w-4" />
-                {t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
-              </Button>
+              </IconButton>
             ) : null}
           </div>
 
@@ -166,7 +160,7 @@ export function WorkflowFolderSettingsPanel({
                 <Plus className="h-4 w-4" />
                 {t({ ko: '폴더 생성', en: 'Create folder' })}
               </Button>
-              <Button type="button" onClick={() => void handleCreateChildFolder(true)} disabled={!childFolderName.trim()}>
+              <Button type="button" variant="secondary" onClick={() => void handleCreateChildFolder(true)} disabled={!childFolderName.trim()}>
                 <Plus className="h-4 w-4" />
                 {t({ ko: '생성 후 할당', en: 'Create and assign' })}
               </Button>
@@ -177,9 +171,7 @@ export function WorkflowFolderSettingsPanel({
         <div className="space-y-4">
           <div className="space-y-1">
             <Heading level={3}>{currentFolderTitle}</Heading>
-            {isRootSelected ? (
-              <div className="text-sm text-muted-foreground">{t({ ko: '기본 위치', en: 'Default location' })}</div>
-            ) : selectedFolder?.description ? (
+            {!isRootSelected && selectedFolder?.description ? (
               <div className="text-sm text-muted-foreground">{selectedFolder.description}</div>
             ) : null}
           </div>
@@ -217,10 +209,9 @@ export function WorkflowFolderSettingsPanel({
                   <Save className="h-4 w-4" />
                   {t({ ko: '폴더 저장', en: 'Save folder' })}
                 </Button>
-                <Button type="button" variant="destructive" onClick={() => selectedFolder && void onDeleteFolder(selectedFolder.id)} disabled={!selectedFolder}>
+                <IconButton variant="destructive" onClick={() => selectedFolder && void onDeleteFolder(selectedFolder.id)} disabled={!selectedFolder} label={t({ ko: '폴더 삭제', en: 'Delete folder' })}>
                   <Trash2 className="h-4 w-4" />
-                  {t({ ko: '폴더 삭제', en: 'Delete folder' })}
-                </Button>
+                </IconButton>
               </div>
             </div>
           ) : null}

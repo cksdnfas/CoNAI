@@ -1,7 +1,9 @@
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Eraser } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { LlmPresetOptionCollections, LlmPresetOptionRecord } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModulePortDefinition } from '@/lib/api-module-graph'
@@ -72,7 +74,6 @@ export function PortBadges({ port, missingRequired = false }: { port: ModulePort
   return (
     <div className="mt-1 flex flex-wrap gap-1">
       <Badge variant="outline">{getModuleGraphPortTypeLabel(t, port.data_type)}</Badge>
-      <Badge variant="secondary">{port.key}</Badge>
       {port.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
       {missingRequired ? <Badge variant="secondary">{t({ ko: '입력 필요', en: 'Input required' })}</Badge> : null}
       {port.multiple ? <Badge variant="outline">{t({ ko: '다중', en: 'Multiple' })}</Badge> : null}
@@ -100,15 +101,16 @@ export function PortHeader({
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex items-center gap-1">
-          <div className="text-sm font-medium text-foreground">{port.label}</div>
+          <Tip content={normalizeModulePortDescription(port.description)}>
+            <div className="text-sm font-medium text-foreground">{port.label}</div>
+          </Tip>
           <TechnicalReferenceHint title={`node ${nodeId}\nport ${port.key}`} label={t({ ko: '포트 내부 키 보기', en: 'Show internal port key' })} />
         </div>
         <PortBadges port={port} missingRequired={missingRequired} />
-        {normalizeModulePortDescription(port.description) ? <div className="mt-1 text-xs text-muted-foreground">{normalizeModulePortDescription(port.description)}</div> : null}
       </div>
-      <Button type="button" size="sm" variant="ghost" onClick={onClear} disabled={!hasExplicitValue}>
-        {t({ ko: '값 지우기', en: 'Clear value' })}
-      </Button>
+      <IconButton size="icon-sm" variant="ghost" onClick={onClear} disabled={!hasExplicitValue} label={t({ ko: '값 지우기', en: 'Clear value' })}>
+        <Eraser />
+      </IconButton>
     </div>
   )
 }
@@ -173,11 +175,12 @@ export function EdgeEndpointCard({
       {endpoint.port ? (
         <>
           <div className="mt-1 flex items-center gap-1">
-            <div className="text-sm text-foreground">{endpoint.port.label}</div>
+            <Tip content={normalizeModulePortDescription(endpoint.port.description)}>
+              <div className="text-sm text-foreground">{endpoint.port.label}</div>
+            </Tip>
             <TechnicalReferenceHint title={`port ${endpoint.port.key}`} label={t({ ko: '포트 내부 키 보기', en: 'Show internal port key' })} />
           </div>
           <PortBadges port={endpoint.port} />
-          {normalizeModulePortDescription(endpoint.port.description) ? <div className="mt-1 text-xs text-muted-foreground">{normalizeModulePortDescription(endpoint.port.description)}</div> : null}
         </>
       ) : (
         <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">

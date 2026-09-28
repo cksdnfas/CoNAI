@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Eye } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
@@ -92,10 +92,9 @@ export function SelectedExecutionSummary({
             {selectedExecutionPlan?.reusedFromExecutionId ? <Badge variant="outline">{t({ ko: '재사용 #{id}', en: 'Reused #{id}' }, { id: selectedExecutionPlan.reusedFromExecutionId })}</Badge> : null}
           </ExecutionHeaderBadges>
         </div>
-        <Button type="button" size="sm" variant="secondary" onClick={onOpenDetail}>
+        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '상세', en: 'Details' })} onClick={onOpenDetail}>
           <Eye className="h-4 w-4" />
-          {t({ ko: '상세', en: 'Details' })}
-        </Button>
+        </IconButton>
       </Inset>
 
       {executionDetail.execution.error_message ? (
@@ -112,10 +111,9 @@ export function SelectedExecutionSummary({
               {llmResponseDiagnostic.failedLog ? <Badge variant="destructive" title={llmResponseDiagnostic.failedLog.event_type}>{getGraphExecutionLogEventLabel(llmResponseDiagnostic.failedLog.event_type, t)}</Badge> : null}
               {llmResponseDiagnostic.providerLog ? <Badge variant="outline" title={llmResponseDiagnostic.providerLog.event_type}>{getGraphExecutionLogEventLabel(llmResponseDiagnostic.providerLog.event_type, t)}</Badge> : null}
             </div>
-            <Button type="button" size="sm" variant="secondary" onClick={onOpenDetail}>
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '로그', en: 'Logs' })} onClick={onOpenDetail}>
               <Eye className="h-4 w-4" />
-              {t({ ko: '로그', en: 'Logs' })}
-            </Button>
+            </IconButton>
           </div>
           {llmResponseDiagnostic.textPreview ? (
             <pre className={cn(CODE_BLOCK_CLASS_NAME, 'max-h-44 whitespace-pre-wrap break-words')}>{llmResponseDiagnostic.textPreview}</pre>
@@ -175,7 +173,6 @@ export function SelectedExecutionSummary({
       <div className="space-y-2.5">
         <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
           <span>{t({ ko: '출력', en: 'Outputs' })}</span>
-          <Badge variant="outline">{formatNumber(compactArtifactGroups.length)}</Badge>
         </Text>
 
         {compactArtifactGroups.length === 0 ? (

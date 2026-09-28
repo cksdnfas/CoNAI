@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FileSearch, Square, SquareCheckBig, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Panel } from '@/components/ui/panel'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -81,7 +81,6 @@ export function ModuleWorkflowArtifactRecordsTab({
       allVisibleSelected={allVisibleSelected}
       selectPageLabel={t('module-graph.components.module.workflow.artifact.records.tab.select.page')}
       clearPageLabel={t('module-graph.components.module.workflow.artifact.records.tab.clear.page')}
-      selectToggleTitle={allVisibleSelected ? 'Clear visible artifacts' : 'Select visible artifacts'}
       canClearAll={canDeleteArtifacts}
       isClearing={isDeletingArtifacts}
       onPageChange={onPageChange}
@@ -134,7 +133,6 @@ export function ModuleWorkflowArtifactRecordsTab({
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="truncate text-sm font-medium text-foreground">{workflowName}</div>
                   <Badge variant="outline">{artifact.artifact_type}</Badge>
-                  <Badge variant="outline">{artifact.port_key}</Badge>
                   {execution?.status ? <Badge variant="outline">{execution.status}</Badge> : null}
                 </div>
 
@@ -152,36 +150,32 @@ export function ModuleWorkflowArtifactRecordsTab({
               </div>
 
               <div className="flex items-center gap-2">
-                <Button
-                  type="button"
+                <IconButton
                   size="icon-sm"
-                  variant="secondary"
+                  variant="ghost"
                   onClick={(event) => {
                     event.stopPropagation()
                     onToggleArtifactSelection(artifact.id)
                   }}
-                  title={isSelected ? 'Deselect artifact' : 'Select artifact'}
-                  aria-label={isSelected ? 'Deselect artifact' : 'Select artifact'}
+                  label={isSelected ? 'Deselect artifact' : 'Select artifact'}
                   data-no-select-drag="true"
                 >
                   {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                </Button>
+                </IconButton>
                 {canDeleteArtifacts ? (
-                  <Button
-                    type="button"
+                  <IconButton
                     size="icon-sm"
-                    variant="destructive"
+                    variant="ghost"
                     onClick={(event) => {
                       event.stopPropagation()
                       onDeleteSingle(artifact.id)
                     }}
                     disabled={isDeletingArtifacts}
-                    title={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
-                    aria-label={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
+                    label={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
                     data-no-select-drag="true"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </IconButton>
                 ) : null}
               </div>
             </div>

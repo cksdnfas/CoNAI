@@ -67,11 +67,11 @@ export function GraphExecutionDetailModal({
 
   const detailSectionButtons = executionDetail ? (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('summary')}>{t({ ko: '요약', en: 'Summary' })}</Button>
-      {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('inputs')}>{t({ ko: '입력', en: 'Inputs' })}</Button> : null}
-      <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('compare')}>{t({ ko: '비교', en: 'Compare' })}</Button>
-      <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('artifacts')}>{t({ ko: '아티팩트', en: 'Artifacts' })}</Button>
-      <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('logs')}>{t({ ko: '로그', en: 'Logs' })}</Button>
+      <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('summary')}>{t({ ko: '요약', en: 'Summary' })}</Button>
+      {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('inputs')}>{t({ ko: '입력', en: 'Inputs' })}</Button> : null}
+      <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('compare')}>{t({ ko: '비교', en: 'Compare' })}</Button>
+      <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('artifacts')}>{t({ ko: '아티팩트', en: 'Artifacts' })}</Button>
+      <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('logs')}>{t({ ko: '로그', en: 'Logs' })}</Button>
     </div>
   ) : null
 

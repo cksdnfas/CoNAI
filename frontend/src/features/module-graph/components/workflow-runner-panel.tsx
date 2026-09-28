@@ -84,8 +84,6 @@ export function WorkflowRunnerPanel({
         t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(graphSummary.finalResultNodeCount) }),
       ].join(' · ')
     : null
-  const latestExecutionStatus = latestExecution?.status ?? null
-  const latestExecutionStatusLabel = latestExecutionStatus ? getGraphExecutionStatusLabel(latestExecutionStatus, t) : null
   const shouldShowLatestExecutionResults = latestExecution?.status === 'completed'
   const latestExecutionFinalResultWarnings = useMemo(() => listFinalResultLifecycleWarnings(latestExecutionLogs), [latestExecutionLogs])
   const latestExecutionFinalResultWarning = latestExecutionFinalResultWarnings[0] ?? null
@@ -195,9 +193,9 @@ export function WorkflowRunnerPanel({
             variant="inside"
             heading={t({ ko: '워크플로우 실행기', en: 'Workflow Runner' })}
             actions={
-              <Button type="button" size="sm" variant="secondary" onClick={onEdit} disabled={!selectedGraph}>
-                {t({ ko: '구조 수정', en: 'Edit graph' })}
-              </Button>
+              <IconButton size="icon-sm" variant="ghost" onClick={onEdit} disabled={!selectedGraph} label={t({ ko: '구조 수정', en: 'Edit graph' })}>
+                <PenSquare className="h-4 w-4" />
+              </IconButton>
             }
           />
         ) : null}
@@ -207,14 +205,10 @@ export function WorkflowRunnerPanel({
             {!showHeader ? (
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-2">
-                  <Heading level={3} className="truncate">{selectedGraph.name}</Heading>
+                  <Tip content={graphSummaryLine}>
+                    <Heading level={3} className="truncate">{selectedGraph.name}</Heading>
+                  </Tip>
                   {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
-                  {graphSummaryLine || latestExecutionStatus ? (
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
-                      {graphSummaryLine ? <span title={graphSummaryLine}>{graphSummaryLine}</span> : null}
-                      {latestExecutionStatusLabel ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatusLabel}</Badge> : null}
-                    </div>
-                  ) : null}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
@@ -235,14 +229,10 @@ export function WorkflowRunnerPanel({
               </div>
             ) : (
               <div className="space-y-2">
-                <Heading level={3}>{selectedGraph.name}</Heading>
+                <Tip content={graphSummaryLine}>
+                  <Heading level={3}>{selectedGraph.name}</Heading>
+                </Tip>
                 {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
-                {graphSummaryLine || latestExecutionStatus ? (
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
-                    {graphSummaryLine ? <span title={graphSummaryLine}>{graphSummaryLine}</span> : null}
-                    {latestExecutionStatusLabel ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatusLabel}</Badge> : null}
-                  </div>
-                ) : null}
               </div>
             )}
 
@@ -250,26 +240,25 @@ export function WorkflowRunnerPanel({
               <Inset className="px-3 py-2.5">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-sm font-medium text-foreground">{t({ ko: '최근 결과', en: 'Latest result' })}</span>
-                  <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
-                  <Badge variant="outline">{getGraphExecutionStatusLabel(latestExecution.status, t)}</Badge>
+                  <span className="text-xs text-muted-foreground">#{latestExecution.id}</span>
+                  <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{getGraphExecutionStatusLabel(latestExecution.status, t)}</Badge>
                   {latestExecutionResultCountLabel ? (
                     <Badge variant={latestExecutionFinalResults && latestExecutionFinalResults.length > 0 ? 'secondary' : 'outline'}>{latestExecutionResultCountLabel}</Badge>
                   ) : null}
                   {!isLatestResultExpanded && latestExecutionAttentionCount > 0 ? (
                     <Badge variant="destructive">{t({ ko: '확인 필요 {count}', en: 'Needs review {count}' }, { count: formatNumber(latestExecutionAttentionCount) })}</Badge>
                   ) : null}
-                  <Button
-                    type="button"
-                    size="xs"
+                  <IconButton
+                    size="icon-xs"
                     variant="ghost"
                     className="ml-auto"
                     aria-expanded={isLatestResultExpanded}
                     aria-controls={latestResultDetailsId}
                     onClick={() => setIsLatestResultExpanded((current) => !current)}
+                    label={isLatestResultExpanded ? t({ ko: '접기', en: 'Hide' }) : t({ ko: '자세히', en: 'Details' })}
                   >
                     <ChevronDown className={cn('transition-transform', !isLatestResultExpanded && '-rotate-90')} aria-hidden />
-                    {isLatestResultExpanded ? t({ ko: '접기', en: 'Hide' }) : t({ ko: '자세히', en: 'Details' })}
-                  </Button>
+                  </IconButton>
                 </div>
 
                 {!isLatestResultExpanded && !shouldShowLatestExecutionResults && latestExecutionPendingMessage ? (
@@ -282,7 +271,6 @@ export function WorkflowRunnerPanel({
                       {latestExecutionArtifactCountLabel ? (
                         <Badge variant={latestExecutionArtifactCount && latestExecutionArtifactCount > 0 ? 'secondary' : 'outline'}>{latestExecutionArtifactCountLabel}</Badge>
                       ) : null}
-                      <Badge variant="outline">{t({ ko: '입출력 {count}', en: 'I/O {count}' }, { count: formatNumber(latestExecutionComparisonSummary.compactInputCount + latestExecutionComparisonSummary.compactOutputCount) })}</Badge>
                       {latestExecutionComparisonSummary.issueLogCount > 0 ? (
                         <Badge variant="outline">{t({ ko: '경고/오류 {count}', en: 'Warnings/errors {count}' }, { count: formatNumber(latestExecutionComparisonSummary.issueLogCount) })}</Badge>
                       ) : null}
@@ -337,7 +325,6 @@ export function WorkflowRunnerPanel({
             <WorkflowValidationPanel
               issues={validationIssues}
               title={t({ ko: '실행 검증', en: 'Run validation' })}
-              description={t({ ko: '실행 전 확인', en: 'Check before running' })}
               showHeader={false}
               onIssueSelect={onValidationIssueSelect}
             />

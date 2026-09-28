@@ -1,6 +1,7 @@
 import { RotateCcw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { DEFAULT_PROMPT_TEXTAREA_ROWS } from '@/features/image-generation/components/text-segment-spreadsheet-input'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { TypedFieldInput } from '@/features/shared-fields/typed-field-input'
@@ -65,28 +66,24 @@ export function WorkflowInputFields({
 
     return (
       <div className="flex shrink-0 items-center gap-1">
-        <Button
-          type="button"
+        <IconButton
           size="icon-sm"
-          variant="secondary"
+          variant="ghost"
           onClick={() => restoreDefaultValue(inputDefinition)}
           disabled={!defaultAvailable || usingDefault}
-          aria-label={t({ ko: '기본값 가져오기', en: 'Restore default value' })}
-          title={t({ ko: '기본값 가져오기', en: 'Restore default value' })}
+          label={t({ ko: '기본값 가져오기', en: 'Restore default value' })}
         >
           <RotateCcw className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
+        </IconButton>
+        <IconButton
           size="icon-sm"
-          variant="secondary"
+          variant="ghost"
           onClick={() => onInputValueClear(inputDefinition.id)}
           disabled={!explicitValue}
-          aria-label={t({ ko: '값 지우기', en: 'Clear value' })}
-          title={t({ ko: '값 지우기', en: 'Clear value' })}
+          label={t({ ko: '값 지우기', en: 'Clear value' })}
         >
           <Trash2 className="h-4 w-4" />
-        </Button>
+        </IconButton>
       </div>
     )
   }
@@ -142,16 +139,14 @@ export function WorkflowInputFields({
     return (
       <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Tip content={normalizedDescription}>
               <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-              {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
-            </div>
-            <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {isSelect ? 'select' : inputDefinition.data_type}</div>
+            </Tip>
+            {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
           </div>
           {renderInputActions(inputDefinition, rawValue, explicitValue)}
         </div>
-        {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
         {renderInputControl(inputDefinition, rawValue, isSelect)}
       </div>
     )

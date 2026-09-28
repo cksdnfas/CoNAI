@@ -127,8 +127,6 @@ export function ExecutionComparisonContextBlock({
       <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
         <span>{t({ ko: '비교 맥락', en: 'Compare context' })}</span>
         <Badge variant="outline">{t({ ko: '입력 {count}', en: 'Inputs {count}' }, { count: formatNumber(summary.runtimeInputCount) })}</Badge>
-        <Badge variant="outline">{t({ ko: '원장 입력 {count}', en: 'Ledger inputs {count}' }, { count: formatNumber(summary.compactInputCount) })}</Badge>
-        <Badge variant="outline">{t({ ko: '원장 출력 {count}', en: 'Ledger outputs {count}' }, { count: formatNumber(summary.compactOutputCount) })}</Badge>
         <Badge variant={summary.finalResultCount > 0 ? 'secondary' : 'outline'}>{t({ ko: '최종 {count}', en: 'Final {count}' }, { count: formatNumber(summary.finalResultCount) })}</Badge>
         {summary.issueLogCount > 0 ? <Badge variant="outline">{t({ ko: '경고/오류 {count}', en: 'Warnings/errors {count}' }, { count: formatNumber(summary.issueLogCount) })}</Badge> : null}
         {summary.finalResultWarningCount > 0 ? <Badge variant="outline">{t({ ko: '최종 경고 {count}', en: 'Final warnings {count}' }, { count: formatNumber(summary.finalResultWarningCount) })}</Badge> : null}
@@ -185,7 +183,6 @@ export function ExecutionPathDiagnosticsBlock({
     <div className="space-y-2.5">
       <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
         <span>{t({ ko: '경로 진단', en: 'Path diagnostics' })}</span>
-        <Badge variant="outline">{formatNumber(rows.length)}</Badge>
       </Text>
       <div className="space-y-1.5">
         {visibleRows.map((row) => (

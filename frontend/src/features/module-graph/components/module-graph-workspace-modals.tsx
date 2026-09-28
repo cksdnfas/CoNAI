@@ -144,7 +144,6 @@ export function ModuleGraphWorkspaceModals({
       <Modal
         open={isModuleLibraryOpen}
         title={t({ ko: '모듈 추가', en: 'Add module' })}
-        description={t({ ko: '저장된 모듈, 시스템 모듈, 커스텀 노드를 나눠 보고 필요한 항목을 바로 그래프에 추가해.', en: 'Browse saved modules, system modules, and custom nodes separately, then add what you need directly to the graph.' })}
         onClose={onCloseModuleLibrary}
         widthClassName="max-w-6xl"
       >
@@ -165,7 +164,6 @@ export function ModuleGraphWorkspaceModals({
       <Modal
         open={isCustomNodeManagerOpen}
         title={t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
-        description={t({ ko: 'user/custom_nodes 기반 로컬 커스텀 노드를 스캔, 생성, 테스트해.', en: 'Scan, create, and test local custom nodes from user/custom_nodes.' })}
         onClose={onCloseCustomNodeManager}
         widthClassName="max-w-6xl"
       >

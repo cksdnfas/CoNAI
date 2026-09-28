@@ -1,7 +1,7 @@
 import { AlertTriangle, Crosshair } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
@@ -14,7 +14,6 @@ export type { WorkflowValidationIssue } from '../module-graph-types'
 type WorkflowValidationPanelProps = {
   issues: WorkflowValidationIssue[]
   title?: string
-  description?: string
   showHeader?: boolean
   onIssueSelect?: (issue: WorkflowValidationIssue) => void
 }
@@ -40,13 +39,11 @@ function getActivationStateLabel(issue: WorkflowValidationIssue, t: ReturnType<t
 export function WorkflowValidationPanel({
   issues,
   title,
-  description,
   showHeader = true,
   onIssueSelect,
 }: WorkflowValidationPanelProps) {
   const { t, formatNumber } = useI18n()
   const resolvedTitle = title ?? t({ ko: '실행 준비 상태', en: 'Execution Readiness' })
-  const resolvedDescription = description ?? t({ ko: '실행 전 확인', en: 'Before execution' })
   const errorCount = issues.filter((issue) => issue.severity === 'error').length
   const warningCount = issues.filter((issue) => issue.severity === 'warning').length
   const runtimeInputWaitingCount = issues.filter((issue) => issue.activationState === 'runtime-input-waiting').length
@@ -59,27 +56,14 @@ export function WorkflowValidationPanel({
   return (
     <div className="space-y-3.5">
       {showHeader ? (
-        <SectionHeading
-          variant="inside"
-          heading={resolvedTitle}
-          description={resolvedDescription}
-        />
+        <SectionHeading variant="inside" heading={resolvedTitle} />
       ) : null}
 
       {shouldShowSummary ? (
-        <Inset className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <AlertTriangle className={cn('h-4 w-4', errorCount > 0 ? 'text-destructive' : 'text-warning')} aria-hidden />
-              <Text variant="label">{errorCount > 0 ? t({ ko: '치명 이슈가 있어 실행이 막혀', en: 'Critical issues are blocking execution' }) : t({ ko: '경고가 있지만 실행 전 보완 가능해', en: 'There are warnings, but you can fix them before execution' })}</Text>
-            </div>
-            <Text variant="caption">
-              {errorCount > 0
-                ? t({ ko: '아래 치명 이슈를 먼저 정리해.', en: 'Resolve the critical issues below first.' })
-                : runtimeInputWaitingCount > 0
-                  ? t({ ko: '실행 입력 대기 항목은 저장 가능하지만 실행 전에 값을 확인해야 해.', en: 'Runtime-input waiting items can be saved, but must be confirmed before running.' })
-                  : t({ ko: '아래 경고는 저장 가능하지만 실행 전에 확인하는 쪽이 좋아.', en: 'The warnings below can be saved, but it is better to review them before execution.' })}
-            </Text>
+        <Inset className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <AlertTriangle className={cn('h-4 w-4', errorCount > 0 ? 'text-destructive' : 'text-warning')} aria-hidden />
+            <Text variant="label">{errorCount > 0 ? t({ ko: '치명 이슈가 있어 실행이 막혀', en: 'Critical issues are blocking execution' }) : t({ ko: '경고가 있지만 실행 전 보완 가능해', en: 'There are warnings, but you can fix them before execution' })}</Text>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -109,10 +93,9 @@ export function WorkflowValidationPanel({
                   <Badge variant="secondary">{issue.nodeLabel}</Badge>
                   {issue.nodeId ? <TechnicalReferenceHint title={`node ${issue.nodeId}${issue.portKey ? `\nport ${issue.portKey}` : ''}`} label={t({ ko: '이슈 대상 내부 식별자 보기', en: 'Show issue target internal identifier' })} /> : null}
                   {canFocusNode ? (
-                    <Button type="button" size="xs" variant="secondary" className="ml-auto" onClick={() => onIssueSelect?.(issue)}>
+                    <IconButton size="icon-xs" variant="ghost" className="ml-auto" onClick={() => onIssueSelect?.(issue)} label={t({ ko: '노드로 이동', en: 'Jump to node' })}>
                       <Crosshair aria-hidden />
-                      {t({ ko: '노드로 이동', en: 'Jump to node' })}
-                    </Button>
+                    </IconButton>
                   ) : null}
                 </div>
                 <Text variant="caption" className="mt-1">{issue.detail}</Text>

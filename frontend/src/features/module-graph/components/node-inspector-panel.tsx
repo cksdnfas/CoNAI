@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, MousePointerClick } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eraser, MousePointerClick, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Inset } from '@/components/ui/inset'
 import { Panel } from '@/components/ui/panel'
 import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
@@ -38,7 +40,7 @@ import {
   resolveEdgeEndpoint,
   summarizeLlmPresetContent,
 } from './node-inspector-panel-helpers'
-import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { PromptWildcardTool } from '@/features/image-generation/components/wildcard-inline-picker-helpers'
 import { TypedFieldInput, type TypedFieldKind } from '@/features/shared-fields/typed-field-input'
@@ -123,13 +125,6 @@ export function NodeInspectorPanel({
     enabled: isSystemLoadLlmPresetNode,
     staleTime: 30_000,
   })
-  const selectedNodeVisibleOutputPorts = selectedNode
-    ? getVisibleModuleOutputPorts(selectedNode.data.module, selectedNode.data.inputValues, {
-        includeAdvanced: isAdvancedOutputPortsEnabled(selectedNode.data.inputValues),
-        connectedInputKeys: selectedNode.data.connectedInputKeys,
-        connectedOutputKeys: selectedNode.data.connectedOutputKeys,
-      })
-    : []
   const llmModelBindings = (() => {
     if (!isSystemCallLlmNode) {
       return [] as Array<ExternalApiLlmOptionRecord & { default_model: string }>
@@ -391,14 +386,15 @@ export function NodeInspectorPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1">
-              <div className="text-sm font-medium text-foreground">{field.label}</div>
+              <Tip content={normalizedDescription}>
+                <div className="text-sm font-medium text-foreground">{field.label}</div>
+              </Tip>
               <TechnicalReferenceHint title={`field ${field.key}`} label={t({ ko: '필드 내부 키 보기', en: 'Show internal field key' })} />
             </div>
-            {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           </div>
-          <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
-            {t({ ko: '값 지우기', en: 'Clear value' })}
-          </Button>
+          <IconButton size="icon-sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue} label={t({ ko: '값 지우기', en: 'Clear value' })}>
+            <Eraser />
+          </IconButton>
         </div>
         {renderFieldInput()}
       </div>
@@ -499,13 +495,6 @@ export function NodeInspectorPanel({
                     <Input value={getModuleBaseDisplayName(selectedNode.data.module)} readOnly aria-readonly className="text-muted-foreground" />
                   </div>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-                  <Badge variant="outline">{t({ ko: '입력 {count}', en: 'Inputs {count}' }, { count: formatNumber(selectedNodeInputPorts.length) })}</Badge>
-                  <Badge variant="outline">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(selectedNodeVisibleOutputPorts.length) })}</Badge>
-                  {missingRequiredInputs.length > 0 ? <Badge variant="outline">{t({ ko: '필수 부족 {count}', en: 'Missing required {count}' }, { count: formatNumber(missingRequiredInputs.length) })}</Badge> : <Badge variant="secondary">{t({ ko: '필수 입력 충족', en: 'Required inputs satisfied' })}</Badge>}
-                  {highlightedPortKey ? <Badge variant="secondary">{t({ ko: '선택 포트 강조', en: 'Selected port highlighted' })}</Badge> : null}
-                  {highlightedPortKey ? <TechnicalReferenceHint title={`focus port ${highlightedPortKey}`} label={t({ ko: '강조 중인 포트 내부 키 보기', en: 'Show highlighted internal port key' })} /> : null}
-                </div>
               </div>
               {onExecuteSelectedNode ? (
                 <div className="flex flex-wrap gap-2">
@@ -513,9 +502,9 @@ export function NodeInspectorPanel({
                     {resolvedExecuteSelectedNodeLabel}
                   </Button>
                   {onForceExecuteSelectedNode ? (
-                    <Button type="button" size="sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
-                      {resolvedForceExecuteSelectedNodeLabel}
-                    </Button>
+                    <IconButton size="icon-sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={executeSelectedNodeDisabled} label={resolvedForceExecuteSelectedNodeLabel}>
+                      <RotateCcw />
+                    </IconButton>
                   ) : null}
                 </div>
               ) : null}
@@ -536,12 +525,11 @@ export function NodeInspectorPanel({
           <Inset className="space-y-3 p-3">
             <div className="flex flex-wrap items-center gap-2">
               <Text as="div" variant="label">{t({ ko: '노드 출력', en: 'Node outputs' })}</Text>
-              {selectedExecutionId ? <Badge variant="outline">{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: formatNumber(selectedExecutionId) })}</Badge> : <Badge variant="outline">{t({ ko: '실행 선택 필요', en: 'Select a run' })}</Badge>}
-              {selectedNodeOutputGroups.length > 0 ? <Badge variant="outline">{t({ ko: '포트 {count}', en: 'Ports {count}' }, { count: formatNumber(selectedNodeOutputGroups.length) })}</Badge> : null}
+              {selectedExecutionId ? <Badge variant="outline">{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: formatNumber(selectedExecutionId) })}</Badge> : null}
             </div>
 
             {!selectedExecutionArtifacts ? (
-              <EmptyState size="compact" title={t({ ko: '실행 결과를 선택하면 이 노드의 출력 값을 포트별로 여기서 바로 확인할 수 있어.', en: 'Select an execution result to inspect this node\'s output values by port here.' })} />
+              <EmptyState size="compact" title={t({ ko: '실행 선택 필요', en: 'Select a run' })} />
             ) : selectedNodeOutputGroups.length === 0 ? (
               <EmptyState size="compact" title={t({ ko: '선택한 실행에서 이 노드가 남긴 출력이 없어.', en: 'This node has no outputs in the selected run.' })} />
             ) : (
@@ -561,7 +549,6 @@ export function NodeInspectorPanel({
                         <span className="flex min-w-0 items-center gap-2">
                           {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                           <span className="truncate text-sm font-medium text-foreground">{group.portLabel}</span>
-                          <Badge variant="secondary">{group.portKey}</Badge>
                           {group.portType ? <Badge variant="outline">{getModuleGraphPortTypeLabel(t, group.portType)}</Badge> : null}
                         </span>
                         <Badge variant="outline">{group.artifacts.length}</Badge>
@@ -584,9 +571,7 @@ export function NodeInspectorPanel({
           {selectedNodeInputPorts.length === 0 || selectedNodeWorkflowInputPort ? (
             selectedNodeStandaloneUiFields.length > 0 ? (
               <div className="space-y-4">{selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}</div>
-            ) : (
-              <div className="text-sm text-muted-foreground">{t({ ko: '이 노드 입력은 카드에서 바로 편집해.', en: 'Edit this node input directly from the card.' })}</div>
-            )
+            ) : null
           ) : (
             <div className="space-y-4">
               {sortedSelectedNodeInputs.map((port) => renderPortInput(selectedNode, port))}

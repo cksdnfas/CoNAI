@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Select } from '@/components/ui/select'
 import { NaiCharacterPositionBoard } from '@/features/image-generation/components/nai-character-position-board'
 import { WildcardInlinePickerField } from '@/features/image-generation/components/wildcard-inline-picker-field'
@@ -155,10 +155,9 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2.5">
         <div className="text-sm font-medium text-foreground">{t({ ko: 'Character Prompt', en: 'Character Prompt' })}</div>
-        <Button type="button" size="sm" variant="secondary" onClick={handleAdd}>
+        <IconButton size="icon-sm" variant="secondary" onClick={handleAdd} label={t({ ko: '추가', en: 'Add' })}>
           <Plus className="h-4 w-4" />
-          {t({ ko: '추가', en: 'Add' })}
-        </Button>
+        </IconButton>
       </div>
 
       {drafts.length > 0 ? (
@@ -190,18 +189,17 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
           >
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
-              <Button
-                type="button"
-                size="sm"
+              <IconButton
+                size="icon-sm"
                 variant="ghost"
                 onClick={(event) => {
                   event.stopPropagation()
                   handleRemove(index)
                 }}
+                label={t({ ko: '제거', en: 'Remove' })}
               >
                 <Trash2 className="h-4 w-4" />
-                {t({ ko: '제거', en: 'Remove' })}
-              </Button>
+              </IconButton>
             </div>
 
             <label className="space-y-2">

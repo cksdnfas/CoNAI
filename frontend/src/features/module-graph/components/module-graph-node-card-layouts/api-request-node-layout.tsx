@@ -1,6 +1,7 @@
 import { useMemo, type CSSProperties, type ReactNode } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { Button } from '@/components/ui/button'
+import { Plus, X } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { ModuleGraphSimpleValueInput, formatModuleGraphDefaultOptionLabel } from '../module-graph-simple-value-input'
@@ -249,9 +250,9 @@ export function ApiRequestNodeLayout({
             className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
             disabled={connected}
           />
-          <Button type="button" size="icon-sm" variant="ghost" className="h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={() => removeKeyValueEntry(portKey, entries, index)}>
-            ×
-          </Button>
+          <IconButton size="icon-sm" variant="ghost" className="h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={() => removeKeyValueEntry(portKey, entries, index)} label={t({ ko: '삭제', en: 'Remove' })}>
+            <X />
+          </IconButton>
         </div>
       </div>
     )
@@ -271,9 +272,9 @@ export function ApiRequestNodeLayout({
     return (
       <div className="grid gap-1">
         {entries.map((entry, index) => renderKeyValueEntryRow(portKey, port, entries, entry, index))}
-        <Button type="button" size="sm" variant="secondary" className="nodrag nowheel h-7 text-2xs" onMouseDown={stopNodeActionEvent} onClick={() => appendKeyValueEntry(portKey, entries)}>
-          {t({ ko: '항목 추가', en: 'Add item' })}
-        </Button>
+        <IconButton size="icon-sm" variant="secondary" className="nodrag nowheel h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={() => appendKeyValueEntry(portKey, entries)} label={t({ ko: '항목 추가', en: 'Add item' })}>
+          <Plus />
+        </IconButton>
       </div>
     )
   }

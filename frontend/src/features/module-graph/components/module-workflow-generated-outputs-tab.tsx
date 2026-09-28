@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { Download, ImageOff } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { Select } from '@/components/ui/select'
@@ -80,13 +80,10 @@ export function ModuleWorkflowGeneratedOutputsTab({
     }
 
     return (
-      <Button
-        type="button"
-        size="icon"
+      <IconButton
+        size="icon-sm"
         variant="secondary"
-        className="h-8 w-8"
-        title={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
-        aria-label={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
+        label={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.preventDefault()
@@ -96,7 +93,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
         disabled={isDownloading}
       >
         <Download className="h-4 w-4" />
-      </Button>
+      </IconButton>
     )
   }, [isDownloading, onDownloadItems, outputItemById, t])
 
@@ -117,10 +114,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
       onClearAll={onClearAll}
       toolbar={isCopyPanelOpen ? (
         <Panel tone="lowest">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Text variant="label">{t({ ko: '선택한 생성 결과를 감시 폴더로 복사', en: 'Copy selected outputs to watched folder' })}</Text>
-            <Badge variant="outline">{selectedOutputIds.length}</Badge>
-          </div>
+          <Text variant="label">{t({ ko: '선택한 생성 결과를 감시 폴더로 복사', en: 'Copy selected outputs to watched folder' })}</Text>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
             <div className="space-y-2">

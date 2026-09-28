@@ -1,6 +1,7 @@
 import { useMemo, type CSSProperties } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { Button } from '@/components/ui/button'
+import { Plus, X } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { ModuleGraphSimpleValueInput } from '../module-graph-simple-value-input'
@@ -174,16 +175,16 @@ export function RandomTextChoiceNodeLayout({
                     allowEmptyOption
                   />
                 )}
-                <Button type="button" size="icon-sm" variant="ghost" className="h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={() => removeEntry(index)}>
-                  ×
-                </Button>
+                <IconButton size="icon-sm" variant="ghost" className="h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={() => removeEntry(index)} label={t({ ko: '삭제', en: 'Remove' })}>
+                  <X />
+                </IconButton>
               </div>
             </div>
           )
         })}
-        <Button type="button" size="sm" variant="secondary" className="nodrag nowheel h-7 text-2xs" onMouseDown={stopNodeActionEvent} onClick={appendEntry}>
-          {t({ ko: '항목 추가', en: 'Add item' })}
-        </Button>
+        <IconButton size="icon-sm" variant="secondary" className="nodrag nowheel h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={appendEntry} label={t({ ko: '항목 추가', en: 'Add item' })}>
+          <Plus />
+        </IconButton>
       </div>
     </div>
   )

@@ -239,7 +239,6 @@ function NaiVibeNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 
     <NaiVibesEditor
       vibes={formDrafts}
       defaultOpen
-      description={t({ ko: 'encoded vibe를 직접 넣거나 saved vibe를 바로 추가해.', en: 'Enter an encoded vibe directly or quickly add a saved vibe.' })}
       emptyLabel={t({ ko: '아직 vibe 입력이 없어.', en: 'There are no vibe inputs yet.' })}
       onAdd={() => updateVibes([...drafts, { encoded: '', strength: '0.6', informationExtracted: '1' }])}
       onRemove={(index) => updateVibes(drafts.filter((_, draftIndex) => draftIndex !== index))}
@@ -313,7 +312,6 @@ function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAss
     <NaiCharacterReferencesEditor
       references={formDrafts}
       defaultOpen
-      description={t({ ko: 'reference 이미지를 직접 넣거나 saved reference를 추가해.', en: 'Add a reference image directly or append a saved reference.' })}
       emptyLabel={t({ ko: '아직 reference 입력이 없어.', en: 'There are no reference inputs yet.' })}
       onAdd={() => updateCharacterReferences([...drafts, { type: 'character&style', strength: '0.6', fidelity: '1' }])}
       onRemove={(index) => updateCharacterReferences(drafts.filter((_, draftIndex) => draftIndex !== index))}

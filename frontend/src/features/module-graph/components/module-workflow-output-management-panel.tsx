@@ -4,7 +4,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { CopyPlus, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Section } from '@/components/ui/section'
 import { StatTile } from '@/components/ui/stat-tile'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -581,29 +581,27 @@ export function ModuleWorkflowOutputManagementPanel({
             ? t('module-graph.components.module.workflow.output.management.panel.value.downloadable', { count: formatNumber(downloadableSelectedItems.length) })
             : t('module-graph.components.module.workflow.output.management.panel.no.downloadable.items')}
           extraActions={(
-            <Button
+            <IconButton
               size="icon-sm"
               variant="secondary"
               onClick={() => setIsCopyPanelOpen((current) => !current)}
-              title={t('module-graph.components.module.workflow.output.management.panel.copy.to.folder')}
-              aria-label={t('module-graph.components.module.workflow.output.management.panel.copy.to.folder')}
+              label={t('module-graph.components.module.workflow.output.management.panel.copy.to.folder')}
               data-no-select-drag="true"
             >
               <CopyPlus className="h-4 w-4" />
-            </Button>
+            </IconButton>
           )}
           trailingActions={canDeleteArtifacts ? (
-            <Button
+            <IconButton
               size="icon-sm"
               variant="destructive"
               onClick={() => void handleDeleteSelectedOutputs()}
               disabled={isDeletingOutputs || selectedOutputItems.length === 0}
-              title={isDeletingOutputs ? t('module-graph.components.module.workflow.output.management.panel.deleting') : t('module-graph.components.module.workflow.output.management.panel.delete.selected')}
-              aria-label={isDeletingOutputs ? t('module-graph.components.module.workflow.output.management.panel.deleting') : t('module-graph.components.module.workflow.output.management.panel.delete.selected')}
+              label={isDeletingOutputs ? t('module-graph.components.module.workflow.output.management.panel.deleting') : t('module-graph.components.module.workflow.output.management.panel.delete.selected')}
               data-no-select-drag="true"
             >
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : undefined}
           onDownload={() => handleDownloadItems(downloadableSelectedItems)}
           onClear={() => setSelectedOutputIds([])}
@@ -616,17 +614,16 @@ export function ModuleWorkflowOutputManagementPanel({
           summary={t('module-graph.components.module.workflow.output.management.panel.value.artifacts.selected', { count: formatNumber(selectedArtifacts.length) })}
           onClear={() => setSelectedArtifactIds([])}
           actions={canDeleteArtifacts ? (
-            <Button
+            <IconButton
               size="icon-sm"
               variant="destructive"
               onClick={() => void handleDeleteSelectedArtifacts()}
               disabled={isDeletingArtifacts || selectedArtifacts.length === 0}
-              title={t({ ko: '선택한 결과물 삭제 ({count}개)', en: 'Delete selected artifacts ({count})' }, { count: selectedArtifacts.length })}
-              aria-label={t({ ko: '선택한 결과물 삭제 ({count}개)', en: 'Delete selected artifacts ({count})' }, { count: selectedArtifacts.length })}
+              label={t({ ko: '선택한 결과물 삭제 ({count}개)', en: 'Delete selected artifacts ({count})' }, { count: selectedArtifacts.length })}
               data-no-select-drag="true"
             >
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : undefined}
         />
       ) : null}

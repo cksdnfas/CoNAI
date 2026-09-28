@@ -1,5 +1,6 @@
 import { Handle, Position } from '@xyflow/react'
-import { Button } from '@/components/ui/button'
+import { Plus, X } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import type { ModulePortDataType } from '@/lib/api-module-graph'
@@ -146,16 +147,16 @@ export function ModuleGraphKeyValueListInput({
                 className={inputClassName}
                 disabled={connected}
               />
-              <Button type="button" size={compact ? 'icon-sm' : 'sm'} variant="ghost" className={compact ? 'h-7 w-7' : undefined} onClick={() => removeEntry(index)}>
-                {compact ? '×' : t({ ko: '삭제', en: 'Remove' })}
-              </Button>
+              <IconButton size="icon-sm" variant="ghost" className={compact ? 'h-7 w-7' : undefined} onClick={() => removeEntry(index)} label={t({ ko: '삭제', en: 'Remove' })}>
+                <X />
+              </IconButton>
             </div>
           </div>
         )
       })}
-      <Button type="button" size="sm" variant="secondary" className={compact ? 'h-7 text-2xs' : undefined} onClick={() => onChange([...visibleEntries, { key: '', value: '' }])}>
-        {t({ ko: '항목 추가', en: 'Add item' })}
-      </Button>
+      <IconButton size="icon-sm" variant="secondary" className={compact ? 'h-7 w-7' : undefined} onClick={() => onChange([...visibleEntries, { key: '', value: '' }])} label={t({ ko: '항목 추가', en: 'Add item' })}>
+        <Plus />
+      </IconButton>
     </div>
   )
 }

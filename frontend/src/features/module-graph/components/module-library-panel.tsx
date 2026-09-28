@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Search, Settings2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
@@ -55,7 +57,7 @@ function getModuleHoverTitle(module: ModuleDefinitionRecord) {
 
 /** Render the reusable module library for graph authoring. */
 export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, onOpenCustomNodeManager, showHeader = true, surface = 'card' }: ModuleLibraryPanelProps) {
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<ModuleLibraryTab>('saved')
   const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<string[]>([])
@@ -66,11 +68,6 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
   const systemModules = useMemo(() => modules.filter((module) => module.engine_type === 'system' && !shouldHideFromModuleLibrary(module)), [modules])
   const finalResultModule = useMemo(() => systemModules.find((module) => isFinalResultModule(module)) ?? null, [systemModules])
   const visibleModules = activeTab === 'system' ? systemModules : activeTab === 'custom-nodes' ? customNodeModules : savedModules
-  const activeTabLabel = activeTab === 'system'
-    ? t({ ko: '시스템 모듈', en: 'System modules' })
-    : activeTab === 'custom-nodes'
-      ? t({ ko: '커스텀 노드', en: 'Custom nodes' })
-      : t({ ko: '저장된 모듈', en: 'Saved modules' })
 
   useEffect(() => {
     if (visibleModules.length > 0) {
@@ -164,37 +161,23 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
     ))
   }
 
+  const customNodeManagerButton = activeTab === 'custom-nodes' && onOpenCustomNodeManager ? (
+    <IconButton size="icon-sm" variant="secondary" onClick={onOpenCustomNodeManager} label={t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}>
+      <Settings2 />
+    </IconButton>
+  ) : null
+
   const content = (
     <div className="space-y-3">
       {showHeader ? (
         <SectionHeading
           variant="inside"
           heading={t({ ko: '모듈 라이브러리', en: 'Module library' })}
-          actions={(
-            <>
-              {activeTab === 'custom-nodes' && onOpenCustomNodeManager ? (
-                <Button type="button" size="sm" variant="secondary" onClick={onOpenCustomNodeManager}>
-                  {t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
-                </Button>
-              ) : null}
-              <Badge variant="outline">{activeTabLabel}</Badge>
-              <Badge variant="outline">{filteredModules.length}</Badge>
-            </>
-          )}
+          actions={customNodeManagerButton}
         />
-      ) : (
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {activeTab === 'custom-nodes' && onOpenCustomNodeManager ? (
-              <Button type="button" size="sm" variant="secondary" onClick={onOpenCustomNodeManager}>
-                {t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
-              </Button>
-            ) : null}
-            <Badge variant="outline">{activeTabLabel}</Badge>
-            <Badge variant="outline">{filteredModules.length}</Badge>
-          </div>
-        </div>
-      )}
+      ) : customNodeManagerButton ? (
+        <div className="flex justify-end">{customNodeManagerButton}</div>
+      ) : null}
 
       <div className="space-y-3">
         <SegmentedControl
@@ -205,30 +188,15 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
           items={[
             {
               value: 'saved',
-              label: (
-                <span className="flex items-center justify-center gap-2">
-                  <span>{t({ ko: '저장된 모듈', en: 'Saved modules' })}</span>
-                  <span className="text-xs text-muted-foreground">{formatNumber(savedModules.length)}</span>
-                </span>
-              ),
+              label: t({ ko: '저장된 모듈', en: 'Saved modules' }),
             },
             {
               value: 'system',
-              label: (
-                <span className="flex items-center justify-center gap-2">
-                  <span>{t({ ko: '시스템 모듈', en: 'System modules' })}</span>
-                  <span className="text-xs text-muted-foreground">{formatNumber(systemModules.length)}</span>
-                </span>
-              ),
+              label: t({ ko: '시스템 모듈', en: 'System modules' }),
             },
             {
               value: 'custom-nodes',
-              label: (
-                <span className="flex items-center justify-center gap-2">
-                  <span>{t({ ko: '커스텀 노드', en: 'Custom nodes' })}</span>
-                  <span className="text-xs text-muted-foreground">{formatNumber(customNodeModules.length)}</span>
-                </span>
-              ),
+              label: t({ ko: '커스텀 노드', en: 'Custom nodes' }),
             },
           ]}
         />
@@ -258,8 +226,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       {!isError && activeTab === 'system' && finalResultModule ? (
         <Alert>
           <AlertTitle>{t({ ko: '권장 출력 노드', en: 'Recommended output node' })}</AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-            <span>{t({ ko: '최종 결과를 표시하려면 최종 결과 시스템 노드를 추가해서 원하는 출력에 연결해줘.', en: 'To display a final result, add the final-result system node and connect it to the output you want.' })}</span>
+          <AlertDescription className="flex flex-wrap items-center justify-end gap-3">
             <Button type="button" size="sm" variant="secondary" onClick={() => onAddModule(finalResultModule)}>
               {t({ ko: '최종 결과 바로 추가', en: 'Add final result now' })}
             </Button>
@@ -268,32 +235,22 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       ) : null}
 
       {modules.length === 0 ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '모듈 없음', en: 'No modules' })}</AlertTitle>
-          <AlertDescription>{t({ ko: '먼저 모듈을 저장해.', en: 'Save a module first.' })}</AlertDescription>
-        </Alert>
+        <EmptyState size="compact" title={t({ ko: '모듈 없음', en: 'No modules' })} />
       ) : null}
 
       {modules.length > 0 && visibleModules.length === 0 ? (
-        <Alert>
-          <AlertTitle>{activeTab === 'system'
+        <EmptyState
+          size="compact"
+          title={activeTab === 'system'
             ? t({ ko: '시스템 모듈이 아직 없어', en: 'No system modules yet' })
             : activeTab === 'custom-nodes'
               ? t({ ko: '커스텀 노드가 아직 없어', en: 'No custom nodes yet' })
-              : t({ ko: '저장된 모듈이 아직 없어', en: 'No saved modules yet' })}</AlertTitle>
-          <AlertDescription>{activeTab === 'system'
-            ? t({ ko: '기본 제공 모듈 구성을 확인해봐.', en: 'Check the built-in module setup.' })
-            : activeTab === 'custom-nodes'
-              ? t({ ko: '커스텀 노드 관리에서 로컬 노드를 스캔하거나 생성해.', en: 'Scan or create local nodes from custom node management.' })
-              : t({ ko: 'ComfyUI 워크플로우에서 저장된 모듈을 만들 수 있어.', en: 'Create saved modules from ComfyUI workflows.' })}</AlertDescription>
-        </Alert>
+              : t({ ko: '저장된 모듈이 아직 없어', en: 'No saved modules yet' })}
+        />
       ) : null}
 
       {visibleModules.length > 0 && filteredModules.length === 0 ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '검색 결과가 없어', en: 'No search results' })}</AlertTitle>
-          <AlertDescription>{t({ ko: '다른 키워드로 찾아봐.', en: 'Try a different keyword.' })}</AlertDescription>
-        </Alert>
+        <EmptyState size="compact" icon={Search} title={t({ ko: '검색 결과가 없어', en: 'No search results' })} />
       ) : null}
 
       <div className="max-h-[min(68vh,760px)] space-y-5 overflow-y-auto pr-1">
@@ -314,7 +271,6 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                   {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                   <span className="text-sm font-semibold text-foreground">{localizeModuleGroupLabel(group.label, t)}</span>
                 </span>
-                <Badge variant="outline">{group.modules.length}</Badge>
               </Button>
 
               {!isCollapsed ? (
@@ -328,20 +284,15 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                         data-engine={module.engine_type}
                         className="flex items-center justify-between gap-3 px-3 py-2.5"
                       >
-                        <div className={cn('min-w-0 space-y-1', module.description ? 'cursor-help' : undefined)} title={getModuleHoverTitle(module)}>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-sm font-medium text-foreground">{getModuleBaseDisplayName(module)}</span>
-                            <Badge variant="outline">{module.engine_type}</Badge>
-                            {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
-                          </div>
-                          <div className="text-2xs text-muted-foreground">
-                            {t({ ko: '입력 {inputs} · 출력 {outputs}', en: 'Inputs {inputs} · Outputs {outputs}' }, { inputs: formatNumber(module.exposed_inputs.length), outputs: formatNumber(module.output_ports.length) })}
-                          </div>
+                        <div className={cn('flex min-w-0 flex-wrap items-center gap-2', module.description ? 'cursor-help' : undefined)} title={getModuleHoverTitle(module)}>
+                          <span className="truncate text-sm font-medium text-foreground">{getModuleBaseDisplayName(module)}</span>
+                          <Badge variant="outline">{module.engine_type}</Badge>
+                          {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
                         </div>
 
-                        <Button type="button" size="sm" variant="secondary" onClick={() => onAddModule(module)}>
-                          {t({ ko: '추가', en: 'Add' })}
-                        </Button>
+                        <IconButton size="icon-sm" variant="ghost" onClick={() => onAddModule(module)} label={t({ ko: '추가', en: 'Add' })}>
+                          <Plus />
+                        </IconButton>
                       </Inset>
                     )
                   })}

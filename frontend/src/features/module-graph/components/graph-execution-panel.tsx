@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Play, RotateCcw, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
@@ -51,7 +52,6 @@ type GraphExecutionPanelProps = {
   onRerunGraph: () => void
   onRetryExecution: () => void
   onCancelExecution: () => void
-  description?: string
   showHeader?: boolean
 }
 
@@ -75,7 +75,6 @@ export function GraphExecutionPanel({
   onRerunGraph,
   onRetryExecution,
   onCancelExecution,
-  description,
   showHeader = true,
 }: GraphExecutionPanelProps) {
   const { t, formatNumber, formatDateTime } = useI18n()
@@ -125,39 +124,33 @@ export function GraphExecutionPanel({
 
   const actionButtons = (
     <div className="flex items-center gap-1">
-      <Button
-        type="button"
+      <IconButton
         size="icon-sm"
-        variant="secondary"
+        variant="ghost"
         onClick={onCancelExecution}
         disabled={isCancellingExecution || (selectedExecutionStatus !== 'queued' && selectedExecutionStatus !== 'running')}
-        title={isCancellingExecution ? t({ ko: '취소 요청 중', en: 'Requesting cancel' }) : t({ ko: '실행 취소', en: 'Cancel run' })}
-        aria-label={isCancellingExecution ? t({ ko: '실행 취소 요청 중', en: 'Requesting run cancel' }) : t({ ko: '실행 취소', en: 'Cancel run' })}
+        label={isCancellingExecution ? t({ ko: '실행 취소 요청 중', en: 'Requesting run cancel' }) : t({ ko: '실행 취소', en: 'Cancel run' })}
       >
         <Square className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
+      </IconButton>
+      <IconButton
         size="icon-sm"
-        variant="secondary"
+        variant="ghost"
         onClick={onRetryExecution}
         disabled={!retryable || isExecutingGraph}
-        title={t({ ko: '다시 시도', en: 'Retry' })}
-        aria-label={t({ ko: '실행 다시 시도', en: 'Retry run' })}
+        label={t({ ko: '실행 다시 시도', en: 'Retry run' })}
       >
         <RotateCcw className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
+      </IconButton>
+      <IconButton
         size="icon-sm"
-        variant="secondary"
+        variant="ghost"
         onClick={onRerunGraph}
         disabled={!selectedGraphId || isExecutingGraph}
-        title={isExecutingGraph ? t({ ko: '실행 중', en: 'Running' }) : t({ ko: '재실행', en: 'Rerun' })}
-        aria-label={isExecutingGraph ? t({ ko: '워크플로우 실행 중', en: 'Workflow running' }) : t({ ko: '워크플로우 재실행', en: 'Rerun workflow' })}
+        label={isExecutingGraph ? t({ ko: '워크플로우 실행 중', en: 'Workflow running' }) : t({ ko: '워크플로우 재실행', en: 'Rerun workflow' })}
       >
         <Play className="h-4 w-4" />
-      </Button>
+      </IconButton>
     </div>
   )
 
@@ -166,18 +159,13 @@ export function GraphExecutionPanel({
     <>
       <Section
         heading={showHeader ? t({ ko: '실행 결과', en: 'Run results' }) : undefined}
-        description={showHeader ? description : undefined}
         actions={showHeader ? actionButtons : undefined}
       >
 
         {!showHeader ? <div className="flex justify-end">{actionButtons}</div> : null}
 
         {!selectedGraphId ? (
-          <EmptyState
-            size="compact"
-            title={t({ ko: '그래프를 먼저 골라줘', en: 'Choose a graph first' })}
-            description={t({ ko: '워크플로우를 먼저 선택해.', en: 'Select a workflow first.' })}
-          />
+          <EmptyState size="compact" title={t({ ko: '그래프를 먼저 골라줘', en: 'Choose a graph first' })} />
         ) : null}
 
         {selectedGraphId && executionListIsError ? (
@@ -185,11 +173,7 @@ export function GraphExecutionPanel({
         ) : null}
 
         {selectedGraphId && executionList.length === 0 ? (
-          <EmptyState
-            size="compact"
-            title={t({ ko: '실행 기록이 없어', en: 'There is no run history' })}
-            description={t({ ko: '먼저 실행해줘.', en: 'Run it first.' })}
-          />
+          <EmptyState size="compact" title={t({ ko: '실행 기록이 없어', en: 'There is no run history' })} />
         ) : null}
 
         {selectedGraphId && (queuedCount > 0 || runningCount > 0) ? (
@@ -218,7 +202,6 @@ export function GraphExecutionPanel({
                   aria-expanded={isSelected}
                   onClick={() => onSelectExecution(isSelected ? null : execution.id)}
                   className="h-auto flex-col items-stretch gap-1 px-2.5 py-2 whitespace-normal"
-                  title={isSelected ? t({ ko: '다시 누르면 접기', en: 'Click again to collapse' }) : t({ ko: '클릭해서 펼치기', en: 'Click to expand' })}
                 >
                   <span className="flex items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-2">
