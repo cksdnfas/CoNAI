@@ -41,6 +41,22 @@
   --color-surface-high: var(--surface-high);
   --color-surface-highest: var(--surface-highest);
   --color-surface-bright: var(--surface-bright);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-soft-foreground: var(--destructive-soft-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-foreground: var(--info-soft-foreground);
 }
 
 :root {
@@ -67,6 +83,28 @@
   --surface-high: #2a2a2a;
   --surface-highest: #353534;
   --surface-bright: #393939;
+  /*
+   * Status tokens. `--x` is the text/icon/border colour on regular surfaces,
+   * `--x-foreground` is text on a solid `--x` fill, and `--x-soft` /
+   * `--x-soft-foreground` are the tinted container pair. Not set by the
+   * runtime appearance system, so they follow the `.light` class only.
+   */
+  --destructive: #ffb4ab;
+  --destructive-foreground: #690005;
+  --destructive-soft: #93000a;
+  --destructive-soft-foreground: #ffdad6;
+  --success: #8fd6a4;
+  --success-foreground: #00391c;
+  --success-soft: #16402a;
+  --success-soft-foreground: #b6f2c7;
+  --warning: #f5c26b;
+  --warning-foreground: #3f2e00;
+  --warning-soft: #43320a;
+  --warning-soft-foreground: #ffdfa0;
+  --info: #9ccaff;
+  --info-foreground: #003258;
+  --info-soft: #173650;
+  --info-soft-foreground: #d1e4ff;
   --theme-primary-soft: #32170d;
   --theme-secondary-soft: #2f221d;
   --theme-shell-surface: rgb(19 19 19 / 0.72);
@@ -139,6 +177,22 @@
   --surface-high: #e9dfdb;
   --surface-highest: #e1d3ce;
   --surface-bright: #faf6f4;
+  --destructive: #ba1a1a;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #ffdad6;
+  --destructive-soft-foreground: #410002;
+  --success: #1b6d3c;
+  --success-foreground: #ffffff;
+  --success-soft: #d3f3dc;
+  --success-soft-foreground: #00210e;
+  --warning: #8a5a00;
+  --warning-foreground: #ffffff;
+  --warning-soft: #ffe2b0;
+  --warning-soft-foreground: #2a1800;
+  --info: #0b61a4;
+  --info-foreground: #ffffff;
+  --info-soft: #d3e4ff;
+  --info-soft-foreground: #001c38;
   --theme-shell-surface: rgb(245 242 241 / 0.72);
   --theme-floating-surface: rgb(242 235 232 / 0.88);
   --theme-shell-border: rgb(249 94 20 / 0.18);

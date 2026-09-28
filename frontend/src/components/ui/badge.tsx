@@ -11,7 +11,7 @@ const badgeVariants = cva(
       variant: {
         default: "bg-primary/14 text-secondary",
         secondary: "bg-surface-highest text-muted-foreground",
-        destructive: "bg-[#93000a] text-[#ffdad6]",
+        destructive: "bg-destructive-soft text-destructive-soft-foreground",
         outline: "bg-transparent text-muted-foreground ring-1 ring-border",
         ghost: "bg-transparent text-muted-foreground",
         link: "text-secondary underline-offset-4 [a&]:hover:underline",

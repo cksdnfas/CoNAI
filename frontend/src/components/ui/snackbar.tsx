@@ -18,8 +18,8 @@ const snackbarSurfaceStyleByTone: Record<NonNullable<SnackbarProps['tone']>, CSS
     boxShadow: '0 18px 56px color-mix(in srgb, black 42%, transparent), inset 0 1px 0 color-mix(in srgb, white 7%, transparent)',
   },
   error: {
-    backgroundColor: 'color-mix(in srgb, var(--surface-highest) 88%, var(--theme-badge-negative) 12%)',
-    borderColor: 'color-mix(in srgb, var(--theme-badge-negative) 46%, var(--border))',
+    backgroundColor: 'color-mix(in srgb, var(--surface-highest) 88%, var(--destructive) 12%)',
+    borderColor: 'color-mix(in srgb, var(--destructive) 46%, var(--border))',
     boxShadow: '0 18px 56px color-mix(in srgb, black 44%, transparent), inset 0 1px 0 color-mix(in srgb, white 7%, transparent)',
   },
 }

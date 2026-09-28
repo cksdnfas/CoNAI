@@ -75,7 +75,7 @@ export function ModuleSaveModal({
           </SettingsField>
 
           {selectedOverwriteModule ? (
-            <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning-foreground md:col-span-2">
+            <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning md:col-span-2">
               {t('image-generation.components.module.save.modal.overwrite.warning', { id: selectedOverwriteModule.id })}
             </div>
           ) : null}

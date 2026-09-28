@@ -71,7 +71,7 @@ export function ComfyModuleSaveModal({
           </SettingsField>
 
           {selectedOverwriteModule ? (
-            <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning-foreground md:col-span-2">
+            <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning md:col-span-2">
               {t(
                 { ko: '#{id} 모듈을 같은 ID로 덮어써. 기존 그래프 연결은 포트 key가 유지되는 항목만 그대로 살아남아.', en: 'This will overwrite module #{id} with the same ID. Existing graph links only survive for items that keep the same port key.' },
                 { id: selectedOverwriteModule.id },
