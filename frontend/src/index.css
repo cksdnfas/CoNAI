@@ -8,6 +8,8 @@
 @theme inline {
   --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --text-2xs: calc(0.6875rem * var(--theme-text-scale));
+  --text-2xs--line-height: calc(1 / 0.6875);
   --text-xs: calc(0.75rem * var(--theme-text-scale));
   --text-sm: calc(0.875rem * var(--theme-text-scale));
   --text-base: calc(1rem * var(--theme-text-scale));
@@ -57,6 +59,34 @@
   --color-info-foreground: var(--info-foreground);
   --color-info-soft: var(--info-soft);
   --color-info-soft-foreground: var(--info-soft-foreground);
+  --color-backdrop: var(--backdrop);
+  --tracking-overline: 0.16em;
+  --shadow-elevation-1: var(--elevation-1);
+  --shadow-elevation-2: var(--elevation-2);
+  --shadow-elevation-3: var(--elevation-3);
+  /*
+   * Stacking layers. Values keep the current order of the arbitrary layers:
+   *   z-10 / z-20 / z-30 (in-component stacking)        -> raised (10)
+   *   z-40 (sticky bars, in-page menus)                  -> sticky (40)
+   *   z-50 (app shell header, floating bottom actions)   -> header (50)
+   *   z-[70] (queue header dropdown)                     -> below drawer; popover once reviewed
+   *   z-[84] z-[85] z-[86] z-[90] (bottom drawer + backdrop,
+   *     floating controller, selection bar, image viewer) -> drawer (84, +1..+6 offsets)
+   *   z-[140] z-[150] z-[160] z-[170] (anchored popups, dropdowns) -> popover (140, +10..+30 offsets)
+   *   z-[1000] z-[1200] (explorer hover card, explorer modals),
+   *     z-[5000] (wallpaper canvas overlay, local stacking) -> below modal
+   *   z-[6000] (settings modal)                          -> modal (6000)
+   *   z-[7000] (snackbar, popups inside wildcard editor) -> toast (7000)
+   *   z-[10000] (path tree hover preview)                -> above toast, keep arbitrary
+   */
+  --z-index-base: 0;
+  --z-index-raised: 10;
+  --z-index-sticky: 40;
+  --z-index-header: 50;
+  --z-index-drawer: 84;
+  --z-index-popover: 140;
+  --z-index-modal: 6000;
+  --z-index-toast: 7000;
 }
 
 :root {
@@ -116,6 +146,11 @@
   --theme-card-shadow: 0 0 40px rgb(14 14 14 / 0.18);
   --theme-list-shadow: 0 0 40px rgb(14 14 14 / 0.18);
   --theme-floating-shadow: 0 0 40px rgb(14 14 14 / 0.28);
+  /* Offset elevations for raised controls, floating menus/panels and modal dialogs. */
+  --elevation-1: 0 12px 32px rgb(0 0 0 / 0.32);
+  --elevation-2: 0 18px 48px rgb(0 0 0 / 0.36);
+  --elevation-3: 0 24px 80px rgb(0 0 0 / 0.48);
+  --backdrop: rgb(0 0 0 / 0.78);
   --theme-shell-header-height: 4rem;
   --theme-shell-inline-padding: 1.5rem;
   --theme-shell-main-padding-bottom: 4rem;
