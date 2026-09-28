@@ -1,6 +1,6 @@
 import type { ChangeEvent, DragEvent, RefObject } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Copy, Download, ExternalLink, File, RefreshCw, Trash2, Video } from 'lucide-react'
+import { ChevronDown, Copy, ExternalLink, File, FileDown, ImageDown, RefreshCw, RotateCcw, Trash2, Video } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { Inset } from '@/components/ui/inset'
@@ -58,7 +58,6 @@ function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope)
   return 'positive'
 }
 
-/** Render a compact summary tile for upload or extraction metadata. */
 /** Turn a MIME type such as "image/png" into a friendly label like "PNG image". */
 function describeFileType(file: File, t: ReturnType<typeof useI18n>['t']): string {
   const [kind = '', subtype = ''] = file.type.split('/')
@@ -76,6 +75,7 @@ function describeFileType(file: File, t: ReturnType<typeof useI18n>['t']): strin
   return t({ ko: '{format} 파일', en: '{format} file' }, { format })
 }
 
+/** Render a compact summary tile for upload or extraction metadata. */
 function SummaryTile({
   label,
   value,
@@ -230,14 +230,14 @@ export function UploadPageUploadSection({
       heading={t('uploadPageSections.fileUpload')}
       actions={
         <>
-          <Button
-            type="button"
+          <IconButton
             variant="ghost"
             onClick={onResetUpload}
             disabled={uploadFiles.length === 0 && !uploadResult && !uploadError}
+            label={t({ ko: '초기화', en: 'Reset' })}
           >
-            {t({ ko: '초기화', en: 'Reset' })}
-          </Button>
+            <RotateCcw />
+          </IconButton>
           <Button type="button" onClick={onUpload} disabled={uploadFiles.length === 0 || isUploading}>
             {isUploading ? t('uploadPageSections.uploading') : t({ ko: '업로드{count}', en: 'Upload{count}' }, { count: uploadFiles.length > 0 ? ` (${formatNumber(uploadFiles.length)})` : '' })}
           </Button>
@@ -258,10 +258,7 @@ export function UploadPageUploadSection({
 
       {uploadFiles.length > 0 ? (
         <Inset className="space-y-3">
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <Badge variant="secondary">{t({ ko: '{count}개', en: '{count} files' }, { count: formatNumber(uploadFiles.length) })}</Badge>
-            <Badge variant="secondary">{formatBytes(uploadTotalSize)}</Badge>
-          </div>
+          <div className="text-xs text-muted-foreground">{formatBytes(uploadTotalSize)}</div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {uploadFilePreviews.slice(0, MAX_VISIBLE_FILES).map((preview, index) => (
               <UploadFilePreviewTile
@@ -450,17 +447,15 @@ export function UploadPageExtractSection({
       heading={t('uploadPageSections.previewExtract')}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="ghost" onClick={onResetExtract} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
-            {t({ ko: '초기화', en: 'Reset' })}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onConvertWebP} disabled={!extractFile || extractBusy}>
-            <Download className="h-4 w-4" />
-            {isConvertingWebP ? t('uploadPageSections.convertingWebp') : t('uploadPageSections.convertWebp')}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onRewriteMetadata} disabled={!extractFile || extractBusy}>
-            <Download className="h-4 w-4" />
-            {isRewritingMetadata ? t('uploadPageSections.editingMetadata') : t('uploadPageSections.editMetadata')}
-          </Button>
+          <IconButton variant="ghost" onClick={onResetExtract} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError} label={t({ ko: '초기화', en: 'Reset' })}>
+            <RotateCcw />
+          </IconButton>
+          <IconButton variant="secondary" onClick={onConvertWebP} disabled={!extractFile || extractBusy} label={isConvertingWebP ? t('uploadPageSections.convertingWebp') : t('uploadPageSections.convertWebp')}>
+            <ImageDown />
+          </IconButton>
+          <IconButton variant="secondary" onClick={onRewriteMetadata} disabled={!extractFile || extractBusy} label={isRewritingMetadata ? t('uploadPageSections.editingMetadata') : t('uploadPageSections.editMetadata')}>
+            <FileDown />
+          </IconButton>
           <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
             <Select
               className="min-w-[140px] flex-1 sm:w-40 sm:flex-none"
@@ -536,9 +531,9 @@ export function UploadPageExtractSection({
             <Inset className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm font-medium text-foreground">{t('uploadPageSections.editMetadata')}</div>
-                <Button type="button" variant="ghost" size="sm" onClick={onToggleRewritePanel}>
-                  {isRewritePanelOpen ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
-                </Button>
+                <IconButton variant="ghost" size="icon-sm" onClick={onToggleRewritePanel} aria-expanded={isRewritePanelOpen} label={isRewritePanelOpen ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}>
+                  <ChevronDown className={cn('transition-transform', !isRewritePanelOpen && '-rotate-90')} />
+                </IconButton>
               </div>
 
               {isRewritePanelOpen ? (
