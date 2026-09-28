@@ -121,7 +121,7 @@ export function HomePage() {
       ) : null}
 
       {!isAnonymousSession && appliedChips.length > 0 ? (
-        <PageInset className="space-y-2">
+        <Inset className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '적용된 필터', en: 'Active filters' })}</div>
             <Button size="sm" variant="ghost" onClick={clearAppliedChips}>
@@ -129,7 +129,7 @@ export function HomePage() {
             </Button>
           </div>
           <SearchChipList chips={appliedChips} title={null} onCycleOperator={cycleAppliedChipOperator} onRemove={removeAppliedChip} />
-        </PageInset>
+        </Inset>
       ) : null}
 
       {imagesQuery.isError ? (
