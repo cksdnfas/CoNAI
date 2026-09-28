@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
-import { Folder, PenSquare, Trash2 } from 'lucide-react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { ChevronDown, Folder, PenSquare, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState } from '@/components/ui/loading-state'
+import { Tip } from '@/components/ui/tooltip'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphExecutionLogRecord, GraphExecutionNodeIoRecord, GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowRecord } from '@/lib/api-module-graph'
@@ -138,8 +140,9 @@ export function WorkflowRunnerPanel({
   const latestExecutionArtifactCountLabel = latestExecutionArtifactCount !== null
     ? t({ ko: '원본 {count}', en: 'Source {count}' }, { count: formatNumber(latestExecutionArtifactCount) })
     : null
-  const latestExecutionDetailLoadMessage = latestExecutionDetailError
-    ?? (latestExecutionDetailIsLoading ? t({ ko: '최종 결과를 불러오는 중...', en: 'Loading final results...' }) : t({ ko: '최종 결과 정보를 불러오지 못했어.', en: 'Could not load final result details.' }))
+  const latestExecutionAttentionCount = latestExecutionFinalResultWarnings.length + latestExecutionComparisonSummary.issueLogCount
+  const [isLatestResultExpanded, setIsLatestResultExpanded] = useState(false)
+  const latestResultDetailsId = useId()
   const blockingIssueCount = validationIssues.filter((issue) => issue.severity === 'error').length
   const warningIssueCount = validationIssues.filter((issue) => issue.severity === 'warning').length
   const firstBlockingIssue = validationIssues.find((issue) => issue.severity === 'error') ?? null
@@ -154,10 +157,36 @@ export function WorkflowRunnerPanel({
         : warningIssueCount > 0
           ? t({ ko: '실행은 가능하지만 경고 {count}개를 먼저 훑어봐.', en: 'The workflow can run, but review {count} warnings first.' }, { count: formatNumber(warningIssueCount) })
           : null
-  const shouldShowRunReadinessAlert = isExecuting || !canExecute || warningIssueCount > 0
+  const canRun = Boolean(selectedGraph) && !isExecuting && canExecute
+  // Read at shortcut time (after a deferred tick) so pending input commits have re-rendered with fresh values.
+  const runStateRef = useRef({ canRun, onExecute })
+  useEffect(() => {
+    runStateRef.current = { canRun, onExecute }
+  })
+
+  /** Run on Ctrl/Cmd+Enter from inside the panel (not from portalled modals), after committing the focused input. */
+  const handleRunShortcut = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.nativeEvent.isComposing) {
+      return
+    }
+    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target) || !canRun) {
+      return
+    }
+
+    event.preventDefault()
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    // Number inputs commit their draft on blur; blur first so the run uses what was typed.
+    activeElement?.blur()
+    window.setTimeout(() => {
+      activeElement?.focus({ preventScroll: true })
+      if (runStateRef.current.canRun) {
+        runStateRef.current.onExecute()
+      }
+    }, 0)
+  }
 
   return (
-    <Card>
+    <Card onKeyDown={handleRunShortcut}>
       <CardContent className="space-y-3.5">
         {showHeader ? (
           <SectionHeading
@@ -216,61 +245,91 @@ export function WorkflowRunnerPanel({
             )}
 
             {latestExecution ? (
-              <Alert>
-                <AlertTitle className="flex flex-wrap items-center gap-1.5">
-                  <span>{t({ ko: '최근 결과', en: 'Latest result' })}</span>
+              <div className="rounded-sm bg-surface-low px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-sm font-medium text-foreground">{t({ ko: '최근 결과', en: 'Latest result' })}</span>
                   <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
                   <Badge variant="outline">{getGraphExecutionStatusLabel(latestExecution.status, t)}</Badge>
-                  {latestExecutionArtifactCountLabel ? (
-                    <Badge variant={latestExecutionArtifactCount && latestExecutionArtifactCount > 0 ? 'secondary' : 'outline'}>{latestExecutionArtifactCountLabel}</Badge>
-                  ) : null}
                   {latestExecutionResultCountLabel ? (
                     <Badge variant={latestExecutionFinalResults && latestExecutionFinalResults.length > 0 ? 'secondary' : 'outline'}>{latestExecutionResultCountLabel}</Badge>
                   ) : null}
-                  <Badge variant="outline">{t({ ko: '입출력 {count}', en: 'I/O {count}' }, { count: formatNumber(latestExecutionComparisonSummary.compactInputCount + latestExecutionComparisonSummary.compactOutputCount) })}</Badge>
-                  {latestExecutionComparisonSummary.issueLogCount > 0 ? (
-                    <Badge variant="outline">{t({ ko: '경고/오류 {count}', en: 'Warnings/errors {count}' }, { count: formatNumber(latestExecutionComparisonSummary.issueLogCount) })}</Badge>
+                  {!isLatestResultExpanded && latestExecutionAttentionCount > 0 ? (
+                    <Badge variant="destructive">{t({ ko: '확인 필요 {count}', en: 'Needs review {count}' }, { count: formatNumber(latestExecutionAttentionCount) })}</Badge>
                   ) : null}
-                </AlertTitle>
-                <AlertDescription className="pt-3">
-                  {latestExecutionFinalResultWarning ? (
-                    <div className="mb-3 rounded-sm border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
-                      <div>
-                        {latestExecutionFinalResultWarning.kind === 'source_artifact_missing'
-                          ? latestExecutionFinalResultWarningSourceLabel
-                            ? t({
-                              ko: '최종 결과 노드는 실행됐지만 {source} 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.',
-                              en: 'The final result node ran, but the {source} output did not create a saved result. Check the connected output port.',
-                            }, { source: latestExecutionFinalResultWarningSourceLabel })
-                            : t({ ko: '최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.', en: 'The final result node ran, but the connected output did not create a saved result. Check the connected output port.' })
-                          : latestExecutionFinalResultWarningSourceLabel
-                            ? t({
-                              ko: '최종 결과는 저장됐지만 {source} 출력의 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.',
-                              en: 'The final result was saved, but linking the {source} output into generation history failed. Check the run logs for the cause.',
-                            }, { source: latestExecutionFinalResultWarningSourceLabel })
-                            : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the run logs for the cause.' })}
-                      </div>
-                      {latestExecutionAdditionalWarningCount > 0 ? (
-                        <div className="mt-1 text-xs text-warning-soft-foreground/80">
-                          {t({ ko: '추가 최종 결과 경고 {count}개가 더 있어. 실행 상세 로그에서 함께 확인해줘.', en: '{count} more final-result warnings are available in the run logs.' }, { count: formatNumber(latestExecutionAdditionalWarningCount) })}
-                        </div>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    className="ml-auto"
+                    aria-expanded={isLatestResultExpanded}
+                    aria-controls={latestResultDetailsId}
+                    onClick={() => setIsLatestResultExpanded((current) => !current)}
+                  >
+                    <ChevronDown className={cn('transition-transform', !isLatestResultExpanded && '-rotate-90')} aria-hidden />
+                    {isLatestResultExpanded ? t({ ko: '접기', en: 'Hide' }) : t({ ko: '자세히', en: 'Details' })}
+                  </Button>
+                </div>
+
+                {!isLatestResultExpanded && !shouldShowLatestExecutionResults && latestExecutionPendingMessage ? (
+                  <div className="mt-1 truncate text-xs text-muted-foreground" title={latestExecutionPendingMessage}>{latestExecutionPendingMessage}</div>
+                ) : null}
+
+                {isLatestResultExpanded ? (
+                  <div id={latestResultDetailsId} className="mt-3 space-y-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {latestExecutionArtifactCountLabel ? (
+                        <Badge variant={latestExecutionArtifactCount && latestExecutionArtifactCount > 0 ? 'secondary' : 'outline'}>{latestExecutionArtifactCountLabel}</Badge>
+                      ) : null}
+                      <Badge variant="outline">{t({ ko: '입출력 {count}', en: 'I/O {count}' }, { count: formatNumber(latestExecutionComparisonSummary.compactInputCount + latestExecutionComparisonSummary.compactOutputCount) })}</Badge>
+                      {latestExecutionComparisonSummary.issueLogCount > 0 ? (
+                        <Badge variant="outline">{t({ ko: '경고/오류 {count}', en: 'Warnings/errors {count}' }, { count: formatNumber(latestExecutionComparisonSummary.issueLogCount) })}</Badge>
                       ) : null}
                     </div>
-                  ) : null}
-                  {shouldShowLatestExecutionResults && latestExecutionArtifacts && latestExecutionFinalResults ? (
-                    <WorkflowFinalResultsSection
-                      finalResults={latestExecutionFinalResults}
-                      artifacts={latestExecutionArtifacts}
-                      selectedGraph={selectedGraph}
-                      emptyLabel={latestExecutionEmptyResultLabel}
-                    />
-                  ) : shouldShowLatestExecutionResults ? (
-                    <div className={cn('text-sm', latestExecutionDetailError ? 'text-destructive' : 'text-muted-foreground')}>{latestExecutionDetailLoadMessage}</div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">{latestExecutionPendingMessage}</div>
-                  )}
-                </AlertDescription>
-              </Alert>
+                    {latestExecutionFinalResultWarning ? (
+                      <div className="rounded-sm border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+                        <div>
+                          {latestExecutionFinalResultWarning.kind === 'source_artifact_missing'
+                            ? latestExecutionFinalResultWarningSourceLabel
+                              ? t({
+                                ko: '최종 결과 노드는 실행됐지만 {source} 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.',
+                                en: 'The final result node ran, but the {source} output did not create a saved result. Check the connected output port.',
+                              }, { source: latestExecutionFinalResultWarningSourceLabel })
+                              : t({ ko: '최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.', en: 'The final result node ran, but the connected output did not create a saved result. Check the connected output port.' })
+                            : latestExecutionFinalResultWarningSourceLabel
+                              ? t({
+                                ko: '최종 결과는 저장됐지만 {source} 출력의 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.',
+                                en: 'The final result was saved, but linking the {source} output into generation history failed. Check the run logs for the cause.',
+                              }, { source: latestExecutionFinalResultWarningSourceLabel })
+                              : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the run logs for the cause.' })}
+                        </div>
+                        {latestExecutionAdditionalWarningCount > 0 ? (
+                          <div className="mt-1 text-xs text-warning-soft-foreground/80">
+                            {t({ ko: '추가 최종 결과 경고 {count}개가 더 있어. 실행 상세 로그에서 함께 확인해줘.', en: '{count} more final-result warnings are available in the run logs.' }, { count: formatNumber(latestExecutionAdditionalWarningCount) })}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {shouldShowLatestExecutionResults && latestExecutionArtifacts && latestExecutionFinalResults ? (
+                      <WorkflowFinalResultsSection
+                        finalResults={latestExecutionFinalResults}
+                        artifacts={latestExecutionArtifacts}
+                        selectedGraph={selectedGraph}
+                        emptyLabel={latestExecutionEmptyResultLabel}
+                      />
+                    ) : shouldShowLatestExecutionResults ? (
+                      latestExecutionDetailError ? (
+                        <ErrorState size="compact" title={latestExecutionDetailError} />
+                      ) : latestExecutionDetailIsLoading ? (
+                        <LoadingState variant="inline" label={t({ ko: '최종 결과를 불러오는 중...', en: 'Loading final results...' })} />
+                      ) : (
+                        <div className="text-sm text-muted-foreground">{t({ ko: '최종 결과 정보를 불러오지 못했어.', en: 'Could not load final result details.' })}</div>
+                      )
+                    ) : (
+                      <div className="text-sm text-muted-foreground">{latestExecutionPendingMessage}</div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             <WorkflowValidationPanel
@@ -289,31 +348,36 @@ export function WorkflowRunnerPanel({
               onInputImageChange={onInputImageChange}
             />
 
-            {shouldShowRunReadinessAlert ? (
-              <Alert variant={!canExecute ? 'destructive' : 'default'}>
-                <AlertTitle className="flex flex-wrap items-center gap-1.5">
-                  <span>{canExecute ? t({ ko: '실행 확인', en: 'Run check' }) : t({ ko: '실행 전 조치 필요', en: 'Action needed before running' })}</span>
-                  {blockingIssueCount > 0 ? <Badge variant="outline">{t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(blockingIssueCount) })}</Badge> : null}
+            <div
+              data-slot="workflow-run-action-row"
+              className="sticky bottom-0 z-10 -mx-(--theme-card-padding-x) space-y-2 border-t border-border/70 bg-surface-container px-(--theme-card-padding-x) py-3"
+            >
+              {runReadinessMessage ? (
+                <div
+                  role="status"
+                  className={cn(
+                    'flex flex-wrap items-center gap-1.5 text-sm',
+                    !canExecute && !isExecuting ? 'text-destructive' : warningIssueCount > 0 && !isExecuting ? 'text-warning' : 'text-muted-foreground',
+                  )}
+                >
+                  {blockingIssueCount > 0 ? <Badge variant="destructive">{t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(blockingIssueCount) })}</Badge> : null}
                   {warningIssueCount > 0 ? <Badge variant="outline">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningIssueCount) })}</Badge> : null}
-                </AlertTitle>
-                <AlertDescription className="pt-2 text-sm text-muted-foreground">
-                  {runReadinessMessage}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Button type="button" onClick={onExecute} disabled={isExecuting || !canExecute}>
-                {isExecuting ? t({ ko: '실행 요청 중…', en: 'Requesting run…' }) : canExecute ? t({ ko: '실행', en: 'Run' }) : t({ ko: '실행 불가', en: 'Cannot run' })}
-              </Button>
-              {selectedGraph ? (
+                  <span className="min-w-0">{runReadinessMessage}</span>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <Tip content={canRun ? t({ ko: 'Ctrl/⌘ + Enter로도 실행돼', en: 'Ctrl/⌘ + Enter also runs it' }) : null}>
+                  <Button type="button" onClick={onExecute} disabled={!canRun} aria-keyshortcuts="Control+Enter Meta+Enter">
+                    {isExecuting ? t({ ko: '실행 요청 중…', en: 'Requesting run…' }) : canExecute ? t({ ko: '실행', en: 'Run' }) : t({ ko: '실행 불가', en: 'Cannot run' })}
+                  </Button>
+                </Tip>
                 <GenerationTargetGroupControl
                   storageKey={buildGraphWorkflowTargetGroupKey(selectedGraph.id)}
                   label={t({ ko: '기본 결과 그룹', en: 'Default result group' })}
                   disabled={isExecuting}
                   className="min-w-0"
                 />
-              ) : null}
+              </div>
             </div>
           </div>
         ) : null}
