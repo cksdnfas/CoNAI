@@ -38,6 +38,7 @@ export function applyTaggerSettingsUpdate(currentSettings: AppSettings, taggerSe
     tagger: {
       ...currentSettings.tagger,
       ...taggerSettings,
+      unloadPolicyVersion: currentSettings.tagger.unloadPolicyVersion,
     },
   };
 }
@@ -49,6 +50,7 @@ export function applyKaloscopeSettingsUpdate(currentSettings: AppSettings, kalos
     kaloscope: {
       ...currentSettings.kaloscope,
       ...kaloscopeSettings,
+      unloadPolicyVersion: currentSettings.kaloscope.unloadPolicyVersion,
     },
   };
 }

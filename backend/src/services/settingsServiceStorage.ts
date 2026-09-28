@@ -388,6 +388,25 @@ export function normalizeLlmSettings(rawLlmSettings: unknown): AppSettings['llm'
 }
 
 /** Build the full default settings object, including environment-driven defaults. */
+export const MODEL_UNLOAD_POLICY_VERSION = 2;
+
+/**
+ * 예전 코드는 keepModelLoaded가 true일 때만 자동 언로드 타이머를 걸었다(라벨과 반대).
+ * 실제로 겪던 동작을 유지하도록 표시 없는 저장값은 한 번 뒤집어 새 의미로 옮긴다.
+ */
+function migrateLegacyModelUnloadPolicy(rawModelSettings: unknown): { keepModelLoaded?: boolean; unloadPolicyVersion: number } {
+  if (!rawModelSettings || typeof rawModelSettings !== 'object') {
+    return { unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION };
+  }
+
+  const record = rawModelSettings as { keepModelLoaded?: unknown; unloadPolicyVersion?: unknown };
+  if (record.unloadPolicyVersion === MODEL_UNLOAD_POLICY_VERSION || typeof record.keepModelLoaded !== 'boolean') {
+    return { unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION };
+  }
+
+  return { keepModelLoaded: !record.keepModelLoaded, unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION };
+}
+
 export function getDefaultSettingsFromEnvironment(): AppSettings {
   return {
     general: {
@@ -416,16 +435,18 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       generalThreshold: parseFloat(process.env.TAGGER_GEN_THRESHOLD || '0.35'),
       characterThreshold: parseFloat(process.env.TAGGER_CHAR_THRESHOLD || '0.75'),
       pythonPath: process.env.PYTHON_PATH || 'python',
-      keepModelLoaded: true,
+      keepModelLoaded: false,
       autoUnloadMinutes: 5,
+      unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION,
     },
     kaloscope: {
       enabled: process.env.KALOSCOPE_ENABLED === 'true',
       autoTagOnUpload: false,
       device: ((process.env.KALOSCOPE_DEVICE as 'auto' | 'cpu' | 'cuda') || 'auto'),
       topK: Number.parseInt(process.env.KALOSCOPE_TOPK || '15', 10),
-      keepModelLoaded: true,
+      keepModelLoaded: false,
       autoUnloadMinutes: 5,
+      unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION,
       artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE,
     },
     similarity: {
@@ -559,11 +580,13 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
     tagger: {
       ...defaults.tagger,
       ...loadedSettings.tagger,
+      ...migrateLegacyModelUnloadPolicy(loadedSettings.tagger),
       ...(process.env.PYTHON_PATH && { pythonPath: process.env.PYTHON_PATH }),
     },
     kaloscope: {
       ...defaults.kaloscope,
       ...loadedSettings.kaloscope,
+      ...migrateLegacyModelUnloadPolicy(loadedSettings.kaloscope),
       ...(process.env.KALOSCOPE_ENABLED !== undefined && { enabled: process.env.KALOSCOPE_ENABLED === 'true' }),
       ...(process.env.KALOSCOPE_DEVICE && { device: process.env.KALOSCOPE_DEVICE as 'auto' | 'cpu' | 'cuda' }),
       ...(process.env.KALOSCOPE_TOPK && { topK: Number.parseInt(process.env.KALOSCOPE_TOPK, 10) }),

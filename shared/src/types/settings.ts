@@ -64,8 +64,11 @@ export interface TaggerSettings {
   generalThreshold: number;
   characterThreshold: number;
   pythonPath: string;
+  /** true면 모델을 계속 메모리에 두고, false면 autoUnloadMinutes 동안 쓰지 않을 때 내린다. */
   keepModelLoaded: boolean;
   autoUnloadMinutes: number;
+  /** keepModelLoaded 의미를 바로잡은 뒤 저장된 값인지 표시한다. 없으면 예전(반대 의미) 값이다. */
+  unloadPolicyVersion?: number;
 }
 
 export interface KaloscopeSettings {
@@ -75,6 +78,7 @@ export interface KaloscopeSettings {
   topK: number;
   keepModelLoaded: boolean;
   autoUnloadMinutes: number;
+  unloadPolicyVersion?: number;
   artistLinkUrlTemplate: string;
 }
 

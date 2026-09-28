@@ -448,8 +448,8 @@ class TaggerDaemon {
 
     const settings = settingsService.loadSettings();
 
-    if (!settings.tagger.keepModelLoaded) {
-      // If keepModelLoaded is false, don't set timer (model stays loaded for session)
+    if (settings.tagger.keepModelLoaded) {
+      // 모델을 메모리에 계속 두는 설정이면 자동 언로드하지 않는다.
       return;
     }
 

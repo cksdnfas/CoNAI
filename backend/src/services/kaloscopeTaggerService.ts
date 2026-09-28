@@ -745,7 +745,7 @@ class KaloscopeTaggerService {
     this.clearAutoUnloadTimer();
 
     const settings = this.getKaloscopeSettings();
-    if (!settings.keepModelLoaded) {
+    if (settings.keepModelLoaded) {
       return;
     }
 

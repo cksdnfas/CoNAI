@@ -79,11 +79,11 @@ export function KaloscopeSettingsCard({
               label={t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
             />
 
-            <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
+            <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })} hint={kaloscopeDraft.keepModelLoaded ? t({ ko: '메모리 유지가 켜져 있으면 자동으로 내리지 않아', en: 'Not used while the model is kept in memory' }) : t({ ko: '이 시간 동안 안 쓰면 모델을 메모리에서 내려', en: 'Unloads the model after this long without use' })}>
               <NumberStepperInput
                 min={1}
                 variant="settings"
-                disabled={!isEnabled}
+                disabled={!isEnabled || kaloscopeDraft.keepModelLoaded}
                 value={kaloscopeDraft.autoUnloadMinutes}
                 onValueCommit={(nextValue) => onPatchKaloscope({ autoUnloadMinutes: Number(nextValue) || 1 })}
               />
