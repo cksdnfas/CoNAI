@@ -10,6 +10,9 @@ import { Section } from '@/components/ui/section'
 import type { VideoOptimizationSettings } from '@conai/shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
+/** Select value shown when CRF/audio no longer match any preset; never sent to the server. */
+const CUSTOM_PRESET_VALUE = 'custom'
+
 const VIDEO_PRESETS: Array<{ value: VideoOptimizationSettings['preset']; label: TranslationDictionary; crf: number; audioBitrateKbps: number }> = [
   { value: 'high-quality', label: { ko: '고화질', en: 'High quality' }, crf: 22, audioBitrateKbps: 192 },
   { value: 'balanced', label: { ko: '균형', en: 'Balanced' }, crf: 26, audioBitrateKbps: 128 },
@@ -33,6 +36,11 @@ export function VideoOptimizationTab({
   hasChanges,
 }: VideoOptimizationTabProps) {
   const { t } = useI18n()
+  const isEnabled = videoOptimizationDraft?.enabled === true
+  // Editing CRF/audio by hand leaves the named preset behind, so show "Custom" instead of a stale name.
+  const matchedPreset = videoOptimizationDraft
+    ? VIDEO_PRESETS.find((preset) => preset.crf === videoOptimizationDraft.crf && preset.audioBitrateKbps === videoOptimizationDraft.audioBitrateKbps)
+    : undefined
 
   return (
     <div className="space-y-6">
@@ -71,7 +79,8 @@ export function VideoOptimizationTab({
                 <Field label={t({ ko: '프리셋', en: 'Preset' })}>
                   <Select
                     variant="settings"
-                    value={videoOptimizationDraft.preset}
+                    value={matchedPreset?.value ?? CUSTOM_PRESET_VALUE}
+                    disabled={!isEnabled}
                     onChange={(event) => {
                       const nextPreset = VIDEO_PRESETS.find((preset) => preset.value === event.target.value)
                       if (!nextPreset) return
@@ -85,12 +94,13 @@ export function VideoOptimizationTab({
                     {VIDEO_PRESETS.map((preset) => (
                       <option key={preset.value} value={preset.value}>{t(preset.label)}</option>
                     ))}
+                    {matchedPreset ? null : <option value={CUSTOM_PRESET_VALUE} disabled>{t({ ko: '사용자 지정', en: 'Custom' })}</option>}
                   </Select>
                 </Field>
 
-                <Field label={t({ ko: '오디오 bitrate (kbps)', en: 'Audio bitrate (kbps)' })}>
+                <Field label={t({ ko: '오디오 비트레이트(kbps)', en: 'Audio bitrate (kbps)' })} hint={t({ ko: '높을수록 좋은 음질', en: 'Higher = better audio' })}>
                   <NumberStepperInput
-
+                    disabled={!isEnabled}
                     min={32}
                     max={320}
                     variant="settings"
@@ -99,9 +109,9 @@ export function VideoOptimizationTab({
                   />
                 </Field>
 
-                <Field label="CRF">
+                <Field label={t({ ko: '화질 (CRF)', en: 'Quality (CRF)' })} hint={t({ ko: '낮을수록 고화질·큰 파일', en: 'Lower = better quality, larger files' })}>
                   <NumberStepperInput
-
+                    disabled={!isEnabled}
                     min={18}
                     max={40}
                     variant="settings"
@@ -115,6 +125,7 @@ export function VideoOptimizationTab({
                     <input
                       type="checkbox"
                       checked={videoOptimizationDraft.applyToUpload}
+                      disabled={!isEnabled}
                       onChange={(event) => onPatchVideoOptimization({ applyToUpload: event.target.checked })}
                     />
                     {t({ ko: '업로드 비디오에 적용', en: 'Apply to uploaded videos' })}
@@ -124,6 +135,7 @@ export function VideoOptimizationTab({
                     <input
                       type="checkbox"
                       checked={videoOptimizationDraft.applyToGeneratedOutputs}
+                      disabled={!isEnabled}
                       onChange={(event) => onPatchVideoOptimization({ applyToGeneratedOutputs: event.target.checked })}
                     />
                     {t({ ko: '생성 결과 비디오에 적용', en: 'Apply to generated output videos' })}
@@ -133,6 +145,7 @@ export function VideoOptimizationTab({
                     <input
                       type="checkbox"
                       checked={videoOptimizationDraft.applyToBackupImports}
+                      disabled={!isEnabled}
                       onChange={(event) => onPatchVideoOptimization({ applyToBackupImports: event.target.checked })}
                     />
                     {t({ ko: '백업 유입 비디오에 적용', en: 'Apply to backup-imported videos' })}
