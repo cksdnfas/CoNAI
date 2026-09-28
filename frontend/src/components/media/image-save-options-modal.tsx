@@ -1,6 +1,7 @@
 import { Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -77,10 +78,9 @@ export function ImageSaveOptionsModal({
           </Field>
 
           <ToggleRow className="md:col-span-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={options.resizeEnabled}
-              onChange={(event) => onOptionsChange({ resizeEnabled: event.target.checked })}
+              onCheckedChange={(checked) => onOptionsChange({ resizeEnabled: checked === true })}
             />
             {t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}
           </ToggleRow>

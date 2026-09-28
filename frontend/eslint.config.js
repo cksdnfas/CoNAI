@@ -23,8 +23,11 @@ const DESIGN_SYSTEM_GUARDS = [
     message: '[ds/checkbox] Raw <input type="checkbox">: use Checkbox or Switch from components/ui.',
   },
   {
-    selector: "JSXOpeningElement[name.name='button']",
-    message: '[ds/button] Raw <button>: use Button or IconButton from components/ui.',
+    // A <button> that is the direct child of <Panel asChild …> is allowed: Panel supplies tone, hover and focus
+    // (`interactive`) for rich clickable cards that Button's single-line sizing does not fit.
+    selector:
+      "JSXElement:not(JSXElement[openingElement.name.name='Panel']:has(JSXOpeningElement[name.name='Panel'] > JSXAttribute[name.name='asChild']) > JSXElement) > JSXOpeningElement[name.name='button']",
+    message: '[ds/button] Raw <button>: use Button or IconButton from components/ui (rich clickable cards: <Panel asChild interactive><button/></Panel>).',
   },
   ...classNameString('/fixed inset-0/', '[ds/overlay] Hand-rolled "fixed inset-0" overlay: use Modal or Popover from components/ui.'),
   ...classNameString('/#[0-9a-fA-F]{3,8}/', '[ds/hex-colour] Hex colour in className: use theme tokens (bg-primary, text-muted-foreground, status colours…).'),
@@ -72,7 +75,12 @@ export default defineConfig([
   },
   // Design-system guards: warn (burn-down) on hand-rolled UI that has a shared replacement.
   {
-    files: ['src/features/**/*.{ts,tsx}', 'src/components/common/**/*.{ts,tsx}'],
+    files: [
+      'src/features/**/*.{ts,tsx}',
+      'src/components/common/**/*.{ts,tsx}',
+      'src/components/layout/**/*.{ts,tsx}',
+      'src/components/media/**/*.{ts,tsx}',
+    ],
     rules: {
       'no-restricted-syntax': ['warn', ...DESIGN_SYSTEM_GUARDS],
     },

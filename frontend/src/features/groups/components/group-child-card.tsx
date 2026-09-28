@@ -91,7 +91,6 @@ export function GroupChildCard({
 
   return (
     <Panel asChild tone="container" padding="none" interactive>
-      {/* eslint-disable-next-line no-restricted-syntax -- list card: Panel interactive supplies tone/hover/focus; Button variants are single-line controls */}
       <button
         type="button"
         onClick={handleOpen}
