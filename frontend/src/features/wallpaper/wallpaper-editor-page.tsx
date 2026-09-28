@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Check, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, Maximize2, Minimize2, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, Maximize2, Minimize2, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageHeader } from '@/components/common/page-header'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Heading } from '@/components/ui/heading'
 import { Panel } from '@/components/ui/panel'
-import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -53,7 +53,7 @@ import {
 } from './wallpaper-types'
 import { WallpaperWidgetInspector } from './wallpaper-widget-inspector'
 import { WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
-import { getWallpaperWidgetDefinition, getWallpaperWidgetDisplayTitle } from './wallpaper-widget-registry'
+import { getWallpaperWidgetDisplayTitle } from './wallpaper-widget-registry'
 import { WallpaperLivelyHelpModal } from './wallpaper-lively-help-modal'
 import { WallpaperTemplateModal } from './wallpaper-template-modal'
 import { useUndoableState } from './use-undoable-state'
@@ -457,30 +457,22 @@ export function WallpaperEditorPage() {
     <div className="space-y-4">
       <PageHeader
         title={t({ ko: '월페이퍼 스튜디오', en: 'Wallpaper Studio' })}
-        titleAccessory={(
+        titleAccessory={activePreset && hasUnsavedPresetChanges ? (
           <Badge variant="secondary" className="normal-case tracking-normal">
-            {activePreset && !hasUnsavedPresetChanges ? <Check className="text-secondary-text" /> : null}
-            {!activePreset
-              ? t({ ko: '초안', en: 'Draft' })
-              : hasUnsavedPresetChanges
-                ? t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
-                : t({ ko: '저장됨', en: 'Saved' })}
+            {t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })}
           </Badge>
-        )}
-        description={t({ ko: '캔버스를 편집하고 Lively용 URL로 바로 실행해.', en: 'Compose the canvas and run it directly in Lively.' })}
+        ) : null}
         actions={(
           <>
-            <Button variant="secondary" size="sm" onClick={() => setIsTemplateModalOpen(true)}>
-              <LayoutTemplate className="h-4 w-4" />
-              <span className="hidden sm:inline">{t({ ko: '템플릿', en: 'Templates' })}</span>
-            </Button>
-            <Button asChild variant="secondary" size="sm">
-              <a href={draftRuntimePath} target="_blank" rel="noreferrer">
-                <Eye className="h-4 w-4" />
-                <span className="hidden sm:inline">{t({ ko: '미리보기', en: 'Preview' })}</span>
-              </a>
-            </Button>
             <div className="flex items-center gap-1">
+              <IconButton variant="ghost" size="icon-sm" onClick={() => setIsTemplateModalOpen(true)} label={t({ ko: '템플릿', en: 'Templates' })}>
+                <LayoutTemplate className="h-4 w-4" />
+              </IconButton>
+              <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '미리보기', en: 'Preview' })}>
+                <a href={draftRuntimePath} target="_blank" rel="noreferrer">
+                  <Eye className="h-4 w-4" />
+                </a>
+              </IconButton>
               <IconButton variant="ghost" size="icon-sm" disabled={!canUndo} onClick={undoLayoutEdit} label={t({ ko: '실행 취소 (Ctrl+Z)', en: 'Undo (Ctrl+Z)' })}>
                 <Undo2 className="h-4 w-4" />
               </IconButton>
@@ -492,26 +484,23 @@ export function WallpaperEditorPage() {
               <Save className="h-4 w-4" />
               {t({ ko: '저장', en: 'Save' })}
             </Button>
-            <Button
+            <IconButton
               ref={workspaceMenuAnchorRef}
-              variant="secondary"
+              variant="ghost"
               size="icon-sm"
-              aria-label={t({ ko: '더 많은 작업', en: 'More actions' })}
-              title={t({ ko: '더 많은 작업', en: 'More actions' })}
+              label={t({ ko: '더 많은 작업', en: 'More actions' })}
               onClick={() => setIsWorkspaceMenuOpen((current) => !current)}
             >
               <MoreHorizontal className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
+            </IconButton>
+            <IconButton
               variant="ghost"
               size="icon-sm"
               onClick={() => setIsLivelyHelpOpen(true)}
-              aria-label={t({ ko: 'Lively 연결 도움말', en: 'Lively connection help' })}
-              title={t({ ko: 'Lively 연결 도움말', en: 'Lively connection help' })}
+              label={t({ ko: 'Lively 연결 도움말', en: 'Lively connection help' })}
             >
               <HelpCircle className="h-4 w-4" />
-            </Button>
+            </IconButton>
           </>
         )}
       />
@@ -556,23 +545,20 @@ export function WallpaperEditorPage() {
         </div>
 
         {activePresetRuntimePath ? (
-          <Button
-            type="button"
-            variant="nav"
-            size="sm"
-            className="h-auto rounded-none bg-surface-lowest px-4 py-2 text-xs"
-            onClick={() => void handleCopyRuntimeUrl()}
-          >
-            <ClipboardCopy className="h-3.5 w-3.5 shrink-0 text-secondary-text" />
-            <span className="shrink-0 font-medium">{t({ ko: 'Lively URL', en: 'Lively URL' })}</span>
-            <span className="min-w-0 flex-1 truncate font-mono text-2xs">{activePresetRuntimeUrl}</span>
-            <span className="shrink-0">{t({ ko: '복사', en: 'Copy' })}</span>
-          </Button>
-        ) : (
-          <div className="bg-surface-lowest px-4 py-2 text-xs text-muted-foreground">
-            {t({ ko: '저장하면 Lively용 고유 URL이 생성돼.', en: 'Save once to create a unique Lively URL.' })}
-          </div>
-        )}
+          <Tip content={t({ ko: 'Lively URL 복사', en: 'Copy Lively URL' })}>
+            <Button
+              type="button"
+              variant="nav"
+              size="sm"
+              className="h-auto rounded-none bg-surface-lowest px-4 py-2 text-xs"
+              onClick={() => void handleCopyRuntimeUrl()}
+            >
+              <ClipboardCopy className="h-3.5 w-3.5 shrink-0 text-secondary-text" />
+              <span className="shrink-0 font-medium">{t({ ko: 'Lively URL', en: 'Lively URL' })}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-2xs">{activePresetRuntimeUrl}</span>
+            </Button>
+          </Tip>
+        ) : null}
       </Panel>
 
       <AnchoredPopup
@@ -581,7 +567,6 @@ export function WallpaperEditorPage() {
         onClose={() => setIsWorkspaceMenuOpen(false)}
         className="w-64 p-2"
       >
-        <Text as="div" variant="overline" className="px-2 pb-2 pt-1 font-semibold">{t({ ko: '프리셋 작업', en: 'Preset actions' })}</Text>
         {[
           { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: () => void handleCreateBlankCanvas() },
           { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
@@ -621,27 +606,17 @@ export function WallpaperEditorPage() {
             mode="editor"
             selectedWidgetId={effectiveSelectedWidgetId}
             editorHeader={(
-              <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="text-xs font-medium text-foreground">{canvasPreset.name}</span>
-                  <Badge variant="secondary" className="normal-case tracking-normal">{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows}</Badge>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="icon-sm"
-                    onClick={() => setIsCanvasFocusMode((current) => !current)}
-                    aria-label={isCanvasFocusMode
-                      ? t({ ko: '집중 보기 종료', en: 'Exit focus view' })
-                      : t({ ko: '캔버스 집중 보기', en: 'Focus canvas' })}
-                    title={isCanvasFocusMode
-                      ? t({ ko: '집중 보기 종료', en: 'Exit focus view' })
-                      : t({ ko: '캔버스 집중 보기', en: 'Focus canvas' })}
-                  >
-                    {isCanvasFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                  </Button>
-                </div>
+              <div className="flex w-full items-center justify-end">
+                <IconButton
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setIsCanvasFocusMode((current) => !current)}
+                  label={isCanvasFocusMode
+                    ? t({ ko: '집중 보기 종료', en: 'Exit focus view' })
+                    : t({ ko: '캔버스 집중 보기', en: 'Focus canvas' })}
+                >
+                  {isCanvasFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </IconButton>
               </div>
             )}
             onSelectWidget={setSelectedWidgetId}
@@ -652,7 +627,23 @@ export function WallpaperEditorPage() {
 
           <Panel asChild tone="low" stack>
             <section>
-            <Heading level={3}>{t({ ko: '선택 위젯 컨트롤', en: 'Selected widget controls' })}</Heading>
+            <div className="flex items-center justify-between gap-2">
+              <Heading level={3}>{t({ ko: '선택 위젯 컨트롤', en: 'Selected widget controls' })}</Heading>
+              {selectedWidget ? (
+                <IconButton
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground"
+                  label={t({ ko: '위젯 삭제', en: 'Delete widget' })}
+                  onClick={() => {
+                    setLayoutPreset((current) => removeSelectedWidget(current, selectedWidget.id))
+                    notifyInfo(t({ ko: '위젯을 삭제했어. 실행 취소(Ctrl+Z)로 되돌릴 수 있어.', en: 'Widget deleted. Undo (Ctrl+Z) brings it back.' }))
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </IconButton>
+              ) : null}
+            </div>
 
             {selectedWidget ? (
               <>
@@ -693,20 +684,6 @@ export function WallpaperEditorPage() {
                       {label}
                     </Button>
                   ))}
-                </div>
-
-                <div className="flex justify-end">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      setLayoutPreset((current) => removeSelectedWidget(current, selectedWidget.id))
-                      notifyInfo(t({ ko: '위젯을 삭제했어. 실행 취소(Ctrl+Z)로 되돌릴 수 있어.', en: 'Widget deleted. Undo (Ctrl+Z) brings it back.' }))
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {t({ ko: '위젯 삭제', en: 'Delete widget' })}
-                  </Button>
                 </div>
               </>
             ) : (
@@ -770,10 +747,7 @@ export function WallpaperEditorPage() {
                           <GripVertical className="h-4 w-4" />
                           <span className="w-5 text-center text-xs font-semibold">{index + 1}</span>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-foreground">{getWallpaperWidgetDisplayTitle(widget, t)}</div>
-                          <div className="truncate text-2xs text-muted-foreground">{t(getWallpaperWidgetDefinition(widget.type).title)}</div>
-                        </div>
+                        <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{getWallpaperWidgetDisplayTitle(widget, t)}</div>
                       </Button>
                       <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                         {isCoarsePointer ? (
@@ -825,7 +799,7 @@ export function WallpaperEditorPage() {
         <section data-surface="raised" className="self-start space-y-4 overflow-y-auto rounded-sm bg-surface-low p-4 xl:sticky xl:top-24 xl:max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]">
           <div>
             <Heading level={3}>{t({ ko: '위젯 설정', en: 'Widget settings' })}</Heading>
-            <div className="mt-1 truncate text-xs text-muted-foreground">{selectedWidget ? getWallpaperWidgetDisplayTitle(selectedWidget, t) : t({ ko: '선택된 위젯 없음', en: 'No widget selected' })}</div>
+            {selectedWidget ? <div className="mt-1 truncate text-xs text-muted-foreground">{getWallpaperWidgetDisplayTitle(selectedWidget, t)}</div> : null}
           </div>
 
           <WallpaperWidgetInspector

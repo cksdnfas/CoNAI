@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
-import { Save, Trash2 } from 'lucide-react'
+import { CopyPlus, Save, Scissors, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -405,21 +406,18 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                   selectedIndex={selectedPointIndex}
                   onSelectIndex={setSelectedPointIndex}
                 />
-                <div className="rounded-sm bg-surface-low px-3 py-2 text-xs text-muted-foreground">
-                  {t({ ko: '점을 클릭하면 아래 값이 같이 선택되고, 숫자는 좌우 드래그로도 조절돼. 선택된 점은 방향키로 미세 조정할 수 있어.', en: 'Click a point to select its values below. You can also drag left and right on the numbers, and fine-tune the selected point with the arrow keys.' })}
-                </div>
                 {selectedPointIndex !== null && selectedPointIndex > 0 && selectedPointIndex < customStops.length - 1 ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-sm bg-surface-low px-3 py-2">
-                    <div className="mr-2 text-xs text-muted-foreground">{t({ ko: `선택된 점 ${selectedPointIndex}`, en: `Selected point ${selectedPointIndex}` })}</div>
-                    <Button type="button" size="xs" variant="secondary" onClick={handleDuplicateSelectedPoint}>
-                      {t({ ko: '복제', en: 'Duplicate' })}
-                    </Button>
-                    <Button type="button" size="xs" variant="secondary" onClick={handleSplitSelectedSegment}>
-                      {t({ ko: '구간 분할', en: 'Split segment' })}
-                    </Button>
-                    <Button type="button" size="xs" variant="ghost" onClick={() => handleRemoveCustomPoint(selectedPointIndex)}>
-                      {t({ ko: '삭제', en: 'Delete' })}
-                    </Button>
+                  <div className="flex flex-wrap items-center gap-1 rounded-sm bg-surface-low px-3 py-1.5">
+                    <div className="mr-auto text-xs text-muted-foreground">{t({ ko: `선택된 점 ${selectedPointIndex}`, en: `Selected point ${selectedPointIndex}` })}</div>
+                    <IconButton size="icon-sm" variant="ghost" onClick={handleDuplicateSelectedPoint} label={t({ ko: '복제', en: 'Duplicate' })}>
+                      <CopyPlus className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton size="icon-sm" variant="ghost" onClick={handleSplitSelectedSegment} label={t({ ko: '구간 분할', en: 'Split segment' })}>
+                      <Scissors className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => handleRemoveCustomPoint(selectedPointIndex)} label={t({ ko: '삭제', en: 'Delete' })}>
+                      <Trash2 className="h-4 w-4" />
+                    </IconButton>
                   </div>
                 ) : null}
                 <div className="space-y-2">
@@ -480,19 +478,17 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                           />
                         </Field>
                         {!isEndpoint ? (
-                          <Button
-                            type="button"
+                          <IconButton
                             variant="ghost"
                             size="icon-sm"
                             onClick={(event) => {
                               event.stopPropagation()
                               handleRemoveCustomPoint(index)
                             }}
-                            title={t({ ko: `${pointLabel} 삭제`, en: `Delete ${pointLabel}` })}
-                            aria-label={t({ ko: `${pointLabel} 삭제`, en: `Delete ${pointLabel}` })}
+                            label={t({ ko: `${pointLabel} 삭제`, en: `Delete ${pointLabel}` })}
                           >
                             <Trash2 className="h-4 w-4" />
-                          </Button>
+                          </IconButton>
                         ) : <div />}
                       </div>
                     )
@@ -508,7 +504,6 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                 extraContent={(
                   <>
                     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '현재 커스텀 곡선', en: 'Current custom curve' })}</div>
                       <div className="rounded-sm bg-surface-lowest px-3 py-2">
                         <WallpaperEasingGraphPreview easing={customEasing} className="h-16 w-full" />
                       </div>
@@ -532,10 +527,9 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                               }
                             }}
                           />
-                          <Button type="button" onClick={handleSavePreset} disabled={!presetName.trim()}>
+                          <IconButton variant="secondary" onClick={handleSavePreset} disabled={!presetName.trim()} label={t({ ko: '프리셋 저장', en: 'Save preset' })}>
                             <Save className="h-4 w-4" />
-                            {t({ ko: '프리셋 저장', en: 'Save preset' })}
-                          </Button>
+                          </IconButton>
                         </div>
                       </Field>
                     </div>

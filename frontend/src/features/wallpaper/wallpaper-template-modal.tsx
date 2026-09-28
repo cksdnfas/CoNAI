@@ -18,7 +18,6 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
       open={open}
       onClose={onClose}
       title={t({ ko: '빠른 시작 템플릿', en: 'Quick-start templates' })}
-      description={t({ ko: '검증된 기존 위젯 조합으로 시작해. 적용 후 모든 요소를 자유롭게 바꿀 수 있어.', en: 'Start with proven widget combinations. Every element remains editable.' })}
       widthClassName="max-w-3xl"
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -32,9 +31,6 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
               <div className="p-4">
                 <div className="font-semibold text-foreground">{t(template.name)}</div>
                 <p className="mt-1 text-sm leading-5 text-muted-foreground">{t(template.description)}</p>
-                <span className="mt-3 inline-block text-sm font-medium text-secondary-text group-hover:underline underline-offset-4">
-                  {t({ ko: '이 템플릿 사용', en: 'Use this template' })}
-                </span>
               </div>
             </button>
           </Panel>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import { Button } from '@/components/ui/button'
+import { Plus, RotateCcw } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n, type TranslationDictionary } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
@@ -10,7 +11,6 @@ import type { WallpaperAnimationEasing, WallpaperImageHoverMotion, WallpaperImag
 import {
   evaluateWallpaperAnimationEasingAtTime,
   getWallpaperAnimationEasingCss,
-  getWallpaperHoverMotionAmount,
   getWallpaperImageTransitionDurationMs,
   getWallpaperMotionStrengthMultiplier,
   normalizeWallpaperEasingStopPoints,
@@ -361,12 +361,10 @@ export function WallpaperEasingGraph({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{t({ ko: '그래프 편집', en: 'Edit graph' })}</span>
-        <div className="flex items-center gap-2">
-          <span>{t({ ko: '빈 곳 더블클릭 추가, 점 더블클릭/우클릭 삭제', en: 'Double-click empty space to add a point, and double-click or right-click a point to delete it.' })}</span>
-          <Button type="button" size="xs" variant="ghost" onClick={handleAddPoint}>{t({ ko: '점 추가', en: 'Add point' })}</Button>
-        </div>
+      <div className="flex items-center justify-end">
+        <IconButton size="icon-sm" variant="ghost" onClick={handleAddPoint} label={t({ ko: '점 추가', en: 'Add point' })}>
+          <Plus className="h-4 w-4" />
+        </IconButton>
       </div>
       <svg
         ref={graphRef}
@@ -579,20 +577,11 @@ function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAni
 
   return (
     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-medium text-foreground">{meta.title}</div>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-2xs text-muted-foreground">
-            {kind === 'transition' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{transitionDurationMs}ms</span> : null}
-            {kind === 'transition' && config?.transitionStyle ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{config.transitionStyle}</span> : null}
-            {kind === 'hover' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{t({ ko: '강도', en: 'Intensity' })} {getWallpaperHoverMotionAmount(config?.hoverMotion ?? 1).toFixed(1)}</span> : null}
-            <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{t({ ko: '모션 강도', en: 'Motion strength' })} {motionStrength.toFixed(1)}</span>
-            <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{t({ ko: '모션 속도', en: 'Motion speed' })} {motionSpeed.toFixed(1)}</span>
-          </div>
-        </div>
-        <Button type="button" size="xs" variant="ghost" onClick={() => setReplayCount((current) => current + 1)}>
-          {t({ ko: '다시 재생', en: 'Replay' })}
-        </Button>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs font-medium text-foreground">{meta.title}</div>
+        <IconButton size="icon-sm" variant="ghost" onClick={() => setReplayCount((current) => current + 1)} label={t({ ko: '다시 재생', en: 'Replay' })}>
+          <RotateCcw className="h-4 w-4" />
+        </IconButton>
       </div>
 
       <div className={cn(

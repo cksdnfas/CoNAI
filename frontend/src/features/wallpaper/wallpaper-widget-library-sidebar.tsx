@@ -13,9 +13,9 @@ import {
   Search,
   Type,
 } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { useI18n } from '@/i18n'
@@ -85,9 +85,6 @@ const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder(
         {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
         <Folder className="h-4 w-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{t(folder.title)}</span>
-        <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-2xs">
-          {folder.widgets.length}
-        </Badge>
       </Button>
 
       {isExpanded ? (
@@ -145,16 +142,14 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
   return (
     <ExplorerSidebar
       title={t({ ko: '위젯 라이브러리', en: 'Widget library' })}
-      badge={(
+      badge={searchSummary.hasSearch ? (
         <Badge
           variant="outline"
-          title={searchSummary.hasSearch
-            ? t({ ko: `검색 결과 ${searchSummary.visibleWidgetCount} / 전체 ${searchSummary.totalWidgetCount}`, en: `${searchSummary.visibleWidgetCount} / ${searchSummary.totalWidgetCount} matching widgets` })
-            : t({ ko: `전체 ${searchSummary.totalWidgetCount}`, en: `${searchSummary.totalWidgetCount} total widgets` })}
+          title={t({ ko: `검색 결과 ${searchSummary.visibleWidgetCount} / 전체 ${searchSummary.totalWidgetCount}`, en: `${searchSummary.visibleWidgetCount} / ${searchSummary.totalWidgetCount} matching widgets` })}
         >
           {searchSummary.badgeText}
         </Badge>
-      )}
+      ) : null}
       floatingFrame
       floatingLockStorageKey="conai:wallpaper:widget-library-sidebar-locked"
       className="sticky top-24 z-20 isolate self-start max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]"
@@ -186,10 +181,7 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
       ))}
 
       {!hasVisibleWidgets ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '검색 결과가 없어', en: 'No matching widgets' })}</AlertTitle>
-          <AlertDescription>{t({ ko: '다른 이름이나 설명 키워드로 다시 찾아봐.', en: 'Try another name or description keyword.' })}</AlertDescription>
-        </Alert>
+        <EmptyState size="compact" title={t({ ko: '검색 결과가 없어', en: 'No matching widgets' })} />
       ) : null}
     </ExplorerSidebar>
   )
