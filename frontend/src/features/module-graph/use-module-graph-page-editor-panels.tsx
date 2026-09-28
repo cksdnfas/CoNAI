@@ -12,6 +12,7 @@ import {
   ModuleGraphWorkflowEditorSupportPanels,
   ModuleGraphWorkflowSetupFolderPanel,
 } from './components/module-graph-page-sections'
+import type { GraphExecutionListPaging } from './components/graph-execution-panel'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import type { WorkflowValidationIssue } from './module-graph-types'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'
@@ -54,6 +55,7 @@ export function useModuleGraphPageEditorPanels({
   isSavingGraph,
   cancellingExecutionId,
   executionList,
+  executionListPaging,
   executionListError,
   executionListIsError,
   executionDetail,
@@ -139,6 +141,7 @@ export function useModuleGraphPageEditorPanels({
   isSavingGraph: boolean
   cancellingExecutionId: number | null
   executionList: GraphExecutionRecord[]
+  executionListPaging?: GraphExecutionListPaging
   executionListError: string
   executionListIsError: boolean
   executionDetail?: GraphExecutionDetailRecord
@@ -294,6 +297,7 @@ export function useModuleGraphPageEditorPanels({
       executingGraphId={executingGraphId}
       cancellingExecutionId={cancellingExecutionId}
       executionList={executionList}
+      executionListPaging={executionListPaging}
       executionListError={executionListError}
       executionListIsError={executionListIsError}
       executionDetail={executionDetail}

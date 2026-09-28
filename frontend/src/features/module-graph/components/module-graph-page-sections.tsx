@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import type { EditorSupportSectionKey } from './module-workflow-editor-support-panel'
-import { GraphExecutionPanel } from './graph-execution-panel'
+import { GraphExecutionPanel, type GraphExecutionListPaging } from './graph-execution-panel'
 import { ModuleWorkflowEditorSupportPanel } from './module-workflow-editor-support-panel'
 import { NodeInspectorPanel } from './node-inspector-panel'
 import { WorkflowRunnerPanel } from './workflow-runner-panel'
@@ -157,6 +157,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   executingGraphId,
   cancellingExecutionId,
   executionList,
+  executionListPaging,
   executionListError,
   executionListIsError,
   executionDetail,
@@ -186,6 +187,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   executingGraphId: number | null
   cancellingExecutionId: number | null
   executionList: GraphExecutionRecord[]
+  executionListPaging?: GraphExecutionListPaging
   executionListError: string
   executionListIsError: boolean
   executionDetail?: GraphExecutionDetailRecord
@@ -240,6 +242,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
           selectedExecutionId={selectedExecutionId}
           selectedExecutionStatus={selectedExecutionStatus}
           executionList={executionList}
+          executionListPaging={executionListPaging}
           executionListError={executionListError}
           executionListIsError={executionListIsError}
           executionDetail={executionDetail}

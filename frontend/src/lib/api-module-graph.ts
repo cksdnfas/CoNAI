@@ -1,4 +1,4 @@
-import { requestApiData } from '@/lib/api-request'
+import { requestApiData, requestJson } from '@/lib/api-request'
 
 import type {
   CreateCodexModuleFromSnapshotPayload,
@@ -480,9 +480,50 @@ export async function deleteGraphWorkflowArtifactsInScope(payload: {
   })
 }
 
-/** List recent executions for a saved graph workflow. */
-export async function getGraphWorkflowExecutions(workflowId: number) {
-  return requestApiData<GraphExecutionRecord[]>(`/api/graph-workflows/${workflowId}/executions`)
+/** Whole-workflow run counts returned beside one page of the execution list. */
+export interface GraphExecutionListMeta {
+  total: number
+  queued_count: number
+  running_count: number
+  limit: number
+  offset: number
+  has_more: boolean
+}
+
+export interface GraphExecutionListPage {
+  executions: GraphExecutionRecord[]
+  meta: GraphExecutionListMeta
+}
+
+/** List recent executions for a saved graph workflow, newest first, with whole-workflow counts. */
+export async function getGraphWorkflowExecutions(workflowId: number, options: { limit?: number; offset?: number } = {}): Promise<GraphExecutionListPage> {
+  const searchParams = new URLSearchParams()
+  if (options.limit !== undefined) {
+    searchParams.set('limit', String(options.limit))
+  }
+  if (options.offset !== undefined) {
+    searchParams.set('offset', String(options.offset))
+  }
+  const query = searchParams.toString()
+  const payload = await requestJson<{ success: boolean; data: GraphExecutionRecord[]; meta?: GraphExecutionListMeta; error?: string }>(
+    `/api/graph-workflows/${workflowId}/executions${query ? `?${query}` : ''}`,
+  )
+  if (!payload.success) {
+    throw new Error(payload.error || 'Request failed')
+  }
+
+  const executions = payload.data ?? []
+  return {
+    executions,
+    meta: payload.meta ?? {
+      total: executions.length,
+      queued_count: executions.filter((execution) => execution.status === 'queued').length,
+      running_count: executions.filter((execution) => execution.status === 'running').length,
+      limit: executions.length,
+      offset: 0,
+      has_more: false,
+    },
+  }
 }
 
 export interface GraphExecutionStatusRecord {

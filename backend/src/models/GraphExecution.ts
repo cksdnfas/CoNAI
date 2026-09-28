@@ -229,14 +229,33 @@ export class GraphExecutionModel {
     return row || null
   }
 
-  static findByWorkflow(workflowId: number, limit = 20): GraphExecutionRecord[] {
+  static findByWorkflow(workflowId: number, limit = 20, offset = 0): GraphExecutionRecord[] {
     const db = getUserSettingsDb()
     return db.prepare(`
       SELECT * FROM graph_executions
       WHERE graph_workflow_id = ?
       ORDER BY created_date DESC, id DESC
-      LIMIT ?
-    `).all(workflowId, limit) as GraphExecutionRecord[]
+      LIMIT ? OFFSET ?
+    `).all(workflowId, limit, offset) as GraphExecutionRecord[]
+  }
+
+  /** Count every run of one workflow plus its active (queued/running) runs, independent of list paging. */
+  static countByWorkflow(workflowId: number): { total: number; queued_count: number; running_count: number } {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0) as queued_count,
+        COALESCE(SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END), 0) as running_count
+      FROM graph_executions
+      WHERE graph_workflow_id = ?
+    `).get(workflowId) as { total?: number; queued_count?: number; running_count?: number } | undefined
+
+    return {
+      total: Number(row?.total ?? 0),
+      queued_count: Number(row?.queued_count ?? 0),
+      running_count: Number(row?.running_count ?? 0),
+    }
   }
 
   /** Summarize workflow runtime status without loading execution rows or artifact payloads. */

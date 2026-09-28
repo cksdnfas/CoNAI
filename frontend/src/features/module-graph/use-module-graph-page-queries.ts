@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getGraphExecution,
@@ -9,6 +9,7 @@ import {
   getGraphWorkflowFolders,
   getGraphWorkflows,
   getModuleDefinitions,
+  type GraphExecutionListMeta,
   type GraphExecutionRecord,
 } from '@/lib/api-module-graph'
 import { getAppSettings } from '@/lib/api-settings-general'
@@ -22,9 +23,14 @@ function isActiveExecutionStatus(status: GraphExecutionRecord['status'] | undefi
   return status === 'queued' || status === 'running'
 }
 
-function hasActiveGraphExecution(executions: GraphExecutionRecord[] | undefined) {
-  return executions?.some((execution) => isActiveExecutionStatus(execution.status)) === true
+function hasActiveGraphExecution(meta: GraphExecutionListMeta | undefined) {
+  return (meta?.queued_count ?? 0) + (meta?.running_count ?? 0) > 0
 }
+
+const EMPTY_EXECUTION_LIST: GraphExecutionRecord[] = []
+
+/** Runs fetched per page; "load more" grows the window by this much. */
+const EXECUTION_LIST_PAGE_SIZE = 20
 
 export function useModuleGraphPageQueries({
   selectedGraphId,
@@ -73,15 +79,25 @@ export function useModuleGraphPageQueries({
     queryFn: () => getGraphWorkflowFolders(),
   })
 
+  // The run list grows by whole pages per workflow; switching workflows starts again at one page.
+  const [executionListWindow, setExecutionListWindow] = useState<{ graphId: number | null; limit: number }>({ graphId: null, limit: EXECUTION_LIST_PAGE_SIZE })
+  const executionListLimit = executionListWindow.graphId === selectedGraphId ? executionListWindow.limit : EXECUTION_LIST_PAGE_SIZE
+
   const graphExecutionsQuery = useQuery({
-    queryKey: ['module-graph-executions', selectedGraphId],
-    queryFn: () => getGraphWorkflowExecutions(selectedGraphId as number),
+    queryKey: ['module-graph-executions', selectedGraphId, executionListLimit],
+    queryFn: () => getGraphWorkflowExecutions(selectedGraphId as number, { limit: executionListLimit }),
     enabled: selectedGraphId !== null,
+    // Keep the current rows on screen while a larger window loads for the same workflow.
+    placeholderData: (previousData, previousQuery) => (previousQuery?.queryKey[1] === selectedGraphId ? previousData : undefined),
     refetchInterval: (query) => resolveStreamFallbackInterval(
       runtimeStreamStatus,
-      hasActiveGraphExecution(query.state.data) ? 5_000 : false,
+      hasActiveGraphExecution(query.state.data?.meta) ? 5_000 : false,
     ),
   })
+
+  const loadMoreExecutions = useCallback(() => {
+    setExecutionListWindow({ graphId: selectedGraphId, limit: executionListLimit + EXECUTION_LIST_PAGE_SIZE })
+  }, [executionListLimit, selectedGraphId])
 
   const executionDetailQuery = useQuery({
     queryKey: ['module-graph-execution-detail', selectedExecutionId],
@@ -139,7 +155,10 @@ export function useModuleGraphPageQueries({
     appearanceQuery,
     refreshGraphWorkflows,
     modules: modulesQuery.data ?? [],
-    executionList: graphExecutionsQuery.data ?? [],
+    executionList: graphExecutionsQuery.data?.executions ?? EMPTY_EXECUTION_LIST,
+    executionListMeta: graphExecutionsQuery.data?.meta ?? null,
+    isLoadingMoreExecutions: graphExecutionsQuery.isPlaceholderData,
+    loadMoreExecutions,
     selectedGraphWorkflow: selectedGraphWorkflowQuery.data ?? null,
     reactFlowColorMode: appearanceQuery.data?.themeMode ?? settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode,
   }

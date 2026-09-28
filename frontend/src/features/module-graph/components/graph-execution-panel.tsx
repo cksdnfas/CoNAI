@@ -11,6 +11,7 @@ import { useI18n } from '@/i18n'
 import type {
   GraphExecutionArtifactRecord,
   GraphExecutionFinalResultRecord,
+  GraphExecutionListMeta,
   GraphExecutionLogRecord,
   GraphExecutionNodeIoRecord,
   GraphExecutionRecord,
@@ -246,6 +247,13 @@ function SelectedExecutionSummary({
   )
 }
 
+/** Server-side run counts and "load more" wiring for the capped run list. */
+export type GraphExecutionListPaging = {
+  meta: GraphExecutionListMeta | null
+  isLoadingMore: boolean
+  onLoadMore: () => void
+}
+
 type GraphExecutionPanelProps = {
   selectedGraphId: number | null
   selectedGraph?: GraphWorkflowRecord | null
@@ -253,6 +261,7 @@ type GraphExecutionPanelProps = {
   selectedExecutionId: number | null
   selectedExecutionStatus?: GraphExecutionRecord['status'] | null
   executionList: GraphExecutionRecord[]
+  executionListPaging?: GraphExecutionListPaging
   executionListError: string
   executionListIsError: boolean
   executionDetail: GraphExecutionDetail | undefined
@@ -276,6 +285,7 @@ export function GraphExecutionPanel({
   selectedExecutionId,
   selectedExecutionStatus,
   executionList,
+  executionListPaging,
   executionListError,
   executionListIsError,
   executionDetail,
@@ -304,8 +314,12 @@ export function GraphExecutionPanel({
     .filter((execution) => execution.status === 'queued')
     .sort((left, right) => (left.queue_position ?? Number.MAX_SAFE_INTEGER) - (right.queue_position ?? Number.MAX_SAFE_INTEGER))
   const runningExecutions = executionList.filter((execution) => execution.status === 'running')
-  const queuedCount = queuedExecutions.length
-  const runningCount = runningExecutions.length
+  // Counts come from the server so they stay right even when the list below is only the newest page.
+  const executionListMeta = executionListPaging?.meta ?? null
+  const queuedCount = executionListMeta?.queued_count ?? queuedExecutions.length
+  const runningCount = executionListMeta?.running_count ?? runningExecutions.length
+  const totalExecutionCount = executionListMeta?.total ?? executionList.length
+  const hasMoreExecutions = executionListMeta?.has_more === true
   const retryable = selectedExecutionStatus === 'failed' || selectedExecutionStatus === 'cancelled'
   const activeRunningExecution = runningExecutions[0] ?? null
   const nextQueuedExecution = queuedExecutions[0] ?? null
@@ -427,8 +441,9 @@ export function GraphExecutionPanel({
 
           {selectedGraphId && (queuedCount > 0 || runningCount > 0) ? (
             <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
-              <Badge variant="outline">Q {queuedCount}</Badge>
-              <Badge variant="outline">R {runningCount}</Badge>
+              <span className="font-medium text-foreground">
+                {t({ ko: '대기 {queued} · 실행 중 {running}', en: 'Queued {queued} · Running {running}' }, { queued: formatNumber(queuedCount), running: formatNumber(runningCount) })}
+              </span>
               {activeRunningExecution ? <span>{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: activeRunningExecution.id })}</span> : null}
               {nextQueuedExecution ? <span>{t({ ko: '다음 #{id} · {position}', en: 'Next #{id} · {position}' }, { id: nextQueuedExecution.id, position: nextQueuedExecution.queue_position ?? '?' })}</span> : null}
             </div>
@@ -497,6 +512,17 @@ export function GraphExecutionPanel({
               )
             })}
           </div>
+
+          {selectedGraphId && executionList.length > 0 && (hasMoreExecutions || totalExecutionCount > executionList.length) ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{t({ ko: '최근 {shown}개 표시 · 전체 {total}개', en: 'Showing latest {shown} of {total}' }, { shown: formatNumber(executionList.length), total: formatNumber(totalExecutionCount) })}</span>
+              {hasMoreExecutions && executionListPaging ? (
+                <Button type="button" size="sm" variant="outline" onClick={executionListPaging.onLoadMore} disabled={executionListPaging.isLoadingMore}>
+                  {executionListPaging.isLoadingMore ? t({ ko: '불러오는 중…', en: 'Loading…' }) : t({ ko: '더 보기', en: 'Load more' })}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

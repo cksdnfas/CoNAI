@@ -109,6 +109,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     browseContentQuery,
     modules,
     executionList,
+    executionListMeta,
+    isLoadingMoreExecutions,
+    loadMoreExecutions,
     selectedGraphWorkflow,
     refreshGraphWorkflows,
     reactFlowColorMode,
@@ -305,6 +308,12 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     return resolveGraphStructureSummary(nodes.length, edges.length, finalResultNodeCount)
   }, [edges.length, nodes])
 
+  const executionListPaging = useMemo(() => ({
+    meta: executionListMeta,
+    isLoadingMore: isLoadingMoreExecutions,
+    onLoadMore: loadMoreExecutions,
+  }), [executionListMeta, isLoadingMoreExecutions, loadMoreExecutions])
+
   const workflowListSidebar = (
     <ModuleGraphWorkflowListSidebar
       graphs={graphWorkflowsQuery.data ?? []}
@@ -387,6 +396,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     isSavingGraph,
     cancellingExecutionId,
     executionList,
+    executionListPaging,
     executionListError: graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : t('module-graph.module.graph.page.failed.to.load.the.execution.list'),
     executionListIsError: graphExecutionsQuery.isError,
     executionDetail: executionDetailQuery.data,
@@ -494,6 +504,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             selectedExecutionId={selectedExecutionId}
             selectedExecutionStatus={selectedExecution?.status ?? null}
             executionList={executionList}
+            executionListPaging={executionListPaging}
             executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : t('module-graph.module.graph.page.failed.to.load.the.execution.list')}
             executionListIsError={graphExecutionsQuery.isError}
             executionDetail={executionDetailQuery.data}

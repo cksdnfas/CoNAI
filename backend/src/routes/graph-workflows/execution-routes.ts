@@ -34,6 +34,22 @@ function resolveExecutionOutputGroup(req: Request, res: Response): { groupId: nu
 
 /** Upper bound for one batch preview request; the page only previews the newest completed runs. */
 const MAX_EXECUTION_PREVIEW_IDS = 24
+const DEFAULT_EXECUTION_LIST_LIMIT = 20
+const MAX_EXECUTION_LIST_LIMIT = 200
+
+/** Parse one optional list query integer, clamped to [min, max]; invalid input falls back. */
+function parseBoundedListInteger(value: unknown, fallback: number, min: number, max: number) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return fallback
+  }
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed)) {
+    return fallback
+  }
+
+  return Math.min(max, Math.max(min, parsed))
+}
 
 export function createGraphWorkflowExecutionRoutes() {
   const router = Router()
@@ -44,9 +60,23 @@ export function createGraphWorkflowExecutionRoutes() {
       return sendRouteBadRequest(res, 'Invalid graph workflow ID')
     }
 
+    const limit = parseBoundedListInteger(req.query.limit, DEFAULT_EXECUTION_LIST_LIMIT, 1, MAX_EXECUTION_LIST_LIMIT)
+    const offset = parseBoundedListInteger(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER)
+
     try {
-      const executions = decorateGraphExecutionRecords(GraphExecutionModel.findByWorkflow(id))
-      return res.json({ success: true, data: executions } as ModuleGraphResponse)
+      const executions = decorateGraphExecutionRecords(GraphExecutionModel.findByWorkflow(id, limit, offset))
+      const counts = GraphExecutionModel.countByWorkflow(id)
+      // `data` stays the plain array for existing clients; paging/counts ride along in `meta`.
+      return res.json({
+        success: true,
+        data: executions,
+        meta: {
+          ...counts,
+          limit,
+          offset,
+          has_more: offset + executions.length < counts.total,
+        },
+      })
     } catch (error) {
       console.error('Error getting graph executions:', error)
       return res.status(500).json({ success: false, error: 'Failed to get graph executions' } as ModuleGraphResponse)

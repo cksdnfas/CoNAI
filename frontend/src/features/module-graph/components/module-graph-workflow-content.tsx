@@ -3,7 +3,7 @@ import { useI18n } from '@/i18n'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowBrowseContentRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api-module-graph'
 import type { WorkflowValidationIssue } from './workflow-validation-panel'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
-import { GraphExecutionPanel } from './graph-execution-panel'
+import { GraphExecutionPanel, type GraphExecutionListPaging } from './graph-execution-panel'
 import { ModuleWorkflowBrowseView } from './module-workflow-browse-view'
 import { ModuleWorkflowEditorView } from './module-workflow-editor-view'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
@@ -30,6 +30,7 @@ export function ModuleGraphWorkflowBrowseContent({
   selectedExecutionId,
   selectedExecutionStatus,
   executionList,
+  executionListPaging,
   executionListError,
   executionListIsError,
   executionDetail,
@@ -55,6 +56,7 @@ export function ModuleGraphWorkflowBrowseContent({
   selectedExecutionId: number | null
   selectedExecutionStatus: GraphExecutionRecord['status'] | null
   executionList: GraphExecutionRecord[]
+  executionListPaging?: GraphExecutionListPaging
   executionListError: string
   executionListIsError: boolean
   executionDetail?: GraphExecutionDetailRecord
@@ -85,6 +87,7 @@ export function ModuleGraphWorkflowBrowseContent({
           selectedExecutionId={selectedExecutionId}
           selectedExecutionStatus={selectedExecutionStatus}
           executionList={executionList}
+          executionListPaging={executionListPaging}
           executionListError={executionListError}
           executionListIsError={executionListIsError}
           executionDetail={executionDetail}
