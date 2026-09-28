@@ -496,7 +496,7 @@ export function ModuleWorkflowOutputManagementPanel({
         heading={selectedFolderRecord
           ? t('module-graph.components.module.workflow.output.management.panel.value.workflow.outputs', { name: selectedFolderRecord.name })
           : t('module-graph.components.module.workflow.output.management.panel.workflow.outputs')}
-        bodyClassName="grid gap-3 space-y-0 sm:grid-cols-2 xl:grid-cols-4"
+        bodyClassName="grid grid-cols-2 gap-3 space-y-0 xl:grid-cols-4"
       >
         <StatTile label={t({ ko: '워크플로', en: 'Workflows' })} value={formatNumber(browseContent.scope.workflow_count)} valueClassName="text-lg" />
         <StatTile label={t({ ko: '실행', en: 'Executions' })} value={formatNumber(browseContent.scope.execution_count)} valueClassName="text-lg" />

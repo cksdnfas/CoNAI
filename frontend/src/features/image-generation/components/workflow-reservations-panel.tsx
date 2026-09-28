@@ -285,7 +285,7 @@ export function WorkflowReservationsPanel() {
         {!reservationsQuery.isError && reservationsQuery.isPending ? <LoadingState variant="inline" label={t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })} /> : null}
 
         {!reservationsQuery.isPending && !reservationsQuery.isError && reservationContent ? (
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-3">
             <StatTile label={t({ ko: '활성 일정', en: 'Active schedules' })} value={activeScheduleCount} valueClassName="text-lg" />
             <StatTile label={t({ ko: '실행 중', en: 'Running' })} value={runningExecutionCount} valueClassName="text-lg" />
             <StatTile label={t({ ko: '대기 중', en: 'Queued' })} value={queuedExecutionCount} valueClassName="text-lg" />
