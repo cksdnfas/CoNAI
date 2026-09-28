@@ -1,6 +1,7 @@
 import { type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { ModuleGraphSimpleValueInput, formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import { TypedFieldInput } from '@/features/shared-fields/typed-field-input'
+import { formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import { useI18n } from '@/i18n'
@@ -240,61 +241,26 @@ export function InputPortCell({
       return <div className="truncate text-2xs text-muted-foreground">{t({ ko: '연결됨', en: 'Linked' })}</div>
     }
 
-    if (selectOptions && data.onNodeValueChange) {
-      return (
-        <div onMouseDown={stopNodeInteraction}>
-          <ModuleGraphSimpleValueInput
-            dataType="select"
-            value={rawValue}
-            onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
-            options={selectOptions}
-            emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : t({ ko: '선택', en: 'Select' })}
-            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-          />
-        </div>
-      )
-    }
+    const editorKind = selectOptions
+      ? 'select'
+      : port.data_type === 'number' || port.data_type === 'boolean'
+        ? port.data_type
+        : isInlineTextPort ? 'text' : null
 
-    if (port.data_type === 'number' && data.onNodeValueChange) {
+    if (editorKind && data.onNodeValueChange) {
       return (
         <div onMouseDown={stopNodeInteraction}>
-          <ModuleGraphSimpleValueInput
-            dataType="number"
+          <TypedFieldInput
+            kind={editorKind}
+            density="compact"
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
-            placeholder={numberPlaceholder}
+            options={selectOptions ?? undefined}
+            emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : undefined}
+            placeholder={editorKind === 'number' ? numberPlaceholder : (uiField?.placeholder || port.label)}
             min={numberMin}
             max={uiField?.max}
             step={numberStep}
-            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-          />
-        </div>
-      )
-    }
-
-    if (port.data_type === 'boolean' && data.onNodeValueChange) {
-      return (
-        <div onMouseDown={stopNodeInteraction}>
-          <ModuleGraphSimpleValueInput
-            dataType="boolean"
-            value={rawValue}
-            onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
-            emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : t({ ko: '선택', en: 'Select' })}
-            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-          />
-        </div>
-      )
-    }
-
-    if (isInlineTextPort && data.onNodeValueChange) {
-      return (
-        <div onMouseDown={stopNodeInteraction}>
-          <ModuleGraphSimpleValueInput
-            dataType="text"
-            value={rawValue}
-            onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
-            placeholder={uiField?.placeholder || port.label}
-            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
       )
