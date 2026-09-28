@@ -16,6 +16,9 @@ import {
   isEmptyLlmJsonArtifact,
 } from '../module-graph-shared'
 import { listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
+import type { TranslationInput, TranslationParams } from '@/i18n'
+
+type Translate = (input: TranslationInput, params?: TranslationParams) => string
 
 export type ParsedExecutionPlan = {
   orderedNodeIds?: string[]
@@ -84,12 +87,74 @@ export function parseExecutionPlan(value?: string | null): ParsedExecutionPlan |
 }
 
 /** Resolve a user-facing execution mode label from one parsed execution plan. */
-export function getExecutionModeLabel(plan: ParsedExecutionPlan | null) {
+export function getExecutionModeLabel(plan: ParsedExecutionPlan | null, t: Translate) {
   if (plan?.targetNodeId) {
-    return plan.forceRerun ? '강제 노드 재실행' : '선택 노드 실행'
+    return plan.forceRerun
+      ? t({ ko: '강제 노드 재실행', en: 'Forced node rerun' })
+      : t({ ko: '선택 노드 실행', en: 'Selected node run' })
   }
 
-  return '워크플로우 실행'
+  return t({ ko: '워크플로우 실행', en: 'Workflow run' })
+}
+
+const GRAPH_EXECUTION_LOG_LEVEL_LABELS: Record<GraphExecutionLogRecord['level'], TranslationInput> = {
+  info: { ko: '정보', en: 'Info' },
+  warn: { ko: '경고', en: 'Warning' },
+  error: { ko: '오류', en: 'Error' },
+}
+
+/** Resolve one localized label for an execution log level. */
+export function getGraphExecutionLogLevelLabel(level: GraphExecutionLogRecord['level'], t: Translate) {
+  const label = GRAPH_EXECUTION_LOG_LEVEL_LABELS[level]
+  return label ? t(label) : level
+}
+
+/** Badge variant per log level: errors must read strongest, info the quietest. */
+export function getGraphExecutionLogLevelBadgeVariant(level: GraphExecutionLogRecord['level']) {
+  if (level === 'error') {
+    return 'destructive' as const
+  }
+
+  return level === 'warn' ? 'secondary' as const : 'outline' as const
+}
+
+const GRAPH_EXECUTION_LOG_EVENT_LABELS: Record<string, TranslationInput> = {
+  execution_queued: { ko: '실행 대기 등록', en: 'Run queued' },
+  execution_start: { ko: '실행 시작', en: 'Run started' },
+  execution_complete: { ko: '실행 완료', en: 'Run completed' },
+  execution_failed: { ko: '실행 실패', en: 'Run failed' },
+  execution_cancel_requested: { ko: '실행 취소 요청', en: 'Run cancel requested' },
+  execution_cancelled: { ko: '실행 취소됨', en: 'Run cancelled' },
+  execution_stopped: { ko: '실행 중지됨', en: 'Run stopped' },
+  execution_abort_drain_timeout: { ko: '중단 정리 시간 초과', en: 'Abort cleanup timed out' },
+  workflow_stop_requested: { ko: '워크플로우 중지 요청', en: 'Workflow stop requested' },
+  node_start: { ko: '노드 시작', en: 'Node started' },
+  node_complete: { ko: '노드 완료', en: 'Node completed' },
+  node_aborted: { ko: '노드 중단', en: 'Node aborted' },
+  node_reused: { ko: '노드 결과 재사용', en: 'Node result reused' },
+  node_inputs_resolved: { ko: '노드 입력 확정', en: 'Node inputs resolved' },
+  node_skipped_disabled: { ko: '비활성 노드 건너뜀', en: 'Disabled node skipped' },
+  node_skipped_inactive_branch: { ko: '비활성 분기 건너뜀', en: 'Inactive branch skipped' },
+  node_engine_start: { ko: '엔진 작업 시작', en: 'Engine job started' },
+  node_engine_progress: { ko: '엔진 작업 진행', en: 'Engine job progress' },
+  node_engine_complete: { ko: '엔진 작업 완료', en: 'Engine job completed' },
+  node_queue_registered: { ko: '생성 큐 등록', en: 'Queued for generation' },
+  node_queue_complete: { ko: '생성 큐 완료', en: 'Generation queue job completed' },
+  node_queue_cancel_requested: { ko: '생성 큐 취소 요청', en: 'Generation queue cancel requested' },
+  node_comfy_cancel_requested: { ko: 'ComfyUI 취소 요청', en: 'ComfyUI cancel requested' },
+  llm_provider_response: { ko: 'LLM 응답 수신', en: 'LLM response received' },
+  llm_json_parse_failed: { ko: 'LLM JSON 해석 실패', en: 'LLM JSON parse failed' },
+  provider_response: { ko: '제공자 응답 수신', en: 'Provider response received' },
+  json_parse_failed: { ko: 'JSON 해석 실패', en: 'JSON parse failed' },
+  final_result_source_artifact_missing: { ko: '최종 결과 원본 없음', en: 'Final result source missing' },
+  final_result_promotion_failed: { ko: '최종 결과 기록 연결 실패', en: 'Final result history link failed' },
+  custom_node_log: { ko: '커스텀 노드 로그', en: 'Custom node log' },
+}
+
+/** Resolve one localized label for an execution log event; unknown events keep their code. */
+export function getGraphExecutionLogEventLabel(eventType: string, t: Translate) {
+  const label = GRAPH_EXECUTION_LOG_EVENT_LABELS[eventType]
+  return label ? t(label) : eventType
 }
 
 /** Pick the runtime-input object from the execution plan's possible payload keys. */
@@ -107,12 +172,15 @@ function getExecutionInputCandidate(plan: ParsedExecutionPlan | null) {
 }
 
 /** Format one primitive or structured execution value for compact UI display. */
-export function formatPrimitiveValue(value: unknown) {
+export function formatPrimitiveValue(value: unknown, t?: Translate) {
   if (value === null || value === undefined) {
-    return '없음'
+    return t ? t({ ko: '없음', en: 'None' }) : '없음'
   }
 
   if (typeof value === 'boolean') {
+    if (t) {
+      return value ? t({ ko: '예', en: 'Yes' }) : t({ ko: '아니오', en: 'No' })
+    }
     return value ? '예' : '아니오'
   }
 
@@ -122,7 +190,7 @@ export function formatPrimitiveValue(value: unknown) {
 
   if (typeof value === 'string') {
     if (value.startsWith('data:')) {
-      return '미디어 데이터'
+      return t ? t({ ko: '미디어 데이터', en: 'Media data' }) : '미디어 데이터'
     }
 
     return value
@@ -377,25 +445,25 @@ export function buildExecutionComparisonRows(
   })
 }
 
-function readSkipReasonLabel(details: Record<string, unknown> | null) {
+function readSkipReasonLabel(details: Record<string, unknown> | null, t: Translate) {
   const disabledInputs = Array.isArray(details?.disabledInputs) ? details.disabledInputs : []
   const inputReasons = disabledInputs
     .filter((input): input is Record<string, unknown> => Boolean(input) && typeof input === 'object' && !Array.isArray(input))
     .map((input) => input.reason)
 
   if (inputReasons.includes('source_node_skipped')) {
-    return '상위 노드가 먼저 건너뜀'
+    return t({ ko: '상위 노드가 먼저 건너뜀', en: 'An upstream node was skipped first' })
   }
 
   if (inputReasons.includes('source_output_disabled')) {
-    return '상위 출력이 비활성'
+    return t({ ko: '상위 출력이 비활성', en: 'Upstream output is inactive' })
   }
 
   if (inputReasons.includes('inactive_if_branch')) {
-    return 'IF 분기 비활성 경로'
+    return t({ ko: 'IF 분기 비활성 경로', en: 'Inactive IF branch' })
   }
 
-  return '건너뛴 경로'
+  return t({ ko: '건너뛴 경로', en: 'Skipped path' })
 }
 
 function readFirstDisabledInputSource(details: Record<string, unknown> | null, nodeLabelMap: ReadonlyMap<string, string>, nodeLabelOverrides?: Record<string, string> | null) {
@@ -417,12 +485,14 @@ export function buildExecutionPathDiagnosticRows({
   plan,
   selectedGraph,
   nodeLabelOverrides,
+  t,
 }: {
   execution: GraphExecutionRecord
   logs: GraphExecutionLogRecord[]
   plan: ParsedExecutionPlan | null
   selectedGraph?: GraphWorkflowRecord | null
   nodeLabelOverrides?: Record<string, string> | null
+  t: Translate
 }): ExecutionPathDiagnosticRow[] {
   const nodeLabelMap = buildNodeDisplayLabelMap(selectedGraph)
   const rows: ExecutionPathDiagnosticRow[] = []
@@ -441,7 +511,7 @@ export function buildExecutionPathDiagnosticRows({
           id: key,
           tone: 'skipped',
           nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, log.node_id, nodeLabelOverrides),
-          reasonLabel: '비활성 노드',
+          reasonLabel: t({ ko: '비활성 노드', en: 'Disabled node' }),
           sourceLabel: null,
         })
       }
@@ -457,7 +527,7 @@ export function buildExecutionPathDiagnosticRows({
           id: key,
           tone: 'skipped',
           nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, log.node_id, nodeLabelOverrides),
-          reasonLabel: readSkipReasonLabel(details),
+          reasonLabel: readSkipReasonLabel(details, t),
           sourceLabel: readFirstDisabledInputSource(details, nodeLabelMap, nodeLabelOverrides),
         })
       }
@@ -471,7 +541,7 @@ export function buildExecutionPathDiagnosticRows({
         id: `failed:${failedNodeId}`,
         tone: 'failed',
         nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, failedNodeId, nodeLabelOverrides),
-        reasonLabel: '실패 지점',
+        reasonLabel: t({ ko: '실패 지점', en: 'Failure point' }),
         sourceLabel: execution.error_message ?? null,
       })
 
@@ -483,7 +553,7 @@ export function buildExecutionPathDiagnosticRows({
             id: `blocked:${blockedNodeId}`,
             tone: 'blocked',
             nodeLabel: getNodeDisplayLabelFromMap(nodeLabelMap, blockedNodeId, nodeLabelOverrides),
-            reasonLabel: '실패 이후 미실행',
+            reasonLabel: t({ ko: '실패 이후 미실행', en: 'Not run after failure' }),
             sourceLabel: getNodeDisplayLabelFromMap(nodeLabelMap, failedNodeId, nodeLabelOverrides),
           })
         }

@@ -234,7 +234,7 @@ export function WorkflowRunnerPanel({
                 </AlertTitle>
                 <AlertDescription className="pt-3">
                   {latestExecutionFinalResultWarning ? (
-                    <div className="mb-3 rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                    <div className="mb-3 rounded-sm border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
                       <div>
                         {latestExecutionFinalResultWarning.kind === 'source_artifact_missing'
                           ? latestExecutionFinalResultWarningSourceLabel
@@ -251,7 +251,7 @@ export function WorkflowRunnerPanel({
                             : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the run logs for the cause.' })}
                       </div>
                       {latestExecutionAdditionalWarningCount > 0 ? (
-                        <div className="mt-1 text-xs text-amber-100/80">
+                        <div className="mt-1 text-xs text-warning-soft-foreground/80">
                           {t({ ko: '추가 최종 결과 경고 {count}개가 더 있어. 실행 상세 로그에서 함께 확인해줘.', en: '{count} more final-result warnings are available in the run logs.' }, { count: formatNumber(latestExecutionAdditionalWarningCount) })}
                         </div>
                       ) : null}

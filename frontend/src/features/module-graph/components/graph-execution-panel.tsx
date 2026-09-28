@@ -19,6 +19,7 @@ import type {
 import { cn } from '@/lib/utils'
 import {
   getArtifactPreviewUrl,
+  getGraphExecutionStatusLabel,
   hasGraphArtifactVisualPreview,
   parseMetadataValue,
   resolveGraphArtifactMimeType,
@@ -31,6 +32,9 @@ import {
   formatPrimitiveValue,
   getExecutionInputEntries,
   getExecutionModeLabel,
+  getGraphExecutionLogEventLabel,
+  getGraphExecutionLogLevelBadgeVariant,
+  getGraphExecutionLogLevelLabel,
   getNodeDisplayLabel,
   getNodeDisplayLabelFromMap,
   groupArtifactsByNode,
@@ -52,6 +56,17 @@ type GraphExecutionDetail = {
 }
 
 type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'compare' | 'artifacts' | 'logs'
+
+/** Failed runs get the destructive badge, completed ones the filled neutral badge. */
+function getExecutionStatusBadgeVariant(status: GraphExecutionRecord['status']) {
+  if (status === 'failed') {
+    return 'destructive' as const
+  }
+
+  return status === 'completed' ? 'secondary' as const : 'outline' as const
+}
+
+const CODE_BLOCK_CLASS_NAME = 'overflow-auto rounded-sm border border-border bg-surface-lowest p-2.5 text-[11px] text-foreground'
 
 function SelectedExecutionSummary({
   executionDetail,
@@ -102,15 +117,16 @@ function SelectedExecutionSummary({
     plan: selectedExecutionPlan,
     selectedGraph,
     nodeLabelOverrides,
-  }), [executionDetail.execution, executionDetail.logs, nodeLabelOverrides, selectedExecutionPlan, selectedGraph])
+    t,
+  }), [executionDetail.execution, executionDetail.logs, nodeLabelOverrides, selectedExecutionPlan, selectedGraph, t])
 
   return (
     <div className="space-y-4 rounded-sm border border-border bg-surface-low p-3">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-background/50 px-3 py-2 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-foreground">#{executionDetail.execution.id}</span>
-          <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
-          <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan)}</Badge>
+          <Badge variant={getExecutionStatusBadgeVariant(executionDetail.execution.status)}>{getGraphExecutionStatusLabel(executionDetail.execution.status, t)}</Badge>
+          <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan, t)}</Badge>
           {selectedExecutionPlan?.targetNodeId ? <Badge variant="outline">{getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId, nodeLabelOverrides)}</Badge> : null}
           {selectedExecutionPlan?.forceRerun ? <Badge variant="outline">{t({ ko: '강제', en: 'Forced' })}</Badge> : null}
           {selectedExecutionPlan?.reusedFromExecutionId ? <Badge variant="outline">{t({ ko: '재사용 #{id}', en: 'Reused #{id}' }, { id: selectedExecutionPlan.reusedFromExecutionId })}</Badge> : null}
@@ -123,18 +139,18 @@ function SelectedExecutionSummary({
       </div>
 
       {executionDetail.execution.error_message ? (
-        <div className="rounded-sm border border-[#7f1d1d] bg-[#3a1010]/60 px-3 py-2 text-sm text-[#ffb4ab]">
+        <div className="rounded-sm border border-destructive/40 bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground">
           {executionDetail.execution.error_message}
         </div>
       ) : null}
 
       {llmResponseDiagnostic ? (
-        <div className="space-y-2 rounded-sm border border-[#7f1d1d] bg-[#180d10] px-3 py-2 text-sm text-[#ffdad6]">
+        <div className="space-y-2 rounded-sm border border-destructive/40 bg-surface-container px-3 py-2 text-sm text-foreground">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-medium">{t({ ko: 'LLM 응답 로그', en: 'LLM response log' })}</span>
-              {llmResponseDiagnostic.failedLog ? <Badge variant="outline">{llmResponseDiagnostic.failedLog.event_type}</Badge> : null}
-              {llmResponseDiagnostic.providerLog ? <Badge variant="outline">{llmResponseDiagnostic.providerLog.event_type}</Badge> : null}
+              {llmResponseDiagnostic.failedLog ? <Badge variant="destructive" title={llmResponseDiagnostic.failedLog.event_type}>{getGraphExecutionLogEventLabel(llmResponseDiagnostic.failedLog.event_type, t)}</Badge> : null}
+              {llmResponseDiagnostic.providerLog ? <Badge variant="outline" title={llmResponseDiagnostic.providerLog.event_type}>{getGraphExecutionLogEventLabel(llmResponseDiagnostic.providerLog.event_type, t)}</Badge> : null}
             </div>
             <Button type="button" size="sm" variant="outline" onClick={onOpenDetail}>
               <Eye className="h-4 w-4" />
@@ -142,15 +158,15 @@ function SelectedExecutionSummary({
             </Button>
           </div>
           {llmResponseDiagnostic.textPreview ? (
-            <pre className="max-h-44 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff] whitespace-pre-wrap break-words">{llmResponseDiagnostic.textPreview}</pre>
+            <pre className={cn(CODE_BLOCK_CLASS_NAME, 'max-h-44 whitespace-pre-wrap break-words')}>{llmResponseDiagnostic.textPreview}</pre>
           ) : llmResponseDiagnostic.rawResponsePreview ? (
-            <pre className="max-h-44 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff] whitespace-pre-wrap break-words">{llmResponseDiagnostic.rawResponsePreview}</pre>
+            <pre className={cn(CODE_BLOCK_CLASS_NAME, 'max-h-44 whitespace-pre-wrap break-words')}>{llmResponseDiagnostic.rawResponsePreview}</pre>
           ) : null}
         </div>
       ) : null}
 
       {finalResultLifecycleWarning ? (
-        <div className="rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+        <div className="rounded-sm border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
           <div>
             {finalResultLifecycleWarning.kind === 'source_artifact_missing'
               ? finalResultLifecycleWarningSourceLabel
@@ -167,7 +183,7 @@ function SelectedExecutionSummary({
                 : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the detailed logs for the cause.' })}
           </div>
           {additionalFinalResultWarningCount > 0 ? (
-            <div className="mt-1 text-xs text-amber-100/80">
+            <div className="mt-1 text-xs text-warning-soft-foreground/80">
               {t({ ko: '추가 최종 결과 경고 {count}개가 더 있어. 상세 로그에서 함께 확인해줘.', en: '{count} more final-result warnings are available in the detailed logs.' }, { count: formatNumber(additionalFinalResultWarningCount) })}
             </div>
           ) : null}
@@ -192,7 +208,7 @@ function SelectedExecutionSummary({
               <div key={entry.key} className="rounded-sm border border-border bg-background/50 px-3 py-2">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{entry.label}</div>
                 {entry.label !== entry.key ? <div className="mt-0.5 text-[11px] text-muted-foreground">{entry.key}</div> : null}
-                <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value)}</div>
+                <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value, t)}</div>
               </div>
             ))}
           </div>
@@ -421,7 +437,7 @@ export function GraphExecutionPanel({
           <div className="space-y-1.5">
             {executionList.map((execution) => {
               const plan = parseExecutionPlan(execution.execution_plan)
-              const modeLabel = getExecutionModeLabel(plan)
+              const modeLabel = getExecutionModeLabel(plan, t)
               const isSelected = selectedExecutionId === execution.id
               const selectedDetailMatches = isSelected && executionDetail?.execution.id === execution.id
 
@@ -436,7 +452,7 @@ export function GraphExecutionPanel({
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="text-sm font-medium text-foreground">#{execution.id}</span>
-                        <Badge variant={execution.status === 'completed' ? 'secondary' : 'outline'}>{execution.status}</Badge>
+                        <Badge variant={getExecutionStatusBadgeVariant(execution.status)}>{getGraphExecutionStatusLabel(execution.status, t)}</Badge>
                         <Badge variant="outline">{modeLabel}</Badge>
                         {isSelected ? <Badge variant="secondary">{t({ ko: '선택', en: 'Selected' })}</Badge> : null}
                       </div>
@@ -446,8 +462,8 @@ export function GraphExecutionPanel({
                     {(execution.status === 'queued' && execution.queue_position) || execution.cancel_requested || execution.error_message ? (
                       <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                         {execution.status === 'queued' && execution.queue_position ? <span>{t({ ko: '순번 {position}', en: 'Position {position}' }, { position: execution.queue_position })}</span> : null}
-                        {execution.cancel_requested ? <span className="text-[#ffd180]">{t({ ko: '취소 요청됨', en: 'Cancel requested' })}</span> : null}
-                        {execution.error_message ? <span className="text-[#ffb4ab] line-clamp-1">{execution.error_message}</span> : null}
+                        {execution.cancel_requested ? <span className="text-warning">{t({ ko: '취소 요청됨', en: 'Cancel requested' })}</span> : null}
+                        {execution.error_message ? <span className="text-destructive line-clamp-1">{execution.error_message}</span> : null}
                       </div>
                     ) : null}
                   </button>
@@ -497,8 +513,8 @@ export function GraphExecutionPanel({
               <Alert>
                 <AlertTitle className="flex flex-wrap items-center gap-2">
                   <span>#{executionDetail.execution.id}</span>
-                  <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
-                  <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan)}</Badge>
+                  <Badge variant={getExecutionStatusBadgeVariant(executionDetail.execution.status)}>{getGraphExecutionStatusLabel(executionDetail.execution.status, t)}</Badge>
+                  <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan, t)}</Badge>
                   <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
                 </AlertTitle>
                 <AlertDescription>
@@ -534,7 +550,7 @@ export function GraphExecutionPanel({
                     <div key={entry.key} className="rounded-sm border border-border bg-surface-low p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{entry.label}</div>
                       {entry.label !== entry.key ? <div className="mt-0.5 text-[11px] text-muted-foreground">{entry.key}</div> : null}
-                      <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value)}</div>
+                      <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value, t)}</div>
                     </div>
                   ))}
                 </div>
@@ -563,6 +579,7 @@ export function GraphExecutionPanel({
                   plan: selectedExecutionPlan,
                   selectedGraph,
                   nodeLabelOverrides,
+                  t,
                 })}
               />
             </div>
@@ -603,7 +620,7 @@ export function GraphExecutionPanel({
                     {artifact.storage_path ? <div className="mt-2 rounded-sm bg-surface-high px-2 py-1.5 break-all text-[11px] text-muted-foreground">{artifact.storage_path}</div> : null}
 
                     {parsedMetadata ? (
-                      <pre className="mt-2 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff]">{typeof parsedMetadata === 'string' ? parsedMetadata : JSON.stringify(parsedMetadata, null, 2)}</pre>
+                      <pre className={cn(CODE_BLOCK_CLASS_NAME, 'mt-2')}>{typeof parsedMetadata === 'string' ? parsedMetadata : JSON.stringify(parsedMetadata, null, 2)}</pre>
                     ) : null}
                   </div>
                 )
@@ -626,15 +643,15 @@ export function GraphExecutionPanel({
                     <div key={log.id} className="rounded-sm border border-border bg-surface-low p-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant={log.level === 'error' ? 'outline' : 'secondary'}>{log.level}</Badge>
-                          <span className="text-sm font-medium text-foreground">{log.event_type}</span>
+                          <Badge variant={getGraphExecutionLogLevelBadgeVariant(log.level)}>{getGraphExecutionLogLevelLabel(log.level, t)}</Badge>
+                          <span className="text-sm font-medium text-foreground" title={log.event_type}>{getGraphExecutionLogEventLabel(log.event_type, t)}</span>
                           {log.node_id ? <TechnicalReferenceHint title={`node ${log.node_id}`} label={t({ ko: '로그 대상 노드 내부 식별자 보기', en: 'Show internal identifier for the log target node' })} /> : null}
                         </div>
                         <div className="text-[11px] text-muted-foreground">{formatDateTime(log.created_date)}</div>
                       </div>
                       <div className="mt-1.5 text-sm text-foreground">{log.message}</div>
                       {parsedDetails ? (
-                        <pre className="mt-2 overflow-auto rounded-sm bg-[#0b111c] p-2.5 text-[11px] text-[#d7e3ff]">{typeof parsedDetails === 'string' ? parsedDetails : JSON.stringify(parsedDetails, null, 2)}</pre>
+                        <pre className={cn(CODE_BLOCK_CLASS_NAME, 'mt-2')}>{typeof parsedDetails === 'string' ? parsedDetails : JSON.stringify(parsedDetails, null, 2)}</pre>
                       ) : null}
                     </div>
                   )
