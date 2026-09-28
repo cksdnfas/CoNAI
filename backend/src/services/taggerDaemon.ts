@@ -44,6 +44,8 @@ interface DaemonResponse {
   [key: string]: any;
 }
 
+
+const DAEMON_READY_TIMEOUT_MS = 120_000;
 class TaggerDaemon {
   private process: ChildProcess | null = null;
   private modelLoaded = false;
@@ -124,7 +126,7 @@ class TaggerDaemon {
         }
 
         // Spawn Python daemon process
-        this.process = spawn(this.pythonPath, [this.scriptPath], {
+        const child = spawn(this.pythonPath, [this.scriptPath], {
           cwd: path.dirname(this.scriptPath),
           env: {
             ...process.env,
@@ -135,20 +137,25 @@ class TaggerDaemon {
             PYTHONIOENCODING: 'utf-8' // Force UTF-8 encoding for stdin/stdout
           }
         });
+        this.process = child;
+        const isCurrent = () => this.process === child;
 
-        if (!this.process.stdout || !this.process.stderr) {
+        if (!child.stdout || !child.stderr) {
           reject(new Error('Failed to capture daemon process streams'));
           return;
         }
 
         // Setup stdout line reader
         const rl = readline.createInterface({
-          input: this.process.stdout,
+          input: child.stdout,
           crlfDelay: Infinity
         });
 
         rl.on('line', (line) => {
           try {
+            if (!isCurrent()) {
+              return;
+            }
             const response: DaemonResponse = JSON.parse(line);
 
             // Handle ready signal
@@ -172,12 +179,15 @@ class TaggerDaemon {
         });
 
         // Handle stderr
-        this.process.stderr.on('data', (data) => {
+        child.stderr.on('data', (data) => {
           console.error('[TaggerDaemon] stderr:', data.toString());
         });
 
         // Handle process exit
-        this.process.on('exit', (code, signal) => {
+        child.on('exit', (code, signal) => {
+          if (!isCurrent()) {
+            return;
+          }
           console.log('[TaggerDaemon] Process exited with code:', code, 'signal:', signal);
           this.isReady = false;
           this.process = null;
@@ -185,10 +195,14 @@ class TaggerDaemon {
           this.modelLoaded = false;
           this.currentModel = null;
           this.currentDevice = null;
+          this.failPendingResponses('Daemon exited');
         });
 
         // Handle process errors
-        this.process.on('error', (error) => {
+        child.on('error', (error) => {
+          if (!isCurrent()) {
+            return;
+          }
           console.error('[TaggerDaemon] Process error:', error);
           this.isReady = false;
           this.process = null;
@@ -196,12 +210,15 @@ class TaggerDaemon {
           reject(error);
         });
 
-        // Timeout if not ready within 30 seconds
+        // A cold container (empty page cache, boot-time scans) can take well over 30s to import torch.
         setTimeout(() => {
-          if (!this.isReady) {
-            reject(new Error('Daemon failed to become ready within 30 seconds'));
+          if (isCurrent() && !this.isReady) {
+            console.error('[TaggerDaemon] Daemon did not become ready in time; stopping it so the next request retries cleanly');
+            this.resetDaemonState();
+            child.kill('SIGTERM');
+            reject(new Error(`Daemon failed to become ready within ${DAEMON_READY_TIMEOUT_MS / 1000} seconds`));
           }
-        }, 30000);
+        }, DAEMON_READY_TIMEOUT_MS);
 
       } catch (error) {
         reject(error);
@@ -228,19 +245,32 @@ class TaggerDaemon {
       }
 
       // Wait a bit then kill if still running
+      const stoppingProcess = this.process;
       setTimeout(() => {
-        if (this.process) {
-          this.process.kill('SIGTERM');
+        if (stoppingProcess && stoppingProcess.exitCode === null) {
+          stoppingProcess.kill('SIGTERM');
         }
       }, 1000);
     }
 
+    this.resetDaemonState();
+  }
+
+  /** Forget the current process; late events from it are ignored by the per-process guards. */
+  private resetDaemonState(): void {
     this.isReady = false;
     this.process = null;
     this.readyPromise = null;
     this.modelLoaded = false;
     this.currentModel = null;
     this.currentDevice = null;
+    this.failPendingResponses('Daemon stopped');
+  }
+
+  /** Answer every queued request so callers fail fast instead of waiting for the command timeout. */
+  private failPendingResponses(reason: string): void {
+    const pending = this.responseQueue.splice(0);
+    pending.forEach((callback) => callback({ success: false, error: reason } as DaemonResponse));
   }
 
   /**
@@ -252,14 +282,25 @@ class TaggerDaemon {
     }
 
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Daemon command timeout'));
-      }, 120000); // 2 minutes timeout
-
-      this.responseQueue.push((response) => {
+      const child = this.process!;
+      const callback = (response: DaemonResponse) => {
         clearTimeout(timeout);
         resolve(response);
-      });
+      };
+      const timeout = setTimeout(() => {
+        const index = this.responseQueue.indexOf(callback);
+        if (index >= 0) {
+          this.responseQueue.splice(index, 1);
+        }
+        reject(new Error('Daemon command timeout'));
+        if (this.process === child) {
+          console.error('[TaggerDaemon] Command timed out; restarting the daemon to resync responses');
+          this.resetDaemonState();
+          child.kill('SIGTERM');
+        }
+      }, 120000);
+
+      this.responseQueue.push(callback);
 
       // Send command
       const commandJson = JSON.stringify(command) + '\n';

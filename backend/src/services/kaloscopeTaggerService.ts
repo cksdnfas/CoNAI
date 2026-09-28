@@ -56,6 +56,8 @@ interface DaemonResponse {
   [key: string]: any;
 }
 
+
+const DAEMON_READY_TIMEOUT_MS = 120_000;
 class KaloscopeTaggerService {
   private readonly daemonScriptPath: string;
   private process: ChildProcess | null = null;
@@ -416,7 +418,7 @@ class KaloscopeTaggerService {
           return;
         }
 
-        this.process = spawn(this.getPythonPath(), [this.daemonScriptPath], {
+        const child = spawn(this.getPythonPath(), [this.daemonScriptPath], {
           cwd: path.dirname(this.daemonScriptPath),
           env: this.createPythonEnv({
             HF_HOME: runtimePaths.modelsDir,
@@ -424,19 +426,24 @@ class KaloscopeTaggerService {
             TRANSFORMERS_CACHE: runtimePaths.modelsDir,
           }),
         });
+        this.process = child;
+        const isCurrent = () => this.process === child;
 
-        if (!this.process.stdout || !this.process.stderr) {
+        if (!child.stdout || !child.stderr) {
           reject(new Error('Failed to capture daemon process streams'));
           return;
         }
 
         const rl = readline.createInterface({
-          input: this.process.stdout,
+          input: child.stdout,
           crlfDelay: Infinity,
         });
 
         rl.on('line', (line) => {
           try {
+            if (!isCurrent()) {
+              return;
+            }
             const response: DaemonResponse = JSON.parse(line);
 
             if (response.status === 'ready' && !this.isReady) {
@@ -454,11 +461,14 @@ class KaloscopeTaggerService {
           }
         });
 
-        this.process.stderr.on('data', (data) => {
+        child.stderr.on('data', (data) => {
           console.error('[KaloscopeDaemon] stderr:', data.toString());
         });
 
-        this.process.on('exit', (code, signal) => {
+        child.on('exit', (code, signal) => {
+          if (!isCurrent()) {
+            return;
+          }
           console.log('[KaloscopeDaemon] Process exited with code:', code, 'signal:', signal);
           this.isReady = false;
           this.process = null;
@@ -466,9 +476,13 @@ class KaloscopeTaggerService {
           this.modelLoaded = false;
           this.currentModel = null;
           this.currentDevice = null;
+          this.failPendingResponses('Daemon exited');
         });
 
-        this.process.on('error', (error) => {
+        child.on('error', (error) => {
+          if (!isCurrent()) {
+            return;
+          }
           console.error('[KaloscopeDaemon] Process error:', error);
           this.isReady = false;
           this.process = null;
@@ -476,11 +490,15 @@ class KaloscopeTaggerService {
           reject(error);
         });
 
+        // A cold container (empty page cache, boot-time scans) can take well over 30s to import torch.
         setTimeout(() => {
-          if (!this.isReady) {
-            reject(new Error('Daemon failed to become ready within 30 seconds'));
+          if (isCurrent() && !this.isReady) {
+            console.error('[KaloscopeDaemon] Daemon did not become ready in time; stopping it so the next request retries cleanly');
+            this.resetDaemonState();
+            child.kill('SIGTERM');
+            reject(new Error(`Daemon failed to become ready within ${DAEMON_READY_TIMEOUT_MS / 1000} seconds`));
           }
-        }, 30000);
+        }, DAEMON_READY_TIMEOUT_MS);
       } catch (error) {
         reject(error);
       }
@@ -500,19 +518,32 @@ class KaloscopeTaggerService {
         console.error('[KaloscopeDaemon] Error sending shutdown command:', error);
       }
 
+      const stoppingProcess = this.process;
       setTimeout(() => {
-        if (this.process) {
-          this.process.kill('SIGTERM');
+        if (stoppingProcess && stoppingProcess.exitCode === null) {
+          stoppingProcess.kill('SIGTERM');
         }
       }, 1000);
     }
 
+    this.resetDaemonState();
+  }
+
+  /** Forget the current process; late events from it are ignored by the per-process guards. */
+  private resetDaemonState(): void {
     this.isReady = false;
     this.process = null;
     this.readyPromise = null;
     this.modelLoaded = false;
     this.currentModel = null;
     this.currentDevice = null;
+    this.failPendingResponses('Daemon stopped');
+  }
+
+  /** Answer every queued request so callers fail fast instead of waiting for the command timeout. */
+  private failPendingResponses(reason: string): void {
+    const pending = this.responseQueue.splice(0);
+    pending.forEach((callback) => callback({ success: false, error: reason } as DaemonResponse));
   }
 
   /** Send command to daemon. */
@@ -522,14 +553,25 @@ class KaloscopeTaggerService {
     }
 
     return await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Daemon command timeout'));
-      }, 120000);
-
-      this.responseQueue.push((response) => {
+      const child = this.process!;
+      const callback = (response: DaemonResponse) => {
         clearTimeout(timeout);
         resolve(response);
-      });
+      };
+      const timeout = setTimeout(() => {
+        const index = this.responseQueue.indexOf(callback);
+        if (index >= 0) {
+          this.responseQueue.splice(index, 1);
+        }
+        reject(new Error('Daemon command timeout'));
+        if (this.process === child) {
+          console.error('[KaloscopeDaemon] Command timed out; restarting the daemon to resync responses');
+          this.resetDaemonState();
+          child.kill('SIGTERM');
+        }
+      }, 120000);
+
+      this.responseQueue.push(callback);
 
       this.process!.stdin!.write(`${JSON.stringify(command)}\n`);
     });
