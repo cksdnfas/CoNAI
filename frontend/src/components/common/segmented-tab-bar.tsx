@@ -11,9 +11,11 @@ type SegmentedTabBarProps = {
   actions?: ReactNode
   fullWidth?: boolean
   size?: 'xs' | 'sm' | 'md'
+  /** Accessible name for the tab list, e.g. the section it switches. */
+  ariaLabel?: string
 }
 
-/** Render the standard page/modal tab bar used across shared segmented-tab sections. */
+/** Render the standard page/modal tab bar used across shared segmented-tab sections, with tablist/tab semantics. */
 export function SegmentedTabBar({
   value,
   items,
@@ -23,6 +25,7 @@ export function SegmentedTabBar({
   actions,
   fullWidth = false,
   size = 'md',
+  ariaLabel,
 }: SegmentedTabBarProps) {
   return (
     <div className={cn(actions ? 'flex flex-wrap items-center justify-between gap-3' : undefined, 'border-b border-border/70 pb-2', className)}>
@@ -34,6 +37,8 @@ export function SegmentedTabBar({
           className={controlClassName}
           fullWidth={fullWidth}
           size={size}
+          semantics="tabs"
+          ariaLabel={ariaLabel}
         />
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
