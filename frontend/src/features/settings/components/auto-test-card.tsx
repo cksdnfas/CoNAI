@@ -32,7 +32,6 @@ function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope)
 
 interface AutoTestCardProps {
   heading: ReactNode
-  description?: ReactNode
   /** Rendered next to the hash input so the controls stay hidden while the section is collapsed. */
   actions?: ReactNode
   autoTestHashInput: string
@@ -51,7 +50,6 @@ interface AutoTestCardProps {
 
 export function AutoTestCard({
   heading,
-  description,
   actions,
   autoTestHashInput,
   autoTestMedia,
@@ -90,7 +88,7 @@ export function AutoTestCard({
   }, [autoTestHashInput, onResolveAutoTestMedia])
 
   return (
-    <Section variant="settings" heading={heading} description={description} collapsible defaultOpen={false}>
+    <Section variant="settings" heading={heading} collapsible defaultOpen={false}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <Field label={t({ ko: '이미지 해시', en: 'Image hash' })} className="min-w-0 flex-1">
           <Input
@@ -142,11 +140,7 @@ export function AutoTestCard({
             </div>
           </div>
         </div>
-      ) : (
-        <Inset className="text-sm text-muted-foreground">
-          {t({ ko: '해시를 확인하거나 랜덤으로 하나 골라줘. 파일이 실제로 확인된 대상만 테스트 버튼이 열려.', en: 'Check a hash or pick one at random. Test buttons unlock only for files that are verified on disk.' })}
-        </Inset>
-      )}
+      ) : null}
 
       {isLoadingAutoTestImage ? (
         <Inset className="text-sm text-muted-foreground">

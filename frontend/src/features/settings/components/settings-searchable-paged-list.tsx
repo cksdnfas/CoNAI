@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
@@ -74,9 +73,7 @@ export function SettingsSearchablePagedList<T>({
     }
   }, [page, totalPages])
 
-  const countLabel = normalizedQuery
-    ? t({ ko: '{filtered} / {total}', en: '{filtered} / {total}' }, { filtered: formatNumber(filteredItems.length), total: formatNumber(items.length) })
-    : formatNumber(filteredItems.length)
+  const countLabel = t({ ko: '{filtered} / {total}', en: '{filtered} / {total}' }, { filtered: formatNumber(filteredItems.length), total: formatNumber(items.length) })
   const progress = resolveSettingsPagedListProgress({ page, pageSize, visibleCount: pagedItems.length, totalCount: filteredItems.length })
   const progressLabel = progress.visibleCount > 0
     ? t(
@@ -99,7 +96,7 @@ export function SettingsSearchablePagedList<T>({
             className="pl-9"
           />
         </div>
-        <Badge variant="secondary">{countLabel}</Badge>
+        {normalizedQuery ? <span className="shrink-0 text-xs text-muted-foreground">{countLabel}</span> : null}
       </div>
 
       {pagedItems.length === 0 ? (
@@ -123,12 +120,12 @@ export function SettingsSearchablePagedList<T>({
             )}
           </span>
           <div className="flex gap-2">
-            <Button type="button" size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-              {t({ ko: '이전', en: 'Previous' })}
-            </Button>
-            <Button type="button" size="sm" variant="secondary" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>
-              {t({ ko: '다음', en: 'Next' })}
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} label={t({ ko: '이전', en: 'Previous' })}>
+              <ChevronLeft className="h-4 w-4" />
+            </IconButton>
+            <IconButton size="icon-sm" variant="secondary" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} label={t({ ko: '다음', en: 'Next' })}>
+              <ChevronRight className="h-4 w-4" />
+            </IconButton>
           </div>
         </div>
       ) : null}

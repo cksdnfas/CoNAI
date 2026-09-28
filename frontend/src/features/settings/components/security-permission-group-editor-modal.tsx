@@ -132,8 +132,6 @@ export function SecurityPermissionGroupEditorModal({
         !isCreateMode && group ? (
           <div className="flex flex-wrap gap-2">
             <Badge variant={group.systemGroup ? 'secondary' : 'outline'}>{getPermissionGroupKindLabel(language, group.systemGroup)}</Badge>
-            <Badge variant="outline">{t({ ko: '권한 {count}', en: 'Permissions {count}' }, { count: draft.permissionKeys.length })}</Badge>
-            <Badge variant="outline">{t({ ko: '멤버 {count}', en: 'Members {count}' }, { count: members.length })}</Badge>
           </div>
         ) : null
       }

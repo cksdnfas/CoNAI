@@ -31,7 +31,6 @@ export function TaggerSettingsCard({
     <Section
       variant="settings"
       heading={heading}
-      description={t({ ko: '이미지 내용을 보고 Danbooru 스타일 태그와 캐릭터를 자동으로 붙여.', en: 'Automatically adds Danbooru-style tags and characters based on image content.' })}
       actions={actions}
     >
       <div className="grid gap-4 md:grid-cols-2">
@@ -70,15 +69,15 @@ export function TaggerSettingsCard({
               </Select>
             </Field>
 
-            <Field label={t({ ko: '일반 태그 기준값', en: 'General tag threshold' })} hint={t({ ko: '높을수록 확실한 태그만', en: 'Higher = fewer, surer tags' })}>
+            <Field label={t({ ko: '일반 태그 기준값', en: 'General tag threshold' })}>
               <NumberStepperInput min={0} max={1} step={0.01} variant="settings" disabled={!isEnabled} value={taggerDraft.generalThreshold} onValueCommit={(nextValue) => onPatchTagger({ generalThreshold: Number(nextValue) || 0 })} />
             </Field>
 
-            <Field label={t({ ko: '캐릭터 기준값', en: 'Character threshold' })} hint={t({ ko: '높을수록 확실한 캐릭터만', en: 'Higher = fewer, surer matches' })}>
+            <Field label={t({ ko: '캐릭터 기준값', en: 'Character threshold' })}>
               <NumberStepperInput min={0} max={1} step={0.01} variant="settings" disabled={!isEnabled} value={taggerDraft.characterThreshold} onValueCommit={(nextValue) => onPatchTagger({ characterThreshold: Number(nextValue) || 0 })} />
             </Field>
 
-            <Field label={t({ ko: 'Python 실행 파일', en: 'Python executable' })} hint={t({ ko: '보통 python 그대로 두면 돼', en: 'Usually leave as python' })} className="md:col-span-2">
+            <Field label={t({ ko: 'Python 실행 파일', en: 'Python executable' })} className="md:col-span-2">
               <Input variant="settings" value={taggerDraft.pythonPath} disabled={!isEnabled} onChange={(event) => onPatchTagger({ pythonPath: event.target.value })} placeholder="python" />
             </Field>
 
@@ -89,7 +88,7 @@ export function TaggerSettingsCard({
               label={t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
             />
 
-            <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })} hint={taggerDraft.keepModelLoaded ? t({ ko: '메모리 유지가 켜져 있으면 자동으로 내리지 않아', en: 'Not used while the model is kept in memory' }) : t({ ko: '이 시간 동안 안 쓰면 모델을 메모리에서 내려', en: 'Unloads the model after this long without use' })}>
+            <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <NumberStepperInput min={1} variant="settings" disabled={!isEnabled || taggerDraft.keepModelLoaded} value={taggerDraft.autoUnloadMinutes} onValueCommit={(nextValue) => onPatchTagger({ autoUnloadMinutes: Number(nextValue) || 1 })} />
             </Field>
           </>

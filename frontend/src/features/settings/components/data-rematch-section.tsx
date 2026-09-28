@@ -121,18 +121,14 @@ export function DataRematchSection() {
     dataRematchMutation.mutate()
   }
 
-  const renderOption = (key: keyof DataRematchOptions, label: string, description: string, disabled: boolean) => (
-    <label className="flex cursor-pointer items-start gap-3 rounded-sm bg-surface-low/60 px-3 py-2.5 text-sm has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
+  const renderOption = (key: keyof DataRematchOptions, label: string, disabled: boolean) => (
+    <label className="flex cursor-pointer items-center gap-3 rounded-sm bg-surface-low/60 px-3 py-2.5 text-sm has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
       <Checkbox
-        className="mt-0.5"
         checked={dataRematchOptions[key]}
         disabled={disabled}
         onCheckedChange={(checked) => updateDataRematchOption(key, checked === true)}
       />
-      <span className="min-w-0">
-        <span className="block font-medium text-foreground">{label}</span>
-        <span className="block text-xs text-muted-foreground">{description}</span>
-      </span>
+      <span className="min-w-0 font-medium text-foreground">{label}</span>
     </label>
   )
 
@@ -140,7 +136,6 @@ export function DataRematchSection() {
     <Section
       variant="settings"
       heading={t({ ko: '데이터 재매칭', en: 'Data rematch' })}
-      description={t({ ko: '썸네일·메타데이터·해시를 전체 라이브러리에 대해 다시 만들어. 설정을 바꾼 뒤 기존 파일에도 반영할 때 써.', en: 'Rebuild thumbnails, metadata or hashes for the whole library. Use it to apply changed settings to existing files.' })}
       actions={(
         <Button
           size="sm"
@@ -155,19 +150,16 @@ export function DataRematchSection() {
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.82fr)]">
         <div className="space-y-2">
-          {renderOption('thumbnail', t({ ko: '썸네일 재생성', en: 'Regenerate thumbnails' }), t({ ko: '현재 썸네일 크기·품질로 다시 만들어.', en: 'Rebuild with the current thumbnail size and quality.' }), isDataRematchBusy || dataRematchOptions.hash)}
-          {renderOption('metadata', t({ ko: '메타데이터 재추출', en: 'Re-extract metadata' }), t({ ko: '프롬프트·생성 정보를 파일에서 다시 읽어.', en: 'Read prompts and generation info from the files again.' }), isDataRematchBusy || dataRematchOptions.hash)}
-          {renderOption('hash', t({ ko: '해시 재생성', en: 'Regenerate hashes' }), t({ ko: '위험 작업이라 다른 항목과 같이 고를 수 없어.', en: 'Risky, so it cannot be combined with other items.' }), isDataRematchBusy)}
+          {renderOption('thumbnail', t({ ko: '썸네일 재생성', en: 'Regenerate thumbnails' }), isDataRematchBusy || dataRematchOptions.hash)}
+          {renderOption('metadata', t({ ko: '메타데이터 재추출', en: 'Re-extract metadata' }), isDataRematchBusy || dataRematchOptions.hash)}
+          {renderOption('hash', t({ ko: '해시 재생성', en: 'Regenerate hashes' }), isDataRematchBusy)}
 
           {dataRematchOptions.hash ? (
             <div className="rounded-sm bg-destructive-soft px-4 py-3 text-sm text-destructive-soft-foreground">
               <div className="flex gap-3">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div className="space-y-2">
-                  <p>{t({ ko: '해시 재생성은 모든 이미지의 식별값을 새로 계산하고, 라이브러리의 기록을 새 값에 다시 연결해.', en: 'Regenerating hashes recalculates every image’s identifier and reconnects library records to the new values.' })}</p>
                   <p>{t({ ko: '그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어져. 필요하면 다시 지정해야 해.', en: 'Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over — they are removed and must be set again if needed.' })}</p>
-                  <p>{t({ ko: '이미지와 GIF만 처리하고 동영상은 건너뛰어. 작업 중에는 자동 스캔과 자동 태그·작가 추출이 잠시 멈춰.', en: 'Only images and GIFs are processed; videos are skipped. Auto scan and automatic tag/artist extraction pause while the job runs.' })}</p>
-                  <p>{t({ ko: '자동 태그·작가 추출은 작업이 끝난 뒤 순서대로 다시 진행돼.', en: 'Automatic tag/artist extraction resumes on its own after the job finishes.' })}</p>
                   <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
                     <Checkbox
                       checked={hashConfirmed}

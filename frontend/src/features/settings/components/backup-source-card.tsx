@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CircleHelp, Play, RotateCcw, Square } from 'lucide-react'
+import { Play, RotateCcw, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,7 @@ import {
 } from './settings-resource-shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsLabelTip } from './settings-label-tip'
 
 interface BackupSourceCardProps {
   source: BackupSource
@@ -77,10 +78,11 @@ export function BackupSourceCard({
   return (
     <Section
       variant="settings"
-      heading={source.display_name || t({ ko: '이름 없는 백업 소스', en: 'Unnamed backup source' })}
       bodyClassName="space-y-5"
+      headerClassName="justify-end"
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={getWatcherBadgeVariant(source.watcher_status)}>{getWatcherStateLabel(source.watcher_status, t)}</Badge>
           <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(source.id))} label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
             <Play className="h-4 w-4" />
           </IconButton>
@@ -93,17 +95,6 @@ export function BackupSourceCard({
         </div>
       }
     >
-      <div className="flex flex-wrap gap-2">
-        <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
-        <Badge variant="outline">{t({ ko: '모드 {mode}', en: 'Mode {mode}' }, { mode: source.import_mode })}</Badge>
-        <Badge variant={getWatcherBadgeVariant(source.watcher_status)}>{getWatcherStateLabel(source.watcher_status, t)}</Badge>
-      </div>
-
-      <div className="space-y-1 font-mono text-xs text-muted-foreground">
-        <div className="break-all">{t({ ko: 'source {path}', en: 'Source {path}' }, { path: source.source_path })}</div>
-        <div className="break-all">{t({ ko: 'target {path}', en: 'Target {path}' }, { path: buildBackupTargetPreviewPath(source.target_folder_name) })}</div>
-      </div>
-
       <div className="grid gap-4 lg:grid-cols-2">
           <Field label={t({ ko: '표시 이름', en: 'Display name' })}>
             <Input variant="settings" value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} />
@@ -114,23 +105,7 @@ export function BackupSourceCard({
           </Field>
 
           <Field
-            label={(
-              <span className="inline-flex items-center gap-1">
-                {t({ ko: 'Upload 내부 대상 경로', en: 'Target path inside Upload' })}
-                <span
-                  className="inline-flex cursor-help text-muted-foreground"
-                  title={[
-                    t({ ko: '업로드 폴더 안의 상대 경로로 지정해.', en: 'Use a relative path inside the upload folder.' }),
-                    t({ ko: '예: Backup → Upload/Backup', en: 'Example: Backup → Upload/Backup' }),
-                    t({ ko: '예: Backup/001 → Upload/Backup/001', en: 'Example: Backup/001 → Upload/Backup/001' }),
-                    t({ ko: '앞에 / 를 붙여도 자동으로 Upload 기준으로 정리돼.', en: 'A leading / is normalized relative to Upload automatically.' }),
-                  ].join('\n')}
-                  aria-label={t({ ko: '업로드 폴더 안의 상대 경로로 지정해. 예: Backup이면 Upload/Backup, Backup/001이면 Upload/Backup/001에 저장돼.', en: 'Use a relative path inside the upload folder. For example, Backup saves to Upload/Backup, and Backup/001 saves to Upload/Backup/001.' })}
-                >
-                  <CircleHelp className="h-3.5 w-3.5" />
-                </span>
-              </span>
-            )}
+            label={<SettingsLabelTip label={t({ ko: 'Upload 내부 대상 경로', en: 'Target path inside Upload' })} tip={t({ ko: '업로드 폴더 안의 상대 경로로 지정해.', en: 'Use a relative path inside the upload folder.' })} />}
           >
             <Input
               variant="settings"
@@ -148,7 +123,7 @@ export function BackupSourceCard({
             </Select>
           </Field>
 
-          <Field label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} hint={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })}>
+          <Field label={<SettingsLabelTip label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} tip={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })} />}>
             <NumberStepperInput min={2000} allowEmpty variant="settings" value={draft.watcher_polling_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null }))} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} disabled={!draft.watcher_enabled} />
           </Field>
 

@@ -11,6 +11,7 @@ import { VideoOptimizationTab } from './video-optimization-tab'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsLabelTip } from './settings-label-tip'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
   { label: '720p', width: 1280, height: 720 },
@@ -363,7 +364,7 @@ export function ImageSaveTab({
                 </Select>
               </Field>
 
-              <Field label={t({ ko: '썸네일 품질', en: 'Thumbnail quality' })}>
+              <Field label={<SettingsLabelTip label={t({ ko: '썸네일 품질', en: 'Thumbnail quality' })} tip={t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })} />}>
                 <NumberStepperInput
 
                   min={60}
@@ -374,9 +375,6 @@ export function ImageSaveTab({
                 />
               </Field>
 
-              <p className="md:col-span-2 text-sm text-muted-foreground">
-                {t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })}
-              </p>
             </div>
           ) : (
             <Skeleton className="h-36 w-full rounded-sm" />

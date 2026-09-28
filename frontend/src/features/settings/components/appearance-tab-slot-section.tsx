@@ -1,5 +1,5 @@
 import { Check, Paintbrush, Save } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { extractAppearanceTheme, resolveAppearanceColors, resolveSurfacePalette } from '@/lib/appearance'
@@ -13,34 +13,6 @@ interface AppearanceTabSlotSectionProps {
   isSaving: boolean
   onPatchAppearance: (patch: Partial<AppearanceSettings>) => void
   onSavePresetSlots: (presetSlots: AppearancePresetSlot[]) => void
-}
-
-function getThemeModeLabel(mode: AppearanceSettings['themeMode'], t: ReturnType<typeof useI18n>['t']) {
-  switch (mode) {
-    case 'system':
-      return t({ ko: '시스템', en: 'System' })
-    case 'dark':
-      return t({ ko: '다크', en: 'Dark' })
-    case 'light':
-      return t({ ko: '라이트', en: 'Light' })
-    default:
-      return mode
-  }
-}
-
-function getDensityLabel(density: AppearanceSettings['density'], t: ReturnType<typeof useI18n>['t']) {
-  switch (density) {
-    case 'ultra-compact':
-      return t({ ko: '아주 촘촘하게', en: 'Ultra compact' })
-    case 'compact':
-      return t({ ko: '촘촘하게', en: 'Compact' })
-    case 'comfortable':
-      return t({ ko: '기본', en: 'Default' })
-    case 'spacious':
-      return t({ ko: '여유롭게', en: 'Spacious' })
-    default:
-      return String(density)
-  }
 }
 
 export function AppearanceTabSlotSection({
@@ -79,55 +51,40 @@ export function AppearanceTabSlotSection({
             )}
           >
             <div className="space-y-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <span className="rounded-sm bg-surface-high px-2 py-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
-                    {t({ ko: '슬롯 {index}', en: 'Slot {index}' }, { index: index + 1 })}
-                  </span>
-                  <span
-                    className={cn(
-                      'rounded-sm px-2 py-1 text-2xs font-semibold',
-                      isEmptySlot
-                        ? 'bg-surface-high text-muted-foreground'
-                        : isActiveSlot
-                          ? 'bg-primary/14 text-primary'
-                          : matchesSavedTheme
-                            ? 'bg-success-soft text-success-soft-foreground'
-                            : 'bg-surface-highest text-foreground',
-                    )}
-                  >
-                    {statusLabel}
-                  </span>
-                </div>
-                <div className="text-right text-2xs text-muted-foreground">{formatSlotTimestamp(slot.updatedAt, locale, t('appearanceTabUtils.noSaveHistory'))}</div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  variant="settings"
+                  className="min-w-0 flex-1"
+                  value={slot.label}
+                  onChange={(event) =>
+                    onPatchAppearance({
+                      presetSlots: appearanceDraft.presetSlots.map((candidate) =>
+                        candidate.id === slot.id ? { ...candidate, label: event.target.value } : candidate,
+                      ),
+                    })
+                  }
+                  maxLength={32}
+                  placeholder={t('appearanceTabSlotSection.slotName')}
+                />
+                <span
+                  className={cn(
+                    'shrink-0 rounded-sm px-2 py-1 text-2xs font-semibold',
+                    isEmptySlot
+                      ? 'bg-surface-high text-muted-foreground'
+                      : isActiveSlot
+                        ? 'bg-primary/14 text-primary'
+                        : matchesSavedTheme
+                          ? 'bg-success-soft text-success-soft-foreground'
+                          : 'bg-surface-highest text-foreground',
+                  )}
+                >
+                  {statusLabel}
+                </span>
               </div>
 
-              <Input
-                type="text"
-                variant="settings"
-                value={slot.label}
-                onChange={(event) =>
-                  onPatchAppearance({
-                    presetSlots: appearanceDraft.presetSlots.map((candidate) =>
-                      candidate.id === slot.id ? { ...candidate, label: event.target.value } : candidate,
-                    ),
-                  })
-                }
-                maxLength={32}
-                placeholder={t('appearanceTabSlotSection.slotName')}
-              />
-
               {slotTheme ? (
-                <div className="space-y-3 rounded-sm bg-surface-low px-3 py-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span>{getThemeModeLabel(slotTheme.themeMode, t)}</span>
-                    <span>·</span>
-                    <span>{slotTheme.accentPreset}</span>
-                    <span>·</span>
-                    <span>{slotTheme.surfacePreset}</span>
-                    <span>·</span>
-                    <span>{getDensityLabel(slotTheme.density, t)}</span>
-                  </div>
+                <div className="rounded-sm bg-surface-low px-3 py-3">
                   <div className="flex items-center gap-2">
                     <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: slotColors?.primary }} />
                     <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: slotColors?.secondary }} />
@@ -142,12 +99,12 @@ export function AppearanceTabSlotSection({
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1 truncate text-2xs text-muted-foreground">{formatSlotTimestamp(slot.updatedAt, locale, t('appearanceTabUtils.noSaveHistory'))}</div>
+                <IconButton
+                  size="icon-sm"
                   variant="secondary"
-                  className="flex-1 min-w-[9rem]"
+                  label={t({ ko: '불러오기', en: 'Load' })}
                   disabled={!slotTheme || isSaving}
                   onClick={() => {
                     if (!slotTheme) return
@@ -158,12 +115,10 @@ export function AppearanceTabSlotSection({
                   }}
                 >
                   <Paintbrush className="h-4 w-4" />
-                  {t({ ko: '불러오기', en: 'Load' })}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="flex-1 min-w-[10rem]"
+                </IconButton>
+                <IconButton
+                  size="icon-sm"
+                  label={overwriteLabel}
                   disabled={isSaving}
                   onClick={() => {
                     const nextPresetSlots = appearanceDraft.presetSlots.map((candidate) =>
@@ -180,8 +135,7 @@ export function AppearanceTabSlotSection({
                   }}
                 >
                   {isEmptySlot ? <Save className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                  {overwriteLabel}
-                </Button>
+                </IconButton>
               </div>
             </div>
           </div>

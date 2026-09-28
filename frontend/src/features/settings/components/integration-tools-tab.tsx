@@ -5,7 +5,6 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
 import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import { useI18n } from '@/i18n'
-import { Inset } from '@/components/ui/inset'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Section } from '@/components/ui/section'
 
@@ -62,15 +61,6 @@ export function IntegrationToolsTab() {
           <StatTile label={t({ ko: '대상', en: 'Target' })} value="ComfyUI custom_nodes" />
           <StatTile label={t({ ko: '노드', en: 'Node' })} value="CoNAI Helper: Artifact Output" />
         </div>
-
-        <Inset>
-          <p className="text-sm text-muted-foreground">
-            {t({
-              ko: 'ComfyUI에서 만든 파일이나 폴더 단위 결과물을 CoNAI 아티팩트로 넘기는 커스텀 노드야. ZIP을 풀어 ComfyUI custom_nodes 아래에 넣고 ComfyUI를 다시 시작해 줘.',
-              en: 'Custom node for passing ComfyUI file or folder outputs to CoNAI artifacts. Extract the ZIP into ComfyUI custom_nodes, then restart ComfyUI.',
-            })}
-          </p>
-        </Inset>
       </Section>
     </div>
   )

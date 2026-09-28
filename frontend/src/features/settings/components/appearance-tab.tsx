@@ -81,16 +81,13 @@ export function AppearanceTab({
             <Eye className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <div className="min-w-0 space-y-0.5">
               <div className="text-sm font-semibold text-foreground">{t({ ko: '가져온 테마 미리보기 중', en: 'Previewing an imported theme' })}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {t({ ko: '{file} — 지금 화면은 미리보기야. 적용하면 초안에 들어가고, 되돌리면 원래대로 돌아가.', en: '{file} — this is a preview. Apply puts it into the draft; Revert restores the previous look.' }, { file: importPreviewFileName })}
-              </div>
+              <div className="truncate text-xs text-muted-foreground">{importPreviewFileName}</div>
             </div>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Button type="button" size="sm" variant="secondary" onClick={onRevertImportPreview}>
+            <IconButton size="icon-sm" variant="secondary" onClick={onRevertImportPreview} label={t({ ko: '되돌리기', en: 'Revert' })}>
               <Undo2 className="h-4 w-4" />
-              {t({ ko: '되돌리기', en: 'Revert' })}
-            </Button>
+            </IconButton>
             <Button type="button" size="sm" onClick={onApplyImportPreview}>
               <Check className="h-4 w-4" />
               {t({ ko: '적용', en: 'Apply' })}
@@ -103,14 +100,9 @@ export function AppearanceTab({
         <Section
           variant="settings"
           heading={t({ ko: '테마 슬롯', en: 'Theme slots' })}
-          description={(
-            <span className="inline-flex flex-wrap items-center gap-2">
-              {t({ ko: '슬롯 저장·덮어쓰기는 바로 반영돼. 불러오기와 슬롯 이름은 아래 저장 바로 저장해.', en: 'Saving or overwriting a slot is immediate. Loading a slot and renaming go through the save bar.' })}
-              <InstantApplyHint />
-            </span>
-          )}
           actions={
             <>
+              <InstantApplyHint />
               <SectionDirtyBadge dirty={isDirty} />
               <IconButton size="icon-sm" variant="secondary" onClick={onExport} disabled={isSaving} label={t({ ko: '외형 내보내기', en: 'Export appearance' })}>
                 <Download className="h-4 w-4" />

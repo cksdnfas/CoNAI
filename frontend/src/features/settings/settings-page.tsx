@@ -428,12 +428,6 @@ export function SettingsPage() {
             <div className="text-sm font-semibold text-foreground">
               {t({ ko: '설정은 관리자만 변경할 수 있어.', en: 'Only administrators can change settings.' })}
             </div>
-            <div className="text-sm text-muted-foreground">
-              {t({
-                ko: '이 계정은 설정 페이지를 볼 수는 있지만 관리자 권한이 없어. 변경이 필요하면 관리자에게 요청해 줘. 표시 언어는 오른쪽 위 계정 메뉴에서 이 브라우저에만 따로 바꿀 수 있어.',
-                en: 'This account can open the settings page but is not an administrator. Ask an administrator if something needs to change. You can switch the display language for this browser from the account menu at the top right.',
-              })}
-            </div>
             <div className="pt-2">
               <Button asChild size="sm" variant="secondary">
                 <Link to="/access">{t('appShell.availablePages')}</Link>

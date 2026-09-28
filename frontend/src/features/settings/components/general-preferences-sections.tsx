@@ -12,6 +12,7 @@ import { SettingsSwitchRow } from './settings-switch-row'
 import { Section } from '@/components/ui/section'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
+import { SettingsLabelTip } from './settings-label-tip'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
 
@@ -70,8 +71,9 @@ export function GeneralPreferencesSections({
         <Section variant="settings" heading={t({ ko: '기본 설정', en: 'General' })} actions={<SectionDirtyBadge dirty={isSectionDirty('basic')} />}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field
-              label={t({ ko: '언어', en: 'Language' })}
-              hint={languageOverride ? t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' }) : undefined}
+              label={languageOverride
+                ? <SettingsLabelTip label={t({ ko: '언어', en: 'Language' })} tip={t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' })} />
+                : t({ ko: '언어', en: 'Language' })}
             >
               <Select
                 variant="settings"

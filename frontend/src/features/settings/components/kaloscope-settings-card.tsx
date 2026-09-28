@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -39,7 +39,6 @@ export function KaloscopeSettingsCard({
     <Section
       variant="settings"
       heading={heading}
-      description={t({ ko: '이미지 화풍을 보고 비슷한 작가를 추정해 작가 태그로 붙여.', en: 'Estimates similar artists from an image’s style and adds them as artist tags.' })}
       actions={actions}
     >
       <div className="grid gap-4 md:grid-cols-2">
@@ -68,7 +67,7 @@ export function KaloscopeSettingsCard({
               </Select>
             </Field>
 
-            <Field label={t({ ko: '작가 후보 수', en: 'Artist candidates' })} hint={t({ ko: '점수 높은 순으로 저장', en: 'Top matches kept' })}>
+            <Field label={t({ ko: '작가 후보 수', en: 'Artist candidates' })}>
               <NumberStepperInput min={1} max={200} variant="settings" disabled={!isEnabled} value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
             </Field>
 
@@ -79,7 +78,7 @@ export function KaloscopeSettingsCard({
               label={t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
             />
 
-            <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })} hint={kaloscopeDraft.keepModelLoaded ? t({ ko: '메모리 유지가 켜져 있으면 자동으로 내리지 않아', en: 'Not used while the model is kept in memory' }) : t({ ko: '이 시간 동안 안 쓰면 모델을 메모리에서 내려', en: 'Unloads the model after this long without use' })}>
+            <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <NumberStepperInput
                 min={1}
                 variant="settings"
@@ -90,20 +89,17 @@ export function KaloscopeSettingsCard({
             </Field>
 
             <Field label={t({ ko: 'Artist 링크 URL', en: 'Artist link URL' })} className="md:col-span-2">
-              <div className="space-y-2">
+              <div className="flex items-center gap-2">
                 <Input
                   variant="settings"
+                  className="min-w-0 flex-1"
                   value={kaloscopeDraft.artistLinkUrlTemplate}
                   onChange={(event) => onPatchKaloscope({ artistLinkUrlTemplate: event.target.value })}
                   placeholder={DEFAULT_ARTIST_LINK_URL_TEMPLATE}
                 />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">{t({ ko: '{key} 자리에 아티스트 배지 텍스트가 들어가.', en: 'Artist badge text is inserted at {key}.' })}</p>
-                  <Button type="button" size="sm" variant="secondary" onClick={() => onPatchKaloscope({ artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE })}>
-                    <RotateCcw className="h-4 w-4" />
-                    {t({ ko: '기본값', en: 'Default' })}
-                  </Button>
-                </div>
+                <IconButton variant="secondary" label={t({ ko: '기본값', en: 'Default' })} onClick={() => onPatchKaloscope({ artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE })}>
+                  <RotateCcw className="h-4 w-4" />
+                </IconButton>
               </div>
             </Field>
           </>
@@ -116,8 +112,6 @@ export function KaloscopeSettingsCard({
           <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '분석 프로세스', en: 'Analyzer process' })} {kaloscopeStatus?.isRunning ? t({ ko: '실행 중', en: 'running' }) : t({ ko: '꺼짐', en: 'stopped' })}</span>
           <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '모델 메모리 적재', en: 'Model in memory' })} {kaloscopeStatus?.modelLoaded ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })}</span>
           <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '모델 파일', en: 'Model files' })} {kaloscopeStatus?.modelCached ? t({ ko: '받아 둠', en: 'downloaded' }) : t({ ko: '없음 (첫 실행 때 받음)', en: 'not yet (downloaded on first run)' })}</span>
-          <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '모델', en: 'Model' })} {kaloscopeStatus?.currentModel ?? '—'}</span>
-          <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '디바이스', en: 'Device' })} {kaloscopeStatus?.currentDevice ?? '—'}</span>
         </div>
       </div>
     </Section>

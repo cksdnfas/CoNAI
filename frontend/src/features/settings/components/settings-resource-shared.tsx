@@ -1,5 +1,5 @@
 import { createContext, useContext, type ComponentProps, type ReactNode } from 'react'
-import { Check, FolderPlus, LoaderCircle, Minus, Save, Settings2 } from 'lucide-react'
+import { Check, FolderCheck, FolderPlus, LoaderCircle, Minus, Save, Settings2, Trash2 } from 'lucide-react'
 import { SegmentedControl, type SegmentedControlItem } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -337,7 +337,7 @@ interface SettingsResourceCreateActionRowProps {
   validationMessage?: ReactNode | null
   canValidate: boolean
   isValidating: boolean
-  validateLabel: ReactNode
+  validateLabel: string
   onValidate: () => void
   canSubmit: boolean
   isSubmitting: boolean
@@ -362,10 +362,9 @@ export function SettingsResourceCreateActionRow({
       {validationMessage ? <p className="text-sm text-primary">{validationMessage}</p> : null}
 
       <div className="flex flex-wrap justify-between gap-2">
-        <Button type="button" size="sm" variant="secondary" disabled={!canValidate || isValidating} onClick={onValidate}>
-          {isValidating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-          {validateLabel}
-        </Button>
+        <IconButton size="icon-sm" variant="secondary" disabled={!canValidate || isValidating} onClick={onValidate} label={validateLabel}>
+          {isValidating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderCheck className="h-4 w-4" />}
+        </IconButton>
 
         <Button type="button" size="sm" disabled={!canSubmit || isSubmitting} onClick={onSubmit}>
           {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
@@ -394,7 +393,7 @@ export function SettingsResourceMetaList({ items }: SettingsResourceMetaListProp
 }
 
 interface SettingsResourceFooterActionsProps {
-  dangerLabel: ReactNode
+  dangerLabel: string
   onDanger: () => void
   dangerDisabled?: boolean
   primaryLabel: ReactNode
@@ -415,9 +414,9 @@ export function SettingsResourceFooterActions({
 
   return (
     <div className="flex flex-wrap justify-between gap-2">
-      <Button size="sm" variant="secondary" disabled={dangerDisabled} onClick={onDanger}>
-        {dangerLabel}
-      </Button>
+      <IconButton size="icon-sm" variant="secondary" className="text-destructive" disabled={dangerDisabled} onClick={onDanger} label={dangerLabel}>
+        <Trash2 className="h-4 w-4" />
+      </IconButton>
 
       <Button size="sm" disabled={primaryDisabled} onClick={onPrimary}>
         {primaryDisabled ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

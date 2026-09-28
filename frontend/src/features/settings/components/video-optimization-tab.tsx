@@ -2,12 +2,12 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n, type TranslationDictionary } from '@/i18n'
 import { Field } from '@/components/ui/field'
-import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import type { VideoOptimizationSettings } from '@conai/shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsLabelTip } from './settings-label-tip'
 
 /** Select value shown when CRF/audio no longer match any preset; never sent to the server. */
 const CUSTOM_PRESET_VALUE = 'custom'
@@ -42,15 +42,11 @@ export function VideoOptimizationTab({
       <section>
         <Section
           variant="settings"
-          heading={t({ ko: '비디오 최적화', en: 'Video optimization' })}
+          heading={<SettingsLabelTip label={t({ ko: '비디오 최적화', en: 'Video optimization' })} tip={t({ ko: 'H.264 MP4로 저장하고, 원본 크기는 유지해. 원본은 따로 남기지 않아.', en: 'Save as H.264 MP4, keep the original dimensions, and do not keep a separate original copy.' })} />}
           actions={<SectionDirtyBadge dirty={hasChanges} />}
         >
           {videoOptimizationDraft ? (
             <div className="space-y-4">
-              <Inset className="text-sm text-muted-foreground">
-                {t({ ko: 'H.264 MP4로 저장하고, 원본 크기는 유지해. 원본은 따로 남기지 않아.', en: 'Save as H.264 MP4, keep the original dimensions, and do not keep a separate original copy.' })}
-              </Inset>
-
               <div className="grid gap-4 md:grid-cols-2">
                 <SettingsSwitchRow
                   checked={videoOptimizationDraft.enabled}
@@ -81,7 +77,7 @@ export function VideoOptimizationTab({
                   </Select>
                 </Field>
 
-                <Field label={t({ ko: '오디오 비트레이트(kbps)', en: 'Audio bitrate (kbps)' })} hint={t({ ko: '높을수록 좋은 음질', en: 'Higher = better audio' })}>
+                <Field label={t({ ko: '오디오 비트레이트(kbps)', en: 'Audio bitrate (kbps)' })}>
                   <NumberStepperInput
                     disabled={!isEnabled}
                     min={32}
@@ -92,7 +88,7 @@ export function VideoOptimizationTab({
                   />
                 </Field>
 
-                <Field label={t({ ko: '화질 (CRF)', en: 'Quality (CRF)' })} hint={t({ ko: '낮을수록 고화질·큰 파일', en: 'Lower = better quality, larger files' })}>
+                <Field label={t({ ko: '화질 (CRF)', en: 'Quality (CRF)' })}>
                   <NumberStepperInput
                     disabled={!isEnabled}
                     min={18}

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { McpHttpScope } from '@conai/shared'
 import { Copy, Eye, EyeOff, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -22,6 +21,7 @@ import {
 import { Inset } from '@/components/ui/inset'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { SettingsSwitchRow } from './settings-switch-row'
 import { Section } from '@/components/ui/section'
 import { InstantApplyHint } from './settings-section-status'
@@ -81,13 +81,7 @@ export function McpHttpSettingsCard() {
     <Section
       variant="settings"
       heading="MCP"
-      description={t({ ko: '외부 AI 에이전트가 API 키로 이 서버의 기능을 쓸 수 있게 해. 키마다 허용할 권한을 고를 수 있어.', en: 'Let external AI agents use this server with an API key. Choose what each key is allowed to do.' })}
-      actions={(
-        <>
-          <InstantApplyHint />
-          {query.data?.enabled ? <Badge>{t({ ko: '활성', en: 'On' })}</Badge> : <Badge variant="outline">{t({ ko: '비활성', en: 'Off' })}</Badge>}
-        </>
-      )}
+      actions={<InstantApplyHint />}
     >
       {query.isLoading ? <Skeleton className="h-40 w-full rounded-sm" /> : null}
       {query.isError ? <Inset className="text-sm text-destructive">{query.error instanceof Error ? query.error.message : t({ ko: 'MCP 설정을 불러오지 못했어.', en: 'Could not load MCP settings.' })}</Inset> : null}
@@ -102,10 +96,7 @@ export function McpHttpSettingsCard() {
           <div className="flex flex-wrap items-center gap-2">
             <Input variant="settings" readOnly value={endpoint} className="min-w-0 flex-1 basis-56 font-mono" aria-label={t({ ko: 'MCP 주소', en: 'MCP URL' })} />
             <IconButton size="icon-sm" variant="secondary" onClick={() => void copy(endpoint)} label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></IconButton>
-            <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))}>
-              <Plus />
-              {t({ ko: '키 추가', en: 'Add key' })}
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))} label={t({ ko: '키 추가', en: 'Add key' })}><Plus /></IconButton>
           </div>
           <div className="space-y-3">
             {query.data.keys.map((key) => {
@@ -143,20 +134,19 @@ export function McpHttpSettingsCard() {
                       }} label={t({ ko: '키 폐기', en: 'Revoke key' })}><Trash2 /></IconButton>
                     </div>
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="flex flex-wrap gap-x-5 gap-y-2">
                     {SCOPES.map((scope) => {
                       const scopeCopy = getScopeCopy(scope, t)
                       return (
-                      <label key={scope} className="flex cursor-pointer items-start gap-2 text-xs has-[:disabled]:cursor-not-allowed">
+                      <Tip key={scope} content={scopeCopy.description} side="bottom" align="start">
+                      <label className="flex cursor-pointer items-center gap-2 text-xs has-[:disabled]:cursor-not-allowed">
                         <Checkbox checked={key.scopes.includes(scope)} disabled={busy || (key.scopes.length === 1 && key.scopes[0] === scope)} onCheckedChange={(checked) => {
                           const scopes = checked === true ? [...key.scopes, scope] : key.scopes.filter((item) => item !== scope)
                           updateKey.mutate({ keyId: key.id, name: key.name, scopes })
-                        }} className="mt-0.5" />
-                        <span className="min-w-0">
-                          <span className="font-medium text-foreground">{scopeCopy.label}</span>
-                          <span className="block text-muted-foreground">{scopeCopy.description}</span>
-                        </span>
+                        }} />
+                        <span className="min-w-0 font-medium text-foreground">{scopeCopy.label}</span>
                       </label>
+                      </Tip>
                       )
                     })}
                   </div>

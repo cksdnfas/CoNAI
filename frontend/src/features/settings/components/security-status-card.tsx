@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 import type { AuthStatusRecord } from '@/lib/api-auth'
 import { StatTile } from '@/components/ui/stat-tile'
@@ -26,7 +25,6 @@ export function SecurityStatusCard({ authStatus, hasCredentials, accountCount, c
     <Section
       variant="settings"
       heading={t({ ko: '보안 상태', en: 'Security status' })}
-      actions={hasCredentials ? <Badge variant="secondary">{t({ ko: '활성', en: 'Active' })}</Badge> : <Badge variant="outline">{t({ ko: '미설정', en: 'Not set' })}</Badge>}
     >
       <div className="grid gap-3 md:grid-cols-3">
         <StatTile label={t({ ko: '계정', en: 'Accounts' })} value={accountValue} />

@@ -171,7 +171,6 @@ export function SecurityAccountEditorModal({
             </Field>
 
             <div className="space-y-2 text-sm text-muted-foreground">
-              <div>{t({ ko: '커스텀 그룹 멤버십은 권한 그룹 모달에서 관리해.', en: 'Manage custom group memberships in the permission group modal.' })}</div>
               {customMemberships.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {customMemberships.map((groupKey) => (

@@ -2,7 +2,6 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@conai/shared'
 import { Field } from '@/components/ui/field'
-import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -30,10 +29,6 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
           <div className="grid gap-4 md:grid-cols-2">
             {metadataDraft ? (
               <>
-                <Inset className="text-sm text-muted-foreground md:col-span-2">
-                  {t('metadataTab.standardMetadataIsReadFirst')}
-                </Inset>
-
                 <SettingsSwitchRow
                   checked={metadataDraft.enableSecondaryExtraction}
                   onCheckedChange={(checked) => onPatchMetadata({ enableSecondaryExtraction: checked })}
@@ -47,14 +42,13 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
                     <option value="full">{t({ ko: '전체 검사 (느림)', en: 'Full (slower)' })}</option>
                     <option value="skip">{t({ ko: '찾지 않음', en: 'Off' })}</option>
                   </Select>
-                  <span className="mt-2 text-xs text-muted-foreground">{t({ ko: '일부 생성기는 프롬프트를 픽셀 안에 숨겨 저장해. 빠르게는 앞부분만 먼저 확인해.', en: 'Some generators hide the prompt inside the pixels. Fast checks the start of the image first.' })}</span>
                 </Field>
 
-                <Field label={t('metadataTab.maximumFileSizeMb')} hint={t({ ko: '넘으면 건너뜀', en: 'Larger files are skipped' })}>
+                <Field label={t('metadataTab.maximumFileSizeMb')}>
                   <NumberStepperInput min={1} variant="settings" disabled={!isStealthEnabled} value={metadataDraft.stealthMaxFileSizeMB} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxFileSizeMB: Number(nextValue) || 1 })} />
                 </Field>
 
-                <Field label={t('metadataTab.maximumResolutionMp')} hint={t({ ko: '넘으면 건너뜀', en: 'Larger images are skipped' })}>
+                <Field label={t('metadataTab.maximumResolutionMp')}>
                   <NumberStepperInput min={1} variant="settings" disabled={!isStealthEnabled} value={metadataDraft.stealthMaxResolutionMP} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxResolutionMP: Number(nextValue) || 1 })} />
                 </Field>
 

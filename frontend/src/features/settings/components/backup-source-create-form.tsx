@@ -1,4 +1,3 @@
-import { CircleHelp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
@@ -7,6 +6,7 @@ import { buildBackupTargetPreviewPath, type NewBackupSourceDraft } from '../sett
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsLabelTip } from './settings-label-tip'
 
 interface BackupSourceCreateFormProps {
   newBackupSource: NewBackupSourceDraft
@@ -41,23 +41,7 @@ export function BackupSourceCreateForm({
         </Field>
 
         <Field
-          label={(
-            <span className="inline-flex items-center gap-1">
-              {t({ ko: 'Upload 내부 대상 경로', en: 'Target path inside Upload' })}
-              <span
-                className="inline-flex cursor-help text-muted-foreground"
-                title={[
-                  t({ ko: '업로드 폴더 안의 상대 경로로 지정해.', en: 'Use a relative path inside the upload folder.' }),
-                  t({ ko: '예: Backup → Upload/Backup', en: 'Example: Backup → Upload/Backup' }),
-                  t({ ko: '예: Backup/001 → Upload/Backup/001', en: 'Example: Backup/001 → Upload/Backup/001' }),
-                  t({ ko: '앞에 / 를 붙여도 자동으로 Upload 기준으로 정리돼.', en: 'A leading / is normalized relative to Upload automatically.' }),
-                ].join('\n')}
-                aria-label={t({ ko: '업로드 폴더 안의 상대 경로로 지정해. 예: Backup이면 Upload/Backup, Backup/001이면 Upload/Backup/001에 저장돼.', en: 'Use a relative path inside the upload folder. For example, Backup saves to Upload/Backup, and Backup/001 saves to Upload/Backup/001.' })}
-              >
-                <CircleHelp className="h-3.5 w-3.5" />
-              </span>
-            </span>
-          )}
+          label={<SettingsLabelTip label={t({ ko: 'Upload 내부 대상 경로', en: 'Target path inside Upload' })} tip={t({ ko: '업로드 폴더 안의 상대 경로로 지정해.', en: 'Use a relative path inside the upload folder.' })} />}
         >
           <Input
             variant="settings"
@@ -75,7 +59,7 @@ export function BackupSourceCreateForm({
           </Select>
         </Field>
 
-        <Field label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} hint={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })}>
+        <Field label={<SettingsLabelTip label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} tip={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })} />}>
           <NumberStepperInput min={2000} allowEmpty variant="settings" value={newBackupSource.watcher_polling_interval} onValueCommit={(nextValue) => onNewBackupSourceChange({ watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null })} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} disabled={!newBackupSource.watcher_enabled} />
         </Field>
 

@@ -163,20 +163,16 @@ export function FoldersTab({
         <Section
           variant="settings"
           heading={t({ ko: '감시 폴더 운영', en: 'Watched folder operations' })}
-          description={t({ ko: '전체 스캔과 파일 검증은 유지보수 탭으로 옮겼어.', en: 'Full scan and file verification now live in the Maintenance tab.' })}
           actions={
             <IconButton size="icon-sm" variant="secondary" onClick={onRefresh} label={t({ ko: '새로고침', en: 'Refresh' })}>
               <RefreshCcw className="h-4 w-4" />
             </IconButton>
           }
         >
-          <div className="grid gap-3 text-sm md:grid-cols-6">
-            <StatTile label={t({ ko: '폴더', en: 'Folders' })} value={formatNumber(folders.length)} valueClassName="text-xl" />
-            <StatTile label={t({ ko: '백업 소스', en: 'Backup sources' })} value={formatNumber(backupSources.length)} valueClassName="text-xl" />
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
             <StatTile label={t({ ko: '감시 중', en: 'Watching' })} value={formatNumber(watchersHealth?.watching ?? 0)} valueClassName="text-xl" />
             <StatTile label={t({ ko: '오류', en: 'Errors' })} value={formatNumber(watchersHealth?.error ?? 0)} valueClassName="text-xl" />
             <StatTile label={t({ ko: '24시간 이벤트', en: 'Events 24h' })} value={formatNumber(watchersHealth?.totalEvents24h ?? 0)} valueClassName="text-xl" />
-            <StatTile label={t({ ko: '최근 스캔 로그', en: 'Latest scan log' })} value={scanLogs[0] ? getScanLogFolderLabel(scanLogs[0]) : '—'} />
           </div>
 
           {/* 전체 스캔은 60초를 훌쩍 넘기므로, 응답을 기다리는 대신 잡 진행률을 그대로 보여준다. */}
@@ -353,7 +349,7 @@ export function FoldersTab({
         open={selectedFolder != null}
         onClose={() => setSelectedFolderId(null)}
         title={selectedFolder ? selectedFolder.folder_name || t({ ko: '감시 폴더 상세', en: 'Watched folder details' }) : t({ ko: '감시 폴더 상세', en: 'Watched folder details' })}
-        description={selectedFolder ? selectedFolder.folder_path : t({ ko: '감시 폴더 상세 정보와 수정', en: 'Watched folder details and editing' })}
+        description={selectedFolder?.folder_path}
       >
         {selectedFolder ? (
           <WatchedFolderCard
@@ -392,7 +388,7 @@ export function FoldersTab({
         open={selectedBackupSource != null}
         onClose={() => setSelectedBackupSourceId(null)}
         title={selectedBackupSource ? selectedBackupSource.display_name || t({ ko: '백업 소스 상세', en: 'Backup source details' }) : t({ ko: '백업 소스 상세', en: 'Backup source details' })}
-        description={selectedBackupSource ? selectedBackupSource.source_path : t({ ko: '백업 소스 상세 정보와 수정', en: 'Backup source details and editing' })}
+        description={selectedBackupSource?.source_path}
       >
         {selectedBackupSource ? (
           <BackupSourceCard

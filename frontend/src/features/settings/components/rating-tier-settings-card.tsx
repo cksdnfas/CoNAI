@@ -240,9 +240,6 @@ export function RatingTierSettingsCard({
                       </Field>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-end gap-3 text-xs text-muted-foreground">
-                      <span className="font-mono">order={index + 1}</span>
-                    </div>
                   </>
                 ) : null}
               </div>

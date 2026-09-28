@@ -18,6 +18,7 @@ import {
 } from './settings-resource-shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsLabelTip } from './settings-label-tip'
 
 interface WatchedFolderCardProps {
   folder: WatchedFolder
@@ -82,10 +83,12 @@ export function WatchedFolderCard({
   return (
     <Section
       variant="settings"
-      heading={folder.folder_name || t({ ko: '이름 없는 폴더', en: 'Unnamed folder' })}
       bodyClassName="space-y-5"
+      headerClassName="justify-end"
       actions={
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {folder.is_default === 1 ? <Badge variant="secondary">{t({ ko: '기본', en: 'Default' })}</Badge> : null}
+          <Badge variant={getWatcherBadgeVariant(watcherState)}>{getWatcherStateLabel(watcherState, t)}</Badge>
           <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onScan(folder.id))} label={t({ ko: '폴더 스캔', en: 'Scan folder' })}>
             <ScanSearch className="h-4 w-4" />
           </IconButton>
@@ -101,14 +104,6 @@ export function WatchedFolderCard({
         </div>
       }
     >
-      <div className="flex flex-wrap gap-2">
-        {folder.is_default === 1 ? <Badge variant="secondary">{t({ ko: '기본', en: 'Default' })}</Badge> : null}
-        <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
-        <Badge variant={getWatcherBadgeVariant(watcherState)}>{getWatcherStateLabel(watcherState, t)}</Badge>
-      </div>
-
-      <div className="break-all font-mono text-xs text-muted-foreground">{folder.folder_path}</div>
-
       <div className="grid gap-4 lg:grid-cols-2">
         <Field label={t({ ko: '표시 이름', en: 'Display name' })}>
           <Input variant="settings" value={draft.folder_name} onChange={(event) => setDraft((current) => ({ ...current, folder_name: event.target.value }))} />
@@ -118,7 +113,7 @@ export function WatchedFolderCard({
           <NumberStepperInput min={1} variant="settings" value={draft.scan_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, scan_interval: Number(nextValue) || 1 }))} />
         </Field>
 
-        <Field label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} hint={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })}>
+        <Field label={<SettingsLabelTip label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} tip={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })} />}>
           <NumberStepperInput min={2000} allowEmpty variant="settings" value={draft.watcher_polling_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null }))} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} disabled={!draft.watcher_enabled} />
         </Field>
 

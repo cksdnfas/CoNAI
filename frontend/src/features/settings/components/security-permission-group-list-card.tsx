@@ -1,7 +1,6 @@
 import { Palette, Pencil, Shield, Users, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
-import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { AuthPermissionGroupSummaryItem } from '@/lib/api-auth'
 import { Section } from '@/components/ui/section'
@@ -37,10 +36,9 @@ export function SecurityPermissionGroupListCard({
           <IconButton size="icon-sm" variant="secondary" onClick={onOpenGroupColors} label={t('securityGroupColorEditorModal.permissionGroupColors')}>
             <Palette className="h-4 w-4" />
           </IconButton>
-          <Button type="button" size="sm" onClick={onCreate}>
+          <IconButton size="icon-sm" onClick={onCreate} label={t({ ko: '그룹 추가', en: 'Add group' })}>
             <UserPlus className="h-4 w-4" />
-            {t({ ko: '그룹 추가', en: 'Add group' })}
-          </Button>
+          </IconButton>
         </div>
       )}
     >
