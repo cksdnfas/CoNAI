@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-image-generation'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
+import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import {
   buildWorkflowPromptData,
   collectWorkflowNodeDraftIssues,
@@ -74,6 +75,7 @@ export function useComfyGenerationActions({
 }) {
   const queryClient = useQueryClient()
   const [isComfyGenerating, setIsComfyGenerating] = useState(false)
+  const { requestPath: targetGroupPath } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
 
   /** Validate the currently selected workflow fields before any generation request. */
   const validateComfyGeneration = () => {
@@ -114,6 +116,7 @@ export function useComfyGenerationActions({
       service_type: 'comfyui' as const,
       workflow_id: selectedWorkflow.id,
       workflow_name: selectedWorkflow.name ?? null,
+      requested_group_path: targetGroupPath,
       request_summary: `${selectedWorkflow.name ?? `ComfyUI workflow ${selectedWorkflow.id}`} queue job`,
       request_payload: {
         prompt_data: promptData,

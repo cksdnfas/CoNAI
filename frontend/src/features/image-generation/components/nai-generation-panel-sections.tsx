@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { CompactGenerationActionSurface } from './shared-generation-controller'
+import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
+import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { PromptToggleField } from './prompt-toggle-field'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
@@ -214,7 +216,8 @@ export function NaiActionSection({
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} disabled={isGenerating} />
           <Button type="button" onClick={onGenerate} disabled={isGenerating || !canGenerate}>
             <Sparkles className="h-4 w-4" />
             {generateButtonLabel}
@@ -278,6 +281,8 @@ export function NaiActionSection({
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
+
+        <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} variant="icon" disabled={isGenerating} className="border-l border-r-0" />
 
         <Button
           type="button"

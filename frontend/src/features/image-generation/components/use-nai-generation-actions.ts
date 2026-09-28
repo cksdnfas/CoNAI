@@ -5,6 +5,7 @@ import { triggerBlobDownload } from '@/lib/api-client'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import { upscaleNaiImage } from '@/lib/api-image-generation-nai'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
+import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import type { GenerationImageSaveOptions } from '@/lib/api-image-generation'
 import {
@@ -46,6 +47,7 @@ export function useNaiGenerationActions({
   const queryClient = useQueryClient()
   const [isNaiGenerating, setIsNaiGenerating] = useState(false)
   const [isUpscaling, setIsUpscaling] = useState(false)
+  const { requestPath: targetGroupPath } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
 
   /** Submit one NAI image-generation request from the current form state. */
   const handleNaiGenerate = useCallback(async () => {
@@ -92,6 +94,7 @@ export function useNaiGenerationActions({
       setIsNaiGenerating(true)
       const response = await createGenerationQueueJob({
         service_type: 'novelai',
+        requested_group_path: targetGroupPath,
         request_summary: `NAI queue job · ${prompt.slice(0, 48)}`,
         request_payload: {
           prompt,
@@ -138,6 +141,7 @@ export function useNaiGenerationActions({
     queryClient,
     showSnackbar,
     supportsCharacterPrompts,
+    targetGroupPath,
     supportsCharacterReference,
     t,
   ])

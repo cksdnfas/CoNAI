@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils'
 import { collectWorkflowNodeDraftIssues, hasWorkflowFieldValue } from '../image-generation-drafts'
 import type { ComfyUIServerTestState, SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
+import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
+import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
 import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownItemClassName, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 import {
@@ -364,6 +366,8 @@ export function ComfyWorkflowControllerPanel({
           />
         </div>
 
+        <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} variant="icon" disabled={isGenerating} />
+
         <NumberStepperInput
           min={1}
           max={32}
@@ -483,6 +487,8 @@ export function ComfyWorkflowControllerPanel({
             />
           </div>
         ) : null}
+
+        <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} variant="icon" disabled={isGenerating} />
 
         <NumberStepperInput
           min={1}

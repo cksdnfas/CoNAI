@@ -73,6 +73,8 @@ export interface CreateGenerationQueueJobPayload {
   workflow_id?: number | null
   workflow_name?: string | null
   requested_group_id?: number | null
+  /** 'Project/Effects' 같은 그룹 경로. 없는 그룹은 서버가 만든다. requested_group_id 와 함께 쓸 수 없다. */
+  requested_group_path?: string | null
   requested_server_id?: number | null
   requested_server_tag?: string | null
   request_payload: Record<string, unknown>

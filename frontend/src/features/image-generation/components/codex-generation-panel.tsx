@@ -19,6 +19,8 @@ import { NaiControllerSection, NaiPromptSection } from './nai-generation-panel-s
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import { CompactGenerationActionSurface } from './shared-generation-controller'
+import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
+import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 
 type CodexGenerationPanelProps = {
   refreshNonce: number
@@ -272,6 +274,8 @@ export function CodexGenerationPanel({
     void refetchCodexStatus()
   }, [refetchCodexStatus])
 
+  const { requestPath: targetGroupPath } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
+
   const handleGenerate = useCallback(async () => {
     if (isSubmitting) {
       return
@@ -302,6 +306,7 @@ export function CodexGenerationPanel({
       setIsSubmitting(true)
       const response = await createGenerationQueueJob({
         service_type: 'codex',
+        requested_group_path: targetGroupPath,
         request_summary: `Codex ${operationLabel} · ${prompt.slice(0, 48)}`,
         request_payload: {
           prompt,
@@ -345,6 +350,7 @@ export function CodexGenerationPanel({
     queueCount,
     showSnackbar,
     t,
+    targetGroupPath,
   ])
 
   const headerToolbarContent = (
@@ -389,6 +395,8 @@ export function CodexGenerationPanel({
 
   const compactActionBarContent = (
     <CompactGenerationActionSurface className="max-w-full">
+      <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} variant="icon" disabled={isSubmitting} />
+
       <NumberStepperInput
         min={CODEX_COUNT_MIN}
         max={CODEX_COUNT_MAX}
@@ -449,6 +457,7 @@ export function CodexGenerationPanel({
 
   const actionContent = (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} disabled={isSubmitting} />
       <NumberStepperInput
         min={CODEX_COUNT_MIN}
         max={CODEX_COUNT_MAX}
