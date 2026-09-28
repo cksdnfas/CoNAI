@@ -12,6 +12,8 @@ interface InlineMediaPreviewProps {
   fileName?: string | null
   alt: string
   frameClassName?: string
+  /** Add the input outline around the tray. Off by default: the frame is a tonal surface-lowest tray (D1). */
+  bordered?: boolean
   mediaClassName?: string
   emptyLabel?: string
   loading?: 'lazy' | 'eager'
@@ -78,6 +80,7 @@ export function InlineMediaPreview({
   fileName,
   alt,
   frameClassName,
+  bordered = false,
   mediaClassName,
   emptyLabel,
   loading = 'lazy',
@@ -110,7 +113,9 @@ export function InlineMediaPreview({
   return (
     <div
       className={cn(
-        fitToMedia ? 'inline-flex max-w-full items-center justify-center overflow-hidden rounded-sm border border-border bg-surface-lowest p-2' : 'flex items-center justify-center overflow-hidden rounded-sm border border-border bg-surface-lowest p-2',
+        fitToMedia ? 'inline-flex max-w-full' : 'flex',
+        'items-center justify-center overflow-hidden rounded-sm bg-surface-lowest p-2',
+        bordered && 'border border-outline-input',
         frameClassName,
       )}
     >

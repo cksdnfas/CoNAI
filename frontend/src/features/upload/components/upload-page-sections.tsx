@@ -152,7 +152,7 @@ function UploadFilePreviewTile({
           mimeType={preview.file.type}
           fileName={preview.file.name}
           alt={preview.file.name}
-          frameClassName="aspect-square w-full rounded-none border-0 bg-surface-lowest p-0"
+          frameClassName="aspect-square w-full rounded-none p-0"
           mediaClassName="h-full max-h-none w-full object-cover"
         />
       ) : (
@@ -516,7 +516,7 @@ export function UploadPageExtractSection({
             mimeType={extractFile.type}
             fileName={extractFile.name}
             alt={extractFile.name}
-            frameClassName="w-full border-0 bg-transparent p-0"
+            frameClassName="w-full bg-transparent p-0"
             mediaClassName="max-h-[420px] w-full object-contain"
           />
         ) : undefined}

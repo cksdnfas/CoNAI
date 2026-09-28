@@ -507,7 +507,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
                 mimeType={selectedImage.mimeType}
                 fileName={selectedImage.fileName}
                 alt={label}
-                frameClassName="w-full border-0 bg-transparent p-0"
+                frameClassName="w-full bg-transparent p-0"
                 mediaClassName="max-h-40 w-full object-contain"
               />
               <div className="truncate px-2 text-center text-xs text-muted-foreground" title={selectedImage.fileName}>{selectedImage.fileName}</div>
