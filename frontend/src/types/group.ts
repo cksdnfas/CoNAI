@@ -20,6 +20,10 @@ export interface GroupWithHierarchy extends GroupRecord {
   child_count: number
   has_children: boolean
   depth?: number
+  /** Visible images directly in the group, filtered like the in-group list. Custom groups only. */
+  visible_image_count?: number
+  /** Visible images in the group and its descendants, each counted once. Custom groups only. */
+  total_visible_image_count?: number
 }
 
 export interface GroupBreadcrumbItem {

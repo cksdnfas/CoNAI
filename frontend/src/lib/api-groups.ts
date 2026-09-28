@@ -31,12 +31,18 @@ function normalizeGroupRecord(group: GroupRecord): GroupRecord {
   }
 }
 
+function normalizeOptionalCount(value: unknown) {
+  return value === null || value === undefined ? undefined : Number(value)
+}
+
 /** Normalize hierarchy records while preserving hierarchy fields. */
 function normalizeGroupWithHierarchy(group: GroupWithHierarchy): GroupWithHierarchy {
   return {
     ...normalizeGroupRecord(group),
     child_count: Number(group.child_count ?? 0),
     has_children: Boolean(group.has_children),
+    visible_image_count: normalizeOptionalCount(group.visible_image_count),
+    total_visible_image_count: normalizeOptionalCount(group.total_visible_image_count),
   }
 }
 

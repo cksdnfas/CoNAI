@@ -5,7 +5,20 @@ export interface GroupCountMaps {
   totalImageCountByGroupId: Map<number, number>
 }
 
-/** Calculate direct + descendant image totals for flat group hierarchy records. */
+/** Direct image count, preferring the server's visible count that matches the in-group list. */
+export function getGroupDirectImageCount(group: GroupWithHierarchy) {
+  return group.visible_image_count ?? group.image_count ?? 0
+}
+
+/**
+ * Resolve direct + descendant image totals for flat group hierarchy records.
+ *
+ * Custom groups carry a server-side inclusive count that de-duplicates images shared by
+ * several subgroups and applies the same visibility filters as the group page, so it is
+ * used as-is. Summing children here would double-count those shared images. Sources
+ * without that field (watched-folder groups, whose folders rarely share images) still
+ * fall back to summing direct counts.
+ */
 export function buildGroupCountMaps(groups: GroupWithHierarchy[]): GroupCountMaps {
   const childrenByParentId = new Map<number, GroupWithHierarchy[]>()
   const childCountByGroupId = new Map<number, number>()
@@ -24,9 +37,14 @@ export function buildGroupCountMaps(groups: GroupWithHierarchy[]): GroupCountMap
     if (totalImageCountByGroupId.has(groupId)) return totalImageCountByGroupId.get(groupId) ?? 0
     if (visiting.has(groupId)) return 0
 
-    visiting.add(groupId)
     const group = groupById.get(groupId)
-    let total = group?.image_count ?? 0
+    if (group?.total_visible_image_count !== undefined) {
+      totalImageCountByGroupId.set(groupId, group.total_visible_image_count)
+      return group.total_visible_image_count
+    }
+
+    visiting.add(groupId)
+    let total = group ? getGroupDirectImageCount(group) : 0
     for (const child of childrenByParentId.get(groupId) ?? []) {
       total += collectTotal(child.id, visiting)
     }
@@ -67,7 +85,7 @@ export function getGroupHierarchyCountLabel(
   countMaps: GroupCountMaps,
   formatNumber: (value: number) => string,
 ) {
-  const directCount = group.image_count ?? 0
+  const directCount = getGroupDirectImageCount(group)
   const hasChildren = (countMaps.childCountByGroupId.get(group.id) ?? 0) > 0
   const totalWithDescendants = countMaps.totalImageCountByGroupId.get(group.id) ?? directCount
 
@@ -75,5 +93,5 @@ export function getGroupHierarchyCountLabel(
 }
 
 export function getGroupHierarchyTotalCount(group: GroupWithHierarchy, countMaps: GroupCountMaps) {
-  return countMaps.totalImageCountByGroupId.get(group.id) ?? group.image_count ?? 0
+  return countMaps.totalImageCountByGroupId.get(group.id) ?? getGroupDirectImageCount(group)
 }

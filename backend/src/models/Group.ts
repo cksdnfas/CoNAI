@@ -11,6 +11,7 @@ import {
   findPreviewImagesQuery,
   getCompositeHashesForGroupQuery,
   getImageFileIdsForGroupQuery,
+  countVisibleImagesByGroupQuery,
 } from './GroupImageQueries';
 
 export class GroupModel {
@@ -217,17 +218,27 @@ export class GroupModel {
   /**
    * 모든 그룹 조회 (자식 개수 포함)
    */
-  static findAllWithHierarchy(): Array<GroupWithStats & { child_count: number; has_children: boolean }> {
+  static findAllWithHierarchy(): Array<GroupWithStats & {
+    child_count: number;
+    has_children: boolean;
+    visible_image_count: number;
+    total_visible_image_count: number;
+  }> {
     const groups = this.findAllWithStats();
     const hierarchyService = getGroupHierarchyService();
 
     const groupIds = groups.map(g => g.id);
     const childCountMap = hierarchyService.getChildCountBatch(groupIds);
+    // image_count stays the raw membership count for existing consumers; the visible
+    // counts use the in-group list filters so tree/card numbers match the group page.
+    const visibleCountMap = countVisibleImagesByGroupQuery();
 
     return groups.map(group => ({
       ...group,
       child_count: childCountMap.get(group.id) || 0,
-      has_children: (childCountMap.get(group.id) || 0) > 0
+      has_children: (childCountMap.get(group.id) || 0) > 0,
+      visible_image_count: visibleCountMap.get(group.id)?.own ?? 0,
+      total_visible_image_count: visibleCountMap.get(group.id)?.total ?? 0,
     }));
   }
 

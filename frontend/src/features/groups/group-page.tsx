@@ -97,7 +97,12 @@ export function GroupPage() {
 
   const groupCountMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
   const groupPathItems = useMemo(() => buildGroupPathItems(allGroups, selectedGroupId), [allGroups, selectedGroupId])
-  const selectedGroupImageTotalCount = groupImagesQuery.data?.pages[0]?.pagination.total ?? selectedGroupQuery.data?.image_count ?? 0
+  // Only the image list's own total is shown; the group record's raw membership count used to
+  // fill in while loading and then jump to the filtered total. Undefined renders as pending.
+  const selectedGroupImagePagination = groupImagesQuery.data?.pages[0]?.pagination
+  const selectedGroupImageTotalCount = selectedGroupImagePagination && selectedGroupImagePagination.totalKnown !== false
+    ? selectedGroupImagePagination.total
+    : undefined
   const fetchNextGroupImagesPage = groupImagesQuery.fetchNextPage
   // Keep the load-more identity stable so the list's IntersectionObserver is not rebuilt every render.
   const handleLoadMoreGroupImages = useCallback(() => {

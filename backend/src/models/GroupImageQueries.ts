@@ -342,6 +342,54 @@ export function findPreviewImagesQuery(
   return [];
 }
 
+export type GroupVisibleImageCounts = {
+  /** Visible images directly in the group. */
+  own: number;
+  /** Visible images in the group and all descendants, each image counted once. */
+  total: number;
+};
+
+/**
+ * Count visible images for every group in one pass, own and descendant-inclusive.
+ *
+ * Uses the same membership source and filters as the in-group list count
+ * (`findImagesByGroupQuery` with includeChildren and no collection filter), so
+ * tree/card counts match the total shown inside the group. Visibility rules are
+ * global (rating tiers, postprocess state), not per requester.
+ * Visibility is resolved once per membership (materialized) before fanning out to
+ * ancestors; the rest scales with memberships x group depth (~150ms for 120k
+ * memberships / 400 groups in a synthetic test). `ancestry` uses UNION so a
+ * corrupt parent cycle terminates instead of recursing forever.
+ */
+export function countVisibleImagesByGroupQuery(): Map<number, GroupVisibleImageCounts> {
+  const rows = db.prepare(`
+    WITH RECURSIVE ancestry(ancestor_id, group_id) AS (
+      SELECT id, id FROM groups
+      UNION
+      SELECT ancestry.ancestor_id, child.id
+      FROM groups child
+      INNER JOIN ancestry ON child.parent_id = ancestry.group_id
+    ),
+    visible_memberships(group_id, composite_hash) AS MATERIALIZED (
+      SELECT ig.group_id, ig.composite_hash
+      FROM image_groups ig
+      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+      WHERE ig.composite_hash IS NOT NULL
+        AND ${getVisibleGroupImageCondition()}
+        AND ${getReadyGroupImageCondition()}
+    )
+    SELECT
+      ancestry.ancestor_id AS group_id,
+      SUM(ancestry.group_id = ancestry.ancestor_id) AS own_count,
+      COUNT(DISTINCT visible.composite_hash) AS total_count
+    FROM ancestry
+    INNER JOIN visible_memberships visible ON visible.group_id = ancestry.group_id
+    GROUP BY ancestry.ancestor_id
+  `).all() as Array<{ group_id: number; own_count: number; total_count: number }>;
+
+  return new Map(rows.map((row) => [row.group_id, { own: row.own_count, total: row.total_count }] as const));
+}
+
 /** Find all composite hashes for one group in display order. */
 export function getCompositeHashesForGroupQuery(groupId: number, includeChildren: boolean = false): string[] {
   const query = includeChildren && hasChildGroups(groupId) ? `

@@ -97,6 +97,12 @@ export function GroupImageSection({
   const shouldShowFeedProgress = !isLoading && !isError && visibleGroupImages.length > 0 && (
     isLoadingMore || feedProgress.hiddenCount > 0 || feedProgress.loadedCount < feedProgress.totalCount
   )
+  // Never show a loaded-so-far number as the total: pending while it loads, a dash if it failed.
+  const totalCountLabel = feedProgress.isTotalKnown
+    ? formatNumber(feedProgress.totalCount)
+    : isError
+      ? '—'
+      : null
 
   return (
     <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-4'}>
@@ -105,7 +111,9 @@ export function GroupImageSection({
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="text-base font-semibold tracking-tight text-foreground">{t('groups.components.group.image.section.images')}</h2>
             <Badge variant="secondary">
-              {t({ ko: '전체 {count}', en: '{count} total' }, { count: formatNumber(feedProgress.totalCount) })}
+              {totalCountLabel === null
+                ? t({ ko: '전체 계산 중', en: 'Counting total…' })
+                : t({ ko: '전체 {count}', en: '{count} total' }, { count: totalCountLabel })}
             </Badge>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -207,7 +215,7 @@ export function GroupImageSection({
             <span>
               {t(
                 { ko: '전체 {total}', en: '{total} total' },
-                { total: formatNumber(feedProgress.totalCount) },
+                { total: totalCountLabel ?? t({ ko: '계산 중', en: 'Counting…' }) },
               )}
             </span>
             {feedProgress.hiddenCount > 0 ? (
