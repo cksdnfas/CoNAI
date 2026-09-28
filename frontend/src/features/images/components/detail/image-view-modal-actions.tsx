@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
+import { GenerationHistoryReuseActions } from '@/features/image-generation/components/generation-history-reuse-actions'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
@@ -53,6 +54,9 @@ export function ImageViewModalActions({
   const allowDetailNavigation = accessOptions?.allowDetailNavigation !== false
   const allowEditAction = accessOptions?.allowEditAction !== false
   const allowGroupAssignAction = accessOptions?.allowGroupAssignAction !== false
+  const historyReuseId = accessOptions?.allowHistoryReuseActions === true && typeof controls.image?.generation_history_id === 'number'
+    ? controls.image.generation_history_id
+    : null
 
   const openDetailPage = () => {
     navigate(`/images/${compositeHash}`, { state: prepareImageSourceState(location) })
@@ -78,6 +82,7 @@ export function ImageViewModalActions({
     </>
   )
 
+  const historyReuseButtons = historyReuseId !== null ? <GenerationHistoryReuseActions key={historyReuseId} historyId={historyReuseId} /> : null
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} /> : null
   const editButton = allowEditAction ? <ImageEditAction image={controls.image} /> : null
   const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="outline" className={overlayButtonClassName} /> : null
@@ -88,6 +93,7 @@ export function ImageViewModalActions({
         {navigationButtons}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {historyReuseButtons}
         {editButton}
         {groupAssignButton}
         {downloadButton}

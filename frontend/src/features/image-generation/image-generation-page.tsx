@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -9,6 +9,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
+import { usePendingHistorySettingsLoad } from './history-settings-load-store'
 import {
   IMAGE_GENERATION_WORKFLOW_PARAM,
   getImageGenerationTabLabel,
@@ -101,6 +102,39 @@ export function ImageGenerationPage() {
       ? 'codex'
       : 'comfyui'
   const useWideSplitPaneScroll = isWideLayout && shouldShowResultPanel
+
+  // "이 설정 불러오기": 기록의 제공자 탭/워크플로우로 옮기고, 좁은 화면에서는 컨트롤 서랍을 연다.
+  // 실제 폼 적용과 덮어쓰기 확인은 해당 제공자 패널이 맡는다.
+  const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
+  const handledHistorySettingsLoadNonceRef = useRef(0)
+  useEffect(() => {
+    if (!pendingHistorySettingsLoad || handledHistorySettingsLoadNonceRef.current === pendingHistorySettingsLoad.nonce) {
+      return
+    }
+
+    handledHistorySettingsLoadNonceRef.current = pendingHistorySettingsLoad.nonce
+    const targetTab: ImageGenerationTab = pendingHistorySettingsLoad.serviceType === 'novelai'
+      ? 'nai'
+      : pendingHistorySettingsLoad.serviceType === 'codex'
+        ? 'codex'
+        : 'comfyui'
+    const targetWorkflowId = targetTab === 'comfyui' ? pendingHistorySettingsLoad.workflowId : null
+    if (activeTab !== targetTab || selectedComfyWorkflowId !== targetWorkflowId) {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current)
+        next.set('tab', targetTab)
+        if (targetWorkflowId !== null) {
+          next.set(IMAGE_GENERATION_WORKFLOW_PARAM, String(targetWorkflowId))
+        } else {
+          next.delete(IMAGE_GENERATION_WORKFLOW_PARAM)
+        }
+        return next
+      })
+    }
+    if (!isWideLayout) {
+      setIsControllerOpen(true)
+    }
+  }, [activeTab, isWideLayout, pendingHistorySettingsLoad, selectedComfyWorkflowId, setSearchParams])
 
   const handleHistoryRefresh = () => {
     setHistoryRefreshNonce((current) => current + 1)

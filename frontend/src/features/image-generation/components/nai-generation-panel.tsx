@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
@@ -15,6 +15,14 @@ import {
   getErrorMessage,
   parseNumberInput,
 } from '../image-generation-shared'
+import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
+import {
+  buildNaiFormFromHistoryPayload,
+  confirmHistorySettingsOverwrite,
+  getHistorySettingsLoadedMessage,
+  hasNaiPromptContent,
+  hasNaiPromptDifference,
+} from '../history-settings-mapping'
 import { NaiAuthModal } from './nai-auth-modal'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiGenerationEditorSections } from './nai-generation-editor-sections'
@@ -73,6 +81,26 @@ export function NaiGenerationPanel({
     handleCharacterReferenceImageChange,
     handleRemoveCharacterReference,
   } = useNaiFormController({ showSnackbar })
+
+  const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
+  const handledHistorySettingsLoadNonceRef = useRef(0)
+  useEffect(() => {
+    const request = pendingHistorySettingsLoad
+    if (!request || request.serviceType !== 'novelai' || handledHistorySettingsLoadNonceRef.current === request.nonce) {
+      return
+    }
+
+    handledHistorySettingsLoadNonceRef.current = request.nonce
+    consumeHistorySettingsLoad(request.nonce)
+    const { form: nextForm, hasImageInputs } = buildNaiFormFromHistoryPayload(request.payload, naiForm)
+    if (hasNaiPromptContent(naiForm) && hasNaiPromptDifference(naiForm, nextForm) && !confirmHistorySettingsOverwrite(t)) {
+      return
+    }
+
+    setNaiForm(nextForm)
+    setSelectedCharacterIndex(null)
+    showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, hasImageInputs), tone: 'info' })
+  }, [naiForm, pendingHistorySettingsLoad, setNaiForm, setSelectedCharacterIndex, showSnackbar, t])
 
   const naiUserQuery = useQuery({
     queryKey: ['image-generation-nai-user'],

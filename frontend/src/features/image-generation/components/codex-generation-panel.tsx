@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, RotateCcw, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,8 @@ import { useI18n } from '@/i18n'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
 import { FormField, getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
+import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
+import { confirmHistorySettingsOverwrite, getHistorySettingsLoadedMessage } from '../history-settings-mapping'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import { Section } from '@/components/ui/section'
@@ -164,6 +166,37 @@ function resolveCodexSize(aspectRatio: string, resolution: string) {
   return `${width}x${height}`
 }
 
+/** Recover the aspect-ratio/resolution pair that produced a stored Codex `size` (e.g. "1024x768"). */
+function resolveCodexAspectRatioAndResolution(size: unknown) {
+  if (typeof size !== 'string') {
+    return null
+  }
+
+  for (const aspectOption of CODEX_ASPECT_RATIO_OPTIONS.filter(isSizedCodexAspectRatioOption)) {
+    for (const resolutionOption of CODEX_RESOLUTION_OPTIONS) {
+      if (resolveCodexSize(aspectOption.value, resolutionOption.value) === size.trim()) {
+        return { aspectRatio: aspectOption.value as string, resolution: resolutionOption.value as string }
+      }
+    }
+  }
+
+  return null
+}
+
+/** Map a stored Codex queue payload onto the form; reference/mask images and the queue count are kept as they are. */
+function buildCodexFormFromHistoryPayload(payload: Record<string, unknown>, current: CodexFormDraft) {
+  const sizeSelection = resolveCodexAspectRatioAndResolution(payload.size)
+  return {
+    form: {
+      ...current,
+      prompt: typeof payload.prompt === 'string' ? payload.prompt : '',
+      negativePrompt: typeof payload.negative_prompt === 'string' ? payload.negative_prompt : '',
+      ...(sizeSelection ?? {}),
+    } satisfies CodexFormDraft,
+    hasImageInputs: payload.operation === 'edit' || payload.operation === 'infill',
+  }
+}
+
 /** Render the Codex image-generation controller with the same controller chrome used by other generation tabs. */
 export function CodexGenerationPanel({
   refreshNonce,
@@ -178,6 +211,27 @@ export function CodexGenerationPanel({
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [, setPortalRevision] = useState(0)
+
+  const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
+  const handledHistorySettingsLoadNonceRef = useRef(0)
+  useEffect(() => {
+    const request = pendingHistorySettingsLoad
+    if (!request || request.serviceType !== 'codex' || handledHistorySettingsLoadNonceRef.current === request.nonce) {
+      return
+    }
+
+    handledHistorySettingsLoadNonceRef.current = request.nonce
+    consumeHistorySettingsLoad(request.nonce)
+    const { form: nextForm, hasImageInputs } = buildCodexFormFromHistoryPayload(request.payload, codexForm)
+    const hasPromptContent = codexForm.prompt.trim().length > 0 || codexForm.negativePrompt.trim().length > 0
+    const changesPrompt = codexForm.prompt !== nextForm.prompt || codexForm.negativePrompt !== nextForm.negativePrompt
+    if (hasPromptContent && changesPrompt && !confirmHistorySettingsOverwrite(t)) {
+      return
+    }
+
+    setCodexForm(nextForm)
+    showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, hasImageInputs), tone: 'info' })
+  }, [codexForm, pendingHistorySettingsLoad, showSnackbar, t])
 
   const appSettingsQuery = useQuery({
     queryKey: ['app-settings'],

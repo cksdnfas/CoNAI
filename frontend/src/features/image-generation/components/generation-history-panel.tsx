@@ -772,6 +772,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                   allowDetailNavigation: false,
                   allowEditAction: !isPublicView,
                   allowGroupAssignAction: !isPublicView,
+                  allowHistoryReuseActions: !isPublicView,
                 }}
                 selectedIds={selectedHistoryIds}
                 onSelectedIdsChange={setSelectedHistoryIds}

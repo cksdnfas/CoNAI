@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, Wrench } from 'lucide-react'
@@ -37,6 +37,13 @@ import {
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
+import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
+import {
+  buildComfyDraftFromHistoryPayload,
+  confirmHistorySettingsOverwrite,
+  getHistorySettingsLoadedMessage,
+  hasWorkflowDraftDifference,
+} from '../history-settings-mapping'
 import { ComfyDropdownListsSection, ComfyServerListSection, ComfyWorkflowListSection } from './comfy-home-sections'
 import { useI18n } from '@/i18n'
 import { ComfyModuleSaveModal } from './comfy-module-save-modal'
@@ -87,6 +94,8 @@ export function ComfyGenerationPanel({
   const { t } = useI18n()
   const navigate = useNavigate()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
+  // Which workflow the current draft belongs to; history loads wait until the target workflow's draft is initialized.
+  const [workflowDraftOwnerId, setWorkflowDraftOwnerId] = useState<number | null>(null)
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
@@ -278,6 +287,7 @@ export function ComfyGenerationPanel({
   useEffect(() => {
     if (!selectedWorkflow) {
       setWorkflowDraft({})
+      setWorkflowDraftOwnerId(null)
       return
     }
 
@@ -292,7 +302,60 @@ export function ComfyGenerationPanel({
       ...baseDraft,
       ...filteredPersistedDraft,
     })
+    setWorkflowDraftOwnerId(selectedWorkflow.id)
   }, [selectedWorkflow, selectedWorkflowFields])
+
+  const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
+  const handledHistorySettingsLoadNonceRef = useRef(0)
+  useEffect(() => {
+    const request = pendingHistorySettingsLoad
+    if (!request || request.serviceType !== 'comfyui' || handledHistorySettingsLoadNonceRef.current === request.nonce) {
+      return
+    }
+
+    const targetWorkflowId = request.workflowId
+    if (targetWorkflowId === null || (workflowsQuery.isSuccess && !workflowById.has(targetWorkflowId))) {
+      handledHistorySettingsLoadNonceRef.current = request.nonce
+      consumeHistorySettingsLoad(request.nonce)
+      showSnackbar({ message: t({ ko: '이 기록의 워크플로우를 찾지 못했어. 삭제됐거나 비활성 상태일 수 있어.', en: 'Could not find the workflow of this record. It may be deleted or inactive.' }), tone: 'error' })
+      return
+    }
+
+    // 페이지가 워크플로우를 바꾸고 그 워크플로우의 초안이 초기화될 때까지 기다린다.
+    if (selectedWorkflow?.id !== targetWorkflowId || workflowDraftOwnerId !== targetWorkflowId) {
+      return
+    }
+
+    handledHistorySettingsLoadNonceRef.current = request.nonce
+    consumeHistorySettingsLoad(request.nonce)
+    const result = buildComfyDraftFromHistoryPayload(request.payload, selectedWorkflowFields, workflowDraft)
+    if (!result) {
+      showSnackbar({ message: t({ ko: '이 기록에는 불러올 워크플로우 입력이 없어.', en: 'This record has no workflow inputs to load.' }), tone: 'error' })
+      return
+    }
+
+    const hasDraftContent = hasWorkflowDraftDifference(selectedWorkflowFields, workflowDraft, buildWorkflowDraft(selectedWorkflowFields))
+    if (hasDraftContent && hasWorkflowDraftDifference(selectedWorkflowFields, workflowDraft, result.draft) && !confirmHistorySettingsOverwrite(t)) {
+      return
+    }
+
+    setWorkflowDraft(result.draft)
+    // 드롭다운 목록 갱신 등으로 초안이 저장본에서 다시 초기화돼도 불러온 값이 남도록 바로 저장한다.
+    persistComfyWorkflowDraft(targetWorkflowId, result.draft)
+    clearWorkflowFieldIssues()
+    showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, result.hasImageInputs), tone: 'info' })
+  }, [
+    clearWorkflowFieldIssues,
+    pendingHistorySettingsLoad,
+    selectedWorkflow?.id,
+    selectedWorkflowFields,
+    showSnackbar,
+    t,
+    workflowById,
+    workflowDraft,
+    workflowDraftOwnerId,
+    workflowsQuery.isSuccess,
+  ])
 
   useEffect(() => {
     if (!moduleSaveWorkflow) {

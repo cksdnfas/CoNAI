@@ -77,6 +77,26 @@ export async function getGenerationWorkflowHistory(workflowId: number, params?: 
   return response
 }
 
+/** The request behind one history row, used to copy its prompt or reload its settings. */
+export interface GenerationHistoryRequestSnapshot {
+  history_id: number
+  service_type: GenerationServiceType
+  workflow_id: number | null
+  workflow_name: string | null
+  queue_job_id: number | null
+  /** `pruned` once queue retention compacted the job payload; `missing` when there is no readable queue job. */
+  payload_status: 'available' | 'pruned' | 'missing'
+  request_payload: Record<string, unknown> | null
+  result_prompt: string | null
+  result_negative_prompt: string | null
+}
+
+/** Load the stored request payload and result prompt of one generation history record. */
+export async function getGenerationHistoryRequest(historyId: number) {
+  const response = await requestJson<{ success: boolean; data: GenerationHistoryRequestSnapshot }>(`/api/generation-history/${historyId}/request`)
+  return response.data
+}
+
 /** Delete one generation history record. */
 export async function deleteGenerationHistoryRecord(historyId: number, deleteFiles = false) {
   const searchParams = new URLSearchParams()

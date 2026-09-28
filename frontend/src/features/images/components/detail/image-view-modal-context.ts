@@ -5,6 +5,8 @@ export interface ImageViewModalAccessOptions {
   allowDetailNavigation?: boolean
   allowEditAction?: boolean
   allowGroupAssignAction?: boolean
+  /** Show "copy prompt" / "load these settings" for generation-history images. Off unless set. */
+  allowHistoryReuseActions?: boolean
 }
 
 /**
