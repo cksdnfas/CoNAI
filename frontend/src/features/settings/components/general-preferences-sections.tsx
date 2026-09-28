@@ -1,18 +1,17 @@
+import { CircleUserRound, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquareText, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
+import { SettingRow } from '@/components/ui/setting-row'
+import { RowGroup } from '@/components/ui/row-group'
+import { ToggleChip } from '@/components/ui/chip'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 import type { GeneralSettings, HeaderNavigationItemKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
-import { Field } from '@/components/ui/field'
-import { Inset } from '@/components/ui/inset'
-import { ToggleRow } from '@/components/ui/toggle-row'
-import { Checkbox } from '@/components/ui/checkbox'
 import { SettingsSwitchRow } from './settings-switch-row'
-import { Section } from '@/components/ui/section'
-import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsLabelTip } from './settings-label-tip'
+import { SETTINGS_CONTROL_CLASS, SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
 
@@ -25,21 +24,21 @@ interface GeneralPreferencesSectionsProps {
   isSectionDirty: (section: GeneralPreferenceSection) => boolean
 }
 
-const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; label: { ko: string; en: string } }> = [
-  { key: 'access', label: { ko: '이용 가능 페이지', en: 'Available pages' } },
-  { key: 'home', label: { ko: '홈', en: 'Home' } },
-  { key: 'groups', label: { ko: '그룹', en: 'Groups' } },
-  { key: 'prompts', label: { ko: '프롬프트', en: 'Prompts' } },
-  { key: 'generation', label: { ko: '생성', en: 'Generation' } },
-  { key: 'upload', label: { ko: '업로드', en: 'Upload' } },
-  { key: 'wallpaper', label: { ko: '월페이퍼', en: 'Wallpaper' } },
-  { key: 'settings', label: { ko: '설정', en: 'Settings' } },
-  { key: 'search', label: { ko: '검색', en: 'Search' } },
-  { key: 'queue', label: { ko: '대기열', en: 'Queue' } },
-  { key: 'account', label: { ko: '사용자', en: 'User' } },
+const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; icon: LucideIcon; label: { ko: string; en: string } }> = [
+  { key: 'access', icon: MapIcon, label: { ko: '이용 가능 페이지', en: 'Available pages' } },
+  { key: 'home', icon: Images, label: { ko: '홈', en: 'Home' } },
+  { key: 'groups', icon: FolderTree, label: { ko: '그룹', en: 'Groups' } },
+  { key: 'prompts', icon: MessageSquareText, label: { ko: '프롬프트', en: 'Prompts' } },
+  { key: 'generation', icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
+  { key: 'upload', icon: Upload, label: { ko: '업로드', en: 'Upload' } },
+  { key: 'wallpaper', icon: LayoutGrid, label: { ko: '월페이퍼', en: 'Wallpaper' } },
+  { key: 'settings', icon: Settings2, label: { ko: '설정', en: 'Settings' } },
+  { key: 'search', icon: Search, label: { ko: '검색', en: 'Search' } },
+  { key: 'queue', icon: ListTodo, label: { ko: '대기열', en: 'Queue' } },
+  { key: 'account', icon: CircleUserRound, label: { ko: '사용자', en: 'User' } },
 ]
 
-/** Render app-wide preferences in their user-facing settings category. */
+/** Render app-wide preferences in their user-facing settings category, as flat hairline rows. */
 export function GeneralPreferencesSections({
   sections,
   generalDraft,
@@ -62,134 +61,129 @@ export function GeneralPreferencesSections({
   }
 
   if (!generalDraft) {
-    return <Skeleton className="h-56 w-full rounded-sm" />
+    return <SettingsRowsSkeleton rows={4} />
   }
 
+  const headerNavigation = generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
+  const languageLabel = t({ ko: '언어', en: 'Language' })
+  const similarityLabel = t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })
+  const recycleBinLabel = t({ ko: '휴지통 경로', en: 'Recycle bin path' })
+  const historyMaxLabel = t({ ko: '생성 히스토리 최대 항목 수', en: 'Generation history maximum items' })
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       {visibleSections.has('basic') ? (
-        <Section variant="settings" heading={t({ ko: '기본 설정', en: 'General' })} actions={<SectionDirtyBadge dirty={isSectionDirty('basic')} />}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label={languageOverride
-                ? <SettingsLabelTip label={t({ ko: '언어', en: 'Language' })} tip={t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' })} />
-                : t({ ko: '언어', en: 'Language' })}
+        <RowGroup heading={t({ ko: '기본', en: 'Basics' })} actions={<SectionDirtyBadge dirty={isSectionDirty('basic')} />}>
+          <SettingRow
+            label={languageOverride
+              ? <SettingsLabelTip label={languageLabel} tip={t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' })} />
+              : languageLabel}
+            controlClassName={SETTINGS_CONTROL_CLASS}
+          >
+            <Select
+              variant="settings"
+              aria-label={languageLabel}
+              value={generalDraft.language}
+              onChange={(event) => onPatchGeneral({ language: event.target.value as GeneralSettings['language'] })}
             >
-              <Select
-                variant="settings"
-                value={generalDraft.language}
-                onChange={(event) => onPatchGeneral({ language: event.target.value as GeneralSettings['language'] })}
-              >
-                <option value="ko">{t({ ko: '한국어', en: 'Korean' })}</option>
-                <option value="en">{t({ ko: '영어', en: 'English' })}</option>
-              </Select>
-            </Field>
-            <SettingsSwitchRow
-              checked={generalDraft.promptForDownloadLocation ?? false}
-              onCheckedChange={(checked) => onPatchGeneral({ promptForDownloadLocation: checked })}
-              label={t({ ko: '다운로드할 때 파일명과 저장 위치 확인', en: 'Ask for file name and save location' })}
-            />
-          </div>
-        </Section>
+              <option value="ko">{t({ ko: '한국어', en: 'Korean' })}</option>
+              <option value="en">{t({ ko: '영어', en: 'English' })}</option>
+            </Select>
+          </SettingRow>
+          <SettingsSwitchRow
+            checked={generalDraft.promptForDownloadLocation ?? false}
+            onCheckedChange={(checked) => onPatchGeneral({ promptForDownloadLocation: checked })}
+            label={t({ ko: '다운로드할 때 파일명과 위치 확인', en: 'Ask for file name and save location' })}
+          />
+        </RowGroup>
       ) : null}
 
       {visibleSections.has('appearance') ? (
-        <Section variant="settings" heading={t({ ko: '탐색 및 표시', en: 'Navigation and display' })} actions={<SectionDirtyBadge dirty={isSectionDirty('appearance')} />}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <SettingsSwitchRow
-              checked={generalDraft.enableGallery ?? true}
-              onCheckedChange={(checked) => onPatchGeneral({ enableGallery: checked })}
-              label={t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}
-            />
-            <SettingsSwitchRow
-              checked={generalDraft.showRatingBadges ?? true}
-              onCheckedChange={(checked) => onPatchGeneral({ showRatingBadges: checked })}
-              label={t({ ko: '등급 배지 표시', en: 'Show rating badges' })}
-            />
-            <Inset className="md:col-span-2">
-              <div className="mb-3 text-2xs font-semibold uppercase tracking-overline text-muted-foreground">
-                {t({ ko: '상단 네비 표시', en: 'Header navigation' })}
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {HEADER_NAVIGATION_OPTIONS.map((option) => (
-                  <ToggleRow key={option.key} className="cursor-pointer">
-                    <Checkbox
-                      checked={(generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS)[option.key] ?? true}
-                      onCheckedChange={(checked) => updateHeaderNavigationItem(option.key, checked === true)}
-                    />
-                    {t(option.label)}
-                  </ToggleRow>
-                ))}
-              </div>
-            </Inset>
-          </div>
-        </Section>
+        <RowGroup heading={t({ ko: '탐색 및 표시', en: 'Navigation and display' })} actions={<SectionDirtyBadge dirty={isSectionDirty('appearance')} />}>
+          <SettingsSwitchRow
+            checked={generalDraft.enableGallery ?? true}
+            onCheckedChange={(checked) => onPatchGeneral({ enableGallery: checked })}
+            label={t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}
+          />
+          <SettingsSwitchRow
+            checked={generalDraft.showRatingBadges ?? true}
+            onCheckedChange={(checked) => onPatchGeneral({ showRatingBadges: checked })}
+            label={t({ ko: '등급 배지 표시', en: 'Show rating badges' })}
+          />
+          <SettingRow label={t({ ko: '상단 메뉴', en: 'Header menu' })} align="start" controlClassName="max-w-xl justify-start sm:justify-end">
+            {HEADER_NAVIGATION_OPTIONS.map((option) => {
+              const Icon = option.icon
+              const pressed = headerNavigation[option.key] ?? true
+              return (
+                <ToggleChip key={option.key} pressed={pressed} onClick={() => updateHeaderNavigationItem(option.key, !pressed)}>
+                  <Icon aria-hidden />
+                  {t(option.label)}
+                </ToggleChip>
+              )
+            })}
+          </SettingRow>
+        </RowGroup>
       ) : null}
 
       {visibleSections.has('library') ? (
-        <Section variant="settings" heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={<SectionDirtyBadge dirty={isSectionDirty('library')} />}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label={t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })}>
-              <Select
-                variant="settings"
-                value={generalDraft.imageSimilarityCheckMode ?? 'always'}
-                onChange={(event) => onPatchGeneral({ imageSimilarityCheckMode: event.target.value as GeneralSettings['imageSimilarityCheckMode'] })}
-              >
-                <option value="manual">{t({ ko: '수동 실행', en: 'Manual' })}</option>
-                <option value="always">{t({ ko: '상세 열 때 자동 실행', en: 'Auto on detail open' })}</option>
-              </Select>
-            </Field>
-          </div>
-        </Section>
+        <RowGroup heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={<SectionDirtyBadge dirty={isSectionDirty('library')} />}>
+          <SettingRow label={similarityLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <Select
+              variant="settings"
+              aria-label={similarityLabel}
+              value={generalDraft.imageSimilarityCheckMode ?? 'always'}
+              onChange={(event) => onPatchGeneral({ imageSimilarityCheckMode: event.target.value as GeneralSettings['imageSimilarityCheckMode'] })}
+            >
+              <option value="manual">{t({ ko: '수동 실행', en: 'Manual' })}</option>
+              <option value="always">{t({ ko: '상세 열 때 자동 실행', en: 'Auto on detail open' })}</option>
+            </Select>
+          </SettingRow>
+        </RowGroup>
       ) : null}
 
       {visibleSections.has('safety') ? (
-        <Section variant="settings" heading={t({ ko: '안전 및 정리', en: 'Safety and cleanup' })} actions={<SectionDirtyBadge dirty={isSectionDirty('safety')} />}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label={t({ ko: '휴지통 경로', en: 'Recycle bin path' })}>
-              <Input
-                variant="settings"
-                value={generalDraft.deleteProtection.recycleBinPath}
-                onChange={(event) => onPatchDeleteProtection({ recycleBinPath: event.target.value })}
-                placeholder="RecycleBin"
-              />
-            </Field>
-            <Field label={t({ ko: '생성 히스토리 최대 항목 수', en: 'Generation history maximum items' })}>
-              <NumberStepperInput
-                variant="settings"
-
-                min={1}
-                max={1_000_000}
-                step={1}
-                value={generalDraft.generationHistoryMaxItems ?? 10_000}
-                onValueCommit={(nextValue) => {
-                  const parsedValue = Number.parseInt(nextValue, 10)
-                  if (Number.isFinite(parsedValue)) {
-                    onPatchGeneral({ generationHistoryMaxItems: parsedValue })
-                  }
-                }}
-              />
-            </Field>
-            <SettingsSwitchRow
-              checked={generalDraft.deleteProtection.enabled}
-              onCheckedChange={(checked) => onPatchDeleteProtection({ enabled: checked })}
-              label={t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}
-              className="md:col-span-2"
+        <RowGroup heading={t({ ko: '안전 및 정리', en: 'Safety and cleanup' })} actions={<SectionDirtyBadge dirty={isSectionDirty('safety')} />}>
+          <SettingsSwitchRow
+            checked={generalDraft.deleteProtection.enabled}
+            onCheckedChange={(checked) => onPatchDeleteProtection({ enabled: checked })}
+            label={t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}
+          />
+          <SettingRow label={recycleBinLabel} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
+            <Input
+              variant="settings"
+              aria-label={recycleBinLabel}
+              value={generalDraft.deleteProtection.recycleBinPath}
+              onChange={(event) => onPatchDeleteProtection({ recycleBinPath: event.target.value })}
+              placeholder="RecycleBin"
             />
-            <SettingsSwitchRow
-              checked={generalDraft.autoCleanupCanvasOnShutdown ?? false}
-              onCheckedChange={(checked) => onPatchGeneral({ autoCleanupCanvasOnShutdown: checked })}
-              label={t({ ko: '종료 시 캔버스 임시 데이터 자동 정리', en: 'Clean up temporary canvas data on exit' })}
-              className="md:col-span-2"
+          </SettingRow>
+          <SettingRow label={historyMaxLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <NumberStepperInput
+              variant="settings"
+              aria-label={historyMaxLabel}
+              min={1}
+              max={1_000_000}
+              step={1}
+              value={generalDraft.generationHistoryMaxItems ?? 10_000}
+              onValueCommit={(nextValue) => {
+                const parsedValue = Number.parseInt(nextValue, 10)
+                if (Number.isFinite(parsedValue)) {
+                  onPatchGeneral({ generationHistoryMaxItems: parsedValue })
+                }
+              }}
             />
-            <SettingsSwitchRow
-              checked={generalDraft.applyRatingSafetyToGenerationHistory ?? false}
-              onCheckedChange={(checked) => onPatchGeneral({ applyRatingSafetyToGenerationHistory: checked })}
-              label={t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}
-              className="md:col-span-2"
-            />
-          </div>
-        </Section>
+          </SettingRow>
+          <SettingsSwitchRow
+            checked={generalDraft.autoCleanupCanvasOnShutdown ?? false}
+            onCheckedChange={(checked) => onPatchGeneral({ autoCleanupCanvasOnShutdown: checked })}
+            label={t({ ko: '종료 시 캔버스 임시 데이터 자동 정리', en: 'Clean up temporary canvas data on exit' })}
+          />
+          <SettingsSwitchRow
+            checked={generalDraft.applyRatingSafetyToGenerationHistory ?? false}
+            onCheckedChange={(checked) => onPatchGeneral({ applyRatingSafetyToGenerationHistory: checked })}
+            label={t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}
+          />
+        </RowGroup>
       ) : null}
     </div>
   )

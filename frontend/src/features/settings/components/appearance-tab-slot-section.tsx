@@ -1,6 +1,7 @@
 import { Check, Paintbrush, Save } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { ListRow } from '@/components/ui/list-row'
 import { useI18n } from '@/i18n'
 import { extractAppearanceTheme, resolveAppearanceColors, resolveSurfacePalette } from '@/lib/appearance'
 import { cn } from '@/lib/utils'
@@ -15,6 +16,7 @@ interface AppearanceTabSlotSectionProps {
   onSavePresetSlots: (presetSlots: AppearancePresetSlot[]) => void
 }
 
+/** Saved theme slots as hairline rows: palette preview, editable name, status, load / overwrite. */
 export function AppearanceTabSlotSection({
   appearanceDraft,
   savedAppearance,
@@ -25,7 +27,7 @@ export function AppearanceTabSlotSection({
   const { locale, t } = useI18n()
 
   return (
-    <div className="grid gap-3 xl:grid-cols-3">
+    <div>
       {appearanceDraft.presetSlots.map((slot, index) => {
         const slotTheme = slot.appearance
         const slotColors = slotTheme ? resolveAppearanceColors(slotTheme) : null
@@ -40,70 +42,29 @@ export function AppearanceTabSlotSection({
             ? t('appearanceTabSlotSection.currentValues')
             : matchesSavedTheme
               ? t({ ko: '저장됨', en: 'Saved' })
-              : t({ ko: '슬롯', en: 'Slot' })
+              : null
 
         return (
-          <div
+          <ListRow
             key={slot.id}
-            className={cn(
-              'rounded-sm p-4 transition-colors',
-              isActiveSlot ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-surface-lowest',
+            size="lg"
+            className="flex-wrap gap-y-2"
+            leading={slotTheme ? (
+              <span aria-hidden className="flex h-6 w-16 overflow-hidden rounded-sm shadow-[inset_0_0_0_1px_var(--line)]">
+                <span className="flex-1" style={{ backgroundColor: slotSurface?.background }} />
+                <span className="flex-1" style={{ backgroundColor: slotSurface?.surfaceHigh }} />
+                <span className="flex-1" style={{ backgroundColor: slotColors?.primary }} />
+                <span className="flex-1" style={{ backgroundColor: slotColors?.secondary }} />
+              </span>
+            ) : (
+              <span aria-hidden className="block h-6 w-16 rounded-sm bg-fill" />
             )}
-          >
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Input
-                  type="text"
-                  variant="settings"
-                  className="min-w-0 flex-1"
-                  value={slot.label}
-                  onChange={(event) =>
-                    onPatchAppearance({
-                      presetSlots: appearanceDraft.presetSlots.map((candidate) =>
-                        candidate.id === slot.id ? { ...candidate, label: event.target.value } : candidate,
-                      ),
-                    })
-                  }
-                  maxLength={32}
-                  placeholder={t('appearanceTabSlotSection.slotName')}
-                />
-                <span
-                  className={cn(
-                    'shrink-0 rounded-sm px-2 py-1 text-2xs font-semibold',
-                    isEmptySlot
-                      ? 'bg-surface-high text-muted-foreground'
-                      : isActiveSlot
-                        ? 'bg-primary/14 text-primary'
-                        : matchesSavedTheme
-                          ? 'bg-success-soft text-success-soft-foreground'
-                          : 'bg-surface-highest text-foreground',
-                  )}
-                >
-                  {statusLabel}
-                </span>
-              </div>
-
-              {slotTheme ? (
-                <div className="rounded-sm bg-surface-low px-3 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: slotColors?.primary }} />
-                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: slotColors?.secondary }} />
-                    <span className="h-5 flex-1 rounded-sm border border-outline-input" style={{ backgroundColor: slotSurface?.background }} />
-                    <span className="h-5 flex-1 rounded-sm border border-outline-input" style={{ backgroundColor: slotSurface?.surfaceContainer }} />
-                    <span className="h-5 flex-1 rounded-sm border border-outline-input" style={{ backgroundColor: slotSurface?.surfaceHigh }} />
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-sm bg-surface-low px-3 py-4 text-xs text-muted-foreground">
-                  {t({ ko: '저장된 테마 없음', en: 'No saved theme' })}
-                </div>
-              )}
-
-              <div className="flex items-center gap-2">
-                <div className="min-w-0 flex-1 truncate text-2xs text-muted-foreground">{formatSlotTimestamp(slot.updatedAt, locale, t('appearanceTabUtils.noSaveHistory'))}</div>
+            trailing={(
+              <>
+                <span className="hidden text-xs sm:inline">{formatSlotTimestamp(slot.updatedAt, locale, t('appearanceTabUtils.noSaveHistory'))}</span>
                 <IconButton
                   size="icon-sm"
-                  variant="secondary"
+                  variant="ghost"
                   label={t({ ko: '불러오기', en: 'Load' })}
                   disabled={!slotTheme || isSaving}
                   onClick={() => {
@@ -118,6 +79,7 @@ export function AppearanceTabSlotSection({
                 </IconButton>
                 <IconButton
                   size="icon-sm"
+                  variant="ghost"
                   label={overwriteLabel}
                   disabled={isSaving}
                   onClick={() => {
@@ -136,9 +98,28 @@ export function AppearanceTabSlotSection({
                 >
                   {isEmptySlot ? <Save className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                 </IconButton>
-              </div>
-            </div>
-          </div>
+              </>
+            )}
+          >
+            <Input
+              type="text"
+              className="h-8 w-full min-w-0 max-w-52"
+              value={slot.label}
+              aria-label={t('appearanceTabSlotSection.slotName')}
+              onChange={(event) =>
+                onPatchAppearance({
+                  presetSlots: appearanceDraft.presetSlots.map((candidate) =>
+                    candidate.id === slot.id ? { ...candidate, label: event.target.value } : candidate,
+                  ),
+                })
+              }
+              maxLength={32}
+              placeholder={t('appearanceTabSlotSection.slotName')}
+            />
+            {statusLabel ? (
+              <span className={cn('shrink-0 text-xs', isActiveSlot ? 'font-medium text-primary' : 'text-muted-foreground')}>{statusLabel}</span>
+            ) : null}
+          </ListRow>
         )
       })}
     </div>

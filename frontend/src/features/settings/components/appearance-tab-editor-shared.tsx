@@ -5,7 +5,8 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@conai/shared'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
-import { Field } from '@/components/ui/field'
+import { SettingRow } from '@/components/ui/setting-row'
+import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 import { useI18n, type TranslationInput } from '@/i18n'
 
 export interface AppearanceTabEditorSectionProps {
@@ -18,23 +19,10 @@ export interface AppearanceTabEditorSectionProps {
   isUploadingFont: boolean
 }
 
-export type AppearanceEditorTab = 'general' | 'list' | 'color'
-
-export const APPEARANCE_EDITOR_TABS: Array<{ value: AppearanceEditorTab; label: TranslationInput }> = [
-  { value: 'general', label: { ko: '일반', en: 'General' } },
-  { value: 'list', label: { ko: '목록', en: 'List' } },
-  { value: 'color', label: { ko: '색상', en: 'Color' } },
-]
-
 type Translate = ReturnType<typeof useI18n>['t']
 
 function translatedLabel(input: TranslationInput, t?: Translate) {
   return t ? t(input) : typeof input === 'string' ? input : input.ko ?? input.en ?? ''
-}
-
-/** Render a compact section title inside the appearance editor. */
-export function EditorSectionLead({ title }: { title: string }) {
-  return <div className="text-sm font-semibold text-foreground">{title}</div>
 }
 
 /** Map theme mode values to localized labels. */
@@ -207,8 +195,9 @@ export function getGroupExplorerCardStyleLabel(style: AppearanceSettings['groupE
   }
 }
 
-/** Render a compact drag-enabled number input for related-image column counts. */
-export function RelatedImageColumnSlider({
+
+/** A 1-6 card count as a setting row (related-image grids). */
+export function RelatedImageColumnRow({
   label,
   value,
   onChange,
@@ -218,22 +207,17 @@ export function RelatedImageColumnSlider({
   onChange: (value: number) => void
 }) {
   return (
-    <Field label={label}>
-      <div className="space-y-2">
-        <NumberStepperInput
-          min={1}
-          max={6}
-          step={1}
-          value={value}
-          variant="settings"
-          onValueCommit={(nextValue) => onChange(Number.parseInt(nextValue || '1', 10))}
-        />
-        <div className="flex justify-between text-2xs text-muted-foreground">
-          <span>1</span>
-          <span>6</span>
-        </div>
-      </div>
-    </Field>
+    <SettingRow label={label} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <NumberStepperInput
+        min={1}
+        max={6}
+        step={1}
+        value={value}
+        variant="settings"
+        aria-label={label}
+        onValueCommit={(nextValue) => onChange(Number.parseInt(nextValue || '1', 10))}
+      />
+    </SettingRow>
   )
 }
 
@@ -251,8 +235,8 @@ export function getUploadedFontDisplayName(fileName: string, url: string) {
   return segments.at(-1) ?? url
 }
 
-/** Render upload and clear actions for a custom font target. */
-export function UploadedFontCard({
+/** One custom font slot as a row: file name, upload and clear. */
+export function UploadedFontRow({
   label,
   fileName,
   url,
@@ -272,55 +256,68 @@ export function UploadedFontCard({
   const hasUploadedFont = Boolean(url.trim())
 
   return (
-    <div className="rounded-sm bg-surface-lowest px-3 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-semibold text-foreground">{label}</div>
-        <div className="flex flex-wrap gap-2">
-          <IconButton
-            size="icon-sm"
-            variant="secondary"
-            onClick={onUpload}
-            disabled={isUploadingFont}
-            label={t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
-          >
-            <Upload className="h-4 w-4" />
-          </IconButton>
-          <IconButton
-            size="icon-sm"
-            variant="secondary"
-            onClick={onClear}
-            disabled={!hasUploadedFont}
-            label={t({ ko: '{label} 해제', en: 'Clear {label}' }, { label })}
-          >
-            <X className="h-4 w-4" />
-          </IconButton>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span
-          className={cn(
-            'rounded-sm px-2 py-1 text-2xs font-semibold',
-            hasUploadedFont ? 'bg-primary/12 text-primary' : 'bg-surface-high text-muted-foreground',
-          )}
-        >
-          {hasUploadedFont ? t({ ko: '연결됨', en: 'Linked' }) : t({ ko: '없음', en: 'None' })}
-        </span>
-        <span className="min-w-0 break-all text-xs text-foreground">{displayName || t({ ko: '파일 없음', en: 'No file' })}</span>
-      </div>
-      {hasUploadedFont ? <div className="mt-2 break-all text-2xs text-muted-foreground">{url}</div> : null}
-    </div>
+    <SettingRow label={label}>
+      <span className={cn('min-w-0 max-w-56 truncate text-xs', hasUploadedFont ? 'text-foreground' : 'text-muted-foreground')} title={url || undefined}>
+        {displayName || t({ ko: '파일 없음', en: 'No file' })}
+      </span>
+      <IconButton
+        size="icon-sm"
+        variant="ghost"
+        onClick={onUpload}
+        disabled={isUploadingFont}
+        label={t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
+      >
+        <Upload className="h-4 w-4" />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
+        variant="ghost"
+        onClick={onClear}
+        disabled={!hasUploadedFont}
+        label={t({ ko: '{label} 해제', en: 'Clear {label}' }, { label })}
+      >
+        <X className="h-4 w-4" />
+      </IconButton>
+    </SettingRow>
   )
 }
 
-/** Render the paired color picker and text input used by appearance colors. */
+/** The paired color picker and hex input used by appearance colors (compact, fits a row's control slot). */
 export function AppearanceColorControl({
   colorValue,
   textValue,
   placeholder,
   onChangeColor,
   onChangeText,
+  ariaLabel,
 }: {
+  colorValue: string
+  textValue: string
+  placeholder: string
+  onChangeColor: (value: string) => void
+  onChangeText: (value: string) => void
+  ariaLabel?: string
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="color"
+        value={colorValue}
+        aria-label={ariaLabel}
+        onChange={(event) => onChangeColor(event.target.value)}
+        className="h-9 w-10 shrink-0 cursor-pointer rounded-sm bg-field p-1"
+      />
+      <Input variant="settings" type="text" className="w-32 font-mono" value={textValue} aria-label={ariaLabel} onChange={(event) => onChangeText(event.target.value)} placeholder={placeholder} />
+    </div>
+  )
+}
+
+/** A color setting as a row. */
+export function AppearanceColorRow({
+  label,
+  ...control
+}: {
+  label: string
   colorValue: string
   textValue: string
   placeholder: string
@@ -328,14 +325,8 @@ export function AppearanceColorControl({
   onChangeText: (value: string) => void
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <input
-        type="color"
-        value={colorValue}
-        onChange={(event) => onChangeColor(event.target.value)}
-        className="h-10 w-16 cursor-pointer rounded-sm border border-outline-input bg-surface-lowest p-1"
-      />
-      <Input variant="settings" type="text" value={textValue} onChange={(event) => onChangeText(event.target.value)} placeholder={placeholder} />
-    </div>
+    <SettingRow label={label}>
+      <AppearanceColorControl ariaLabel={label} {...control} />
+    </SettingRow>
   )
 }

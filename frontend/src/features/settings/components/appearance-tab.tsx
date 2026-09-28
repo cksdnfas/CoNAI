@@ -3,11 +3,14 @@ import { Check, Download, Eye, RotateCcw, Undo2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { InstantApplyHint, SectionDirtyBadge } from './settings-section-status'
-import { AppearanceTabEditorSection } from './appearance-tab-editor-section'
+import { AppearanceBadgeColorRows, AppearanceThemeRows } from './appearance-color-editor-content'
+import { AppearanceFinishRows, AppearanceFontRows } from './appearance-general-editor-content'
+import { AppearanceListRows } from './appearance-list-editor-content'
+import { SettingsRowsSkeleton } from './settings-rows'
 import { AppearanceTabSlotSection } from './appearance-tab-slot-section'
 import type { AppearanceTabProps } from './appearance-tab.types'
 import { getAppearanceTabColorValues } from './appearance-tab.utils'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
 import { useI18n } from '@/i18n'
 
 export function AppearanceTab({
@@ -32,9 +35,18 @@ export function AppearanceTab({
   const sansFontInputRef = useRef<HTMLInputElement | null>(null)
   const monoFontInputRef = useRef<HTMLInputElement | null>(null)
   const colorValues = getAppearanceTabColorValues(appearanceDraft)
+  const editorProps = appearanceDraft ? {
+    appearanceDraft,
+    colorValues,
+    onPatchAppearance,
+    onRequestSansFontUpload: () => sansFontInputRef.current?.click(),
+    onRequestMonoFontUpload: () => monoFontInputRef.current?.click(),
+    onClearCustomFont,
+    isUploadingFont,
+  } : null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <input
         ref={fileInputRef}
         type="file"
@@ -96,53 +108,57 @@ export function AppearanceTab({
         </div>
       ) : null}
 
-      <section>
-        <Section
-          variant="settings"
-          heading={t({ ko: '테마 슬롯', en: 'Theme slots' })}
-          actions={
-            <>
-              <InstantApplyHint />
-              <SectionDirtyBadge dirty={isDirty} />
-              <IconButton size="icon-sm" variant="secondary" onClick={onExport} disabled={isSaving} label={t({ ko: '외형 내보내기', en: 'Export appearance' })}>
-                <Download className="h-4 w-4" />
-              </IconButton>
-              <IconButton size="icon-sm" variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isSaving || importPreviewFileName !== null} label={t({ ko: '외형 가져오기 (미리보기 후 적용)', en: 'Import appearance (preview first)' })}>
-                <Upload className="h-4 w-4" />
-              </IconButton>
-              <IconButton size="icon-sm" variant="secondary" onClick={onReset} disabled={!appearanceDraft || isSaving} label={t({ ko: '기본값으로 되돌리기', en: 'Restore defaults' })}>
-                <RotateCcw className="h-4 w-4" />
-              </IconButton>
-            </>
-          }
-        >
-          {appearanceDraft ? (
+      {editorProps ? (
+        <>
+          <RowGroup
+            heading={t({ ko: '테마', en: 'Theme' })}
+            actions={(
+              <>
+                <SectionDirtyBadge dirty={isDirty} />
+                <IconButton size="icon-sm" variant="ghost" onClick={onExport} disabled={isSaving} label={t({ ko: '외형 내보내기', en: 'Export appearance' })}>
+                  <Download className="h-4 w-4" />
+                </IconButton>
+                <IconButton size="icon-sm" variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={isSaving || importPreviewFileName !== null} label={t({ ko: '외형 가져오기 (미리보기 후 적용)', en: 'Import appearance (preview first)' })}>
+                  <Upload className="h-4 w-4" />
+                </IconButton>
+                <IconButton size="icon-sm" variant="ghost" onClick={onReset} disabled={isSaving} label={t({ ko: '기본값으로 되돌리기', en: 'Restore defaults' })}>
+                  <RotateCcw className="h-4 w-4" />
+                </IconButton>
+              </>
+            )}
+          >
+            <AppearanceThemeRows {...editorProps} />
+          </RowGroup>
+
+          <RowGroup heading={t({ ko: '글꼴', en: 'Font' })}>
+            <AppearanceFontRows {...editorProps} />
+          </RowGroup>
+
+          <RowGroup heading={t({ ko: '레이아웃 및 마감', en: 'Layout and finish' })}>
+            <AppearanceFinishRows {...editorProps} />
+          </RowGroup>
+
+          <RowGroup heading={t({ ko: '목록 및 카드', en: 'Lists and cards' })}>
+            <AppearanceListRows {...editorProps} />
+          </RowGroup>
+
+          <RowGroup heading={t({ ko: '배지 색상', en: 'Badge colors' })}>
+            <AppearanceBadgeColorRows {...editorProps} />
+          </RowGroup>
+
+          <RowGroup heading={t({ ko: '테마 슬롯', en: 'Theme slots' })} actions={<InstantApplyHint />}>
             <AppearanceTabSlotSection
-              appearanceDraft={appearanceDraft}
+              appearanceDraft={editorProps.appearanceDraft}
               savedAppearance={savedAppearance}
               isSaving={isSaving}
               onPatchAppearance={onPatchAppearance}
               onSavePresetSlots={onSavePresetSlots}
             />
-          ) : null}
-        </Section>
-      </section>
-
-      <section>
-        <Section variant="settings" heading={t({ ko: '세부 편집', en: 'Detailed editor' })}>
-          {appearanceDraft ? (
-            <AppearanceTabEditorSection
-              appearanceDraft={appearanceDraft}
-              colorValues={colorValues}
-              onPatchAppearance={onPatchAppearance}
-              onRequestSansFontUpload={() => sansFontInputRef.current?.click()}
-              onRequestMonoFontUpload={() => monoFontInputRef.current?.click()}
-              onClearCustomFont={onClearCustomFont}
-              isUploadingFont={isUploadingFont}
-            />
-          ) : null}
-        </Section>
-      </section>
+          </RowGroup>
+        </>
+      ) : (
+        <SettingsRowsSkeleton rows={4} />
+      )}
     </div>
   )
 }
