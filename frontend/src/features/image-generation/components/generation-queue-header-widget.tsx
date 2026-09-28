@@ -34,9 +34,9 @@ import {
 import {
   formatReservationTimestamp,
   getActiveWorkflowReservationScheduleCount,
+  getReservationRunAtLabel,
   getReservationRunSummaryLabel,
   getReservationStatusVariant,
-  getReservationTimingLabel,
   getReservationTypeLabel,
   sortWorkflowReservationSchedules,
 } from './workflow-reservations-ui'
@@ -528,7 +528,6 @@ export function GenerationQueueHeaderWidget() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge variant={activeReservationCount > 0 ? 'secondary' : 'outline'}>{t({ ko: '활성 {count}', en: 'Active {count}' }, { count: formatNumber(activeReservationCount) })}</Badge>
-                <Badge variant="outline">{t({ ko: '전체 {count}', en: 'Total {count}' }, { count: formatNumber(reservationSchedules.length) })}</Badge>
               </div>
             </div>
 
@@ -552,26 +551,28 @@ export function GenerationQueueHeaderWidget() {
                   {reservationSchedules.map((schedule) => {
                     const nextRunAt = formatReservationTimestamp(schedule.next_run_at, locale)
                     const lastEnqueuedAt = formatReservationTimestamp(schedule.last_enqueued_at, locale)
-                    const runSummaryLabel = getReservationRunSummaryLabel(schedule)
+                    const runSummaryLabel = getReservationRunSummaryLabel(schedule, t, formatNumber)
+                    const runAtLabel = getReservationRunAtLabel(schedule, t, (value) => formatReservationTimestamp(value, locale))
+                    const stopReasonLabel = getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)
                     return (
                       <div key={schedule.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
                             <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
-                            <Badge variant="outline">{getReservationTypeLabel(schedule.schedule_type, t)}</Badge>
+                            <Badge variant="outline">{getReservationTypeLabel(schedule, t, formatNumber)}</Badge>
                           </div>
                           <div className="text-[11px] text-muted-foreground">
-                            {reservationWorkflowNameById.get(schedule.graph_workflow_id) ?? t('image-generation.components.generation.queue.header.widget.workflow.value', { id: schedule.graph_workflow_id })} · {getReservationTimingLabel(schedule, t, locale)}
+                            {reservationWorkflowNameById.get(schedule.graph_workflow_id) ?? t('image-generation.components.generation.queue.header.widget.workflow.value', { id: schedule.graph_workflow_id })}{runAtLabel ? ` · ${runAtLabel}` : ''}
                           </div>
                           <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
                             <span>{runSummaryLabel}</span>
                             {nextRunAt ? <span>{t('image-generation.components.generation.queue.header.widget.next.enqueue.attempt.value', { nextRunAt })}</span> : null}
                             {lastEnqueuedAt ? <span>{t('image-generation.components.generation.queue.header.widget.last.queued.value', { lastEnqueuedAt })}</span> : null}
                           </div>
-                          {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t) ? (
+                          {stopReasonLabel ? (
                             <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2 text-[11px] text-muted-foreground">
-                              {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)}
+                              {stopReasonLabel}
                             </div>
                           ) : null}
                         </div>

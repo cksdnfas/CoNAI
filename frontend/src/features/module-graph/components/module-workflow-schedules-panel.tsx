@@ -16,9 +16,14 @@ import type {
   GraphWorkflowNameRecord,
   GraphWorkflowScheduleFailurePolicy,
   GraphWorkflowScheduleRecord,
-  GraphWorkflowScheduleStatus,
   GraphWorkflowScheduleType,
 } from '@/lib/api-module-graph'
+import {
+  getReservationRunAtLabel,
+  getReservationRunSummaryLabel,
+  getReservationStatusVariant,
+  getReservationTypeLabel,
+} from '@/features/image-generation/components/workflow-reservations-ui'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
 import { WorkflowInputFields } from './workflow-input-fields'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -76,32 +81,6 @@ function parseDateTimeLocalInput(value: string) {
 
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
-}
-
-function getScheduleStatusVariant(status: GraphWorkflowScheduleStatus) {
-  if (status === 'active') {
-    return 'secondary' as const
-  }
-  if (status === 'error_stopped' || status === 'overlap_stopped') {
-    return 'destructive' as const
-  }
-  return 'outline' as const
-}
-
-function getScheduleTypeLabel(scheduleType: GraphWorkflowScheduleType, t: (input: TranslationInput) => string) {
-  if (scheduleType === 'once') {
-    return t({ ko: '1회 실행', en: 'Run once' })
-  }
-  if (scheduleType === 'interval') {
-    return t({ ko: 'N분마다', en: 'Every N minutes' })
-  }
-  return t({ ko: '매일', en: 'Daily' })
-}
-
-function getScheduleRunSummaryLabel(schedule: GraphWorkflowScheduleRecord, formatNumber: (value: number) => string) {
-  const completedCount = schedule.completed_run_count ?? 0
-  const maxRunCount = schedule.max_run_count
-  return `${formatNumber(completedCount)}/${maxRunCount === null || maxRunCount === undefined ? '-' : formatNumber(maxRunCount)}`
 }
 
 function getScheduleFailurePolicyLabel(failurePolicy: GraphWorkflowScheduleFailurePolicy | null | undefined, t: (input: TranslationInput) => string) {
@@ -308,15 +287,11 @@ export function ModuleWorkflowSchedulesPanel({
           <div className="space-y-3">
             {schedules.map((schedule) => {
               const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? t({ ko: '워크플로우 #{id}', en: 'Workflow #{id}' }, { id: schedule.graph_workflow_id })
-              const reservedCountLabel = t({ ko: '최대 {count}회', en: 'Max {count}' }, { count: formatNumber(schedule.max_run_count ?? -1) })
               const runEnqueueCountLabel = t({ ko: '1회 {count}개', en: '{count} per run' }, { count: formatNumber(schedule.run_enqueue_count ?? 1) })
-              const runSummaryLabel = getScheduleRunSummaryLabel(schedule, formatNumber)
+              const runSummaryLabel = getReservationRunSummaryLabel(schedule, t, formatNumber)
               const failurePolicyLabel = getScheduleFailurePolicyLabel(schedule.failure_policy, t)
-              const scheduleTimingLabel = schedule.schedule_type === 'once'
-                ? (schedule.run_at ? formatDateTime(schedule.run_at) : t({ ko: '시각 미설정', en: 'Time not set' }))
-                : schedule.schedule_type === 'interval'
-                  ? t({ ko: '{minutes}분마다', en: 'Every {minutes} min' }, { minutes: schedule.interval_minutes === null || schedule.interval_minutes === undefined ? '?' : formatNumber(schedule.interval_minutes) })
-                  : t({ ko: '{time} 매일', en: 'Daily at {time}' }, { time: schedule.daily_time ?? '--:--' })
+              const runAtLabel = getReservationRunAtLabel(schedule, t, (value) => formatDateTime(value))
+              const stopReasonLabel = getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)
 
               return (
                 <Inset key={schedule.id}>
@@ -324,11 +299,11 @@ export function ModuleWorkflowSchedulesPanel({
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
-                        <Badge variant={getScheduleStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
-                        <Badge variant="outline">{getScheduleTypeLabel(schedule.schedule_type, t)}</Badge>
+                        <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
+                        <Badge variant="outline">{getReservationTypeLabel(schedule, t, formatNumber)}</Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {workflowName} · {scheduleTimingLabel} · {runEnqueueCountLabel} · {reservedCountLabel} · {failurePolicyLabel}
+                        {[workflowName, runAtLabel, runEnqueueCountLabel, failurePolicyLabel].filter(Boolean).join(' · ')}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{runSummaryLabel}</span>
@@ -359,10 +334,10 @@ export function ModuleWorkflowSchedulesPanel({
                       </Button>
                     </div>
                   </div>
-                  {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t) ? (
+                  {stopReasonLabel ? (
                     <Inset className="mt-3 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{t({ ko: '중지/정지 사유', en: 'Stop reason' })}</span>
-                      <span className="ml-2">{getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)}</span>
+                      <span className="ml-2">{stopReasonLabel}</span>
                     </Inset>
                   ) : null}
                 </Inset>
