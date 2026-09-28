@@ -1,6 +1,6 @@
 # CoNAI Design Preset — The Silent Curator
 
-작성일: 2026-03-21 · 구현 규칙 갱신: 2026-09-28
+작성일: 2026-03-21 · 구현 규칙 갱신: 2026-09-28 (shared follow-up)
 기준 레퍼런스: 사용자 제공 홈페이지 시안 + Design System Strategy `The Silent Curator`
 
 ## Creative North Star
@@ -32,6 +32,14 @@ AI 결과물을 조용히 전면에 세우는 **하이엔드 다크 갤러리**�
 - foreground: `#E5E2E1`
 - muted-foreground: `#E3BFB2`
 - outline-variant: `#5A4138`
+
+### Light ramp
+Light은 plinth가 페이지보다 **어두워지는** 방향이다 (recessed = 흰색 tray). 단계는 CIE L* 기준 약 3.5씩:
+- background `#F5F2F1` (L* 95.7) · surface-lowest `#FFFFFF` (100)
+- surface-low `#EFE7E4` (92.2) · surface-container `#EBE1DD` (90.2)
+- surface-high `#E2D5D0` (86.2) · surface-highest `#DAC9C3` (82.2)
+
+Midnight / Paper light 프리셋도 같은 L* 단계를 따른다. custom 팔레트에서 low를 비워 두면 배경보다 최소 3.5 L* 어둡게 자동 보정된다.
 
 ---
 
@@ -86,7 +94,7 @@ AI 결과물을 조용히 전면에 세우는 **하이엔드 다크 갤러리**�
 The rules below are what `src/components/ui` actually does. Use those components; do not re-create their look with
 ad-hoc classes. Lint guards (`eslint.config.js`, `[ds/*]`) warn on raw `<button>`, raw checkboxes, hand-rolled
 `fixed inset-0` overlays, hex colours, `text-[Npx]` and `bg-black/N` scrims. The live reference is `/#/dev/ui`
-(dev builds only).
+(dev builds only). The guards cover `src/features/**` and `src/components/{common,layout,media}/**`.
 
 ### D1: tone, not lines
 - Sections, cards, panels, modals and drawers separate by **surface tone and spacing**. No border, no header `border-b`.
@@ -115,6 +123,9 @@ Automatic nesting uses `data-surface` on the container: `raised` (Section, Card,
 `high` (Panel high, Popover), `recessed` (Panel lowest). The nested tones live in the `ui-tone-*` classes in
 `index.css` (components layer), so a `bg-*` className on a component still overrides them.
 
+Rich clickable cards (preview art + copy, list cards, media tiles) are `<Panel asChild interactive><button …/></Panel>`:
+Panel supplies tone, hover and focus ring; the lint rule allows a `<button>` that is the direct child of `Panel asChild`.
+
 ### Button variants
 | Variant | Use | Look |
 |---|---|---|
@@ -125,19 +136,43 @@ Automatic nesting uses `data-surface` on the container: `raised` (Section, Card,
 | `nav` | sidebar / list navigation rows | full width, left aligned; current row via `data-active="true"` or `aria-current` → `primary/12` tint |
 | `destructive` | delete / irreversible | `destructive-soft` pair |
 | `link` | inline text links | `secondary` text, underline on hover |
+| `shell` | icon keys in the floating app header (search, queue, account) | translucent glass key (`.theme-shell-icon-button`); open / `aria-expanded` / pressed → primary tint |
+| `overlay` | controls sitting on photos (viewer toolbar, media tiles) | `backdrop/50` scrim + blur, white foreground; readable on any image in both themes |
 
 `outline` no longer exists. Icon-only buttons use `IconButton` (label = aria-label + tooltip).
+Toggle icon buttons pass `active` (`aria-pressed` + `data-pressed`): primary/12 tint on ghost/subtle/secondary, solid
+primary on `overlay`, primary tint on `shell`.
 Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` overrides; pick a variant.
+
+### Badge / Chip / ToggleChip
+| Component | Use | Look |
+|---|---|---|
+| `Badge` | short status / kind labels | `text-2xs` semibold, `tracking-overline`, uppercase (Latin); variants `default secondary outline ghost link` + status `success warning info destructive` (soft token fills) |
+| `Chip` | user content: tags, terms, tokens | keeps text case; `tone` `default muted primary success warning info destructive`, `size` `sm md` |
+| `ToggleChip` | multi-select filters / category toggles | `aria-pressed`; muted wash → primary/12 tint when pressed |
+
+`Alert` has the same status set: `default destructive warning success info`.
+
+### Labels
+Overline-style labels (Field label, StatTile label, Badge, Section `drawer` heading, anchored-popup label, PageHeader
+eyebrow, ExplorerSidebar title) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
+0.02em under `html:lang(ko)`, so never hard-code `tracking-[0.1Xem]` or `text-[11px]` on a label. The PageHeader eyebrow
+is a muted overline (no accent colour, no rule line).
+
+### Navigation rows
+Current row = `primary/12` tint + `foreground` text + primary icon (Button `nav`, `HierarchyNav`,
+`getNavigationItemClassName`). Hover = `surface-high`. Only the top app nav uses primary text for the active item.
 
 ### Other tokens
 - Text: `Text` variants `overline / label / body / muted / caption / title`, `Heading level`; type scale
   `text-2xs … text-5xl` (scaled by `--theme-text-scale`). Body text is `foreground`, metadata `muted-foreground`.
 - Status colours: `destructive / success / warning / info`, each with `-foreground`, `-soft`, `-soft-foreground`.
 - Elevation: `shadow-elevation-1` (raised controls), `-2` (menus, popovers), `-3` (modals).
-- Stacking: `z-raised / sticky / header / drawer / popover / modal / floating / toast` (see `index.css`).
+- Stacking: `z-raised / sticky / header / drawer / popover / popover-nested / modal / floating / toast` (see `index.css`).
+  `popover-nested` (150) is for a popup opened from inside a popover; go `calc(var(--z-index-popover-nested)+10)` for one more level.
 - Density: `--theme-panel-padding-x/y`, `--theme-field-gap`, `--theme-control-height` (Panel `padding`/`stack` use them).
 - Radius: `rounded-sm` default; `rounded-md` for floating menus.
-- Chips (`Badge`): small metadata pieces, muted text, not pill-round.
+- Chips (`Badge` / `Chip`): small metadata pieces, not pill-round.
 - Top navigation: floating glass (`theme-shell-header`, translucent + blur); active state is the only orange.
 
 ---

@@ -3,11 +3,12 @@
  * Registered in router.tsx behind `import.meta.env.DEV`, so it never reaches production bundles.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { Copy, Folder, Image as ImageIcon, ImageOff, Inbox, MoreHorizontal, Pencil, Plus, Settings, Trash2 } from 'lucide-react'
+import { CircleCheck, Copy, Download, Folder, Image as ImageIcon, ImageOff, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, TriangleAlert, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -61,7 +62,9 @@ type ThemeChoice = 'app' | 'light' | 'dark'
 const BUTTON_VARIANTS = ['default', 'secondary', 'subtle', 'ghost', 'destructive', 'link'] as const
 const BUTTON_SIZES = ['xs', 'sm', 'default', 'lg'] as const
 const ICON_SIZES = ['icon-xs', 'icon-sm', 'icon', 'icon-lg'] as const
-const BADGE_VARIANTS = ['default', 'secondary', 'destructive', 'outline', 'ghost', 'link'] as const
+const BADGE_VARIANTS = ['default', 'secondary', 'success', 'warning', 'info', 'destructive', 'outline', 'ghost', 'link'] as const
+const CHIP_TONES = ['default', 'muted', 'primary', 'success', 'warning', 'info', 'destructive'] as const
+const CHIP_FILTERS = ['태그', 'Prompt', '모델', 'LoRA'] as const
 const INPUT_VARIANTS = ['default', 'settings', 'detail', 'detailNested'] as const
 const SECTION_VARIANTS = ['page', 'settings', 'drawer', 'controller'] as const
 const PANEL_TONES = ['lowest', 'low', 'container', 'high'] as const
@@ -113,6 +116,7 @@ const Z_LAYERS = [
   { name: 'header (50)', className: 'z-header left-18 top-15 bg-success-soft text-success-soft-foreground' },
   { name: 'drawer (84)', className: 'z-drawer left-24 top-20 bg-warning-soft text-warning-soft-foreground' },
   { name: 'popover (140)', className: 'z-popover left-30 top-25 bg-surface-bright' },
+  { name: 'popover-nested (150)', className: 'z-popover-nested left-33 top-27 bg-surface-highest' },
   { name: 'modal (6000)', className: 'z-modal left-36 top-30 bg-primary text-primary-foreground' },
   { name: 'floating (6500)', className: 'z-floating left-42 top-35 bg-secondary text-secondary-foreground' },
   { name: 'toast (7000)', className: 'z-toast left-48 top-40 bg-destructive-soft text-destructive-soft-foreground' },
@@ -164,6 +168,8 @@ export function UiCatalogPage() {
   const [retrying, setRetrying] = useState(false)
   const [navItem, setNavItem] = useState('images')
   const [selectedPanel, setSelectedPanel] = useState<string>('low')
+  const [zoomLocked, setZoomLocked] = useState(true)
+  const [chipFilters, setChipFilters] = useState<string[]>(['태그'])
 
   useCatalogTheme(theme)
 
@@ -227,6 +233,30 @@ export function UiCatalogPage() {
             <IconButton variant="secondary" label="No tooltip" tooltip={false}><Copy /></IconButton>
             <IconButton variant="subtle" label="Subtle"><Copy /></IconButton>
           </Row>
+          <Row label="IconButton active (toggle: aria-pressed + tint)">
+            {(['ghost', 'subtle', 'secondary'] as const).map((variant) => (
+              <IconButton key={variant} variant={variant} active={zoomLocked} onClick={() => setZoomLocked((current) => !current)} label={`Lock zoom (${variant})`}><Lock /></IconButton>
+            ))}
+          </Row>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Text variant="overline" className="font-semibold">variant=shell (glass app-header keys)</Text>
+              <div className="theme-shell-header flex items-center justify-end gap-2 rounded-sm px-3 py-2">
+                <IconButton variant="shell" label="Search"><Search /></IconButton>
+                <IconButton variant="shell" label="Queue (open)" aria-expanded><Inbox /></IconButton>
+                <IconButton variant="shell" label="Account"><Settings /></IconButton>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Text variant="overline" className="font-semibold">variant=overlay (controls on photos)</Text>
+              <div className="flex items-start justify-end gap-2 rounded-sm bg-[linear-gradient(135deg,var(--primary),var(--secondary)_45%,var(--surface-bright)_70%,var(--foreground))] p-3">
+                <IconButton size="icon-sm" variant="overlay" label="Close"><X /></IconButton>
+                <IconButton size="icon-sm" variant="overlay" label="Download"><Download /></IconButton>
+                <IconButton size="icon-sm" variant="overlay" active={zoomLocked} onClick={() => setZoomLocked((current) => !current)} label="Lock zoom"><Lock /></IconButton>
+                <Button size="sm" variant="overlay">Overlay text</Button>
+              </div>
+            </div>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Text variant="overline" className="font-semibold">variant=nav (data-active on the current row)</Text>
@@ -255,9 +285,27 @@ export function UiCatalogPage() {
           </div>
         </CatalogSection>
 
-        <CatalogSection id="badges" title="Badge">
-          <Row label="variants">
+        <CatalogSection id="badges" title="Badge / Chip / ToggleChip">
+          <Row label="Badge variants (uppercase status labels; success/warning/info/destructive = soft status fills)">
             {BADGE_VARIANTS.map((variant) => <Badge key={variant} variant={variant}>{variant}</Badge>)}
+            <Badge variant="success">연결됨</Badge>
+          </Row>
+          <Row label="Chip tones (static, keeps text case — tags, terms, tokens)">
+            {CHIP_TONES.map((tone) => <Chip key={tone} tone={tone}>{tone}</Chip>)}
+            <Chip size="sm" tone="muted">size=sm</Chip>
+            <Chip><Folder />with icon</Chip>
+          </Row>
+          <Row label="ToggleChip (aria-pressed; multi-select filters)">
+            {CHIP_FILTERS.map((filter) => (
+              <ToggleChip
+                key={filter}
+                pressed={chipFilters.includes(filter)}
+                onClick={() => setChipFilters((current) => current.includes(filter) ? current.filter((value) => value !== filter) : [...current, filter])}
+              >
+                {filter}
+              </ToggleChip>
+            ))}
+            <ToggleChip size="sm" pressed={false} disabled>disabled</ToggleChip>
           </Row>
         </CatalogSection>
 
@@ -450,6 +498,19 @@ export function UiCatalogPage() {
 
         <CatalogSection id="panels" title="Panel / Separator">
           <Text variant="muted">Tonal box for ad-hoc surfaces. No outline: pick a tone one step away from the parent (lowest inside a Section).</Text>
+          <Row label="asChild + interactive: a rich clickable card is a real <button> (lint allows it inside Panel asChild)">
+            {(['low', 'container'] as const).map((tone) => (
+              <Panel key={tone} asChild tone={tone} interactive padding="none" className="w-56 overflow-hidden text-left">
+                <button type="button" onClick={() => setSelectedPanel(tone)}>
+                  <div className="h-16 bg-[linear-gradient(135deg,var(--primary),var(--secondary))]" />
+                  <div className="p-3">
+                    <Text variant="title">Template card</Text>
+                    <Text variant="caption">tone={tone}</Text>
+                  </div>
+                </button>
+              </Panel>
+            ))}
+          </Row>
           <Row label="tone (interactive, click to select)">
             {PANEL_TONES.map((tone) => (
               <Panel
@@ -507,6 +568,9 @@ export function UiCatalogPage() {
             <div className="space-y-3">
               <Alert><Inbox /><AlertTitle>Default alert</AlertTitle><AlertDescription>Neutral information.</AlertDescription></Alert>
               <Alert variant="destructive"><Trash2 /><AlertTitle>Destructive alert</AlertTitle><AlertDescription>Something failed.</AlertDescription></Alert>
+              <Alert variant="warning"><TriangleAlert /><AlertTitle>Warning alert</AlertTitle><AlertDescription>Check this before running.</AlertDescription></Alert>
+              <Alert variant="success"><CircleCheck /><AlertTitle>Success alert</AlertTitle><AlertDescription>Saved.</AlertDescription></Alert>
+              <Alert variant="info"><Inbox /><AlertTitle>Info alert</AlertTitle><AlertDescription>Runs in the background.</AlertDescription></Alert>
             </div>
             <Inset><Text variant="muted">Inset surface for dense notes and previews.</Text></Inset>
             <div className="grid grid-cols-3 gap-3">
