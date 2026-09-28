@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, FilePenLine, Search, Settings2, SlidersHorizontal } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import {
@@ -24,6 +24,7 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
 import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTermItems, type ExtractedPromptActionScope, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
+import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems } from './image-detail-utils'
@@ -162,6 +163,7 @@ function getImageModelSearchValue(image: ImageRecord) {
 
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const imageViewModal = useImageViewModal()
   const { addScopedTextChip } = useHomeSearch()
@@ -320,8 +322,9 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               size="sm"
               variant="outline"
               onClick={() => {
+                const sourceState = prepareImageSourceState(location)
                 imageViewModal?.closeImageView()
-                navigate(`/images/${image.composite_hash}/metadata`)
+                navigate(`/images/${image.composite_hash}/metadata`, { state: sourceState })
               }}
             >
               <FilePenLine className="h-4 w-4" />

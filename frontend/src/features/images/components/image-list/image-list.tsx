@@ -2,8 +2,8 @@ import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useStat
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
 import { useImageViewModal, type ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
+import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import type { ImageRecord } from '@/types/image'
 const ImageListGridLazy = lazy(async () => {
@@ -155,19 +155,10 @@ export function ImageList({
       }
 
       if (href) {
-        if (location.pathname === '/') {
-          markHomeScrollRestorePending()
-        }
-
-        navigate(href, {
-          state: {
-            fromFeed: location.pathname === '/',
-            sourcePath: location.pathname,
-          },
-        })
+        navigate(href, { state: prepareImageSourceState({ pathname: location.pathname, search: location.search }) })
       }
     },
-    [activationMode, hasMore, imageViewModal, itemCompositeHashes, items, location.pathname, modalAccessOptions, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIdSet, selectedIds, selectionMode, shouldSuppressClick, stableSequenceTotal],
+    [activationMode, hasMore, imageViewModal, itemCompositeHashes, items, location.pathname, location.search, modalAccessOptions, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIdSet, selectedIds, selectionMode, shouldSuppressClick, stableSequenceTotal],
   )
 
   const handlePreviewIntent = useCallback((image: ImageRecord) => {

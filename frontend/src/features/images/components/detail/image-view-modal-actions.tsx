@@ -1,8 +1,9 @@
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
+import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
@@ -32,6 +33,7 @@ export function ImageViewModalActions({
   onClose,
 }: ImageViewModalActionsProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { t, formatNumber } = useI18n()
   const showCounter = activeIndex >= 0 && (
     totalCount > 1
@@ -53,7 +55,7 @@ export function ImageViewModalActions({
   const allowGroupAssignAction = accessOptions?.allowGroupAssignAction !== false
 
   const openDetailPage = () => {
-    navigate(`/images/${compositeHash}`)
+    navigate(`/images/${compositeHash}`, { state: prepareImageSourceState(location) })
     onClose()
   }
 

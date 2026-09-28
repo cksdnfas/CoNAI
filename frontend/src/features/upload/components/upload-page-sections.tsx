@@ -1,5 +1,5 @@
 import type { ChangeEvent, DragEvent, RefObject } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Copy, Download, ExternalLink, File, RefreshCw, Trash2, Video } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
@@ -16,6 +16,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
 import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
+import { buildImageSourceState } from '@/features/images/image-source-navigation'
 import type { RewriteMetadataDraft } from '@/features/metadata/use-metadata-rewrite-draft'
 import { useI18n } from '@/i18n'
 import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
@@ -200,6 +201,7 @@ export function UploadPageUploadSection({
   onUpload: () => void
 }) {
   const { t, formatNumber } = useI18n()
+  const location = useLocation()
   const uploadFilePreviews = useLocalFilePreviews(uploadFiles, MAX_VISIBLE_FILES)
   const uploadResultItems = uploadResult ? getVisibleUploadResultLists(uploadResult, MAX_VISIBLE_FILES) : null
 
@@ -295,7 +297,7 @@ export function UploadPageUploadSection({
                       <div className="min-w-0 break-all text-foreground">{file.original_name}</div>
                       {detailPath ? (
                         <Button asChild variant="ghost" size="icon-xs" aria-label={t({ ko: '상세 열기', en: 'Open details' })} title={t({ ko: '상세 열기', en: 'Open details' })}>
-                          <Link to={detailPath}>
+                          <Link to={detailPath} state={buildImageSourceState(location)}>
                             <ExternalLink />
                           </Link>
                         </Button>

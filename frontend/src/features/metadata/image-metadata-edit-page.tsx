@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Download, Save } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { ImageDetailMedia } from '@/features/images/components/detail/image-detail-media'
+import { useImageSourceBack } from '@/features/images/image-source-navigation'
 import { getDownloadName, getImageDetailRenderUrl } from '@/features/images/components/detail/image-detail-utils'
 import { downloadExistingImageWithRewrittenMetadata, getImage, saveImageMetadata } from '@/lib/api-images'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -20,12 +21,12 @@ import { buildMetadataRewritePatch, createRewriteDraftFromImage, type RewriteMet
 
 export function ImageMetadataEditPage() {
   const { compositeHash } = useParams<{ compositeHash: string }>()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [draft, setDraft] = useState<RewriteMetadataDraft | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
+  const handleBack = useImageSourceBack(`/images/${compositeHash ?? ''}`)
 
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
@@ -101,10 +102,6 @@ export function ImageMetadataEditPage() {
   const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
   const isEditableImage = image?.file_type === 'image'
   const busy = downloadMutation.isPending || saveMutation.isPending
-
-  const handleBack = () => {
-    navigate(`/images/${compositeHash}`)
-  }
 
   const handleDownload = () => {
     if (!draft || busy) {

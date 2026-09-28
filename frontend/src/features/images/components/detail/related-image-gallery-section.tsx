@@ -1,10 +1,11 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
+import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { useI18n } from '@/i18n'
 import { ImageListItem } from '@/features/images/components/image-list/image-list-item'
 import type { ImageRecord } from '@/types/image'
@@ -52,6 +53,7 @@ export function RelatedImageGallerySection({
   renderItemPersistentOverlay,
 }: RelatedImageGallerySectionProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { t } = useI18n()
   const imageViewModal = useImageViewModal()
   const itemCompositeHashes = useMemo(
@@ -77,9 +79,9 @@ export function RelatedImageGallerySection({
     }
 
     if (href) {
-      navigate(href)
+      navigate(href, { state: prepareImageSourceState(location) })
     }
-  }, [activationMode, imageViewModal, itemCompositeHashes, navigate])
+  }, [activationMode, imageViewModal, itemCompositeHashes, location, navigate])
 
   const resolvedMobileCardColumns = Math.min(Math.max(mobileCardColumns, 1), 6)
   const resolvedDesktopCardColumns = Math.min(Math.max(desktopCardColumns, 1), 6)

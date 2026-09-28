@@ -1,29 +1,14 @@
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { ImageDetailActions } from './components/detail/image-detail-actions'
 import { ImageDetailView } from './image-detail-view'
-
-interface DetailLocationState {
-  fromFeed?: boolean
-  sourcePath?: string
-}
+import { useImageSourceBack } from './image-source-navigation'
 
 export function ImageDetailPage() {
   const { compositeHash } = useParams<{ compositeHash: string }>()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const locationState = location.state as DetailLocationState | null
+  const handleBackToSource = useImageSourceBack('/')
 
   if (!compositeHash) {
     return null
-  }
-
-  const handleBackToFeed = () => {
-    if (locationState?.fromFeed && locationState.sourcePath === '/' && window.history.state?.idx > 0) {
-      navigate(-1)
-      return
-    }
-
-    navigate('/')
   }
 
   return (
@@ -36,7 +21,7 @@ export function ImageDetailPage() {
           downloadName={downloadName}
           image={image}
           isRefreshing={isRefreshing}
-          onBack={handleBackToFeed}
+          onBack={handleBackToSource}
           onRefresh={refresh}
         />
       )}

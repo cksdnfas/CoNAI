@@ -87,7 +87,7 @@ export function useHomeScrollRestoration({
   }, [canLoadMore, enabled, isLoadingMore, itemCount, onLoadMore])
 }
 
-export function markHomeScrollRestorePending() {
+export function markHomeScrollRestorePending(scrollY = window.scrollY) {
   sessionStorage.setItem(HOME_SCROLL_PENDING_KEY, 'true')
-  sessionStorage.setItem(HOME_SCROLL_STORAGE_KEY, String(window.scrollY))
+  sessionStorage.setItem(HOME_SCROLL_STORAGE_KEY, String(scrollY))
 }
