@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleUserRound, LogIn, LogOut, Map as MapIcon } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
+import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -89,13 +89,11 @@ export function HeaderAccountMenu() {
         <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`} role="menu" aria-label={t('headerAccountMenu.accountMenu')}>
           {isSignedIn ? (
             <div className="space-y-1">
-              <div className={anchoredPopupLabelClassName}>{t({ ko: '현재 계정', en: 'Current account' })}</div>
               <div className="text-sm font-semibold text-foreground">{authStatus.username}</div>
               <div className="text-xs text-muted-foreground">{accountTypeLabel}</div>
             </div>
           ) : isAnonymousSession ? (
             <div className="space-y-1">
-              <div className={anchoredPopupLabelClassName}>{t({ ko: '현재 계정', en: 'Current account' })}</div>
               <div className="text-sm text-muted-foreground">{t({ ko: '로그인하지 않음', en: 'Not signed in' })}</div>
             </div>
           ) : null}

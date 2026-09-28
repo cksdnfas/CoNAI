@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, LogIn, ShieldAlert, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
@@ -19,14 +18,13 @@ import { useAuthStatusQuery } from './use-auth-status-query'
 
 interface AccessEntryCardProps {
   label: string
-  description: string
+  description?: string | null
   href: string
   icon: LucideIcon
-  badge?: string | null
 }
 
 /** Render one compact access card with a direct jump target. */
-function AccessEntryCard({ label, description, href, icon: Icon, badge }: AccessEntryCardProps) {
+function AccessEntryCard({ label, description, href, icon: Icon }: AccessEntryCardProps) {
   return (
     <Link
       to={href}
@@ -40,11 +38,8 @@ function AccessEntryCard({ label, description, href, icon: Icon, badge }: Access
       </div>
 
       <div className="min-w-0 flex-1 space-y-0.5">
-        <div className="flex items-center gap-2">
-          <Text as="div" variant="title" className="truncate">{label}</Text>
-          {badge ? <Badge variant="outline">{badge}</Badge> : null}
-        </div>
-        <Text as="div" variant="caption" className="truncate">{description}</Text>
+        <Text as="div" variant="title" className="truncate">{label}</Text>
+        {description ? <Text as="div" variant="caption" className="truncate">{description}</Text> : null}
       </div>
 
       <div className="shrink-0 text-muted-foreground transition-colors group-hover:text-foreground">
@@ -139,23 +134,10 @@ export function AccessOverviewPage() {
     ...accessibleItems.filter((item) => item.category !== 'primary'),
   ]
   const publicWorkflows = publicWorkflowsQuery.data ?? []
-  const accountTypeLabel = authStatus?.accountType === 'admin'
-    ? t({ ko: '관리자', en: 'Admin' })
-    : authStatus?.accountType === 'guest'
-      ? t({ ko: '게스트', en: 'Guest' })
-      : t({ ko: '계정', en: 'Account' })
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title={t('appShell.availablePages')}
-        actions={(
-          <>
-            {authStatus?.username ? <Badge variant="secondary">{authStatus.username}</Badge> : null}
-            <Badge variant="outline">{accountTypeLabel}</Badge>
-          </>
-        )}
-      />
+      <PageHeader title={t('appShell.availablePages')} />
 
       {blockedRoute ? (
         <BlockedRouteNotice
@@ -176,12 +158,11 @@ export function AccessOverviewPage() {
                 <Heading level={3}>{t({ ko: '페이지', en: 'Pages' })}</Heading>
               ) : null}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {pageItems.map(({ path, labelKey, descriptionKey, icon }) => (
+                {pageItems.map(({ path, labelKey, icon }) => (
                   <AccessEntryCard
                     key={path}
                     href={path}
                     label={t(labelKey)}
-                    description={t(descriptionKey)}
                     icon={icon}
                   />
                 ))}
@@ -202,9 +183,8 @@ export function AccessOverviewPage() {
                     key={workflow.id}
                     href={`/public/workflows/${workflow.public_slug}`}
                     label={workflow.name}
-                    description={workflow.description?.trim() || t('accessOverviewPage.publicGenerationPage')}
+                    description={workflow.description?.trim()}
                     icon={Sparkles}
-                    badge={t({ ko: '공용', en: 'Public' })}
                   />
                 ))}
               </div>

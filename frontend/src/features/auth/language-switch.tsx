@@ -21,14 +21,12 @@ export function LanguageSwitch({ className }: { className?: string }) {
   const { t, defaultLanguage, languageOverride, setLanguageOverride } = useI18n()
 
   return (
-    <div className={cn('space-y-1.5', className)}>
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Languages className="h-3.5 w-3.5" />
-        {t({ ko: '표시 언어 (이 브라우저)', en: 'Display language (this browser)' })}
-      </div>
+    <div className={cn('flex items-center gap-2', className)}>
+      <Languages className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <SegmentedControl
         size="xs"
         fullWidth
+        className="min-w-0 flex-1"
         ariaLabel={t({ ko: '표시 언어', en: 'Display language' })}
         value={languageOverride ?? DEFAULT_OPTION_VALUE}
         onChange={(value) => setLanguageOverride(value === DEFAULT_OPTION_VALUE ? null : (value as AppLanguage))}

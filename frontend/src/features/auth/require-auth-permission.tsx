@@ -24,7 +24,6 @@ export function AuthStatusErrorState({ error, isRetrying, onRetry }: { error: un
           </div>
           <div className="min-w-0 space-y-1">
             <div className="text-sm font-semibold text-foreground">{t('requireAuthPermission.statusUnavailable')}</div>
-            <div className="text-sm text-muted-foreground">{t('requireAuthPermission.statusUnavailableHint')}</div>
             {error instanceof Error && error.message ? (
               <div className="break-words text-xs text-muted-foreground/80">{error.message}</div>
             ) : null}

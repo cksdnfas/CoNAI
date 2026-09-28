@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CircleHelp, ShieldCheck, UserPlus } from 'lucide-react'
+import { CircleHelp, UserPlus } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
@@ -9,7 +9,6 @@ import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -158,7 +157,6 @@ export function LoginPage() {
           <div className="flex items-start justify-between gap-3">
             <Heading level={1}>{t('loginPage.signIn')}</Heading>
             <div className="flex shrink-0 items-center gap-2">
-              <Badge variant="secondary">{t('loginPage.localAccount')}</Badge>
               <IconButton
                 size="icon-sm"
                 variant="ghost"
@@ -219,10 +217,9 @@ export function LoginPage() {
             ) : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
               {canCreateGuestAccount ? (
-                <Button type="button" variant="secondary" onClick={() => setIsGuestModalOpen(true)}>
-                  <UserPlus className="h-4 w-4" />
-                  {t('loginPage.createGuestAccount')}
-                </Button>
+                <IconButton variant="secondary" onClick={() => setIsGuestModalOpen(true)} label={t('loginPage.createGuestAccount')}>
+                  <UserPlus />
+                </IconButton>
               ) : null}
               <Button className="ml-auto" type="submit" disabled={loginMutation.isPending || username.trim().length === 0 || password.length === 0}>
                 {loginMutation.isPending ? t('loginPage.signingIn') : t('loginPage.signIn')}
@@ -239,12 +236,7 @@ export function LoginPage() {
         widthClassName="max-w-lg"
       >
         <ModalBody>
-          <div className="flex items-start gap-3">
-            <div className="rounded-sm bg-primary/12 p-3 text-primary">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
-            <div className="text-sm text-muted-foreground">{t('loginPage.recoveryForgotPassword')}</div>
-          </div>
+          <div className="text-sm text-muted-foreground">{t('loginPage.recoveryForgotPassword')}</div>
 
           <Inset className="text-sm text-muted-foreground">
             {t('loginPage.recoveryAdminLost')}
