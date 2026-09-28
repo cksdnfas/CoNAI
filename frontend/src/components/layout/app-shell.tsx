@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import type { HeaderNavigationItemKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
+import { Tip } from '@/components/ui/tooltip'
 
 const GenerationQueueHeaderWidgetLazy = lazy(async () => {
   const [module, imageGenerationCatalog] = await Promise.all([
@@ -146,16 +147,16 @@ function AppShellLayout() {
                 onPointerLeave={handlePointerLeave}
                 style={{ touchAction: 'pan-y pinch-zoom' }}
               >
-                <nav className="flex min-w-max items-center gap-2 pr-10 sm:pr-2 xl:gap-1" aria-label={t('appShell.mainPageNavigation')}>
+                <nav className="flex min-w-max items-center gap-1 pr-10 sm:pr-2" aria-label={t('appShell.mainPageNavigation')}>
                   {visibleNavItems.map(({ to, labelKey, icon: Icon }) => {
                     const label = t(labelKey)
 
                     return (
+                    <Tip key={to} content={label} side="bottom">
                     <NavLink
-                      key={to}
                       to={to}
                       end={to === '/'}
-                      title={label}
+                      aria-label={label}
                       draggable={false}
                       onClick={handleNavItemClick}
                       onMouseEnter={() => prefetchAppRoute(to)}
@@ -163,16 +164,21 @@ function AppShellLayout() {
                       onDragStart={(event) => event.preventDefault()}
                       className={({ isActive }) =>
                         cn(
-                          // Icon-only below xl; from xl (1280px) the label sits next to the icon.
-                          'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-foreground/70 transition-colors duration-300 outline-none hover:bg-surface-high hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 select-none xl:w-auto xl:px-3',
+                          // Icon-only; from xl (1280px) the active page also shows its label.
+                          'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-foreground/70 transition-colors duration-300 outline-none hover:bg-surface-high hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 select-none',
                           isDraggingNav && 'pointer-events-none',
-                          isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary',
+                          isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary xl:w-auto xl:px-3',
                         )
                       }
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="sr-only xl:not-sr-only xl:whitespace-nowrap xl:text-sm xl:font-medium">{label}</span>
+                      {({ isActive }) => (
+                        <>
+                          <Icon className="h-4 w-4 shrink-0" />
+                          <span className={cn('sr-only', isActive && 'xl:not-sr-only xl:whitespace-nowrap xl:text-sm xl:font-medium')}>{label}</span>
+                        </>
+                      )}
                     </NavLink>
+                    </Tip>
                     )
                   })}
                 </nav>

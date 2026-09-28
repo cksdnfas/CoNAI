@@ -74,10 +74,9 @@ export function SelectionActionBar({
       clearButton = <SelectionBarAction icon={X} label={resolvedClearLabel} variant="ghost" onClick={onClear} />
     } else {
       clearButton = (
-        <Button size="sm" variant="secondary" onClick={onClear} data-no-select-drag="true">
+        <IconButton size="icon-sm" variant="secondary" onClick={onClear} data-no-select-drag="true" label={resolvedClearLabel}>
           <X className="h-4 w-4" />
-          {resolvedClearLabel}
-        </Button>
+        </IconButton>
       )
     }
   }

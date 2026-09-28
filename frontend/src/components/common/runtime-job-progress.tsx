@@ -1,7 +1,8 @@
-import { Button } from '@/components/ui/button'
+import { LoaderCircle, X } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
+import { IconButton } from '@/components/ui/icon-button'
 
 interface RuntimeJobProgressProps {
   job: RuntimeJobRecord | undefined
@@ -35,11 +36,15 @@ export function RuntimeJobProgress({ job, cancel, isCancelling = false, classNam
         </span>
 
         {isRunning && cancel ? (
-          <Button type="button" size="sm" variant="ghost" disabled={isCancelling} onClick={() => void cancel()}>
-            {isCancelling
-              ? t({ ko: '취소하는 중...', en: 'Cancelling...' })
-              : t({ ko: '취소', en: 'Cancel' })}
-          </Button>
+          <IconButton
+            size="icon-xs"
+            variant="ghost"
+            disabled={isCancelling}
+            onClick={() => void cancel()}
+            label={isCancelling ? t({ ko: '취소하는 중...', en: 'Cancelling...' }) : t({ ko: '취소', en: 'Cancel' })}
+          >
+            {isCancelling ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+          </IconButton>
         ) : null}
       </div>
 

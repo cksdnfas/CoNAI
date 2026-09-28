@@ -1,6 +1,5 @@
 import { Copy } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
@@ -9,6 +8,7 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
 import { CharacterPromptSection, GeneralPromptSection, RatingPromptSection } from './prompt-result-sections'
 import { formatPromptTagCopyText, getSortedEntries, parseTaglistTokens } from './tag-result-utils'
+import { IconButton } from '@/components/ui/icon-button'
 
 interface WDTaggerResultBlockProps {
   result: AutoTestTaggerResult
@@ -67,17 +67,14 @@ export function WDTaggerResultBlock({ result, title, onAddSearchFilter }: WDTagg
               getTagHref={buildDanbooruTagUrl}
               onAddSearchFilter={onAddSearchFilter}
               tagsHeaderAction={generalCopyText ? (
-                <Button
-                  type="button"
-                  size="xs"
+                <IconButton
+                  size="icon-xs"
                   variant="ghost"
                   onClick={() => void handleCopyGeneralTags()}
-                  aria-label={t({ ko: 'General 태그 복사', en: 'Copy general tags' })}
-                  title={t({ ko: 'General 태그 복사', en: 'Copy general tags' })}
+                  label={t({ ko: 'General 태그 복사', en: 'Copy general tags' })}
                 >
                   <Copy className="h-3.5 w-3.5" />
-                  {t({ ko: '복사', en: 'Copy' })}
-                </Button>
+                </IconButton>
               ) : null}
             />
           </div>

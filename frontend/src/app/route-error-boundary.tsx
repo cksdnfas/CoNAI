@@ -1,6 +1,7 @@
 import { AlertTriangle, Home, RefreshCcw } from 'lucide-react'
 import { useRouteError } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { getRouteErrorMessage } from '@/lib/error-message'
 import { SystemMessagePanel } from '@/features/system/system-message-panel'
@@ -23,16 +24,7 @@ export function RouteErrorBoundary() {
       <SystemMessagePanel
         icon={AlertTriangle}
         iconTone="warning"
-        overline={t({ ko: '오류', en: 'Error' })}
         title={isChunkError ? t('routeErrorBoundary.appResourcesNeedToBe') : t('routeErrorBoundary.anUnexpectedErrorOccurred')}
-        description={isChunkError ? (
-          <>
-            <p>{t('routeErrorBoundary.thisCanHappenRightAfter')}</p>
-            <p>{t('routeErrorBoundary.aRefreshUsuallyFixesIt')}</p>
-          </>
-        ) : (
-          <p>{t({ ko: '이 화면을 표시하다가 문제가 생겼어. 다시 시도하거나 홈으로 이동해 줘.', en: 'Something went wrong while showing this page. Try again, or go back to Home.' })}</p>
-        )}
         actions={(
           <>
             <Button type="button" onClick={() => window.location.reload()}>
@@ -40,12 +32,11 @@ export function RouteErrorBoundary() {
               {isChunkError ? t({ ko: '새로고침', en: 'Refresh' }) : t({ ko: '다시 시도', en: 'Try again' })}
             </Button>
             {/* A full navigation also recovers when the router itself is in a broken state. */}
-            <Button asChild variant="secondary">
+            <IconButton asChild variant="secondary" label={t({ ko: '홈으로 이동', en: 'Go to Home' })}>
               <a href="/">
                 <Home className="h-4 w-4" />
-                {t({ ko: '홈으로 이동', en: 'Go to Home' })}
               </a>
-            </Button>
+            </IconButton>
           </>
         )}
       >
