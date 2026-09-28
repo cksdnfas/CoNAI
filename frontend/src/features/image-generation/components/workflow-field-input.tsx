@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Inset } from '@/components/ui/inset'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
@@ -141,7 +142,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
           onSelect={(image) => void onImageChange(image)}
         />
         {imageValue && !isSimpleImageUpload ? (
-          <div className="theme-input-surface space-y-2 rounded-sm border border-border/80 p-3">
+          <Inset className="space-y-2 p-3">
             <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
             <InlineMediaPreview
               src={imageValue.dataUrl}
@@ -155,7 +156,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
                 {t({ ko: '이미지 제거', en: 'Remove image' })}
               </Button>
             </div>
-          </div>
+          </Inset>
         ) : null}
       </div>,
     )
