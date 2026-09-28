@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldAlert } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -29,9 +29,9 @@ import { useAppearanceSettingsTab } from './use-appearance-settings-tab'
 import { useAutoSettingsTab } from './use-auto-settings-tab'
 import { useUnsavedSettingsGuard } from './use-unsaved-settings-guard'
 
-const GeneralTabLazy = lazy(async () => {
-  const module = await import('./components/general-tab')
-  return { default: module.GeneralTab }
+const MaintenanceTabLazy = lazy(async () => {
+  const module = await import('./components/maintenance-tab')
+  return { default: module.MaintenanceTab }
 })
 
 const GeneralPreferencesSectionsLazy = lazy(async () => {
@@ -113,7 +113,8 @@ export function SettingsPage() {
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = parseSettingsTab(searchParams.get('section'))
+  const rawSection = searchParams.get('section')
+  const activeTab = parseSettingsTab(rawSection)
   const [generalDraft, setGeneralDraft] = useState<GeneralSettings | null>(null)
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
@@ -132,6 +133,24 @@ export function SettingsPage() {
     }
     setSearchParams(nextSearchParams, { replace: true })
   }
+
+  // Rewrite legacy or unknown `?section=` ids to the canonical tab so the address bar matches what is shown.
+  useEffect(() => {
+    const canonicalSection = activeTab === 'general' ? null : activeTab
+    if (rawSection === canonicalSection) {
+      return
+    }
+
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (canonicalSection) {
+        next.set('section', canonicalSection)
+      } else {
+        next.delete('section')
+      }
+      return next
+    }, { replace: true })
+  }, [activeTab, rawSection, setSearchParams])
 
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -166,7 +185,7 @@ export function SettingsPage() {
     ])
   }
 
-  const { tabProps: foldersTabProps } = useFolderSettingsTab({ isActive: activeTab === 'library', notifyInfo, notifyError })
+  const { tabProps: foldersTabProps } = useFolderSettingsTab({ isActive: activeTab === 'library' || activeTab === 'maintenance', notifyInfo, notifyError })
 
   const effectiveGeneralDraft = generalDraft ?? settingsQuery.data?.general ?? null
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
@@ -192,7 +211,7 @@ export function SettingsPage() {
   const isVideoOptimizationDraftDirty = Boolean(effectiveVideoOptimizationDraft && settingsQuery.data?.videoOptimization && !areSettingsDraftsEqual(effectiveVideoOptimizationDraft, settingsQuery.data.videoOptimization))
 
   const { tabProps: appearanceTabProps } = useAppearanceSettingsTab({
-    isActive: activeTab === 'appearance',
+    isActive: activeTab === 'general',
     currentAppearance: settingsQuery.data?.appearance,
     savedAppearance,
     syncSettingsCache,
@@ -453,19 +472,16 @@ export function SettingsPage() {
         <section className="space-y-6">
           <Suspense fallback={<SettingsSectionFallback />}>
             {activeTab === 'general' ? (
-              <GeneralPreferencesSectionsLazy
-                sections={['basic']}
-                generalDraft={effectiveGeneralDraft}
-                onPatchGeneral={patchGeneralDraft}
-                onPatchDeleteProtection={patchDeleteProtectionDraft}
-                onSave={() => saveGeneralSection('basic')}
-                isSaving={generalMutation.isPending}
-                hasChanges={isGeneralSectionDirty('basic')}
-              />
-            ) : null}
-
-            {activeTab === 'appearance' ? (
               <div className="space-y-6">
+                <GeneralPreferencesSectionsLazy
+                  sections={['basic']}
+                  generalDraft={effectiveGeneralDraft}
+                  onPatchGeneral={patchGeneralDraft}
+                  onPatchDeleteProtection={patchDeleteProtectionDraft}
+                  onSave={() => saveGeneralSection('basic')}
+                  isSaving={generalMutation.isPending}
+                  hasChanges={isGeneralSectionDirty('basic')}
+                />
                 <GeneralPreferencesSectionsLazy
                   sections={['appearance']}
                   generalDraft={effectiveGeneralDraft}
@@ -497,8 +513,6 @@ export function SettingsPage() {
                   onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
                   isSaving={metadataMutation.isPending}
                   hasChanges={isMetadataDraftDirty}
-                  onReextractAll={() => void metadataReextractMutation.mutateAsync()}
-                  isReextracting={metadataReextractMutation.isPending}
                 />
               </div>
             ) : null}
@@ -521,15 +535,15 @@ export function SettingsPage() {
                   showMediaSettings={false}
                 />
                 <LlmConnectionsTabLazy />
+                <IntegrationToolsTabLazy />
               </div>
             ) : null}
 
-            {activeTab === 'integration' ? <IntegrationToolsTabLazy /> : null}
+            {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
 
             {activeTab === 'system' ? (
               <div className="space-y-6">
                 <McpHttpSettingsCardLazy />
-                <SecurityTabLazy />
                 <GeneralPreferencesSectionsLazy
                   sections={['safety']}
                   generalDraft={effectiveGeneralDraft}
@@ -539,8 +553,22 @@ export function SettingsPage() {
                   isSaving={generalMutation.isPending}
                   hasChanges={isGeneralSectionDirty('safety')}
                 />
-                <GeneralTabLazy />
               </div>
+            ) : null}
+
+            {activeTab === 'maintenance' ? (
+              <MaintenanceTabLazy
+                onScanAll={foldersTabProps.onScanAll}
+                isScanningAll={foldersTabProps.isScanningAll}
+                scanAllJob={foldersTabProps.scanAllJob}
+                onCancelScanAll={foldersTabProps.onCancelScanAll}
+                isCancellingScanAll={foldersTabProps.isCancellingScanAll}
+                onVerifyAllFiles={foldersTabProps.onVerifyAllFiles}
+                isVerifyingAllFiles={foldersTabProps.isVerifyingAllFiles}
+                onReextractAll={() => void metadataReextractMutation.mutateAsync()}
+                isReextracting={metadataReextractMutation.isPending}
+                autoTabProps={autoTabProps}
+              />
             ) : null}
           </Suspense>
         </section>

@@ -442,7 +442,7 @@ export function ImageSaveTab({
               </Field>
 
               <p className="md:col-span-2 text-sm text-muted-foreground">
-                {t({ ko: '기존 썸네일은 재생성 필요. 계정 및 시스템의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch under Accounts and system.' })}
+                {t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })}
               </p>
             </div>
           ) : (

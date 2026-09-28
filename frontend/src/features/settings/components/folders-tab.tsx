@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCcw, ScanSearch, ShieldCheck } from 'lucide-react'
+import { Plus, RefreshCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, ScanAllSummary, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
 import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
@@ -39,12 +39,8 @@ interface FoldersTabProps {
   onValidateBackupPath: () => void
   onAddBackupSource: () => Promise<boolean>
   onRefresh: () => void
-  onVerifyAllFiles: () => void
-  isVerifyingAllFiles: boolean
-  onScanAll: () => void
   /** 진행 중인 전체 스캔 잡. 없으면 진행률 블록을 렌더하지 않는다. */
   scanAllJob: RuntimeJobRecord<ScanAllSummary> | undefined
-  isScanningAll: boolean
   onCancelScanAll: () => void
   isCancellingScanAll: boolean
   folders: WatchedFolder[]
@@ -86,11 +82,7 @@ export function FoldersTab({
   onValidateBackupPath,
   onAddBackupSource,
   onRefresh,
-  onVerifyAllFiles,
-  isVerifyingAllFiles,
-  onScanAll,
   scanAllJob,
-  isScanningAll,
   onCancelScanAll,
   isCancellingScanAll,
   folders,
@@ -170,31 +162,11 @@ export function FoldersTab({
         <Section
           variant="settings"
           heading={t({ ko: '감시 폴더 운영', en: 'Watched folder operations' })}
+          description={t({ ko: '전체 스캔과 파일 검증은 유지보수 탭으로 옮겼어.', en: 'Full scan and file verification now live in the Maintenance tab.' })}
           actions={
-            <>
-              <Button size="icon-sm" variant="outline" onClick={onRefresh} aria-label={t({ ko: '새로고침', en: 'Refresh' })} title={t({ ko: '새로고침', en: 'Refresh' })}>
-                <RefreshCcw className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon-sm"
-                variant="outline"
-                onClick={onVerifyAllFiles}
-                disabled={isVerifyingAllFiles}
-                aria-label={t({ ko: '전체 파일 검증', en: 'Verify all files' })}
-                title={t({ ko: '전체 파일 검증', en: 'Verify all files' })}
-              >
-                <ShieldCheck className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon-sm"
-                onClick={onScanAll}
-                disabled={isScanningAll}
-                aria-label={t({ ko: '전체 스캔', en: 'Full scan' })}
-                title={t({ ko: '전체 스캔', en: 'Full scan' })}
-              >
-                <ScanSearch className="h-4 w-4" />
-              </Button>
-            </>
+            <IconButton size="icon-sm" variant="outline" onClick={onRefresh} label={t({ ko: '새로고침', en: 'Refresh' })}>
+              <RefreshCcw className="h-4 w-4" />
+            </IconButton>
           }
         >
           <div className="grid gap-3 text-sm md:grid-cols-6">
@@ -236,15 +208,9 @@ export function FoldersTab({
               variant="settings"
               heading={t({ ko: '등록된 감시 폴더', en: 'Registered watched folders' })}
               actions={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  onClick={() => setIsAddFolderModalOpen(true)}
-                  aria-label={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}
-                  title={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}
-                >
+                <IconButton size="icon-sm" onClick={() => setIsAddFolderModalOpen(true)} label={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}>
                   <Plus className="h-4 w-4" />
-                </Button>
+                </IconButton>
               }
               bodyClassName="px-0 py-0"
             >
@@ -293,15 +259,9 @@ export function FoldersTab({
               variant="settings"
               heading={t({ ko: '등록된 백업 소스', en: 'Registered backup sources' })}
               actions={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  onClick={() => setIsAddBackupSourceModalOpen(true)}
-                  aria-label={t({ ko: '백업 소스 추가', en: 'Add backup source' })}
-                  title={t({ ko: '백업 소스 추가', en: 'Add backup source' })}
-                >
+                <IconButton size="icon-sm" onClick={() => setIsAddBackupSourceModalOpen(true)} label={t({ ko: '백업 소스 추가', en: 'Add backup source' })}>
                   <Plus className="h-4 w-4" />
-                </Button>
+                </IconButton>
               }
               bodyClassName="px-0 py-0"
             >

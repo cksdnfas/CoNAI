@@ -1,7 +1,6 @@
 import { Loader2, Plus, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AutoOverviewCard } from './auto-overview-card'
-import { AutoTestCard } from './auto-test-card'
 import { KaloscopeSettingsCard } from './kaloscope-settings-card'
 import { TaggerSettingsCard } from './tagger-settings-card'
 import { RatingWeightSettingsCard } from './rating-weight-settings-card'
@@ -42,21 +41,6 @@ export function AutoTab({
   hasRatingWeightsChanges,
   hasRatingTiersChanges,
   isCheckingTaggerDependencies,
-  autoTestHashInput,
-  onAutoTestHashInputChange,
-  autoTestMedia,
-  autoTestImage,
-  isLoadingAutoTestImage,
-  taggerTestResult,
-  kaloscopeTestResult,
-  onResolveAutoTestMedia,
-  onRandomAutoTestMedia,
-  onRunTaggerAutoTest,
-  onRunKaloscopeAutoTest,
-  isResolvingAutoTestMedia,
-  isPickingRandomAutoTestMedia,
-  isRunningTaggerAutoTest,
-  isRunningKaloscopeAutoTest,
 }: AutoTabProps) {
   const { t } = useI18n()
 
@@ -166,35 +150,6 @@ export function AutoTab({
           onMoveRatingTierUp={onMoveRatingTierUp}
           onMoveRatingTierDown={onMoveRatingTierDown}
           onReorderRatingTier={onReorderRatingTier}
-        />
-      </section>
-
-      <section>
-        <AutoTestCard
-          heading={t({ ko: '개발자 도구', en: 'Developer tools' })}
-          description={t({ ko: '특정 이미지로 Kaloscope·WD Tagger 결과를 바로 확인하는 점검용 도구야.', en: 'Diagnostic tool for checking Kaloscope and WD Tagger output on a specific image.' })}
-          actions={
-            <>
-              <Button size="sm" variant="outline" onClick={onResolveAutoTestMedia} disabled={!autoTestHashInput.trim() || isResolvingAutoTestMedia}>
-                {t({ ko: '해시 확인', en: 'Check hash' })}
-              </Button>
-              <Button size="sm" variant="outline" onClick={onRandomAutoTestMedia} disabled={isPickingRandomAutoTestMedia}>
-                {t({ ko: '랜덤 선택', en: 'Random pick' })}
-              </Button>
-            </>
-          }
-          autoTestHashInput={autoTestHashInput}
-          autoTestMedia={autoTestMedia}
-          autoTestImage={autoTestImage}
-          isLoadingAutoTestImage={isLoadingAutoTestImage}
-          taggerTestResult={taggerTestResult}
-          kaloscopeTestResult={kaloscopeTestResult}
-          onAutoTestHashInputChange={onAutoTestHashInputChange}
-          onResolveAutoTestMedia={onResolveAutoTestMedia}
-          onRunTaggerAutoTest={onRunTaggerAutoTest}
-          onRunKaloscopeAutoTest={onRunKaloscopeAutoTest}
-          isRunningTaggerAutoTest={isRunningTaggerAutoTest}
-          isRunningKaloscopeAutoTest={isRunningKaloscopeAutoTest}
         />
       </section>
     </div>

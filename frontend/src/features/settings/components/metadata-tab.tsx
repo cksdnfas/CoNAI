@@ -1,4 +1,4 @@
-import { RefreshCcw, Save } from 'lucide-react'
+import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -8,7 +8,6 @@ import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface MetadataTabProps {
@@ -17,25 +16,11 @@ interface MetadataTabProps {
   onSave: () => void
   isSaving: boolean
   hasChanges: boolean
-  onReextractAll: () => void
-  isReextracting: boolean
 }
 
-export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, hasChanges, onReextractAll, isReextracting }: MetadataTabProps) {
+export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, hasChanges }: MetadataTabProps) {
   const { t } = useI18n()
   const isStealthEnabled = metadataDraft?.enableSecondaryExtraction === true
-  const confirm = useConfirm()
-  const handleReextractAll = async () => {
-    const confirmed = await confirm({
-      title: t({ ko: 'AI 메타데이터 다시 추출', en: 'Re-extract AI metadata' }),
-      description: t('metadataTab.reExtractAiMetadataFor'),
-      confirmLabel: t({ ko: '다시 추출', en: 'Re-extract' }),
-    })
-    if (!confirmed) {
-      return
-    }
-    onReextractAll()
-  }
 
   return (
     <div className="space-y-6">
@@ -58,18 +43,8 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
           <div className="grid gap-4 md:grid-cols-2">
             {metadataDraft ? (
               <>
-                <Inset className="flex flex-col gap-3 text-sm text-muted-foreground md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-                  <span>{t('metadataTab.standardMetadataIsReadFirst')}</span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleReextractAll}
-                    disabled={isReextracting}
-                  >
-                    <RefreshCcw className={isReextracting ? 'animate-spin' : undefined} />
-                    {isReextracting ? t({ ko: '등록 중...', en: 'Queuing...' }) : t({ ko: '모든 항목 재추출', en: 'Re-extract all items' })}
-                  </Button>
+                <Inset className="text-sm text-muted-foreground md:col-span-2">
+                  {t('metadataTab.standardMetadataIsReadFirst')}
                 </Inset>
 
                 <ToggleRow className="md:col-span-2">

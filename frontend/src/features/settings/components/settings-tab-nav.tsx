@@ -10,14 +10,14 @@ interface SettingsTabNavProps {
 }
 
 const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
-  general: { ko: '일반', en: 'General' },
-  appearance: { ko: '화면 및 탐색', en: 'Appearance and navigation' },
+  general: { ko: '일반 및 화면', en: 'General and appearance' },
   library: { ko: '라이브러리 및 가져오기', en: 'Library and imports' },
   media: { ko: '미디어 처리', en: 'Media processing' },
   auto: { ko: '자동화 및 분석', en: 'Automation and analysis' },
   generation: { ko: '생성 및 AI', en: 'Generation and AI' },
-  integration: { ko: '연동', en: 'Integrations' },
-  system: { ko: '계정 및 시스템', en: 'Accounts and system' },
+  accounts: { ko: '계정·권한', en: 'Accounts and access' },
+  system: { ko: '시스템', en: 'System' },
+  maintenance: { ko: '유지보수', en: 'Maintenance' },
 }
 
 const SETTINGS_TAB_GROUP_LABELS: Record<SettingsTabGroup, TranslationDictionary> = {
