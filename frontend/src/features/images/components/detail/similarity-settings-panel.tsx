@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type SimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
-import { NumberInputWithSuffix, SectionTitleWithTooltip } from './similarity-settings-panel-shared'
+import { NumberInputWithSuffix, SectionTitle } from './similarity-settings-panel-shared'
 
 interface SimilaritySettingsPanelProps {
   isOpen: boolean
@@ -98,7 +98,7 @@ export function SimilaritySettingsPanel({
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Panel tone="container" padding="none" className="space-y-3 p-3">
-                <SectionTitleWithTooltip title={t('images.components.detail.similarity.settings.panel.score.weights')} tooltip={t('images.components.detail.similarity.settings.panel.weight.used.in.the.final.score.calculation')} />
+                <SectionTitle title={t('images.components.detail.similarity.settings.panel.score.weights')} />
 
                 <SimilarityNumberField
                   label={t('images.components.detail.similarity.settings.panel.phash.weight')}
@@ -137,7 +137,7 @@ export function SimilaritySettingsPanel({
               </Panel>
 
               <Panel tone="container" padding="none" className="space-y-3 p-3">
-                <SectionTitleWithTooltip title={t('images.components.detail.similarity.settings.panel.per.item.thresholds')} tooltip={t('images.components.detail.similarity.settings.panel.each.item.must.fall.within.this.range')} />
+                <SectionTitle title={t('images.components.detail.similarity.settings.panel.per.item.thresholds')} />
 
                 <SimilarityNumberField
                   label={t('images.components.detail.similarity.settings.panel.phash.distance.threshold')}

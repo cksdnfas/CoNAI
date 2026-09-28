@@ -1,4 +1,4 @@
-import { FolderPlus, ImageOff, SearchX, Trash2 } from 'lucide-react'
+import { FolderPlus, ImageOff, SearchX, Trash2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CountSummary } from '@/components/ui/count-summary'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/common/page-header'
 import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { AuthStatusErrorState } from '@/features/auth/require-auth-permission'
@@ -123,12 +124,11 @@ export function HomePage() {
   return (
     // Leave room under the list for the fixed selection bar while it is up.
     <div className={cn('space-y-6', selectedIds.length > 0 && 'pb-24')}>
-      <PageHeader eyebrow={isAnonymousSession ? t({ ko: '공개', en: 'Public' }) : undefined} title={t('pageAccessCatalog.home')} />
+      <PageHeader title={t('pageAccessCatalog.home')} />
 
       {isAnonymousSession ? (
         <Section
           heading={t('homePage.anonymousMode')}
-          description={t('homePage.onlyThePublicHomeView')}
           actions={
             <>
               <Button asChild>
@@ -143,21 +143,17 @@ export function HomePage() {
       ) : null}
 
       {!isAnonymousSession && appliedChips.length > 0 ? (
-        <Inset className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '적용된 필터', en: 'Active filters' })}</div>
-            <Button size="sm" variant="ghost" onClick={clearAppliedChips}>
-              {t({ ko: '모두 지우기', en: 'Clear all' })}
-            </Button>
-          </div>
-          <SearchChipList chips={appliedChips} title={null} onCycleOperator={cycleAppliedChipOperator} onRemove={removeAppliedChip} />
+        <Inset className="flex items-start gap-2">
+          <SearchChipList chips={appliedChips} title={null} onCycleOperator={cycleAppliedChipOperator} onRemove={removeAppliedChip} className="min-w-0 flex-1" />
+          <IconButton size="icon-sm" variant="ghost" label={t({ ko: '모두 지우기', en: 'Clear all' })} onClick={clearAppliedChips}>
+            <X className="size-4" />
+          </IconButton>
         </Inset>
       ) : null}
 
       {isInitialLoadError ? (
         <ErrorState
           title={errorTitle}
-          description={t({ ko: '잠시 뒤에 다시 시도해 줘.', en: 'Try again in a moment.' })}
           error={imagesQuery.error}
           onRetry={handleRetryInitialLoad}
           isRetrying={imagesQuery.isFetching}

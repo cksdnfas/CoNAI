@@ -374,11 +374,7 @@ export function ImageDetailSimilaritySection({
         items={similarImagesRequested ? similarImages : []}
         isLoading={similarImagesRequested ? similarImagesLoading : false}
         errorMessage={similarImagesRequested ? imageSimilarityErrorMessage : null}
-        emptyMessage={
-          similarImagesRequested
-            ? t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.with.the')
-            : t({ ko: '필요할 때만 이미지 기준 유사 검사를 실행해.', en: 'Run image-based similarity only when needed.' })
-        }
+        emptyMessage={similarImagesRequested ? t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.with.the') : undefined}
         actions={imageSimilarityActions}
         activationMode={presentation === 'modal' ? 'modal' : 'modal-single'}
         mobileCardColumns={mobileCardColumns}
@@ -397,11 +393,7 @@ export function ImageDetailSimilaritySection({
         items={promptSimilarImagesRequested ? promptSimilarImages : []}
         isLoading={promptSimilarImagesRequested ? promptSimilarImagesLoading : false}
         errorMessage={promptSimilarImagesRequested ? promptSimilarityErrorMessage : null}
-        emptyMessage={
-          promptSimilarImagesRequested
-            ? t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.for.the')
-            : t({ ko: '필요할 때만 텍스트 기준 유사 검사를 실행해.', en: 'Run text-based similarity only when needed.' })
-        }
+        emptyMessage={promptSimilarImagesRequested ? t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.for.the') : undefined}
         actions={promptSimilarityActions}
         activationMode={presentation === 'modal' ? 'modal' : 'modal-single'}
         mobileCardColumns={mobileCardColumns}

@@ -3,7 +3,7 @@ import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
-import { Inset } from '@/components/ui/inset'
+import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
@@ -46,15 +46,10 @@ export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving 
           />
         </Field>
 
-        <Inset className="text-xs text-muted-foreground">
-          {t({ ko: '예시', en: 'Example' })}: {DEFAULT_ARTIST_LINK_URL_TEMPLATE}
-        </Inset>
-
         <ModalFooter className="justify-between">
-          <Button type="button" variant="secondary" onClick={() => setDraft(DEFAULT_ARTIST_LINK_URL_TEMPLATE)}>
+          <IconButton variant="ghost" onClick={() => setDraft(DEFAULT_ARTIST_LINK_URL_TEMPLATE)} label={t('images.components.image.list.image.list.column.floating.control.reset.to.default')}>
             <RotateCcw className="h-4 w-4" />
-            {t('images.components.image.list.image.list.column.floating.control.reset.to.default')}
-          </Button>
+          </IconButton>
 
           <div className="flex items-center gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>

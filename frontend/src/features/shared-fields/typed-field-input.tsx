@@ -1,4 +1,5 @@
-import { Button } from '@/components/ui/button'
+import { X } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Inset } from '@/components/ui/inset'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -207,9 +208,9 @@ export function TypedFieldInput({
             />
             {imageRemovable ? (
               <div className="flex justify-end">
-                <Button type="button" size="sm" variant="ghost" onClick={() => void onImageChange?.()}>
-                  {t({ ko: '이미지 제거', en: 'Remove image' })}
-                </Button>
+                <IconButton size="icon-sm" variant="ghost" onClick={() => void onImageChange?.()} label={t({ ko: '이미지 제거', en: 'Remove image' })}>
+                  <X className="h-4 w-4" />
+                </IconButton>
               </div>
             ) : null}
           </Inset>

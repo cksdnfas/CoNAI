@@ -278,11 +278,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   )
 
   const emptyStateTitle = isSearchMode ? t('useHomePageData.noSearchResults') : t('useHomePageData.noImagesToShowYet')
-  const emptyStateDescription = hasOnlyHiddenItems
-    ? t('useHomePageData.itemsAreHiddenInThis')
-    : isSearchMode
-      ? t('useHomePageData.tryChangingTheSearchFilters')
-      : t('useHomePageData.checkTheUploadOrData')
+  // Only the hidden-by-rating case needs a line: the user cannot tell the feed is filtered, not empty.
+  const emptyStateDescription = hasOnlyHiddenItems ? t('useHomePageData.itemsAreHiddenInThis') : undefined
   const errorTitle = isSearchMode ? t('useHomePageData.failedToLoadSearchResults') : t('useHomePageData.failedToLoadTheHome')
   const loadMoreErrorMessage =
     imagesQuery.error instanceof Error

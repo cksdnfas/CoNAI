@@ -31,7 +31,6 @@ export function ImageListFeedFooter({ itemCount, hasMore, isLoadingMore, loadMor
         size="compact"
         className="max-w-xl"
         title={t({ ko: '나머지를 못 불러왔어', en: "Couldn't load the rest" })}
-        description={t({ ko: '자동으로 더 불러오지 않을게. 다시 시도해 줘.', en: 'Auto-loading is paused. Try again.' })}
         error={loadMoreError}
         onRetry={onRetry}
         isRetrying={isRetrying}

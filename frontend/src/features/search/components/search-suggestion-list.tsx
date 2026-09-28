@@ -25,14 +25,13 @@ interface SearchSuggestionListProps {
   idlePromptText?: string
 }
 
-/** Edge-to-edge list row: nav tone and hover, with the trailing hint/count pushed right. */
+/** Edge-to-edge list row: nav tone and hover, with the trailing count pushed right. */
 const suggestionRowClassName = 'h-auto justify-between gap-4 rounded-none px-4 py-3'
 
-function SuggestionActionRow({ label, hint, onClick }: { label: string; hint?: string; onClick: () => void }) {
+function SuggestionActionRow({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Button type="button" onClick={onClick} variant="nav" className={suggestionRowClassName}>
       <span className="truncate text-sm text-foreground">{label}</span>
-      {hint ? <span className="shrink-0 text-xs text-muted-foreground">{hint}</span> : null}
     </Button>
   )
 }
@@ -67,7 +66,7 @@ export function SearchSuggestionList({
   if (searchScope === 'positive' || searchScope === 'negative' || searchScope === 'auto') {
     return (
       <>
-        {trimmedInput.length > 0 ? <SuggestionActionRow label={t({ ko: '"{value}" 추가', en: 'Add "{value}"' }, { value: trimmedInput })} hint="Enter" onClick={onSubmitInput} /> : null}
+        {trimmedInput.length > 0 ? <SuggestionActionRow label={t({ ko: '"{value}" 추가', en: 'Add "{value}"' }, { value: trimmedInput })} onClick={onSubmitInput} /> : null}
 
         {suggestionsLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{t('search.components.search.suggestion.list.loading.suggestions')}</div> : null}
         {!suggestionsLoading && trimmedInput.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedIdlePromptText}</div> : null}
@@ -134,7 +133,7 @@ export function SearchSuggestionList({
 
   return (
     <>
-      {trimmedInput.length > 0 ? <SuggestionActionRow label={t({ ko: '"{value}" 추가', en: 'Add "{value}"' }, { value: trimmedInput })} hint="Enter" onClick={onSubmitInput} /> : null}
+      {trimmedInput.length > 0 ? <SuggestionActionRow label={t({ ko: '"{value}" 추가', en: 'Add "{value}"' }, { value: trimmedInput })} onClick={onSubmitInput} /> : null}
       {metadataLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{t({ ko: '{metadataLabel} 추천을 불러오는 중…', en: 'Loading {metadataLabel} suggestions…' }, { metadataLabel })}</div> : null}
       {!metadataLoading && metadataSuggestions.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{metadataEmptyText}</div> : null}
       {!metadataLoading && metadataSuggestions.length > 0

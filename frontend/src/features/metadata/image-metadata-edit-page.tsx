@@ -178,14 +178,12 @@ export function ImageMetadataEditPage() {
         description={downloadName}
         actions={
           <>
-            <Button variant="secondary" onClick={handleBack}>
+            <IconButton variant="ghost" onClick={handleBack} label={t({ ko: '돌아가기', en: 'Back' })}>
               <ArrowLeft className="h-4 w-4" />
-              {t({ ko: '돌아가기', en: 'Back' })}
-            </Button>
-            <Button variant="secondary" onClick={handleDownload} disabled={!draft || busy || !isEditableImage || Boolean(draftValidationError)}>
+            </IconButton>
+            <IconButton variant="ghost" onClick={handleDownload} disabled={!draft || busy || !isEditableImage || Boolean(draftValidationError)} label={t({ ko: '다운로드', en: 'Download' })}>
               <Download className="h-4 w-4" />
-              {t({ ko: '다운로드', en: 'Download' })}
-            </Button>
+            </IconButton>
             <Button
               onClick={handleSave}
               disabled={!canSave}
@@ -221,11 +219,6 @@ export function ImageMetadataEditPage() {
               </div>
             </div>
 
-            <Inset className="text-sm text-muted-foreground">
-              <Text variant="overline">{t({ ko: '파일', en: 'File' })}</Text>
-              <p className="mt-2 break-all text-foreground">{downloadName}</p>
-            </Inset>
-
             {image.composite_hash ? (
               <Inset className="text-sm text-muted-foreground">
                 <details>
@@ -260,6 +253,7 @@ export function ImageMetadataEditPage() {
                 draft={draft}
                 disabled={busy || !isEditableImage}
                 formatLabel={t('metadata.image.metadata.edit.page.download.format')}
+                showHeader={false}
                 onDraftChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}
               />
             ) : null}

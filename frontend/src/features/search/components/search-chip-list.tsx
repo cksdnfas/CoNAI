@@ -8,6 +8,7 @@ import { Inset } from '@/components/ui/inset'
 import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 
 interface SearchChipListProps {
   chips: SearchChip[]
@@ -15,6 +16,7 @@ interface SearchChipListProps {
   emptyMessage?: string
   onCycleOperator: (chipId: string) => void
   onRemove: (chipId: string) => void
+  className?: string
 }
 
 /** Render the shared current-filter chip list used across search UIs. */
@@ -24,13 +26,14 @@ export function SearchChipList({
   emptyMessage,
   onCycleOperator,
   onRemove,
+  className,
 }: SearchChipListProps) {
   const { t } = useI18n()
   const resolvedTitle = title === undefined ? t({ ko: '현재 필터', en: 'Current filters' }) : title
   const resolvedEmptyMessage = emptyMessage ?? t('search.components.search.chip.list.no.condition.chips.yet')
 
   return (
-    <div className="space-y-2">
+    <div className={cn('space-y-2', className)}>
       {resolvedTitle ? <Text as="div" variant="overline" className="font-semibold">{resolvedTitle}</Text> : null}
       {chips.length === 0 ? <Inset className="text-sm text-muted-foreground">{resolvedEmptyMessage}</Inset> : null}
       {chips.length > 0 ? (

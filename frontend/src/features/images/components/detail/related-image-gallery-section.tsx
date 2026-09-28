@@ -16,7 +16,7 @@ interface RelatedImageGallerySectionProps {
   items: ImageRecord[]
   isLoading: boolean
   errorMessage: string | null
-  emptyMessage: string
+  emptyMessage?: string
   actions?: ReactNode
   activationMode?: 'navigate' | 'modal' | 'modal-single'
   mobileCardColumns?: number
@@ -133,7 +133,7 @@ export function RelatedImageGallerySection({
         </div>
       ) : null}
 
-      {!isLoading && !errorMessage && items.length === 0 ? (
+      {!isLoading && !errorMessage && items.length === 0 && emptyMessage ? (
         <Card >
           <CardContent className="text-sm text-muted-foreground">{emptyMessage}</CardContent>
         </Card>

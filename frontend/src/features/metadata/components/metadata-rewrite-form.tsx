@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,10 +21,7 @@ export function MetadataRewriteForm({ draft, disabled = false, formatLabel, show
   return (
     <div className={showHeader ? 'space-y-4 rounded-sm bg-surface-container p-4' : 'space-y-4'}>
       {showHeader ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm font-medium text-foreground">{t('metadata.components.metadata.rewrite.form.edit.metadata')}</div>
-          <Badge variant="outline">{t({ ko: '다시 쓰기', en: 'Rewrite' })}</Badge>
-        </div>
+        <div className="text-sm font-medium text-foreground">{t('metadata.components.metadata.rewrite.form.edit.metadata')}</div>
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

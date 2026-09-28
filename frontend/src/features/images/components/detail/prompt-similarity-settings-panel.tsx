@@ -6,7 +6,7 @@ import { Panel } from '@/components/ui/panel'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type PromptSimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
-import { NumberInputWithSuffix, SectionTitleWithTooltip } from './similarity-settings-panel-shared'
+import { NumberInputWithSuffix, SectionTitle } from './similarity-settings-panel-shared'
 
 interface PromptSimilaritySettingsPanelProps {
   isOpen: boolean
@@ -55,7 +55,7 @@ export function PromptSimilaritySettingsPanel({
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Panel tone="container" padding="none" className="space-y-3 p-3">
-                <SectionTitleWithTooltip title={t('images.components.detail.prompt.similarity.settings.panel.score.weights')} tooltip={t('images.components.detail.prompt.similarity.settings.panel.weight.applied.when.calculating.the.combined.score')} />
+                <SectionTitle title={t('images.components.detail.prompt.similarity.settings.panel.score.weights')} />
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>{t({ ko: '포지티브', en: 'Positive' })}</label>
@@ -74,7 +74,7 @@ export function PromptSimilaritySettingsPanel({
               </Panel>
 
               <Panel tone="container" padding="none" className="space-y-3 p-3">
-                <SectionTitleWithTooltip title={t('images.components.detail.prompt.similarity.settings.panel.minimum.field.thresholds')} tooltip={t('images.components.detail.prompt.similarity.settings.panel.each.field.must.meet.or.exceed.this')} />
+                <SectionTitle title={t('images.components.detail.prompt.similarity.settings.panel.minimum.field.thresholds')} />
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>{t({ ko: '포지티브', en: 'Positive' })}</label>

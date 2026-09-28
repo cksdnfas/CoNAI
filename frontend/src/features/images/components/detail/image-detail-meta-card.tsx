@@ -11,7 +11,6 @@ import {
   RatingPromptSection,
 } from '@/components/common/prompt-result-sections'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Panel } from '@/components/ui/panel'
 import { Switch } from '@/components/ui/switch'
@@ -337,9 +336,10 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         <div className="flex items-center gap-2">
           {image.is_processing ? <Badge variant="secondary">{t({ ko: '처리 중', en: 'Processing' })}</Badge> : null}
           {canEditMetadata ? (
-            <Button
-              size="sm"
-              variant="secondary"
+            <IconButton
+              size="icon-sm"
+              variant="ghost"
+              label={t({ ko: '메타 수정', en: 'Edit metadata' })}
               onClick={() => {
                 const sourceState = prepareImageSourceState(location)
                 imageViewModal?.closeImageView()
@@ -347,8 +347,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               }}
             >
               <FilePenLine className="h-4 w-4" />
-              {t({ ko: '메타 수정', en: 'Edit metadata' })}
-            </Button>
+            </IconButton>
           ) : null}
         </div>
       </div>
@@ -440,18 +439,15 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 getTagHref={buildDanbooruTagUrl}
                 onAddSearchFilter={handleAddAutoPromptSearchFilter}
                 tagsHeaderAction={(
-                  <Button
-                    type="button"
-                    size="xs"
+                  <IconButton
+                    size="icon-xs"
                     variant="ghost"
                     onClick={() => void handleCopyAutoPrompt()}
                     disabled={!autoPromptCopyText}
-                    aria-label={t('images.components.detail.image.detail.meta.card.auto.prompt.copy')}
-                    title={t('images.components.detail.image.detail.meta.card.auto.prompt.copy')}
+                    label={t('images.components.detail.image.detail.meta.card.auto.prompt.copy')}
                   >
                     <Copy className="h-3.5 w-3.5" />
-                    {t({ ko: '복사', en: 'Copy' })}
-                  </Button>
+                  </IconButton>
                 )}
               />
             </div>

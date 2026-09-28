@@ -1,6 +1,6 @@
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Search, X } from 'lucide-react'
+import { RotateCcw, Search, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Heading } from '@/components/ui/heading'
@@ -278,19 +278,15 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
           </section>
 
           <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <Text as="div" variant="overline" className="min-w-0 flex-1 font-semibold">{t({ ko: '현재 필터', en: 'Current filters' })}</Text>
-            </div>
-
             <SearchChipList chips={draftChips} title={null} emptyMessage={t({ ko: '필터 없음', en: 'No filters' })} onCycleOperator={cycleChipOperator} onRemove={removeChip} />
 
             <div className="flex gap-2">
               <Button type="button" className="flex-1" onClick={handleApplySearch}>
                 {t({ ko: '검색', en: 'Search' })}
               </Button>
-              <Button type="button" variant="secondary" className="flex-1" onClick={handleClearSearch}>
-                {t({ ko: '초기화', en: 'Reset' })}
-              </Button>
+              <IconButton variant="secondary" onClick={handleClearSearch} label={t({ ko: '초기화', en: 'Reset' })}>
+                <RotateCcw className="size-4" />
+              </IconButton>
             </div>
           </section>
 
@@ -298,10 +294,10 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
             <div className="flex items-center justify-between gap-3">
               <Text as="div" variant="overline" className="min-w-0 flex-1 font-semibold">{t({ ko: '최근 검색', en: 'Recent searches' })}</Text>
               <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  type="button"
+                <IconButton
                   variant="ghost"
-                  size="xs"
+                  size="icon-sm"
+                  label={t({ ko: '히스토리 비우기', en: 'Clear history' })}
                   onClick={async () => {
                     const confirmed = await confirm({
                       title: t({ ko: '최근 검색 비우기', en: 'Clear recent searches' }),
@@ -315,8 +311,8 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                   }}
                   disabled={historyEntries.length === 0}
                 >
-                  {t({ ko: '히스토리 비우기', en: 'Clear history' })}
-                </Button>
+                  <Trash2 className="size-4" />
+                </IconButton>
               </div>
             </div>
 
