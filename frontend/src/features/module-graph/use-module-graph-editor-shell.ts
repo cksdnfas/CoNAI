@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useEffect, useRef } from 'react'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
+import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
 import { shouldBypassOverlayHistoryBackNavigation } from '@/components/ui/use-overlay-back-close'
 import type { WorkflowValidationIssue } from './module-graph-types'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
@@ -117,19 +118,7 @@ export function useModuleGraphEditorShell({
   )
 
   const graphExitBlocker = useBlocker(useCallback(() => shouldBlockGraphExit && !shouldBypassOverlayHistoryBackNavigation(), [shouldBlockGraphExit]))
-
-  useEffect(() => {
-    if (graphExitBlocker.state !== 'blocked') {
-      return
-    }
-
-    if (window.confirm(confirmMessage)) {
-      graphExitBlocker.proceed()
-      return
-    }
-
-    graphExitBlocker.reset()
-  }, [confirmMessage, graphExitBlocker])
+  useBlockerConfirm(graphExitBlocker, confirmMessage)
 
   const setEditorSupportSectionRef = useCallback((section: EditorSupportSectionKey, node: HTMLDivElement | null) => {
     editorSupportSectionRefs.current[section] = node

@@ -11,6 +11,7 @@ import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-eve
 import { StatTile } from '@/components/ui/stat-tile'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   cleanupGraphWorkflowEmptyExecutions,
   createGraphWorkflowSchedule,
@@ -33,6 +34,7 @@ type ReservationView = 'schedules' | 'executions'
 export function WorkflowReservationsPanel() {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const confirm = useConfirm()
   const [selectedReservationExecutionIds, setSelectedReservationExecutionIds] = useState<number[]>([])
   const [isCleaningReservations, setIsCleaningReservations] = useState(false)
   const [isMutatingSchedules, setIsMutatingSchedules] = useState(false)
@@ -238,7 +240,13 @@ export function WorkflowReservationsPanel() {
   }
 
   const handleDeleteSchedule = async (scheduleId: number) => {
-    if (!window.confirm(t({ ko: '이 예약작업을 정말 삭제할까? 연결된 queued 예약 실행도 함께 정리될 수 있어.', en: 'Delete this reservation job? Linked queued reservation runs may be cleaned up too.' }))) {
+    const confirmed = await confirm({
+      title: t({ ko: '예약작업 삭제', en: 'Delete reservation job' }),
+      description: t({ ko: '이 예약작업을 정말 삭제할까? 연결된 queued 예약 실행도 함께 정리될 수 있어.', en: 'Delete this reservation job? Linked queued reservation runs may be cleaned up too.' }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!confirmed) {
       return
     }
 

@@ -10,6 +10,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { ImageList } from '@/features/images/components/image-list/image-list'
@@ -78,6 +79,7 @@ type GenerationHistoryPanelProps = {
 export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const confirm = useConfirm()
   const queryClient = useQueryClient()
   const authStatusQuery = useAuthStatusQuery()
   // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 기존 refresh cadence 가 그대로 되살아난다.
@@ -363,7 +365,12 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     }
 
     const selectedCount = selectedHistoryRecords.length
-    const confirmed = window.confirm(t('image-generation.components.generation.history.panel.selected.valueresults.to.the.recycle.bin.and', { count: formatNumber(selectedCount) }))
+    const confirmed = await confirm({
+      title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
+      description: t('image-generation.components.generation.history.panel.selected.valueresults.to.the.recycle.bin.and', { count: formatNumber(selectedCount) }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
@@ -395,7 +402,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     } finally {
       setIsDeletingSelection(false)
     }
-  }, [formatNumber, isAdmin, isDeletingSelection, refreshHistory, selectedHistoryRecords, showSnackbar, t])
+  }, [confirm, formatNumber, isAdmin, isDeletingSelection, refreshHistory, selectedHistoryRecords, showSnackbar, t])
 
   const handleCleanupFailed = useCallback(async () => {
     if (isCleaningFailed) {
@@ -423,15 +430,20 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         return
       }
 
-      const confirmed = window.confirm(isPublicView
-        ? t(
-            { ko: '이 공용 워크플로에서 내 실패 기록 {count}개를 목록에서 지울까? 원본 미디어는 유지돼.', en: 'Remove {count} of my failed records for this public workflow? Original media will be kept.' },
-            { count: formatNumber(preview.deleted) },
-          )
-        : t(
-            { ko: '이 생성 페이지의 실패 기록 {count}개를 목록에서 지울까? 원본 미디어는 유지돼.', en: 'Remove {count} failed records from this generation page? Original media will be kept.' },
-            { count: formatNumber(preview.deleted) },
-          ))
+      const confirmed = await confirm({
+        title: t({ ko: '실패 기록 정리', en: 'Clean up failed records' }),
+        description: isPublicView
+          ? t(
+              { ko: '이 공용 워크플로에서 내 실패 기록 {count}개를 목록에서 지울까? 원본 미디어는 유지돼.', en: 'Remove {count} of my failed records for this public workflow? Original media will be kept.' },
+              { count: formatNumber(preview.deleted) },
+            )
+          : t(
+              { ko: '이 생성 페이지의 실패 기록 {count}개를 목록에서 지울까? 원본 미디어는 유지돼.', en: 'Remove {count} failed records from this generation page? Original media will be kept.' },
+              { count: formatNumber(preview.deleted) },
+            ),
+        confirmLabel: t({ ko: '정리', en: 'Clean up' }),
+        tone: 'destructive',
+      })
       if (!confirmed) {
         return
       }
@@ -453,22 +465,27 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     } finally {
       setIsCleaningFailed(false)
     }
-  }, [formatNumber, isAdmin, isCleaningFailed, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, showSnackbar, t, workflowId])
+  }, [confirm, formatNumber, isAdmin, isCleaningFailed, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, showSnackbar, t, workflowId])
 
   const handleClearHistory = useCallback(async () => {
     if (isClearingHistory) {
       return
     }
 
-    const confirmed = window.confirm(isPublicView
-      ? t({
-          ko: '이 공용 워크플로에서 내 완료·실패 히스토리 목록을 비울까? 원본 미디어는 유지돼.',
-          en: 'Clear my completed and failed history for this public workflow? Original media will be kept.',
-        })
-      : t({
-          ko: '이 생성 페이지의 완료·실패 히스토리 목록을 비울까? 원본 미디어는 유지돼.',
-          en: 'Clear completed and failed history for this generation page? Original media will be kept.',
-        }))
+    const confirmed = await confirm({
+      title: t({ ko: '히스토리 비우기', en: 'Clear history' }),
+      description: isPublicView
+        ? t({
+            ko: '이 공용 워크플로에서 내 완료·실패 히스토리 목록을 비울까? 원본 미디어는 유지돼.',
+            en: 'Clear my completed and failed history for this public workflow? Original media will be kept.',
+          })
+        : t({
+            ko: '이 생성 페이지의 완료·실패 히스토리 목록을 비울까? 원본 미디어는 유지돼.',
+            en: 'Clear completed and failed history for this generation page? Original media will be kept.',
+          }),
+      confirmLabel: t({ ko: '비우기', en: 'Clear' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
@@ -501,7 +518,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     } finally {
       setIsClearingHistory(false)
     }
-  }, [formatNumber, isAdmin, isClearingHistory, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, showSnackbar, t, workflowId])
+  }, [confirm, formatNumber, isAdmin, isClearingHistory, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, showSnackbar, t, workflowId])
 
   const acknowledgeRecoveryRecords = useCallback((records: GenerationHistoryRecord[]) => {
     if (records.length === 0) {

@@ -9,6 +9,7 @@ import type { ImageViewSequenceTotal } from '@/features/images/components/detail
 import { getHomeFeedProgressSummary } from '@/features/home/home-feed-progress'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
 import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
@@ -30,6 +31,7 @@ type HomeImagesPageParam = number | {
 export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOptions) {
   const queryClient = useQueryClient()
   const { t, formatNumber } = useI18n()
+  const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const { appliedChips } = useHomeSearch()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -292,7 +294,12 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     }
 
     const selectedCount = formatNumber(selectedCompositeHashes.length)
-    const confirmed = window.confirm(t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Move {count} selected items to the Recycle Bin?' }, { count: selectedCount }))
+    const confirmed = await confirm({
+      title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
+      description: t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Move {count} selected items to the Recycle Bin?' }, { count: selectedCount }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }

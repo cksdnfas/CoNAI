@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ImageDetailMedia } from '@/features/images/components/detail/image-detail-media'
 import { useImageSourceBack } from '@/features/images/image-source-navigation'
 import { getDownloadName, getImageDetailRenderUrl } from '@/features/images/components/detail/image-detail-utils'
@@ -33,6 +34,7 @@ export function ImageMetadataEditPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [draft, setDraft] = useState<RewriteMetadataDraft | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
   const handleBack = useImageSourceBack(`/images/${compositeHash ?? ''}`)
@@ -150,12 +152,17 @@ export function ImageMetadataEditPage() {
 
   const canSave = Boolean(draft) && !busy && isEditableImage && hasUnsavedChanges && !draftValidationError
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!draft || !canSave) {
       return
     }
 
-    if (!window.confirm(t('metadata.image.metadata.edit.page.save.the.current.metadata.to.the.file'))) {
+    const confirmed = await confirm({
+      title: t({ ko: '메타데이터 저장', en: 'Save metadata' }),
+      description: t('metadata.image.metadata.edit.page.save.the.current.metadata.to.the.file'),
+      confirmLabel: t({ ko: '저장', en: 'Save' }),
+    })
+    if (!confirmed) {
       return
     }
 

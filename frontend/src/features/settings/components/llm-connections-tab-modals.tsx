@@ -18,6 +18,7 @@ import {
 import type { LlmPresetRecord } from '@conai/shared'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { ToggleRow } from '@/components/ui/toggle-row'
@@ -263,6 +264,7 @@ export function LlmConnectionEditorModal({
 }) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
+  const confirm = useConfirm()
   const isOpen = state !== null
   const isEditMode = state?.mode === 'edit'
   const provider = state?.mode === 'edit' ? state.provider : null
@@ -406,12 +408,18 @@ export function LlmConnectionEditorModal({
               type="button"
               size="icon-sm"
               variant="destructive"
-              onClick={() => {
+              onClick={async () => {
                 if (!provider) {
                   return
                 }
 
-                if (window.confirm(t({ ko: "연결 '{providerName}' 을(를) 삭제할까?", en: "Delete connection '{providerName}'?" }, { providerName: provider.provider_name }))) {
+                const confirmed = await confirm({
+                  title: t({ ko: '연결 삭제', en: 'Delete connection' }),
+                  description: t({ ko: "연결 '{providerName}' 을(를) 삭제할까?", en: "Delete connection '{providerName}'?" }, { providerName: provider.provider_name }),
+                  confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+                  tone: 'destructive',
+                })
+                if (confirmed) {
                   void deleteMutation.mutateAsync()
                 }
               }}
@@ -457,6 +465,7 @@ export function LlmPresetEditorModal({
   onDelete: (preset: LlmPresetRecord) => Promise<void>
 }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const isOpen = state !== null
   const isEditMode = state?.mode === 'edit'
   const preset = state?.mode === 'edit' ? state.preset : null
@@ -497,8 +506,14 @@ export function LlmPresetEditorModal({
             size="icon-sm"
             variant="destructive"
             disabled={isSaving || isDeleting}
-            onClick={() => {
-              if (window.confirm(t({ ko: "프리셋 '{presetName}' 을(를) 삭제할까?", en: "Delete preset '{presetName}'?" }, { presetName: preset.name }))) {
+            onClick={async () => {
+              const confirmed = await confirm({
+                title: t({ ko: '프리셋 삭제', en: 'Delete preset' }),
+                description: t({ ko: "프리셋 '{presetName}' 을(를) 삭제할까?", en: "Delete preset '{presetName}'?" }, { presetName: preset.name }),
+                confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+                tone: 'destructive',
+              })
+              if (confirmed) {
                 void onDelete(preset)
               }
             }}

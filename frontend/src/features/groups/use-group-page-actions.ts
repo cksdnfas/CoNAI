@@ -16,6 +16,7 @@ import type { GroupDownloadType, GroupMutationInput, GroupRecord } from '@/types
 import type { GroupEditorState, GroupSourceDefinition } from './group-page-shared'
 import { useI18n } from '@/i18n'
 import { formatGroupBulkAddNotice, formatGroupBulkRemoveNotice } from './group-bulk-result-messages'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 /** Own mutation wiring and user-triggered action handlers for the group page. */
 export function useGroupPageActions({
@@ -60,6 +61,7 @@ export function useGroupPageActions({
 }) {
   const authStatusQuery = useAuthStatusQuery()
   const { t, formatNumber } = useI18n()
+  const confirm = useConfirm()
   const canDeleteImages = authStatusQuery.data?.isAdmin === true
 
   const createGroupMutation = useMutation({
@@ -266,17 +268,26 @@ export function useGroupPageActions({
     }
 
     const hasChildren = Boolean(selectedGroupHierarchy?.has_children)
-    const confirmed = window.confirm(
-      hasChildren
+    const confirmed = await confirm({
+      title: t({ ko: '그룹 삭제', en: 'Delete group' }),
+      description: hasChildren
         ? t({ ko: '정말 {groupName} 그룹을 삭제할까? 하위 그룹은 기본적으로 루트로 올라가.', en: 'Delete the {groupName} group? Child groups will move to the root by default.' }, { groupName: selectedGroup.name })
         : t({ ko: '정말 {groupName} 그룹을 삭제할까?', en: 'Delete the {groupName} group?' }, { groupName: selectedGroup.name }),
-    )
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
 
     const cascade = hasChildren
-      ? window.confirm(t('groups.use.group.page.actions.delete.all.child.groups.too.nok.delete'))
+      ? await confirm({
+        title: t({ ko: '하위 그룹도 삭제할까?', en: 'Delete child groups too?' }),
+        description: t({ ko: '현재 그룹만 삭제하면 하위 그룹은 유지돼.', en: 'Deleting only the current group keeps its child groups.' }),
+        confirmLabel: t({ ko: '하위 그룹까지 삭제', en: 'Delete child groups too' }),
+        cancelLabel: t({ ko: '현재 그룹만 삭제', en: 'Delete only this group' }),
+        tone: 'destructive',
+      })
       : false
 
     await deleteGroupMutation.mutateAsync({
@@ -294,7 +305,11 @@ export function useGroupPageActions({
   }
 
   const handleRunAutoCollectAll = async () => {
-    const confirmed = window.confirm(t('groups.use.group.page.actions.run.auto.collect.once.for.all.custom'))
+    const confirmed = await confirm({
+      title: t({ ko: '전체 자동수집', en: 'Auto-collect all' }),
+      description: t('groups.use.group.page.actions.run.auto.collect.once.for.all.custom'),
+      confirmLabel: t({ ko: '실행', en: 'Run' }),
+    })
     if (!confirmed) {
       return
     }
@@ -303,7 +318,11 @@ export function useGroupPageActions({
   }
 
   const handleRebuildAutoFolderGroups = async () => {
-    const confirmed = window.confirm(t('groups.use.group.page.actions.reload.and.rebuild.the.watched.folder.group'))
+    const confirmed = await confirm({
+      title: t({ ko: '감시폴더 그룹 재구축', en: 'Rebuild watched folder groups' }),
+      description: t('groups.use.group.page.actions.reload.and.rebuild.the.watched.folder.group'),
+      confirmLabel: t({ ko: '재구축', en: 'Rebuild' }),
+    })
     if (!confirmed) {
       return
     }
@@ -345,7 +364,12 @@ export function useGroupPageActions({
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Send {count} selected items to the Recycle Bin?' }, { count: formatNumber(selectedGroupCompositeHashes.length) }))
+    const confirmed = await confirm({
+      title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
+      description: t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Send {count} selected items to the Recycle Bin?' }, { count: formatNumber(selectedGroupCompositeHashes.length) }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
@@ -388,7 +412,12 @@ export function useGroupPageActions({
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '선택한 {count}개 이미지를 현재 그룹에서 제거할까?', en: 'Remove {count} selected images from the current group?' }, { count: formatNumber(selectedGroupCompositeHashes.length) }))
+    const confirmed = await confirm({
+      title: t({ ko: '그룹에서 제거', en: 'Remove from group' }),
+      description: t({ ko: '선택한 {count}개 이미지를 현재 그룹에서 제거할까?', en: 'Remove {count} selected images from the current group?' }, { count: formatNumber(selectedGroupCompositeHashes.length) }),
+      confirmLabel: t({ ko: '제거', en: 'Remove' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }

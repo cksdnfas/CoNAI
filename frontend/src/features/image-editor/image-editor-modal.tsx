@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } fr
 import type Konva from 'konva'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useImageEditorHistory } from './use-image-editor-history'
 import { useImageEditorKeyboardShortcuts } from './use-image-editor-keyboard-shortcuts'
 import { useImageEditorLayerSessionActions } from './use-image-editor-layer-session-actions'
@@ -74,6 +75,7 @@ export function ImageEditorModal({
 }: ImageEditorModalProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
+  const confirm = useConfirm()
   const resolvedTitle = title ?? t({ ko: '이미지 편집기', en: 'Image Editor' })
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const documentGroupRef = useRef<Konva.Group | null>(null)
@@ -336,18 +338,34 @@ export function ImageEditorModal({
     showSnackbar,
   })
 
+  // One discard confirmation at a time: browser back can request a close again while the dialog is still open.
+  const closeConfirmPendingRef = useRef(false)
+
   /** Confirm before a user-initiated close (Esc, backdrop, close buttons, browser back) discards edits. */
   const requestClose = useCallback(() => {
-    if (saving) {
+    if (saving || closeConfirmPendingRef.current) {
       return
     }
 
-    if (hasDocumentChanges && !window.confirm(t({ ko: '저장하지 않은 편집 내용이 사라져. 닫을까?', en: 'Unsaved edits will be discarded. Close the editor?' }))) {
+    if (!hasDocumentChanges) {
+      onClose()
       return
     }
 
-    onClose()
-  }, [hasDocumentChanges, onClose, saving, t])
+    closeConfirmPendingRef.current = true
+    void confirm({
+      title: t({ ko: '편집 내용 버리기', en: 'Discard edits' }),
+      description: t({ ko: '저장하지 않은 편집 내용이 사라져. 닫을까?', en: 'Unsaved edits will be discarded. Close the editor?' }),
+      confirmLabel: t({ ko: '버리고 닫기', en: 'Discard' }),
+      cancelLabel: t({ ko: '계속 편집', en: 'Keep editing' }),
+      tone: 'destructive',
+    }).then((confirmed) => {
+      closeConfirmPendingRef.current = false
+      if (confirmed) {
+        onClose()
+      }
+    })
+  }, [confirm, hasDocumentChanges, onClose, saving, t])
 
   useImageEditorKeyboardShortcuts({
     open,

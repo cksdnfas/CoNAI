@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { BackupSource, BackupSourceUpdateInput } from '@/types/folder'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { buildBackupTargetPreviewPath, formatDateTime, normalizeBackupTargetPath } from '../settings-utils'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
@@ -36,6 +37,7 @@ export function BackupSourceCard({
   onDelete,
 }: BackupSourceCardProps) {
   const { t, locale } = useI18n()
+  const confirm = useConfirm()
   const [draft, setDraft] = useState({
     display_name: source.display_name || '',
     source_path: source.source_path,
@@ -184,8 +186,14 @@ export function BackupSourceCard({
       <SettingsResourceFooterActions
         dangerLabel={t({ ko: '백업 소스 제거', en: 'Remove backup source' })}
         dangerDisabled={isBusy}
-        onDanger={() => {
-          if (!window.confirm(t({ ko: '정말 {name} 백업 소스를 삭제할까?', en: 'Delete the {name} backup source?' }, { name: source.display_name || source.source_path }))) {
+        onDanger={async () => {
+          const confirmed = await confirm({
+            title: t({ ko: '백업 소스 제거', en: 'Remove backup source' }),
+            description: t({ ko: '정말 {name} 백업 소스를 삭제할까?', en: 'Delete the {name} backup source?' }, { name: source.display_name || source.source_path }),
+            confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+            tone: 'destructive',
+          })
+          if (!confirmed) {
             return
           }
           void handleAction(() => onDelete(source.id))

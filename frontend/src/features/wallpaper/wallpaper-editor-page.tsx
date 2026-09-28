@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
 import { getAppSettings } from '@/lib/api-settings-general'
 import { updateAppearanceSettings } from '@/lib/api-settings-appearance'
@@ -92,6 +93,7 @@ function removeSelectedWidget(layoutPreset: WallpaperLayoutPreset, widgetId: str
 
 export function WallpaperEditorPage() {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const hasHydratedServerPresetsRef = useRef(false)
   const [layoutPreset, setLayoutPreset] = useState(() => loadWallpaperLayoutDraft() ?? buildWallpaperStarterLayout('landscape-1080p'))
@@ -267,15 +269,20 @@ export function WallpaperEditorPage() {
     )
   }
 
-  const handleDeletePreset = () => {
+  const handleDeletePreset = async () => {
     if (!effectiveActivePresetId) {
       return
     }
 
-    const confirmed = window.confirm(t({
-      ko: "정말 '{name}' 월페이퍼를 삭제할까? 이 작업은 되돌릴 수 없어.",
-      en: "Delete the '{name}' wallpaper? This cannot be undone.",
-    }, { name: activePreset?.name ?? layoutPreset.name }))
+    const confirmed = await confirm({
+      title: t({ ko: '월페이퍼 삭제', en: 'Delete wallpaper' }),
+      description: t({
+        ko: "정말 '{name}' 월페이퍼를 삭제할까? 이 작업은 되돌릴 수 없어.",
+        en: "Delete the '{name}' wallpaper? This cannot be undone.",
+      }, { name: activePreset?.name ?? layoutPreset.name }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
@@ -343,10 +350,15 @@ export function WallpaperEditorPage() {
     setLayoutPreset((current) => normalizeWallpaperLayoutPreset({ ...current, canvasPresetId: nextPreset.id }, nextPreset))
   }
 
-  const handleApplyTemplate = (template: WallpaperTemplateDefinition) => {
-    if (layoutPreset.widgets.length > 0 && !window.confirm(t({
-      ko: '현재 초안의 위젯을 템플릿으로 교체할까? 저장된 프리셋은 영향을 받지 않아.',
-      en: 'Replace widgets in the current draft with this template? Saved presets are not affected.',
+  const handleApplyTemplate = async (template: WallpaperTemplateDefinition) => {
+    if (layoutPreset.widgets.length > 0 && !(await confirm({
+      title: t({ ko: '템플릿 적용', en: 'Apply template' }),
+      description: t({
+        ko: '현재 초안의 위젯을 템플릿으로 교체할까? 저장된 프리셋은 영향을 받지 않아.',
+        en: 'Replace widgets in the current draft with this template? Saved presets are not affected.',
+      }),
+      confirmLabel: t({ ko: '교체', en: 'Replace' }),
+      tone: 'destructive',
     }))) {
       return
     }

@@ -1,4 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useI18n } from '@/i18n'
 import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import type { WorkflowValidationIssue } from './module-graph-types'
@@ -115,12 +117,20 @@ export function useModuleGraphPageActions({
   enterWorkflowEditor: (section?: EditorSupportSectionKey) => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
-  const confirmDiscardUnsavedChanges = () => {
+  const { t } = useI18n()
+  const confirm = useConfirm()
+
+  const confirmDiscardUnsavedChanges = async () => {
     if (workflowView !== 'edit' || !isDirty) {
       return true
     }
 
-    return window.confirm(confirmMessage)
+    return confirm({
+      title: t({ ko: '저장하지 않은 변경', en: 'Unsaved changes' }),
+      description: confirmMessage,
+      confirmLabel: t({ ko: '변경 버리기', en: 'Discard changes' }),
+      tone: 'destructive',
+    })
   }
 
   const {

@@ -24,6 +24,7 @@ import { resolvePromptListProgress } from './prompt-list-progress'
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 type AssignModalState =
   | { mode: 'single'; item: PromptCollectionItem }
@@ -59,6 +60,7 @@ function PanelFallback() {
 export function PromptPage() {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const confirm = useConfirm()
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const promptListRef = useRef<HTMLDivElement | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
@@ -312,7 +314,12 @@ export function PromptPage() {
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '정말 {groupName} 그룹을 삭제할까? 하위 그룹까지 삭제되고 포함된 프롬프트는 Unclassified로 이동해.', en: 'Delete the {groupName} group? Child groups will also be deleted, and included prompts will move to Unclassified.' }, { groupName: selectedGroup.group_name }))
+    const confirmed = await confirm({
+      title: t({ ko: '그룹 삭제', en: 'Delete group' }),
+      description: t({ ko: '정말 {groupName} 그룹을 삭제할까? 하위 그룹까지 삭제되고 포함된 프롬프트는 Unclassified로 이동해.', en: 'Delete the {groupName} group? Child groups will also be deleted, and included prompts will move to Unclassified.' }, { groupName: selectedGroup.group_name }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
@@ -373,7 +380,12 @@ export function PromptPage() {
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '정말 이 프롬프트를 삭제할까?\n\n{prompt}', en: 'Delete this prompt?\n\n{prompt}' }, { prompt: item.prompt }))
+    const confirmed = await confirm({
+      title: t({ ko: '프롬프트 삭제', en: 'Delete prompt' }),
+      description: t({ ko: '정말 이 프롬프트를 삭제할까?\n\n{prompt}', en: 'Delete this prompt?\n\n{prompt}' }, { prompt: item.prompt }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
@@ -394,7 +406,12 @@ export function PromptPage() {
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '선택한 {count}개 프롬프트를 삭제할까?', en: 'Delete {count} selected prompts?' }, { count: formatNumber(selectedPromptItems.length) }))
+    const confirmed = await confirm({
+      title: t({ ko: '프롬프트 삭제', en: 'Delete prompts' }),
+      description: t({ ko: '선택한 {count}개 프롬프트를 삭제할까?', en: 'Delete {count} selected prompts?' }, { count: formatNumber(selectedPromptItems.length) }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }

@@ -71,7 +71,7 @@ export function useModuleGraphEditorInteractions({
   setWorkflowRunInputValues: Dispatch<SetStateAction<Record<string, unknown>>>
   setLastSavedSnapshot: Dispatch<SetStateAction<string>>
   setIsModuleLibraryOpen: Dispatch<SetStateAction<boolean>>
-  confirmDiscardUnsavedChanges: () => boolean
+  confirmDiscardUnsavedChanges: () => Promise<boolean>
   fitViewAfterAutoLayout: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
@@ -674,8 +674,8 @@ export function useModuleGraphEditorInteractions({
   }, [selectedFolderId, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
 
   /** Reset the full editor canvas after confirmation when needed. */
-  const handleResetCanvas = useCallback(() => {
-    if (!confirmDiscardUnsavedChanges()) {
+  const handleResetCanvas = useCallback(async () => {
+    if (!(await confirmDiscardUnsavedChanges())) {
       return
     }
 

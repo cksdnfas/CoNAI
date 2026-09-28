@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import type { Dispatch, SetStateAction } from 'react'
 import {
@@ -93,13 +94,14 @@ export function useModuleGraphBrowseActions({
   refetchGraphWorkflowFolders: () => Promise<unknown>
   refetchGraphWorkflows: () => Promise<unknown>
   refetchModules: () => Promise<unknown>
-  confirmDiscardUnsavedChanges: () => boolean
+  confirmDiscardUnsavedChanges: () => Promise<boolean>
   resetWorkflowDraft: () => void
   enterWorkflowEditor: (section?: EditorSupportSectionKey) => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t, formatNumber } = useI18n()
   const queryClient = useQueryClient()
+  const confirm = useConfirm()
 
   /** Apply one saved workflow record into the current editor state. */
   const applyGraphRecordToEditor = useCallback((graph: GraphWorkflowRecord) => {
@@ -148,7 +150,7 @@ export function useModuleGraphBrowseActions({
     graph: GraphWorkflowSummaryRecord | GraphWorkflowRecord,
     options?: { openEditor?: boolean; silent?: boolean },
   ) => {
-    if (!confirmDiscardUnsavedChanges()) {
+    if (!(await confirmDiscardUnsavedChanges())) {
       return false
     }
 
@@ -180,8 +182,8 @@ export function useModuleGraphBrowseActions({
   }, [applyGraphRecordToEditor, confirmDiscardUnsavedChanges, enterWorkflowEditor, queryClient, showSnackbar, t])
 
   /** Start one fresh workflow draft from the current folder context. */
-  const handleCreateWorkflow = useCallback(() => {
-    if (!confirmDiscardUnsavedChanges()) {
+  const handleCreateWorkflow = useCallback(async () => {
+    if (!(await confirmDiscardUnsavedChanges())) {
       return
     }
 
@@ -396,7 +398,15 @@ export function useModuleGraphBrowseActions({
       return
     }
 
-    const confirmed = window.confirm(`워크플로우 "${selectedGraphRecord.name}"을(를) 삭제할까? 이 작업은 되돌릴 수 없어.`)
+    const confirmed = await confirm({
+      title: t({ ko: '워크플로우 삭제', en: 'Delete workflow' }),
+      description: t(
+        { ko: '워크플로우 "{name}"을(를) 삭제할까? 이 작업은 되돌릴 수 없어.', en: 'Delete the workflow "{name}"? This cannot be undone.' },
+        { name: selectedGraphRecord.name },
+      ),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
@@ -422,17 +432,17 @@ export function useModuleGraphBrowseActions({
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우 삭제에 실패했어.', en: 'Failed to delete the workflow.' }), tone: 'error' })
     }
-  }, [formatNumber, refetchGraphWorkflows, resetWorkflowDraft, selectedGraphRecord, setIsEditorSupportOpen, setWorkflowView, showSnackbar, t])
+  }, [confirm, formatNumber, refetchGraphWorkflows, resetWorkflowDraft, selectedGraphRecord, setIsEditorSupportOpen, setWorkflowView, showSnackbar, t])
 
   /** Leave editor mode, restoring the selected saved workflow when needed. */
-  const handleLeaveWorkflowEditor = useCallback(() => {
+  const handleLeaveWorkflowEditor = useCallback(async () => {
     if (workflowView !== 'edit') {
       setWorkflowView('browse')
       setIsEditorSupportOpen(false)
       return
     }
 
-    if (!confirmDiscardUnsavedChanges()) {
+    if (!(await confirmDiscardUnsavedChanges())) {
       return
     }
 

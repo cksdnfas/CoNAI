@@ -21,6 +21,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { LoraAutoCollectModal } from './lora-auto-collect-modal'
 import { WildcardEditorModal, type WildcardEditorModalInput } from './wildcard-editor-modal'
 import { LoraScanLogCard, WildcardDetailCard } from './wildcard-browser-cards'
@@ -69,6 +70,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
+  const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const isWideLayout = useDesktopPageLayout()
 
@@ -272,17 +274,26 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     }
 
     const hasChildren = browserEntries.some((entry) => entry.wildcard.parent_id === selectedWildcard.id)
-    const confirmed = window.confirm(
-      hasChildren
+    const confirmed = await confirm({
+      title: t({ ko: '항목 삭제', en: 'Delete item' }),
+      description: hasChildren
         ? t({ ko: '{name} 항목을 삭제할까? 하위 항목 처리 방식도 바로 이어서 물어볼게.', en: 'Delete the {name} item? I will ask how to handle child items next.' }, { name: selectedWildcard.name })
         : t({ ko: '{name} 항목을 삭제할까?', en: 'Delete the {name} item?' }, { name: selectedWildcard.name }),
-    )
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
 
     const cascade = hasChildren
-      ? window.confirm(t('image-generation.components.wildcard.generation.panel.delete.all.child.items.too.nok.delete'))
+      ? await confirm({
+        title: t({ ko: '하위 항목도 삭제할까?', en: 'Delete child items too?' }),
+        description: t({ ko: '현재 항목만 삭제하면 하위 항목은 한 단계 위로 올라가.', en: 'Deleting only this item moves its children up one level.' }),
+        confirmLabel: t({ ko: '하위 항목까지 삭제', en: 'Delete children too' }),
+        cancelLabel: t({ ko: '현재 항목만 삭제', en: 'Delete only this item' }),
+        tone: 'destructive',
+      })
       : false
 
     await deleteMutation.mutateAsync({

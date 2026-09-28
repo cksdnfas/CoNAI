@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { WatchedFolder, WatchedFolderUpdateInput } from '@/types/folder'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { formatDateTime, parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
@@ -40,6 +41,7 @@ export function WatchedFolderCard({
   onDelete,
 }: WatchedFolderCardProps) {
   const { t, locale, formatNumber } = useI18n()
+  const confirm = useConfirm()
   const [draft, setDraft] = useState({
     folder_name: folder.folder_name || '',
     auto_scan: folder.auto_scan === 1,
@@ -164,8 +166,14 @@ export function WatchedFolderCard({
       <SettingsResourceFooterActions
         dangerLabel={t({ ko: '폴더 제거', en: 'Remove folder' })}
         dangerDisabled={isBusy || folder.is_default === 1}
-        onDanger={() => {
-          if (!window.confirm(t({ ko: '정말 {name} 폴더를 삭제할까?', en: 'Delete the {name} folder?' }, { name: folder.folder_name || folder.folder_path }))) {
+        onDanger={async () => {
+          const confirmed = await confirm({
+            title: t({ ko: '폴더 제거', en: 'Remove folder' }),
+            description: t({ ko: '정말 {name} 폴더를 삭제할까?', en: 'Delete the {name} folder?' }, { name: folder.folder_name || folder.folder_path }),
+            confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+            tone: 'destructive',
+          })
+          if (!confirmed) {
             return
           }
           void handleAction(() => onDelete(folder.id))

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import type {
   GraphExecutionRecord,
@@ -47,6 +48,7 @@ export function ModuleWorkflowOutputManagementPanel({
 }) {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const canDeleteArtifacts = authStatusQuery.data?.isAdmin === true
   const [activeTab, setActiveTab] = useState<BrowseTab>('outputs')
@@ -300,7 +302,13 @@ export function ModuleWorkflowOutputManagementPanel({
         ? t('module-graph.components.module.workflow.output.management.panel.delete.the.selected.generated.output.files.will')
         : t('module-graph.components.module.workflow.output.management.panel.delete.the.selected.value.generated.outputs.files', { count: formatNumber(targetArtifactIds.length) })
 
-    if (!window.confirm(confirmMessage)) {
+    const confirmed = await confirm({
+      title: t({ ko: '생성 결과 삭제', en: 'Delete outputs' }),
+      description: confirmMessage,
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!confirmed) {
       return
     }
 
@@ -346,7 +354,13 @@ export function ModuleWorkflowOutputManagementPanel({
         ? t('module-graph.components.module.workflow.output.management.panel.delete.the.selected.artifact.this.only.cleans')
         : t('module-graph.components.module.workflow.output.management.panel.delete.the.selected.value.artifacts.this.only', { count: formatNumber(targetArtifactIds.length) })
 
-    if (!window.confirm(confirmMessage)) {
+    const confirmed = await confirm({
+      title: t({ ko: '아티팩트 삭제', en: 'Delete artifacts' }),
+      description: confirmMessage,
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!confirmed) {
       return
     }
 
@@ -382,7 +396,13 @@ export function ModuleWorkflowOutputManagementPanel({
       return
     }
 
-    if (!window.confirm(t('module-graph.components.module.workflow.output.management.panel.delete.all.generated.outputs.in.the.current'))) {
+    const confirmed = await confirm({
+      title: t({ ko: '생성 결과 삭제', en: 'Delete outputs' }),
+      description: t('module-graph.components.module.workflow.output.management.panel.delete.all.generated.outputs.in.the.current'),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!confirmed) {
       return
     }
 
@@ -429,7 +449,13 @@ export function ModuleWorkflowOutputManagementPanel({
       ? t('module-graph.components.module.workflow.output.management.panel.delete.all.text.and.intermediate.artifacts.in')
       : t('module-graph.components.module.workflow.output.management.panel.delete.all.text.and.intermediate.artifacts.in.43cfb8cc')
 
-    if (!window.confirm(confirmMessage)) {
+    const confirmed = await confirm({
+      title: t({ ko: '아티팩트 삭제', en: 'Delete artifacts' }),
+      description: confirmMessage,
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!confirmed) {
       return
     }
 

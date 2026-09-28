@@ -7,6 +7,7 @@ import {
 } from '@/lib/api-image-generation-workflows'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServer } from '@/lib/api-image-generation-types'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   DEFAULT_COMFYUI_SERVER_FORM,
   getErrorMessage,
@@ -31,6 +32,7 @@ export function useComfyServerController({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [isComfyServerSubmitting, setIsComfyServerSubmitting] = useState(false)
   const [comfyServerForm, setComfyServerForm] = useState<ComfyUIServerFormDraft>(DEFAULT_COMFYUI_SERVER_FORM)
   const [editingServerId, setEditingServerId] = useState<number | null>(null)
@@ -108,10 +110,14 @@ export function useComfyServerController({
         return
       }
 
-      const confirmed = window.confirm(t({
-        ko: 'Modal 서버 테스트는 원격 endpoint를 호출해서 GPU 컨테이너가 켜지고 비용이 발생할 수 있어. 계속할까?',
-        en: 'Testing a Modal server calls the remote endpoint, which can start a GPU container and incur costs. Continue?',
-      }))
+      const confirmed = await confirm({
+        title: t({ ko: 'Modal 서버 테스트', en: 'Test Modal server' }),
+        description: t({
+          ko: 'Modal 서버 테스트는 원격 endpoint를 호출해서 GPU 컨테이너가 켜지고 비용이 발생할 수 있어. 계속할까?',
+          en: 'Testing a Modal server calls its remote endpoint, which can start a GPU container and incur costs. Continue?',
+        }),
+        confirmLabel: t({ ko: '테스트', en: 'Test' }),
+      })
       if (!confirmed) {
         return
       }
@@ -159,7 +165,7 @@ export function useComfyServerController({
         showSnackbar({ message, tone: 'error' })
       }
     }
-  }, [servers, showSnackbar, t])
+  }, [confirm, servers, showSnackbar, t])
 
   useEffect(() => {
     if (selectedTarget === 'auto' || selectedTarget.startsWith('tag:')) {
@@ -297,7 +303,12 @@ export function useComfyServerController({
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '정말 {name} 서버를 삭제할까?', en: 'Delete the {name} server?' }, { name: server.name }))
+    const confirmed = await confirm({
+      title: t({ ko: '서버 삭제', en: 'Delete server' }),
+      description: t({ ko: '정말 {name} 서버를 삭제할까?', en: 'Delete the {name} server?' }, { name: server.name }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }

@@ -15,6 +15,7 @@ import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { buildPromptPresetInsertionText, createPromptPreset, deletePromptPreset, getPromptPresets, updatePromptPreset, type PromptPresetMutationInput, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -213,6 +214,7 @@ export function PromptPresetPanel() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const isWideLayout = useDesktopPageLayout()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
@@ -283,9 +285,14 @@ export function PromptPresetPanel() {
     }
 
     const hasChildren = entries.some((entry) => entry.preset.parent_id === selectedPreset.id)
-    const confirmed = window.confirm(hasChildren
-      ? t('prompts.components.prompt.preset.panel.confirm.delete.with.children', { name: selectedPreset.name })
-      : t('prompts.components.prompt.preset.panel.confirm.delete', { name: selectedPreset.name }))
+    const confirmed = await confirm({
+      title: t({ ko: '프리셋 삭제', en: 'Delete preset' }),
+      description: hasChildren
+        ? t('prompts.components.prompt.preset.panel.confirm.delete.with.children', { name: selectedPreset.name })
+        : t('prompts.components.prompt.preset.panel.confirm.delete', { name: selectedPreset.name }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }

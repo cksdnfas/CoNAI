@@ -1,5 +1,6 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback } from 'react'
 import { useBeforeUnload, useBlocker, type BlockerFunction } from 'react-router-dom'
+import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
 import { shouldBypassOverlayHistoryBackNavigation } from '@/components/ui/use-overlay-back-close'
 
 /** Warn before a reload/close or an in-app route change drops unsaved settings drafts. */
@@ -22,17 +23,5 @@ export function useUnsavedSettingsGuard(hasUnsavedChanges: boolean, confirmMessa
     && !shouldBypassOverlayHistoryBackNavigation()
   ), [hasUnsavedChanges])
   const blocker = useBlocker(shouldBlock)
-
-  useEffect(() => {
-    if (blocker.state !== 'blocked') {
-      return
-    }
-
-    if (window.confirm(confirmMessage)) {
-      blocker.proceed()
-      return
-    }
-
-    blocker.reset()
-  }, [blocker, confirmMessage])
+  useBlockerConfirm(blocker, confirmMessage)
 }

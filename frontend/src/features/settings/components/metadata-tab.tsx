@@ -8,6 +8,7 @@ import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface MetadataTabProps {
@@ -23,8 +24,14 @@ interface MetadataTabProps {
 export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, hasChanges, onReextractAll, isReextracting }: MetadataTabProps) {
   const { t } = useI18n()
   const isStealthEnabled = metadataDraft?.enableSecondaryExtraction === true
-  const handleReextractAll = () => {
-    if (!window.confirm(t('metadataTab.reExtractAiMetadataFor'))) {
+  const confirm = useConfirm()
+  const handleReextractAll = async () => {
+    const confirmed = await confirm({
+      title: t({ ko: 'AI 메타데이터 다시 추출', en: 'Re-extract AI metadata' }),
+      description: t('metadataTab.reExtractAiMetadataFor'),
+      confirmLabel: t({ ko: '다시 추출', en: 'Re-extract' }),
+    })
+    if (!confirmed) {
       return
     }
     onReextractAll()

@@ -46,6 +46,7 @@ import {
 } from '../history-settings-mapping'
 import { ComfyDropdownListsSection, ComfyServerListSection, ComfyWorkflowListSection } from './comfy-home-sections'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
@@ -92,6 +93,7 @@ export function ComfyGenerationPanel({
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   // Which workflow the current draft belongs to; history loads wait until the target workflow's draft is initialized.
@@ -481,7 +483,12 @@ export function ComfyGenerationPanel({
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '정말 {name} 워크플로우를 삭제할까?', en: 'Delete the {name} workflow?' }, { name: workflow.name }))
+    const confirmed = await confirm({
+      title: t({ ko: '워크플로우 삭제', en: 'Delete workflow' }),
+      description: t({ ko: '정말 {name} 워크플로우를 삭제할까?', en: 'Delete the {name} workflow?' }, { name: workflow.name }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
@@ -514,7 +521,12 @@ export function ComfyGenerationPanel({
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '정말 {name} 목록을 삭제할까?', en: 'Delete the {name} list?' }, { name: list.name }))
+    const confirmed = await confirm({
+      title: t({ ko: '목록 삭제', en: 'Delete list' }),
+      description: t({ ko: '정말 {name} 목록을 삭제할까?', en: 'Delete the {name} list?' }, { name: list.name }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
     if (!confirmed) {
       return
     }
