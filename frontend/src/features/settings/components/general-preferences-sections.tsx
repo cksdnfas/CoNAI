@@ -47,7 +47,7 @@ export function GeneralPreferencesSections({
   isSaving,
   hasChanges,
 }: GeneralPreferencesSectionsProps) {
-  const { t } = useI18n()
+  const { t, languageOverride } = useI18n()
   const visibleSections = new Set(sections)
 
   const saveAction = (
@@ -82,7 +82,10 @@ export function GeneralPreferencesSections({
       {visibleSections.has('basic') ? (
         <Section variant="settings" heading={t({ ko: '기본 설정', en: 'General' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label={t({ ko: '언어', en: 'Language' })}>
+            <Field
+              label={t({ ko: '언어', en: 'Language' })}
+              hint={languageOverride ? t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' }) : undefined}
+            >
               <Select
                 variant="settings"
                 value={generalDraft.language}

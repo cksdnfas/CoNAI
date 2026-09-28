@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { logoutLocalAccount } from '@/lib/api-auth'
+import { LanguageSwitch } from './language-switch'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
 /** Render one compact header account button with a mini popup for account actions and the page list. */
@@ -99,16 +100,21 @@ export function HeaderAccountMenu() {
             </div>
           ) : null}
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={() => openPage('/access')}
-          >
-            <MapIcon className="h-4 w-4" />
-            {t('appShell.availablePages')}
-          </Button>
+          {/* Anonymous sessions are sent to /login by the shell guard, so the page list is only offered once signed in. */}
+          {!isAnonymousSession ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start"
+              onClick={() => openPage('/access')}
+            >
+              <MapIcon className="h-4 w-4" />
+              {t('appShell.availablePages')}
+            </Button>
+          ) : null}
+
+          <LanguageSwitch />
 
           {isSignedIn ? (
             <Button

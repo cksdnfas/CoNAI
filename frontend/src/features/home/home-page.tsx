@@ -7,6 +7,7 @@ import { Section } from '@/components/ui/section'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { AuthStatusErrorState } from '@/features/auth/require-auth-permission'
 import { useAuthPermissionRedirect } from '@/features/auth/use-auth-permission-redirect'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
@@ -73,13 +74,25 @@ export function HomePage() {
     notifyError: (message) => showSnackbar({ message, tone: 'error' }),
   })
 
+  const isAuthStatusUnavailable = authStatusQuery.isError && !canViewHome
+
   useAuthPermissionRedirect({
-    enabled: !authStatusQuery.isLoading && !canViewHome,
+    enabled: !authStatusQuery.isLoading && !isAuthStatusUnavailable && !canViewHome,
     permissionKey: 'page.home.view',
   })
 
   if (authStatusQuery.isLoading) {
     return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
+  }
+
+  if (isAuthStatusUnavailable) {
+    return (
+      <AuthStatusErrorState
+        error={authStatusQuery.error}
+        isRetrying={authStatusQuery.isFetching}
+        onRetry={() => void authStatusQuery.refetch()}
+      />
+    )
   }
 
   if (!canViewHome) {

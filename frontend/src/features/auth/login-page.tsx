@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { createGuestAccount, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
+import { LanguageSwitch } from './language-switch'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
 /** Marks a guest signup whose account was created but whose follow-up sign-in failed. */
@@ -138,6 +139,9 @@ export function LoginPage() {
     <>
       <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-10">
         <div className="w-full space-y-8">
+          <div className="flex justify-end">
+            <LanguageSwitch className="w-full max-w-[260px]" />
+          </div>
           <PageHeader
             eyebrow="Personal Access"
             title={t('loginPage.signIn')}

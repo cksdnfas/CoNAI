@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { ArrowRight, LogIn, ShieldAlert, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { getPublicGenerationWorkflows } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
-import { listAccessiblePageAccessItems } from './page-access-catalog'
+import { resolveRoutePermissionKey } from './auth-route-permissions'
+import { PAGE_ACCESS_CATALOG, listAccessiblePageAccessItems } from './page-access-catalog'
 import { useAuthStatusQuery } from './use-auth-status-query'
 
 interface AccessEntryCardProps {
@@ -45,11 +48,73 @@ function AccessEntryCard({ label, description, href, icon: Icon, badge }: Access
   )
 }
 
+interface BlockedRouteState {
+  blockedPath?: unknown
+  blockedPermissionKey?: unknown
+}
+
+/** Read the blocked-route details that `useAuthPermissionRedirect` stores in navigation state. */
+function readBlockedRoute(state: unknown): { path: string; permissionKey: string | null } | null {
+  if (!state || typeof state !== 'object') {
+    return null
+  }
+
+  const { blockedPath, blockedPermissionKey } = state as BlockedRouteState
+  if (typeof blockedPath !== 'string' || !blockedPath.startsWith('/')) {
+    return null
+  }
+
+  return {
+    path: blockedPath,
+    permissionKey: typeof blockedPermissionKey === 'string' ? blockedPermissionKey : null,
+  }
+}
+
+/** Explain which page was blocked and how to get access to it. */
+function BlockedRouteNotice({ path, permissionKey, isAnonymous, onDismiss }: { path: string; permissionKey: string | null; isAnonymous: boolean; onDismiss: () => void }) {
+  const { t } = useI18n()
+  const resolvedPermissionKey = permissionKey ?? resolveRoutePermissionKey(path.split('?')[0] ?? path)
+  const matchedPage = PAGE_ACCESS_CATALOG.find((item) => item.permissionKey === resolvedPermissionKey)
+  const pageLabel = matchedPage ? t(matchedPage.labelKey) : path
+
+  return (
+    <Alert variant="destructive" className="rounded-sm border-destructive/40 pr-12">
+      <ShieldAlert />
+      <AlertTitle className="line-clamp-none">
+        {t('accessOverviewPage.blockedTitle', { pageLabel })}
+      </AlertTitle>
+      <AlertDescription>
+        <p>{isAnonymous ? t('accessOverviewPage.blockedHintAnonymous') : t('accessOverviewPage.blockedHintSignedIn')}</p>
+        {isAnonymous ? (
+          <Button asChild size="sm" className="mt-1">
+            <Link to={`/login?next=${encodeURIComponent(path)}`}>
+              <LogIn className="h-4 w-4" />
+              {t('loginPage.signIn')}
+            </Link>
+          </Button>
+        ) : null}
+      </AlertDescription>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="absolute right-3 top-3 rounded-sm p-0.5 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+        aria-label={t({ ko: '닫기', en: 'Close' })}
+        title={t({ ko: '닫기', en: 'Close' })}
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </Alert>
+  )
+}
+
 /** Render one compact landing page for the pages the current account can use. */
 export function AccessOverviewPage() {
   const { t, formatNumber } = useI18n()
+  const location = useLocation()
+  const navigate = useNavigate()
   const authStatusQuery = useAuthStatusQuery()
   const authStatus = authStatusQuery.data
+  const blockedRoute = readBlockedRoute(location.state)
   const publicWorkflowsQuery = useQuery({
     queryKey: ['public-generation-workflows', 'access-overview'],
     queryFn: getPublicGenerationWorkflows,
@@ -85,6 +150,15 @@ export function AccessOverviewPage() {
           <Badge variant="outline">{t({ ko: '항목 {count}', en: '{count} items' }, { count: formatNumber(totalVisibleEntries) })}</Badge>
         </div>
       </div>
+
+      {blockedRoute ? (
+        <BlockedRouteNotice
+          path={blockedRoute.path}
+          permissionKey={blockedRoute.permissionKey}
+          isAnonymous={authStatus?.hasCredentials === true && authStatus.authenticated !== true}
+          onDismiss={() => navigate(`${location.pathname}${location.search}`, { replace: true, state: null })}
+        />
+      ) : null}
 
       {accessibleItems.length === 0 && publicWorkflows.length === 0 ? (
         <div className="flex items-center gap-3 rounded-sm border border-border bg-surface-container/72 px-4 py-3 text-foreground">

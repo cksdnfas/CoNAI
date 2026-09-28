@@ -6,6 +6,13 @@ import { createTranslationCatalog, type ScopedLocaleResources } from './types'
 export const authResources = {
   ko: {
     "accessOverviewPage.publicGenerationPage": "공용 생성 페이지",
+    "requireAuthPermission.statusUnavailable": "권한 정보를 불러오지 못했어.",
+    "requireAuthPermission.statusUnavailableHint": "서버에 연결할 수 없거나 응답에 문제가 있어. 권한이 없는 게 아니니 잠시 후 다시 시도해 줘.",
+    "requireAuthPermission.retry": "다시 시도",
+    "requireAuthPermission.retrying": "다시 시도 중…",
+    "accessOverviewPage.blockedTitle": "{pageLabel} 페이지는 현재 권한으로 열 수 없어.",
+    "accessOverviewPage.blockedHintAnonymous": "로그인하면 열 수 있을 수도 있어. 계정이 없거나 로그인해도 안 열리면 관리자에게 권한을 요청해 줘.",
+    "accessOverviewPage.blockedHintSignedIn": "이 계정에는 해당 페이지 권한이 없어. 필요하면 관리자에게 권한을 요청해 줘. 아래는 지금 열 수 있는 페이지야.",
     "headerAccountMenu.signedOut": "로그아웃했어.",
     "headerAccountMenu.signOutFailed": "로그아웃에 실패했어.",
     "headerAccountMenu.accountMenu": "계정 메뉴",
@@ -44,11 +51,16 @@ export const authResources = {
     "pageAccessCatalog.fileRegistration": "파일 등록",
     "pageAccessCatalog.settings": "설정",
     "pageAccessCatalog.environmentManagement": "환경 관리",
-    "useAuthPermissionRedirect.thisPage": "이 페이지",
-    "useAuthPermissionRedirect.valueCannotBeOpenedWith": "{pageLabel} 페이지를 열 권한이 없어. 이용 가능 페이지로 안내할게.",
   },
   en: {
     "accessOverviewPage.publicGenerationPage": "Public generation page",
+    "requireAuthPermission.statusUnavailable": "Couldn't load your permissions.",
+    "requireAuthPermission.statusUnavailableHint": "The server is unreachable or returned an error. This is not a permission problem — please try again in a moment.",
+    "requireAuthPermission.retry": "Retry",
+    "requireAuthPermission.retrying": "Retrying…",
+    "accessOverviewPage.blockedTitle": "You don't have permission to open {pageLabel}.",
+    "accessOverviewPage.blockedHintAnonymous": "Signing in may give you access. If you have no account, or it still won't open after signing in, ask an administrator for access.",
+    "accessOverviewPage.blockedHintSignedIn": "This account doesn't have access to that page. Ask an administrator if you need it. The pages you can open right now are listed below.",
     "headerAccountMenu.signedOut": "Signed out.",
     "headerAccountMenu.signOutFailed": "Sign-out failed.",
     "headerAccountMenu.accountMenu": "Account menu",
@@ -87,8 +99,6 @@ export const authResources = {
     "pageAccessCatalog.fileRegistration": "File registration",
     "pageAccessCatalog.settings": "Settings",
     "pageAccessCatalog.environmentManagement": "Environment management",
-    "useAuthPermissionRedirect.thisPage": "this page",
-    "useAuthPermissionRedirect.valueCannotBeOpenedWith": "{pageLabel} cannot be opened with your current permissions. Redirecting to an available page.",
   },
 } as const satisfies ScopedLocaleResources
 

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useState,
   useSyncExternalStore,
   type PropsWithChildren,
 } from 'react'
@@ -20,7 +21,12 @@ export type TranslationParams = Record<string, string | number | boolean | null 
 export type TranslationCatalog = Record<string, TranslationDictionary>
 
 const DEFAULT_LANGUAGE: AppLanguage = 'ko'
+/** Effective UI language; also read by `api-error-fallbacks` outside React. */
 const LANGUAGE_STORAGE_KEY = 'conai.language'
+/** Last server-wide default seen, so "use default" still works for accounts that cannot read `/api/settings`. */
+const DEFAULT_LANGUAGE_STORAGE_KEY = 'conai.language.default'
+/** Per-browser choice from the account menu; wins over the server default. */
+const LANGUAGE_OVERRIDE_STORAGE_KEY = 'conai.language.override'
 const DEFAULT_CATALOG: TranslationCatalog = { ...shellCatalog, ...authCatalog }
 let registeredCatalog: TranslationCatalog = { ...DEFAULT_CATALOG }
 const catalogListeners = new Set<() => void>()
@@ -54,6 +60,11 @@ interface I18nContextValue {
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string
   formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string
   formatDateTime: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string
+  /** Language used when there is no per-browser override (server setting, or its last cached value). */
+  defaultLanguage: AppLanguage
+  languageOverride: AppLanguage | null
+  /** Pick a per-browser language, or `null` to follow the server default again. */
+  setLanguageOverride: (language: AppLanguage | null) => void
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null)
@@ -86,20 +97,29 @@ export function getLocaleForLanguage(language: AppLanguage): string {
   return LOCALE_BY_LANGUAGE[language]
 }
 
-function readStoredLanguage(): AppLanguage | null {
+function readStoredValue(key: string): AppLanguage | null {
   try {
-    return normalizeLanguage(window.localStorage.getItem(LANGUAGE_STORAGE_KEY))
+    return normalizeLanguage(window.localStorage.getItem(key))
   } catch {
     return null
   }
 }
 
-function writeStoredLanguage(language: AppLanguage): void {
+function writeStoredValue(key: string, language: AppLanguage | null): void {
   try {
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language)
+    if (language) {
+      window.localStorage.setItem(key, language)
+    } else {
+      window.localStorage.removeItem(key)
+    }
   } catch {
     // localStorage may be unavailable in private/embed contexts. The provider still works without it.
   }
+}
+
+function readStoredDefaultLanguage(): AppLanguage | null {
+  // Older builds only stored the effective language; use it as the default until the server value is seen.
+  return readStoredValue(DEFAULT_LANGUAGE_STORAGE_KEY) ?? readStoredValue(LANGUAGE_STORAGE_KEY)
 }
 
 function interpolate(template: string, params?: TranslationParams): string {
@@ -187,7 +207,8 @@ function getCachedNumberFormat(locale: string, options?: Intl.NumberFormatOption
 
 export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithChildren<{ catalog?: TranslationCatalog }>) {
   const registeredCatalogSnapshot = useSyncExternalStore(subscribeCatalog, getRegisteredCatalog, getRegisteredCatalog)
-  const storedLanguage = useMemo(() => readStoredLanguage(), [])
+  const storedDefaultLanguage = useMemo(() => readStoredDefaultLanguage(), [])
+  const [languageOverride, setLanguageOverrideState] = useState<AppLanguage | null>(() => readStoredValue(LANGUAGE_OVERRIDE_STORAGE_KEY))
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,
@@ -195,12 +216,36 @@ export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithC
     staleTime: 30_000,
   })
 
-  const language = normalizeLanguage(settingsQuery.data?.general.language) ?? storedLanguage ?? DEFAULT_LANGUAGE
+  const serverLanguage = normalizeLanguage(settingsQuery.data?.general.language)
+  const defaultLanguage = serverLanguage ?? storedDefaultLanguage ?? DEFAULT_LANGUAGE
+  const language = languageOverride ?? defaultLanguage
   const locale = getLocaleForLanguage(language)
+
+  const setLanguageOverride = useCallback((nextLanguage: AppLanguage | null) => {
+    setLanguageOverrideState(nextLanguage)
+    writeStoredValue(LANGUAGE_OVERRIDE_STORAGE_KEY, nextLanguage)
+  }, [])
+
+  useEffect(() => {
+    // Keep other tabs of this browser in step with the account-menu choice.
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === LANGUAGE_OVERRIDE_STORAGE_KEY || event.key === null) {
+        setLanguageOverrideState(readStoredValue(LANGUAGE_OVERRIDE_STORAGE_KEY))
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+
+  useEffect(() => {
+    if (serverLanguage) {
+      writeStoredValue(DEFAULT_LANGUAGE_STORAGE_KEY, serverLanguage)
+    }
+  }, [serverLanguage])
 
   useEffect(() => {
     document.documentElement.lang = language
-    writeStoredLanguage(language)
+    writeStoredValue(LANGUAGE_STORAGE_KEY, language)
   }, [language])
 
   const activeCatalog = useMemo(
@@ -229,8 +274,8 @@ export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithC
   )
 
   const contextValue = useMemo<I18nContextValue>(
-    () => ({ language, locale, t, formatNumber, formatDate, formatDateTime }),
-    [formatDate, formatDateTime, formatNumber, language, locale, t],
+    () => ({ language, locale, t, formatNumber, formatDate, formatDateTime, defaultLanguage, languageOverride, setLanguageOverride }),
+    [defaultLanguage, formatDate, formatDateTime, formatNumber, language, languageOverride, locale, setLanguageOverride, t],
   )
 
   return <I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>
