@@ -1,28 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { ChevronDown, Wrench } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Panel } from '@/components/ui/panel'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Text } from '@/components/ui/text'
 import type { CustomDropdownList, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
-  DEFAULT_COMFY_MODEL_API_PATHS,
-  createGenerationCustomDropdownList,
   createGenerationWorkflow,
-  deleteGenerationCustomDropdownList,
   deleteGenerationWorkflow,
   getGenerationComfyUIServers,
   getGenerationCustomDropdownLists,
   getGenerationWorkflow,
   getGenerationWorkflows,
-  scanGenerationComfyUIModelDropdownLists,
-  updateGenerationCustomDropdownList,
 } from '@/lib/api-image-generation-workflows'
-import { createComfyModuleFromWorkflow, getModuleDefinitions } from '@/lib/api-module-graph'
 import { getAppSettings } from '@/lib/api-settings-general'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
@@ -35,7 +23,6 @@ import {
 } from '../image-generation-drafts'
 import {
   getErrorMessage,
-  type ModuleFieldOption,
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
@@ -46,15 +33,18 @@ import {
   getHistorySettingsLoadedMessage,
   hasWorkflowDraftDifference,
 } from '../history-settings-mapping'
-import { ComfyDropdownListsSection, ComfyServerListSection, ComfyWorkflowListSection } from './comfy-home-sections'
+import { ComfyWorkflowListSection } from './comfy-home-sections'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { ComfyManagementArea } from './comfy-management-area'
 import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
 import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
 import { findAutoCollectedPowerLoraOptions } from './power-lora-loader-utils'
+import { useComfyDropdownListActions } from './use-comfy-dropdown-list-actions'
 import { useComfyGenerationActions } from './use-comfy-generation-actions'
+import { useComfyModuleSave } from './use-comfy-module-save'
 import { useComfyServerController } from './use-comfy-server-controller'
 
 type ComfyGenerationPanelProps = {
@@ -94,22 +84,13 @@ export function ComfyGenerationPanel({
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const confirm = useConfirm()
-  const navigate = useNavigate()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   // Which workflow the current draft belongs to; history loads wait until the target workflow's draft is initialized.
   const [workflowDraftOwnerId, setWorkflowDraftOwnerId] = useState<number | null>(null)
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
-  const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
-  const [moduleSaveWorkflowId, setModuleSaveWorkflowId] = useState<number | null>(null)
-  const [isSavingComfyModule, setIsSavingComfyModule] = useState(false)
-  const [isRefreshingDropdownLists, setIsRefreshingDropdownLists] = useState(false)
   const [isManagementOpen, setIsManagementOpen] = useState(false)
-  const [comfyModuleName, setComfyModuleName] = useState('')
-  const [comfyModuleDescription, setComfyModuleDescription] = useState('')
-  const [comfyExposedFieldIds, setComfyExposedFieldIds] = useState<string[]>([])
-  const [comfyOverwriteModuleId, setComfyOverwriteModuleId] = useState<number | null>(null)
   const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
 
   const appSettingsQuery = useQuery({
@@ -132,10 +113,6 @@ export function ComfyGenerationPanel({
     queryFn: () => getGenerationCustomDropdownLists(),
   })
 
-  const moduleDefinitionsQuery = useQuery({
-    queryKey: ['module-definitions', 'comfy-overwrite-candidates'],
-    queryFn: () => getModuleDefinitions(false),
-  })
 
   const workflowById = useMemo(
     () => new Map<number, GenerationWorkflow>((workflowsQuery.data ?? []).map((workflow) => [workflow.id, workflow])),
@@ -144,10 +121,6 @@ export function ComfyGenerationPanel({
   const selectedWorkflow = useMemo(
     () => selectedWorkflowId === null ? null : workflowById.get(selectedWorkflowId) ?? null,
     [selectedWorkflowId, workflowById],
-  )
-  const moduleSaveWorkflow = useMemo(
-    () => moduleSaveWorkflowId === null ? null : workflowById.get(moduleSaveWorkflowId) ?? null,
-    [moduleSaveWorkflowId, workflowById],
   )
 
   const dropdownListByName = useMemo(
@@ -191,7 +164,10 @@ export function ComfyGenerationPanel({
   }, [buildDropdownSelectOptions, dropdownListByName])
 
   const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
-  const moduleSaveWorkflowFields = useMemo(() => resolveWorkflowFields(moduleSaveWorkflow), [resolveWorkflowFields, moduleSaveWorkflow])
+  const { handleOpenModuleSave, moduleSaveModalProps } = useComfyModuleSave({
+    workflowById,
+    resolveWorkflowFields,
+  })
 
   const servers = useMemo(() => serversQuery.data ?? [], [serversQuery.data])
   const activeServers = useMemo(() => servers.filter((server) => server.is_active !== false), [servers])
@@ -250,28 +226,19 @@ export function ComfyGenerationPanel({
     onHistoryRefresh,
     showSnackbar,
   })
-  const comfyModuleFieldOptions = useMemo<ModuleFieldOption[]>(() => (
-    moduleSaveWorkflowFields.map((field) => ({
-      key: field.id,
-      label: field.label,
-      dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : field.type === 'node' ? 'json' : 'text',
-      options: field.options,
-    }))
-  ), [moduleSaveWorkflowFields])
-
-  const comfyOverwriteCandidates = useMemo(() => {
-    if (!moduleSaveWorkflow) {
-      return []
-    }
-
-    return (moduleDefinitionsQuery.data ?? []).filter((module) => (
-      module.engine_type === 'comfyui'
-      && module.authoring_source === 'comfyui_workflow_wrap'
-      && module.source_workflow_id === moduleSaveWorkflow.id
-    ))
-  }, [moduleDefinitionsQuery.data, moduleSaveWorkflow])
 
   const refetchDropdownLists = dropdownListsQuery.refetch
+  const {
+    isRefreshingDropdownLists,
+    handleCreateDropdownList,
+    handleDeleteDropdownList,
+    handleUpdateDropdownList,
+    handleScanDropdownLists,
+    handleRefreshDropdownLists,
+  } = useComfyDropdownListActions({
+    dropdownListById,
+    refetchDropdownLists,
+  })
 
   useEffect(() => {
     if (!selectedWorkflow) {
@@ -349,22 +316,6 @@ export function ComfyGenerationPanel({
     workflowsQuery.isSuccess,
   ])
 
-  useEffect(() => {
-    if (!moduleSaveWorkflow) {
-      setComfyModuleName('')
-      setComfyModuleDescription('')
-      setComfyExposedFieldIds([])
-      setComfyOverwriteModuleId(null)
-      if (isModuleSaveModalOpen) {
-        setIsModuleSaveModalOpen(false)
-      }
-      return
-    }
-
-    setComfyModuleName(`${moduleSaveWorkflow.name} 모듈`)
-    setComfyModuleDescription(moduleSaveWorkflow.description ?? '')
-    setComfyExposedFieldIds(moduleSaveWorkflowFields.map((field) => field.id))
-  }, [isModuleSaveModalOpen, moduleSaveWorkflow, moduleSaveWorkflowFields])
 
   useEffect(() => {
     if (selectedWorkflowId === null) {
@@ -410,10 +361,6 @@ export function ComfyGenerationPanel({
     onSelectedWorkflowChange(workflowId)
   }, [onSelectedWorkflowChange])
 
-  const handleOpenModuleSave = useCallback((workflowId: number) => {
-    setModuleSaveWorkflowId(workflowId)
-    setIsModuleSaveModalOpen(true)
-  }, [])
 
   const handleAuthoringSaved = async (workflowId: number) => {
     await Promise.all([workflowsQuery.refetch(), dropdownListsQuery.refetch()])
@@ -495,69 +442,6 @@ export function ComfyGenerationPanel({
     }
   }
 
-  const handleCreateDropdownList = async (input: { name: string; description?: string; items: string[] }) => {
-    try {
-      await createGenerationCustomDropdownList(input)
-      await dropdownListsQuery.refetch()
-      showSnackbar({ message: t({ ko: '커스텀 드롭다운 목록을 만들었어.', en: 'Created the custom dropdown list.' }), tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '커스텀 드롭다운 목록 생성에 실패했어.', en: 'Failed to create the custom dropdown list.' })), tone: 'error' })
-    }
-  }
-
-  const handleDeleteDropdownList = async (listId: number) => {
-    const list = dropdownListById.get(listId)
-    if (!list) {
-      return
-    }
-
-    const confirmed = await confirm({
-      title: t({ ko: '목록 삭제', en: 'Delete list' }),
-      description: t({ ko: '정말 {name} 목록을 삭제할까?', en: 'Delete the {name} list?' }, { name: list.name }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (!confirmed) {
-      return
-    }
-
-    try {
-      await deleteGenerationCustomDropdownList(listId)
-      await dropdownListsQuery.refetch()
-      showSnackbar({ message: t({ ko: '드롭다운 목록을 삭제했어.', en: 'Deleted the dropdown list.' }), tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '드롭다운 목록 삭제에 실패했어.', en: 'Failed to delete the dropdown list.' })), tone: 'error' })
-    }
-  }
-
-  const handleUpdateDropdownList = async (listId: number, input: { name?: string; description?: string; items?: string[] }) => {
-    try {
-      await updateGenerationCustomDropdownList(listId, input)
-      await dropdownListsQuery.refetch()
-      showSnackbar({ message: t({ ko: '드롭다운 목록을 수정했어.', en: 'Updated the dropdown list.' }), tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '드롭다운 목록 수정에 실패했어.', en: 'Failed to update the dropdown list.' })), tone: 'error' })
-    }
-  }
-
-  const handleScanDropdownLists = useCallback(async (input: { apiPaths: string[] }) => {
-    if (isRefreshingDropdownLists) {
-      return
-    }
-
-    try {
-      setIsRefreshingDropdownLists(true)
-      const response = await scanGenerationComfyUIModelDropdownLists(input)
-      await refetchDropdownLists()
-      showSnackbar({ message: response.data.message || t({ ko: '자동수집 목록을 갱신했어.', en: 'Refreshed the auto-collect list.' }), tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '자동수집 목록 생성에 실패했어.', en: 'Failed to create the auto-collect list.' })), tone: 'error' })
-    } finally {
-      setIsRefreshingDropdownLists(false)
-    }
-  }, [isRefreshingDropdownLists, refetchDropdownLists, showSnackbar, t])
-
-  const handleRefreshDropdownLists = useCallback(() => handleScanDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS }), [handleScanDropdownLists])
 
   const handleResetWorkflowDraft = useCallback(async () => {
     const baseDraft = buildWorkflowDraft(selectedWorkflowFields)
@@ -594,41 +478,6 @@ export function ComfyGenerationPanel({
     void handleGenerateSelected()
   }, [handleGenerateSelected])
 
-  const handleCreateComfyModule = async () => {
-    if (!moduleSaveWorkflow) {
-      return
-    }
-
-    const moduleName = comfyModuleName.trim()
-    if (moduleName.length === 0 || isSavingComfyModule) {
-      return
-    }
-
-    if (comfyModuleFieldOptions.length > 0 && comfyExposedFieldIds.length === 0) {
-      showSnackbar({ message: t({ ko: '최소 1개는 입력 가능 필드로 열어줘.', en: 'Expose at least one editable field.' }), tone: 'error' })
-      return
-    }
-
-    try {
-      setIsSavingComfyModule(true)
-      await createComfyModuleFromWorkflow(moduleSaveWorkflow.id, {
-        name: moduleName,
-        description: comfyModuleDescription.trim() || undefined,
-        exposed_field_ids: comfyExposedFieldIds,
-        target_module_id: comfyOverwriteModuleId ?? undefined,
-      })
-      setIsModuleSaveModalOpen(false)
-      setModuleSaveWorkflowId(null)
-      setComfyOverwriteModuleId(null)
-      void moduleDefinitionsQuery.refetch()
-      showSnackbar({ message: comfyOverwriteModuleId ? t({ ko: '{name} 워크플로우로 기존 모듈을 덮어썼어.', en: 'Overwrote the existing module with the {name} workflow.' }, { name: moduleSaveWorkflow.name }) : t({ ko: '{name} 워크플로우를 모듈로 저장했어.', en: 'Saved the {name} workflow as a module.' }, { name: moduleSaveWorkflow.name }), tone: 'info' })
-      navigate('/generation?tab=workflows')
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: 'ComfyUI 모듈 저장에 실패했어.', en: 'Failed to save the ComfyUI module.' })), tone: 'error' })
-    } finally {
-      setIsSavingComfyModule(false)
-    }
-  }
 
   return (
     <>
@@ -667,45 +516,24 @@ export function ComfyGenerationPanel({
               onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
             />
 
-            <Panel padding="sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Text as="div" variant="label">{t({ ko: 'ComfyUI 관리', en: 'ComfyUI management' })}</Text>
-                  <Badge variant="outline">{t({ ko: '서버 {count}', en: '{count} servers' }, { count: servers.length })}</Badge>
-                  <Badge variant="outline">{t({ ko: '목록 {count}', en: '{count} lists' }, { count: dropdownListsQuery.data?.length ?? 0 })}</Badge>
-                </div>
-                <Button type="button" size="sm" variant="secondary" onClick={() => setIsManagementOpen((current) => !current)} aria-expanded={isManagementOpen}>
-                  <Wrench className="h-4 w-4" />
-                  {isManagementOpen ? t({ ko: '관리 닫기', en: 'Close management' }) : t({ ko: '관리 열기', en: 'Open management' })}
-                  <ChevronDown className={cn('h-4 w-4 transition-transform', isManagementOpen && 'rotate-180')} />
-                </Button>
-              </div>
-            </Panel>
-
-            {servers.length === 0 || isManagementOpen ? (
-              <>
-                {isManagementOpen ? (
-                  <ComfyDropdownListsSection
-                    dropdownLists={dropdownListsQuery.data ?? []}
-                    isSubmitting={isRefreshingDropdownLists}
-                    onCreateManualList={(input) => handleCreateDropdownList(input)}
-                    onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
-                    onDeleteList={(listId) => handleDeleteDropdownList(listId)}
-                    onScanAutoLists={(input) => handleScanDropdownLists(input)}
-                  />
-                ) : null}
-                <ComfyServerListSection
-                  servers={servers}
-                  activeServerCount={activeServers.length}
-                  serverTests={comfyServerTests}
-                  onOpenCreateServer={handleOpenCreateServer}
-                  onEditServer={handleEditServer}
-                  onDeleteServer={(serverId) => void handleDeleteServer(serverId)}
-                  onTestServer={(serverId) => void handleTestComfyServer(serverId)}
-                  onToggleServerActive={(serverId, isActive) => void handleToggleComfyServerActive(serverId, isActive)}
-                />
-              </>
-            ) : null}
+            <ComfyManagementArea
+              servers={servers}
+              activeServerCount={activeServers.length}
+              serverTests={comfyServerTests}
+              dropdownLists={dropdownListsQuery.data}
+              isManagementOpen={isManagementOpen}
+              onToggleManagement={() => setIsManagementOpen((current) => !current)}
+              isRefreshingDropdownLists={isRefreshingDropdownLists}
+              onCreateManualList={(input) => handleCreateDropdownList(input)}
+              onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
+              onDeleteList={(listId) => handleDeleteDropdownList(listId)}
+              onScanAutoLists={(input) => handleScanDropdownLists(input)}
+              onOpenCreateServer={handleOpenCreateServer}
+              onEditServer={handleEditServer}
+              onDeleteServer={(serverId) => void handleDeleteServer(serverId)}
+              onTestServer={(serverId) => void handleTestComfyServer(serverId)}
+              onToggleServerActive={(serverId, isActive) => void handleToggleComfyServerActive(serverId, isActive)}
+            />
           </div>
         ) : selectedWorkflow ? (
           <ComfyWorkflowControllerPanel
@@ -761,33 +589,7 @@ export function ComfyGenerationPanel({
         onSubmit={() => void handleSubmitComfyServer()}
       />
 
-      <ComfyModuleSaveModal
-        open={isModuleSaveModalOpen}
-        moduleName={comfyModuleName}
-        moduleDescription={comfyModuleDescription}
-        fieldOptions={comfyModuleFieldOptions}
-        exposedFieldIds={comfyExposedFieldIds}
-        isSaving={isSavingComfyModule}
-        overwriteCandidates={comfyOverwriteCandidates}
-        overwriteModuleId={comfyOverwriteModuleId}
-        onClose={() => {
-          setIsModuleSaveModalOpen(false)
-          setModuleSaveWorkflowId(null)
-          setComfyOverwriteModuleId(null)
-        }}
-        onModuleNameChange={setComfyModuleName}
-        onModuleDescriptionChange={setComfyModuleDescription}
-        onExposedFieldIdsChange={setComfyExposedFieldIds}
-        onOverwriteModuleIdChange={(moduleId) => {
-          setComfyOverwriteModuleId(moduleId)
-          const module = comfyOverwriteCandidates.find((item) => item.id === moduleId)
-          if (module) {
-            setComfyModuleName(module.name)
-            setComfyModuleDescription(module.description ?? '')
-          }
-        }}
-        onSave={() => void handleCreateComfyModule()}
-      />
+      <ComfyModuleSaveModal {...moduleSaveModalProps} />
     </>
   )
 }
