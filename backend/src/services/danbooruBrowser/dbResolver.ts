@@ -17,6 +17,15 @@ export interface DanbooruBrowserDatabaseInfo {
   matchedBy: 'configured' | 'default' | 'discovered' | 'missing';
 }
 
+/** Database info with the server file-system locations removed, for non-admin viewers. */
+export type PublicDanbooruBrowserDatabaseInfo = Omit<DanbooruBrowserDatabaseInfo, 'path' | 'expectedPath' | 'expectedDirectory'>;
+
+/** Drop the server file paths from database info; keep availability, accepted names and the download link. */
+export function toPublicDanbooruDbInfo(info: DanbooruBrowserDatabaseInfo): PublicDanbooruBrowserDatabaseInfo {
+  const { path: _path, expectedPath: _expectedPath, expectedDirectory: _expectedDirectory, ...publicInfo } = info;
+  return publicInfo;
+}
+
 function isDanbooruDbCandidate(fileName: string): boolean {
   const lowerFileName = fileName.toLowerCase();
   const extension = path.extname(lowerFileName);

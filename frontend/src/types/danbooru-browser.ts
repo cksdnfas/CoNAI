@@ -25,16 +25,18 @@ export interface DanbooruBrowserPagination {
 
 export interface DanbooruBrowserDatabaseInfo {
   available: boolean
-  path: string
-  expectedPath: string
-  expectedDirectory: string
+  /** Server file-system locations: only sent to admins (or the local owner before any account exists). */
+  path?: string
+  expectedPath?: string
+  expectedDirectory?: string
   downloadUrl: string
   filePatterns: string[]
   matchedBy: 'configured' | 'default' | 'discovered' | 'missing'
 }
 
 export interface DanbooruBrowserSummary {
-  dbPath: string
+  /** Admin-only, like the path fields of `database`. */
+  dbPath?: string
   database: DanbooruBrowserDatabaseInfo
   counts: {
     tags: number

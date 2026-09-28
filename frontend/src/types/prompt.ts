@@ -112,9 +112,10 @@ export interface DanbooruPromptGroupingResult {
   includeAssignedPrompts: boolean
   database: {
     available: boolean
-    path: string
-    expectedPath: string
-    expectedDirectory: string
+    /** Server file-system locations: only sent to admins (or the local owner before any account exists). */
+    path?: string
+    expectedPath?: string
+    expectedDirectory?: string
     downloadUrl: string
     filePatterns: string[]
     matchedBy: 'configured' | 'default' | 'discovered' | 'missing'

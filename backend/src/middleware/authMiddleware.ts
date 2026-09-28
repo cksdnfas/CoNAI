@@ -67,6 +67,29 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction): v
 };
 
 /**
+ * Check, without responding, whether the request would pass `requireAdmin`: the local owner in
+ * bootstrap mode (no accounts yet, direct loopback) or an active admin account session.
+ * Use it to trim admin-only details (server paths, env hints) from responses shared with other users.
+ */
+export function hasAdminAccess(req: Request): boolean {
+  if (!hasConfiguredAuth()) {
+    return isDirectLoopbackRequest(req);
+  }
+
+  if (req.session?.authenticated !== true) {
+    return false;
+  }
+
+  const accountId = req.session.accountId;
+  if (typeof accountId !== 'number') {
+    return false;
+  }
+
+  const account = AuthAccount.findById(accountId);
+  return account?.account_type === 'admin' && account.status === 'active';
+}
+
+/**
  * Refresh cached access data for the current authenticated account session.
  * The freshness rule itself lives in auth-route-helpers so this middleware and the SPA shell
  * payload builder share one definition of "this session's access cache is still current"; the TTL

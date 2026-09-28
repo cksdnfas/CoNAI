@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { PromptCollectionService } from '../services/promptCollectionService';
 import { PromptGroupService } from '../services/promptGroupService';
+import { hasAdminAccess } from '../middleware/authMiddleware';
+import { toPublicDanbooruDbInfo, type DanbooruBrowserDatabaseInfo } from '../services/danbooruBrowser/dbResolver';
 import {
   successResponse,
   errorResponse,
@@ -240,6 +242,11 @@ router.post('/resolve-groups', async (req: Request, res: Response) => {
   }
 });
 
+/** Keep the Danbooru DB server paths in grouping results for admins only. */
+function withDanbooruDatabaseForViewer<T extends { database: DanbooruBrowserDatabaseInfo }>(req: Request, result: T) {
+  return hasAdminAccess(req) ? result : { ...result, database: toPublicDanbooruDbInfo(result.database) };
+}
+
 /**
  * 단부루 taxonomy 기반 프롬프트 그룹 자동 구성 미리보기
  * GET /api/prompt-collection/danbooru-grouping/preview
@@ -250,7 +257,7 @@ router.get('/danbooru-grouping/preview', async (req: Request, res: Response) => 
     const mode = req.query.mode === 'overwrite-existing' || includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only';
     const language = req.query.language === 'ko' ? 'ko' : 'en';
     const result = PromptGroupService.previewDanbooruGrouping({ mode, language, includeAssignedPrompts });
-    return res.json(successResponse(result));
+    return res.json(successResponse(withDanbooruDatabaseForViewer(req, result)));
   } catch (error) {
     console.error('Error previewing Danbooru grouping:', error);
     return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Failed to preview Danbooru grouping'));
@@ -267,7 +274,7 @@ router.post('/danbooru-grouping/apply', async (req: Request, res: Response) => {
     const mode = req.body?.mode === 'overwrite-existing' || includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only';
     const language = req.body?.language === 'ko' ? 'ko' : 'en';
     const result = PromptGroupService.applyDanbooruGrouping({ mode, language, includeAssignedPrompts });
-    return res.json(successResponse(result));
+    return res.json(successResponse(withDanbooruDatabaseForViewer(req, result)));
   } catch (error) {
     console.error('Error applying Danbooru grouping:', error);
     return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Failed to apply Danbooru grouping'));

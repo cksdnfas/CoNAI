@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { hasAdminAccess } from '../middleware/authMiddleware';
 import { danbooruBrowserService } from '../services/danbooruBrowserService';
+import { toPublicDanbooruDbInfo } from '../services/danbooruBrowser/dbResolver';
 
 const router = Router();
 
@@ -8,8 +10,16 @@ function sendSuccess(res: Response, data: unknown): void {
   res.json({ success: true, data });
 }
 
-router.get('/summary', asyncHandler(async (_req: Request, res: Response) => {
-  sendSuccess(res, danbooruBrowserService.getSummary());
+router.get('/summary', asyncHandler(async (req: Request, res: Response) => {
+  const summary = danbooruBrowserService.getSummary();
+  if (hasAdminAccess(req)) {
+    sendSuccess(res, summary);
+    return;
+  }
+
+  // Server file paths are admin-only; other viewers get availability, accepted names and the download link.
+  const { dbPath: _dbPath, database, ...rest } = summary;
+  sendSuccess(res, { ...rest, database: toPublicDanbooruDbInfo(database) });
 }));
 
 router.get('/tags', asyncHandler(async (req: Request, res: Response) => {
