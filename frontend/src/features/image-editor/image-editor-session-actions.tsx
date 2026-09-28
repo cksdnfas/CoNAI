@@ -1,5 +1,6 @@
-import { Crop, Minus, Square } from 'lucide-react'
+import { BrushCleaning, Combine, Eraser, Layers2, SquareDashed, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Heading } from '@/components/ui/heading'
 import { Panel } from '@/components/ui/panel'
 import { useI18n } from '@/i18n'
@@ -54,22 +55,26 @@ export function ImageEditorSessionActions({
 
   return (
     <Panel tone="low" className="space-y-3">
-        <Heading level={3} className="pb-1">{t({ ko: '세션 작업', en: 'Session actions' })}</Heading>
-        <Button type="button" variant="secondary" onClick={onMergeVisible} className="w-full justify-start" disabled={!canMergeVisible}>
-          {t({ ko: '보이는 레이어 병합', en: 'Merge visible' })}
-        </Button>
-        <Button type="button" variant="secondary" onClick={onFlattenVisible} className="w-full justify-start" disabled={!canFlattenVisible}>
-          {t({ ko: '보이는 레이어 평탄화', en: 'Flatten visible' })}
-        </Button>
-        <Button type="button" variant="secondary" onClick={onClearActiveDrawLayer} className="w-full justify-start" disabled={!canClearActiveDrawLayer}>
-          <Minus className="h-4 w-4" /> {t({ ko: '현재 드로우 레이어 지우기', en: 'Clear active draw layer' })}
-        </Button>
-        <Button type="button" variant="secondary" onClick={onClearAllDrawLayers} className="w-full justify-start">
-          <Minus className="h-4 w-4" /> {t({ ko: '모든 드로우 레이어 지우기', en: 'Clear all draw layers' })}
-        </Button>
-        <Button type="button" variant="secondary" onClick={onClearSelection} className="w-full justify-start" disabled={!hasSelectionRect}>
-          <Square className="h-4 w-4" /> {t({ ko: '선택 해제', en: 'Clear selection' })}
-        </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Heading level={3}>{t({ ko: '세션 작업', en: 'Session actions' })}</Heading>
+          <div className="flex flex-wrap items-center gap-1">
+            <IconButton variant="subtle" size="icon-sm" onClick={onMergeVisible} disabled={!canMergeVisible} label={t({ ko: '보이는 레이어 병합', en: 'Merge visible' })}>
+              <Combine className="h-4 w-4" />
+            </IconButton>
+            <IconButton variant="subtle" size="icon-sm" onClick={onFlattenVisible} disabled={!canFlattenVisible} label={t({ ko: '보이는 레이어 평탄화', en: 'Flatten visible' })}>
+              <Layers2 className="h-4 w-4" />
+            </IconButton>
+            <IconButton variant="subtle" size="icon-sm" onClick={onClearActiveDrawLayer} disabled={!canClearActiveDrawLayer} label={t({ ko: '현재 드로우 레이어 지우기', en: 'Clear active draw layer' })}>
+              <Eraser className="h-4 w-4" />
+            </IconButton>
+            <IconButton variant="subtle" size="icon-sm" onClick={onClearAllDrawLayers} label={t({ ko: '모든 드로우 레이어 지우기', en: 'Clear all draw layers' })}>
+              <BrushCleaning className="h-4 w-4" />
+            </IconButton>
+            <IconButton variant="subtle" size="icon-sm" onClick={onClearSelection} disabled={!hasSelectionRect} label={t({ ko: '선택 해제', en: 'Clear selection' })}>
+              <SquareDashed className="h-4 w-4" />
+            </IconButton>
+          </div>
+        </div>
 
         {selectionRect ? (
           <div className="space-y-2 rounded-sm bg-surface-lowest p-3">
@@ -85,12 +90,13 @@ export function ImageEditorSessionActions({
 
         {cropRect ? (
           <>
-            <Button type="button" variant="secondary" onClick={onCancelCrop} className="w-full justify-start">
-              <Crop className="h-4 w-4" /> {t({ ko: '자르기 취소', en: 'Cancel crop' })}
-            </Button>
-
             <div className="space-y-2 rounded-sm bg-surface-lowest p-3">
-              <div className="text-xs font-medium text-foreground">{t({ ko: '자르기 범위', en: 'Crop bounds' })}</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-medium text-foreground">{t({ ko: '자르기 범위', en: 'Crop bounds' })}</div>
+                <IconButton variant="ghost" size="icon-xs" onClick={onCancelCrop} label={t({ ko: '자르기 취소', en: 'Cancel crop' })}>
+                  <X className="h-3.5 w-3.5" />
+                </IconButton>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="space-y-1 text-xs text-muted-foreground">X<NumberStepperInput value={Math.round(cropRect.x)} onValueCommit={(nextValue) => onCropRectFieldChange('x', Number(nextValue) || 0)} className="h-8" /></label>
                 <label className="space-y-1 text-xs text-muted-foreground">Y<NumberStepperInput value={Math.round(cropRect.y)} onValueCommit={(nextValue) => onCropRectFieldChange('y', Number(nextValue) || 0)} className="h-8" /></label>

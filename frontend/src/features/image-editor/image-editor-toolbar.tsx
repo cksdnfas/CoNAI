@@ -1,17 +1,11 @@
 import type { ReactNode } from 'react'
-import { Brush, ClipboardPaste, Crop, Eraser, FlipHorizontal, Hand, RotateCw, Square, ZoomIn, ZoomOut } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { ArrowUpFromLine, Brush, BrushCleaning, ClipboardList, ClipboardPaste, Copy, CopyPlus, Crop, Eraser, FlipHorizontal, Hand, Highlighter, Redo2, RotateCw, Scan, Scissors, Square, SquareX, Trash2, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
-import {
-  getImageEditorBrushColorLabel,
-  getImageEditorBrushOpacityLabel,
-  getImageEditorBrushSizeLabel,
-  getImageEditorToolHint,
-  getImageEditorToolLabel,
-  getImageEditorToolShortcut,
-} from './image-editor-tool-metadata'
+import { getImageEditorToolLabel, getImageEditorToolShortcut } from './image-editor-tool-metadata'
 import type { ImageEditorTool } from './image-editor-types'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -49,23 +43,18 @@ interface ImageEditorToolbarProps {
   onApplyCrop: () => void
 }
 
-/** Render one simple button row item for tool selection. */
-function ToolButton({ active, children, onClick, title }: { active?: boolean; children: ReactNode; onClick: () => void; title: string }) {
+/** Render one icon toggle for tool selection; the label and shortcut live in the tooltip. */
+function ToolButton({ active, children, onClick, label }: { active: boolean; children: ReactNode; onClick: () => void; label: string }) {
   return (
-    <Button type="button" variant={active ? 'default' : 'secondary'} size="sm" onClick={onClick} title={title}>
+    <IconButton variant="ghost" size="icon-sm" active={active} onClick={onClick} label={label}>
       {children}
-    </Button>
+    </IconButton>
   )
 }
 
-/** Render one labeled toolbar section so related actions stay grouped. */
-function ToolbarSection({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-end gap-2 rounded-sm bg-surface-lowest px-3 py-2">
-      <div className="mr-2 min-w-[72px] text-2xs font-medium uppercase tracking-overline text-muted-foreground">{label}</div>
-      <div className="flex flex-wrap items-end gap-2">{children}</div>
-    </div>
-  )
+/** Group related toolbar controls on one quiet strip. */
+function ToolbarGroup({ children }: { children: ReactNode }) {
+  return <div className="flex flex-wrap items-center gap-1 rounded-sm bg-surface-lowest p-1">{children}</div>
 }
 
 /** Render the main editor toolbar with tools, history, transform, and selection actions. */
@@ -103,137 +92,67 @@ export function ImageEditorToolbar({
   onApplyCrop,
 }: ImageEditorToolbarProps) {
   const { t } = useI18n()
+  const toolLabel = (value: ImageEditorTool) => `${t(getImageEditorToolLabel(value))} (${getImageEditorToolShortcut(value)})`
+  const selectionDisabled = !canApplySelectionOperation || loading
 
   return (
-    <div className="space-y-3">
-      <ToolbarSection label={t({ ko: '도구', en: 'Tools' })}>
-        <ToolButton active={tool === 'pan'} onClick={() => onToolChange('pan')} title={t(getImageEditorToolLabel('pan'))}>
-          <Hand className="h-4 w-4" /> {t(getImageEditorToolLabel('pan'))}
-        </ToolButton>
-        <ToolButton active={tool === 'select'} onClick={() => onToolChange('select')} title={t(getImageEditorToolLabel('select'))}>
-          <Square className="h-4 w-4" /> {t(getImageEditorToolLabel('select'))}
-        </ToolButton>
-        <ToolButton active={tool === 'brush'} onClick={() => onToolChange('brush')} title={t(getImageEditorToolLabel('brush'))}>
-          <Brush className="h-4 w-4" /> {t(getImageEditorToolLabel('brush'))}
-        </ToolButton>
-        <ToolButton active={tool === 'eraser'} onClick={() => onToolChange('eraser')} title={t(getImageEditorToolLabel('eraser'))}>
-          <Eraser className="h-4 w-4" /> {t(getImageEditorToolLabel('eraser'))}
-        </ToolButton>
+    <div className="flex flex-wrap items-center gap-2">
+      <ToolbarGroup>
+        <ToolButton active={tool === 'pan'} onClick={() => onToolChange('pan')} label={toolLabel('pan')}><Hand className="h-4 w-4" /></ToolButton>
+        <ToolButton active={tool === 'select'} onClick={() => onToolChange('select')} label={toolLabel('select')}><Square className="h-4 w-4" /></ToolButton>
+        <ToolButton active={tool === 'brush'} onClick={() => onToolChange('brush')} label={toolLabel('brush')}><Brush className="h-4 w-4" /></ToolButton>
+        <ToolButton active={tool === 'eraser'} onClick={() => onToolChange('eraser')} label={toolLabel('eraser')}><Eraser className="h-4 w-4" /></ToolButton>
         {enableMaskEditing ? (
           <>
-            <ToolButton active={tool === 'mask-brush'} onClick={() => onToolChange('mask-brush')} title={t(getImageEditorToolLabel('mask-brush'))}>
-              <Brush className="h-4 w-4" /> {t(getImageEditorToolLabel('mask-brush'))}
-            </ToolButton>
-            <ToolButton active={tool === 'mask-eraser'} onClick={() => onToolChange('mask-eraser')} title={t(getImageEditorToolLabel('mask-eraser'))}>
-              <Eraser className="h-4 w-4" /> {t(getImageEditorToolLabel('mask-eraser'))}
-            </ToolButton>
+            <ToolButton active={tool === 'mask-brush'} onClick={() => onToolChange('mask-brush')} label={toolLabel('mask-brush')}><Highlighter className="h-4 w-4" /></ToolButton>
+            <ToolButton active={tool === 'mask-eraser'} onClick={() => onToolChange('mask-eraser')} label={toolLabel('mask-eraser')}><BrushCleaning className="h-4 w-4" /></ToolButton>
           </>
         ) : null}
-        <ToolButton active={tool === 'crop'} onClick={() => onToolChange('crop')} title={t(getImageEditorToolLabel('crop'))}>
-          <Crop className="h-4 w-4" /> {t(getImageEditorToolLabel('crop'))}
-        </ToolButton>
-      </ToolbarSection>
+        <ToolButton active={tool === 'crop'} onClick={() => onToolChange('crop')} label={toolLabel('crop')}><Crop className="h-4 w-4" /></ToolButton>
+      </ToolbarGroup>
 
-      <div className="flex flex-wrap gap-3">
-        <ToolbarSection label={t({ ko: '브러시', en: 'Brush' })}>
-          <label className="space-y-1 text-xs text-muted-foreground">
-            {t({ ko: '브러시 색상', en: 'Brush color' })}
-            <Input type="color" value={brushColor} onChange={(event) => onBrushColorChange(event.target.value)} className="h-10 w-16 p-1" />
-          </label>
-          <label className="space-y-1 text-xs text-muted-foreground">
-            {t({ ko: '브러시 크기', en: 'Brush size' })}
-            <NumberStepperInput min={1} max={256} value={brushSize} onValueCommit={(nextValue) => onBrushSizeChange(Math.max(1, Number(nextValue) || 1))} className="w-24" />
-          </label>
-          <label className="space-y-1 text-xs text-muted-foreground">
-            {t({ ko: '불투명도', en: 'Opacity' })}
-            <NumberStepperInput min={0} max={100} value={brushOpacity} onValueCommit={(nextValue) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(nextValue) || 0)))} className="w-24" />
-          </label>
-        </ToolbarSection>
+      <ToolbarGroup>
+        <Tip content={t({ ko: '브러시 색상', en: 'Brush color' })}>
+          <Input type="color" aria-label={t({ ko: '브러시 색상', en: 'Brush color' })} value={brushColor} onChange={(event) => onBrushColorChange(event.target.value)} className="h-8 w-10 p-1" />
+        </Tip>
+        <label className="flex items-center gap-1.5 pl-1 text-xs text-muted-foreground">
+          {t({ ko: '브러시 크기', en: 'Brush size' })}
+          <NumberStepperInput min={1} max={256} value={brushSize} onValueCommit={(nextValue) => onBrushSizeChange(Math.max(1, Number(nextValue) || 1))} className="h-8 w-20" />
+        </label>
+        <label className="flex items-center gap-1.5 pl-1 text-xs text-muted-foreground">
+          {t({ ko: '불투명도', en: 'Opacity' })}
+          <NumberStepperInput min={0} max={100} value={brushOpacity} onValueCommit={(nextValue) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(nextValue) || 0)))} className="h-8 w-20" />
+        </label>
+      </ToolbarGroup>
 
-        <ToolbarSection label={t({ ko: '보기', en: 'View' })}>
-          <Button type="button" variant="secondary" size="sm" onClick={onUndo} disabled={historyLength <= 1 || loading}>
-            {t({ ko: '실행 취소', en: 'Undo' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onRedo} disabled={redoLength === 0 || loading}>
-            {t({ ko: '다시 실행', en: 'Redo' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onZoomOut}>
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onZoomIn}>
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onFitToScreen}>
-            {t({ ko: '맞춤', en: 'Fit' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onRotate}>
-            <RotateCw className="h-4 w-4" /> {t({ ko: '회전', en: 'Rotate' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onFlip}>
-            <FlipHorizontal className="h-4 w-4" /> {t({ ko: '뒤집기', en: 'Flip' })}
-          </Button>
-        </ToolbarSection>
+      <ToolbarGroup>
+        <IconButton variant="ghost" size="icon-sm" onClick={onUndo} disabled={historyLength <= 1 || loading} label={t({ ko: '실행 취소', en: 'Undo' })}><Undo2 className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onRedo} disabled={redoLength === 0 || loading} label={t({ ko: '다시 실행', en: 'Redo' })}><Redo2 className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onZoomOut} label={t({ ko: '축소', en: 'Zoom out' })}><ZoomOut className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onZoomIn} label={t({ ko: '확대', en: 'Zoom in' })}><ZoomIn className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onFitToScreen} label={t({ ko: '맞춤', en: 'Fit' })}><Scan className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onRotate} label={t({ ko: '회전', en: 'Rotate' })}><RotateCw className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onFlip} label={t({ ko: '뒤집기', en: 'Flip' })}><FlipHorizontal className="h-4 w-4" /></IconButton>
+      </ToolbarGroup>
 
-        <ToolbarSection label={t({ ko: '선택', en: 'Selection' })}>
-          <Button type="button" variant="secondary" size="sm" onClick={onPasteFromClipboard}>
-            <ClipboardPaste className="h-4 w-4" /> {t({ ko: '붙여넣기', en: 'Paste' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onPasteStoredSelection} disabled={!hasStoredSelection || loading}>
-            {t({ ko: '선택 붙여넣기', en: 'Paste selection' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onSelectionCopy} disabled={!canApplySelectionOperation || loading}>
-            {t({ ko: '선택 복사', en: 'Copy selection' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onSelectionCut} disabled={!canApplySelectionOperation || loading}>
-            {t({ ko: '선택 잘라내기', en: 'Cut selection' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onSelectionDuplicate} disabled={!canApplySelectionOperation || loading}>
-            {t({ ko: '선택 복제', en: 'Duplicate selection' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onSelectionPromote} disabled={!canApplySelectionOperation || loading}>
-            {t({ ko: '선택 올리기', en: 'Promote selection' })}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={onSelectionDelete} disabled={!canApplySelectionOperation || loading}>
-            {t({ ko: '선택 삭제', en: 'Delete selection' })}
-          </Button>
-        </ToolbarSection>
-      </div>
+      <ToolbarGroup>
+        <IconButton variant="ghost" size="icon-sm" onClick={onPasteFromClipboard} label={t({ ko: '붙여넣기', en: 'Paste' })}><ClipboardPaste className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onPasteStoredSelection} disabled={!hasStoredSelection || loading} label={t({ ko: '선택 붙여넣기', en: 'Paste selection' })}><ClipboardList className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onSelectionCopy} disabled={selectionDisabled} label={t({ ko: '선택 복사', en: 'Copy selection' })}><Copy className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onSelectionCut} disabled={selectionDisabled} label={t({ ko: '선택 잘라내기', en: 'Cut selection' })}><Scissors className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onSelectionDuplicate} disabled={selectionDisabled} label={t({ ko: '선택 복제', en: 'Duplicate selection' })}><CopyPlus className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onSelectionPromote} disabled={selectionDisabled} label={t({ ko: '선택 올리기', en: 'Promote selection' })}><ArrowUpFromLine className="h-4 w-4" /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" onClick={onSelectionDelete} disabled={selectionDisabled} label={t({ ko: '선택 삭제', en: 'Delete selection' })}><Trash2 className="h-4 w-4" /></IconButton>
+      </ToolbarGroup>
 
-      {(enableMaskEditing && onClearMask) || canApplyCrop ? (
-        <ToolbarSection label={t({ ko: '컨텍스트', en: 'Context' })}>
-          {enableMaskEditing && onClearMask ? (
-            <Button type="button" variant="secondary" size="sm" onClick={onClearMask}>
-              {t({ ko: '마스크 지우기', en: 'Clear mask' })}
-            </Button>
-          ) : null}
-          {canApplyCrop ? (
-            <Button type="button" variant="secondary" size="sm" onClick={onApplyCrop} disabled={loading}>
-              {t({ ko: '자르기 적용', en: 'Apply crop' })}
-            </Button>
-          ) : null}
-        </ToolbarSection>
+      {enableMaskEditing && onClearMask ? (
+        <IconButton variant="ghost" size="icon-sm" onClick={onClearMask} label={t({ ko: '마스크 지우기', en: 'Clear mask' })}><SquareX className="h-4 w-4" /></IconButton>
       ) : null}
-
-      <div className="flex flex-wrap items-center gap-2 rounded-sm bg-surface-lowest px-3 py-2 text-xs text-muted-foreground">
-        <Badge variant="outline">{t({ ko: '도구', en: 'Tool' })} {t(getImageEditorToolLabel(tool))}</Badge>
-        <span>{t({ ko: '단축키', en: 'Shortcut' })} {getImageEditorToolShortcut(tool)}</span>
-        <span>•</span>
-        <span>{t(getImageEditorToolHint(tool))}</span>
-        <span>•</span>
-        <span>{getImageEditorBrushSizeLabel(brushSize, t)}</span>
-        <span>•</span>
-        <span>{getImageEditorBrushColorLabel(brushColor, t)}</span>
-        <span>•</span>
-        <span>{getImageEditorBrushOpacityLabel(brushOpacity, t)}</span>
-        {(tool === 'mask-brush' || tool === 'mask-eraser') ? (
-          <>
-            <span>•</span>
-            <span>{t({ ko: '흰색은 편집 가능 영역을 추가해.', en: 'White adds editable area.' })}</span>
-          </>
-        ) : null}
-        <span>•</span>
-        <span>{t({ ko: 'Esc로 선택/자르기를 해제해.', en: 'Esc clears selection/crop.' })}</span>
-      </div>
+      {canApplyCrop ? (
+        <Button type="button" size="sm" onClick={onApplyCrop} disabled={loading}>
+          <Crop className="h-4 w-4" /> {t({ ko: '자르기 적용', en: 'Apply crop' })}
+        </Button>
+      ) : null}
     </div>
   )
 }

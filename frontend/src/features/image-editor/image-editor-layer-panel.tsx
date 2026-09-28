@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Eye, EyeOff, Layers, Lock, Plus, Trash2, Unlock } from 'lucide-react'
+import { ArrowDown, ArrowDownToLine, ArrowUp, CopyPlus, Eye, EyeOff, Layers, Lock, Plus, Trash2, Unlock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -53,9 +53,9 @@ export function ImageEditorLayerPanel({
           <Heading level={3} className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-muted-foreground" /> {t({ ko: '레이어', en: 'Layers' })}
           </Heading>
-          <Button type="button" variant="secondary" size="sm" onClick={onAddLayer}>
-            <Plus className="h-4 w-4" /> {t({ ko: '추가', en: 'Add' })}
-          </Button>
+          <IconButton variant="ghost" size="icon-sm" onClick={onAddLayer} label={t({ ko: '추가', en: 'Add' })}>
+            <Plus className="h-4 w-4" />
+          </IconButton>
         </div>
 
         <div className="space-y-2">
@@ -84,7 +84,6 @@ export function ImageEditorLayerPanel({
                       aria-label={t({ ko: '레이어 이름 {index}', en: 'Layer name {index}' }, { index: index + 1 })}
                     />
                   </div>
-                  <Badge variant={isActive ? 'secondary' : 'outline'}>{index + 1}</Badge>
                 </div>
                 <div className="flex flex-wrap items-center gap-1">
                   <IconButton variant="subtle" size="icon-sm" onClick={() => onToggleLayerVisible(layer.id)} aria-pressed={!layer.visible} label={layer.visible ? t({ ko: '레이어 숨기기', en: 'Hide layer' }) : t({ ko: '레이어 보이기', en: 'Show layer' })}>
@@ -99,12 +98,12 @@ export function ImageEditorLayerPanel({
                   <IconButton variant="subtle" size="icon-sm" onClick={() => onMoveLayer(layer.id, 1)} disabled={index === layers.length - 1} label={t({ ko: '아래로 이동', en: 'Move down' })}>
                     <ArrowDown className="h-4 w-4" />
                   </IconButton>
-                  <Button type="button" variant="subtle" size="sm" onClick={() => onDuplicateLayer(layer.id)} disabled={loading}>
-                    {t({ ko: '복제', en: 'Duplicate' })}
-                  </Button>
-                  <Button type="button" variant="subtle" size="sm" onClick={onMergeLayerDown} disabled={!isActive || index === 0 || loading}>
-                    {t({ ko: '아래로 병합', en: 'Merge Down' })}
-                  </Button>
+                  <IconButton variant="subtle" size="icon-sm" onClick={() => onDuplicateLayer(layer.id)} disabled={loading} label={t({ ko: '복제', en: 'Duplicate' })}>
+                    <CopyPlus className="h-4 w-4" />
+                  </IconButton>
+                  <IconButton variant="subtle" size="icon-sm" onClick={onMergeLayerDown} disabled={!isActive || index === 0 || loading} label={t({ ko: '아래로 병합', en: 'Merge Down' })}>
+                    <ArrowDownToLine className="h-4 w-4" />
+                  </IconButton>
                   <IconButton variant="subtle" size="icon-sm" onClick={() => onDeleteLayer(layer.id)} disabled={layers.length === 1 && layer.type === 'draw'} label={t({ ko: '레이어 삭제', en: 'Delete layer' })}>
                     <Trash2 className="h-4 w-4" />
                   </IconButton>
@@ -115,12 +114,9 @@ export function ImageEditorLayerPanel({
         </div>
 
         {enableMaskEditing ? (
-          <div className="space-y-2 rounded-sm bg-surface-lowest p-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-foreground">{t({ ko: '마스크 레이어', en: 'Mask layer' })}</div>
-              <Badge variant={hasVisibleMask ? 'secondary' : 'outline'}>{hasVisibleMask ? t({ ko: '보임', en: 'Visible' }) : t({ ko: '비어 있음', en: 'Empty' })}</Badge>
-            </div>
-            <div className="text-xs text-muted-foreground">{t({ ko: '마스크 레이어는 인필용으로 별도 내보내져. 브러시는 흰색을 칠하고, 지우개는 흰색을 지워.', en: 'The mask layer is exported separately for infill. Brush paints white. Eraser removes white.' })}</div>
+          <div className="flex items-center justify-between rounded-sm bg-surface-lowest p-3">
+            <div className="text-sm font-medium text-foreground">{t({ ko: '마스크 레이어', en: 'Mask layer' })}</div>
+            <Badge variant={hasVisibleMask ? 'secondary' : 'outline'}>{hasVisibleMask ? t({ ko: '보임', en: 'Visible' }) : t({ ko: '비어 있음', en: 'Empty' })}</Badge>
           </div>
         ) : null}
     </Panel>

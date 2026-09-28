@@ -1,6 +1,5 @@
 import type { RefObject, WheelEvent } from 'react'
 import type Konva from 'konva'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { Panel } from '@/components/ui/panel'
@@ -155,25 +154,17 @@ export function ImageEditorModalLayout({
         }
       }}
       title={title}
-      description={t({ ko: 'img2img·인페인트에 쓸 원본 이미지와 마스크를 그림판처럼 편집해.', en: 'Paint over the source image and mask for img2img and inpainting.' })}
       widthClassName="max-w-[96vw]"
     >
       <div className="space-y-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-4">
             <Panel tone="low" className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <Heading level={3} className="truncate">{sourceFileName || t({ ko: '편집 세션', en: 'Editor Session' })}</Heading>
-                    <div className="text-xs text-muted-foreground">{sourceSummary.width > 0 ? `${sourceSummary.width} × ${sourceSummary.height}` : t({ ko: '불러온 이미지가 없어.', en: 'No image loaded' })}</div>
-                    {sourceSummary.activeLayerName ? (
-                      <div className="text-xs text-muted-foreground">{t({ ko: '활성 레이어', en: 'Active layer' })}: {sourceSummary.activeLayerName}{sourceSummary.activeLayerLocked ? ` · ${t({ ko: '잠김', en: 'Locked' })}` : ''}</div>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">{t({ ko: '확대 {value}%', en: 'Zoom {value}%' }, { value: Math.round(sourceSummary.zoom * 100) })}</Badge>
-                    <Badge variant="outline">{t({ ko: '회전 {value}°', en: 'Rotate {value}°' }, { value: ((sourceSummary.rotation % 360) + 360) % 360 })}</Badge>
-                    {sourceSummary.enableMaskEditing ? <Badge variant={sourceSummary.hasVisibleMask ? 'secondary' : 'outline'}>{t({ ko: '마스크', en: 'Mask' })} {sourceSummary.hasVisibleMask ? t({ ko: '켜짐', en: 'On' }) : t({ ko: '비어 있음', en: 'Empty' })}</Badge> : null}
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <Heading level={3} className="min-w-0 truncate">{sourceFileName || t({ ko: '편집 세션', en: 'Editor Session' })}</Heading>
+                  <div className="text-xs text-muted-foreground">
+                    {sourceSummary.width > 0 ? `${sourceSummary.width} × ${sourceSummary.height}` : t({ ko: '불러온 이미지가 없어.', en: 'No image loaded' })}
+                    {((sourceSummary.rotation % 360) + 360) % 360 !== 0 ? <>{' · '}{t({ ko: '회전 {value}°', en: 'Rotate {value}°' }, { value: ((sourceSummary.rotation % 360) + 360) % 360 })}</> : null}
                   </div>
                 </div>
 
