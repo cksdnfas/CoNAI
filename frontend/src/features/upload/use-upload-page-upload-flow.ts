@@ -69,6 +69,8 @@ export function useUploadPageUploadFlow({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<UploadFlowProgress | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  /** Files of the current / last run, in queue order (per-row progress is derived from them). */
+  const [uploadRunFiles, setUploadRunFiles] = useState<File[]>([])
   const [uploadImageSaveOptions, setUploadImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingUploadSave, setPendingUploadSave] = useState<PendingUploadSaveState | null>(null)
   const [pendingUploadSaveInfo, setPendingUploadSaveInfo] = useState<ImageSaveSourceInfo | null>(null)
@@ -182,6 +184,7 @@ export function useUploadPageUploadFlow({
     }
 
     setIsUploading(true)
+    setUploadRunFiles(files)
     setUploadError(null)
     setUploadResult(null)
     setUploadProgress(progress)
@@ -288,6 +291,30 @@ export function useUploadPageUploadFlow({
     }
   }
 
+  /** Ask for save options (format, quality, resize) for this upload even when settings would skip the dialog. */
+  const handleOpenUploadSaveOptions = async () => {
+    if (uploadFiles.length === 0 || isUploading) {
+      return
+    }
+
+    const processableFiles = uploadFiles.filter((file) => !shouldBypassImageSaveProcessing(file))
+    if (processableFiles.length === 0) {
+      return
+    }
+
+    setUploadImageSaveOptions({ ...effectiveImageSaveSettings, applyToUpload: true })
+    setPendingUploadSave({
+      files: uploadFiles,
+      processableFiles,
+    })
+    setPendingUploadSaveInfo(
+      await loadImageSaveSourceInfo({
+        source: processableFiles[0],
+        sourceMimeType: processableFiles[0].type,
+      }),
+    )
+  }
+
   const handleUpload = async () => {
     if (uploadFiles.length === 0 || isUploading) {
       return
@@ -325,6 +352,7 @@ export function useUploadPageUploadFlow({
     uploadError,
     uploadProgress,
     isUploading,
+    uploadRunFiles,
     uploadImageSaveOptions,
     setUploadImageSaveOptions,
     pendingUploadSave,
@@ -338,6 +366,7 @@ export function useUploadPageUploadFlow({
     resetUploadState,
     handleUploadFileChange,
     handleConfirmUploadSave,
+    handleOpenUploadSaveOptions,
     handleUpload,
   }
 }

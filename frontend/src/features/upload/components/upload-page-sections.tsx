@@ -1,20 +1,16 @@
-import type { ChangeEvent, DragEvent, RefObject } from 'react'
+import { useMemo, type DragEvent, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { ChevronDown, Copy, ExternalLink, File, FileDown, ImageDown, RefreshCw, RotateCcw, Trash2, Video } from 'lucide-react'
+import { Check, ChevronDown, Copy, ExternalLink, File as FileIcon, ImagePlus, Video, X } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
-import { Inset } from '@/components/ui/inset'
-import { Section } from '@/components/ui/section'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
-import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
+import { ListRow } from '@/components/ui/list-row'
 import { Panel } from '@/components/ui/panel'
-import { Text } from '@/components/ui/text'
-import { Select } from '@/components/ui/select'
+import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
 import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
@@ -24,10 +20,10 @@ import type { RewriteMetadataDraft } from '@/features/metadata/use-metadata-rewr
 import { useI18n } from '@/i18n'
 import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
 import { copyTextToClipboard } from '@/lib/clipboard'
-import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import { getUploadResultDetailPath } from '../upload-result-links'
 import { getVisibleUploadResultLists } from '../upload-result-list'
+import { getUploadQueueFileStates, type UploadQueueFileState } from '../upload-queue-progress'
 import { useLocalFilePreviews, type LocalFilePreview } from '../use-local-file-previews'
 import type { UploadBatchResult } from '@/lib/api-images'
 import type { UploadFlowProgress } from '../use-upload-page-upload-flow'
@@ -38,7 +34,16 @@ import type { ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageRecord } from '@/types/image'
 import type { ImageSaveSettings } from '@conai/shared'
 
-const MAX_VISIBLE_FILES = 6
+const MAX_VISIBLE_FILES = 60
+const MAX_VISIBLE_RESULTS = 12
+
+type DropZoneHandlers = {
+  isDragActive: boolean
+  handleDrop: (event: DragEvent<HTMLButtonElement>) => void
+  handleDragEnter: (event: DragEvent<HTMLButtonElement>) => void
+  handleDragOver: (event: DragEvent<HTMLButtonElement>) => void
+  handleDragLeave: (event: DragEvent<HTMLButtonElement>) => void
+}
 
 /** Format image dimensions into a compact width×height label. */
 function formatDimensions(width?: number | null, height?: number | null) {
@@ -75,16 +80,252 @@ function describeFileType(file: File, t: ReturnType<typeof useI18n>['t']): strin
   return t({ ko: '{format} 파일', en: '{format} file' }, { format })
 }
 
-/** Render a compact summary tile for upload or extraction metadata. */
-function SummaryTile({
-  label,
-  value,
-  copyValue,
+/** The page's one drop target: a quiet filled area (no dashed box); a primary ring while files hover over it. */
+export function UploadDropZone({
+  ariaLabel,
+  dropZone,
+  onClick,
+  children,
 }: {
-  label: string
-  value: string
-  copyValue?: string | null
+  ariaLabel: string
+  dropZone: DropZoneHandlers
+  onClick: () => void
+  children?: ReactNode
 }) {
+  const { t } = useI18n()
+
+  return (
+    <Panel
+      asChild
+      tone="none"
+      padding="none"
+      radius="md"
+      interactive
+      className={cn(
+        'bg-fill',
+        dropZone.isDragActive && 'bg-primary/6 ring-2 ring-primary/50 ring-inset hover:bg-primary/6',
+      )}
+    >
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={onClick}
+        onDrop={dropZone.handleDrop}
+        onDragEnter={dropZone.handleDragEnter}
+        onDragOver={dropZone.handleDragOver}
+        onDragLeave={dropZone.handleDragLeave}
+        className="flex min-h-48 w-full items-center justify-center overflow-hidden p-3"
+      >
+        {children ?? (
+          <span className="flex flex-col items-center gap-2 text-center text-sm text-muted-foreground">
+            <ImagePlus className={cn('size-7', dropZone.isDragActive ? 'text-primary' : 'text-muted-foreground/70')} aria-hidden />
+            {t({ ko: '끌어다 놓거나 눌러서 고르기', en: 'Drop files or click to choose' })}
+          </span>
+        )}
+      </button>
+    </Panel>
+  )
+}
+
+/** Thin inline progress bar for one queue row. */
+function RowProgress({ percent, tone = 'primary' }: { percent: number; tone?: 'primary' | 'destructive' }) {
+  return (
+    <span className="block h-1 w-20 overflow-hidden rounded-full bg-fill sm:w-44" aria-hidden>
+      <span
+        className={cn('block h-full rounded-full transition-[width] duration-200', tone === 'destructive' ? 'bg-destructive' : 'bg-primary')}
+        style={{ width: `${percent}%` }}
+      />
+    </span>
+  )
+}
+
+function QueueThumb({ preview }: { preview?: LocalFilePreview }) {
+  const isVideo = preview?.file.type.startsWith('video/')
+
+  if (preview?.url && !isVideo) {
+    return <img src={preview.url} alt="" loading="lazy" decoding="async" className="size-10 shrink-0 rounded-sm bg-fill object-cover" />
+  }
+
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-fill text-muted-foreground">
+      {isVideo ? <Video className="size-4" /> : <FileIcon className="size-4" />}
+    </span>
+  )
+}
+
+function useStatusLabel() {
+  const { t } = useI18n()
+  return (state: UploadQueueFileState) => {
+    switch (state.status) {
+      case 'uploading':
+        return t({ ko: '전송 중', en: 'Sending' })
+      case 'processing':
+        return t({ ko: '처리 중', en: 'Processing' })
+      case 'done':
+        return t({ ko: '완료', en: 'Done' })
+      case 'failed':
+        return t({ ko: '실패', en: 'Failed' })
+      default:
+        return t({ ko: '대기', en: 'Waiting' })
+    }
+  }
+}
+
+/** Queue of picked files plus the last run's saved files, as hairline rows with inline progress. */
+export function UploadQueueList({
+  uploadFiles,
+  uploadRunFiles,
+  uploadResult,
+  uploadError,
+  uploadProgress,
+  uploadTotalSize,
+  isUploading,
+  onRemoveUploadFile,
+}: {
+  uploadFiles: File[]
+  uploadRunFiles: File[]
+  uploadResult: UploadBatchResult | null
+  uploadError: string | null
+  uploadProgress: UploadFlowProgress | null
+  uploadTotalSize: number
+  isUploading: boolean
+  onRemoveUploadFile: (index: number) => void
+}) {
+  const { t, formatNumber } = useI18n()
+  const location = useLocation()
+  const getStatusLabel = useStatusLabel()
+  const previews = useLocalFilePreviews(uploadFiles, MAX_VISIBLE_FILES)
+  const states = useMemo(
+    () => getUploadQueueFileStates(uploadFiles, uploadRunFiles, uploadProgress, uploadResult),
+    [uploadFiles, uploadProgress, uploadResult, uploadRunFiles],
+  )
+  const savedItems = uploadResult ? getVisibleUploadResultLists(uploadResult, MAX_VISIBLE_RESULTS).uploaded : null
+  const hasRows = uploadFiles.length > 0 || (savedItems?.visible.length ?? 0) > 0
+
+  if (!hasRows && !uploadError) {
+    return null
+  }
+
+  const summary = uploadProgress && uploadProgress.phase !== 'done'
+    ? t(
+      { ko: '전송 {percent}% · 처리 {processed}/{total}', en: 'Sent {percent}% · processed {processed}/{total}' },
+      {
+        percent: uploadProgress.percent ?? 0,
+        processed: formatNumber(uploadProgress.processedFiles),
+        total: formatNumber(uploadProgress.totalFiles),
+      },
+    )
+    : uploadResult
+      ? t({ ko: '저장 {successful} · 실패 {failed}', en: '{successful} saved · {failed} failed' }, {
+        successful: formatNumber(uploadResult.successful),
+        failed: formatNumber(uploadResult.failed_count),
+      })
+      : t({ ko: '{count}개 · {size}', en: '{count} files · {size}' }, { count: formatNumber(uploadFiles.length), size: formatBytes(uploadTotalSize) })
+
+  return (
+    <div className="space-y-4">
+      {uploadError ? (
+        <Alert variant="destructive">
+          <AlertTitle>{t('uploadPageSections.uploadFailed')}</AlertTitle>
+          <AlertDescription>{uploadError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {hasRows ? (
+        <div>
+          <div className="flex h-8 items-center border-b border-line text-xs text-muted-foreground/75">{summary}</div>
+
+          {uploadFiles.slice(0, MAX_VISIBLE_FILES).map((file, index) => {
+            const state = states.get(file) ?? { status: 'waiting', percent: 0 }
+            return (
+              <ListRow
+                key={previews[index]?.key ?? `${file.name}:${index}`}
+                size="lg"
+                leading={<QueueThumb preview={previews[index]} />}
+                trailing={(
+                  <>
+                    <RowProgress percent={state.percent} tone={state.status === 'failed' ? 'destructive' : 'primary'} />
+                    <span
+                      className={cn(
+                        'w-14 text-right text-xs',
+                        state.status === 'done' && 'text-success',
+                        state.status === 'failed' && 'text-destructive',
+                      )}
+                    >
+                      {getStatusLabel(state)}
+                    </span>
+                    <IconButton
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={isUploading}
+                      onClick={() => onRemoveUploadFile(index)}
+                      label={t('uploadPageSections.removeFileFromUpload', { fileName: file.name })}
+                    >
+                      <X />
+                    </IconButton>
+                  </>
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate" title={file.name}>{file.name}</span>
+                  <span className={cn('block truncate text-xs', state.error ? 'text-destructive' : 'text-muted-foreground')} title={state.error}>
+                    {state.error ?? formatBytes(file.size)}
+                  </span>
+                </span>
+              </ListRow>
+            )
+          })}
+          {uploadFiles.length > MAX_VISIBLE_FILES ? (
+            <ListRow size="sm">
+              <span className="text-xs text-muted-foreground">{t({ ko: '{count}개 더 있어', en: '…{count} more' }, { count: formatNumber(uploadFiles.length - MAX_VISIBLE_FILES) })}</span>
+            </ListRow>
+          ) : null}
+
+          {savedItems?.visible.map((file) => {
+            const detailPath = getUploadResultDetailPath(file)
+            return (
+              <ListRow
+                key={`${file.filename}:${file.upload_date}`}
+                size="lg"
+                leading={(
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-fill text-success">
+                    <Check className="size-4" />
+                  </span>
+                )}
+                trailing={(
+                  <>
+                    <RowProgress percent={100} />
+                    <span className="w-14 text-right text-xs text-success">{t({ ko: '완료', en: 'Done' })}</span>
+                    {detailPath ? (
+                      <IconButton asChild variant="ghost" size="icon-xs" label={t({ ko: '상세 열기', en: 'Open details' })}>
+                        <Link to={detailPath} state={buildImageSourceState(location)}>
+                          <ExternalLink />
+                        </Link>
+                      </IconButton>
+                    ) : <span className="size-6" />}
+                  </>
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate" title={file.original_name}>{file.original_name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</span>
+                </span>
+              </ListRow>
+            )
+          })}
+          {savedItems && savedItems.hiddenCount > 0 ? (
+            <ListRow size="sm">
+              <span className="text-xs text-muted-foreground">{t({ ko: '저장된 파일 {count}개 더 있어', en: '…{count} more saved' }, { count: formatNumber(savedItems.hiddenCount) })}</span>
+            </ListRow>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** One label / value row of the inspected file, with an optional copy key. */
+function InfoRow({ label, value, copyValue }: { label: string; value: string; copyValue?: string | null }) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
 
@@ -102,332 +343,61 @@ function SummaryTile({
   }
 
   return (
-    <Inset className="min-w-0">
-      <div className="flex items-center justify-between gap-2">
-        <Text as="div" variant="overline">{label}</Text>
-        {copyValue ? (
-          <IconButton
-            size="icon-xs"
-            variant="ghost"
-            onClick={() => void handleCopy()}
-            label={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label })}
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </IconButton>
-        ) : null}
-      </div>
-      <div className="mt-2 min-w-0 whitespace-pre-wrap break-all text-sm text-foreground">{value}</div>
-    </Inset>
-  )
-}
-
-/** Render the upload-progress bar used by the upload panel. */
-function ProgressBar({ percent }: { percent: number }) {
-  return (
-    <div className="h-2 overflow-hidden rounded-full bg-surface-container">
-      <div className="h-full rounded-full bg-primary transition-all duration-200" style={{ width: `${percent}%` }} />
-    </div>
-  )
-}
-
-/** Render one compact local file preview with accessible removal. */
-function UploadFilePreviewTile({
-  preview,
-  disabled,
-  removeLabel,
-  onRemove,
-}: {
-  preview: LocalFilePreview
-  disabled: boolean
-  removeLabel: string
-  onRemove: () => void
-}) {
-  const isVideo = preview.file.type.startsWith('video/')
-
-  return (
-    <Panel tone="container" padding="none" className="relative min-w-0 overflow-hidden">
-      {preview.url ? (
-        <InlineMediaPreview
-          src={preview.url}
-          mimeType={preview.file.type}
-          fileName={preview.file.name}
-          alt={preview.file.name}
-          frameClassName="aspect-square w-full rounded-none p-0"
-          mediaClassName="h-full max-h-none w-full object-cover"
-        />
-      ) : (
-        <div className="flex aspect-square w-full items-center justify-center bg-surface-lowest text-muted-foreground">
-          {isVideo ? <Video className="h-8 w-8" /> : <File className="h-8 w-8" />}
-        </div>
-      )}
-
-      <IconButton
-        variant="destructive"
-        size="icon-xs"
-        className="absolute right-2 top-2 shadow-elevation-1"
-        disabled={disabled}
-        onClick={onRemove}
-        label={removeLabel}
-      >
-        <Trash2 />
-      </IconButton>
-
-      <div className="space-y-1 p-2">
-        <div className="truncate text-xs text-foreground" title={preview.file.name}>{preview.file.name}</div>
-        <div className="text-2xs text-muted-foreground">{formatBytes(preview.file.size)}</div>
-      </div>
-    </Panel>
-  )
-}
-
-/** Render the upload half of the upload page. */
-export function UploadPageUploadSection({
-  uploadInputRef,
-  uploadAccept,
-  uploadFiles,
-  uploadResult,
-  uploadError,
-  uploadProgress,
-  uploadPercent,
-  processPercent,
-  uploadTotalSize,
-  isUploading,
-  uploadDropZone,
-  onUploadFileChange,
-  onRemoveUploadFile,
-  onResetUpload,
-  onUpload,
-}: {
-  uploadInputRef: RefObject<HTMLInputElement | null>
-  uploadAccept: string
-  uploadFiles: File[]
-  uploadResult: UploadBatchResult | null
-  uploadError: string | null
-  uploadProgress: UploadFlowProgress | null
-  uploadPercent: number
-  processPercent: number
-  uploadTotalSize: number
-  isUploading: boolean
-  uploadDropZone: {
-    isDragActive: boolean
-    handleDrop: (event: DragEvent<HTMLButtonElement>) => void
-    handleDragEnter: (event: DragEvent<HTMLButtonElement>) => void
-    handleDragOver: (event: DragEvent<HTMLButtonElement>) => void
-    handleDragLeave: (event: DragEvent<HTMLButtonElement>) => void
-  }
-  onUploadFileChange: (event: ChangeEvent<HTMLInputElement>) => void
-  onRemoveUploadFile: (index: number) => void
-  onResetUpload: () => void
-  onUpload: () => void
-}) {
-  const { t, formatNumber } = useI18n()
-  const location = useLocation()
-  const uploadFilePreviews = useLocalFilePreviews(uploadFiles, MAX_VISIBLE_FILES)
-  const uploadResultItems = uploadResult ? getVisibleUploadResultLists(uploadResult, MAX_VISIBLE_FILES) : null
-
-  return (
-    <Section
-      heading={t('uploadPageSections.fileUpload')}
-      actions={
-        <>
-          <IconButton
-            variant="ghost"
-            onClick={onResetUpload}
-            disabled={uploadFiles.length === 0 && !uploadResult && !uploadError}
-            label={t({ ko: '초기화', en: 'Reset' })}
-          >
-            <RotateCcw />
-          </IconButton>
-          <Button type="button" onClick={onUpload} disabled={uploadFiles.length === 0 || isUploading}>
-            {isUploading ? t('uploadPageSections.uploading') : t({ ko: '업로드{count}', en: 'Upload{count}' }, { count: uploadFiles.length > 0 ? ` (${formatNumber(uploadFiles.length)})` : '' })}
-          </Button>
-        </>
-      }
+    <ListRow
+      className="items-start"
+      trailing={copyValue ? (
+        <IconButton size="icon-xs" variant="ghost" onClick={() => void handleCopy()} label={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label })}>
+          <Copy />
+        </IconButton>
+      ) : undefined}
     >
-      <input ref={uploadInputRef} type="file" multiple accept={uploadAccept} className="hidden" onChange={onUploadFileChange} />
-
-      <MediaFileDropSurface
-        ariaLabel={t('uploadPageSections.chooseFilesToUpload')}
-        active={uploadDropZone.isDragActive}
-        onClick={() => uploadInputRef.current?.click()}
-        onDrop={uploadDropZone.handleDrop}
-        onDragEnter={uploadDropZone.handleDragEnter}
-        onDragOver={uploadDropZone.handleDragOver}
-        onDragLeave={uploadDropZone.handleDragLeave}
-      />
-
-      {uploadFiles.length > 0 ? (
-        <Inset className="space-y-3">
-          <div className="text-xs text-muted-foreground">{formatBytes(uploadTotalSize)}</div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {uploadFilePreviews.slice(0, MAX_VISIBLE_FILES).map((preview, index) => (
-              <UploadFilePreviewTile
-                key={preview.key}
-                preview={preview}
-                disabled={isUploading}
-                removeLabel={t('uploadPageSections.removeFileFromUpload', { fileName: preview.file.name })}
-                onRemove={() => onRemoveUploadFile(index)}
-              />
-            ))}
-          </div>
-          {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs text-muted-foreground">{t({ ko: '{count}개 더 있어', en: '…{count} more' }, { count: formatNumber(uploadFiles.length - MAX_VISIBLE_FILES) })}</div> : null}
-        </Inset>
-      ) : null}
-
-      {(isUploading || uploadProgress || uploadResult) ? (
-        <Inset className="space-y-3">
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <div className="font-medium text-foreground">
-              {uploadProgress?.phase === 'processing'
-                ? t({ ko: '처리 중', en: 'Processing' })
-                : uploadProgress?.phase === 'uploading'
-                  ? t({ ko: '전송 중', en: 'Uploading' })
-                  : t({ ko: '완료', en: 'Done' })}
-            </div>
-          </div>
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-              <span>{t({ ko: '전송', en: 'Transfer' })} · {formatBytes(uploadProgress?.loaded ?? 0)} / {formatBytes(uploadProgress?.total ?? uploadTotalSize)}</span>
-              <span>{uploadPercent}%</span>
-            </div>
-            <ProgressBar percent={uploadPercent} />
-          </div>
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-              <span>
-                {t({ ko: '서버 처리', en: 'Server processing' })} · {t({ ko: '{processed}/{total}개', en: '{processed}/{total} files' }, {
-                  processed: formatNumber(uploadProgress?.processedFiles ?? 0),
-                  total: formatNumber(uploadProgress?.totalFiles ?? 0),
-                })}
-              </span>
-              <span>{processPercent}%</span>
-            </div>
-            <ProgressBar percent={processPercent} />
-          </div>
-        </Inset>
-      ) : null}
-
-      {uploadError ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t('uploadPageSections.uploadFailed')}</AlertTitle>
-          <AlertDescription>{uploadError}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {uploadResult ? (
-        <Inset className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">{t({ ko: '성공 {count}', en: '{count} succeeded' }, { count: formatNumber(uploadResult.successful) })}</Badge>
-            <Badge variant={uploadResult.failed_count > 0 ? 'destructive' : 'secondary'}>{t({ ko: '실패 {count}', en: '{count} failed' }, { count: formatNumber(uploadResult.failed_count) })}</Badge>
-          </div>
-
-          {uploadResult.uploaded.length > 0 ? (
-            <div className="space-y-2 text-sm text-muted-foreground">
-              {uploadResultItems?.uploaded.visible.map((file) => {
-                const detailPath = getUploadResultDetailPath(file)
-
-                return (
-                  <Panel key={`${file.filename}:${file.upload_date}`} tone="container" padding="none" className="px-3 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 break-all text-foreground">{file.original_name}</div>
-                      {detailPath ? (
-                        <IconButton asChild variant="ghost" size="icon-xs" label={t({ ko: '상세 열기', en: 'Open details' })}>
-                          <Link to={detailPath} state={buildImageSourceState(location)}>
-                            <ExternalLink />
-                          </Link>
-                        </IconButton>
-                      ) : null}
-                    </div>
-                    <div className="mt-1 text-xs">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</div>
-                  </Panel>
-                )
-              })}
-              {uploadResultItems && uploadResultItems.uploaded.hiddenCount > 0 ? (
-                <div className="text-xs">{t({ ko: '저장된 파일 {count}개 더 있어', en: '…{count} more saved' }, { count: formatNumber(uploadResultItems.uploaded.hiddenCount) })}</div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {uploadResult.failed.length > 0 ? (
-            <div className="space-y-2 text-sm text-muted-foreground">
-              {uploadResultItems?.failed.visible.map((file) => (
-                <Panel key={`${file.filename}:${file.error}`} tone="container" padding="none" className="px-3 py-3">
-                  <div className="break-all text-foreground">{file.filename}</div>
-                  <div className="mt-1 text-xs" style={getThemeToneTextStyle('negative')}>{file.error}</div>
-                </Panel>
-              ))}
-              {uploadResultItems && uploadResultItems.failed.hiddenCount > 0 ? (
-                <div className="text-xs">{t({ ko: '실패한 파일 {count}개 더 있어', en: '…{count} more failed' }, { count: formatNumber(uploadResultItems.failed.hiddenCount) })}</div>
-              ) : null}
-            </div>
-          ) : null}
-        </Inset>
-      ) : null}
-    </Section>
+      <span className="w-28 shrink-0 text-muted-foreground">{label}</span>
+      <span className="min-w-0 flex-1 whitespace-pre-wrap break-all">{value}</span>
+    </ListRow>
   )
 }
 
-/** Render the preview/extract half of the upload page. */
-export function UploadPageExtractSection({
-  extractInputRef,
-  imageAccept,
+/** Preview inside the drop zone for the "metadata only" mode. */
+export function UploadInspectPreview({ file, previewUrl }: { file: File; previewUrl: string }) {
+  return (
+    <InlineMediaPreview
+      src={previewUrl}
+      mimeType={file.type}
+      fileName={file.name}
+      alt={file.name}
+      frameClassName="w-full bg-transparent p-0"
+      mediaClassName="max-h-[420px] w-full object-contain"
+    />
+  )
+}
+
+/** Results of the "metadata only" mode: file info, generation info, prompts, tagger results, metadata editing. */
+export function UploadInspectDetails({
   extractFile,
-  extractPreviewUrl,
   extractResult,
   taggerResult,
   kaloscopeResult,
   extractError,
-  activeExtractAction,
-  selectedExtractAction,
-  isConvertingWebP,
-  isRewritingMetadata,
   isRewritePanelOpen,
   rewriteDraft,
   extractBusy,
   isDesktopPageLayout,
   extractedPromptCards,
   extractedGenerationParamItems,
-  extractDropZone,
-  onExtractFileChange,
-  onResetExtract,
-  onConvertWebP,
-  onRewriteMetadata,
-  onSelectedExtractActionChange,
-  onRunSelectedExtract,
   onToggleRewritePanel,
   onRewriteDraftChange,
 }: {
-  extractInputRef: RefObject<HTMLInputElement | null>
-  imageAccept: string
   extractFile: File | null
-  extractPreviewUrl: string | null
   extractResult: ImageRecord | null
   taggerResult: AutoTestTaggerResult | null
   kaloscopeResult: AutoTestKaloscopeResult | null
   extractError: string | null
-  activeExtractAction: 'prompt' | 'tagger' | 'kaloscope' | 'all' | null
-  selectedExtractAction: 'all' | 'tagger' | 'kaloscope'
-  isConvertingWebP: boolean
-  isRewritingMetadata: boolean
   isRewritePanelOpen: boolean
   rewriteDraft: RewriteMetadataDraft
   extractBusy: boolean
   isDesktopPageLayout: boolean
   extractedPromptCards: ExtractedPromptCardItem[]
   extractedGenerationParamItems: { id: string; label: string; value: string }[]
-  extractDropZone: {
-    isDragActive: boolean
-    handleDrop: (event: DragEvent<HTMLButtonElement>) => void
-    handleDragEnter: (event: DragEvent<HTMLButtonElement>) => void
-    handleDragOver: (event: DragEvent<HTMLButtonElement>) => void
-    handleDragLeave: (event: DragEvent<HTMLButtonElement>) => void
-  }
-  onExtractFileChange: (event: ChangeEvent<HTMLInputElement>) => void
-  onResetExtract: () => void
-  onConvertWebP: () => void
-  onRewriteMetadata: () => void
-  onSelectedExtractActionChange: (value: 'all' | 'tagger' | 'kaloscope') => void
-  onRunSelectedExtract: () => void
   onToggleRewritePanel: () => void
   onRewriteDraftChange: (patch: Record<string, unknown>) => void
 }) {
@@ -443,134 +413,68 @@ export function UploadPageExtractSection({
   }
 
   return (
-    <Section
-      heading={t('uploadPageSections.previewExtract')}
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <IconButton variant="ghost" onClick={onResetExtract} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError} label={t({ ko: '초기화', en: 'Reset' })}>
-            <RotateCcw />
-          </IconButton>
-          <IconButton variant="secondary" onClick={onConvertWebP} disabled={!extractFile || extractBusy} label={isConvertingWebP ? t('uploadPageSections.convertingWebp') : t('uploadPageSections.convertWebp')}>
-            <ImageDown />
-          </IconButton>
-          <IconButton variant="secondary" onClick={onRewriteMetadata} disabled={!extractFile || extractBusy} label={isRewritingMetadata ? t('uploadPageSections.editingMetadata') : t('uploadPageSections.editMetadata')}>
-            <FileDown />
-          </IconButton>
-          <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
-            <Select
-              className="min-w-[140px] flex-1 sm:w-40 sm:flex-none"
-              value={selectedExtractAction}
-              onChange={(event) => onSelectedExtractActionChange(event.target.value as 'all' | 'tagger' | 'kaloscope')}
-              disabled={!extractFile || extractBusy}
-            >
-              <option value="all">{t('uploadPageSections.extractAll')}</option>
-              <option value="tagger">{t('uploadPageSections.autoExtract')}</option>
-              <option value="kaloscope">{t('uploadPageSections.artistExtract')}</option>
-            </Select>
-            <Button type="button" onClick={onRunSelectedExtract} disabled={!extractFile || extractBusy}>
-              {activeExtractAction === selectedExtractAction ? t('uploadPageSections.extracting') : t('uploadPageSections.runExtract')}
-            </Button>
-          </div>
-        </div>
-      }
-    >
-      <input ref={extractInputRef} type="file" accept={imageAccept} className="hidden" onChange={onExtractFileChange} />
-
-      <MediaFileDropSurface
-        ariaLabel={t('uploadPageSections.chooseAnImageToPreview')}
-        active={extractDropZone.isDragActive}
-        onClick={() => extractInputRef.current?.click()}
-        onDrop={extractDropZone.handleDrop}
-        onDragEnter={extractDropZone.handleDragEnter}
-        onDragOver={extractDropZone.handleDragOver}
-        onDragLeave={extractDropZone.handleDragLeave}
-        actions={extractFile ? (
-          <>
-            <IconButton
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => extractInputRef.current?.click()}
-              label={t('uploadPageSections.replaceSelectedImage')}
-            >
-              <RefreshCw />
-            </IconButton>
-            <IconButton
-              variant="destructive"
-              size="icon-sm"
-              onClick={onResetExtract}
-              label={t('uploadPageSections.removeSelectedImage')}
-            >
-              <Trash2 />
-            </IconButton>
-          </>
-        ) : undefined}
-      >
-        {extractFile && extractPreviewUrl ? (
-          <InlineMediaPreview
-            src={extractPreviewUrl}
-            mimeType={extractFile.type}
-            fileName={extractFile.name}
-            alt={extractFile.name}
-            frameClassName="w-full bg-transparent p-0"
-            mediaClassName="max-h-[420px] w-full object-contain"
-          />
-        ) : undefined}
-      </MediaFileDropSurface>
+    <div className="space-y-6">
+      {extractError ? (
+        <Alert variant="destructive">
+          <AlertTitle>{t('uploadPageSections.extractionFailed')}</AlertTitle>
+          <AlertDescription>{extractError}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {extractFile ? (
-        <div className={cn('grid gap-4', isDesktopPageLayout ? 'grid-cols-2 items-start' : 'grid-cols-1')}>
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
-              <SummaryTile label={t({ ko: '파일', en: 'File' })} value={extractFile.name} />
-              <SummaryTile label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractFile.size)} />
-              <SummaryTile label={t({ ko: '형식', en: 'Type' })} value={describeFileType(extractFile, t)} />
-            </div>
-          </div>
+        <div className={cn('grid gap-10', isDesktopPageLayout ? 'grid-cols-2 items-start' : 'grid-cols-1')}>
+          <div className="space-y-8">
+            <RowGroup headingAs="h2" heading={t({ ko: '파일', en: 'File' })}>
+              <InfoRow label={t({ ko: '이름', en: 'Name' })} value={extractFile.name} />
+              <InfoRow label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractFile.size)} />
+              <InfoRow label={t({ ko: '형식', en: 'Type' })} value={describeFileType(extractFile, t)} />
+            </RowGroup>
 
-          <div className="space-y-4">
-            <Inset className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-medium text-foreground">{t('uploadPageSections.editMetadata')}</div>
+            {extractResult ? (
+              <RowGroup headingAs="h2" heading={t({ ko: '생성 정보', en: 'Generation' })}>
+                <InfoRow label={t({ ko: '해상도', en: 'Dimensions' })} value={formatDimensions(extractResult.width, extractResult.height)} />
+                <InfoRow label={t({ ko: '생성 도구', en: 'Tool' })} value={extractResult.ai_metadata?.ai_tool || '—'} />
+                <InfoRow label={t({ ko: '모델', en: 'Model' })} value={extractResult.ai_metadata?.model_name || '—'} />
+                {extractedGenerationParamItems.map((item) => (
+                  <InfoRow key={item.id} label={item.label} value={item.value} copyValue={item.value} />
+                ))}
+              </RowGroup>
+            ) : null}
+
+            {extractResult?.ai_metadata?.lora_models?.length ? (
+              <RowGroup headingAs="h2" heading="LoRA">
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {extractResult.ai_metadata.lora_models.map((item) => (
+                    <Chip key={item} size="sm">{item}</Chip>
+                  ))}
+                </div>
+              </RowGroup>
+            ) : null}
+
+            <RowGroup
+              headingAs="h2"
+              heading={t('uploadPageSections.editMetadata')}
+              actions={(
                 <IconButton variant="ghost" size="icon-sm" onClick={onToggleRewritePanel} aria-expanded={isRewritePanelOpen} label={isRewritePanelOpen ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}>
                   <ChevronDown className={cn('transition-transform', !isRewritePanelOpen && '-rotate-90')} />
                 </IconButton>
-              </div>
-
+              )}
+            >
               {isRewritePanelOpen ? (
                 <div className="pt-2">
                   <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={onRewriteDraftChange} />
                 </div>
               ) : null}
-            </Inset>
+            </RowGroup>
+          </div>
 
+          <div className="space-y-8">
             {extractResult ? (
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                  <SummaryTile label={t({ ko: '해상도', en: 'Dimensions' })} value={formatDimensions(extractResult.width, extractResult.height)} />
-                  <SummaryTile label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractResult.file_size)} />
-                  <SummaryTile label={t({ ko: '생성 도구', en: 'Tool' })} value={extractResult.ai_metadata?.ai_tool || '—'} />
-                  <SummaryTile label={t({ ko: '모델', en: 'Model' })} value={extractResult.ai_metadata?.model_name || '—'} />
-                  {extractedGenerationParamItems.map((item) => (
-                    <SummaryTile key={item.id} label={item.label} value={item.value} copyValue={item.value} />
-                  ))}
-                </div>
-
-                {extractResult.ai_metadata?.lora_models?.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {extractResult.ai_metadata.lora_models.map((item) => (
-                      <Badge key={item} variant="secondary" className="normal-case tracking-normal">
-                        {item}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-
-                {extractedPromptCards.length > 0 ? (
-                  <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
-                ) : (
-                  <Inset className="text-sm text-muted-foreground">{t({ ko: '표시할 프롬프트가 없어.', en: 'No prompts to show.' })}</Inset>
-                )}
-              </div>
+              extractedPromptCards.length > 0 ? (
+                <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
+              ) : (
+                <p className="text-sm text-muted-foreground">{t({ ko: '표시할 프롬프트가 없어.', en: 'No prompts to show.' })}</p>
+              )
             ) : null}
 
             {taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
@@ -578,14 +482,7 @@ export function UploadPageExtractSection({
           </div>
         </div>
       ) : null}
-
-      {extractError ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t('uploadPageSections.extractionFailed')}</AlertTitle>
-          <AlertDescription>{extractError}</AlertDescription>
-        </Alert>
-      ) : null}
-    </Section>
+    </div>
   )
 }
 

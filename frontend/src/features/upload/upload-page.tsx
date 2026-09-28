@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { PageHeader } from '@/components/common/page-header'
+import { FileDown, FileSearch, ImageDown, Library, RotateCcw, Settings2, Upload } from 'lucide-react'
+import { PageToolbar } from '@/components/common/page-toolbar'
+import { SegmentedControl } from '@/components/common/segmented-control'
+import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   downloadConvertedWebP,
@@ -11,12 +16,19 @@ import {
 import type { AutoTestTaggerResult } from '@/lib/api-settings-tagger'
 import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
+import { shouldBypassImageSaveProcessing } from '@/lib/image-save-output'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import type { ImageRecord } from '@/types/image'
 import { buildMetadataRewritePatch, useMetadataRewriteDraft } from '../metadata/use-metadata-rewrite-draft'
 import { getImageGenerationParamItems } from '../images/components/detail/image-detail-utils'
-import { UploadPageExtractSection, UploadPageSaveOptionsModal, UploadPageUploadSection } from './components/upload-page-sections'
+import {
+  UploadDropZone,
+  UploadInspectDetails,
+  UploadInspectPreview,
+  UploadPageSaveOptionsModal,
+  UploadQueueList,
+} from './components/upload-page-sections'
 import { useDropZoneState } from './use-drop-zone-state'
 import { useUploadPageUploadFlow } from './use-upload-page-upload-flow'
 
@@ -25,10 +37,12 @@ const UPLOAD_ACCEPT = `${IMAGE_ACCEPT},video/mp4,video/webm,video/quicktime,vide
 
 type ExtractAction = 'prompt' | 'tagger' | 'kaloscope' | 'all'
 type ManualExtractAction = 'all' | 'tagger' | 'kaloscope'
+type UploadPageMode = 'library' | 'inspect'
 
 export function UploadPage() {
   const { showSnackbar } = useSnackbar()
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
+  const [mode, setMode] = useState<UploadPageMode>('library')
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const extractInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -84,6 +98,7 @@ export function UploadPage() {
     uploadError,
     uploadProgress,
     isUploading,
+    uploadRunFiles,
     uploadImageSaveOptions,
     setUploadImageSaveOptions,
     pendingUploadSave,
@@ -91,12 +106,11 @@ export function UploadPage() {
     pendingUploadSaveInfo,
     setPendingUploadSaveInfo,
     uploadTotalSize,
-    uploadPercent,
-    processPercent,
     applyUploadFiles,
     resetUploadState,
     handleUploadFileChange,
     handleConfirmUploadSave,
+    handleOpenUploadSaveOptions,
     handleUpload,
   } = useUploadPageUploadFlow({ showSnackbar })
   const extractBusy = activeExtractAction !== null || isConvertingWebP || isRewritingMetadata
@@ -321,64 +335,138 @@ export function UploadPage() {
     },
   })
 
+  const hasProcessableUploadFile = uploadFiles.some((file) => !shouldBypassImageSaveProcessing(file))
+  const isInspectMode = mode === 'inspect'
+  const dropZone = isInspectMode ? extractDropZone : uploadDropZone
+
+  const libraryActions = (
+    <>
+      <IconButton
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => void handleOpenUploadSaveOptions()}
+        disabled={!hasProcessableUploadFile || isUploading}
+        label={t({ ko: '저장 옵션', en: 'Save options' })}
+      >
+        <Settings2 />
+      </IconButton>
+      <IconButton
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => {
+          setUploadFiles([])
+          resetUploadState()
+        }}
+        disabled={isUploading || (uploadFiles.length === 0 && !uploadResult && !uploadError)}
+        label={t({ ko: '초기화', en: 'Reset' })}
+      >
+        <RotateCcw />
+      </IconButton>
+      <Button type="button" className="ml-1" onClick={() => void handleUpload()} disabled={uploadFiles.length === 0 || isUploading}>
+        <Upload />
+        {isUploading
+          ? t('uploadPageSections.uploading')
+          : t({ ko: '업로드{count}', en: 'Upload{count}' }, { count: uploadFiles.length > 0 ? ` ${formatNumber(uploadFiles.length)}` : '' })}
+      </Button>
+    </>
+  )
+
+  const inspectActions = (
+    <>
+      <IconButton variant="ghost" size="icon-sm" onClick={() => void handleConvertWebP()} disabled={!extractFile || extractBusy} label={isConvertingWebP ? t('uploadPageSections.convertingWebp') : t('uploadPageSections.convertWebp')}>
+        <ImageDown />
+      </IconButton>
+      <IconButton variant="ghost" size="icon-sm" onClick={() => void handleRewriteMetadata()} disabled={!extractFile || extractBusy} label={isRewritingMetadata ? t('uploadPageSections.editingMetadata') : t('uploadPageSections.editMetadata')}>
+        <FileDown />
+      </IconButton>
+      <IconButton
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => applyExtractFile(null)}
+        disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}
+        label={t({ ko: '초기화', en: 'Reset' })}
+      >
+        <RotateCcw />
+      </IconButton>
+      <Select
+        aria-label={t('uploadPageSections.runExtract')}
+        className="ml-1 h-9 w-32"
+        value={selectedExtractAction}
+        onChange={(event) => setSelectedExtractAction(event.target.value as ManualExtractAction)}
+        disabled={!extractFile || extractBusy}
+      >
+        <option value="all">{t('uploadPageSections.extractAll')}</option>
+        <option value="tagger">{t('uploadPageSections.autoExtract')}</option>
+        <option value="kaloscope">{t('uploadPageSections.artistExtract')}</option>
+      </Select>
+      <Button type="button" onClick={() => void handleRunSelectedExtract()} disabled={!extractFile || extractBusy}>
+        {activeExtractAction === selectedExtractAction ? t('uploadPageSections.extracting') : t('uploadPageSections.runExtract')}
+      </Button>
+    </>
+  )
+
   return (
-    <div className="space-y-6">
-      <PageHeader title={t('pageAccessCatalog.upload')} />
+    <div className="mx-auto max-w-5xl">
+      <PageToolbar
+        start={(
+          <SegmentedControl
+            value={mode}
+            onChange={(next) => setMode(next as UploadPageMode)}
+            size="sm"
+            semantics="tabs"
+            ariaLabel={t({ ko: '업로드 방식', en: 'Upload mode' })}
+            items={[
+              { value: 'library', label: <><Library />{t({ ko: '라이브러리에 저장', en: 'Save to library' })}</> },
+              { value: 'inspect', label: <><FileSearch />{t({ ko: '메타데이터만 보기', en: 'Metadata only' })}</> },
+            ]}
+          />
+        )}
+        actions={isInspectMode ? inspectActions : libraryActions}
+      />
+
+      <input ref={uploadInputRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFileChange} />
+      <input ref={extractInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handleExtractFileChange} />
 
       <div className="space-y-6">
-        <UploadPageUploadSection
-          uploadInputRef={uploadInputRef}
-          uploadAccept={UPLOAD_ACCEPT}
-          uploadFiles={uploadFiles}
-          uploadResult={uploadResult}
-          uploadError={uploadError}
-          uploadProgress={uploadProgress}
-          uploadPercent={uploadPercent}
-          processPercent={processPercent}
-          uploadTotalSize={uploadTotalSize}
-          isUploading={isUploading}
-          uploadDropZone={uploadDropZone}
-          onUploadFileChange={handleUploadFileChange}
-          onRemoveUploadFile={(index) => {
-            setUploadFiles((current) => current.filter((_, currentIndex) => currentIndex !== index))
-            resetUploadState()
-          }}
-          onResetUpload={() => {
-            setUploadFiles([])
-            resetUploadState()
-          }}
-          onUpload={() => void handleUpload()}
-        />
+        <UploadDropZone
+          ariaLabel={isInspectMode ? t('uploadPageSections.chooseAnImageToPreview') : t('uploadPageSections.chooseFilesToUpload')}
+          dropZone={dropZone}
+          onClick={() => (isInspectMode ? extractInputRef : uploadInputRef).current?.click()}
+        >
+          {isInspectMode && extractFile && extractPreviewUrl ? <UploadInspectPreview file={extractFile} previewUrl={extractPreviewUrl} /> : undefined}
+        </UploadDropZone>
 
-        <UploadPageExtractSection
-          extractInputRef={extractInputRef}
-          imageAccept={IMAGE_ACCEPT}
-          extractFile={extractFile}
-          extractPreviewUrl={extractPreviewUrl}
-          extractResult={extractResult}
-          taggerResult={taggerResult}
-          kaloscopeResult={kaloscopeResult}
-          extractError={extractError}
-          activeExtractAction={activeExtractAction}
-          selectedExtractAction={selectedExtractAction}
-          isConvertingWebP={isConvertingWebP}
-          isRewritingMetadata={isRewritingMetadata}
-          isRewritePanelOpen={isRewritePanelOpen}
-          rewriteDraft={rewriteDraft}
-          extractBusy={extractBusy}
-          isDesktopPageLayout={isDesktopPageLayout}
-          extractedPromptCards={extractedPromptCards}
-          extractedGenerationParamItems={extractedGenerationParamItems}
-          extractDropZone={extractDropZone}
-          onExtractFileChange={handleExtractFileChange}
-          onResetExtract={() => applyExtractFile(null)}
-          onConvertWebP={() => void handleConvertWebP()}
-          onRewriteMetadata={() => void handleRewriteMetadata()}
-          onSelectedExtractActionChange={setSelectedExtractAction}
-          onRunSelectedExtract={() => void handleRunSelectedExtract()}
-          onToggleRewritePanel={() => setIsRewritePanelOpen((current) => !current)}
-          onRewriteDraftChange={patchRewriteDraft}
-        />
+        {isInspectMode ? (
+          <UploadInspectDetails
+            extractFile={extractFile}
+            extractResult={extractResult}
+            taggerResult={taggerResult}
+            kaloscopeResult={kaloscopeResult}
+            extractError={extractError}
+            isRewritePanelOpen={isRewritePanelOpen}
+            rewriteDraft={rewriteDraft}
+            extractBusy={extractBusy}
+            isDesktopPageLayout={isDesktopPageLayout}
+            extractedPromptCards={extractedPromptCards}
+            extractedGenerationParamItems={extractedGenerationParamItems}
+            onToggleRewritePanel={() => setIsRewritePanelOpen((current) => !current)}
+            onRewriteDraftChange={patchRewriteDraft}
+          />
+        ) : (
+          <UploadQueueList
+            uploadFiles={uploadFiles}
+            uploadRunFiles={uploadRunFiles}
+            uploadResult={uploadResult}
+            uploadError={uploadError}
+            uploadProgress={uploadProgress}
+            uploadTotalSize={uploadTotalSize}
+            isUploading={isUploading}
+            onRemoveUploadFile={(index) => {
+              setUploadFiles((current) => current.filter((_, currentIndex) => currentIndex !== index))
+              resetUploadState()
+            }}
+          />
+        )}
       </div>
 
       <UploadPageSaveOptionsModal
