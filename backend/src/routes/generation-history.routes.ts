@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { HistoryCommandService } from '../services/historyCommandService';
+import { buildGenerationHistoryRequestSnapshot } from '../services/generationHistoryRequestSnapshot';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
 import {
@@ -165,6 +166,38 @@ router.get(
   '/:id/image',
   asyncHandler(async (req: Request, res: Response) => {
     await handleHistoryImageDetail(req, res, routeParam(req.params.id));
+  })
+);
+
+/**
+ * GET /api/generation-history/:id/request
+ * Read the request behind one history row so the generation UI can copy its prompt or reload its settings.
+ * Uses the same owner check as the detail route; inline image data and debug bookkeeping are stripped.
+ */
+router.get(
+  '/:id/request',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(routeParam(req.params.id), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ success: false, error: 'Invalid generation history id' });
+      return;
+    }
+
+    const record = await GenerationHistoryService.getHistoryDetail(id);
+    if (!record) {
+      res.status(404).json({ success: false, error: 'Generation history not found' });
+      return;
+    }
+
+    if (!canAccessHistoryRecord(req, record)) {
+      res.status(403).json({ success: false, error: 'Not allowed to access this generation history item' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: buildGenerationHistoryRequestSnapshot(record),
+    });
   })
 );
 
