@@ -2,6 +2,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Panel } from '@/components/ui/panel'
@@ -324,37 +325,38 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
             {!historyLoading && historyEntries.length > 0 ? (
               <div className="space-y-2">
                 {historyEntries.map((entry) => (
-                  <Panel key={entry.id} padding="none" className="flex items-start gap-3 px-4 py-3">
-                    {/* eslint-disable-next-line no-restricted-syntax -- multi-line chip block as one hit target; Button is a single-line control */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        selectHistoryEntry(entry)
-                        setIsSuggestionPanelOpen(false)
-                        closeDrawer()
-                      }}
-                      className="min-w-0 flex-1 rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
-                    >
-                      <div className="flex flex-wrap gap-2">
-                        {entry.chips.map((chip) => (
-                          <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-surface-high px-2 py-1 text-xs text-foreground">
-                            <span className="rounded-sm px-1.5 py-0.5 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
-                              {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
-                            </span>
-                            <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary" title={t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator])}>
-                              {t(SEARCH_OPERATOR_LABELS[chip.operator])}
-                            </span>
-                            <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
-                              {chip.label}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </button>
-                    <IconButton size="icon-xs" variant="ghost" onClick={() => void deleteHistoryEntry(entry.id)} label={t('homeSearchDrawerContent.deleteSearchHistory')}>
+                  // The whole entry is the hit target (Panel interactive); the delete key floats in its top-right corner.
+                  <div key={entry.id} className="relative">
+                    <Panel asChild padding="none" interactive className="block w-full py-3 pr-12 pl-4 text-left">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          selectHistoryEntry(entry)
+                          setIsSuggestionPanelOpen(false)
+                          closeDrawer()
+                        }}
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {entry.chips.map((chip) => (
+                            <Chip key={chip.id}>
+                              <span className="rounded-sm px-1.5 py-0.5 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
+                                {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
+                              </span>
+                              <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary" title={t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator])}>
+                                {t(SEARCH_OPERATOR_LABELS[chip.operator])}
+                              </span>
+                              <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
+                                {chip.label}
+                              </span>
+                            </Chip>
+                          ))}
+                        </div>
+                      </button>
+                    </Panel>
+                    <IconButton size="icon-xs" variant="ghost" className="absolute top-3 right-3" onClick={() => void deleteHistoryEntry(entry.id)} label={t('homeSearchDrawerContent.deleteSearchHistory')}>
                       <X className="h-4 w-4" />
                     </IconButton>
-                  </Panel>
+                  </div>
                 ))}
               </div>
             ) : null}
