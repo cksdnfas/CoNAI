@@ -1,11 +1,14 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 export type SegmentedControlItem = {
   value: string
   label: ReactNode
   disabled?: boolean
+  /** Accessible name and tooltip for icon-only segments. */
+  ariaLabel?: string
 }
 
 type SegmentedControlProps = {
@@ -88,7 +91,7 @@ export function SegmentedControl({
       {items.map((item) => {
         const isActive = value === item.value
 
-        return (
+        const button = (
           <Button
             key={item.value}
             type="button"
@@ -99,6 +102,7 @@ export function SegmentedControl({
             role={isTabs ? 'tab' : undefined}
             aria-selected={isTabs ? isActive : undefined}
             aria-pressed={isTabs ? undefined : isActive}
+            aria-label={item.ariaLabel}
             tabIndex={item.value === tabStopValue ? 0 : -1}
             onClick={() => onChange(item.value)}
             className={cn(
@@ -112,6 +116,8 @@ export function SegmentedControl({
             {item.label}
           </Button>
         )
+
+        return item.ariaLabel ? <Tip key={item.value} content={item.ariaLabel}>{button}</Tip> : button
       })}
     </div>
   )

@@ -1,3 +1,4 @@
+import { ProviderIcon } from '@/components/common/provider-icons'
 import { memo, useEffect, useState } from 'react'
 import { Square, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -99,6 +100,7 @@ const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCance
             <Badge variant={isCancelRequested ? 'warning' : isRunning ? 'info' : 'secondary'}>
               {statusLabel}
             </Badge>
+            <ProviderIcon provider={record.service_type} className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
           </div>
           {isRunning ? (

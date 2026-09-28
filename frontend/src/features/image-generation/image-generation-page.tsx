@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { CalendarClock, Workflow } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
+import { ProviderIcon } from '@/components/common/provider-icons'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -247,7 +248,11 @@ export function ImageGenerationPage() {
     />
   ) : null
 
-  const providerItems = PROVIDER_TABS.map((value) => ({ value, label: getImageGenerationTabLabel(value, t) }))
+  const providerItems = PROVIDER_TABS.map((value) => ({
+    value,
+    label: <ProviderIcon provider={value} className="size-4" />,
+    ariaLabel: getImageGenerationTabLabel(value, t),
+  }))
   const workflowLabel = getImageGenerationTabLabel('workflows', t)
   const reservationsLabel = getImageGenerationTabLabel('reservations', t)
   const historyTotal = historyFeed.historyQuery.data?.pages[0]?.total

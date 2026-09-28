@@ -1,3 +1,4 @@
+import { ProviderIcon } from '@/components/common/provider-icons'
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Eraser, MousePointerClick, RotateCcw } from 'lucide-react'
@@ -478,7 +479,7 @@ export function NodeInspectorPanel({
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-foreground">{getModuleNodeDisplayLabel(selectedNode)}</span>
-                  <Badge variant="outline">{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
+                  <Badge variant="outline" className="gap-1"><ProviderIcon provider={selectedNode.data.module.engine_type === 'nai' ? 'novelai' : selectedNode.data.module.engine_type} className="size-3" />{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
                   <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">

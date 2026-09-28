@@ -1,10 +1,10 @@
+import { CodexIcon } from '@/components/common/provider-icons'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -430,7 +430,7 @@ export function CodexGenerationPanel({
   const headerToolbarContent = (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0 flex items-center gap-2">
-        <Heading level={3} as="div" className="truncate">Codex</Heading>
+        <CodexIcon className="size-5 text-foreground" aria-label="Codex" role="img" aria-hidden={undefined} />
       </div>
       <div className="flex items-center gap-1">
         {showStatusRecovery ? (

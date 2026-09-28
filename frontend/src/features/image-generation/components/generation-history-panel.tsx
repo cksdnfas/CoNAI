@@ -223,6 +223,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
         onBack={onBack}
         leading={headerLeading}
         historyLabel={historyLabel}
+        historyProvider={isPublicView || workflowId ? undefined : serviceType}
         isPublicView={isPublicView}
         isAdmin={isAdmin}
         historyTotalLabel={historyTotalLabel}

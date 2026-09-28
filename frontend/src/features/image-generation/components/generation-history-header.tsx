@@ -1,3 +1,5 @@
+import { ProviderIcon } from '@/components/common/provider-icons'
+import { Tip } from '@/components/ui/tooltip'
 import type { ReactNode } from 'react'
 import { ArrowLeft, ListX, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +14,8 @@ type GenerationHistoryHeaderProps = {
   /** Replaces the heading and scope line; the scope actions stay on the right. */
   leading?: ReactNode
   historyLabel: string
+  /** Provider key; shows its mark (with the label as tooltip) instead of the label text. */
+  historyProvider?: string
   isPublicView: boolean
   isAdmin: boolean
   historyTotalLabel: string
@@ -33,6 +37,7 @@ export function GenerationHistoryHeader({
   onBack,
   leading,
   historyLabel,
+  historyProvider,
   isPublicView,
   isAdmin,
   historyTotalLabel,
@@ -75,7 +80,11 @@ export function GenerationHistoryHeader({
             <Heading level={2}>{t('image-generation.components.generation.history.panel.generation.history')}</Heading>
           </div>
           <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-            <span>{historyLabel}</span>
+            {historyProvider ? (
+              <Tip content={historyLabel}>
+                <span className="inline-flex items-center" aria-label={historyLabel}><ProviderIcon provider={historyProvider} className="size-3.5" /></span>
+              </Tip>
+            ) : <span>{historyLabel}</span>}
             {!isPublicView ? <span>· {isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</span> : null}
             <span>· {t({ ko: '전체 기록 {count}', en: 'Total records: {count}' }, { count: historyTotalLabel })}</span>
             {hasHiddenHistoryItems ? <span>· {t({ ko: '일부는 등급 설정으로 숨김', en: 'Some hidden by rating settings' })}</span> : null}
