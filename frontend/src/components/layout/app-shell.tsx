@@ -147,7 +147,7 @@ function AppShellLayout() {
                 onPointerLeave={handlePointerLeave}
                 style={{ touchAction: 'pan-y pinch-zoom' }}
               >
-                <nav className="flex min-w-max items-center gap-1 pr-10 sm:pr-2" aria-label={t('appShell.mainPageNavigation')}>
+                <nav className="flex min-w-max items-center gap-0.5 pr-10 sm:pr-2" aria-label={t('appShell.mainPageNavigation')}>
                   {visibleNavItems.map(({ to, labelKey, icon: Icon }) => {
                     const label = t(labelKey)
                     // Resolved here (not via NavLink's render props) so the Tip trigger can merge a plain className.
@@ -165,14 +165,14 @@ function AppShellLayout() {
                       onFocus={() => prefetchAppRoute(to)}
                       onDragStart={(event) => event.preventDefault()}
                       className={cn(
-                        // Icon-only; from xl (1280px) the active page also shows its label.
-                        'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-foreground/70 transition-colors duration-300 outline-none hover:bg-surface-high hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 select-none',
+                        // Icon-only; from md the current page also shows its label.
+                        'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-muted-foreground transition-colors duration-200 outline-none hover:bg-fill hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 select-none',
                         isDraggingNav && 'pointer-events-none',
-                        isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary xl:w-auto xl:px-3',
+                        isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary md:w-auto md:px-3',
                       )}
                     >
                       <Icon className="h-4 w-4 shrink-0" />
-                      <span className={cn('sr-only', isActive && 'xl:not-sr-only xl:whitespace-nowrap xl:text-sm xl:font-medium')}>{label}</span>
+                      <span className={cn('sr-only', isActive && 'md:not-sr-only md:whitespace-nowrap md:text-sm md:font-semibold')}>{label}</span>
                     </NavLink>
                     </Tip>
                     )
