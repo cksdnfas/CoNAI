@@ -17,7 +17,7 @@ import { ImageDownloadOptionMenu } from './image-download-option-menu'
 interface ImageDownloadTriggerButtonProps {
   image?: ImageRecord | null
   size?: 'default' | 'sm' | 'lg' | 'icon' | 'icon-sm'
-  variant?: 'default' | 'destructive' | 'secondary' | 'subtle' | 'ghost' | 'nav' | 'link'
+  variant?: 'default' | 'destructive' | 'secondary' | 'subtle' | 'ghost' | 'nav' | 'link' | 'overlay'
   className?: string
   ariaLabel?: string
   title?: string

@@ -476,16 +476,14 @@ export function GenerationQueueHeaderWidget() {
 
   return (
     <div ref={containerRef} className="relative">
-      {/* Shell header icon: shares theme-shell-icon-button with the search and account triggers (no Button variant for the glass header). */}
-      {/* eslint-disable-next-line no-restricted-syntax -- header shell icon style, see comment above */}
-      <button
-        type="button"
+      <IconButton
+        variant="shell"
         onClick={() => setIsOpen((current) => !current)}
         data-state={isOpen ? 'open' : globalActiveCount > 0 ? 'active' : 'closed'}
-        className="theme-shell-icon-button relative inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-        aria-label={t('image-generation.components.generation.queue.header.widget.open.job.queue.and.reservations')}
+        className="relative"
+        label={t('image-generation.components.generation.queue.header.widget.open.job.queue.and.reservations')}
+        tooltipSide="bottom"
         aria-expanded={isOpen}
-        title={t('image-generation.components.generation.queue.header.widget.job.queue.reservations')}
       >
         <ListTodo className="h-4 w-4" />
         {globalActiveCount > 0 ? (
@@ -494,7 +492,7 @@ export function GenerationQueueHeaderWidget() {
           </span>
         ) : null}
         {hasUnreadQueueUpdate ? <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-destructive ring-2 ring-background" aria-hidden="true" /> : null}
-      </button>
+      </IconButton>
 
       <div
         className={cn(

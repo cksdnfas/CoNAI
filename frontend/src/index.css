@@ -428,13 +428,20 @@
     backdrop-filter: blur(calc(var(--theme-header-blur) * 0.32));
   }
 
+  /* Light: keep the header controls as bright glass keys (surface-low steps below the page in light). */
+  :where(.light) .theme-shell-icon-button {
+    background: color-mix(in srgb, var(--surface-lowest) 82%, transparent);
+  }
+
   .theme-shell-icon-button:hover {
     background: color-mix(in srgb, var(--surface-high) 88%, transparent);
     border-color: color-mix(in srgb, var(--border) 94%, transparent);
   }
 
   .theme-shell-icon-button[data-state='open'],
-  .theme-shell-icon-button[data-state='active'] {
+  .theme-shell-icon-button[data-state='active'],
+  .theme-shell-icon-button[aria-expanded='true'],
+  .theme-shell-icon-button[data-pressed='true'] {
     background: color-mix(in srgb, var(--primary) 12%, var(--surface-high));
     border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
     box-shadow:

@@ -185,8 +185,7 @@ export function ImageDetailTransformControls({
         {!isDefaultView ? <div className="hidden px-2 text-2xs text-muted-foreground tabular-nums sm:block">{transformSummary}</div> : null}
         <IconButton
           {...toolbarButtonProps}
-          className="aria-pressed:bg-primary/12 aria-pressed:text-primary"
-          aria-pressed={isWheelZoomEnabled}
+          active={isWheelZoomEnabled}
           onClick={onToggleWheelZoomEnabled}
           label={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom') : t('images.components.detail.image.detail.media.enable.zoom')}
         >

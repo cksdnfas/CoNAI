@@ -67,23 +67,22 @@ export function ImageViewModalActions({
     onClose()
   }
 
-  // The toolbar floats over the photo stage, so its buttons use a translucent backdrop scrim instead of a surface tone.
-  const overlayButtonClassName = 'bg-backdrop/50 text-white shadow-elevation-1 backdrop-blur-md hover:bg-backdrop/80 hover:text-white'
+  // The toolbar floats over the photo stage, so its buttons use the on-image `overlay` variant instead of a surface tone.
 
   const navigationButtons = (
     <>
-      <IconButton size="icon-sm" variant="ghost" className={overlayButtonClassName} onClick={onClose} label={t('images.components.detail.image.view.modal.actions.close')}>
+      <IconButton size="icon-sm" variant="overlay" onClick={onClose} label={t('images.components.detail.image.view.modal.actions.close')}>
         <X className="h-4 w-4" />
       </IconButton>
       {showCounter ? <div className="shrink-0 px-2 text-xs tabular-nums text-white/80">{counterLabel}</div> : null}
       {allowDetailNavigation ? (
-        <IconButton size="icon-sm" variant="ghost" className={overlayButtonClassName} onClick={openDetailPage} label={t('images.components.detail.image.view.modal.actions.open.detail.page')}>
+        <IconButton size="icon-sm" variant="overlay" onClick={openDetailPage} label={t('images.components.detail.image.view.modal.actions.open.detail.page')}>
           <ExternalLink className="h-4 w-4" />
         </IconButton>
       ) : null}
       {/* The record is refetched every time the viewer opens (staleTime 0); a manual refresh only helps while it is still processing. */}
       {controls.image?.is_processing ? (
-        <IconButton size="icon-sm" variant="ghost" className={overlayButtonClassName} onClick={controls.refresh} disabled={controls.isRefreshing} label={t('images.components.detail.image.view.modal.actions.refresh')}>
+        <IconButton size="icon-sm" variant="overlay" onClick={controls.refresh} disabled={controls.isRefreshing} label={t('images.components.detail.image.view.modal.actions.refresh')}>
           <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
         </IconButton>
       ) : null}
@@ -93,11 +92,11 @@ export function ImageViewModalActions({
   const historyReuseButtons = historyReuseId !== null ? <GenerationHistoryReuseActions key={historyReuseId} historyId={historyReuseId} /> : null
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} /> : null
   const editButton = allowEditAction ? <ImageEditAction image={controls.image} /> : null
-  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="ghost" className={overlayButtonClassName} /> : null
+  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="overlay" /> : null
   const deleteButton = allowDeleteAction ? (
     <ImageDeleteAction
       image={controls.image}
-      className={overlayButtonClassName}
+      variant="overlay"
       onDeleted={(deletedCompositeHash) => (imageViewModal ? imageViewModal.removeImageFromView(deletedCompositeHash) : onClose())}
     />
   ) : null

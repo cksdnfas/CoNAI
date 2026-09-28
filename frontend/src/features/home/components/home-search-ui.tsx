@@ -66,7 +66,7 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
 
   return (
     <IconButton
-      variant="ghost"
+      variant="shell"
       onClick={() => {
         if (isDrawerOpen) {
           closeDrawer()
@@ -78,7 +78,7 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
       }}
       data-state={isDrawerOpen ? 'open' : appliedChips.length > 0 ? 'active' : 'closed'}
       aria-expanded={isDrawerOpen}
-      className="theme-shell-icon-button relative text-foreground/80 hover:text-foreground"
+      className="relative"
       label={isDrawerOpen ? t({ ko: '라이브러리 검색 닫기', en: 'Close library search' }) : t({ ko: '라이브러리 검색', en: 'Search library' })}
       tooltipSide="bottom"
     >

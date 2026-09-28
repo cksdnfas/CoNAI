@@ -4,6 +4,10 @@ import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+/** Pressed look for toggle buttons (IconButton `active` sets data-pressed="true" + aria-pressed). */
+const PRESSED_TINT =
+  "data-[pressed=true]:bg-primary/12 data-[pressed=true]:text-primary data-[pressed=true]:hover:bg-primary/16 data-[pressed=true]:hover:text-primary"
+
 const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2 rounded-sm text-sm font-medium tracking-tight whitespace-nowrap cursor-pointer transition-all duration-300 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -18,18 +22,36 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive-soft text-destructive-soft-foreground hover:brightness-110 focus-visible:ring-destructive/25",
         /** Default non-primary action: tonal fill, no border. Steps up one tone on a surface-high parent (popover, Panel tone=high). */
-        secondary:
+        secondary: cn(
           "ui-tone-secondary text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest in-data-[surface=high]:hover:bg-surface-bright",
+          PRESSED_TINT,
+        ),
         /** Lowest-emphasis filled action for dense toolbars and sidebars. Translucent, so it reads on any surface tone. */
-        subtle:
+        subtle: cn(
           "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground aria-expanded:bg-foreground/10 aria-expanded:text-foreground",
+          PRESSED_TINT,
+        ),
         /** Icon toolbars and inline actions: no fill until hover. */
-        ghost:
+        ghost: cn(
           "text-muted-foreground hover:bg-surface-high hover:text-foreground in-data-[surface=high]:hover:bg-surface-highest",
+          PRESSED_TINT,
+        ),
         /** Sidebar / list navigation row. Mark the current row with data-active="true" or aria-current. */
         nav:
           "w-full justify-start text-left font-normal text-muted-foreground hover:bg-surface-high hover:text-foreground in-data-[surface=high]:hover:bg-surface-highest data-[active=true]:bg-primary/12 data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:[&_svg]:text-primary aria-[current=page]:bg-primary/12 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=true]:bg-primary/12 aria-[current=true]:font-medium aria-[current=true]:text-foreground",
         link: "text-secondary underline-offset-4 hover:underline",
+        /**
+         * Glass icon buttons in the floating app header (search, queue, account). Chrome lives in
+         * `.theme-shell-icon-button` (index.css): translucent low tone, blur, hairline; open/pressed tint with primary.
+         */
+        shell:
+          "theme-shell-icon-button text-foreground/80 hover:text-foreground aria-expanded:text-foreground",
+        /**
+         * Controls that sit on top of photos (viewer toolbars, media tiles). Translucent backdrop scrim + blur with a
+         * white foreground, so they read on any image in both themes. Pressed = solid primary.
+         */
+        overlay:
+          "bg-backdrop/50 text-white shadow-elevation-1 backdrop-blur-md hover:bg-backdrop/80 hover:text-white aria-expanded:bg-backdrop/80 focus-visible:ring-white/50 data-[pressed=true]:bg-primary data-[pressed=true]:text-primary-foreground data-[pressed=true]:hover:bg-primary data-[pressed=true]:hover:text-primary-foreground",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

@@ -14,6 +14,8 @@ import type { ImageRecord } from '@/types/image'
 interface ImageDeleteActionProps {
   image?: ImageRecord
   className?: string
+  /** `overlay` when the button sits on the photo stage (viewer toolbar). */
+  variant?: 'secondary' | 'overlay'
   /** Called after the image is in the Recycle Bin, e.g. to step the viewer or leave the detail page. */
   onDeleted?: (compositeHash: string) => void
 }
@@ -25,7 +27,7 @@ export function useCanDeleteImages() {
 }
 
 /** Move one image to the Recycle Bin after a destructive confirm. Renders nothing without the permission. */
-export function ImageDeleteAction({ image, className, onDeleted }: ImageDeleteActionProps) {
+export function ImageDeleteAction({ image, className, variant = 'secondary', onDeleted }: ImageDeleteActionProps) {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -83,8 +85,8 @@ export function ImageDeleteAction({ image, className, onDeleted }: ImageDeleteAc
     <IconButton
       label={label}
       size="icon-sm"
-      variant="secondary"
-      className={cn(className, 'text-destructive hover:text-destructive')}
+      variant={variant}
+      className={cn(variant === 'secondary' && 'text-destructive hover:text-destructive', className)}
       onClick={() => void handleDelete()}
       disabled={isDeleting}
     >

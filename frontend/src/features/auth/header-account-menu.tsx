@@ -4,6 +4,7 @@ import { CircleUserRound, LogIn, LogOut, Map as MapIcon } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { logoutLocalAccount } from '@/lib/api-auth'
@@ -72,19 +73,17 @@ export function HeaderAccountMenu() {
 
   return (
     <div ref={containerRef} className="relative">
-      {/* eslint-disable-next-line no-restricted-syntax -- header icon chrome comes from .theme-shell-icon-button (shared with home search and the queue widget); Button has no shell variant yet */}
-      <button
-        type="button"
+      <IconButton
+        variant="shell"
         onClick={() => setIsOpen((current) => !current)}
         data-state={isOpen ? 'open' : 'closed'}
-        className="theme-shell-icon-button inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-        aria-label={t('headerAccountMenu.accountMenu')}
+        label={t('headerAccountMenu.accountMenu')}
+        tooltipSide="bottom"
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        title={t({ ko: '계정', en: 'Account' })}
       >
         <CircleUserRound className="h-4 w-4" />
-      </button>
+      </IconButton>
 
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
         <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`} role="menu" aria-label={t('headerAccountMenu.accountMenu')}>

@@ -21,7 +21,6 @@ export type NaiSavedAssetTileProps = {
 }
 
 // On-media control: the image behind it has no theme tone, so it sits on the backdrop scrim (no Button variant for this yet).
-const ON_MEDIA_BUTTON_CLASS = 'bg-backdrop text-white hover:bg-backdrop hover:text-white'
 
 /** Render one saved vibe/reference as an image tile; click loads it, corner buttons pin/edit/delete. */
 export function NaiSavedAssetTile({
@@ -96,8 +95,7 @@ export function NaiSavedAssetTile({
         {onTogglePin ? (
           <IconButton
             size="icon-sm"
-            variant="ghost"
-            className={ON_MEDIA_BUTTON_CLASS}
+            variant="overlay"
             onClick={(event) => {
               event.stopPropagation()
               onTogglePin()
@@ -110,8 +108,7 @@ export function NaiSavedAssetTile({
         {onEdit ? (
           <IconButton
             size="icon-sm"
-            variant="ghost"
-            className={ON_MEDIA_BUTTON_CLASS}
+            variant="overlay"
             onClick={(event) => {
               event.stopPropagation()
               onEdit()
@@ -124,8 +121,7 @@ export function NaiSavedAssetTile({
         {onDelete ? (
           <IconButton
             size="icon-sm"
-            variant="ghost"
-            className={ON_MEDIA_BUTTON_CLASS}
+            variant="overlay"
             onClick={(event) => {
               event.stopPropagation()
               onDelete()
