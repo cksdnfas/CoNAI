@@ -135,9 +135,12 @@ export function PromptPage() {
   )
   const assignableGroups = editablePromptGroups
   const editableParentGroups = editablePromptGroups
-  const currentSectionTitle = selectedGroup?.group_name ?? 'All prompts'
+  const isSearching = searchQuery.trim().length > 0
+  const currentSectionTitle = selectedGroup?.group_name
+    ?? (isSearching ? t({ ko: '검색 결과', en: 'Search results' }) : t({ ko: '전체 프롬프트', en: 'All prompts' }))
   const currentSectionCount = pagination?.total ?? 0
-  const sidebarTotalCount = selectedGroupId == null && currentSectionCount > 0 ? currentSectionCount : totalCount
+  // While searching, the list total is the match count, not the library total the sidebar labels "All prompts".
+  const sidebarTotalCount = selectedGroupId == null && !isSearching && currentSectionCount > 0 ? currentSectionCount : totalCount
   const promptListProgress = resolvePromptListProgress({
     page: pagination?.page ?? page,
     pageSize: pagination?.limit ?? 40,
