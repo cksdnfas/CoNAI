@@ -8,6 +8,7 @@ import type { ComfyUIServerRecord } from '../../types/comfyuiServer';
 import type { WorkflowRecord } from '../../types/workflow';
 import { registerNovelAiGenerationTools } from './generationNovelAiTools';
 import { cleanupMcpComfyTempFile, processMcpComfyOutput } from './mcpComfyOutputService';
+import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import {
   createMcpWorkflowInputTemplate,
   describeMcpMarkedField,
@@ -207,22 +208,24 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
     inputs: z.record(z.string(), z.unknown()).optional().describe('Workflow inputs keyed by marked field ID. Partial MiniMax H3 Director objects and media data URLs are supported.'),
     prompt_data: z.record(z.string(), z.unknown()).optional().describe('Legacy alias for inputs.'),
     group_id: z.number().int().optional().describe('Optional group ID to assign generated outputs to'),
+    group_path: mcpGroupPathSchema,
   };
 
   server.tool(
     'generate_comfyui',
     'Compatibility synchronous ComfyUI generation. Prefer submit_generation_job for durable work that may exceed the HTTP connection lifetime.',
     inputSchema,
-    async ({ workflow_id, server_id, inputs, prompt_data, group_id }) => {
+    async ({ workflow_id, server_id, inputs, prompt_data, group_id, group_path }) => {
       try {
         const workflow = resolveUsableWorkflow(workflow_id);
         if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
         const serverRecord = resolveMcpComfyServer(workflow_id, server_id);
+        const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
         const result = await saveMcpComfyOutputs({
           workflow,
           server: serverRecord,
           suppliedInputs: (inputs ?? prompt_data ?? {}) as Record<string, unknown>,
-          groupId: group_id,
+          groupId: targetGroupId,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(await replaceOutputPathsWithArtifacts(result, context), null, 2) }] };
       } catch (error) {
@@ -242,13 +245,15 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
       inputs: z.record(z.string(), z.unknown()).optional().describe('Workflow inputs keyed by marked field ID.'),
       prompt_data: z.record(z.string(), z.unknown()).optional().describe('Legacy alias for inputs.'),
       group_id: z.number().int().optional().describe('Optional group ID to assign generated outputs to'),
+      group_path: mcpGroupPathSchema,
     },
-    async ({ workflow_id, inputs, prompt_data, group_id }) => {
+    async ({ workflow_id, inputs, prompt_data, group_id, group_path }) => {
       try {
         const workflow = resolveUsableWorkflow(workflow_id);
         if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
         const activeServers = ComfyUIServerModel.findAll(true);
         if (activeServers.length === 0) throw new Error('No active ComfyUI servers found');
+        const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
         const suppliedInputs = (inputs ?? prompt_data ?? {}) as Record<string, unknown>;
         const settled = await Promise.all(activeServers.map(async (serverRecord) => {
           try {
@@ -256,7 +261,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
               workflow,
               server: serverRecord,
               suppliedInputs,
-              groupId: group_id,
+              groupId: targetGroupId,
             });
             return await replaceOutputPathsWithArtifacts(result, context);
           } catch (error) {

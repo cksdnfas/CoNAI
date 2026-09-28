@@ -11,6 +11,7 @@ import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNum
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
 import type { McpRequestContext } from '../context';
 import { normalizeMcpWorkflowInputs, parseMcpMarkedFields } from './mcpComfyWorkflowService';
+import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import {
   describeMcpGenerationJobRouting,
   getMcpGenerationRoutingOptions,
@@ -76,10 +77,11 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       inputs: z.record(z.string(), z.unknown()).optional().describe('ComfyUI marked-field inputs, or a NovelAI/Codex payload alias'),
       request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters'),
       group_id: z.number().int().positive().optional(),
+      group_path: mcpGroupPathSchema,
       priority: z.number().int().min(0).max(100000).default(100),
       idempotency_key: z.string().trim().min(1).max(200).optional().describe('Optional retry key. The same MCP key and request return the original job; a different request conflicts.'),
     },
-    async ({ service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, priority, idempotency_key }) => {
+    async ({ service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority, idempotency_key }) => {
       try {
         const normalizedServerTag = parseGenerationQueueRoutingTag(server_tag, 'server_tag');
         if (server_id != null && normalizedServerTag !== undefined) {
@@ -98,6 +100,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
               inputs: inputs ?? null,
               request_payload: request_payload ?? null,
               group_id: group_id ?? null,
+              ...(group_path ? { group_path } : {}),
               priority,
             })
           : null;
@@ -162,12 +165,15 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
           }
         }
 
+        // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.
+        const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
+
         const createData = {
           service_type,
           priority,
           workflow_id: workflow_id ?? null,
           workflow_name: workflowName,
-          requested_group_id: group_id ?? null,
+          requested_group_id: targetGroupId ?? null,
           requested_server_id: routing.requestedServerId,
           requested_server_tag: routing.requestedServerTag,
           request_payload: payload,

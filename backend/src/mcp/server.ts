@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerPromptTools } from './tools/promptTools';
 import { registerGenerationTools } from './tools/generationTools';
 import { registerImageTools } from './tools/imageTools';
+import { registerImageGroupTools } from './tools/imageGroupTools';
 import { registerResourceTools } from './tools/resourceTools';
 import { registerPromptOrganizationTools } from './tools/promptOrganizationTools';
 import { registerGraphWorkflowTools } from './tools/graphWorkflowTools';
@@ -32,6 +33,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerGenerationTools(server, context);
   registerGraphWorkflowTools(server, context);
   registerImageTools(server, context);
+  registerImageGroupTools(server);
   registerResourceTools(server);
   registerPromptOrganizationTools(server);
   registerWorkflowTransferTools(server);

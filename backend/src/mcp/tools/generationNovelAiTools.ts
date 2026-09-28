@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
 import { executeNaiGeneration } from '../../services/naiGenerationExecutor';
 import { getToken } from '../../utils/nai/auth';
+import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 
 export function registerNovelAiGenerationTools(server: McpServer): void {
   // NovelAI 이미지 생성
@@ -29,8 +30,9 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
       n_samples: z.number().int().min(1).max(4).default(1).describe('Number of images to generate'),
       transparent_background: z.boolean().default(false).describe('Add the NAI V5 prompt tags that request an alpha channel'),
       group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
+      group_path: mcpGroupPathSchema,
     },
-    async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, transparent_background, group_id }) => {
+    async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, transparent_background, group_id, group_path }) => {
       try {
         const token = getToken();
         if (!token) {
@@ -40,6 +42,7 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
           };
         }
 
+        const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
         const actualSeed = seed ?? Math.floor(Math.random() * 4294967295);
 
         const result = await executeNaiGeneration({
@@ -68,7 +71,7 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
         for (let i = 0; i < images.length; i++) {
           const historyId = await GenerationHistoryService.createNAIHistory({
             model: metadata.model || 'unknown',
-            groupId: group_id,
+            groupId: targetGroupId,
           });
           historyIds.push(historyId);
 
