@@ -240,8 +240,8 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
     <div
       ref={popupRef}
       data-surface="high"
-      // Sits just above the inline picker's anchored popovers (z-popover = 140).
-      className="z-[150] rounded-md bg-surface-high px-3 py-2.5 shadow-elevation-2"
+      // A popup opened from inside the inline picker's anchored popover: one layer above z-popover.
+      className="z-popover-nested rounded-md bg-surface-high px-3 py-2.5 shadow-elevation-2"
       style={{
         position: 'fixed',
         top: position.top,
@@ -292,8 +292,8 @@ export function WildcardInlinePickerPopup({
   return createPortal(
     <div
       data-surface="high"
-      // Above the token popup (z-[150]) and anchored popovers (z-popover = 140).
-      className="fixed z-[160] overflow-hidden rounded-md bg-surface-high shadow-elevation-2"
+      // Above the token preview (z-popover-nested) and anchored popovers (z-popover).
+      className="fixed z-[calc(var(--z-index-popover-nested)+10)] overflow-hidden rounded-md bg-surface-high shadow-elevation-2"
       style={{
         top: position.top,
         left: position.left,

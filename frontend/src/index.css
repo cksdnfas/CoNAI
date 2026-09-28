@@ -74,7 +74,9 @@
    *   z-[70] (queue header dropdown)                     -> below drawer; popover once reviewed
    *   z-[84] z-[85] z-[86] z-[90] (bottom drawer + backdrop,
    *     floating controller, selection bar, image viewer) -> drawer (84, +1..+6 offsets)
-   *   z-[140] z-[150] z-[160] z-[170] (anchored popups, dropdowns) -> popover (140, +10..+30 offsets)
+   *   z-[140] z-[170] (anchored popups, dropdowns)       -> popover (140, +30 offset)
+   *   z-[150] z-[160] (popups opened from inside a popover:
+   *     inline-picker token preview, wildcard picker)   -> popover-nested (150, +10 offset)
    *   z-[1000] z-[1200] (explorer hover card, explorer modals),
    *     z-[5000] (wallpaper canvas overlay, local stacking) -> below modal
    *   z-[6000] (settings modal)                          -> modal (6000)
@@ -89,6 +91,7 @@
   --z-index-header: 50;
   --z-index-drawer: 84;
   --z-index-popover: 140;
+  --z-index-popover-nested: 150;
   --z-index-modal: 6000;
   --z-index-floating: 6500;
   --z-index-toast: 7000;
