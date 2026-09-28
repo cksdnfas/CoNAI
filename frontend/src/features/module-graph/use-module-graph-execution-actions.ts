@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { useI18n } from '@/i18n'
 import {
   cancelGraphExecution,
   createGraphWorkflow,
@@ -64,6 +65,7 @@ export function useModuleGraphExecutionActions({
   refetchExecutionDetail: () => Promise<unknown>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t, formatNumber } = useI18n()
   const [isSavingGraph, setIsSavingGraph] = useState(false)
   const [executingGraphId, setExecutingGraphId] = useState<number | null>(null)
   const [cancellingExecutionId, setCancellingExecutionId] = useState<number | null>(null)
@@ -74,7 +76,7 @@ export function useModuleGraphExecutionActions({
 
     if (nodes.length === 0) {
       if (!silent) {
-        showSnackbar({ message: '저장할 노드를 먼저 하나 이상 배치해줘.', tone: 'error' })
+        showSnackbar({ message: t({ ko: '저장할 노드를 먼저 하나 이상 배치해줘.', en: 'Place at least one node before saving.' }), tone: 'error' })
       }
       return null
     }
@@ -104,7 +106,7 @@ export function useModuleGraphExecutionActions({
       const pausedScheduleCount = updateResult.schedule_maintenance?.pausedScheduleCount ?? 0
       if (!silent && pausedScheduleCount > 0) {
         showSnackbar({
-          message: `워크플로우 변경으로 자동 실행 ${pausedScheduleCount}개를 검토 대기 상태로 전환했어. 다시 확인 후 재개해줘.`,
+          message: t({ ko: '워크플로우 변경으로 자동 실행 {count}개를 검토 대기 상태로 전환했어. 다시 확인 후 재개해줘.', en: 'The workflow changed, so {count} autoruns now wait for review. Check them and resume.' }, { count: formatNumber(pausedScheduleCount) }),
           tone: 'info',
         })
       }
@@ -140,7 +142,7 @@ export function useModuleGraphExecutionActions({
       created,
       name: resolvedName,
     }
-  }, [draftWorkflowFolderId, edges, nodes, onExecutionSelected, onGraphSelected, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, workflowDebugMode, workflowDescription, workflowName])
+  }, [draftWorkflowFolderId, edges, formatNumber, nodes, onExecutionSelected, onGraphSelected, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, t, workflowDebugMode, workflowDescription, workflowName])
 
   /** Save the current graph workflow draft and show one user-facing result message. */
   const handleSaveGraph = useCallback(async () => {
@@ -157,18 +159,18 @@ export function useModuleGraphExecutionActions({
 
       showSnackbar({
         message: saveResult.created
-          ? `새 그래프 워크플로우를 저장했어. (${saveResult.name})`
-          : `현재 그래프를 업데이트 저장했어. (${saveResult.name})`,
+          ? t({ ko: '새 그래프 워크플로우를 저장했어. ({name})', en: 'Saved the new graph workflow. ({name})' }, { name: saveResult.name })
+          : t({ ko: '현재 그래프를 업데이트 저장했어. ({name})', en: 'Saved changes to the current graph. ({name})' }, { name: saveResult.name }),
         tone: 'info',
       })
       return true
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '그래프 저장에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '그래프 저장에 실패했어.', en: 'Failed to save the graph.' }), tone: 'error' })
       return false
     } finally {
       setIsSavingGraph(false)
     }
-  }, [isSavingGraph, persistCurrentGraph, showSnackbar])
+  }, [isSavingGraph, persistCurrentGraph, showSnackbar, t])
 
   /** Queue a full workflow execution for one saved graph. */
   const handleExecuteGraph = useCallback(async (graphId: number, inputValues?: Record<string, unknown>) => {
@@ -187,21 +189,21 @@ export function useModuleGraphExecutionActions({
       onExecutionSelected(result.executionId)
       await refetchGraphExecutions()
       showSnackbar({
-        message: `워크플로우 실행 요청을 등록했어. 실행 #${result.executionId}가 백그라운드 큐에서 처리돼.`,
+        message: t({ ko: '워크플로우 실행 요청을 등록했어. 실행 #{id}가 백그라운드 큐에서 처리돼.', en: 'Workflow run requested. Run #{id} will be processed in the background queue.' }, { id: result.executionId }),
         tone: 'info',
       })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 실행에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우 실행에 실패했어.', en: 'Failed to run the workflow.' }), tone: 'error' })
     } finally {
       setExecutingGraphId(null)
     }
-  }, [executingGraphId, onExecutionSelected, onGraphSelected, refetchGraphExecutions, showSnackbar])
+  }, [executingGraphId, onExecutionSelected, onGraphSelected, refetchGraphExecutions, showSnackbar, t])
 
   /** Queue execution up to one selected node, auto-saving the graph first when needed. */
   const handleExecuteNodeById = useCallback(async (nodeId: string, forceRerun = false) => {
     const node = nodes.find((candidate) => candidate.id === nodeId)
     if (!node) {
-      showSnackbar({ message: '실행할 노드를 찾지 못했어.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '실행할 노드를 찾지 못했어.', en: 'Could not find the node to run.' }), tone: 'error' })
       return
     }
 
@@ -216,7 +218,7 @@ export function useModuleGraphExecutionActions({
       if (workflowView === 'edit' && (selectedGraphId === null || isDirty)) {
         const saveResult = await persistCurrentGraph({ silent: true })
         if (!saveResult) {
-          showSnackbar({ message: '선택 노드를 실행하려면 현재 그래프를 먼저 저장할 수 있어야 해.', tone: 'error' })
+          showSnackbar({ message: t({ ko: '선택 노드를 실행하려면 현재 그래프를 먼저 저장할 수 있어야 해.', en: 'The current graph must be savable before running the selected node.' }), tone: 'error' })
           return
         }
 
@@ -225,7 +227,7 @@ export function useModuleGraphExecutionActions({
       }
 
       if (graphId === null) {
-        showSnackbar({ message: '실행할 그래프를 준비하지 못했어.', tone: 'error' })
+        showSnackbar({ message: t({ ko: '실행할 그래프를 준비하지 못했어.', en: 'Could not prepare the graph to run.' }), tone: 'error' })
         return
       }
 
@@ -246,31 +248,35 @@ export function useModuleGraphExecutionActions({
       const nodeDisplayLabel = getModuleNodeDisplayLabel(node)
       showSnackbar({
         message: forceRerun
-          ? `${autoSaved ? '현재 그래프를 저장한 뒤 ' : ''}강제 재실행 요청을 등록했어. 실행 #${result.executionId}는 ${nodeDisplayLabel}까지 캐시 없이 다시 처리해.`
-          : `${autoSaved ? '현재 그래프를 저장한 뒤 ' : ''}선택 노드 실행 요청을 등록했어. 실행 #${result.executionId}가 ${nodeDisplayLabel}까지 필요한 upstream만 처리해.`,
+          ? (autoSaved
+            ? t({ ko: '현재 그래프를 저장한 뒤 강제 재실행 요청을 등록했어. 실행 #{id}는 {node}까지 캐시 없이 다시 처리해.', en: 'Saved the graph and requested a forced rerun. Run #{id} reprocesses up to {node} without cache.' }, { id: result.executionId, node: nodeDisplayLabel })
+            : t({ ko: '강제 재실행 요청을 등록했어. 실행 #{id}는 {node}까지 캐시 없이 다시 처리해.', en: 'Forced rerun requested. Run #{id} reprocesses up to {node} without cache.' }, { id: result.executionId, node: nodeDisplayLabel }))
+          : (autoSaved
+            ? t({ ko: '현재 그래프를 저장한 뒤 선택 노드 실행 요청을 등록했어. 실행 #{id}가 {node}까지 필요한 upstream만 처리해.', en: 'Saved the graph and requested a selected-node run. Run #{id} processes only the upstream needed for {node}.' }, { id: result.executionId, node: nodeDisplayLabel })
+            : t({ ko: '선택 노드 실행 요청을 등록했어. 실행 #{id}가 {node}까지 필요한 upstream만 처리해.', en: 'Selected-node run requested. Run #{id} processes only the upstream needed for {node}.' }, { id: result.executionId, node: nodeDisplayLabel })),
         tone: 'info',
       })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '선택 노드 실행에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '선택 노드 실행에 실패했어.', en: 'Failed to run the selected node.' }), tone: 'error' })
     } finally {
       setExecutingGraphId(null)
     }
-  }, [executingGraphId, isDirty, nodes, onEdgeCleared, onExecutionSelected, onNodeSelected, persistCurrentGraph, refetchGraphExecutions, selectedGraphId, showSnackbar, workflowRunInputValues, workflowView])
+  }, [executingGraphId, isDirty, nodes, onEdgeCleared, onExecutionSelected, onNodeSelected, persistCurrentGraph, refetchGraphExecutions, selectedGraphId, showSnackbar, t, workflowRunInputValues, workflowView])
 
   /** Execute the currently selected node, optionally forcing a full rerun path. */
   const handleExecuteSelectedNode = useCallback(async (forceRerun = false) => {
     if (!selectedNode) {
-      showSnackbar({ message: '먼저 실행할 노드를 하나 선택해줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '먼저 실행할 노드를 하나 선택해줘.', en: 'Select a node to run first.' }), tone: 'error' })
       return
     }
 
     await handleExecuteNodeById(selectedNode.id, forceRerun)
-  }, [handleExecuteNodeById, selectedNode, showSnackbar])
+  }, [handleExecuteNodeById, selectedNode, showSnackbar, t])
 
   /** Run the currently selected saved workflow after validation and required-input checks. */
   const handleRunSelectedWorkflow = useCallback(async () => {
     if (selectedGraphRecord === null) {
-      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '먼저 워크플로우를 하나 선택해줘.', en: 'Select a workflow first.' }), tone: 'error' })
       return
     }
 
@@ -291,12 +297,12 @@ export function useModuleGraphExecutionActions({
     })
 
     if (missingRequiredInput) {
-      showSnackbar({ message: `필수 입력 '${missingRequiredInput.label}' 값을 먼저 넣어줘.`, tone: 'error' })
+      showSnackbar({ message: t({ ko: "필수 입력 '{label}' 값을 먼저 넣어줘.", en: "Fill in the required input '{label}' first." }, { label: missingRequiredInput.label }), tone: 'error' })
       return
     }
 
     await handleExecuteGraph(selectedGraphRecord.id, workflowRunInputValues)
-  }, [handleExecuteGraph, selectedGraphRecord, selectedWorkflowValidationIssues, showSnackbar, workflowRunInputValues])
+  }, [handleExecuteGraph, selectedGraphRecord, selectedWorkflowValidationIssues, showSnackbar, t, workflowRunInputValues])
 
   /** Rerun the active workflow, auto-saving the editor draft first when necessary. */
   const handleRerunSelectedGraph = useCallback(async () => {
@@ -310,29 +316,29 @@ export function useModuleGraphExecutionActions({
       try {
         const saveResult = await persistCurrentGraph({ silent: true })
         if (!saveResult) {
-          showSnackbar({ message: '재실행하려면 현재 그래프를 먼저 저장할 수 있어야 해.', tone: 'error' })
+          showSnackbar({ message: t({ ko: '재실행하려면 현재 그래프를 먼저 저장할 수 있어야 해.', en: 'The current graph must be savable before rerunning.' }), tone: 'error' })
           return
         }
 
         graphId = saveResult.graphId
       } catch (error) {
-        showSnackbar({ message: error instanceof Error ? error.message : '재실행 전에 그래프 저장에 실패했어.', tone: 'error' })
+        showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '재실행 전에 그래프 저장에 실패했어.', en: 'Failed to save the graph before rerunning.' }), tone: 'error' })
         return
       }
     }
 
     if (graphId === null) {
-      showSnackbar({ message: '먼저 그래프를 하나 불러와줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '먼저 그래프를 하나 불러와줘.', en: 'Load a graph first.' }), tone: 'error' })
       return
     }
 
     await handleExecuteGraph(graphId)
-  }, [executingGraphId, handleExecuteGraph, isDirty, persistCurrentGraph, selectedGraphId, showSnackbar, workflowView])
+  }, [executingGraphId, handleExecuteGraph, isDirty, persistCurrentGraph, selectedGraphId, showSnackbar, t, workflowView])
 
   /** Cancel the currently selected execution and refresh both list and detail views. */
   const handleCancelSelectedExecution = useCallback(async () => {
     if (!selectedExecutionIdValue(selectedExecution)) {
-      showSnackbar({ message: '먼저 실행 하나를 선택해줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '먼저 실행 하나를 선택해줘.', en: 'Select a run first.' }), tone: 'error' })
       return
     }
 
@@ -344,21 +350,21 @@ export function useModuleGraphExecutionActions({
       await Promise.all([refetchGraphExecutions(), refetchExecutionDetail()])
       showSnackbar({ message: result.message, tone: result.success ? 'info' : 'error' })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '실행 취소에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '실행 취소에 실패했어.', en: 'Failed to cancel the run.' }), tone: 'error' })
     } finally {
       setCancellingExecutionId(null)
     }
-  }, [refetchExecutionDetail, refetchGraphExecutions, selectedExecution, showSnackbar])
+  }, [refetchExecutionDetail, refetchGraphExecutions, selectedExecution, showSnackbar, t])
 
   /** Retry one failed or cancelled execution by rerunning its parent workflow. */
   const handleRetrySelectedExecution = useCallback(async () => {
     if (!selectedExecution || (selectedExecution.status !== 'failed' && selectedExecution.status !== 'cancelled')) {
-      showSnackbar({ message: '실패하거나 취소된 실행을 먼저 선택해줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '실패하거나 취소된 실행을 먼저 선택해줘.', en: 'Select a failed or cancelled run first.' }), tone: 'error' })
       return
     }
 
     await handleExecuteGraph(selectedExecution.graph_workflow_id)
-  }, [handleExecuteGraph, selectedExecution, showSnackbar])
+  }, [handleExecuteGraph, selectedExecution, showSnackbar, t])
 
   return {
     isSavingGraph,

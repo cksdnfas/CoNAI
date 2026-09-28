@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ChevronDown, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 type CompactGenerationControllerActionBarProps = {
@@ -18,13 +19,16 @@ type CompactGenerationControllerActionBarProps = {
 export function CompactGenerationControllerActionBar({
   isExpanded,
   onToggle,
-  expandedLabel = '접기',
-  collapsedLabel = '컨트롤 열기',
+  expandedLabel: expandedLabelProp,
+  collapsedLabel: collapsedLabelProp,
   expandedContent,
   className,
   innerClassName,
   contentClassName,
 }: CompactGenerationControllerActionBarProps) {
+  const { t } = useI18n()
+  const expandedLabel = expandedLabelProp ?? t({ ko: '접기', en: 'Collapse' })
+  const collapsedLabel = collapsedLabelProp ?? t({ ko: '컨트롤 열기', en: 'Open controls' })
   return (
     <div className={cn('pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-start px-3', className)}>
       <div className={cn('pointer-events-auto flex w-full items-center gap-2', innerClassName)}>

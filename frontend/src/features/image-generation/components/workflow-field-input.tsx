@@ -13,11 +13,12 @@ import { InlineMediaPreview } from '@/features/images/components/inline-media-pr
 import { PowerLoraLoaderInput } from './power-lora-loader-input'
 import { MiniMaxH3DirectorDasiwaInput } from './minimax-h3-director-dasiwa-input'
 import { PathOptionTreeSelect } from './path-option-tree-select'
+import { useI18n, type TranslationInput } from '@/i18n'
 
 const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
 
-function getSelectOptionLabel(option: string) {
-  return option === DROPDOWN_RANDOM_OPTION_VALUE ? '랜덤 선택' : option
+function getSelectOptionLabel(option: string, t: (input: TranslationInput) => string) {
+  return option === DROPDOWN_RANDOM_OPTION_VALUE ? t({ ko: '랜덤 선택', en: 'Random pick' }) : option
 }
 
 function shouldUsePathTreeSelect(options: string[]) {
@@ -54,6 +55,7 @@ function isWorkflowNodeDraftValue(value: WorkflowFieldDraftValue): value is Reco
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
 export function WorkflowFieldInput({ field, value, hideLabel = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, invalid = false, errorMessageId, onChange, onImageChange }: WorkflowFieldInputProps) {
+  const { t } = useI18n()
   const invalidProps = invalid
     ? { 'aria-invalid': true as const, 'aria-describedby': errorMessageId }
     : {}
@@ -62,7 +64,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
     <span
       className="inline-flex cursor-help text-muted-foreground"
       title={field.description}
-      aria-label={`${field.label} 설명`}
+      aria-label={t({ ko: '{label} 설명', en: '{label} description' }, { label: field.label })}
     >
       <CircleQuestionMark className="h-3.5 w-3.5" />
     </span>
@@ -104,7 +106,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
           value={stringValue}
           options={options}
           modelPreviewFolder={field.model_preview_folder}
-          refreshLabel="ComfyUI 자동수집 새로고침"
+          refreshLabel={t({ ko: 'ComfyUI 자동수집 새로고침', en: 'Refresh ComfyUI options' })}
           isRefreshing={isRefreshingOptions}
           onRefresh={onRefreshOptions}
           onChange={onChange}
@@ -114,10 +116,10 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
 
     return wrapField(
       <Select value={stringValue} onChange={(event) => onChange(event.target.value)} {...invalidProps}>
-        <option value="" disabled hidden>선택</option>
+        <option value="" disabled hidden>{t({ ko: '선택', en: 'Select' })}</option>
         {options.map((option) => (
           <option key={option} value={option}>
-            {getSelectOptionLabel(option)}
+            {getSelectOptionLabel(option, t)}
           </option>
         ))}
       </Select>,
@@ -131,7 +133,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
     return wrapField(
       <div className="space-y-3">
         <ImageAttachmentPickerButton
-          label={imageValue ? '이미지 변경' : '이미지 선택'}
+          label={imageValue ? t({ ko: '이미지 변경', en: 'Change image' }) : t({ ko: '이미지 선택', en: 'Choose image' })}
           modalTitle={field.label}
           allowSaveDialog={false}
           uploadOnly={isSimpleImageUpload}
@@ -151,7 +153,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
             />
             <div className="flex justify-end">
               <Button type="button" size="sm" variant="ghost" onClick={() => void onImageChange()}>
-                이미지 제거
+                {t({ ko: '이미지 제거', en: 'Remove image' })}
               </Button>
             </div>
           </div>
