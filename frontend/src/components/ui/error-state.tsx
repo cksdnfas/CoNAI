@@ -85,7 +85,7 @@ function ErrorState({
       <div className="flex min-w-0 flex-1 items-start gap-2.5">
         <AlertTriangle className={cn('shrink-0', isCompact ? 'mt-0.5 size-4' : 'mt-0.5 size-5')} aria-hidden />
         <div className="min-w-0 space-y-1">
-          <div className="text-sm font-medium">{title ?? t({ ko: '문제가 발생했습니다', en: 'Something went wrong' })}</div>
+          <div className="text-sm font-medium">{title ?? t({ ko: '문제가 생겼어', en: 'Something went wrong' })}</div>
           {description ? <div className="text-sm opacity-85">{description}</div> : null}
           {detail ? (
             <details className="text-xs opacity-80">

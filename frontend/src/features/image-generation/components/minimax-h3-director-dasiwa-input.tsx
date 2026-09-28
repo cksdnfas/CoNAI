@@ -244,7 +244,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   const changeVideoMode = (item: MiniMaxH3DirectorTimelineItem, videoMode: MiniMaxH3DirectorVideoMode) => {
     const next = retargetMiniMaxDirectorVideo(timeline.items, item, videoMode)
     if (!next) {
-      setStatus(t({ ko: '영상 또는 오디오 참조 슬롯이 가득 찼습니다.', en: 'The video or audio reference slots are full.' }))
+      setStatus(t({ ko: '영상이나 오디오 참조 슬롯이 가득 찼어.', en: 'The video or audio reference slots are full.' }))
       return
     }
     emit({}, { ...timeline, items: timeline.items.map((candidate) => candidate.id === item.id ? next : candidate) })
@@ -894,7 +894,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           </div>
         ) : (
           <Button type="button" variant="subtle" className="h-auto min-h-28 w-full px-3 text-xs whitespace-normal" onClick={() => visualInputRef.current?.click()}>
-            {mode === null ? t({ ko: '실행 모드는 상위 노드가 결정해. 참조 미디어를 추가할 수 있어.', en: 'An upstream node selects the mode. You can add reference media.' }) : t({ ko: '이미지를 추가하거나 놓으세요.', en: 'Add or drop an image.' })}
+            {mode === null ? t({ ko: '실행 모드는 상위 노드가 결정해. 참조 미디어를 추가할 수 있어.', en: 'An upstream node selects the mode. You can add reference media.' }) : t({ ko: '이미지를 추가하거나 끌어다 놓아 줘.', en: 'Add or drop an image.' })}
           </Button>
         )}
       </div>
@@ -911,7 +911,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           </div>
           {renderInputPort?.('reference_video')}
           {videoItems.length > 0 ? <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>{videoItems.map((item, index) => renderMediaCard(item, index + 1))}</div>
-            : <Button type="button" variant="subtle" disabled={isUploading} className="h-auto min-h-20 w-full px-3 text-xs whitespace-normal" onClick={() => videoInputRef.current?.click()}>{t({ ko: '영상을 추가하거나 놓으세요.', en: 'Add or drop a video.' })}</Button>}
+            : <Button type="button" variant="subtle" disabled={isUploading} className="h-auto min-h-20 w-full px-3 text-xs whitespace-normal" onClick={() => videoInputRef.current?.click()}>{t({ ko: '영상을 추가하거나 끌어다 놓아 줘.', en: 'Add or drop a video.' })}</Button>}
         </div>
       ) : null}
 

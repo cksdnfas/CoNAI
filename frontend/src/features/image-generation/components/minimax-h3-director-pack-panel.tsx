@@ -39,7 +39,7 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
     setPack(null)
     setMedia([])
     try {
-      if (file.size > 8 * 1024 * 1024) throw new Error(t({ ko: '참조 팩 JSON은 8MB 이하여야 합니다.', en: 'Reference-pack JSON must be at most 8 MB.' }))
+      if (file.size > 8 * 1024 * 1024) throw new Error(t({ ko: '참조 팩 JSON은 8MB 이하여야 해.', en: 'Reference-pack JSON must be at most 8 MB.' }))
       setPack(parseMiniMaxDirectorPack(await file.text()))
       setMessage('')
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid reference pack') }
@@ -49,7 +49,7 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
     try {
       const result = buildMiniMaxDirectorPack(value, effectiveScope)
       triggerBlobDownload(new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' }), `minimax-h3-${effectiveScope}-pack.json`)
-      setMessage(t({ ko: '참조 팩을 저장했습니다.', en: 'Reference pack saved.' }))
+      setMessage(t({ ko: '참조 팩을 저장했어.', en: 'Reference pack saved.' }))
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not save reference pack') }
   }
 
@@ -58,7 +58,7 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
     setBusy(true)
     const uploaded: WorkflowInputAssetRef[] = []
     try {
-      if (!allowMode && pack.model_mode !== value.mode) throw new Error(t({ ko: '현재 모드와 같은 참조 팩을 선택하세요.', en: 'Select a reference pack matching the current mode.' }))
+      if (!allowMode && pack.model_mode !== value.mode) throw new Error(t({ ko: '지금 모드와 같은 참조 팩을 골라 줘.', en: 'Select a reference pack matching the current mode.' }))
       // Capacity and prompt validation happen before uploading or replacing any media.
       applyMiniMaxDirectorPack(value, pack, effectiveScope, append, new Map())
       const resolved = new Map<number, WorkflowInputAssetRef>()
@@ -69,9 +69,9 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
         const filesToUpload: Array<{ index: number; file: File }> = []
         for (const [index, item] of pack.items.entries()) {
           const candidates = media.filter((file) => file.name === mediaFileName(item.value))
-          if (candidates.length > 1) throw new Error(t({ ko: '같은 이름의 파일을 하나만 선택하세요: {name}', en: 'Select only one file with this name: {name}' }, { name: mediaFileName(item.value) }))
+          if (candidates.length > 1) throw new Error(t({ ko: '같은 이름의 파일은 하나만 골라 줘: {name}', en: 'Select only one file with this name: {name}' }, { name: mediaFileName(item.value) }))
           if (candidates[0]) {
-            if (inferMiniMaxH3DirectorMediaType(candidates[0]) !== item.type) throw new Error(t({ ko: '파일 종류가 참조와 다릅니다: {name}', en: 'File type does not match the reference: {name}' }, { name: candidates[0].name }))
+            if (inferMiniMaxH3DirectorMediaType(candidates[0]) !== item.type) throw new Error(t({ ko: '파일 종류가 참조와 달라: {name}', en: 'File type does not match the reference: {name}' }, { name: candidates[0].name }))
             filesToUpload.push({ index, file: candidates[0] })
             continue
           }
@@ -80,7 +80,7 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
           if (asset && (await fetch(buildWorkflowInputAssetUrl(asset), { method: 'HEAD', credentials: 'include' })).ok) resolved.set(index, asset)
           else missing.push(mediaFileName(item.value))
         }
-        if (missing.length) throw new Error(t({ ko: '미디어 파일을 연결하세요: {files}', en: 'Attach the missing media files: {files}' }, { files: missing.join(', ') }))
+        if (missing.length) throw new Error(t({ ko: '미디어 파일을 연결해 줘: {files}', en: 'Attach the missing media files: {files}' }, { files: missing.join(', ') }))
         for (const { index, file } of filesToUpload) {
           const asset = await uploadWorkflowInputAsset(file)
           uploaded.push(asset)
@@ -91,11 +91,11 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
       onChange(result)
       setPack(null)
       setMedia([])
-      setMessage(t({ ko: '참조 팩을 적용했습니다.', en: 'Reference pack applied.' }))
+      setMessage(t({ ko: '참조 팩을 적용했어.', en: 'Reference pack applied.' }))
     } catch (error) {
       const cleanup = await Promise.allSettled(uploaded.map((asset) => deleteWorkflowInputAsset(asset.id)))
       const cleanupFailed = cleanup.some((result) => result.status === 'rejected')
-      setMessage(`${error instanceof Error ? error.message : 'Could not load reference pack'}${cleanupFailed ? t({ ko: ' · 임시 업로드 정리에 실패했습니다.', en: ' · Could not clean up temporary uploads.' }) : ''}`)
+      setMessage(`${error instanceof Error ? error.message : 'Could not load reference pack'}${cleanupFailed ? t({ ko: ' · 임시 업로드는 정리하지 못했어.', en: ' · Could not clean up temporary uploads.' }) : ''}`)
     } finally { setBusy(false) }
   }
 
@@ -104,7 +104,7 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
     <Button type="button" size="icon-sm" variant="secondary" disabled={disabled} onClick={() => setOpen(true)} aria-label={t({ ko: '참조 팩', en: 'Reference pack' })} title={t({ ko: '참조 팩', en: 'Reference pack' })}><FolderOpen className="h-4 w-4" /></Button>
     <Modal open={open} title={t({ ko: '참조 팩', en: 'Reference pack' })} onClose={() => { if (!busy) setOpen(false) }} widthClassName="max-w-xl">
       <div className="space-y-4 p-4">
-        <p className="text-xs text-muted-foreground">{t({ ko: 'DaSiWa JSON 형식입니다. 미디어 파일은 포함하지 않으며, 없는 파일은 적용 전에 연결해야 합니다.', en: 'DaSiWa JSON format. Media files are not embedded; attach any missing files before applying.' })}</p>
+        <p className="text-xs text-muted-foreground">{t({ ko: 'DaSiWa JSON 형식이야. 미디어 파일은 들어 있지 않으니, 없는 파일은 적용하기 전에 연결해 줘.', en: 'DaSiWa JSON format. Media files are not embedded; attach any missing files before applying.' })}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Select aria-label={t({ ko: '데이터 범위', en: 'Data scope' })} value={effectiveScope} disabled={busy} onChange={(event) => setScope(event.target.value as MiniMaxDirectorPackScope)}>
             {allowFiles && allowPrompt ? <option value="all">{t({ ko: '전체', en: 'All' })}</option> : null}

@@ -58,7 +58,7 @@ export function formatGroupBulkRemoveNotice(result: GroupBulkRemoveResult, t: Tr
 
   if (result.skipped_count > 0) {
     details.push(t(
-      { ko: '하위 그룹 이미지 {count}개는 해당 하위 그룹에서 제거해야 합니다', en: '{count} subgroup images must be removed from their own subgroup' },
+      { ko: '하위 그룹 이미지 {count}개는 그 하위 그룹에서 빼야 해', en: '{count} subgroup images must be removed from their own subgroup' },
       { count: formatNumber(result.skipped_count) },
     ))
   }

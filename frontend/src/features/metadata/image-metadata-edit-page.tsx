@@ -71,7 +71,7 @@ export function ImageMetadataEditPage() {
     }
   }, [draft, invalidStepsMessage])
 
-  useUnsavedSettingsGuard(hasUnsavedChanges, t({ ko: '저장하지 않은 메타데이터 변경 사항이 있습니다. 페이지를 떠날까요?', en: 'You have unsaved metadata changes. Leave this page?' }))
+  useUnsavedSettingsGuard(hasUnsavedChanges, t({ ko: '저장하지 않은 메타데이터 변경이 있어. 페이지를 떠날까?', en: 'You have unsaved metadata changes. Leave this page?' }))
 
   const downloadMutation = useMutation({
     mutationFn: async (nextDraft: RewriteMetadataDraft) => {
@@ -138,9 +138,9 @@ export function ImageMetadataEditPage() {
 
     try {
       await copyTextToClipboard(image.composite_hash)
-      showSnackbar({ message: t({ ko: '복사했습니다.', en: 'Copied.' }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '복사했어.', en: 'Copied.' }), tone: 'info' })
     } catch {
-      showSnackbar({ message: t({ ko: '복사하지 못했습니다.', en: 'Could not copy.' }), tone: 'error' })
+      showSnackbar({ message: t({ ko: '복사하지 못했어.', en: 'Could not copy.' }), tone: 'error' })
     }
   }
 

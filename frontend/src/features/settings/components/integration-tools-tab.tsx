@@ -66,7 +66,7 @@ export function IntegrationToolsTab() {
         <Inset>
           <p className="text-sm text-muted-foreground">
             {t({
-              ko: 'ComfyUI에서 생성된 파일이나 폴더 단위 결과물을 CoNAI 아티팩트로 넘기기 위한 커스텀 노드입니다. ZIP을 풀어 ComfyUI custom_nodes 아래에 넣고 ComfyUI를 재시작하세요.',
+              ko: 'ComfyUI에서 만든 파일이나 폴더 단위 결과물을 CoNAI 아티팩트로 넘기는 커스텀 노드야. ZIP을 풀어 ComfyUI custom_nodes 아래에 넣고 ComfyUI를 다시 시작해 줘.',
               en: 'Custom node for passing ComfyUI file or folder outputs to CoNAI artifacts. Extract the ZIP into ComfyUI custom_nodes, then restart ComfyUI.',
             })}
           </p>

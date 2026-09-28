@@ -425,7 +425,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
 
         <div className="space-y-1 text-sm">
           <div className="font-medium text-foreground">{t({ ko: '대표 서버 API 기준', en: 'Representative server API' })}</div>
-          <p className="text-muted-foreground">{t({ ko: '자동수집은 대표 ComfyUI 서버에서 실행되며 통합 + 개별 생성, 하위 폴더 통합은 항상 적용됩니다.', en: 'Auto collect runs against the representative ComfyUI server; merged + separate lists and subfolder merging are always applied.' })}</p>
+          <p className="text-muted-foreground">{t({ ko: '자동수집은 대표 ComfyUI 서버에서 실행되고, 통합 + 개별 생성과 하위 폴더 통합은 항상 적용돼.', en: 'Auto collect runs against the representative ComfyUI server; merged + separate lists and subfolder merging are always applied.' })}</p>
         </div>
 
         <ModalFooter>
