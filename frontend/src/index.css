@@ -268,6 +268,10 @@
   --theme-card-shadow: 0 0 40px rgb(107 81 70 / 0.18);
   --theme-list-shadow: 0 0 40px rgb(107 81 70 / 0.18);
   --theme-floating-shadow: 0 0 40px rgb(107 81 70 / 0.28);
+  /* Warm, lighter offsets: the dark-theme black 32–48% shadows read as smudges on a light page. */
+  --elevation-1: 0 8px 22px rgb(107 81 70 / 0.16);
+  --elevation-2: 0 16px 40px rgb(107 81 70 / 0.2);
+  --elevation-3: 0 24px 72px rgb(107 81 70 / 0.26);
 }
 
 @layer base {
