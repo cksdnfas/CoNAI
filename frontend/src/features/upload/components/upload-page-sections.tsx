@@ -11,6 +11,9 @@ import { ImageSaveOptionsModal } from '@/components/media/image-save-options-mod
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
+import { Text } from '@/components/ui/text'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
@@ -101,17 +104,16 @@ function SummaryTile({
   return (
     <Inset className="min-w-0">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
+        <Text as="div" variant="overline">{label}</Text>
         {copyValue ? (
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-primary"
+          <IconButton
+            size="icon-xs"
+            variant="ghost"
             onClick={() => void handleCopy()}
-            aria-label={t({ ko: '{label} 복사', en: '{label} copy' }, { label })}
-            title={t({ ko: '{label} 복사', en: '{label} copy' }, { label })}
+            label={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label })}
           >
             <Copy className="h-3.5 w-3.5" />
-          </button>
+          </IconButton>
         ) : null}
       </div>
       <div className="mt-2 min-w-0 whitespace-pre-wrap break-all text-sm text-foreground">{value}</div>
@@ -143,7 +145,7 @@ function UploadFilePreviewTile({
   const isVideo = preview.file.type.startsWith('video/')
 
   return (
-    <div className="relative min-w-0 overflow-hidden rounded-sm border border-border/70 bg-background/50">
+    <Panel tone="container" padding="none" className="relative min-w-0 overflow-hidden">
       {preview.url ? (
         <InlineMediaPreview
           src={preview.url}
@@ -159,24 +161,22 @@ function UploadFilePreviewTile({
         </div>
       )}
 
-      <Button
-        type="button"
+      <IconButton
         variant="destructive"
         size="icon-xs"
-        className="absolute right-2 top-2 shadow-sm"
+        className="absolute right-2 top-2 shadow-elevation-1"
         disabled={disabled}
         onClick={onRemove}
-        aria-label={removeLabel}
-        title={removeLabel}
+        label={removeLabel}
       >
         <Trash2 />
-      </Button>
+      </IconButton>
 
       <div className="space-y-1 p-2">
         <div className="truncate text-xs text-foreground" title={preview.file.name}>{preview.file.name}</div>
-        <div className="text-[11px] text-muted-foreground">{formatBytes(preview.file.size)}</div>
+        <div className="text-2xs text-muted-foreground">{formatBytes(preview.file.size)}</div>
       </div>
-    </div>
+    </Panel>
   )
 }
 
@@ -260,7 +260,7 @@ export function UploadPageUploadSection({
         <Inset className="space-y-3">
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <Badge variant="secondary">{t({ ko: '{count}개', en: '{count} files' }, { count: formatNumber(uploadFiles.length) })}</Badge>
-            <Badge variant="outline">{formatBytes(uploadTotalSize)}</Badge>
+            <Badge variant="secondary">{formatBytes(uploadTotalSize)}</Badge>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {uploadFilePreviews.slice(0, MAX_VISIBLE_FILES).map((preview, index) => (
@@ -321,7 +321,7 @@ export function UploadPageUploadSection({
         <Inset className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">{t({ ko: '성공 {count}', en: '{count} succeeded' }, { count: formatNumber(uploadResult.successful) })}</Badge>
-            <Badge variant={uploadResult.failed_count > 0 ? 'outline' : 'secondary'}>{t({ ko: '실패 {count}', en: '{count} failed' }, { count: formatNumber(uploadResult.failed_count) })}</Badge>
+            <Badge variant={uploadResult.failed_count > 0 ? 'destructive' : 'secondary'}>{t({ ko: '실패 {count}', en: '{count} failed' }, { count: formatNumber(uploadResult.failed_count) })}</Badge>
           </div>
 
           {uploadResult.uploaded.length > 0 ? (
@@ -330,19 +330,19 @@ export function UploadPageUploadSection({
                 const detailPath = getUploadResultDetailPath(file)
 
                 return (
-                  <div key={`${file.filename}:${file.upload_date}`} className="rounded-sm border border-border/70 bg-background/50 px-3 py-3">
+                  <Panel key={`${file.filename}:${file.upload_date}`} tone="container" padding="none" className="px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 break-all text-foreground">{file.original_name}</div>
                       {detailPath ? (
-                        <Button asChild variant="ghost" size="icon-xs" aria-label={t({ ko: '상세 열기', en: 'Open details' })} title={t({ ko: '상세 열기', en: 'Open details' })}>
+                        <IconButton asChild variant="ghost" size="icon-xs" label={t({ ko: '상세 열기', en: 'Open details' })}>
                           <Link to={detailPath} state={buildImageSourceState(location)}>
                             <ExternalLink />
                           </Link>
-                        </Button>
+                        </IconButton>
                       ) : null}
                     </div>
                     <div className="mt-1 text-xs">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</div>
-                  </div>
+                  </Panel>
                 )
               })}
               {uploadResultItems && uploadResultItems.uploaded.hiddenCount > 0 ? (
@@ -354,10 +354,10 @@ export function UploadPageUploadSection({
           {uploadResult.failed.length > 0 ? (
             <div className="space-y-2 text-sm text-muted-foreground">
               {uploadResultItems?.failed.visible.map((file) => (
-                <div key={`${file.filename}:${file.error}`} className="rounded-sm border border-border/70 bg-background/50 px-3 py-3">
+                <Panel key={`${file.filename}:${file.error}`} tone="container" padding="none" className="px-3 py-3">
                   <div className="break-all text-foreground">{file.filename}</div>
                   <div className="mt-1 text-xs" style={getThemeToneTextStyle('negative')}>{file.error}</div>
-                </div>
+                </Panel>
               ))}
               {uploadResultItems && uploadResultItems.failed.hiddenCount > 0 ? (
                 <div className="text-xs">{t({ ko: '…실패 {count}개 더 있음', en: '…{count} more failed' }, { count: formatNumber(uploadResultItems.failed.hiddenCount) })}</div>
@@ -481,63 +481,55 @@ export function UploadPageExtractSection({
     >
       <input ref={extractInputRef} type="file" accept={imageAccept} className="hidden" onChange={onExtractFileChange} />
 
-      <Inset className="px-0 py-0">
-        <MediaFileDropSurface
-          ariaLabel={t('uploadPageSections.chooseAnImageToPreview')}
-          active={extractDropZone.isDragActive}
-          onClick={() => extractInputRef.current?.click()}
-          onDrop={extractDropZone.handleDrop}
-          onDragEnter={extractDropZone.handleDragEnter}
-          onDragOver={extractDropZone.handleDragOver}
-          onDragLeave={extractDropZone.handleDragLeave}
-          actions={extractFile ? (
-            <>
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon-sm"
-                onClick={() => extractInputRef.current?.click()}
-                aria-label={t('uploadPageSections.replaceSelectedImage')}
-                title={t('uploadPageSections.replaceSelectedImage')}
-              >
-                <RefreshCw />
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                size="icon-sm"
-                onClick={onResetExtract}
-                aria-label={t('uploadPageSections.removeSelectedImage')}
-                title={t('uploadPageSections.removeSelectedImage')}
-              >
-                <Trash2 />
-              </Button>
-            </>
-          ) : undefined}
-        >
-          {extractFile && extractPreviewUrl ? (
-            <InlineMediaPreview
-              src={extractPreviewUrl}
-              mimeType={extractFile.type}
-              fileName={extractFile.name}
-              alt={extractFile.name}
-              frameClassName="w-full border-0 bg-transparent p-0"
-              mediaClassName="max-h-[420px] w-full object-contain"
-            />
-          ) : undefined}
-        </MediaFileDropSurface>
-      </Inset>
+      <MediaFileDropSurface
+        ariaLabel={t('uploadPageSections.chooseAnImageToPreview')}
+        active={extractDropZone.isDragActive}
+        onClick={() => extractInputRef.current?.click()}
+        onDrop={extractDropZone.handleDrop}
+        onDragEnter={extractDropZone.handleDragEnter}
+        onDragOver={extractDropZone.handleDragOver}
+        onDragLeave={extractDropZone.handleDragLeave}
+        actions={extractFile ? (
+          <>
+            <IconButton
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => extractInputRef.current?.click()}
+              label={t('uploadPageSections.replaceSelectedImage')}
+            >
+              <RefreshCw />
+            </IconButton>
+            <IconButton
+              variant="destructive"
+              size="icon-sm"
+              onClick={onResetExtract}
+              label={t('uploadPageSections.removeSelectedImage')}
+            >
+              <Trash2 />
+            </IconButton>
+          </>
+        ) : undefined}
+      >
+        {extractFile && extractPreviewUrl ? (
+          <InlineMediaPreview
+            src={extractPreviewUrl}
+            mimeType={extractFile.type}
+            fileName={extractFile.name}
+            alt={extractFile.name}
+            frameClassName="w-full border-0 bg-transparent p-0"
+            mediaClassName="max-h-[420px] w-full object-contain"
+          />
+        ) : undefined}
+      </MediaFileDropSurface>
 
       {extractFile ? (
         <div className={cn('grid gap-4', isDesktopPageLayout ? 'grid-cols-2 items-start' : 'grid-cols-1')}>
           <div className="space-y-4">
-            <Inset className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
-                <SummaryTile label={t({ ko: '파일', en: 'File' })} value={extractFile.name} />
-                <SummaryTile label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractFile.size)} />
-                <SummaryTile label={t({ ko: '형식', en: 'Type' })} value={describeFileType(extractFile, t)} />
-              </div>
-            </Inset>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
+              <SummaryTile label={t({ ko: '파일', en: 'File' })} value={extractFile.name} />
+              <SummaryTile label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractFile.size)} />
+              <SummaryTile label={t({ ko: '형식', en: 'Type' })} value={describeFileType(extractFile, t)} />
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -550,14 +542,14 @@ export function UploadPageExtractSection({
               </div>
 
               {isRewritePanelOpen ? (
-                <div className="border-t border-border pt-4">
+                <div className="pt-2">
                   <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={onRewriteDraftChange} />
                 </div>
               ) : null}
             </Inset>
 
             {extractResult ? (
-              <Inset className="space-y-4">
+              <div className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                   <SummaryTile label={t({ ko: '해상도', en: 'Dimensions' })} value={formatDimensions(extractResult.width, extractResult.height)} />
                   <SummaryTile label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractResult.file_size)} />
@@ -569,25 +561,21 @@ export function UploadPageExtractSection({
                 </div>
 
                 {extractResult.ai_metadata?.lora_models?.length ? (
-                  <div className="rounded-sm border border-border/70 bg-background/50 p-4">
-                    <div className="flex flex-wrap gap-2">
-                      {extractResult.ai_metadata.lora_models.map((item) => (
-                        <Badge key={item} variant="outline">
-                          {item}
-                        </Badge>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-2">
+                    {extractResult.ai_metadata.lora_models.map((item) => (
+                      <Badge key={item} variant="secondary" className="normal-case tracking-normal">
+                        {item}
+                      </Badge>
+                    ))}
                   </div>
                 ) : null}
 
                 {extractedPromptCards.length > 0 ? (
-                  <div className="rounded-sm border border-border/70 bg-background/50 p-4">
-                    <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
-                  </div>
+                  <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
                 ) : (
                   <Inset className="text-sm text-muted-foreground">{t({ ko: '표시할 프롬프트가 없어.', en: 'No prompts to show.' })}</Inset>
                 )}
-              </Inset>
+              </div>
             ) : null}
 
             {taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
