@@ -1,7 +1,8 @@
 import { ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState, type FocusEvent, type PointerEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { getNavigationItemClassName } from './navigation-item'
+import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 
 export type HierarchyNodeId = number | string
 
@@ -101,6 +102,7 @@ export function HierarchyNav<T>({
   defaultExpandedIds = EMPTY_EXPANDED_IDS,
   className,
 }: HierarchyNavProps<T>) {
+  const { t } = useI18n()
   const itemsByParentId = useMemo(() => buildHierarchyMap(items, getId, getParentId, sortItems), [items, getId, getParentId, sortItems])
   const parentById = useMemo(
     () => new Map(items.map((item) => [getId(item), getParentId(item) ?? null] as const)),
@@ -192,22 +194,25 @@ export function HierarchyNav<T>({
               {expandable ? (
                 <div className="flex items-center gap-1" style={{ paddingLeft: `${depth * 14}px` }}>
                   {hasChildren ? (
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-sm"
                       onClick={() => toggleExpanded(itemId)}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-surface-low hover:text-foreground"
-                      aria-label={isExpanded ? '접기' : '펼치기'}
-                      title={isExpanded ? '접기' : '펼치기'}
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
                     >
                       <ChevronRight className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-90')} />
-                    </button>
+                    </Button>
                   ) : (
                     <span className="inline-flex h-8 w-8 shrink-0" aria-hidden="true" />
                   )}
 
                   {selectable || hasChildren ? (
-                    <button
+                    <Button
                       type="button"
+                      variant="nav"
+                      size="sm"
                       {...itemEventHandlers}
                       onClick={() => {
                         if (hasChildren && shouldExpandOnSelect) {
@@ -217,15 +222,12 @@ export function HierarchyNav<T>({
                           onSelect(item)
                         }
                       }}
-                      className={getNavigationItemClassName({
-                        active: isSelected,
-                        density: 'sm',
-                        fullWidth: false,
-                        className: cn('inline-flex max-w-full flex-1 items-center gap-2', itemClassName),
-                      })}
+                      data-active={isSelected ? 'true' : undefined}
+                      aria-current={isSelected ? 'true' : undefined}
+                      className={cn('min-w-0 flex-1 px-2 has-[>svg]:px-2', itemClassName)}
                     >
                       {content}
-                    </button>
+                    </Button>
                   ) : (
                     <div
                       {...itemEventHandlers}
@@ -236,18 +238,18 @@ export function HierarchyNav<T>({
                   )}
                 </div>
               ) : (
-                <button
+                <Button
                   type="button"
+                  variant="nav"
                   {...itemEventHandlers}
                   onClick={() => onSelect(item)}
-                  className={getNavigationItemClassName({
-                    active: isSelected,
-                    className: cn('flex items-center gap-2', itemClassName),
-                  })}
+                  data-active={isSelected ? 'true' : undefined}
+                  aria-current={isSelected ? 'true' : undefined}
+                  className={cn('min-w-0', itemClassName)}
                   style={{ paddingLeft: `${12 + depth * 14}px` }}
                 >
                   {content}
-                </button>
+                </Button>
               )}
 
               {hasChildren && isExpanded ? renderNodes(itemId, depth + 1) : null}

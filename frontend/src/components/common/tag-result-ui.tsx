@@ -1,4 +1,7 @@
 import { useState, type ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
+import { useI18n } from '@/i18n'
 import { getThemeToneFillStyle, getThemeToneStyle } from '@/lib/theme-tones'
 import { PromptTagActionMenu } from './prompt-tag-action-menu'
 import { formatScore } from './tag-result-utils'
@@ -39,7 +42,7 @@ export function TagBundleSection({
   return (
     <div className="space-y-2 rounded-sm bg-surface-lowest px-3 py-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+        <Text as="div" variant="overline" className="font-semibold">{label}</Text>
         {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -54,7 +57,6 @@ export function TagBundleSection({
                 href={href}
                 onAddSearchFilter={onAddSearchFilter}
                 onOpenHref={onTagClick}
-                className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high hover:text-primary"
               >
                 {tag}
               </PromptTagActionMenu>
@@ -62,7 +64,7 @@ export function TagBundleSection({
           }
 
           return (
-            <span key={`${label}:${tag}`} className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground">
+            <span key={`${label}:${tag}`} className="rounded-sm bg-foreground/5 px-2 py-1 text-xs text-foreground">
               {tag}
             </span>
           )
@@ -87,7 +89,7 @@ export function ScoreMeterList({
 
   return (
     <div className="space-y-3 rounded-sm bg-surface-lowest px-3 py-3">
-      {hideTitle ? null : <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</div>}
+      {hideTitle ? null : <Text as="div" variant="overline" className="font-semibold">{title}</Text>}
       <div className="space-y-3">
         {entries.map(([label, score]) => {
           const width = Math.max(0, Math.min(score * 100, 100))
@@ -119,6 +121,7 @@ export function CollapsibleScoreMeterList({
   accentClassName?: string
   defaultExpanded?: boolean
 }) {
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   if (entries.length === 0) return null
@@ -126,14 +129,10 @@ export function CollapsibleScoreMeterList({
   return (
     <div className="space-y-3 rounded-sm bg-surface-lowest px-3 py-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</div>
-        <button
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-          className="text-xs font-medium text-muted-foreground transition hover:text-foreground"
-        >
-          {expanded ? '접기' : `펼치기 (${entries.length})`}
-        </button>
+        <Text as="div" variant="overline" className="font-semibold">{title}</Text>
+        <Button type="button" variant="ghost" size="xs" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>
+          {expanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기 ({count})', en: 'Expand ({count})' }, { count: entries.length })}
+        </Button>
       </div>
       {expanded ? <ScoreMeterList title={title} entries={entries} accentClassName={accentClassName} hideTitle /> : null}
     </div>
@@ -148,7 +147,7 @@ export function StackedRatingBar({ title, entries }: { title: string; entries: A
 
   return (
     <div className="space-y-3 rounded-sm bg-surface-lowest px-3 py-3">
-      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</div>
+      <Text as="div" variant="overline" className="font-semibold">{title}</Text>
       <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-low">
         {normalizedEntries.map(([label, score]) => (
           <div

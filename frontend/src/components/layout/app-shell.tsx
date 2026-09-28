@@ -162,9 +162,9 @@ function AppShellLayout() {
                       className={({ isActive }) =>
                         cn(
                           // Icon-only below xl; from xl (1280px) the label sits next to the icon.
-                          'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm border border-transparent text-foreground/70 transition-all duration-300 hover:border-border hover:bg-surface-high hover:text-foreground select-none xl:w-auto xl:px-3',
+                          'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-foreground/70 transition-colors duration-300 outline-none hover:bg-surface-high hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 select-none xl:w-auto xl:px-3',
                           isDraggingNav && 'pointer-events-none',
-                          isActive && 'border-primary/35 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_10%,transparent)]',
+                          isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary',
                         )
                       }
                     >

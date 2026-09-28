@@ -2,6 +2,7 @@ import { Copy } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { AutoTestTaggerResult } from '@/lib/api-settings-tagger'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -49,14 +50,14 @@ export function WDTaggerResultBlock({ result, title, onAddSearchFilter }: WDTagg
 
       {ratingEntries.length > 0 ? (
         <div className="mt-4 space-y-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '등급 요약', en: 'Rating overview' })}</div>
+          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '등급 요약', en: 'Rating overview' })}</Text>
           <RatingPromptSection entries={ratingEntries} />
         </div>
       ) : null}
 
       {characterEntries.length > 0 || generalEntries.length > 0 ? (
         <div className="mt-4 space-y-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '상세 점수', en: 'Detailed scores' })}</div>
+          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '상세 점수', en: 'Detailed scores' })}</Text>
           <div className="grid gap-3 grid-cols-1">
             <CharacterPromptSection entries={characterEntries} />
             <GeneralPromptSection

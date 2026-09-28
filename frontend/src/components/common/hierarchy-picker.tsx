@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { getNavigationItemClassName } from './navigation-item'
+import { Button } from '@/components/ui/button'
 import { HierarchyNav, type HierarchyNodeId, type HierarchyNavItemState } from './hierarchy-nav'
 
 interface HierarchyPickerProps<T> {
@@ -36,18 +36,17 @@ export function HierarchyPicker<T>({
   showRootOption = true,
 }: HierarchyPickerProps<T>) {
   return (
-    <div className={cn('rounded-sm border border-border/70 bg-surface-lowest p-2', className)}>
+    <div className={cn('rounded-sm bg-surface-lowest p-2', className)}>
       {showRootOption ? (
-        <button
+        <Button
           type="button"
+          variant="nav"
           onClick={onSelectRoot}
-          className={getNavigationItemClassName({
-            active: selectedId == null,
-            className: 'flex items-center justify-between',
-          })}
+          data-active={selectedId == null ? 'true' : undefined}
+          aria-current={selectedId == null ? 'true' : undefined}
         >
           <span>{rootLabel}</span>
-        </button>
+        </Button>
       ) : null}
 
       <div className={cn(showRootOption ? 'mt-2 max-h-72 overflow-y-auto pr-1' : 'max-h-72 overflow-y-auto pr-1', bodyClassName)}>

@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
+import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
 import { cn } from '@/lib/utils'
@@ -14,7 +15,8 @@ interface PromptTagActionMenuProps {
   onOpenHref?: (tag: string, href: string) => void
 }
 
-const tagActionItemClassName = 'flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-xs font-medium text-foreground transition hover:bg-surface-high hover:text-primary'
+/** Tag chip look shared by the menu trigger and the plain (no-action) fallback. */
+const tagChipClassName = 'h-auto min-h-6 py-1 whitespace-normal break-words text-left font-normal text-foreground'
 
 /** Render a compact action menu for prompt-like tags. */
 export function PromptTagActionMenu({
@@ -32,7 +34,7 @@ export function PromptTagActionMenu({
   const hasActions = Boolean(onAddSearchFilter || resolvedHref)
 
   if (!hasActions) {
-    return <span className={className}>{children ?? tag}</span>
+    return <span className={cn('inline-flex rounded-sm bg-foreground/5 px-2 text-xs', tagChipClassName, className)}>{children ?? tag}</span>
   }
 
   const handleAddSearchFilter = () => {
@@ -56,10 +58,12 @@ export function PromptTagActionMenu({
 
   return (
     <>
-      <button
+      <Button
         ref={anchorRef}
         type="button"
-        className={className}
+        variant="subtle"
+        size="xs"
+        className={cn(tagChipClassName, className)}
         onClick={(event) => {
           event.stopPropagation()
           setOpen((current) => !current)
@@ -70,14 +74,16 @@ export function PromptTagActionMenu({
         title={t({ ko: '{tag} 태그 작업', en: '{tag} tag actions' }, { tag })}
       >
         {children ?? tag}
-      </button>
+      </Button>
 
       <AnchoredPopup open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} align="start" side="bottom" className="w-[min(15rem,calc(100vw-1.5rem))] p-0">
         <div className={cn(anchoredPopupBodyClassName, 'space-y-1 p-1.5')} role="menu" aria-label={t({ ko: '{tag} 태그 작업', en: '{tag} tag actions' }, { tag })}>
           {onAddSearchFilter ? (
-            <button
+            <Button
               type="button"
-              className={tagActionItemClassName}
+              variant="nav"
+              size="sm"
+              className="text-xs"
               role="menuitem"
               onClick={(event) => {
                 event.stopPropagation()
@@ -86,13 +92,15 @@ export function PromptTagActionMenu({
             >
               <Search className="h-3.5 w-3.5 shrink-0" />
               <span className="min-w-0 truncate">{t({ ko: '검색에 {tag} 추가', en: 'Add {tag} to search' }, { tag })}</span>
-            </button>
+            </Button>
           ) : null}
 
           {resolvedHref ? (
-            <button
+            <Button
               type="button"
-              className={tagActionItemClassName}
+              variant="nav"
+              size="sm"
+              className="text-xs"
               role="menuitem"
               onClick={(event) => {
                 event.stopPropagation()
@@ -101,7 +109,7 @@ export function PromptTagActionMenu({
             >
               <Search className="h-3.5 w-3.5 shrink-0" />
               <span>{t({ ko: '웹서치', en: 'Web search' })}</span>
-            </button>
+            </Button>
           ) : null}
         </div>
       </AnchoredPopup>

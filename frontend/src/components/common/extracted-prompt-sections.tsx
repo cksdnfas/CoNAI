@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, Copy, FolderTree, GitBranch } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Badge } from '@/components/ui/badge'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneStyle, getThemeToneTextStyle } from '@/lib/theme-tones'
@@ -78,7 +79,6 @@ function ExtractedPromptTermList({ terms, scope, onAddSearchFilter }: ExtractedP
           tag={term.searchValue}
           href={getPromptActionHref(scope)}
           onAddSearchFilter={onAddSearchFilter ? (tag) => onAddSearchFilter(scope, tag) : undefined}
-          className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high hover:text-primary"
         >
           {term.display}
         </PromptTagActionMenu>
@@ -99,7 +99,7 @@ function ExtractedPromptGroupedBody({ sections, actionScope, onAddSearchFilter }
               {getGroupedSectionIcon(section)}
               <span
                 className={cn(
-                  'inline-flex max-w-full items-center rounded-sm border border-border/70 bg-surface-low px-2 py-1 text-sm font-semibold text-foreground',
+                  'inline-flex max-w-full items-center rounded-sm bg-surface-high px-2 py-1 text-sm font-semibold text-foreground',
                   tooltip && 'cursor-help',
                 )}
                 title={tooltip}
@@ -136,16 +136,18 @@ function ExtractedPromptCard({ item, onAddSearchFilter }: ExtractedPromptCardPro
   }
 
   return (
-    <section className="overflow-hidden rounded-sm border border-white/8 bg-surface-lowest">
-      <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3">
-        <button
-          type="button"
+    <section className="overflow-hidden rounded-sm bg-surface-lowest">
+      <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+        <IconButton
+          size="icon-xs"
+          variant="ghost"
           onClick={() => setExpanded((current) => !current)}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
-          aria-label={expanded ? t({ ko: '{title} 접기', en: 'Collapse {title}' }, { title: item.title }) : t({ ko: '{title} 펼치기', en: 'Expand {title}' }, { title: item.title })}
+          aria-expanded={expanded}
+          label={expanded ? t({ ko: '{title} 접기', en: 'Collapse {title}' }, { title: item.title }) : t({ ko: '{title} 펼치기', en: 'Expand {title}' }, { title: item.title })}
+          tooltip={false}
         >
           <ChevronDown className={cn('h-4 w-4 transition-transform', expanded ? 'rotate-0' : '-rotate-90')} />
-        </button>
+        </IconButton>
 
         <div className={cn('min-w-0 text-sm font-semibold')} style={getPromptToneStyle(item.tone)}>{item.title}</div>
 
@@ -155,19 +157,19 @@ function ExtractedPromptCard({ item, onAddSearchFilter }: ExtractedPromptCardPro
               {badge === '그룹' ? t({ ko: '그룹', en: 'Group' }) : badge}
             </Badge>
           ))}
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-primary"
+          <IconButton
+            size="icon-sm"
+            variant="ghost"
             onClick={handleCopy}
-            aria-label={t({ ko: '{title} 복사', en: 'Copy {title}' }, { title: item.title })}
+            label={t({ ko: '{title} 복사', en: 'Copy {title}' }, { title: item.title })}
           >
             <Copy className="h-4 w-4" />
-          </button>
+          </IconButton>
         </div>
       </div>
 
       {expanded ? (
-        <div className="px-4 py-4 text-base text-foreground/92 whitespace-pre-wrap break-words">
+        <div className="px-4 pt-2 pb-4 text-base text-foreground whitespace-pre-wrap break-words">
           {item.groupedSections?.length ? (
             <ExtractedPromptGroupedBody sections={item.groupedSections} actionScope={item.actionScope} onAddSearchFilter={onAddSearchFilter} />
           ) : item.actionScope && item.actionTerms?.length ? (

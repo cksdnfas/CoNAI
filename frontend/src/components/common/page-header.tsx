@@ -16,7 +16,7 @@ export function PageHeader({ eyebrow, title, titleAccessory, description, action
   return (
     <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)}>
       <div className="min-w-0 flex-1">
-        {eyebrow ? <Text variant="overline" className="text-[11px] font-semibold tracking-[0.22em] text-secondary">{eyebrow}</Text> : null}
+        {eyebrow ? <Text variant="overline" className="font-semibold text-secondary">{eyebrow}</Text> : null}
         <div>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Heading level={1}>{title}</Heading>
