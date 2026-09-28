@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useEffect, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
@@ -60,7 +60,7 @@ export function NaiSavedAssetTile({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
-      className="group relative isolate h-60 overflow-hidden rounded-sm border border-border bg-surface-container text-left transition-transform duration-300 hover:-translate-y-0.5 hover:bg-surface-high"
+      className="group relative isolate h-60 overflow-hidden rounded-sm bg-surface-container text-left outline-none transition-transform duration-300 hover:-translate-y-0.5 focus-visible:ring-[3px] focus-visible:ring-ring/40"
     >
       {previewImage && previewState === 'ready' ? (
         <ImagePreviewMedia
@@ -83,34 +83,32 @@ export function NaiSavedAssetTile({
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/84 via-black/42 to-transparent" />
 
       <div className="absolute right-2 top-2 z-10 flex gap-1.5">
-        <Button
-          type="button"
+        <IconButton
           size="icon-sm"
           variant="ghost"
-          className="h-8 w-8 rounded-full border border-white/12 bg-black/45 text-white hover:bg-black/60"
+          // On-media control: the image behind it has no theme tone, so it sits on the backdrop scrim (no Button variant for this yet).
+          className="bg-backdrop text-white hover:bg-backdrop hover:text-white"
           onClick={(event) => {
             event.stopPropagation()
             onEdit()
           }}
-          aria-label={editLabel}
-          title={editLabel}
+          label={editLabel}
         >
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
+          <Pencil />
+        </IconButton>
+        <IconButton
           size="icon-sm"
           variant="ghost"
-          className="h-8 w-8 rounded-full border border-white/12 bg-black/45 text-white hover:bg-black/60"
+          // On-media control: the image behind it has no theme tone, so it sits on the backdrop scrim (no Button variant for this yet).
+          className="bg-backdrop text-white hover:bg-backdrop hover:text-white"
           onClick={(event) => {
             event.stopPropagation()
             onDelete()
           }}
-          aria-label={deleteLabel}
-          title={deleteLabel}
+          label={deleteLabel}
         >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+          <Trash2 />
+        </IconButton>
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-10 space-y-1 p-3">

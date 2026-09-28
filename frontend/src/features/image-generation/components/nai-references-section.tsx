@@ -1,9 +1,11 @@
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 import { Select } from '@/components/ui/select'
+import { Text } from '@/components/ui/text'
 import type { StoredNaiCharacterReferenceAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAICharacterReferenceDraft, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
@@ -55,32 +57,30 @@ export function NaiReferencesSection({
         heading={t({ ko: '레퍼런스', en: 'References' })}
         collapsible
         defaultOpen={false}
-        className="rounded-b-none border-b-0"
+        className="rounded-b-none"
         actions={(
           <>
             <Badge variant="outline">{references.length}</Badge>
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
               variant="secondary"
               onClick={onAddReference}
               disabled={!supportsCharacterReference}
-              aria-label={t('image-generation.components.nai.references.section.add.reference')}
-              title={t('image-generation.components.nai.references.section.add.reference')}
+              label={t('image-generation.components.nai.references.section.add.reference')}
             >
-              <Plus className="h-4 w-4" />
-            </Button>
+              <Plus />
+            </IconButton>
           </>
         )}
       >
-        {!supportsCharacterReference ? <div className="text-xs text-destructive">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</div> : null}
+        {!supportsCharacterReference ? <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</Text> : null}
 
         {references.length > 0 ? (
-          <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-low/40">
+          <div className="divide-y divide-outline-subtle">
             {references.map((reference, index) => (
-              <div key={`nai-character-reference-${index}`} className="space-y-4 px-3 py-3">
+              <div key={`nai-character-reference-${index}`} className="space-y-4 py-4 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
+                  <Text as="div" variant="label">Reference {index + 1}</Text>
                   <div className="flex flex-wrap items-center gap-2">
                     <ImageAttachmentPickerButton
                       label={reference.image
@@ -91,7 +91,7 @@ export function NaiReferencesSection({
                       onSelect={(image) => onReferenceImageChange(index, image)}
                     />
                     <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveReference(index)}>
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 />
                       {t('image-generation.components.nai.common.remove')}
                     </Button>
                   </div>
@@ -115,7 +115,7 @@ export function NaiReferencesSection({
                   </FormField>
                 </div>
 
-                <div className="flex justify-end border-t border-border/70 pt-3">
+                <div className="flex justify-end">
                   <Button type="button" variant="secondary" onClick={() => onOpenReferenceSaveModal(index)} disabled={!reference.image}>
                     <Save className="h-4 w-4" />
                     {t('image-generation.components.nai.common.save')}

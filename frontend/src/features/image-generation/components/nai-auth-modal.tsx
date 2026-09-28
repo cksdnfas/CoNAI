@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
@@ -48,7 +49,7 @@ export function NaiAuthModal({
           />
         </FormField>
 
-        {showStatusHint ? <div className="text-xs text-destructive">{connectionHint}</div> : null}
+        {showStatusHint ? <Text variant="caption" className="text-destructive">{connectionHint}</Text> : null}
 
         <ModalFooter className="justify-between">
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>

@@ -163,7 +163,7 @@ function ImageAttachmentBrowserSection({
       {isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 8 }, (_, index) => (
-            <div key={`image-attachment-skeleton-${index}`} className="space-y-2 rounded-sm border border-border/70 bg-surface-low p-3">
+            <div key={`image-attachment-skeleton-${index}`} className="ui-tone-plinth space-y-2 rounded-sm p-3">
               <Skeleton className="h-44 w-full rounded-sm" />
               <Skeleton className="h-4 w-2/3 rounded-sm" />
             </div>

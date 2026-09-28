@@ -88,7 +88,7 @@ export function NaiCharacterPositionBoard({
     <div className={cn('space-y-3', className)}>
       <div
         ref={boardRef}
-        className="relative aspect-square overflow-hidden rounded-sm border border-border bg-surface-low select-none touch-none"
+        className="relative aspect-square overflow-hidden rounded-sm bg-surface-lowest select-none touch-none"
         onPointerMove={(event) => {
           if (draggingIndexRef.current === null) {
             return
@@ -117,9 +117,10 @@ export function NaiCharacterPositionBoard({
               <div
                 key={cellKey}
                 className={cn(
-                  'border border-border/50 bg-background/20',
-                  (rowIndex + columnIndex) % 2 === 0 ? 'bg-background/25' : 'bg-surface-high/40',
-                  selectedCellKey === cellKey && 'border-accent/70 bg-accent/10 shadow-[inset_0_0_0_1px] shadow-accent/50',
+                  // A placement grid is chart-like, so faint cell lines stay (outline-subtle), checkered by tone.
+                  'border border-outline-subtle',
+                  (rowIndex + columnIndex) % 2 === 0 ? 'bg-transparent' : 'bg-foreground/3',
+                  selectedCellKey === cellKey && 'bg-primary/10 ring-1 ring-inset ring-primary/40',
                 )}
               />
             )
@@ -141,14 +142,16 @@ export function NaiCharacterPositionBoard({
           const offset = markerOffsets.get(index) || { offsetX: 0, offsetY: 0 }
 
           return (
+            // Draggable marker positioned by left/top: Button's transition-all would animate the position while dragging.
+            // eslint-disable-next-line no-restricted-syntax -- drag handle, see above
             <button
               key={`character-position-marker-${index}`}
               type="button"
               className={cn(
-                'absolute rounded-full border px-2 py-1 text-xs font-medium shadow-sm transition-colors',
+                'absolute rounded-sm px-2 py-1 text-xs font-medium shadow-elevation-1 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40',
                 isSelected || isDragging
-                  ? 'z-20 border-accent bg-accent text-accent-foreground'
-                  : 'z-10 border-border bg-background text-foreground hover:bg-surface-high',
+                  ? 'z-20 bg-primary text-primary-foreground'
+                  : 'z-10 bg-surface-highest text-foreground hover:bg-surface-bright',
               )}
               style={{ left, top, transform: `translate(calc(-50% + ${offset.offsetX}px), calc(-50% + ${offset.offsetY}px))` }}
               onClick={() => onSelectIndex?.(index)}

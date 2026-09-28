@@ -1,6 +1,8 @@
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Text } from '@/components/ui/text'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 import type { StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
@@ -8,6 +10,7 @@ import { FormField, type NAIVibeDraft, type SelectedImageDraft } from '../image-
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { Section } from '@/components/ui/section'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
+import { STATUS_BADGE_CLASS } from './generation-status-tone'
 import { NaiSavedAssetTile } from './nai-saved-asset-tile'
 import { NaiSavedImageBrowserSection } from './nai-saved-image-browser-section'
 
@@ -56,29 +59,29 @@ export function NaiVibesSection({
         heading={t({ ko: '바이브', en: 'Vibes' })}
         collapsible
         defaultOpen={false}
-        className="rounded-b-none border-b-0"
+        className="rounded-b-none"
         actions={(
           <>
             <Badge variant="outline">{vibes.length}</Badge>
-            <Button type="button" size="icon-sm" variant="secondary" onClick={onAddVibe} aria-label={t('image-generation.components.nai.vibes.section.add.vibe')} title={t('image-generation.components.nai.vibes.section.add.vibe')}>
-              <Plus className="h-4 w-4" />
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" onClick={onAddVibe} label={t('image-generation.components.nai.vibes.section.add.vibe')}>
+              <Plus />
+            </IconButton>
           </>
         )}
       >
         {vibes.length > 0 ? (
-          <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-low/40">
+          <div className="divide-y divide-outline-subtle">
             {vibes.map((vibe, index) => (
-              <div key={`nai-vibe-${index}`} className="space-y-4 px-3 py-3">
+              <div key={`nai-vibe-${index}`} className="space-y-4 py-4 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
+                    <Text as="div" variant="label">Vibe {index + 1}</Text>
                     {vibe.encoded ? (
-                      <Badge variant="secondary">{t('image-generation.components.nai.vibes.section.ready')}</Badge>
+                      <Badge variant="secondary" className={STATUS_BADGE_CLASS.success}>{t('image-generation.components.nai.vibes.section.ready')}</Badge>
                     ) : vibe.image ? (
-                      <Badge variant="outline">{t('image-generation.components.nai.vibes.section.auto.encode')}</Badge>
+                      <Badge variant="secondary" className={STATUS_BADGE_CLASS.info}>{t('image-generation.components.nai.vibes.section.auto.encode')}</Badge>
                     ) : (
-                      <Badge variant="outline">{t('image-generation.components.nai.vibes.section.image.required')}</Badge>
+                      <Badge variant="secondary" className={STATUS_BADGE_CLASS.warning}>{t('image-generation.components.nai.vibes.section.image.required')}</Badge>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -91,7 +94,7 @@ export function NaiVibesSection({
                       onSelect={(image) => onVibeImageChange(index, image)}
                     />
                     <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveVibe(index)}>
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 />
                       {t('image-generation.components.nai.common.remove')}
                     </Button>
                   </div>
@@ -108,7 +111,7 @@ export function NaiVibesSection({
                   </FormField>
                 </div>
 
-                <div className="flex justify-end border-t border-border/70 pt-3">
+                <div className="flex justify-end">
                   <Button type="button" variant="secondary" onClick={() => onOpenVibeSaveModal(index)} disabled={!vibe.image || encodingVibeIndex === index || !naiConnected} title={!naiConnected ? t('image-generation.components.nai.vibes.section.saving.vibes.requires.novelai.login') : undefined}>
                     <Save className="h-4 w-4" />
                     {encodingVibeIndex === index ? t('image-generation.components.nai.vibes.section.encoding') : t('image-generation.components.nai.vibes.section.save')}

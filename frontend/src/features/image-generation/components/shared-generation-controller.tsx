@@ -36,7 +36,7 @@ export function CompactGenerationControllerActionBar({
           type="button"
           size={isExpanded ? 'icon-sm' : 'sm'}
           className={cn(
-            'shrink-0 rounded-sm border border-primary/70 bg-primary text-primary-foreground shadow-[0_12px_32px_rgba(0,0,0,0.28)] hover:bg-primary/90',
+            'shrink-0',
             isExpanded ? 'w-10 px-0' : 'min-w-0 max-w-[min(16rem,calc(100vw-1.5rem))] px-3',
           )}
           onClick={onToggle}
@@ -51,7 +51,7 @@ export function CompactGenerationControllerActionBar({
           )}
         </Button>
 
-        <div className={cn('h-px flex-1 transition-opacity duration-200', isExpanded ? 'bg-border/60 opacity-100' : 'bg-border/0 opacity-0')} />
+        <div className={cn('h-px flex-1 transition-opacity duration-200', isExpanded ? 'bg-outline-subtle opacity-100' : 'bg-transparent opacity-0')} />
 
         <div
           className={cn(
