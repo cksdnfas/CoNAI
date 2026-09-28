@@ -109,7 +109,7 @@ function BlockedRouteNotice({ path, permissionKey, isAnonymous, onDismiss }: { p
 
 /** Render one compact landing page for the pages the current account can use. */
 export function AccessOverviewPage() {
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
   const authStatusQuery = useAuthStatusQuery()
@@ -127,10 +127,12 @@ export function AccessOverviewPage() {
   }
 
   const accessibleItems = listAccessiblePageAccessItems(authStatus?.permissionKeys ?? [])
-  const primaryItems = accessibleItems.filter((item) => item.category === 'primary')
-  const derivedItems = accessibleItems.filter((item) => item.category === 'derived')
+  // Primary pages first, then the pages reached from them; users don't need the distinction spelled out.
+  const pageItems = [
+    ...accessibleItems.filter((item) => item.category === 'primary'),
+    ...accessibleItems.filter((item) => item.category !== 'primary'),
+  ]
   const publicWorkflows = publicWorkflowsQuery.data ?? []
-  const totalVisibleEntries = accessibleItems.length + publicWorkflows.length
   const accountTypeLabel = authStatus?.accountType === 'admin'
     ? t({ ko: '관리자', en: 'Admin' })
     : authStatus?.accountType === 'guest'
@@ -147,7 +149,6 @@ export function AccessOverviewPage() {
         <div className="flex flex-wrap items-center gap-2">
           {authStatus?.username ? <Badge variant="secondary">{authStatus.username}</Badge> : null}
           <Badge variant="outline">{accountTypeLabel}</Badge>
-          <Badge variant="outline">{t({ ko: '항목 {count}', en: '{count} items' }, { count: formatNumber(totalVisibleEntries) })}</Badge>
         </div>
       </div>
 
@@ -169,34 +170,13 @@ export function AccessOverviewPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {primaryItems.length > 0 ? (
+          {pageItems.length > 0 ? (
             <section className="space-y-2.5">
-              <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-foreground">{t({ ko: '기본 페이지', en: 'Primary pages' })}</div>
-                <div className="text-xs text-muted-foreground">{formatNumber(primaryItems.length)}</div>
-              </div>
+              {publicWorkflows.length > 0 ? (
+                <div className="text-sm font-semibold text-foreground">{t({ ko: '페이지', en: 'Pages' })}</div>
+              ) : null}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {primaryItems.map(({ path, labelKey, descriptionKey, icon }) => (
-                  <AccessEntryCard
-                    key={path}
-                    href={path}
-                    label={t(labelKey)}
-                    description={t(descriptionKey)}
-                    icon={icon}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {derivedItems.length > 0 ? (
-            <section className="space-y-2.5">
-              <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-foreground">{t({ ko: '파생 페이지', en: 'Derived pages' })}</div>
-                <div className="text-xs text-muted-foreground">{formatNumber(derivedItems.length)}</div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {derivedItems.map(({ path, labelKey, descriptionKey, icon }) => (
+                {pageItems.map(({ path, labelKey, descriptionKey, icon }) => (
                   <AccessEntryCard
                     key={path}
                     href={path}
@@ -217,7 +197,6 @@ export function AccessOverviewPage() {
             <section className="space-y-2.5">
               <div className="flex items-center gap-2">
                 <div className="text-sm font-semibold text-foreground">{t({ ko: '공용 워크플로우', en: 'Public workflows' })}</div>
-                <div className="text-xs text-muted-foreground">{formatNumber(publicWorkflows.length)}</div>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {publicWorkflows.map((workflow) => (

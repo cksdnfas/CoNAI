@@ -68,6 +68,7 @@ export function SecurityTab() {
         <SecurityStatusCard
           authStatus={securityTabData.authStatus}
           hasCredentials={securityTabData.hasCredentials}
+          accountCount={securityTabData.canManageAccess && !securityTabData.isLoadingAccounts ? securityTabData.accounts.length : null}
           currentUsername={securityTabData.currentUsername}
         />
       </section>
