@@ -7,7 +7,7 @@ import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, ScanAllSumma
 import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
 import { Modal } from '@/components/ui/modal'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { SettingsResourceTable } from './settings-resource-shared'
 import { WatchedFolderCard } from './watched-folder-card'
 import { WatchedFolderListItem } from './watched-folder-list-item'
@@ -163,7 +163,8 @@ export function FoldersTab({
   return (
     <>
       <div className="space-y-6">
-        <SettingsSection
+        <Section
+          variant="settings"
           heading={t({ ko: '감시 폴더 운영', en: 'Watched folder operations' })}
           actions={
             <>
@@ -208,7 +209,7 @@ export function FoldersTab({
             isCancelling={isCancellingScanAll}
             className="mt-4"
           />
-        </SettingsSection>
+        </Section>
 
         <section className="space-y-4">
           {foldersLoading ? (
@@ -227,7 +228,8 @@ export function FoldersTab({
           ) : null}
 
           {!foldersLoading && !foldersError ? (
-            <SettingsSection
+            <Section
+              variant="settings"
               heading={t({ ko: '등록된 감시 폴더', en: 'Registered watched folders' })}
               actions={
                 <Button
@@ -262,7 +264,7 @@ export function FoldersTab({
               ) : (
                 <div className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '등록된 감시 폴더가 없어.', en: 'No registered watched folders yet.' })}</div>
               )}
-            </SettingsSection>
+            </Section>
           ) : null}
         </section>
 
@@ -283,7 +285,8 @@ export function FoldersTab({
           ) : null}
 
           {!backupSourcesLoading && !backupSourcesError ? (
-            <SettingsSection
+            <Section
+              variant="settings"
               heading={t({ ko: '등록된 백업 소스', en: 'Registered backup sources' })}
               actions={
                 <Button
@@ -317,12 +320,12 @@ export function FoldersTab({
               ) : (
                 <div className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '등록된 백업 소스가 없어.', en: 'No registered backup sources yet.' })}</div>
               )}
-            </SettingsSection>
+            </Section>
           ) : null}
         </section>
 
         <section className="space-y-4">
-          <SettingsSection heading={t({ ko: '최근 스캔 로그', en: 'Recent scan logs' })} bodyClassName="px-0 py-0">
+          <Section variant="settings" heading={t({ ko: '최근 스캔 로그', en: 'Recent scan logs' })} bodyClassName="px-0 py-0">
             {scanLogsLoading ? (
               <div className="space-y-2 px-4 py-4">
                 {Array.from({ length: 5 }).map((_, index) => (
@@ -355,7 +358,7 @@ export function FoldersTab({
                 ))}
               </SettingsResourceTable>
             ) : null}
-          </SettingsSection>
+          </Section>
         </section>
       </div>
 

@@ -9,7 +9,7 @@ import { getAppSettings } from '@/lib/api-settings-general'
 import { updateLlmSettings } from '@/lib/api-settings-llm'
 import type { LlmPresetRecord, LlmSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { SettingsResourceTable } from './settings-resource-shared'
 import {
   LlmConnectionEditorModal,
@@ -154,7 +154,8 @@ export function LlmConnectionsTab() {
 
   return (
     <div className="space-y-6">
-      <SettingsSection
+      <Section
+        variant="settings"
         heading={t('llmConnectionsTab.llmConnections')}
         actions={
           <Button
@@ -193,13 +194,14 @@ export function LlmConnectionsTab() {
             ))}
           </SettingsResourceTable>
         )}
-      </SettingsSection>
+      </Section>
 
       {LLM_PRESET_SECTIONS.map((section) => {
         const presets = llmPresetCollections[section.key]
 
         return (
-          <SettingsSection
+          <Section
+            variant="settings"
             key={section.key}
             heading={t(section.heading)}
             actions={
@@ -239,7 +241,7 @@ export function LlmConnectionsTab() {
                 ))}
               </SettingsResourceTable>
             )}
-          </SettingsSection>
+          </Section>
         )
       })}
 

@@ -6,7 +6,7 @@ import { useI18n, type TranslationDictionary } from '@/i18n'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import type { VideoOptimizationSettings } from '@conai/shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -37,7 +37,8 @@ export function VideoOptimizationTab({
   return (
     <div className="space-y-6">
       <section>
-        <SettingsSection
+        <Section
+          variant="settings"
           heading={t({ ko: '비디오 최적화', en: 'Video optimization' })}
           actions={
             <Button
@@ -142,7 +143,7 @@ export function VideoOptimizationTab({
           ) : (
             <Skeleton className="h-56 w-full rounded-sm" />
           )}
-        </SettingsSection>
+        </Section>
       </section>
     </div>
   )

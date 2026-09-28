@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 import type { AuthStatusRecord } from '@/lib/api-auth'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { getAccountTypeLabel } from './security-ui-text'
 
 interface SecurityStatusCardProps {
@@ -16,7 +16,8 @@ export function SecurityStatusCard({ authStatus, hasCredentials, currentUsername
   const { language, t } = useI18n()
 
   return (
-    <SettingsSection
+    <Section
+      variant="settings"
       heading={t({ ko: '보안 상태', en: 'Security status' })}
       actions={hasCredentials ? <Badge variant="secondary">{t({ ko: '활성', en: 'Active' })}</Badge> : <Badge variant="outline">{t({ ko: '미설정', en: 'Not set' })}</Badge>}
     >
@@ -29,6 +30,6 @@ export function SecurityStatusCard({ authStatus, hasCredentials, currentUsername
           value={getAccountTypeLabel(language, authStatus?.accountType)}
         />
       </div>
-    </SettingsSection>
+    </Section>
   )
 }

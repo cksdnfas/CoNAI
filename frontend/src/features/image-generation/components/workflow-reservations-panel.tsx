@@ -9,7 +9,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSection } from '@/features/settings/components/settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import {
   cleanupGraphWorkflowEmptyExecutions,
@@ -256,7 +256,8 @@ export function WorkflowReservationsPanel() {
 
   return (
     <section className="space-y-4">
-      <SettingsSection
+      <Section
+        variant="settings"
         heading={t({ ko: '예약작업', en: 'Reservation jobs' })}
         actions={(
           <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })} aria-label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
@@ -280,7 +281,7 @@ export function WorkflowReservationsPanel() {
             <StatTile label={t({ ko: '대기 중', en: 'Queued' })} value={queuedExecutionCount} valueClassName="text-lg" />
           </div>
         ) : null}
-      </SettingsSection>
+      </Section>
 
       <SegmentedTabBar
         value={activeView}

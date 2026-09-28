@@ -7,7 +7,7 @@ import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import { useI18n } from '@/i18n'
 import { Inset } from '@/components/ui/inset'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 
 const CONAI_HELPER_DOWNLOAD_PATH = '/api/settings/resources/comfyui-helper/download'
 const CONAI_HELPER_PACKAGE_FILENAME = 'conai-helper-comfyui-custom-node.zip'
@@ -47,7 +47,8 @@ export function IntegrationToolsTab() {
 
   return (
     <div className="space-y-6">
-      <SettingsSection
+      <Section
+        variant="settings"
         heading={t({ ko: 'ComfyUI 연동', en: 'ComfyUI integration' })}
         actions={
           <Button type="button" size="sm" onClick={() => void handleDownload()} disabled={isDownloading}>
@@ -70,7 +71,7 @@ export function IntegrationToolsTab() {
             })}
           </p>
         </Inset>
-      </SettingsSection>
+      </Section>
     </div>
   )
 }

@@ -8,7 +8,7 @@ import type { KaloscopeServerStatus, KaloscopeSettings } from '@conai/shared'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -35,7 +35,7 @@ export function KaloscopeSettingsCard({
   const { t } = useI18n()
 
   return (
-    <SettingsSection heading={heading} actions={actions}>
+    <Section variant="settings" heading={heading} actions={actions}>
       <div className="grid gap-4 md:grid-cols-2">
         {kaloscopeDraft ? (
           <>
@@ -115,6 +115,6 @@ export function KaloscopeSettingsCard({
           <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '디바이스', en: 'Device' })} {kaloscopeStatus?.currentDevice ?? '—'}</span>
         </div>
       </div>
-    </SettingsSection>
+    </Section>
   )
 }

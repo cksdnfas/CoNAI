@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/select'
 import type { StoredNaiCharacterReferenceAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAICharacterReferenceDraft, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
-import { NaiControllerSection } from './nai-generation-panel-sections'
+import { Section } from '@/components/ui/section'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { NaiSavedAssetTile } from './nai-saved-asset-tile'
 import { NaiSavedImageBrowserSection } from './nai-saved-image-browser-section'
@@ -50,7 +50,8 @@ export function NaiReferencesSection({
 
   return (
     <div className="space-y-0">
-      <NaiControllerSection
+      <Section
+        variant="controller"
         heading="References"
         collapsible
         defaultOpen={false}
@@ -124,7 +125,7 @@ export function NaiReferencesSection({
             ))}
           </div>
         ) : null}
-      </NaiControllerSection>
+      </Section>
 
       <NaiSavedImageBrowserSection
         count={savedReferences.length}

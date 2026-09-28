@@ -6,7 +6,7 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { Field } from '@/components/ui/field'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 
 interface RatingTierSettingsCardProps {
@@ -81,7 +81,7 @@ export function RatingTierSettingsCard({
   }
 
   return (
-    <SettingsSection heading={heading} actions={actions}>
+    <Section variant="settings" heading={heading} actions={actions}>
       {validationMessages.length > 0 ? (
         <div className="rounded-sm border border-[#ffb4ab]/40 bg-[#93000a]/10 px-3 py-2 text-sm text-[#ffb4ab]">
           <div className="font-medium">{t({ ko: '저장 전에 확인해줘', en: 'Check before saving' })}</div>
@@ -259,6 +259,6 @@ export function RatingTierSettingsCard({
           {t({ ko: '평가 등급을 불러오는 중…', en: 'Loading rating tiers…' })}
         </div>
       )}
-    </SettingsSection>
+    </Section>
   )
 }

@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
-import { NaiControllerSection } from './nai-generation-panel-sections'
+import { Section } from '@/components/ui/section'
 
 interface NaiSavedImageBrowserSectionProps {
   title?: string
@@ -40,10 +40,11 @@ export function NaiSavedImageBrowserSection({
     : t('image-generation.components.nai.saved.image.browser.section.expand', { title })
 
   return (
-    <NaiControllerSection
+    <Section
+      variant="controller"
       heading={<span className="text-xs font-medium tracking-[0.08em] text-muted-foreground/90">{title}</span>}
       className={className}
-      contentClassName={isExpanded ? 'space-y-0 px-3 py-3' : 'hidden'}
+      bodyClassName={isExpanded ? 'space-y-0 px-3 py-3' : 'hidden'}
       actions={(
         <>
           <Badge variant="outline">{count}</Badge>
@@ -72,6 +73,6 @@ export function NaiSavedImageBrowserSection({
           <div className="text-sm text-muted-foreground">{emptyMessage}</div>
         )
       ) : null}
-    </NaiControllerSection>
+    </Section>
   )
 }

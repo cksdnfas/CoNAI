@@ -1,7 +1,7 @@
 import { useI18n } from '@/i18n'
 import type { AuthDatabaseInfoRecord } from '@/lib/api-auth'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 
 interface SecurityRecoveryCardProps {
   databaseInfo: AuthDatabaseInfoRecord | null
@@ -15,7 +15,7 @@ export function SecurityRecoveryCard({ databaseInfo }: SecurityRecoveryCardProps
     : (databaseInfo?.recoveryInstructions.ko ?? databaseInfo?.recoveryInstructions.en)
 
   return (
-    <SettingsSection heading={t({ ko: '복구', en: 'Recovery' })}>
+    <Section variant="settings" heading={t({ ko: '복구', en: 'Recovery' })}>
       <div className="grid gap-3 md:grid-cols-2">
         <StatTile
           label={t({ ko: '인증 DB', en: 'Auth DB' })}
@@ -28,6 +28,6 @@ export function SecurityRecoveryCard({ databaseInfo }: SecurityRecoveryCardProps
           valueClassName="text-xs font-medium leading-6"
         />
       </div>
-    </SettingsSection>
+    </Section>
   )
 }

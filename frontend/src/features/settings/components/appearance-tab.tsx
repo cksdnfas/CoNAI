@@ -5,7 +5,7 @@ import { AppearanceTabEditorSection } from './appearance-tab-editor-section'
 import { AppearanceTabSlotSection } from './appearance-tab-slot-section'
 import type { AppearanceTabProps } from './appearance-tab.types'
 import { getAppearanceTabColorValues } from './appearance-tab.utils'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 
 export function AppearanceTab({
@@ -73,7 +73,8 @@ export function AppearanceTab({
       />
 
       <section>
-        <SettingsSection
+        <Section
+          variant="settings"
           heading={t({ ko: '테마 슬롯', en: 'Theme slots' })}
           actions={
             <>
@@ -104,11 +105,11 @@ export function AppearanceTab({
               onSavePresetSlots={onSavePresetSlots}
             />
           ) : null}
-        </SettingsSection>
+        </Section>
       </section>
 
       <section>
-        <SettingsSection heading={t({ ko: '세부 편집', en: 'Detailed editor' })}>
+        <Section variant="settings" heading={t({ ko: '세부 편집', en: 'Detailed editor' })}>
           {appearanceDraft ? (
             <AppearanceTabEditorSection
               appearanceDraft={appearanceDraft}
@@ -120,7 +121,7 @@ export function AppearanceTab({
               isUploadingFont={isUploadingFont}
             />
           ) : null}
-        </SettingsSection>
+        </Section>
       </section>
     </div>
   )

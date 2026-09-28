@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { Field } from '@/components/ui/field'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 
 interface SecurityAccountFormCardProps {
   hasCredentials: boolean
@@ -52,7 +52,8 @@ export function SecurityAccountFormCard({
     nextPassword.length === 0
 
   return (
-    <SettingsSection
+    <Section
+      variant="settings"
       heading={!hasCredentials ? t({ ko: '관리자 계정', en: 'Admin account' }) : t({ ko: '관리자 계정 변경', en: 'Change admin account' })}
       actions={
         <div className="rounded-sm border border-border/70 bg-surface-low/45 p-2 text-primary">
@@ -132,6 +133,6 @@ export function SecurityAccountFormCard({
           </div>
         </div>
       )}
-    </SettingsSection>
+    </Section>
   )
 }

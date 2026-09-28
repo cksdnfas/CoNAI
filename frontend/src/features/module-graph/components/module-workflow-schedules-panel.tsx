@@ -9,7 +9,7 @@ import type { SelectedImageDraft } from '@/features/image-generation/image-gener
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { Modal } from '@/components/ui/modal'
-import { SettingsSection } from '@/features/settings/components/settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { getGraphWorkflow } from '@/lib/api-module-graph'
 import type {
@@ -287,7 +287,8 @@ export function ModuleWorkflowSchedulesPanel({
 
   return (
     <>
-      <SettingsSection
+      <Section
+        variant="settings"
         heading={t({ ko: '자동 실행', en: 'Autorun' })}
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -369,7 +370,7 @@ export function ModuleWorkflowSchedulesPanel({
             })}
           </div>
         )}
-      </SettingsSection>
+      </Section>
 
       <Modal
         open={editorMode !== null}

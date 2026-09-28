@@ -19,7 +19,7 @@ import {
 } from '@/lib/api-settings-mcp'
 import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 
 const QUERY_KEY = ['mcp-http-settings'] as const
 const SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore']
@@ -52,7 +52,7 @@ export function McpHttpSettingsCard() {
   }
 
   return (
-    <SettingsSection heading="MCP" actions={query.data?.enabled ? <Badge>활성</Badge> : <Badge variant="outline">비활성</Badge>}>
+    <Section variant="settings" heading="MCP" actions={query.data?.enabled ? <Badge>활성</Badge> : <Badge variant="outline">비활성</Badge>}>
       {query.isLoading ? <Skeleton className="h-40 w-full rounded-sm" /> : null}
       {query.isError ? <Inset className="text-sm text-destructive">{query.error instanceof Error ? query.error.message : 'MCP 오류'}</Inset> : null}
       {query.data ? (
@@ -103,6 +103,6 @@ export function McpHttpSettingsCard() {
           </div>
         </div>
       ) : null}
-    </SettingsSection>
+    </Section>
   )
 }

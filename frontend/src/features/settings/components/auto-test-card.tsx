@@ -15,7 +15,7 @@ import { EnhancedVideoPlayer } from '@/features/images/components/detail/enhance
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 
 function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope): TextSearchScope {
@@ -87,7 +87,7 @@ export function AutoTestCard({
   }, [autoTestHashInput, onResolveAutoTestMedia])
 
   return (
-    <SettingsSection heading={heading} actions={actions}>
+    <Section variant="settings" heading={heading} actions={actions}>
       <Field label={t({ ko: 'Composite hash', en: 'Composite hash' })}>
         <Input
           variant="settings"
@@ -168,6 +168,6 @@ export function AutoTestCard({
 
       {kaloscopeTestResult ? <KaloscopeResultBlock result={kaloscopeTestResult} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
       {taggerTestResult ? <WDTaggerResultBlock result={taggerTestResult} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
-    </SettingsSection>
+    </Section>
   )
 }

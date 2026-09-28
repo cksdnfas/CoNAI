@@ -9,7 +9,7 @@ import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
@@ -81,7 +81,7 @@ export function GeneralPreferencesSections({
   return (
     <div className="space-y-6">
       {visibleSections.has('basic') ? (
-        <SettingsSection heading={t({ ko: '기본 설정', en: 'General' })} actions={saveAction}>
+        <Section variant="settings" heading={t({ ko: '기본 설정', en: 'General' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t({ ko: '언어', en: 'Language' })}>
               <Select
@@ -102,11 +102,11 @@ export function GeneralPreferencesSections({
               {t({ ko: '다운로드할 때 파일명과 저장 위치 확인', en: 'Ask for file name and save location' })}
             </ToggleRow>
           </div>
-        </SettingsSection>
+        </Section>
       ) : null}
 
       {visibleSections.has('appearance') ? (
-        <SettingsSection heading={t({ ko: '탐색 및 표시', en: 'Navigation and display' })} actions={saveAction}>
+        <Section variant="settings" heading={t({ ko: '탐색 및 표시', en: 'Navigation and display' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
             <ToggleRow>
               <input type="checkbox" checked={generalDraft.enableGallery ?? true} onChange={(event) => onPatchGeneral({ enableGallery: event.target.checked })} />
@@ -134,11 +134,11 @@ export function GeneralPreferencesSections({
               </div>
             </Inset>
           </div>
-        </SettingsSection>
+        </Section>
       ) : null}
 
       {visibleSections.has('library') ? (
-        <SettingsSection heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={saveAction}>
+        <Section variant="settings" heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })}>
               <Select
@@ -151,11 +151,11 @@ export function GeneralPreferencesSections({
               </Select>
             </Field>
           </div>
-        </SettingsSection>
+        </Section>
       ) : null}
 
       {visibleSections.has('safety') ? (
-        <SettingsSection heading={t({ ko: '안전 및 정리', en: 'Safety and cleanup' })} actions={saveAction}>
+        <Section variant="settings" heading={t({ ko: '안전 및 정리', en: 'Safety and cleanup' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t({ ko: '휴지통 경로', en: 'Recycle bin path' })}>
               <Input
@@ -198,7 +198,7 @@ export function GeneralPreferencesSections({
               {t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}
             </ToggleRow>
           </div>
-        </SettingsSection>
+        </Section>
       ) : null}
     </div>
   )

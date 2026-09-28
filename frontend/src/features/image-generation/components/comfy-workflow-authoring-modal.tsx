@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from '@/features/settings/components/settings-primitives'
+import { Section } from '@/components/ui/section'
 import { getPermissionGroupDisplayName } from '@/features/settings/components/security-ui-text'
 import { useI18n } from '@/i18n'
 import type { CustomDropdownList } from '@/lib/api-image-generation-types'
@@ -119,7 +119,7 @@ export function ComfyWorkflowAuthoringModal({
       widthClassName="max-w-[1180px]"
     >
       <ModalBody className="space-y-5">
-        <SettingsSection heading={t({ ko: '기본 정보', en: 'Basic information' })}>
+        <Section variant="settings" heading={t({ ko: '기본 정보', en: 'Basic information' })}>
           <div className="grid gap-4">
             <Field label={t({ ko: '이름', en: 'Name' })}>
               <Input
@@ -244,9 +244,10 @@ export function ComfyWorkflowAuthoringModal({
               </>
             ) : null}
           </div>
-        </SettingsSection>
+        </Section>
 
-        <SettingsSection
+        <Section
+          variant="settings"
           heading={
             <SegmentedControl
               value={workflowEditorTab}
@@ -375,7 +376,7 @@ export function ComfyWorkflowAuthoringModal({
               </div>
             </div>
           )}
-        </SettingsSection>
+        </Section>
 
         <ComfyWorkflowMarkedFieldsEditor
           markedFields={markedFieldsWithNodeSources}

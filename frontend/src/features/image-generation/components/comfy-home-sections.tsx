@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from '@/features/settings/components/settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS } from '@/lib/api-image-generation-workflows'
 import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
@@ -38,7 +38,8 @@ export function ComfyWorkflowListSection({
   const { t, formatNumber } = useI18n()
 
   return (
-    <SettingsSection
+    <Section
+      variant="settings"
       heading={(
         <span className="flex items-center gap-2">
           <ListTree className="h-4 w-4 text-primary" />
@@ -143,7 +144,7 @@ export function ComfyWorkflowListSection({
       ) : (
         <div className="text-sm text-muted-foreground">{t({ ko: '등록된 워크플로우가 없어.', en: 'No workflows registered.' })}</div>
       )}
-    </SettingsSection>
+    </Section>
   )
 }
 
@@ -163,7 +164,8 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
   const inactiveServerCount = Math.max(0, servers.length - activeServerCount)
 
   return (
-    <SettingsSection
+    <Section
+      variant="settings"
       heading={(
         <span className="flex items-center gap-2">
           <Server className="h-4 w-4 text-primary" />
@@ -267,7 +269,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
       ) : (
         <div className="text-sm text-muted-foreground">{t({ ko: '연결된 서버가 없어.', en: 'No connected servers.' })}</div>
       )}
-    </SettingsSection>
+    </Section>
   )
 }
 
@@ -450,7 +452,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
 
   return (
     <section className="space-y-3">
-      <SettingsSection heading={t({ ko: '드롭다운 목록', en: 'Dropdown lists' })} actions={<Badge variant="outline">{dropdownLists.length}</Badge>}>
+      <Section variant="settings" heading={t({ ko: '드롭다운 목록', en: 'Dropdown lists' })} actions={<Badge variant="outline">{dropdownLists.length}</Badge>}>
         <SegmentedTabBar
           value={activeTab}
           onChange={(value) => setActiveTab(value as DropdownTab)}
@@ -521,7 +523,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
         ) : (
           <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? t({ ko: '등록된 커스텀 목록이 없어.', en: 'No custom lists registered.' }) : t({ ko: '자동수집된 목록이 없어.', en: 'No auto-collected lists.' })}</div>
         )}
-      </SettingsSection>
+      </Section>
 
       <CustomDropdownListEditorModal
         open={isCustomModalOpen}

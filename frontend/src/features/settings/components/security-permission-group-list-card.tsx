@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { AuthPermissionGroupSummaryItem } from '@/lib/api-auth'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { getPermissionGroupDisplayName, getPermissionGroupKindLabel } from './security-ui-text'
 import { getSecurityGroupBadgeStyle, getSecurityGroupColor, type SecurityGroupColorMap } from './security-group-color-utils'
 
@@ -28,7 +28,8 @@ export function SecurityPermissionGroupListCard({
   const { language, t } = useI18n()
 
   return (
-    <SettingsSection
+    <Section
+      variant="settings"
       heading={t({ ko: '권한 그룹', en: 'Permission groups' })}
       actions={(
         <div className="flex items-center gap-2">
@@ -80,6 +81,6 @@ export function SecurityPermissionGroupListCard({
           ))}
         </div>
       )}
-    </SettingsSection>
+    </Section>
   )
 }

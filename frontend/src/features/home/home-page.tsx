@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PageHeader } from '@/components/common/page-header'
 import { Inset } from '@/components/ui/inset'
-import { PageSection } from '@/components/common/page-surface'
+import { Section } from '@/components/ui/section'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -88,8 +88,8 @@ export function HomePage() {
       <PageHeader eyebrow={isAnonymousSession ? t({ ko: '공개', en: 'Public' }) : t({ ko: '이미지', en: 'Image' })} title={t('pageAccessCatalog.home')} />
 
       {isAnonymousSession ? (
-        <PageSection
-          title={t('homePage.anonymousMode')}
+        <Section
+          heading={t('homePage.anonymousMode')}
           description={t('homePage.onlyThePublicHomeView')}
           actions={
             <>
@@ -127,7 +127,7 @@ export function HomePage() {
       ) : null}
 
       {!imagesQuery.isPending && !imagesQuery.isError && visibleImages.length === 0 ? (
-        <PageSection title={emptyStateTitle} description={emptyStateDescription} />
+        <Section heading={emptyStateTitle} description={emptyStateDescription} />
       ) : null}
 
       {!imagesQuery.isPending && !imagesQuery.isError && visibleImages.length > 0 ? (
@@ -204,8 +204,8 @@ export function HomePage() {
             ) : null}
 
             {imagesQuery.isFetchNextPageError ? (
-              <PageSection
-                title={t('homePage.couldNotLoadTheRest')}
+              <Section
+                heading={t('homePage.couldNotLoadTheRest')}
                 description={loadMoreErrorMessage}
                 className="w-full max-w-xl"
                 actions={

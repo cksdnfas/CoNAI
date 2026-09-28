@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Inset } from '@/components/ui/inset'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSection } from '@/features/settings/components/settings-primitives'
+import { Section } from '@/components/ui/section'
 import type { PromptCollectionItem, PromptGroupRecord, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
 import { useI18n } from '@/i18n'
 import { PROMPT_TYPE_TABS, getPromptTypeTotal } from '../prompt-page-utils'
@@ -26,7 +26,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-      <SettingsSection heading={t({ ko: '{typeLabel} 요약', en: '{typeLabel} summary' }, { typeLabel: getTypeLabel(promptType) })}>
+      <Section variant="settings" heading={t({ ko: '{typeLabel} 요약', en: '{typeLabel} summary' }, { typeLabel: getTypeLabel(promptType) })}>
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile
             label={t({ ko: '현재 유형 전체', en: 'Current type total' })}
@@ -44,9 +44,9 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
             valueClassName="text-2xl"
           />
         </div>
-      </SettingsSection>
+      </Section>
 
-      <SettingsSection heading={t({ ko: '상위 그룹', en: 'Top groups' })}>
+      <Section variant="settings" heading={t({ ko: '상위 그룹', en: 'Top groups' })}>
         <div className="space-y-2">
           {topGroups.length > 0 ? topGroups.map((group) => (
             <Inset key={group.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
@@ -55,9 +55,9 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
             </Inset>
           )) : <Inset className="px-3 py-4 text-sm text-muted-foreground">{t('prompts.components.prompt.summary.panel.no.group.statistics.to.show')}</Inset>}
         </div>
-      </SettingsSection>
+      </Section>
 
-      <SettingsSection heading={t({ ko: '상위 프롬프트', en: 'Top prompts' })} className="xl:col-span-2">
+      <Section variant="settings" heading={t({ ko: '상위 프롬프트', en: 'Top prompts' })} className="xl:col-span-2">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {topPrompts.length > 0 ? topPrompts.slice(0, 9).map((item) => (
             <Inset key={`${item.type}-${item.id}`} className="px-3 py-2">
@@ -66,7 +66,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
             </Inset>
           )) : <Inset className="px-3 py-4 text-sm text-muted-foreground md:col-span-2 xl:col-span-3">{t('prompts.components.prompt.summary.panel.no.top.prompts.to.show')}</Inset>}
         </div>
-      </SettingsSection>
+      </Section>
     </div>
   )
 }

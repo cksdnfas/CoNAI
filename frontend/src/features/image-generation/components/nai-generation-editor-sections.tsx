@@ -22,7 +22,8 @@ import {
 } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
-import { NaiControllerInsetBlock, NaiControllerSection, NaiPromptSection } from './nai-generation-panel-sections'
+import { Section } from '@/components/ui/section'
+import { NaiControllerInsetBlock, NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiReferencesSection } from './nai-references-section'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { NaiVibesSection } from './nai-vibes-section'
@@ -132,7 +133,8 @@ export function NaiGenerationEditorSections({
         onNegativePromptChange={(value) => handleNaiFieldChange('negativePrompt', value)}
       />
 
-      <NaiControllerSection
+      <Section
+        variant="controller"
         heading="Character Prompt"
         collapsible
         defaultOpen={false}
@@ -230,9 +232,9 @@ export function NaiGenerationEditorSections({
             </div>
           </>
         )}
-      </NaiControllerSection>
+      </Section>
 
-      <NaiControllerSection heading="Settings">
+      <Section variant="controller" heading="Settings">
         <div className="space-y-5">
           <div className="space-y-3">
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '핵심 설정', en: 'Core' })}</div>
@@ -344,10 +346,10 @@ export function NaiGenerationEditorSections({
             </NaiControllerInsetBlock>
           </div>
         </div>
-      </NaiControllerSection>
+      </Section>
 
       {naiForm.action !== 'generate' ? (
-        <NaiControllerSection heading="Images" collapsible defaultOpen={false}>
+        <Section variant="controller" heading="Images" collapsible defaultOpen={false}>
           <div className="space-y-4">
             <FormField label="Source Image">
               <div className="space-y-3">
@@ -418,7 +420,7 @@ export function NaiGenerationEditorSections({
               ) : null}
             </NaiControllerInsetBlock>
           </div>
-        </NaiControllerSection>
+        </Section>
       ) : null}
 
       <NaiReferencesSection

@@ -6,7 +6,7 @@ import type { GenerationThrottleSettings, ImageSaveSettings, ThumbnailSettings, 
 import { useI18n } from '@/i18n'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { VideoOptimizationTab } from './video-optimization-tab'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -100,7 +100,8 @@ export function ImageSaveTab({
     <div className="space-y-6">
       {showGenerationThrottle ? (
       <section>
-        <SettingsSection
+        <Section
+          variant="settings"
           heading={t({ ko: '생성 텀 / 쓰로틀', en: 'Generation pacing / throttle' })}
           actions={
             <Button
@@ -238,14 +239,15 @@ export function ImageSaveTab({
           ) : (
             <Skeleton className="h-72 w-full rounded-sm" />
           )}
-        </SettingsSection>
+        </Section>
       </section>
       ) : null}
 
       {showMediaSettings ? (
       <>
       <section>
-        <SettingsSection
+        <Section
+          variant="settings"
           heading={t({ ko: '이미지 저장', en: 'Image saving' })}
           actions={
             <Button
@@ -393,11 +395,12 @@ export function ImageSaveTab({
               <Skeleton className="h-64 w-full rounded-sm md:col-span-2" />
             )}
           </div>
-        </SettingsSection>
+        </Section>
       </section>
 
       <section>
-        <SettingsSection
+        <Section
+          variant="settings"
           heading={t({ ko: '썸네일', en: 'Thumbnail' })}
           actions={
             <Button
@@ -445,7 +448,7 @@ export function ImageSaveTab({
           ) : (
             <Skeleton className="h-36 w-full rounded-sm" />
           )}
-        </SettingsSection>
+        </Section>
       </section>
 
       <VideoOptimizationTab

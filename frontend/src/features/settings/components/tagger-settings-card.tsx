@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { TaggerModelInfo, TaggerSettings } from '@conai/shared'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -27,7 +27,7 @@ export function TaggerSettingsCard({
   const { t } = useI18n()
 
   return (
-    <SettingsSection heading={heading} actions={actions}>
+    <Section variant="settings" heading={heading} actions={actions}>
       <div className="grid gap-4 md:grid-cols-2">
         {taggerDraft ? (
           <>
@@ -92,6 +92,6 @@ export function TaggerSettingsCard({
           <Skeleton className="h-48 w-full rounded-sm md:col-span-2" />
         )}
       </div>
-    </SettingsSection>
+    </Section>
   )
 }

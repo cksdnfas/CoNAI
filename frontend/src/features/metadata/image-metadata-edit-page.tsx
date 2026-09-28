@@ -4,7 +4,7 @@ import { ArrowLeft, Download, Save } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Inset } from '@/components/ui/inset'
-import { PageSection } from '@/components/common/page-surface'
+import { Section } from '@/components/ui/section'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -165,7 +165,7 @@ export function ImageMetadataEditPage() {
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
         <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] items-start' : 'grid-cols-1')}>
-          <PageSection bodyClassName="space-y-4">
+          <Section bodyClassName="space-y-4">
             <div className="overflow-hidden rounded-sm border border-border/70 bg-surface-lowest">
               <div className="flex h-[max(420px,60vh)] items-center justify-center bg-surface-lowest">
                 <ImageDetailMedia image={image} renderUrl={renderUrl} />
@@ -182,9 +182,9 @@ export function ImageMetadataEditPage() {
                 <p className="mt-2 break-all text-foreground">{downloadName}</p>
               </Inset>
             </div>
-          </PageSection>
+          </Section>
 
-          <PageSection title={t('metadata.image.metadata.edit.page.edit.metadata')}>
+          <Section heading={t('metadata.image.metadata.edit.page.edit.metadata')}>
             {!isEditableImage ? (
               <Alert variant="destructive">
                 <AlertTitle>{t('metadata.image.metadata.edit.page.this.file.cannot.be.edited.in.place')}</AlertTitle>
@@ -207,7 +207,7 @@ export function ImageMetadataEditPage() {
                 <AlertDescription>{saveMutation.error instanceof Error ? saveMutation.error.message : t('metadata.image.metadata.edit.page.an.unknown.error.occurred')}</AlertDescription>
               </Alert>
             ) : null}
-          </PageSection>
+          </Section>
         </div>
       ) : null}
     </div>

@@ -4,7 +4,7 @@ import { Copy, Download, ExternalLink, File, RefreshCw, Trash2, Video } from 'lu
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { Inset } from '@/components/ui/inset'
-import { PageSection } from '@/components/common/page-surface'
+import { Section } from '@/components/ui/section'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
@@ -204,8 +204,8 @@ export function UploadPageUploadSection({
   const uploadResultItems = uploadResult ? getVisibleUploadResultLists(uploadResult, MAX_VISIBLE_FILES) : null
 
   return (
-    <PageSection
-      title={t('uploadPageSections.fileUpload')}
+    <Section
+      heading={t('uploadPageSections.fileUpload')}
       actions={
         <>
           <Button
@@ -326,7 +326,7 @@ export function UploadPageUploadSection({
           ) : null}
         </Inset>
       ) : null}
-    </PageSection>
+    </Section>
   )
 }
 
@@ -406,8 +406,8 @@ export function UploadPageExtractSection({
   }
 
   return (
-    <PageSection
-      title={t('uploadPageSections.previewExtract')}
+    <Section
+      heading={t('uploadPageSections.previewExtract')}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="ghost" onClick={onResetExtract} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
@@ -562,7 +562,7 @@ export function UploadPageExtractSection({
           <AlertDescription>{extractError}</AlertDescription>
         </Alert>
       ) : null}
-    </PageSection>
+    </Section>
   )
 }
 

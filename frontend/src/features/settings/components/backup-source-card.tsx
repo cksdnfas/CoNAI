@@ -9,7 +9,7 @@ import { useI18n } from '@/i18n'
 import { buildBackupTargetPreviewPath, formatDateTime, normalizeBackupTargetPath } from '../settings-utils'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import {
   SettingsResourceFooterActions,
   SettingsResourceMetaList,
@@ -72,7 +72,8 @@ export function BackupSourceCard({
   }
 
   return (
-    <SettingsSection
+    <Section
+      variant="settings"
       heading={source.display_name || t({ ko: '이름 없는 백업 소스', en: 'Unnamed backup source' })}
       bodyClassName="space-y-5"
       actions={
@@ -206,6 +207,6 @@ export function BackupSourceCard({
           )
         }
       />
-    </SettingsSection>
+    </Section>
   )
 }

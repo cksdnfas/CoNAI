@@ -6,7 +6,7 @@ import type { MetadataExtractionSettings } from '@conai/shared'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -32,7 +32,8 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
   return (
     <div className="space-y-6">
       <section>
-        <SettingsSection
+        <Section
+          variant="settings"
           heading={t({ ko: '메타데이터', en: 'Metadata' })}
           actions={
             <Button
@@ -111,7 +112,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
               <Skeleton className="h-48 w-full rounded-sm md:col-span-2" />
             )}
           </div>
-        </SettingsSection>
+        </Section>
       </section>
     </div>
   )

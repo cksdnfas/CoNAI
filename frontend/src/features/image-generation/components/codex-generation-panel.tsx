@@ -15,7 +15,8 @@ import { cn } from '@/lib/utils'
 import { FormField, getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
-import { NaiControllerSection, NaiPromptSection } from './nai-generation-panel-sections'
+import { Section } from '@/components/ui/section'
+import { NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import { CompactGenerationActionSurface } from './shared-generation-controller'
@@ -520,7 +521,7 @@ export function CodexGenerationPanel({
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
         />
 
-        <NaiControllerSection heading={t({ ko: '출력', en: 'Output' })}>
+        <Section variant="controller" heading={t({ ko: '출력', en: 'Output' })}>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label={t({ ko: '비율', en: 'Aspect Ratio' })}>
               <Select
@@ -546,9 +547,9 @@ export function CodexGenerationPanel({
               </Select>
             </FormField>
           </div>
-        </NaiControllerSection>
+        </Section>
 
-        <NaiControllerSection heading={t({ ko: '이미지', en: 'Images' })}>
+        <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })}>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/40 p-3">
               <div className="flex items-center justify-between gap-3">
@@ -607,7 +608,7 @@ export function CodexGenerationPanel({
               )}
             </div>
           </div>
-        </NaiControllerSection>
+        </Section>
 
           {!useInlineActionBar ? actionSection : null}
           {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}

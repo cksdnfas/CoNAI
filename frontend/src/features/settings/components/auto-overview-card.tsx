@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@conai/shared'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n, type TranslationInput } from '@/i18n'
 
 interface AutoOverviewCardProps {
@@ -48,7 +48,7 @@ export function AutoOverviewCard({
   const kaloscopeReady = kaloscopeStatus ? kaloscopeStatus.scriptExists && kaloscopeStatus.dependenciesAvailable : null
 
   return (
-    <SettingsSection heading={heading} actions={actions}>
+    <Section variant="settings" heading={heading} actions={actions}>
       <div className="grid gap-4 min-[900px]:grid-cols-4">
         <StatTile label={t({ ko: '로드된 모델', en: 'Loaded model' })} value={taggerStatus?.currentModel ?? '—'} />
         <StatTile label={t({ ko: '현재 디바이스', en: 'Current device' })} value={taggerStatus?.currentDevice ?? '—'} />
@@ -62,6 +62,6 @@ export function AutoOverviewCard({
         />
         <StatTile label={t({ ko: 'Kaloscope', en: 'Kaloscope' })} value={renderDependencyStatus({ ready: kaloscopeReady, t })} />
       </div>
-    </SettingsSection>
+    </Section>
   )
 }

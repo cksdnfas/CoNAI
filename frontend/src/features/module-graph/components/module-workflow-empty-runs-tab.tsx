@@ -2,7 +2,7 @@ import { Square, SquareCheckBig, Trash2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Inset } from '@/components/ui/inset'
-import { SettingsSection } from '@/features/settings/components/settings-primitives'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionRecord, GraphWorkflowNameRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
@@ -88,7 +88,8 @@ export function ModuleWorkflowEmptyRunsTab({
         onRunNow={onRunScheduleNow}
       /> : null}
 
-      {view === 'executions' ? <SettingsSection
+      {view === 'executions' ? <Section
+        variant="settings"
         heading={t({ ko: '예약 실행 현황', en: 'Reservation run status' })}
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -159,7 +160,7 @@ export function ModuleWorkflowEmptyRunsTab({
             })}
           </div>
         )}
-      </SettingsSection> : null}
+      </Section> : null}
     </div>
   )
 }

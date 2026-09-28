@@ -6,7 +6,7 @@ import { useI18n } from '@/i18n'
 import type { StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAIVibeDraft, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
-import { NaiControllerSection } from './nai-generation-panel-sections'
+import { Section } from '@/components/ui/section'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { NaiSavedAssetTile } from './nai-saved-asset-tile'
 import { NaiSavedImageBrowserSection } from './nai-saved-image-browser-section'
@@ -51,7 +51,8 @@ export function NaiVibesSection({
 
   return (
     <div className="space-y-0">
-      <NaiControllerSection
+      <Section
+        variant="controller"
         heading="Vibes"
         collapsible
         defaultOpen={false}
@@ -117,7 +118,7 @@ export function NaiVibesSection({
             ))}
           </div>
         ) : null}
-      </NaiControllerSection>
+      </Section>
 
       <NaiSavedImageBrowserSection
         count={savedVibes.length}

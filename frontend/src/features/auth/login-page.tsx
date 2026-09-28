@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/common/page-header'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { PageSection } from '@/components/common/page-surface'
+import { Section } from '@/components/ui/section'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -117,8 +117,8 @@ export function LoginPage() {
           />
 
           <div className="grid gap-6">
-            <PageSection
-              title={t('loginPage.accountSignIn')}
+            <Section
+              heading={t('loginPage.accountSignIn')}
               className="border-primary/15 bg-card"
               bodyClassName="space-y-4"
               actions={
@@ -162,7 +162,7 @@ export function LoginPage() {
                   </Button>
                 </div>
               </form>
-            </PageSection>
+            </Section>
           </div>
         </div>
       </div>

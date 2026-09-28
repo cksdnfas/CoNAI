@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { Inset } from '@/components/ui/inset'
 import { StatTile } from '@/components/ui/stat-tile'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 
 const DEFAULT_DATA_REMATCH_OPTIONS: DataRematchOptions = {
   thumbnail: false,
@@ -105,7 +105,8 @@ export function GeneralTab() {
 
   return (
     <div className="space-y-6">
-      <SettingsSection
+      <Section
+        variant="settings"
         heading={t({ ko: '데이터 재매칭', en: 'Data rematch' })}
         actions={(
           <Button
@@ -217,7 +218,7 @@ export function GeneralTab() {
             ) : null}
           </div>
         </div>
-      </SettingsSection>
+      </Section>
     </div>
   )
 }

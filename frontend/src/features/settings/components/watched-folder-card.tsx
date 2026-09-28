@@ -8,7 +8,7 @@ import { useI18n } from '@/i18n'
 import { formatDateTime, parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import {
   SettingsResourceFooterActions,
   SettingsResourceMetaList,
@@ -76,7 +76,8 @@ export function WatchedFolderCard({
   }
 
   return (
-    <SettingsSection
+    <Section
+      variant="settings"
       heading={folder.folder_name || t({ ko: '이름 없는 폴더', en: 'Unnamed folder' })}
       bodyClassName="space-y-5"
       actions={
@@ -181,6 +182,6 @@ export function WatchedFolderCard({
           )
         }
       />
-    </SettingsSection>
+    </Section>
   )
 }

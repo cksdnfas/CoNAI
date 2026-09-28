@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { SecurityAccountManagementList } from './security-account-management-list'
-import { SettingsSection } from './settings-primitives'
+import { Section } from '@/components/ui/section'
 import type { SecurityGroupColorMap } from './security-group-color-utils'
 
 interface SecurityAccountListCardProps {
@@ -39,7 +39,8 @@ export function SecurityAccountListCard({
   const { t } = useI18n()
 
   return (
-    <SettingsSection
+    <Section
+        variant="settings"
         heading={t({ ko: '계정', en: 'Accounts' })}
         actions={(
           <Button
@@ -74,6 +75,6 @@ export function SecurityAccountListCard({
             onAccountDelete={onAccountDelete}
           />
         )}
-    </SettingsSection>
+    </Section>
   )
 }

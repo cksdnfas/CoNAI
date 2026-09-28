@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, type ComponentProps, type ReactNode } from 'react'
+import { useEffect, type ComponentProps, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -23,36 +23,6 @@ type BottomDrawerSheetProps = {
   closeLabel?: string
   hideHandle?: boolean
 }
-
-type BottomDrawerSectionProps = ComponentProps<'section'> & {
-  heading?: ReactNode
-  actions?: ReactNode
-  children: ReactNode
-  bodyClassName?: string
-  headerClassName?: string
-}
-
-/** Render one shared minimal content section inside drawer shells. */
-export const BottomDrawerSection = forwardRef<HTMLElement, BottomDrawerSectionProps>(function BottomDrawerSection(
-  { heading, actions, children, className, bodyClassName, headerClassName, ...props },
-  ref,
-) {
-  const hasHeader = heading !== undefined || actions !== undefined
-
-  return (
-    <section ref={ref} className={cn('overflow-hidden rounded-sm border border-border/80 bg-surface-container/30', className)} {...props}>
-      {hasHeader ? (
-        <div className={cn('flex items-center justify-between gap-3 border-b border-border/80 px-4 py-3', headerClassName)}>
-          {heading !== undefined ? <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{heading}</div> : <div className="flex-1" />}
-          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-        </div>
-      ) : null}
-      <div className={cn('px-4 py-4', bodyClassName)}>
-        {children}
-      </div>
-    </section>
-  )
-})
 
 type BottomDrawerNoticeProps = ComponentProps<'div'> & {
   children: ReactNode

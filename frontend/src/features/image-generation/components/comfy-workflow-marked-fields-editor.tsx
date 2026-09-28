@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import { SettingsSection } from '@/features/settings/components/settings-primitives'
+import { Section } from '@/components/ui/section'
 import type { WorkflowMarkedField, WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
@@ -212,7 +212,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
   }
 
   return (
-    <SettingsSection heading="Marked Fields" actions={<Badge variant="outline">{markedFields.length}</Badge>}>
+    <Section variant="settings" heading="Marked Fields" actions={<Badge variant="outline">{markedFields.length}</Badge>}>
       {markedFields.length > 0 ? (
         <div className={cn('space-y-3 overflow-y-auto pr-1', listClassName ?? 'max-h-[620px]')}>
           {markedFieldGroups.map((group) => {
@@ -573,6 +573,6 @@ export function ComfyWorkflowMarkedFieldsEditor({
       ) : (
         <div className="text-sm text-muted-foreground">{t('image-generation.components.comfy.workflow.marked.fields.editor.no.marked.fields.have.been.added.yet')}</div>
       )}
-    </SettingsSection>
+    </Section>
   )
 }
