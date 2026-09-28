@@ -282,10 +282,11 @@ export function GroupPage() {
                 groupImages={groupImages}
                 resetKey={groupImageListResetKey}
                 isLoading={groupImagesQuery.isLoading}
-                isError={groupImagesQuery.isError}
+                isError={groupImagesQuery.isError && groupImages.length === 0 && !groupImagesQuery.isFetchNextPageError}
                 errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
                 hasMore={Boolean(groupImagesQuery.hasNextPage)}
                 isLoadingMore={groupImagesQuery.isFetchingNextPage}
+                loadMoreError={groupImagesQuery.isFetchNextPageError ? groupImagesQuery.error : null}
                 totalCount={selectedGroupImageTotalCount}
                 onLoadMore={handleLoadMoreGroupImages}
                 preferredColumnCount={groupColumnCount}

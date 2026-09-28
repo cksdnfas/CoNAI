@@ -23,7 +23,7 @@ interface ComplexImageSearchRequest {
   }
   page?: number
   limit?: number
-  sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height'
+  sortBy?: 'first_seen_date' | 'upload_date' | 'filename' | 'file_size' | 'width' | 'height'
   sortOrder?: 'ASC' | 'DESC'
   pagination?: 'offset' | 'cursor'
   cursorValue?: string | number | null
@@ -38,12 +38,14 @@ export async function getImages(params?: {
   cursorDate?: string | null
   cursorHash?: string | null
   includeTotal?: boolean
+  /** First-seen date direction; the cursor feed orders by nothing else. */
+  sortOrder?: 'ASC' | 'DESC'
 }, init?: RequestInit) {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('limit', String(params?.limit ?? 12))
   searchParams.set('sortBy', 'first_seen_date')
-  searchParams.set('sortOrder', 'DESC')
+  searchParams.set('sortOrder', params?.sortOrder ?? 'DESC')
   if (params?.pagination === 'cursor') {
     searchParams.set('pagination', 'cursor')
     searchParams.set('include_total', params.includeTotal ? 'true' : 'false')

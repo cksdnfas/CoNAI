@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useHomeSearch } from '@/features/home/home-search-context'
@@ -8,6 +9,7 @@ import { useImageFeedSafety } from '@/features/images/components/image-list/use-
 import type { ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { getHomeFeedProgressSummary } from '@/features/home/home-feed-progress'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
+import { buildHomeSearchString, readHomeSortParam, readSearchChipsParam, type HomeSortOrder } from '@/features/home/home-search-url'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
@@ -34,6 +36,10 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const { appliedChips } = useHomeSearch()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const sortOrder = readHomeSortParam(location.search)
+  const apiSortOrder = sortOrder === 'oldest' ? 'ASC' : 'DESC'
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -45,7 +51,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const isAuthenticated = authStatusQuery.data?.authenticated === true
   const isAnonymousSession = hasCredentials && !isAuthenticated
   const isSearchMode = !isAnonymousSession && appliedChips.length > 0
-  const imageListResetKey = useMemo(() => {
+  // Identifies the match set; the total does not depend on the order, so it is keyed on this alone.
+  const feedScopeKey = useMemo(() => {
     if (isAnonymousSession) {
       return 'anonymous'
     }
@@ -58,6 +65,20 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       .map((chip) => [chip.scope, chip.operator, chip.conditionCategory ?? '', chip.conditionType ?? '', chip.value, chip.minScore ?? '', chip.maxScore ?? ''].join('::'))
       .join('|')}`
   }, [appliedChips, isAnonymousSession])
+  const imageListResetKey = `${feedScopeKey}:${sortOrder}`
+
+  /** Change the order in the URL (next to `q`) and start the reordered list from the top. */
+  const setSortOrder = useCallback((nextSortOrder: HomeSortOrder) => {
+    if (nextSortOrder === sortOrder) {
+      return
+    }
+
+    navigate(
+      { pathname: location.pathname, search: buildHomeSearchString(readSearchChipsParam(location.search), nextSortOrder) },
+      { replace: true },
+    )
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+  }, [location.pathname, location.search, navigate, sortOrder])
 
   const imagesQuery = useInfiniteQuery({
     // Key on the id-free chip signature: chip ids embed Date.now()/Math.random(),
@@ -72,8 +93,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
           complex_filter: buildComplexFilterPayload(appliedChips),
           page: 1,
           limit: 40,
-          sortBy: 'upload_date',
-          sortOrder: 'DESC',
+          sortBy: 'first_seen_date',
+          sortOrder: apiSortOrder,
           pagination: 'cursor',
           cursorValue: typeof typedPageParam === 'number' ? null : typedPageParam.cursorValue,
           cursorHash: typeof typedPageParam === 'number' ? null : typedPageParam.cursorHash,
@@ -90,6 +111,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         cursorDate: cursor.cursorDate,
         cursorHash: cursor.cursorHash,
         includeTotal: false,
+        sortOrder: apiSortOrder,
       }, { signal })
     },
     getNextPageParam: (lastPage) => {
@@ -129,14 +151,14 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
    * is a status line, not layout, so it can arrive late without disturbing the grid.
    */
   const feedTotalQuery = useQuery({
-    queryKey: ['home-images-total', imageListResetKey],
+    queryKey: ['home-images-total', feedScopeKey],
     queryFn: async ({ signal }) => {
       if (isSearchMode) {
         const result = await searchImagesComplex({
           complex_filter: buildComplexFilterPayload(appliedChips),
           page: 1,
           limit: 1,
-          sortBy: 'upload_date',
+          sortBy: 'first_seen_date',
           sortOrder: 'DESC',
           includeTotal: true,
         }, { signal })
@@ -220,10 +242,13 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     setSelectedIds([])
   }, [appliedChips])
 
+  // Auto-loading stops after a failed page so a broken server is not hammered; the retry button takes over.
+  const canAutoLoadMore = Boolean(imagesQuery.hasNextPage) && !imagesQuery.isFetchNextPageError
+
   useHomeScrollRestoration({
     enabled: !imagesQuery.isPending && !imagesQuery.isError,
     itemCount: visibleImages.length,
-    canLoadMore: Boolean(imagesQuery.hasNextPage),
+    canLoadMore: canAutoLoadMore,
     isLoadingMore: imagesQuery.isFetchingNextPage,
     onLoadMore: imagesQuery.fetchNextPage,
   })
@@ -369,6 +394,9 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     assignToGroupMutation,
     visibleImages,
     imageListResetKey,
+    sortOrder,
+    setSortOrder,
+    canAutoLoadMore,
     feedProgress,
     feedSequenceTotal,
     renderItemPersistentOverlay,

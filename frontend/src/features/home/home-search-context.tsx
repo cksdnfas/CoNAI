@@ -8,7 +8,7 @@ import { clearSearchHistory, deleteSearchHistory, getSearchHistory, saveSearchHi
 import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchOperator, SearchScope } from '@/features/search/search-types'
 import { buildSearchChipKey, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
-import { buildHomeSearchString, decodeSearchChipsParam, encodeSearchChipsParam, readSearchChipsParam } from './home-search-url'
+import { buildHomeSearchString, decodeSearchChipsParam, encodeSearchChipsParam, readHomeSortParam, readSearchChipsParam } from './home-search-url'
 
 export type TextSearchScope = Exclude<SearchScope, 'rating' | 'tool'>
 type AddScopedTextChipOptions = { operator?: SearchOperator; apply?: boolean }
@@ -141,7 +141,8 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const search = buildHomeSearchString(encodeSearchChipsParam(nextChips))
+    // Keep the sort the Home URL already carries; a search from another page starts at the default.
+    const search = buildHomeSearchString(encodeSearchChipsParam(nextChips), isHomeRoute ? readHomeSortParam(location.search) : undefined)
     navigate({ pathname: '/', search }, { replace: isHomeRoute && location.search === search })
   }, [isHomeRoute, location.search, navigate])
 

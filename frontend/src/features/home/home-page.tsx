@@ -1,4 +1,4 @@
-import { FolderPlus, Loader2, Trash2 } from 'lucide-react'
+import { FolderPlus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PageHeader } from '@/components/common/page-header'
@@ -12,12 +12,14 @@ import { useAuthPermissionRedirect } from '@/features/auth/use-auth-permission-r
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { ImageListFeedFooter } from '@/features/images/components/image-list/image-list-feed-footer'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { useI18n } from '@/i18n'
 import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
+import { HomeSortMenu } from './components/home-sort-menu'
 import { useHomeSearch } from './home-search-context'
 import { useHomePageData } from './use-home-page-data'
 
@@ -56,6 +58,9 @@ export function HomePage() {
     assignToGroupMutation,
     visibleImages,
     imageListResetKey,
+    sortOrder,
+    setSortOrder,
+    canAutoLoadMore,
     feedProgress,
     feedSequenceTotal,
     renderItemPersistentOverlay,
@@ -70,7 +75,6 @@ export function HomePage() {
     emptyStateTitle,
     emptyStateDescription,
     errorTitle,
-    loadMoreErrorMessage,
     handleRetryInitialLoad,
     handleRetryNextPage,
     handleDownloadSelected,
@@ -83,6 +87,9 @@ export function HomePage() {
   })
 
   const isAuthStatusUnavailable = authStatusQuery.isError && !canViewHome
+  // A failed next page or background refetch keeps the loaded images on screen; only a failed first load replaces them.
+  const hasFeedData = (imagesQuery.data?.pages.length ?? 0) > 0
+  const isInitialLoadError = imagesQuery.isError && !hasFeedData
 
   useAuthPermissionRedirect({
     enabled: !authStatusQuery.isLoading && !isAuthStatusUnavailable && !canViewHome,
@@ -140,7 +147,7 @@ export function HomePage() {
         </Inset>
       ) : null}
 
-      {imagesQuery.isError ? (
+      {isInitialLoadError ? (
         <Alert variant="destructive">
           <AlertTitle>{errorTitle}</AlertTitle>
           <AlertDescription className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -162,11 +169,11 @@ export function HomePage() {
         </section>
       ) : null}
 
-      {!imagesQuery.isPending && !imagesQuery.isError && visibleImages.length === 0 ? (
+      {hasFeedData && visibleImages.length === 0 ? (
         <Section heading={emptyStateTitle} description={emptyStateDescription} />
       ) : null}
 
-      {!imagesQuery.isPending && !imagesQuery.isError && visibleImages.length > 0 ? (
+      {hasFeedData && visibleImages.length > 0 ? (
         <>
           <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -198,9 +205,12 @@ export function HomePage() {
                 </span>
               ) : null}
             </div>
-            {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
-              <span>{t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
+                <span>{t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span>
+              ) : null}
+              <HomeSortMenu value={sortOrder} onChange={setSortOrder} />
+            </div>
           </Inset>
 
           <ImageList
@@ -212,7 +222,7 @@ export function HomePage() {
             selectable={!isAnonymousSession}
             selectedIds={selectedIds}
             onSelectedIdsChange={setSelectedIds}
-            hasMore={Boolean(imagesQuery.hasNextPage)}
+            hasMore={canAutoLoadMore}
             isLoadingMore={imagesQuery.isFetchingNextPage}
             onLoadMore={imagesQuery.fetchNextPage}
             minColumnWidth={300}
@@ -226,33 +236,13 @@ export function HomePage() {
             modalAccessOptions={HOME_VIEWER_ACCESS_OPTIONS}
           />
 
-          <div className="flex flex-col items-center gap-3 pb-6">
-            {imagesQuery.isFetchingNextPage ? (
-              <Inset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>{t('homePage.loadingMoreImages')}</span>
-              </Inset>
-            ) : null}
-
-            {Boolean(imagesQuery.hasNextPage) && !imagesQuery.isFetchingNextPage && !imagesQuery.isFetchNextPageError ? (
-              <Button size="sm" variant="outline" onClick={() => void imagesQuery.fetchNextPage()}>
-                {t({ ko: '더 보기', en: 'Load more' })}
-              </Button>
-            ) : null}
-
-            {imagesQuery.isFetchNextPageError ? (
-              <Section
-                heading={t('homePage.couldNotLoadTheRest')}
-                description={loadMoreErrorMessage}
-                className="w-full max-w-xl"
-                actions={
-                  <Button size="sm" variant="outline" onClick={handleRetryNextPage}>
-                    {t({ ko: '다음 묶음 다시 시도', en: 'Retry next batch' })}
-                  </Button>
-                }
-              />
-            ) : null}
-          </div>
+          <ImageListFeedFooter
+            itemCount={visibleImages.length}
+            hasMore={Boolean(imagesQuery.hasNextPage)}
+            isLoadingMore={imagesQuery.isFetchingNextPage}
+            loadMoreError={imagesQuery.isFetchNextPageError ? imagesQuery.error : null}
+            onRetry={handleRetryNextPage}
+          />
           <ImageListColumnFloatingControl
             value={homeColumnCount}
             defaultValue={defaultHomeColumnCount}

@@ -4,6 +4,16 @@ import { createSearchChipId } from '@/features/search/search-utils'
 /** Query parameter on the Home route that carries the applied search chips. */
 export const HOME_SEARCH_QUERY_PARAM = 'q'
 
+/** Query parameter on the Home route that carries the sort order; absent means newest first. */
+export const HOME_SORT_QUERY_PARAM = 'sort'
+
+/**
+ * Home sort orders. Both the feed and search order by when an image was first seen; the feed's
+ * cursor API only supports that column, so direction is the one choice that works everywhere.
+ */
+export type HomeSortOrder = 'newest' | 'oldest'
+export const DEFAULT_HOME_SORT_ORDER: HomeSortOrder = 'newest'
+
 const SEARCH_SCOPES: ReadonlySet<SearchScope> = new Set(['positive', 'negative', 'auto', 'rating', 'model', 'lora', 'tool'])
 const SEARCH_OPERATORS: ReadonlySet<SearchOperator> = new Set(['OR', 'AND', 'NOT'])
 const MAX_URL_SEARCH_CHIPS = 50
@@ -84,7 +94,16 @@ export function readSearchChipsParam(search: string) {
   return new URLSearchParams(search).get(HOME_SEARCH_QUERY_PARAM) ?? ''
 }
 
-/** Build the Home location search string for a `q` value. */
-export function buildHomeSearchString(query: string) {
-  return query ? `?${new URLSearchParams({ [HOME_SEARCH_QUERY_PARAM]: query }).toString()}` : ''
+/** Read the sort order from a location search string, falling back to newest for anything unknown. */
+export function readHomeSortParam(search: string): HomeSortOrder {
+  return new URLSearchParams(search).get(HOME_SORT_QUERY_PARAM) === 'oldest' ? 'oldest' : DEFAULT_HOME_SORT_ORDER
+}
+
+/** Build the Home location search string for a `q` value and sort order (the default sort is left out). */
+export function buildHomeSearchString(query: string, sort: HomeSortOrder = DEFAULT_HOME_SORT_ORDER) {
+  const params = new URLSearchParams()
+  if (query) params.set(HOME_SEARCH_QUERY_PARAM, query)
+  if (sort !== DEFAULT_HOME_SORT_ORDER) params.set(HOME_SORT_QUERY_PARAM, sort)
+  const search = params.toString()
+  return search ? `?${search}` : ''
 }

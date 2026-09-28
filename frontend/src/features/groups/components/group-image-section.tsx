@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { Bot, Images, LayoutGrid, Loader2, Minus, Pencil, Plus, RotateCcw } from 'lucide-react'
+import { Bot, Images, LayoutGrid, Minus, Pencil, Plus, RotateCcw } from 'lucide-react'
 import { Inset } from '@/components/ui/inset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { ImageListFeedFooter } from '@/features/images/components/image-list/image-list-feed-footer'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
@@ -23,6 +24,8 @@ interface GroupImageSectionProps {
   errorMessage: string | null
   hasMore: boolean
   isLoadingMore: boolean
+  /** Failed next-page request; pauses auto-loading until the retry succeeds. */
+  loadMoreError?: unknown
   totalCount?: number
   onLoadMore: () => void
   hideHeader?: boolean
@@ -62,6 +65,7 @@ export function GroupImageSection({
   errorMessage,
   hasMore,
   isLoadingMore,
+  loadMoreError = null,
   totalCount,
   onLoadMore,
   hideHeader = false,
@@ -83,6 +87,9 @@ export function GroupImageSection({
 }: GroupImageSectionProps) {
   const { t, formatNumber } = useI18n()
   const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
+  const hasLoadMoreError = loadMoreError !== null && loadMoreError !== undefined
+  // Stop auto-loading after a failed page; the footer's retry is the manual fallback.
+  const canAutoLoadMore = hasMore && !hasLoadMoreError
   const {
     visibleItems: visibleGroupImages,
     hasOnlyHiddenItems,
@@ -90,7 +97,7 @@ export function GroupImageSection({
     shouldBlurItemPreview,
   } = useImageFeedSafety({
     items: groupImages,
-    hasMore,
+    hasMore: canAutoLoadMore,
     isLoading,
     isError,
     isLoadingMore,
@@ -255,7 +262,7 @@ export function GroupImageSection({
             selectable={selectable}
             selectedIds={selectedIds}
             onSelectedIdsChange={onSelectedIdsChange}
-            hasMore={hasMore}
+            hasMore={canAutoLoadMore}
             isLoadingMore={isLoadingMore}
             onLoadMore={onLoadMore}
             minColumnWidth={presentation === 'drawer' ? 180 : 280}
@@ -274,20 +281,14 @@ export function GroupImageSection({
             modalAccessOptions={GROUP_VIEWER_ACCESS_OPTIONS}
           />
 
-          <div className="flex flex-col items-center gap-3 pb-3">
-            {isLoadingMore ? (
-              <Inset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>{t('homePage.loadingMoreImages')}</span>
-              </Inset>
-            ) : null}
-
-            {hasMore && !isLoadingMore ? (
-              <Button size="sm" variant="outline" onClick={onLoadMore}>
-                {t({ ko: '더 보기', en: 'Load more' })}
-              </Button>
-            ) : null}
-          </div>
+          <ImageListFeedFooter
+            itemCount={visibleGroupImages.length}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            loadMoreError={loadMoreError}
+            onRetry={onLoadMore}
+            className={presentation === 'drawer' ? 'pb-3' : undefined}
+          />
         </>
       ) : null}
 
