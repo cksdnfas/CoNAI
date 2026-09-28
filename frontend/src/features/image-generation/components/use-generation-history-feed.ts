@@ -27,6 +27,8 @@ export type GenerationHistoryFeedOptions = {
   serviceType: GenerationServiceType
   workflowId?: number | null
   publicWorkflowSlug?: string | null
+  /** False keeps the query idle (e.g. while the page shows a view without results). */
+  enabled?: boolean
 }
 
 /**
@@ -34,7 +36,7 @@ export type GenerationHistoryFeedOptions = {
  * refresh cadence (with the watchdog poll for rows stuck in progress) and the parent refresh nonce.
  * Mount it once per surface so only one observer drives the refetch interval.
  */
-export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId, publicWorkflowSlug }: GenerationHistoryFeedOptions) {
+export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, enabled = true }: GenerationHistoryFeedOptions) {
   const queryClient = useQueryClient()
   const authStatusQuery = useAuthStatusQuery()
   // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 기존 refresh cadence 가 그대로 되살아난다.
@@ -99,7 +101,7 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
 
       return page
     },
-    enabled: !authStatusQuery.isPending,
+    enabled: enabled && !authStatusQuery.isPending,
     // Keep every loaded page: the active-generation refetch has to restart at offset 0 so newly
     // completed generations appear, and selection/visible-count state is derived from all pages.
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {
@@ -157,12 +159,12 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
   }, [isFetchingHistory])
 
   useEffect(() => {
-    if (refreshNonce === 0) {
+    if (refreshNonce === 0 || !enabled) {
       return
     }
 
     void refreshHistory({ watchForNewRows: true })
-  }, [refreshNonce, refreshHistory])
+  }, [enabled, refreshNonce, refreshHistory])
 
   const historyRecords = useMemo(
     () => dedupeHistoryRecords((historyQuery.data?.pages ?? []).flatMap((page) => page.records)),
