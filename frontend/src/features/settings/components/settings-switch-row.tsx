@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
+import { SettingRow } from '@/components/ui/setting-row'
 import { Switch } from '@/components/ui/switch'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { cn } from '@/lib/utils'
 
 interface SettingsSwitchRowProps {
@@ -12,15 +12,18 @@ interface SettingsSwitchRowProps {
   className?: string
 }
 
-/** An on/off setting: label (and optional hint) on the left, a switch on the right; the whole row toggles it. */
+/** An on/off setting as a flat hairline row: label on the left, a switch on the right; the label toggles it too. */
 export function SettingsSwitchRow({ checked, onCheckedChange, label, description, disabled = false, className }: SettingsSwitchRowProps) {
+  const id = useId()
+
   return (
-    <ToggleRow className={cn('cursor-pointer justify-between gap-4 has-[:disabled]:cursor-not-allowed', disabled && 'opacity-60', className)}>
-      <span className="min-w-0">
-        <span className="block">{label}</span>
-        {description ? <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span> : null}
-      </span>
-      <Switch checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
-    </ToggleRow>
+    <SettingRow
+      label={label}
+      description={description}
+      htmlFor={id}
+      className={cn('[&_label]:cursor-pointer', disabled && 'opacity-60 [&_label]:cursor-not-allowed', className)}
+    >
+      <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
+    </SettingRow>
   )
 }

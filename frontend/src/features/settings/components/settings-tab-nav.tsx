@@ -1,68 +1,50 @@
-import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
-import { Button } from '@/components/ui/button'
-import { Text } from '@/components/ui/text'
+import { Bot, Image, Library, Server, SlidersHorizontal, Users, WandSparkles, Wrench, type LucideIcon } from 'lucide-react'
+import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { type TranslationDictionary, useI18n } from '@/i18n'
-import { SETTINGS_TAB_ITEMS, type SettingsTab, type SettingsTabGroup } from '../settings-tabs'
+import { SETTINGS_TAB_ITEMS, SETTINGS_TAB_LABELS, type SettingsTab, type SettingsTabGroup } from '../settings-tabs'
 
 interface SettingsTabNavProps {
   activeTab: SettingsTab
   onChange: (tab: SettingsTab) => void
 }
 
-const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
-  general: { ko: '일반 및 화면', en: 'General and appearance' },
-  library: { ko: '라이브러리 및 가져오기', en: 'Library and imports' },
-  media: { ko: '미디어 처리', en: 'Media processing' },
-  auto: { ko: '자동화 및 분석', en: 'Automation and analysis' },
-  generation: { ko: '생성 및 AI', en: 'Generation and AI' },
-  accounts: { ko: '계정·권한', en: 'Accounts and access' },
-  system: { ko: '시스템', en: 'System' },
-  maintenance: { ko: '유지보수', en: 'Maintenance' },
+const SETTINGS_TAB_ICONS: Record<SettingsTab, LucideIcon> = {
+  general: SlidersHorizontal,
+  library: Library,
+  media: Image,
+  auto: Bot,
+  generation: WandSparkles,
+  accounts: Users,
+  system: Server,
+  maintenance: Wrench,
 }
 
 const SETTINGS_TAB_GROUP_LABELS: Record<SettingsTabGroup, TranslationDictionary> = {
-  personalization: { ko: '기본 환경', en: 'Preferences' },
+  personalization: { ko: '기본', en: 'Basics' },
   library: { ko: '콘텐츠', en: 'Content' },
-  services: { ko: '기능 및 서비스', en: 'Features and services' },
+  services: { ko: '기능', en: 'Features' },
   administration: { ko: '관리', en: 'Administration' },
 }
 
+/** Settings sections as sidebar rows, grouped; the current section gets the fill + accent bar. Labels and rows stay
+ * direct children of the nav so only the first group label drops its top padding. */
 export function SettingsTabNav({ activeTab, onChange }: SettingsTabNavProps) {
   const { t } = useI18n()
 
   return (
-    <ExplorerSidebar
-      title={t({ ko: '설정 항목', en: 'Settings sections' })}
-      floatingFrame
-      floatingLockStorageKey="conai:settings:sidebar-locked"
-      className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start"
-    >
-      <div className="space-y-4">
-        {Object.keys(SETTINGS_TAB_GROUP_LABELS).map((groupKey) => {
-          const group = groupKey as SettingsTabGroup
-          const items = SETTINGS_TAB_ITEMS.filter((item) => item.group === group)
-
-          return (
-            <div key={group} className="space-y-1.5">
-              <Text as="div" variant="overline" className="px-3 font-semibold">
-                {t(SETTINGS_TAB_GROUP_LABELS[group])}
-              </Text>
-              {items.map((item) => (
-                <Button
-                  key={item.value}
-                  type="button"
-                  variant="nav"
-                  data-active={activeTab === item.value}
-                  aria-current={activeTab === item.value ? 'page' : undefined}
-                  onClick={() => onChange(item.value)}
-                >
-                  {t(SETTINGS_TAB_LABELS[item.value])}
-                </Button>
-              ))}
-            </div>
-          )
-        })}
-      </div>
-    </ExplorerSidebar>
+    <SidebarNav aria-label={t({ ko: '설정 항목', en: 'Settings sections' })}>
+      {(Object.keys(SETTINGS_TAB_GROUP_LABELS) as SettingsTabGroup[]).flatMap((group) => [
+        <SidebarGroupLabel key={`group-${group}`}>{t(SETTINGS_TAB_GROUP_LABELS[group])}</SidebarGroupLabel>,
+        ...SETTINGS_TAB_ITEMS.filter((item) => item.group === group).map((item) => (
+          <SidebarItem
+            key={item.value}
+            icon={SETTINGS_TAB_ICONS[item.value]}
+            label={t(SETTINGS_TAB_LABELS[item.value])}
+            active={activeTab === item.value}
+            onClick={() => onChange(item.value)}
+          />
+        )),
+      ])}
+    </SidebarNav>
   )
 }

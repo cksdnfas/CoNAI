@@ -1,3 +1,5 @@
+import type { TranslationDictionary } from '@/i18n'
+
 export type SettingsTab = 'general' | 'library' | 'media' | 'auto' | 'generation' | 'accounts' | 'system' | 'maintenance'
 
 export type SettingsTabGroup = 'personalization' | 'library' | 'services' | 'administration'
@@ -17,6 +19,18 @@ export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'system', group: 'administration' },
   { value: 'maintenance', group: 'administration' },
 ]
+
+/** Sidebar row label and toolbar title of each section. */
+export const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
+  general: { ko: '일반 및 화면', en: 'General and appearance' },
+  library: { ko: '라이브러리', en: 'Library' },
+  media: { ko: '미디어 처리', en: 'Media processing' },
+  auto: { ko: '자동화 및 분석', en: 'Automation and analysis' },
+  generation: { ko: '생성 및 AI', en: 'Generation and AI' },
+  accounts: { ko: '계정·권한', en: 'Accounts and access' },
+  system: { ko: '시스템', en: 'System' },
+  maintenance: { ko: '유지보수', en: 'Maintenance' },
+}
 
 const SETTINGS_TAB_VALUES = new Set<SettingsTab>(SETTINGS_TAB_ITEMS.map((item) => item.value))
 

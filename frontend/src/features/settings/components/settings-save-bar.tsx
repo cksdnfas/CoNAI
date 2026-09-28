@@ -1,4 +1,4 @@
-import { LoaderCircle, Save, Undo2 } from 'lucide-react'
+import { Check, CircleDot, LoaderCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
@@ -13,7 +13,7 @@ interface SettingsSaveBarProps {
   onOpenTab: (tab: SettingsTab) => void
 }
 
-/** Sticky page-wide bar that saves or discards every edited settings section at once. */
+/** Floating page-wide bar (the one surface with a shadow on the page) that saves or discards every edited settings section at once. */
 export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, onOpenTab }: SettingsSaveBarProps) {
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
@@ -39,13 +39,14 @@ export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, on
   }
 
   return (
-    <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-30" role="region" aria-label={t({ ko: '설정 저장', en: 'Save settings' })}>
-      <div className="theme-floating-panel flex flex-col gap-3 rounded-sm bg-surface-high px-4 py-3 shadow-elevation-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1" aria-live="polite">
-          <div className="text-sm font-semibold text-foreground">
+    <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-30 mt-8" role="region" aria-label={t({ ko: '설정 저장', en: 'Save settings' })}>
+      <div className="theme-floating-panel flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-surface-high py-2 pr-2 pl-4 shadow-elevation-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5" aria-live="polite">
+          <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-foreground">
+            <CircleDot className="h-4 w-4 text-primary" aria-hidden />
             {t({ ko: '변경 {count}건', en: '{count} unsaved changes' }, { count: formatNumber(dirtySections.length) })}
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex min-w-0 flex-wrap gap-1.5">
             {dirtySections.map((section) => (
               <Button
                 key={section.id}
@@ -59,13 +60,12 @@ export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, on
             ))}
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <Button type="button" size="sm" variant="secondary" disabled={isSaving || dirtySections.length === 0} onClick={() => void handleDiscard()}>
-            <Undo2 className="h-4 w-4" />
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Button type="button" size="sm" variant="ghost" disabled={isSaving || dirtySections.length === 0} onClick={() => void handleDiscard()}>
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
           <Button type="button" size="sm" disabled={isSaving || dirtySections.length === 0} onClick={onSave}>
-            {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             {isSaving ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })}
           </Button>
         </div>

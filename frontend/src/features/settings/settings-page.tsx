@@ -2,15 +2,14 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldAlert } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { PageHeader } from '@/components/common/page-header'
+import { PageToolbar } from '@/components/common/page-toolbar'
+import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings } from '@/lib/api-settings'
 import { getAppSettings, updateGeneralSettings } from '@/lib/api-settings-general'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
-import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
-import { cn } from '@/lib/utils'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import type {
@@ -25,7 +24,7 @@ import type { GeneralPreferenceSection } from './components/general-preferences-
 import { SettingsSaveBar } from './components/settings-save-bar'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import { areSettingsDraftsEqual, saveSettingsDraftSections, type SettingsDraftSection } from './settings-draft-sections'
-import { parseSettingsTab, type SettingsTab } from './settings-tabs'
+import { parseSettingsTab, SETTINGS_TAB_LABELS, type SettingsTab } from './settings-tabs'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 import { useAppearanceSettingsTab } from './use-appearance-settings-tab'
 import { useAutoSettingsTab } from './use-auto-settings-tab'
@@ -111,7 +110,7 @@ function pickGeneralFields(settings: GeneralSettings, fields: ReadonlyArray<keyo
 }
 
 function SettingsSectionFallback() {
-  return <div className="min-h-[16rem] rounded-sm bg-surface-low/50 animate-pulse" />
+  return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
 }
 
 /** Keep the settings page as a composition root for tab-level state, the page-wide save bar and access. */
@@ -130,7 +129,6 @@ export function SettingsPage() {
   const [generationThrottleDraft, setGenerationThrottleDraft] = useState<GenerationThrottleSettings | null>(null)
   const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
   const [isSavingAll, setIsSavingAll] = useState(false)
-  const isDesktopPageLayout = useDesktopPageLayout()
   const canOpenSettings = authStatusQuery.data?.isAdmin === true || authStatusQuery.data?.hasCredentials !== true
 
   const setActiveTab = (tab: SettingsTab) => {
@@ -305,7 +303,7 @@ export function SettingsPage() {
   })
 
   const generalSectionLabels: Record<GeneralPreferenceSection, string> = {
-    basic: t({ ko: '기본 설정', en: 'General' }),
+    basic: t({ ko: '기본', en: 'Basics' }),
     appearance: t({ ko: '탐색 및 표시', en: 'Navigation and display' }),
     library: t({ ko: '라이브러리 동작', en: 'Library behavior' }),
     safety: t({ ko: '안전 및 정리', en: 'Safety and cleanup' }),
@@ -418,21 +416,17 @@ export function SettingsPage() {
   if (!canOpenSettings) {
     // Accounts with page.settings.view but without admin rights get an explanation instead of a silent bounce.
     return (
-      <div className="space-y-6">
-        <PageHeader title={t('pageAccessCatalog.settings')} />
-        <div role="status" className="flex items-start gap-3 rounded-sm bg-surface-low px-4 py-4">
-          <div className="rounded-sm bg-primary/10 p-2 text-primary">
-            <ShieldAlert className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1 space-y-1">
+      <div className="space-y-4">
+        <PageToolbar title={t('pageAccessCatalog.settings')} />
+        <div role="status" className="flex items-start gap-3">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1 space-y-3">
             <div className="text-sm font-semibold text-foreground">
               {t({ ko: '설정은 관리자만 변경할 수 있어.', en: 'Only administrators can change settings.' })}
             </div>
-            <div className="pt-2">
-              <Button asChild size="sm" variant="secondary">
-                <Link to="/access">{t('appShell.availablePages')}</Link>
-              </Button>
-            </div>
+            <Button asChild size="sm" variant="secondary">
+              <Link to="/access">{t('appShell.availablePages')}</Link>
+            </Button>
           </div>
         </div>
       </div>
@@ -520,96 +514,88 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={t({ ko: '설정', en: 'Settings' })}
-        titleAccessory={(
-          <span className="inline-flex items-center rounded-sm bg-surface-high px-2 py-0.5 text-xs font-medium text-muted-foreground" title={APP_BRAND_TOOLTIP}>
-            {APP_VERSION_LABEL}
-          </span>
-        )}
-      />
+    <PageWithSidebar
+      storageKey="settings"
+      sidebarLabel={t({ ko: '설정 항목', en: 'Settings sections' })}
+      sidebar={<SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />}
+      sidebarFooter={<span className="tabular-nums" title={APP_BRAND_TOOLTIP}>{APP_VERSION_LABEL}</span>}
+      toolbar={<PageToolbar title={t(SETTINGS_TAB_LABELS[activeTab])} />}
+    >
+      <div>
+        <Suspense fallback={<SettingsSectionFallback />}>
+          {activeTab === 'general' ? (
+            <div className="space-y-10">
+              <GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} />
+              <AppearanceTabLazy {...appearanceTabProps} />
+            </div>
+          ) : null}
 
-      <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[248px_minmax(0,1fr)]' : 'grid-cols-1')}>
-        <SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />
+          {activeTab === 'library' ? (
+            <div className="space-y-10">
+              <GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} />
+              <FoldersTabLazy {...foldersTabProps} />
+              <MetadataTabLazy
+                metadataDraft={effectiveMetadataDraft}
+                onPatchMetadata={patchMetadataDraft}
+                hasChanges={isMetadataDraftDirty}
+              />
+            </div>
+          ) : null}
 
-        <section className="space-y-6">
-          <Suspense fallback={<SettingsSectionFallback />}>
-            {activeTab === 'general' ? (
-              <div className="space-y-6">
-                <GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} />
-                <AppearanceTabLazy {...appearanceTabProps} />
-              </div>
-            ) : null}
+          {activeTab === 'media' ? (
+            <ImageSaveTabLazy
+              {...imageSaveTabProps}
+              showGenerationThrottle={false}
+            />
+          ) : null}
 
-            {activeTab === 'library' ? (
-              <div className="space-y-6">
-                <GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} />
-                <FoldersTabLazy {...foldersTabProps} />
-                <MetadataTabLazy
-                  metadataDraft={effectiveMetadataDraft}
-                  onPatchMetadata={patchMetadataDraft}
-                  hasChanges={isMetadataDraftDirty}
-                />
-              </div>
-            ) : null}
+          {activeTab === 'auto' ? (
+            <AutoTabLazy {...autoTabProps} />
+          ) : null}
 
-            {activeTab === 'media' ? (
+          {activeTab === 'generation' ? (
+            <div className="space-y-10">
               <ImageSaveTabLazy
                 {...imageSaveTabProps}
-                showGenerationThrottle={false}
+                showMediaSettings={false}
               />
-            ) : null}
+              <LlmConnectionsTabLazy />
+              <IntegrationToolsTabLazy />
+            </div>
+          ) : null}
 
-            {activeTab === 'auto' ? (
-              <AutoTabLazy {...autoTabProps} />
-            ) : null}
+          {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
 
-            {activeTab === 'generation' ? (
-              <div className="space-y-6">
-                <ImageSaveTabLazy
-                  {...imageSaveTabProps}
-                  showMediaSettings={false}
-                />
-                <LlmConnectionsTabLazy />
-                <IntegrationToolsTabLazy />
-              </div>
-            ) : null}
+          {activeTab === 'system' ? (
+            <div className="space-y-10">
+              <McpHttpSettingsCardLazy />
+              <GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} />
+            </div>
+          ) : null}
 
-            {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
-
-            {activeTab === 'system' ? (
-              <div className="space-y-6">
-                <McpHttpSettingsCardLazy />
-                <GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} />
-              </div>
-            ) : null}
-
-            {activeTab === 'maintenance' ? (
-              <MaintenanceTabLazy
-                onScanAll={foldersTabProps.onScanAll}
-                isScanningAll={foldersTabProps.isScanningAll}
-                scanAllJob={foldersTabProps.scanAllJob}
-                onCancelScanAll={foldersTabProps.onCancelScanAll}
-                isCancellingScanAll={foldersTabProps.isCancellingScanAll}
-                onVerifyAllFiles={foldersTabProps.onVerifyAllFiles}
-                isVerifyingAllFiles={foldersTabProps.isVerifyingAllFiles}
-                onReextractAll={() => void metadataReextractMutation.mutateAsync()}
-                isReextracting={metadataReextractMutation.isPending}
-                autoTabProps={autoTabProps}
-              />
-            ) : null}
-          </Suspense>
-
-          <SettingsSaveBar
-            dirtySections={dirtySections}
-            isSaving={isSavingAll}
-            onSave={() => void handleSaveAll()}
-            onDiscard={handleDiscardAll}
-            onOpenTab={setActiveTab}
-          />
-        </section>
+          {activeTab === 'maintenance' ? (
+            <MaintenanceTabLazy
+              onScanAll={foldersTabProps.onScanAll}
+              isScanningAll={foldersTabProps.isScanningAll}
+              scanAllJob={foldersTabProps.scanAllJob}
+              onCancelScanAll={foldersTabProps.onCancelScanAll}
+              isCancellingScanAll={foldersTabProps.isCancellingScanAll}
+              onVerifyAllFiles={foldersTabProps.onVerifyAllFiles}
+              isVerifyingAllFiles={foldersTabProps.isVerifyingAllFiles}
+              onReextractAll={() => void metadataReextractMutation.mutateAsync()}
+              isReextracting={metadataReextractMutation.isPending}
+              autoTabProps={autoTabProps}
+            />
+          ) : null}
+        </Suspense>
+        <SettingsSaveBar
+          dirtySections={dirtySections}
+          isSaving={isSavingAll}
+          onSave={() => void handleSaveAll()}
+          onDiscard={handleDiscardAll}
+          onOpenTab={setActiveTab}
+        />
       </div>
-    </div>
+    </PageWithSidebar>
   )
 }
