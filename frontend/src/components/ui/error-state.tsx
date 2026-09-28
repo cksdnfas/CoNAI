@@ -71,7 +71,7 @@ function ErrorState({
       type="button"
       size={isCompact ? 'xs' : 'sm'}
       variant="secondary"
-      className="border-destructive-soft-foreground/30 text-destructive-soft-foreground hover:bg-destructive-soft-foreground/10 hover:text-destructive-soft-foreground"
+      className="bg-destructive-soft-foreground/10 text-destructive-soft-foreground hover:bg-destructive-soft-foreground/20 hover:text-destructive-soft-foreground"
       onClick={onRetry}
       disabled={isRetrying}
     >

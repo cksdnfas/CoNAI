@@ -179,7 +179,7 @@ function Modal({ open, title, description, headerContent, onClose, widthClassNam
               aria-modal="true"
               aria-label={hasTitle ? undefined : t({ ko: '대화 상자', en: 'Dialog' })}
               {...(description ? {} : { 'aria-describedby': undefined })}
-              className={cn('mx-auto flex max-h-full w-full flex-col overflow-y-auto rounded-sm border border-border/85 bg-background shadow-elevation-3 outline-none', widthClassName)}
+              className={cn('mx-auto flex max-h-full w-full flex-col overflow-y-auto rounded-sm bg-background shadow-elevation-3 outline-none', widthClassName)}
               onMouseDown={(event) => event.stopPropagation()}
               onKeyDown={handleContentKeyDown}
               onEscapeKeyDown={handleEscapeKeyDown}
@@ -187,7 +187,7 @@ function Modal({ open, title, description, headerContent, onClose, widthClassNam
               onOpenAutoFocus={handleOpenAutoFocus}
               onCloseAutoFocus={handleCloseAutoFocus}
             >
-              <div className="sticky top-0 z-10 border-b border-border/70 bg-background/96 px-4 py-3 backdrop-blur md:px-5">
+              <div className="sticky top-0 z-10 bg-background/96 px-4 pt-4 pb-2 backdrop-blur md:px-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
                     <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">{title}</DialogPrimitive.Title>
@@ -203,10 +203,10 @@ function Modal({ open, title, description, headerContent, onClose, widthClassNam
                   </Button>
                 </div>
 
-                {headerContent ? <div className="mt-3 border-t border-border/70 pt-3">{headerContent}</div> : null}
+                {headerContent ? <div className="mt-3">{headerContent}</div> : null}
               </div>
 
-              <div className="px-4 py-4 md:px-5 md:py-5">{children}</div>
+              <div className="px-4 pt-2 pb-4 md:px-5 md:pb-5">{children}</div>
             </DialogPrimitive.Content>
           </div>
         </DialogPrimitive.Portal>
@@ -222,7 +222,7 @@ function ModalBody({ className, ...props }: ComponentProps<'div'>) {
 
 /** Render the modal footer row for primary and secondary actions. */
 function ModalFooter({ className, ...props }: ComponentProps<'div'>) {
-  return <div data-slot="modal-footer" className={cn('flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4', className)} {...props} />
+  return <div data-slot="modal-footer" className={cn('flex flex-wrap items-center justify-end gap-2 pt-2', className)} {...props} />
 }
 
 export { Modal, ModalBody, ModalFooter }

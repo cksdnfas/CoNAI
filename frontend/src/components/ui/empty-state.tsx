@@ -3,9 +3,9 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 import { Text } from './text'
 
-// Tonal fill instead of the old dashed outline (DESIGN_PRESET no-line rule).
-// Inside a surface-low container, pass a different tone via className (e.g. bg-surface-container).
-const emptyStateVariants = cva('rounded-sm bg-surface-low', {
+// Tonal fill instead of the old dashed outline (DESIGN_PRESET D1). Recesses to surface-lowest inside a raised
+// surface (Section, Card, Panel, drawer), so it stays visible without a className override.
+const emptyStateVariants = cva('rounded-sm bg-surface-low in-data-[surface=raised]:bg-surface-lowest', {
   variants: {
     size: {
       default: 'flex w-full flex-col items-center justify-center gap-3 px-6 py-10 text-center',

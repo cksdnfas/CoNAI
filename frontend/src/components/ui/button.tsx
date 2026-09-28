@@ -14,18 +14,18 @@ const buttonVariants = cva(
           "bg-primary bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_22%,var(--primary)),var(--primary)_65%)] text-primary-foreground shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_14%,transparent)] hover:brightness-108 hover:shadow-[0_0_28px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
         destructive:
           "bg-destructive-soft text-destructive-soft-foreground hover:brightness-110 focus-visible:ring-destructive/25",
-        /** Default non-primary action: tonal fill, no border. */
+        /** Default non-primary action: tonal fill, no border. Steps up one tone on a surface-high parent (popover, Panel tone=high). */
         secondary:
-          "bg-surface-high text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest",
-        /** Lowest-emphasis filled action for dense toolbars and sidebars. */
+          "bg-surface-high text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest in-data-[surface=high]:bg-surface-highest in-data-[surface=high]:hover:bg-surface-bright",
+        /** Lowest-emphasis filled action for dense toolbars and sidebars. Translucent, so it reads on any surface tone. */
         subtle:
-          "bg-surface-low text-muted-foreground hover:bg-surface-container hover:text-foreground aria-expanded:bg-surface-container aria-expanded:text-foreground",
+          "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground aria-expanded:bg-foreground/10 aria-expanded:text-foreground",
         /** Icon toolbars and inline actions: no fill until hover. */
         ghost:
-          "text-muted-foreground hover:bg-surface-high hover:text-foreground",
+          "text-muted-foreground hover:bg-surface-high hover:text-foreground in-data-[surface=high]:hover:bg-surface-highest",
         /** Sidebar / list navigation row. Mark the current row with data-active="true" or aria-current. */
         nav:
-          "w-full justify-start text-left font-normal text-muted-foreground hover:bg-surface-high hover:text-foreground data-[active=true]:bg-primary/12 data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:[&_svg]:text-primary aria-[current=page]:bg-primary/12 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=true]:bg-primary/12 aria-[current=true]:font-medium aria-[current=true]:text-foreground",
+          "w-full justify-start text-left font-normal text-muted-foreground hover:bg-surface-high hover:text-foreground in-data-[surface=high]:hover:bg-surface-highest data-[active=true]:bg-primary/12 data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:[&_svg]:text-primary aria-[current=page]:bg-primary/12 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=true]:bg-primary/12 aria-[current=true]:font-medium aria-[current=true]:text-foreground",
         link: "text-secondary underline-offset-4 hover:underline",
       },
       size: {

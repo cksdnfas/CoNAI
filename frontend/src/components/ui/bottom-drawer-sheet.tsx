@@ -31,7 +31,7 @@ type BottomDrawerNoticeProps = ComponentProps<'div'> & {
 /** Render one shared low-emphasis notice block inside drawer shells. */
 export function BottomDrawerNotice({ children, className, ...props }: BottomDrawerNoticeProps) {
   return (
-    <div className={cn('rounded-sm border border-border/70 bg-surface-low/45 px-4 py-4 text-sm text-muted-foreground', className)} {...props}>
+    <div className={cn('rounded-sm bg-surface-lowest/70 px-4 py-4 text-sm text-muted-foreground', className)} {...props}>
       {children}
     </div>
   )
@@ -95,6 +95,7 @@ export function BottomDrawerSheet({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
+        data-surface={useControllerSurface ? undefined : 'raised'}
         className={cn(
           open
             ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col overflow-hidden transition-transform duration-300'
@@ -112,7 +113,7 @@ export function BottomDrawerSheet({
         {hasHeader ? (
           <div className={cn(
             'theme-drawer-header',
-            useControllerSurface ? 'border-b-0 bg-background/92 px-4 py-3' : 'border-b border-border/80 bg-background/40',
+            useControllerSurface ? 'bg-background/92 px-4 py-3' : 'bg-background/40',
             headerClassName,
           )}>
             {title !== null || subtitle || headerActions ? (
@@ -124,7 +125,7 @@ export function BottomDrawerSheet({
                 {headerActions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{headerActions}</div> : null}
               </div>
             ) : null}
-            {headerContentId ? <div id={headerContentId} className={cn((title !== null || subtitle || headerActions) ? 'mt-3 border-t border-border/80 pt-3' : '', headerPortalClassName)} /> : null}
+            {headerContentId ? <div id={headerContentId} className={cn((title !== null || subtitle || headerActions) ? 'mt-3' : '', headerPortalClassName)} /> : null}
           </div>
         ) : null}
 

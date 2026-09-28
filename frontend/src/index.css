@@ -37,6 +37,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-outline-input: var(--outline-input);
+  --color-outline-subtle: var(--outline-subtle);
   --color-surface-lowest: var(--surface-lowest);
   --color-surface-low: var(--surface-low);
   --color-surface-container: var(--surface-container);
@@ -121,6 +123,13 @@
   --border: rgb(90 65 56 / 0.15);
   --input: #0e0e0e;
   --ring: #ffb59a;
+  /*
+   * Outlines (D1 in DESIGN_PRESET.md): surfaces separate by tone, not lines.
+   * Only inputs/tables use --outline-input; --outline-subtle is for the rare divider.
+   * Both derive from --border, which the appearance system sets at runtime.
+   */
+  --outline-input: var(--border);
+  --outline-subtle: color-mix(in srgb, var(--border) 55%, transparent);
   --surface-lowest: #0e0e0e;
   --surface-low: #1c1b1b;
   --surface-container: #201f1f;
@@ -435,9 +444,15 @@
     padding-block: var(--theme-panel-padding-y);
   }
 
+  /* Recessed tray for inputs: lowest tone + the input outline. Focus shifts tone in the component classes. */
   .theme-input-surface {
-    background: color-mix(in srgb, var(--surface-low) 65%, transparent);
-    border-color: color-mix(in srgb, var(--border) 85%, transparent);
+    background: var(--surface-lowest);
+    border-color: var(--outline-input);
+  }
+
+  /* Component layer on purpose: a bg-* utility on the element still wins over the focus tone shift. */
+  .theme-input-surface:focus {
+    background: var(--surface-low);
   }
 
   .theme-drawer-header {

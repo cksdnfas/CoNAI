@@ -5,13 +5,15 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 
-const sectionVariants = cva('', {
+// Tonal plinth, no outline (DESIGN_PRESET D1): surface-low on the page, recessed to surface-lowest when nested
+// inside another raised surface (Section, Card, Panel, drawer). Variants differ only in their header typography.
+const sectionVariants = cva('overflow-hidden rounded-sm bg-surface-low in-data-[surface=raised]:bg-surface-lowest', {
   variants: {
     variant: {
-      page: 'overflow-hidden rounded-sm border border-border/85 bg-surface-container/30',
-      settings: 'overflow-hidden rounded-sm border border-border/85 bg-surface-container/30',
-      drawer: 'overflow-hidden rounded-sm border border-border/80 bg-surface-container/30',
-      controller: 'overflow-hidden rounded-sm border border-border/85 bg-surface-container/30',
+      page: '',
+      settings: '',
+      drawer: '',
+      controller: '',
     },
   },
   defaultVariants: {
@@ -33,7 +35,7 @@ const sectionSlots: Record<SectionVariant, {
   body: string
 }> = {
   page: {
-    header: 'flex flex-col gap-3 border-b border-border/85 px-4 py-3 sm:flex-row sm:items-start sm:justify-between',
+    header: 'flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between',
     titleBlock: 'min-w-0 flex-1',
     heading: 'text-xl font-semibold tracking-tight text-foreground',
     headingAs: 'h2',
@@ -41,7 +43,7 @@ const sectionSlots: Record<SectionVariant, {
     body: 'space-y-4 px-4 py-4',
   },
   settings: {
-    header: 'flex items-center justify-between gap-3 border-b border-border/85 px-4 py-3',
+    header: 'flex items-center justify-between gap-3 px-4 py-3',
     titleBlock: 'min-w-0 flex-1',
     heading: 'text-xl font-semibold tracking-tight text-foreground',
     headingAs: 'p',
@@ -49,7 +51,7 @@ const sectionSlots: Record<SectionVariant, {
     body: 'space-y-4 px-4 py-4',
   },
   drawer: {
-    header: 'flex items-center justify-between gap-3 border-b border-border/80 px-4 py-3',
+    header: 'flex items-center justify-between gap-3 px-4 py-3',
     titleBlock: 'min-w-0 flex-1',
     heading: 'text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground',
     headingAs: 'div',
@@ -57,8 +59,8 @@ const sectionSlots: Record<SectionVariant, {
     body: 'px-4 py-4',
   },
   controller: {
-    header: 'px-4 py-3 border-b border-border/85',
-    headerRow: 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b-0 pb-0',
+    header: 'px-4 py-3',
+    headerRow: 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between',
     titleBlock: 'min-w-0',
     heading: 'text-xl font-semibold tracking-tight text-foreground',
     headingAs: 'p',
@@ -78,7 +80,7 @@ type SectionProps = ComponentProps<'section'> & VariantProps<typeof sectionVaria
   bodyClassName?: string
 }
 
-/** Render one bordered content section with an optional heading row and collapsible body. */
+/** Render one tonal content section with an optional heading row and collapsible body. */
 function Section({
   variant,
   heading,
@@ -129,13 +131,14 @@ function Section({
   )
 
   return (
-    <section data-slot="section" className={cn(sectionVariants({ variant }), className)} {...props}>
+    <section data-slot="section" data-surface="raised" className={cn(sectionVariants({ variant }), className)} {...props}>
       {hasHeader ? (
         <div className={cn(slots.header, headerClassName)}>
           {slots.headerRow ? <div className={slots.headerRow}>{headerContent}</div> : headerContent}
         </div>
       ) : null}
-      {isOpen ? <div className={cn(slots.body, bodyClassName)}>{children}</div> : null}
+      {/* No divider under the header: a short top gap on the body keeps the two apart by spacing. */}
+      {isOpen ? <div className={cn(slots.body, hasHeader && 'pt-1', bodyClassName)}>{children}</div> : null}
     </section>
   )
 }

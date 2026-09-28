@@ -3,14 +3,14 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const textareaVariants = cva(
-  'w-full rounded-sm text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50',
+  'w-full rounded-sm text-sm text-foreground outline-none transition-[background-color,border-color,box-shadow] focus:border-primary/55 focus:ring-2 focus:ring-primary/15 aria-invalid:border-destructive/70 aria-invalid:focus:ring-destructive/20 disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
-        default: 'theme-input-surface border px-3 py-2 transition focus:border-primary',
-        settings: 'theme-settings-control theme-input-surface border px-3 py-2 focus:ring-1 focus:ring-primary',
-        detail: 'theme-input-surface border px-3 py-2 focus:border-primary',
-        detailNested: 'theme-input-surface border px-3 py-2 focus:border-primary',
+        default: 'theme-input-surface border px-3 py-2',
+        settings: 'theme-settings-control theme-input-surface border px-3 py-2',
+        detail: 'theme-input-surface border px-3 py-2',
+        detailNested: 'theme-input-surface border px-3 py-2',
       },
     },
     defaultVariants: {
