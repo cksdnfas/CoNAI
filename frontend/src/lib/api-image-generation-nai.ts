@@ -37,6 +37,8 @@ export async function getNaiCostEstimate(payload: {
   n_samples: number
   subscriptionTier: number
   anlasBalance: number
+  /** img2img strength; omit for text-to-image. */
+  strength?: number
 }) {
   return requestJson<NAICostEstimateResponse>('/api/nai/cost/calculate', {
     method: 'POST',

@@ -38,6 +38,7 @@ export function NaiGenerationEditorSections({
   supportsCharacterReference,
   canUseCharacterPositions,
   useCharacterPositions,
+  maxSampleCount = NAI_SAMPLE_COUNT_MAX,
   savedCharacterReferenceSearch,
   setSavedCharacterReferenceSearch,
   filteredSavedCharacterReferences,
@@ -82,6 +83,8 @@ export function NaiGenerationEditorSections({
   supportsCharacterReference: boolean
   canUseCharacterPositions: boolean
   useCharacterPositions: boolean
+  /** Upper bound for the samples input (resolution/balance limit from the cost estimate). */
+  maxSampleCount?: number
   savedCharacterReferenceSearch: string
   setSavedCharacterReferenceSearch: Dispatch<SetStateAction<string>>
   filteredSavedCharacterReferences: StoredNaiCharacterReferenceAsset[]
@@ -309,7 +312,7 @@ export function NaiGenerationEditorSections({
                 </FormField>
 
                 <FormField label="Samples">
-                  <NumberStepperInput min={NAI_SAMPLE_COUNT_MIN} max={NAI_SAMPLE_COUNT_MAX} step={1} value={naiForm.samples} onValueCommit={(nextValue) => handleNaiFieldChange('samples', nextValue)} />
+                  <NumberStepperInput min={NAI_SAMPLE_COUNT_MIN} max={maxSampleCount} step={1} value={naiForm.samples} onValueCommit={(nextValue) => handleNaiFieldChange('samples', nextValue)} />
                 </FormField>
 
                 <FormField label="Seed">

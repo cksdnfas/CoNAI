@@ -71,9 +71,11 @@ router.get('/data', async (req: Request, res: Response) => {
       let anlasBalance = 0;
       if (anlasResponse.ok) {
         const subscriptionData: any = await anlasResponse.json();
-        // Anlas 잔액 추출 (trainingStepsLeft는 학습 스텝이며, Anlas와 다를 수 있음)
-        // NovelAI API는 trainingStepsLeft.fixedTrainingStepsLeft를 Anlas로 사용
-        anlasBalance = subscriptionData.trainingStepsLeft?.fixedTrainingStepsLeft || 0;
+        // Anlas 잔액 = 구독 지급분(fixedTrainingStepsLeft) + 구매분(purchasedTrainingSteps).
+        // 구매분을 빼면 잔액이 과소 표시되고 비용 부족 경고가 잘못 뜬다.
+        const trainingSteps = subscriptionData.trainingStepsLeft ?? {};
+        anlasBalance = (Number(trainingSteps.fixedTrainingStepsLeft) || 0)
+          + (Number(trainingSteps.purchasedTrainingSteps) || 0);
       }
 
       // 구독 정보 추출

@@ -56,27 +56,48 @@ export function calculateAnlasCost(params: CostCalculationParams): number {
   return perSample * n_samples;
 }
 
+/** NovelAI subscription tier value for Opus. */
+export const NAI_OPUS_TIER = 3;
+/** Opus free generation limits: up to 1024x1024 pixels, 28 steps, one image per request. */
+const OPUS_FREE_MAX_PIXELS = 1024 * 1024;
+const OPUS_FREE_MAX_STEPS = 28;
+
+/**
+ * Opus 무료 생성 여부.
+ * NovelAI 규칙: Opus 티어 + 픽셀 수 <= 1024x1024 + steps <= 28 + 1장 생성일 때만 무료다.
+ * (바이브/캐릭터 레퍼런스 등 추가 비용 요소는 검증된 규칙이 없어 반영하지 않는다.)
+ */
+export function isOpusFreeGeneration(
+  params: { width: number; height: number; steps: number; n_samples: number },
+  subscriptionTier: number
+): boolean {
+  return subscriptionTier === NAI_OPUS_TIER
+    && params.width * params.height <= OPUS_FREE_MAX_PIXELS
+    && params.steps <= OPUS_FREE_MAX_STEPS
+    && params.n_samples === 1;
+}
+
 /**
  * 잔액으로 생성 가능한 최대 샘플 수 계산
  */
 export function getMaxSamples(
-  params: { width: number; height: number; steps: number },
+  params: { width: number; height: number; steps: number; strength?: number },
   anlasBalance: number,
   subscriptionTier: number
 ): number {
-  // 샘플당 비용 계산 (Opus 로직 제거)
   const costPerSample = calculateAnlasCost({
     ...params,
     n_samples: 1
   });
 
-  // 잔액으로 생성 가능한 최대 수
+  // 잔액으로 생성 가능한 최대 수. Opus 무료 조건이면 잔액과 무관하게 1장은 가능하다.
   const maxByBalance = Math.floor(anlasBalance / costPerSample);
+  const freeSamples = isOpusFreeGeneration({ ...params, n_samples: 1 }, subscriptionTier) ? 1 : 0;
 
   // 해상도 제한과 비교하여 최소값 반환
   const maxByResolution = getMaxSamplesByResolution(params.width, params.height);
 
-  return Math.min(maxByBalance, maxByResolution);
+  return Math.min(Math.max(maxByBalance, freeSamples), maxByResolution);
 }
 
 /**

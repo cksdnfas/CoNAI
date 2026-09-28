@@ -22,7 +22,7 @@ interface NaiConnectionHeaderProps {
 
 /** Render the NovelAI connection header with auth status and external link. */
 export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenAuth, compact = false }: NaiConnectionHeaderProps) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const novelAiHomeLabel = t('image-generation.components.nai.generation.panel.sections.open.novelai.homepage')
 
   return (
@@ -34,7 +34,7 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenA
             ? <Badge variant="secondary">{t('image-generation.components.nai.generation.panel.sections.connected')}</Badge>
             : <Badge variant="outline">{t('image-generation.components.nai.generation.panel.sections.disconnected')}</Badge>}
           {connected && tierName ? <Badge variant="outline">{tierName}</Badge> : null}
-          {connected && anlasBalance !== undefined ? <Badge variant="outline">Anlas {anlasBalance}</Badge> : null}
+          {connected && anlasBalance !== undefined ? <Badge variant="outline">Anlas {formatNumber(anlasBalance)}</Badge> : null}
         </div>
         <div className="flex items-center gap-2">
           {!connected ? (

@@ -9,6 +9,8 @@ import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { getNaiCostEstimate, getNaiUserData } from '@/lib/api-image-generation-nai'
 import { getAppSettings } from '@/lib/api-settings-general'
 import {
+  NAI_SAMPLE_COUNT_MAX,
+  NAI_SAMPLE_COUNT_MIN,
   clampNaiSampleCount,
   getErrorMessage,
   parseNumberInput,
@@ -43,7 +45,7 @@ export function NaiGenerationPanel({
   headerPortalTargetId,
   compactActionBarContentTargetId,
 }: NaiGenerationPanelProps) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const { showSnackbar } = useSnackbar()
 
   const {
@@ -155,13 +157,18 @@ export function NaiGenerationPanel({
   })
 
   const naiCostInputs = useMemo(
-    () => ({
-      width: parseNumberInput(naiForm.width, 1024),
-      height: parseNumberInput(naiForm.height, 1024),
-      steps: parseNumberInput(naiForm.steps, 28),
-      n_samples: clampNaiSampleCount(naiForm.samples),
-    }),
-    [naiForm.height, naiForm.samples, naiForm.steps, naiForm.width],
+    () => {
+      // 계산기가 모델링하는 img2img strength 만 넘긴다(인페인트/바이브 비용은 검증된 규칙이 없다).
+      const strength = parseNumberInput(naiForm.strength, 1)
+      return {
+        width: parseNumberInput(naiForm.width, 1024),
+        height: parseNumberInput(naiForm.height, 1024),
+        steps: parseNumberInput(naiForm.steps, 28),
+        n_samples: clampNaiSampleCount(naiForm.samples),
+        ...(naiForm.action === 'img2img' && strength > 0 && strength <= 1 ? { strength } : {}),
+      }
+    },
+    [naiForm.action, naiForm.height, naiForm.samples, naiForm.steps, naiForm.strength, naiForm.width],
   )
 
   const naiCostQuery = useQuery({
@@ -180,7 +187,31 @@ export function NaiGenerationPanel({
       naiCostInputs.n_samples > 0,
   })
 
-  const naiCostErrorMessage = naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost')) : null
+  const naiCostEstimate = naiCostQuery.isSuccess ? naiCostQuery.data : null
+  // 잔액/해상도 기준 최대 장수로 입력 상한만 좁힌다(0 이어도 입력은 1 까지 허용).
+  const naiMaxSampleCount = naiCostEstimate
+    ? Math.min(NAI_SAMPLE_COUNT_MAX, Math.max(NAI_SAMPLE_COUNT_MIN, naiCostEstimate.maxSamples))
+    : NAI_SAMPLE_COUNT_MAX
+  // 예상치라 생성은 막지 않고 버튼 근처에 경고만 보여 준다.
+  const naiCostWarningMessage = naiCostEstimate
+    ? [
+        !naiCostEstimate.canAfford
+          ? t(
+              { ko: 'Anlas 가 부족할 수 있어 (예상 {cost} / 보유 {balance}). 예상치라 생성은 막지 않아.', en: 'You may not have enough Anlas (est. {cost} / balance {balance}). This is an estimate, so generation is not blocked.' },
+              { cost: formatNumber(naiCostEstimate.estimatedCost), balance: formatNumber(naiUserQuery.data?.anlasBalance ?? 0) },
+            )
+          : null,
+        naiCostInputs.n_samples > naiMaxSampleCount
+          ? t(
+              { ko: '현재 크기/잔액으로는 최대 {max}장까지 권장돼.', en: 'Up to {max} images are recommended at this size and balance.' },
+              { max: formatNumber(naiMaxSampleCount) },
+            )
+          : null,
+      ].filter(Boolean).join(' ') || null
+    : null
+  const naiCostErrorMessage = naiCostQuery.isError
+    ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost'))
+    : naiCostWarningMessage
   const generationImageSaveOptions = useMemo(() => ({
     format: generationSaveSettings.defaultFormat,
     quality: generationSaveSettings.quality,
@@ -237,7 +268,7 @@ export function NaiGenerationPanel({
       : naiCostQuery.isSuccess
         ? naiCostQuery.data.isOpusFree
           ? t('image-generation.components.nai.generation.panel.generate.free')
-          : t('image-generation.components.nai.generation.panel.generate.with.cost', { cost: naiCostQuery.data.estimatedCost })
+          : t('image-generation.components.nai.generation.panel.generate.with.cost', { cost: formatNumber(naiCostQuery.data.estimatedCost) })
         : naiCostQuery.isPending
           ? t('image-generation.components.nai.generation.panel.generate.calculating')
           : t('image-generation.components.nai.generation.panel.generate')
@@ -298,6 +329,7 @@ export function NaiGenerationPanel({
       supportsCharacterPrompts={supportsCharacterPrompts}
       supportsCharacterReference={supportsCharacterReference}
       canUseCharacterPositions={canUseCharacterPositions}
+      maxSampleCount={naiMaxSampleCount}
       useCharacterPositions={useCharacterPositions}
       savedCharacterReferenceSearch={savedCharacterReferenceSearch}
       setSavedCharacterReferenceSearch={setSavedCharacterReferenceSearch}
