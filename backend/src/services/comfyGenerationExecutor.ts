@@ -48,6 +48,8 @@ export interface ExecuteComfyGenerationResult {
   savedArtifactCount: number
   savedArtifacts: ComfyGenerationSavedArtifact[]
   representativeImage: ComfyGenerationRepresentativeImage | null
+  /** 저장된 모든 이미지 출력의 composite hash (대표 이미지 포함, 저장 순서) */
+  savedImageHashes: string[]
 }
 
 export function isComfyGenerationCancelledError(error: unknown) {
@@ -185,6 +187,7 @@ export async function executeComfyGeneration(
   const savedArtifacts: ComfyGenerationSavedArtifact[] = []
   const artifactRunStartedAt = new Date()
   let representativeImage: ComfyGenerationRepresentativeImage | null = null
+  const savedImageHashes: string[] = []
   const pendingTempPaths = new Set(collectedOutputs.map((output) => output.tempPath))
   const savedArtifactOutputs: SavedArtifactOutput[] = []
 
@@ -221,6 +224,7 @@ export async function executeComfyGeneration(
           })
 
           savedImageCount += 1
+          savedImageHashes.push(processedPaths.compositeHash)
           if (!representativeImage) {
             representativeImage = {
               originalPath: processedPaths.originalPath,
@@ -279,5 +283,6 @@ export async function executeComfyGeneration(
     savedArtifactCount: savedArtifacts.length,
     savedArtifacts,
     representativeImage,
+    savedImageHashes,
   }
 }

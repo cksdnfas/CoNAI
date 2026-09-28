@@ -23,6 +23,7 @@ import {
   WorkflowNumericFieldValidationError,
 } from '../../services/workflowNumericFieldPolicy';
 import { requirePermission } from '../../middleware/authMiddleware';
+import { assignGeneratedMediaToGroup, GenerationTargetGroupService } from '../../services/generationTargetGroupService';
 
 const router = Router();
 
@@ -32,10 +33,11 @@ const router = Router();
  */
 router.post('/:id/generate', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
-  const { prompt_data, server_id, groupId, source_image, imageSaveOptions } = req.body as {
+  const { prompt_data, server_id, groupId, group_path, source_image, imageSaveOptions } = req.body as {
     prompt_data?: Record<string, any>;
     server_id?: number;
     groupId?: string | number;
+    group_path?: string;
     source_image?: string;
     imageSaveOptions?: GeneratedImageSaveOptions;
   };
@@ -122,13 +124,26 @@ router.post('/:id/generate', requirePermission('generation.execute'), asyncHandl
       sampler: extractedParams.sampler
     });
 
+    // 그룹 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.
+    const targetGroup = GenerationTargetGroupService.resolveForAccount(requestedByAccountId, {
+      groupId,
+      groupPath: group_path,
+    });
+    if (!targetGroup.ok) {
+      return res.status(targetGroup.status).json({
+        success: false,
+        error: targetGroup.error,
+      } as WorkflowResponse);
+    }
+    const targetGroupId = targetGroup.groupId;
+
     // API Generation History 생성
     let historyId: number | undefined;
     try {
       historyId = await GenerationHistoryService.createComfyUIHistory({
         workflowId: id,
         workflowName: workflow.name,
-        groupId: groupId !== undefined && groupId !== null ? Number(groupId) : undefined, // User-selected group for automatic assignment
+        groupId: targetGroupId ?? undefined, // User-selected group for automatic assignment
         requestedByAccountId,
         requestedByAccountType,
         serverId: server_id,
@@ -181,6 +196,8 @@ router.post('/:id/generate', requirePermission('generation.execute'), asyncHandl
             });
             await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash);
             HistoryCommandService.updateStatus(historyId, 'completed');
+            // history 는 대표 이미지 하나만 가리키므로 배치의 나머지 출력은 직접 그룹에 넣는다.
+            assignGeneratedMediaToGroup(targetGroupId, result.savedImageHashes);
 
             console.log(`✅ ComfyUI history ${historyId} linked to representative output: ${result.representativeImage.compositeHash.substring(0, 16)}...`);
             console.log(`✅ Image generation completed for history ID ${historyId} (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`);

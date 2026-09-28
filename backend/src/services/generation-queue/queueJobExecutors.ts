@@ -15,6 +15,7 @@ import { executeCodexGeneration } from '../codexGenerationExecutor'
 import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
+import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer'
 import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import type { NAIMetadataInputParams } from '../../utils/nai/metadata'
@@ -290,6 +291,9 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
         await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash)
         HistoryCommandService.updateStatus(historyId, 'completed')
       }
+
+      // history 는 대표 이미지 하나만 가리키므로 배치의 나머지 출력은 직접 그룹에 넣는다.
+      assignGeneratedMediaToGroup(job.requested_group_id, result.savedImageHashes)
 
       updateQueueRequestDebugMeta(job, {
         history_id: historyId ?? null,
