@@ -38,7 +38,7 @@ export function AutoTab({
   const { t } = useI18n()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <section>
         <AutoOverviewCard
           heading={t({ ko: '개요', en: 'Overview' })}
@@ -91,7 +91,7 @@ export function AutoTab({
           actions={(
             <>
               <SectionDirtyBadge dirty={hasRatingTiersChanges} />
-              <IconButton size="icon-sm" variant="secondary" onClick={onAddRatingTier} label={t({ ko: '등급 추가', en: 'Add tier' })}>
+              <IconButton size="icon-sm" variant="ghost" onClick={onAddRatingTier} label={t({ ko: '등급 추가', en: 'Add tier' })}>
                 <Plus className="h-4 w-4" />
               </IconButton>
             </>

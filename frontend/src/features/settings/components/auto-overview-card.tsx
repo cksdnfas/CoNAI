@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
-import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@conai/shared'
-import { StatTile } from '@/components/ui/stat-tile'
-import { Section } from '@/components/ui/section'
-import { useI18n, type TranslationInput } from '@/i18n'
+import { RowGroup } from '@/components/ui/row-group'
+import { useI18n } from '@/i18n'
+import { SettingsStatLine, type SettingsStatItem } from './settings-rows'
 
 interface AutoOverviewCardProps {
   heading: ReactNode
@@ -14,28 +13,21 @@ interface AutoOverviewCardProps {
   isCheckingTaggerDependencies: boolean
 }
 
-function renderDependencyStatus({
-  ready,
-  pending,
-  t,
-  fallback = '—',
-}: {
-  ready: boolean | null
-  pending?: boolean
-  t: (input: TranslationInput) => string
-  fallback?: string
-}) {
+type Translate = ReturnType<typeof useI18n>['t']
+
+function dependencyStat(label: string, ready: boolean | null, pending: boolean, t: Translate): SettingsStatItem {
   if (pending) {
-    return <span className="text-muted-foreground">{t({ ko: '확인 중…', en: 'Checking…' })}</span>
+    return { label, value: t({ ko: '확인 중…', en: 'Checking…' }), tone: 'muted' }
   }
-
   if (ready == null) {
-    return <span className="text-muted-foreground">{fallback}</span>
+    return { label, value: '—', tone: 'muted' }
   }
-
-  return <span style={ready ? getThemeToneTextStyle('positive') : getThemeToneTextStyle('negative')}>{ready ? t({ ko: '준비 OK', en: 'Ready' }) : t({ ko: '확인 필요', en: 'Needs attention' })}</span>
+  return ready
+    ? { label, value: t({ ko: '준비 OK', en: 'Ready' }), tone: 'success' }
+    : { label, value: t({ ko: '확인 필요', en: 'Needs attention' }), tone: 'danger' }
 }
 
+/** Tagger / Kaloscope readiness as one inline stat line. */
 export function AutoOverviewCard({
   heading,
   actions,
@@ -48,20 +40,16 @@ export function AutoOverviewCard({
   const kaloscopeReady = kaloscopeStatus ? kaloscopeStatus.scriptExists && kaloscopeStatus.dependenciesAvailable : null
 
   return (
-    <Section variant="settings" heading={heading} actions={actions}>
-      <div className="grid gap-4 min-[900px]:grid-cols-4">
-        <StatTile label={t({ ko: '로드된 모델', en: 'Loaded model' })} value={taggerStatus?.currentModel ?? '—'} />
-        <StatTile label={t({ ko: '현재 디바이스', en: 'Current device' })} value={taggerStatus?.currentDevice ?? '—'} />
-        <StatTile
-          label={t({ ko: 'WD Tagger', en: 'WD Tagger' })}
-          value={renderDependencyStatus({
-            ready: taggerDependencyResult?.available ?? null,
-            pending: isCheckingTaggerDependencies,
-            t,
-          })}
-        />
-        <StatTile label={t({ ko: 'Kaloscope', en: 'Kaloscope' })} value={renderDependencyStatus({ ready: kaloscopeReady, t })} />
-      </div>
-    </Section>
+    <RowGroup heading={heading} actions={actions}>
+      <SettingsStatLine
+        className="py-1"
+        items={[
+          { label: t({ ko: '로드된 모델', en: 'Loaded model' }), value: taggerStatus?.currentModel ?? '—' },
+          { label: t({ ko: '디바이스', en: 'Device' }), value: taggerStatus?.currentDevice ?? '—' },
+          dependencyStat('WD Tagger', taggerDependencyResult?.available ?? null, isCheckingTaggerDependencies, t),
+          dependencyStat('Kaloscope', kaloscopeReady, false, t),
+        ]}
+      />
+    </RowGroup>
   )
 }
