@@ -135,7 +135,8 @@ export function WildcardExplorerSidebarPanel({
                 {canDeleteInActiveTab ? (
                   <IconButton
                     size="icon-sm"
-                    variant="destructive"
+                    variant="secondary"
+                    className="hover:text-destructive"
                     onClick={onDeleteSelected}
                     disabled={!selectedWildcard || isDeleting}
                     label={t('image-generation.components.wildcard.explorer.sidebar.panel.delete')}

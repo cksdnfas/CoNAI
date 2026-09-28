@@ -59,7 +59,7 @@ export function NaiVibesSection({
         heading={t({ ko: '바이브', en: 'Vibes' })}
         collapsible
         defaultOpen={false}
-        className="rounded-b-none"
+        className="rounded-b-none @container"
         actions={(
           <>
             <Badge variant="outline">{vibes.length}</Badge>
@@ -102,7 +102,7 @@ export function NaiVibesSection({
 
                 {vibe.image ? <NaiSelectedImageCard image={vibe.image} alt={`NAI vibe ${index + 1}`} /> : null}
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 @sm:grid-cols-2">
                   <FormField label={t({ ko: '강도', en: 'Strength' })}>
                     <NumberStepperInput min={0.01} max={1} step={0.01} value={vibe.strength} onValueCommit={(value) => onVibeFieldChange(index, 'strength', value)} />
                   </FormField>
@@ -130,11 +130,11 @@ export function NaiVibesSection({
         emptyMessage={naiConnected
           ? t('image-generation.components.nai.vibes.section.no.search.results.or.saved.vibes')
           : t('image-generation.components.nai.vibes.section.log.in.to.novelai.to.view.or')}
-        className="rounded-t-none"
+        className="rounded-t-none @container"
         onSearchChange={onSavedVibeSearchChange}
       >
         <div className="max-h-[41rem] overflow-y-auto pr-1">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 @lg:grid-cols-3">
             {savedVibes.map((asset) => (
               <NaiSavedAssetTile
                 key={asset.id}

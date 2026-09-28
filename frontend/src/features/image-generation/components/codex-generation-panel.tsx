@@ -511,8 +511,8 @@ export function CodexGenerationPanel({
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
         />
 
-        <Section variant="controller" heading={t({ ko: '출력', en: 'Output' })}>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <Section variant="controller" heading={t({ ko: '출력', en: 'Output' })} className="@container">
+          <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
             <FormField label={t({ ko: '비율', en: 'Aspect Ratio' })}>
               <Select
                 value={codexForm.aspectRatio}
@@ -537,8 +537,8 @@ export function CodexGenerationPanel({
           </div>
         </Section>
 
-        <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })}>
-          <div className="grid gap-4 lg:grid-cols-2">
+        <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
+          <div className="grid gap-4 @2xl:grid-cols-2">
             <Inset className="space-y-3 px-3">
               <div className="flex items-center justify-between gap-3">
                 <div>

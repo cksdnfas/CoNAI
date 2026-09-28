@@ -57,7 +57,7 @@ export function NaiReferencesSection({
         heading={t({ ko: '레퍼런스', en: 'References' })}
         collapsible
         defaultOpen={false}
-        className="rounded-b-none"
+        className="rounded-b-none @container"
         actions={(
           <>
             <Badge variant="outline">{references.length}</Badge>
@@ -99,7 +99,7 @@ export function NaiReferencesSection({
 
                 {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} /> : null}
 
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 @lg:grid-cols-3">
                   <FormField label={t({ ko: '유형', en: 'Type' })}>
                     <Select value={reference.type} onChange={(event) => onReferenceFieldChange(index, 'type', event.target.value)}>
                       <option value="character">character</option>
@@ -132,11 +132,11 @@ export function NaiReferencesSection({
         searchValue={savedReferenceSearch}
         isLoading={savedReferencesLoading}
         emptyMessage={t('image-generation.components.nai.references.section.no.search.results.or.saved.references')}
-        className="rounded-t-none"
+        className="rounded-t-none @container"
         onSearchChange={onSavedReferenceSearchChange}
       >
         <div className="max-h-[41rem] overflow-y-auto pr-1">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 @lg:grid-cols-3">
             {savedReferences.map((asset) => (
               <NaiSavedAssetTile
                 key={asset.id}

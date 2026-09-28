@@ -248,7 +248,7 @@ export function NaiGenerationEditorSections({
       />
 
       {naiForm.action !== 'generate' ? (
-        <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })} collapsible defaultOpen={false}>
+        <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })} collapsible defaultOpen={false} className="@container">
           <div className="space-y-4">
             <FormField label={t({ ko: '원본 이미지', en: 'Source Image' })}>
               <div className="space-y-3">
@@ -302,7 +302,7 @@ export function NaiGenerationEditorSections({
 
             <NaiControllerInsetBlock className="space-y-4">
               <Text variant="label">{t({ ko: '이미지 옵션', en: 'Image Options' })}</Text>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 @sm:grid-cols-2">
                 <FormField label={t({ ko: '강도', en: 'Strength' })}>
                   <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
                 </FormField>
@@ -414,8 +414,8 @@ function NaiSeedField({ seed, onSeedChange }: { seed: string, onSeedChange: (val
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <span id={labelId} className="text-sm font-medium text-foreground">{seedLabel}</span>
-        <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+        <span id={labelId} className="shrink-0 text-sm font-medium whitespace-nowrap text-foreground">{seedLabel}</span>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-xs whitespace-nowrap text-muted-foreground">
           {t({ ko: '매번 랜덤', en: 'Random each time' })}
           <Switch
             size="sm"
@@ -479,10 +479,10 @@ function NaiSettingsSection({
     .join(' · ')
 
   return (
-    <Section variant="controller" heading={t({ ko: '설정', en: 'Settings' })}>
+    <Section variant="controller" heading={t({ ko: '설정', en: 'Settings' })} className="@container">
       <div className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-4">
-          <div className="md:col-span-3">
+        <div className="grid gap-4 @md:grid-cols-4">
+          <div className="@md:col-span-3">
             <FormField label={t({ ko: '모델', en: 'Model' })}>
               <Select value={naiForm.model} onChange={(event) => handleNaiFieldChange('model', event.target.value)}>
                 {NAI_MODEL_OPTIONS.map((option) => (
@@ -501,7 +501,7 @@ function NaiSettingsSection({
           </FormField>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">
           <FormField label={t({ ko: '해상도 프리셋', en: 'Preset' })}>
             <Select value={naiForm.resolutionPreset} onChange={(event) => handleResolutionPresetChange(event.target.value)}>
               {NAI_RESOLUTION_PRESETS.map((preset) => (
@@ -556,7 +556,7 @@ function NaiSettingsSection({
           </Button>
 
           {isAdvancedOpen ? (
-            <div id={advancedRegionId} className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div id={advancedRegionId} className="mt-3 grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">
               <FormField label={t({ ko: '샘플러', en: 'Sampler' })}>
                 <Select value={naiForm.sampler} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
                   {NAI_SAMPLER_OPTIONS.map((option) => (
