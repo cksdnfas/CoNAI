@@ -9,10 +9,10 @@ import { Input } from '@/components/ui/input'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
-import { useI18n } from '@/i18n'
+import { useI18n, type TranslationInput } from '@/i18n'
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
 import { getLlmPresetOptions } from '@/lib/api-settings-llm'
-import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
+import type { GraphExecutionArtifactRecord, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphKeyValueListInput } from './module-graph-key-value-list-input'
 import { ModuleGraphSimpleValueInput, formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
@@ -39,6 +39,14 @@ import {
   summarizeLlmPresetContent,
 } from './node-inspector-panel-helpers'
 import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+
+const MODULE_ENGINE_LABELS: Record<ModuleEngineType, TranslationInput> = {
+  nai: 'NovelAI',
+  codex: 'Codex',
+  comfyui: 'ComfyUI',
+  system: { ko: '기본 노드', en: 'Built-in node' },
+  custom_js: { ko: '커스텀 노드', en: 'Custom node' },
+}
 
 type NodeInspectorPanelProps = {
   nodes: ModuleGraphNode[]
@@ -597,7 +605,7 @@ export function NodeInspectorPanel({
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-foreground">{getModuleNodeDisplayLabel(selectedNode)}</span>
-                    <Badge variant="outline">{selectedNode.data.module.engine_type}</Badge>
+                    <Badge variant="outline">{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
                     <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
