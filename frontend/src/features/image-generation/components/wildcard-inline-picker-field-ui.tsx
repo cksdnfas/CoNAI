@@ -79,7 +79,7 @@ function getPromptSyntaxHighlightClass(kind: PromptSyntaxTokenKind) {
 }
 
 export function getPromptSyntaxChipClass(kind: PromptSyntaxTokenKind, isActive: boolean) {
-  const shared = 'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors'
+  const shared = 'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-2xs transition-colors'
 
   if (kind === 'wildcard') {
     return cn(shared, isActive ? 'border-sky-300/60 bg-sky-400/18 text-foreground' : 'border-sky-400/20 bg-sky-400/10 text-foreground/90 hover:bg-sky-400/16')
@@ -243,21 +243,21 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
     >
       <div className="space-y-2.5">
         <div className="space-y-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{getPromptSyntaxKindLabel(token.kind)}</div>
+          <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{getPromptSyntaxKindLabel(token.kind)}</div>
           <div className="break-all text-sm font-medium text-foreground">{token.name}</div>
-          {token.loraWeight ? <div className="text-[12px] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.weight.token.loraweight', { weight: token.loraWeight })}</div> : null}
+          {token.loraWeight ? <div className="text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.weight.token.loraweight', { weight: token.loraWeight })}</div> : null}
         </div>
 
         {token.previewItems.length > 0 ? (
           <div className="space-y-1.5">
             {token.previewItems.map((item, index) => (
-              <div key={`${token.key}:preview:${index}`} className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-[12px] leading-5 text-foreground/92">
+              <div key={`${token.key}:preview:${index}`} className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-xs leading-5 text-foreground/92">
                 <div className="break-words whitespace-pre-wrap">{item}</div>
               </div>
             ))}
           </div>
         ) : token.fallbackMessage ? (
-          <div className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-[12px] leading-5 text-foreground/92">
+          <div className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-xs leading-5 text-foreground/92">
             {token.fallbackMessage}
           </div>
         ) : null}
@@ -344,7 +344,7 @@ export function PromptAutocompletePopup({
   const renderPager = (page: number, pageCount: number, onPageChange: (page: number) => void) => (
     pageCount > 1 ? (
       <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border/70 bg-surface-container/95 px-2 py-1.5">
-        <span className="px-1 font-mono text-[11px] text-muted-foreground">{page + 1}/{pageCount}</span>
+        <span className="px-1 font-mono text-2xs text-muted-foreground">{page + 1}/{pageCount}</span>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -383,7 +383,7 @@ export function PromptAutocompletePopup({
         <>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <div className="space-y-2">
-              <div className="truncate px-1 text-[11px] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.related.tags.for', { label: activeCharacter.label })}</div>
+              <div className="truncate px-1 text-2xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.related.tags.for', { label: activeCharacter.label })}</div>
               <div className="flex flex-wrap gap-1">
                 {PROMPT_RELATED_TAG_TABS.map((tab) => (
                   <button
@@ -394,7 +394,7 @@ export function PromptAutocompletePopup({
                       setRelatedTagTab(tab.id)
                     }}
                     className={cn(
-                      'rounded-full border px-2 py-0.5 text-[11px] transition',
+                      'rounded-full border px-2 py-0.5 text-2xs transition',
                       relatedTagTab === tab.id ? 'border-primary/50 bg-primary/15 text-foreground' : 'border-border/70 text-muted-foreground hover:bg-surface-high',
                     )}
                   >

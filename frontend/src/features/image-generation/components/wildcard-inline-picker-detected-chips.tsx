@@ -43,7 +43,7 @@ export function WildcardInlinePickerDetectedChips({
   return (
     <>
       {showDetectedSyntax && detectedTokenSummaries.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-2xs text-muted-foreground">
           <span>{t('image-generation.components.wildcard.inline.picker.field.detected')}</span>
           {detectedTokenSummaries.map((token) => {
             const isActive = token.key === activeDetectedTokenKey
@@ -84,7 +84,7 @@ export function WildcardInlinePickerDetectedChips({
       ) : null}
 
       {showDetectedSyntax && detectedCharacters.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-2xs text-muted-foreground">
           <span>{t({ ko: '캐릭터', en: 'Characters' })}</span>
           {detectedCharacters.map(({ candidate, suggestion }) => {
             const isActive = candidate.key === activeDetectedCharacterKey
@@ -96,7 +96,7 @@ export function WildcardInlinePickerDetectedChips({
                 }}
                 type="button"
                 className={cn(
-                  'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors',
+                  'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-2xs transition-colors',
                   isActive ? 'border-cyan-300/60 bg-cyan-400/18 text-foreground' : 'border-cyan-400/20 bg-cyan-400/10 text-foreground/90 hover:bg-cyan-400/16',
                 )}
                 onClick={() => {

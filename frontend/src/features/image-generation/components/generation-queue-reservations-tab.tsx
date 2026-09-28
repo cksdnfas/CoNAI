@@ -43,7 +43,7 @@ export function GenerationQueueReservationsTab({
     <>
       <div className="space-y-3 border-y border-border/70 px-3 py-3 sm:px-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.generation.queue.header.widget.summary')}</div>
+          <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t('image-generation.components.generation.queue.header.widget.summary')}</div>
           <Badge variant={schedules.length > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">{t({ ko: '예약작업 · {count}', en: 'Reservations · {count}' }, { count: formatNumber(schedules.length) })}</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -78,16 +78,16 @@ export function GenerationQueueReservationsTab({
                       <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
                       <Badge variant="outline">{getReservationTypeLabel(schedule, t, formatNumber)}</Badge>
                     </div>
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="text-2xs text-muted-foreground">
                       {workflowNameById.get(schedule.graph_workflow_id) ?? t('image-generation.components.generation.queue.header.widget.workflow.value', { id: schedule.graph_workflow_id })}{runAtLabel ? ` · ${runAtLabel}` : ''}
                     </div>
-                    <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                    <div className="flex flex-wrap gap-3 text-2xs text-muted-foreground">
                       <span>{runSummaryLabel}</span>
                       {nextRunAt ? <span>{t('image-generation.components.generation.queue.header.widget.next.enqueue.attempt.value', { nextRunAt })}</span> : null}
                       {lastEnqueuedAt ? <span>{t('image-generation.components.generation.queue.header.widget.last.queued.value', { lastEnqueuedAt })}</span> : null}
                     </div>
                     {stopReasonLabel ? (
-                      <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2 text-[11px] text-muted-foreground">
+                      <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2 text-2xs text-muted-foreground">
                         {stopReasonLabel}
                       </div>
                     ) : null}

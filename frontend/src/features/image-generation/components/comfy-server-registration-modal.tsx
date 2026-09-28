@@ -77,7 +77,7 @@ export function ComfyServerRegistrationModal({
             onChange={(event) => onFieldChange('isActive', event.target.checked)}
           />
           <span className="flex-1">{t({ ko: '활성 서버', en: 'Active server' })}</span>
-          <span className="text-[11px] text-muted-foreground">{t({ ko: '생성 후보 포함', en: 'Include in routing' })}</span>
+          <span className="text-2xs text-muted-foreground">{t({ ko: '생성 후보 포함', en: 'Include in routing' })}</span>
         </ToggleRow>
 
         {canSelectRepresentative ? (
@@ -88,7 +88,7 @@ export function ComfyServerRegistrationModal({
               onChange={(event) => onFieldChange('isDefault', event.target.checked)}
             />
             <span className="flex-1">{t({ ko: '대표 서버', en: 'Representative server' })}</span>
-            <span className="text-[11px] text-muted-foreground">{t({ ko: 'API 기본 대상', en: 'Default API target' })}</span>
+            <span className="text-2xs text-muted-foreground">{t({ ko: 'API 기본 대상', en: 'Default API target' })}</span>
           </ToggleRow>
         ) : null}
 

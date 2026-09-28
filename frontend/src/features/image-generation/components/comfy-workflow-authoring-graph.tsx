@@ -435,7 +435,7 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="text-sm font-semibold text-foreground">{data.title}</div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
             <span>{data.classType}</span>
             <span>•</span>
             <span>#{id}</span>

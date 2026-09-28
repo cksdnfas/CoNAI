@@ -242,7 +242,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                     </button>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-foreground">{group.nodeTitle}</div>
-                      {group.nodeId ? <div className="mt-0.5 text-[11px] text-muted-foreground">{t('image-generation.components.workflow.field.group.node.id', { id: group.nodeId })}</div> : null}
+                      {group.nodeId ? <div className="mt-0.5 text-2xs text-muted-foreground">{t('image-generation.components.workflow.field.group.node.id', { id: group.nodeId })}</div> : null}
                     </div>
                     <Badge variant="outline">{t('image-generation.components.workflow.field.group.field.count', { count: group.fields.length })}</Badge>
                   </div>
@@ -290,7 +290,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         {field.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
                         {field.default_collapsed ? <Badge variant="secondary">{t('image-generation.components.comfy.workflow.marked.fields.editor.collapsed.by.default')}</Badge> : null}
                       </div>
-                      <div className="truncate text-[11px] text-muted-foreground">{field.jsonPath}</div>
+                      <div className="truncate text-2xs text-muted-foreground">{field.jsonPath}</div>
                     </div>
                   </button>
 

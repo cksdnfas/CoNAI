@@ -185,13 +185,13 @@ const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCance
   return (
     <div className="rounded-sm border border-border bg-surface-low px-3 py-3">
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3 text-[11px]">
+        <div className="flex items-center justify-between gap-3 text-2xs">
           <div className="flex min-w-0 items-center gap-2">
             <Badge variant={isCancelRequested ? 'outline' : 'secondary'} className={cn(isCancelRequested ? 'border-amber-500/40 text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</Badge>
             <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
           </div>
           {isRunning ? (
-            <div className="shrink-0 text-[11px] font-medium text-foreground">
+            <div className="shrink-0 text-2xs font-medium text-foreground">
               {progressPercent != null
                 ? (isLiveProgress
                   ? t({ ko: '{percent}%', en: '{percent}%' }, { percent: formatNumber(progressPercent) })
@@ -209,7 +209,7 @@ const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCance
           />
         ) : null}
 
-        <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 text-2xs text-muted-foreground">
           <span className="min-w-0 truncate" title={detailTitle || undefined}>
             {detailLabel}
           </span>
@@ -481,7 +481,7 @@ export function GenerationQueueHeaderWidget() {
       >
         <ListTodo className="h-4 w-4" />
         {globalActiveCount > 0 ? (
-          <span className="absolute -right-1 -bottom-1 inline-flex min-w-[1rem] items-center justify-center rounded-sm border border-primary/25 bg-primary/16 px-1 text-[10px] font-semibold leading-4 text-primary shadow-[0_0_0_2px_var(--background)]">
+          <span className="absolute -right-1 -bottom-1 inline-flex min-w-[1rem] items-center justify-center rounded-sm border border-primary/25 bg-primary/16 px-1 text-2xs font-semibold leading-4 text-primary shadow-[0_0_0_2px_var(--background)]">
             {formatNumber(globalActiveCount)}
           </span>
         ) : null}
@@ -521,7 +521,7 @@ export function GenerationQueueHeaderWidget() {
           <>
             <div className="space-y-3 border-y border-border/70 px-3 py-3 sm:px-4">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '범위', en: 'Scope' })}</div>
+                <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '범위', en: 'Scope' })}</div>
                 <Badge variant={filteredActiveCount > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">{t({ ko: '작업 큐 · {count}', en: 'Job Queue · {count}' }, { count: formatNumber(filteredActiveCount) })}</Badge>
               </div>
               <Select value={selectedFilter} onChange={(event) => setSelectedFilter(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">
@@ -533,7 +533,7 @@ export function GenerationQueueHeaderWidget() {
                   <option key={workflow.id} value={`workflow:${workflow.id}`}>{workflow.name}</option>
                 ))}
               </Select>
-              {hasGenerationPermission && workflowsQuery.isError ? <div className="text-[11px] text-amber-700 dark:text-amber-300">{t('image-generation.components.generation.queue.header.widget.could.not.load.the.workflow.list.so')}</div> : null}
+              {hasGenerationPermission && workflowsQuery.isError ? <div className="text-2xs text-amber-700 dark:text-amber-300">{t('image-generation.components.generation.queue.header.widget.could.not.load.the.workflow.list.so')}</div> : null}
             </div>
 
             <div className={POPUP_LIST_CLASS_NAME}>

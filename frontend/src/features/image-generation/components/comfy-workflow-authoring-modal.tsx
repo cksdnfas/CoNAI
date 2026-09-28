@@ -175,7 +175,7 @@ export function ComfyWorkflowAuthoringModal({
                 </Field>
 
                 <div className="grid gap-2.5 rounded-sm border border-border/70 px-3 py-3">
-                  <div className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                  <div className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
                     {t({ ko: '등급별 동시 대기열 제한', en: 'Per-role active queue limit' })}
                   </div>
                   <div className="text-xs text-muted-foreground">
@@ -328,7 +328,7 @@ export function ComfyWorkflowAuthoringModal({
                 className="min-h-[520px] rounded-none border-0 bg-transparent px-4 py-4 font-mono text-xs focus:ring-0"
               />
 
-              {jsonError ? <div className="border-t border-border/70 px-4 py-3 text-xs text-[#ffb4ab]">{jsonError}</div> : null}
+              {jsonError ? <div className="border-t border-border/70 px-4 py-3 text-xs text-destructive">{jsonError}</div> : null}
             </div>
           ) : (
             <div className="px-4 py-4">

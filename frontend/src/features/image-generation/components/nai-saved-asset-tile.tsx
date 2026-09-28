@@ -115,7 +115,7 @@ export function NaiSavedAssetTile({
 
       <div className="absolute inset-x-0 bottom-0 z-10 space-y-1 p-3">
         <p className="truncate text-sm font-semibold text-white">{title}</p>
-        {subtitle ? <p className="truncate text-[11px] text-white/82">{subtitle}</p> : null}
+        {subtitle ? <p className="truncate text-2xs text-white/82">{subtitle}</p> : null}
       </div>
     </div>
   )

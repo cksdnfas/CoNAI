@@ -48,7 +48,7 @@ export function NaiAuthModal({
           />
         </FormField>
 
-        {showStatusHint ? <div className="text-xs text-[#ffb4ab]">{connectionHint}</div> : null}
+        {showStatusHint ? <div className="text-xs text-destructive">{connectionHint}</div> : null}
 
         <ModalFooter className="justify-between">
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>

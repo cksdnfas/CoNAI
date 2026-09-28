@@ -631,7 +631,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         {item.type === 'video' ? (
           <div className="flex flex-wrap gap-1">
             {([['video', 'V'], ['audio', 'A'], ['video_audio', 'V+A']] as Array<[MiniMaxH3DirectorVideoMode, string]>).map(([videoMode, videoLabel]) => (
-              <Button key={videoMode} type="button" size="sm" variant={(item.media_mode ?? 'video') === videoMode ? 'default' : 'secondary'} className="h-7 px-2 text-[11px]" onClick={() => changeVideoMode(item, videoMode)}>
+              <Button key={videoMode} type="button" size="sm" variant={(item.media_mode ?? 'video') === videoMode ? 'default' : 'secondary'} className="h-7 px-2 text-2xs" onClick={() => changeVideoMode(item, videoMode)}>
                 {videoLabel}
               </Button>
             ))}
@@ -868,7 +868,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                   }}
                 />
               </FormField>
-              {mode === 'Image Inpaint' ? <div className="text-[11px] text-muted-foreground">{t({ ko: 'Image Inpaint는 내부 5프레임·단일 이미지 출력으로 고정돼.', en: 'Image Inpaint uses a fixed five-frame latent and produces one image.' })}</div> : null}
+              {mode === 'Image Inpaint' ? <div className="text-2xs text-muted-foreground">{t({ ko: 'Image Inpaint는 내부 5프레임·단일 이미지 출력으로 고정돼.', en: 'Image Inpaint uses a fixed five-frame latent and produces one image.' })}</div> : null}
             </div>
           ) : null}
           {isFieldVisible('frame_rate') ? (

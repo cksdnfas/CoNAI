@@ -77,7 +77,7 @@ export function MiniMaxH3DirectorPromptBuilder({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-xs font-medium text-foreground">{t({ ko: '프롬프트 빌더', en: 'Prompt builder' })}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">{state.mode}</div>
+          <div className="mt-1 text-2xs text-muted-foreground">{state.mode}</div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="secondary" onClick={() => setShotNumberDraft('1')}>

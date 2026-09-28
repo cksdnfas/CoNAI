@@ -120,7 +120,7 @@ export function WildcardPreviewModal({
               {parseResult.results.map((result, index) => (
                 <div key={`${index}:${result}`} className="rounded-sm border border-border bg-surface-low p-3 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs uppercase tracking-[0.18em]">{t({ ko: '샘플 {count}', en: 'Sample {count}' }, { count: index + 1 })}</div>
+                    <div className="text-xs uppercase tracking-overline">{t({ ko: '샘플 {count}', en: 'Sample {count}' }, { count: index + 1 })}</div>
                     <Button type="button" size="sm" variant="ghost" onClick={() => onCopyResult(result, t({ ko: '프리뷰 결과 {count}', en: 'Preview result {count}' }, { count: index + 1 }))}>
                       <Copy className="h-4 w-4" />
                       {t({ ko: '복사', en: 'Copy' })}

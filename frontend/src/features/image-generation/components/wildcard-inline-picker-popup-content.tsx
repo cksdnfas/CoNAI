@@ -223,7 +223,7 @@ export function WildcardInlinePickerPopupContent({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
           {recentSuggestions.length > 0 ? (
             <div className="space-y-1">
-              <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.recent')}</div>
+              <div className="px-1 text-2xs font-medium uppercase tracking-overline text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.recent')}</div>
               <div className="space-y-1">
                 {recentSuggestions.map(renderSuggestionButton)}
               </div>
@@ -232,7 +232,7 @@ export function WildcardInlinePickerPopupContent({
 
           {remainingSuggestions.length > 0 ? (
             <div className="space-y-1">
-              {recentSuggestions.length > 0 ? <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.all.results')}</div> : null}
+              {recentSuggestions.length > 0 ? <div className="px-1 text-2xs font-medium uppercase tracking-overline text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.all.results')}</div> : null}
               <div className="space-y-1">
                 {remainingSuggestions.map(renderSuggestionButton)}
               </div>

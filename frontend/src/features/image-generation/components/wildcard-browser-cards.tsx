@@ -188,19 +188,19 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
         <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '시간', en: 'Time' })}</div>
+              <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: '시간', en: 'Time' })}</div>
               <div className="mt-1 text-sm text-foreground">{formatWildcardDateTime(log.timestamp, formatDateTime)}</div>
             </div>
             <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: 'LoRA 가중치', en: 'LoRA weight' })}</div>
+              <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: 'LoRA 가중치', en: 'LoRA weight' })}</div>
               <div className="mt-1 text-sm text-foreground">{log.loraWeight}</div>
             </div>
             <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '중복 처리', en: 'Duplicate handling' })}</div>
+              <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: '중복 처리', en: 'Duplicate handling' })}</div>
               <div className="mt-1 text-sm text-foreground">{log.duplicateHandling}</div>
             </div>
             <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '생성 항목', en: 'Created items' })}</div>
+              <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: '생성 항목', en: 'Created items' })}</div>
               <div className="mt-1 text-sm text-foreground">{formatNumber(log.totalItems)}</div>
             </div>
           </div>

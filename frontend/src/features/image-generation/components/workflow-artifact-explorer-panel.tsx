@@ -128,8 +128,8 @@ function ArtifactCard({
       {isDirectory ? <FolderThumbnail entry={entry} /> : <FileThumbnail entry={entry} />}
       <div className="mt-2 min-w-0 text-center">
         <div className="line-clamp-2 break-words text-xs font-medium text-foreground" title={entry.name}>{entry.name}</div>
-        <div className="mt-1 text-[11px] text-muted-foreground">{isDirectory ? t({ ko: '폴더', en: 'Folder' }) : formatSize(entry.size)}</div>
-        <div className="text-[10px] text-muted-foreground/80">{formatDateTime(entry.modifiedAt)}</div>
+        <div className="mt-1 text-2xs text-muted-foreground">{isDirectory ? t({ ko: '폴더', en: 'Folder' }) : formatSize(entry.size)}</div>
+        <div className="text-2xs text-muted-foreground/80">{formatDateTime(entry.modifiedAt)}</div>
       </div>
     </>
   )

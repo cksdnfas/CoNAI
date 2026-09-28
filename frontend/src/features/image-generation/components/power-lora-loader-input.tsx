@@ -182,7 +182,7 @@ export function PowerLoraLoaderInput({
   if (nodeItems.length === 0) {
     return (
       <div className={cn(isCompact ? 'space-y-1' : 'space-y-2')}>
-        <div className={cn('rounded-sm border border-dashed border-border/80 text-muted-foreground', isCompact ? 'px-2 py-1.5 text-[11px]' : 'px-3 py-4 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
+        <div className={cn('rounded-sm border border-dashed border-border/80 text-muted-foreground', isCompact ? 'px-2 py-1.5 text-2xs' : 'px-3 py-4 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
         {addLoraControl}
       </div>
     )
@@ -223,14 +223,14 @@ export function PowerLoraLoaderInput({
             />
 
             <div className="min-w-0">
-              <div className={cn('truncate font-medium text-foreground', isCompact ? 'text-[11px] leading-5' : 'text-sm')}>{item.label}</div>
+              <div className={cn('truncate font-medium text-foreground', isCompact ? 'text-2xs leading-5' : 'text-sm')}>{item.label}</div>
             </div>
 
             <NumberStepperInput
               step={0.05}
               value={typeof entry.strength === 'number' ? String(entry.strength) : ''}
               aria-label={t('image-generation.components.power.lora.loader.input.value.weight', { label: item.label })}
-              className={cn('text-left', isCompact ? 'h-6 w-11 px-1.5 text-[11px]' : 'h-8 w-[72px] px-2')}
+              className={cn('text-left', isCompact ? 'h-6 w-11 px-1.5 text-2xs' : 'h-8 w-[72px] px-2')}
               onValueCommit={(nextValue) => {
                 const parsedStrength = Number(nextValue)
                 onChange({

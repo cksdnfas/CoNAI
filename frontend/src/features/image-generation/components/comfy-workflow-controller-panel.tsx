@@ -145,7 +145,7 @@ function WorkflowTargetSelect({
                     }}
                   >
                     <span className="min-w-0 truncate">{option.label}</span>
-                    {option.description ? <span className="shrink-0 text-[11px] text-muted-foreground">{option.description}</span> : null}
+                    {option.description ? <span className="shrink-0 text-2xs text-muted-foreground">{option.description}</span> : null}
                   </button>
                 )
               })}

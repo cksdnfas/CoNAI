@@ -42,7 +42,7 @@ export function NaiSavedImageBrowserSection({
   return (
     <Section
       variant="controller"
-      heading={<span className="text-xs font-medium tracking-[0.08em] text-muted-foreground/90">{title}</span>}
+      heading={<span className="text-xs font-medium tracking-overline text-muted-foreground/90">{title}</span>}
       className={className}
       bodyClassName={isExpanded ? 'space-y-0 px-3 py-3' : 'hidden'}
       actions={(

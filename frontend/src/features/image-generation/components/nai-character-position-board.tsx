@@ -126,10 +126,10 @@ export function NaiCharacterPositionBoard({
           }))}
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 top-2 grid grid-cols-5 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="pointer-events-none absolute inset-x-0 top-2 grid grid-cols-5 text-center text-2xs font-medium uppercase tracking-overline text-muted-foreground">
           {['A', 'B', 'C', 'D', 'E'].map((label) => <span key={label}>{label}</span>)}
         </div>
-        <div className="pointer-events-none absolute inset-y-0 left-2 grid grid-rows-5 items-center text-[10px] font-medium tracking-[0.18em] text-muted-foreground">
+        <div className="pointer-events-none absolute inset-y-0 left-2 grid grid-rows-5 items-center text-2xs font-medium tracking-overline text-muted-foreground">
           {['1', '2', '3', '4', '5'].map((label) => <span key={label}>{label}</span>)}
         </div>
 

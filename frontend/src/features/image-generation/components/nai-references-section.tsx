@@ -73,7 +73,7 @@ export function NaiReferencesSection({
           </>
         )}
       >
-        {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</div> : null}
+        {!supportsCharacterReference ? <div className="text-xs text-destructive">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</div> : null}
 
         {references.length > 0 ? (
           <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-low/40">
