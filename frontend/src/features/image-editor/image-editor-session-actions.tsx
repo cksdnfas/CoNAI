@@ -1,6 +1,7 @@
 import { Crop, Minus, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Heading } from '@/components/ui/heading'
+import { Panel } from '@/components/ui/panel'
 import { useI18n } from '@/i18n'
 import type { ImageEditorCropRect } from './image-editor-types'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -52,9 +53,8 @@ export function ImageEditorSessionActions({
   const { t } = useI18n()
 
   return (
-    <Card>
-      <CardContent className="space-y-3">
-        <div className="border-b border-border/70 pb-4 text-sm font-semibold text-foreground">{t({ ko: '세션 작업', en: 'Session actions' })}</div>
+    <Panel tone="low" className="space-y-3">
+        <Heading level={3} className="pb-1">{t({ ko: '세션 작업', en: 'Session actions' })}</Heading>
         <Button type="button" variant="secondary" onClick={onMergeVisible} className="w-full justify-start" disabled={!canMergeVisible}>
           {t({ ko: '보이는 레이어 병합', en: 'Merge visible' })}
         </Button>
@@ -72,7 +72,7 @@ export function ImageEditorSessionActions({
         </Button>
 
         {selectionRect ? (
-          <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+          <div className="space-y-2 rounded-sm bg-surface-lowest p-3">
             <div className="text-xs font-medium text-foreground">{t({ ko: '선택 범위', en: 'Selection bounds' })}</div>
             <div className="grid grid-cols-2 gap-2">
               <label className="space-y-1 text-xs text-muted-foreground">X<NumberStepperInput value={Math.round(selectionRect.x)} onValueCommit={(nextValue) => onSelectionRectFieldChange('x', Number(nextValue) || 0)} className="h-8" /></label>
@@ -89,7 +89,7 @@ export function ImageEditorSessionActions({
               <Crop className="h-4 w-4" /> {t({ ko: '자르기 취소', en: 'Cancel crop' })}
             </Button>
 
-            <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+            <div className="space-y-2 rounded-sm bg-surface-lowest p-3">
               <div className="text-xs font-medium text-foreground">{t({ ko: '자르기 범위', en: 'Crop bounds' })}</div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="space-y-1 text-xs text-muted-foreground">X<NumberStepperInput value={Math.round(cropRect.x)} onValueCommit={(nextValue) => onCropRectFieldChange('x', Number(nextValue) || 0)} className="h-8" /></label>
@@ -109,7 +109,6 @@ export function ImageEditorSessionActions({
             {saving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+    </Panel>
   )
 }

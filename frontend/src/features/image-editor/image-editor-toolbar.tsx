@@ -61,8 +61,8 @@ function ToolButton({ active, children, onClick, title }: { active?: boolean; ch
 /** Render one labeled toolbar section so related actions stay grouped. */
 function ToolbarSection({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2">
-      <div className="mr-2 min-w-[72px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+    <div className="flex flex-wrap items-end gap-2 rounded-sm bg-surface-lowest px-3 py-2">
+      <div className="mr-2 min-w-[72px] text-2xs font-medium uppercase tracking-overline text-muted-foreground">{label}</div>
       <div className="flex flex-wrap items-end gap-2">{children}</div>
     </div>
   )
@@ -214,7 +214,7 @@ export function ImageEditorToolbar({
         </ToolbarSection>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 rounded-sm bg-surface-lowest px-3 py-2 text-xs text-muted-foreground">
         <Badge variant="outline">{t({ ko: '도구', en: 'Tool' })} {t(getImageEditorToolLabel(tool))}</Badge>
         <span>{t({ ko: '단축키', en: 'Shortcut' })} {getImageEditorToolShortcut(tool)}</span>
         <span>•</span>

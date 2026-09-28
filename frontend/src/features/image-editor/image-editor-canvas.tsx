@@ -159,7 +159,7 @@ export function ImageEditorCanvas({
         }
       }}
     >
-      <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-wrap gap-2 rounded-sm border border-white/10 bg-black/55 px-3 py-2 text-[11px] text-white shadow-lg backdrop-blur-sm">
+      <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-wrap gap-2 rounded-sm bg-backdrop px-3 py-2 text-2xs text-white backdrop-blur-sm">
         <span className="font-medium text-white/90">{t(getImageEditorToolLabel(tool))}</span>
         <span className="text-white/50">•</span>
         <span>{t({ ko: '확대 {value}%', en: 'Zoom {value}%' }, { value: Math.round(zoom * 100) })}</span>
@@ -185,9 +185,9 @@ export function ImageEditorCanvas({
         ) : null}
       </div>
       {isMaskTool ? (
-        <div className="pointer-events-none absolute right-3 top-3 z-20 max-w-[280px] rounded-sm border border-red-300/25 bg-red-950/60 px-3 py-2 text-[11px] text-red-50 shadow-lg backdrop-blur-sm">
-          <div className="font-medium text-red-100">{t({ ko: '마스크 모드 활성화', en: 'Mask mode active' })}</div>
-          <div className="mt-1 text-red-100/80">{t({ ko: '흰색 영역은 편집 가능한 인필 마스크 영역으로 내보내져. 마스크 브러시는 ', en: 'White regions are exported as editable infill mask areas. Use ' })}<span className="font-medium">M</span>{t({ ko: ', 마스크 지우개는 ', en: ' for mask brush and ' })}<span className="font-medium">Shift+M</span>{t({ ko: ' 를 써.', en: ' for mask eraser.' })}</div>
+        <div className="pointer-events-none absolute right-3 top-3 z-20 max-w-[280px] rounded-sm bg-destructive-soft/92 px-3 py-2 text-2xs text-destructive-soft-foreground backdrop-blur-sm">
+          <div className="font-medium">{t({ ko: '마스크 모드 활성화', en: 'Mask mode active' })}</div>
+          <div className="mt-1 opacity-85">{t({ ko: '흰색 영역은 편집 가능한 인필 마스크 영역으로 내보내져. 마스크 브러시는 ', en: 'White regions are exported as editable infill mask areas. Use ' })}<span className="font-medium">M</span>{t({ ko: ', 마스크 지우개는 ', en: ' for mask brush and ' })}<span className="font-medium">Shift+M</span>{t({ ko: ' 를 써.', en: ' for mask eraser.' })}</div>
         </div>
       ) : null}
       {baseImage ? (

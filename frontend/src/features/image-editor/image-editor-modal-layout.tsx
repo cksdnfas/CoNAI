@@ -2,7 +2,8 @@ import type { RefObject, WheelEvent } from 'react'
 import type Konva from 'konva'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Heading } from '@/components/ui/heading'
+import { Panel } from '@/components/ui/panel'
 import { useI18n } from '@/i18n'
 import { Modal } from '@/components/ui/modal'
 import { ImageEditorCanvas } from './image-editor-canvas'
@@ -160,11 +161,10 @@ export function ImageEditorModalLayout({
       <div className="space-y-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-4">
-            <Card>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
-                  <div className="space-y-1">
-                    <div className="text-base font-semibold text-foreground">{sourceFileName || t({ ko: '편집 세션', en: 'Editor Session' })}</div>
+            <Panel tone="low" className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <Heading level={3} className="truncate">{sourceFileName || t({ ko: '편집 세션', en: 'Editor Session' })}</Heading>
                     <div className="text-xs text-muted-foreground">{sourceSummary.width > 0 ? `${sourceSummary.width} × ${sourceSummary.height}` : t({ ko: '불러온 이미지가 없어.', en: 'No image loaded' })}</div>
                     {sourceSummary.activeLayerName ? (
                       <div className="text-xs text-muted-foreground">{t({ ko: '활성 레이어', en: 'Active layer' })}: {sourceSummary.activeLayerName}{sourceSummary.activeLayerLocked ? ` · ${t({ ko: '잠김', en: 'Locked' })}` : ''}</div>
@@ -179,8 +179,7 @@ export function ImageEditorModalLayout({
 
                 <ImageEditorToolbar {...toolbar} />
                 <ImageEditorCanvas {...canvas} />
-              </CardContent>
-            </Card>
+            </Panel>
           </div>
 
           <div className="min-w-0 space-y-4 xl:sticky xl:top-0 xl:self-start">
@@ -190,7 +189,7 @@ export function ImageEditorModalLayout({
         </div>
 
         {/* Below xl the side panel stacks under the tall canvas, so keep the primary actions pinned to the modal bottom. */}
-        <div className="sticky bottom-0 z-10 flex gap-2 border-t border-border/70 bg-background/96 py-3 backdrop-blur xl:hidden">
+        <div className="sticky bottom-0 z-10 flex gap-2 bg-background/96 py-3 backdrop-blur xl:hidden">
           <Button type="button" variant="secondary" className="flex-1" onClick={sessionActions.onClose} disabled={sessionActions.saving}>
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
