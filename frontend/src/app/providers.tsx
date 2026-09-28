@@ -2,6 +2,7 @@ import type { PropsWithChildren } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { ConfirmProvider } from '@/components/ui/confirm-dialog'
 import { SnackbarProvider } from '@/components/ui/snackbar-provider'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { RuntimeEventStreamProvider } from '@/features/runtime-events/runtime-event-stream-provider'
 import { I18nProvider } from '@/i18n'
 import { appQueryClient } from '@/lib/app-query-client'
@@ -15,7 +16,9 @@ export function AppProviders({ children }: PropsWithChildren) {
         <I18nProvider>
           <ThemeProvider>
             <SnackbarProvider>
-              <ConfirmProvider>{children}</ConfirmProvider>
+              <TooltipProvider>
+                <ConfirmProvider>{children}</ConfirmProvider>
+              </TooltipProvider>
             </SnackbarProvider>
           </ThemeProvider>
         </I18nProvider>

@@ -76,6 +76,8 @@
    *   z-[1000] z-[1200] (explorer hover card, explorer modals),
    *     z-[5000] (wallpaper canvas overlay, local stacking) -> below modal
    *   z-[6000] (settings modal)                          -> modal (6000)
+   *   Radix tooltips, dropdown menus, popovers, which must
+   *     also float above an open modal                   -> floating (6500)
    *   z-[7000] (snackbar, popups inside wildcard editor) -> toast (7000)
    *   z-[10000] (path tree hover preview)                -> above toast, keep arbitrary
    */
@@ -86,7 +88,19 @@
   --z-index-drawer: 84;
   --z-index-popover: 140;
   --z-index-modal: 6000;
+  --z-index-floating: 6500;
   --z-index-toast: 7000;
+  /* Indeterminate <Progress>: a 40%-wide bar sweeping across the track. */
+  --animate-progress-indeterminate: progress-indeterminate 1.4s ease-in-out infinite;
+
+  @keyframes progress-indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(250%);
+    }
+  }
 }
 
 :root {
