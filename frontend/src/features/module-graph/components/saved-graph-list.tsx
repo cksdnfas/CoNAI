@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, FileCode2, Folder, Search } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -333,16 +333,20 @@ export function SavedGraphList({
       {rootEntries.map((entry) => entry.type === 'folder' ? renderFolderNode(entry.folder, 0) : renderWorkflowRow(entry.workflow, 0))}
 
       {graphs.length === 0 && folders.length === 0 ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '저장된 워크플로우가 없어', en: 'There are no saved workflows' })}</AlertTitle>
-          <AlertDescription>{t({ ko: '새 폴더나 새 워크플로우를 만들면 여기서 바로 탐색할 수 있어.', en: 'Create a new folder or workflow to browse it here.' })}</AlertDescription>
-        </Alert>
+        <EmptyState
+          size="compact"
+          icon={FileCode2}
+          title={t({ ko: '저장된 워크플로우가 없어', en: 'There are no saved workflows' })}
+          description={t({ ko: '새 폴더나 새 워크플로우를 만들면 여기서 바로 탐색할 수 있어.', en: 'Create a new folder or workflow to browse it here.' })}
+        />
       ) : null}
       {(graphs.length > 0 || folders.length > 0) && !hasAnyVisibleItem ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '검색 결과가 없어', en: 'No search results' })}</AlertTitle>
-          <AlertDescription>{t({ ko: '다른 키워드로 찾아봐.', en: 'Try a different keyword.' })}</AlertDescription>
-        </Alert>
+        <EmptyState
+          size="compact"
+          icon={Search}
+          title={t({ ko: '검색 결과가 없어', en: 'No search results' })}
+          description={t({ ko: '다른 키워드로 찾아봐.', en: 'Try a different keyword.' })}
+        />
       ) : null}
     </ExplorerSidebar>
   )
