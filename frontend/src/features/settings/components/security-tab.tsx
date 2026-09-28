@@ -140,7 +140,12 @@ export function SecurityTab() {
 
       {securityTabData.canViewDatabaseInfo ? (
         <section>
-          <SecurityRecoveryCard databaseInfo={securityTabData.databaseInfo} />
+          <SecurityRecoveryCard
+            databaseInfo={securityTabData.databaseInfo}
+            isError={securityTabData.isDatabaseInfoError}
+            isRetrying={securityTabData.isRefetchingDatabaseInfo}
+            onRetry={securityTabData.retryDatabaseInfo}
+          />
         </section>
       ) : null}
 
