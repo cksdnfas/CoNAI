@@ -23,7 +23,7 @@ import { Section } from '@/components/ui/section'
 import { NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
-import { GenerateActionBar } from './generate-action-bar'
+import { GenerateActionBar, GenerateActionDock } from './generate-action-bar'
 import { ResolutionPicker } from './resolution-picker'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 
@@ -483,7 +483,6 @@ export function CodexGenerationPanel({
   const inlineHeaderContent = (
     <div className="space-y-3">
       {headerToolbarContent}
-      {useInlineActionBar ? actionSection : null}
     </div>
   )
 
@@ -593,6 +592,9 @@ export function CodexGenerationPanel({
           {!useInlineActionBar && !useDrawerCompactChrome ? actionSection : null}
           {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
         </div>
+
+        {/* 생성 버튼·결과 그룹은 편집 영역 아래에 고정해 스크롤 위치와 상관없이 바로 누를 수 있게 한다. */}
+        {useInlineActionBar ? <GenerateActionDock>{actionSection}</GenerateActionDock> : null}
       </div>
 
     </>

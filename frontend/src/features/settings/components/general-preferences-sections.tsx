@@ -25,6 +25,7 @@ interface GeneralPreferencesSectionsProps {
 }
 
 const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; label: { ko: string; en: string } }> = [
+  { key: 'access', label: { ko: '이용 가능 페이지', en: 'Available pages' } },
   { key: 'home', label: { ko: '홈', en: 'Home' } },
   { key: 'groups', label: { ko: '그룹', en: 'Groups' } },
   { key: 'prompts', label: { ko: '프롬프트', en: 'Prompts' } },

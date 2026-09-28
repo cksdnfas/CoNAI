@@ -15,7 +15,6 @@ import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { AuthRequestError, createGuestAccount, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
-import { hasAuthPermission } from './auth-permissions'
 import { LanguageSwitch } from './language-switch'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
@@ -58,11 +57,8 @@ export function LoginPage() {
     const params = new URLSearchParams(location.search)
     return resolveNextPath(params.get('next'))
   }, [location.search])
-  // 홈을 열 수 있는 계정은 홈으로, 아니면 이용 가능한 페이지 목록으로 보낸다.
-  const resolvePostLoginPath = (result: { isAdmin?: boolean; permissionKeys?: string[] }) => {
-    if (nextPath !== '/') return nextPath
-    return result.isAdmin || hasAuthPermission(result.permissionKeys ?? [], 'page.home.view') ? '/' : '/access'
-  }
+  // 로그인 뒤에는 이용 가능한 페이지 목록에서 시작한다(원래 흐름).
+  const resolvePostLoginPath = () => (nextPath === '/' ? '/access' : nextPath)
 
   const describeLoginError = (error: unknown) => {
     if (error instanceof AuthRequestError) {
@@ -94,7 +90,7 @@ export function LoginPage() {
       setLoginFormNotice(null)
       closeSnackbar()
       showSnackbar({ message: t('loginPage.signedIn'), tone: 'info' })
-      navigate(resolvePostLoginPath(result), { replace: true })
+      navigate(resolvePostLoginPath(), { replace: true })
     },
     onError: (error) => {
       // Keep the password so a typo in the username (or a transient error) doesn't force retyping it.
@@ -119,7 +115,7 @@ export function LoginPage() {
       setGuestPassword('')
       setIsGuestModalOpen(false)
       showSnackbar({ message: t('loginPage.guestAccountCreatedAndSigned'), tone: 'info' })
-      navigate(resolvePostLoginPath(result), { replace: true })
+      navigate(resolvePostLoginPath(), { replace: true })
     },
     onError: (error) => {
       setGuestPassword('')
@@ -140,7 +136,7 @@ export function LoginPage() {
   }
 
   if (authStatusQuery.data?.authenticated) {
-    return <Navigate to={resolvePostLoginPath(authStatusQuery.data)} replace />
+    return <Navigate to={resolvePostLoginPath()} replace />
   }
 
   const hasCredentials = authStatusQuery.data?.hasCredentials === true

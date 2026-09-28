@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageList } from '@/features/images/components/image-list/image-list'
-import { ImageListColumnControl } from '@/features/images/components/image-list/image-list-column-control'
+import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { ImageListFeedFooter } from '@/features/images/components/image-list/image-list-feed-footer'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import type { GroupRecord } from '@/types/group'
@@ -160,13 +160,14 @@ export function GroupImageSection({
               />
             ) : null}
             {preferredColumnCount !== undefined && onColumnCountChange ? (
-              <ImageListColumnControl
+              <ImageListColumnFloatingControl
                 value={preferredColumnCount}
-                defaultValue={defaultColumnCount}
+                defaultValue={defaultColumnCount ?? preferredColumnCount}
                 min={minColumnCount}
                 max={maxColumnCount}
                 onChange={onColumnCountChange}
                 onReset={onColumnCountReset}
+                className={selectedIds.length > 0 ? 'bottom-24' : undefined}
               />
             ) : null}
             {toolbarActions}

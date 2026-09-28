@@ -28,6 +28,7 @@ import { NaiAuthModal } from './nai-auth-modal'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiGenerationEditorSections } from './nai-generation-editor-sections'
 import { NaiActionSection, NaiConnectionHeader } from './nai-generation-panel-sections'
+import { GenerateActionDock } from './generate-action-bar'
 import { useNaiAssetLibrary } from './use-nai-asset-library'
 import { useNaiAuthController } from './use-nai-auth-controller'
 import { useNaiGenerationActions } from './use-nai-generation-actions'
@@ -403,7 +404,6 @@ export function NaiGenerationPanel({
         onOpenAuth={handleOpenNaiAuthModal}
         compact
       />
-      {useDrawerCompactChrome ? null : actionSection}
     </div>
   )
 
@@ -435,6 +435,9 @@ export function NaiGenerationPanel({
           {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionSection, compactActionBarPortalTarget) : null}
           {editorSections}
         </div>
+
+        {/* 생성 버튼·결과 그룹은 편집 영역 아래에 고정해 스크롤 위치와 상관없이 바로 누를 수 있게 한다. */}
+        {useInlineActionBar && !useDrawerCompactChrome ? <GenerateActionDock>{actionSection}</GenerateActionDock> : null}
       </div>
 
       <NaiAuthModal

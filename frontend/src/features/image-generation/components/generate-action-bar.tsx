@@ -301,3 +301,12 @@ export function GenerateActionBar({
     </GenerateActionBarVariantContext.Provider>
   )
 }
+
+/** Bottom dock for the inline bar in the split-pane layout: stays put while the controls above it scroll. */
+export function GenerateActionDock({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div data-slot="generate-action-dock" className={cn('sticky bottom-0 z-sticky shrink-0 rounded-md bg-surface-container p-3 shadow-elevation-1', className)}>
+      {children}
+    </div>
+  )
+}

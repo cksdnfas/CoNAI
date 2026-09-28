@@ -16,7 +16,7 @@ import { GroupAssignModal } from '@/features/groups/components/group-assign-moda
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { ImageListFeedFooter } from '@/features/images/components/image-list/image-list-feed-footer'
-import { ImageListColumnControl } from '@/features/images/components/image-list/image-list-column-control'
+import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
@@ -199,16 +199,18 @@ export function HomePage() {
             </div>
             <div className="flex items-center gap-2">
               <HomeSortMenu value={sortOrder} onChange={setSortOrder} />
-              <ImageListColumnControl
-                value={homeColumnCount}
-                defaultValue={defaultHomeColumnCount}
-                min={minHomeColumnCount}
-                max={maxHomeColumnCount}
-                onChange={setHomeColumnCount}
-                onReset={resetHomeColumnCount}
-              />
             </div>
           </Inset>
+          {/* 스크롤을 따라다니는 칼럼 설정. 선택 바가 떠 있으면 그 위로 비켜 선다. */}
+          <ImageListColumnFloatingControl
+            value={homeColumnCount}
+            defaultValue={defaultHomeColumnCount}
+            min={minHomeColumnCount}
+            max={maxHomeColumnCount}
+            onChange={setHomeColumnCount}
+            onReset={resetHomeColumnCount}
+            className={selectedIds.length > 0 ? 'bottom-24' : undefined}
+          />
 
           <ImageList
             items={visibleImages}

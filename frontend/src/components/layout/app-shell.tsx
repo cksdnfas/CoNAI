@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -38,11 +38,14 @@ const PRIMARY_NAV_ITEM_IDS: Record<typeof PRIMARY_NAV_ORDER[number], HeaderNavig
   '/settings': 'settings',
 }
 
-// `/access` is intentionally not a nav item: the logo and the account menu both reach it.
-const navItems: Array<{ id: HeaderNavigationItemKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string }> = PRIMARY_NAV_ORDER.flatMap((path) => {
-  const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
-  return item ? [{ id: PRIMARY_NAV_ITEM_IDS[path], to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
-})
+// "이용 가능 페이지" leads the header: it is the hub people use to reach every page they may open.
+const navItems: Array<{ id: HeaderNavigationItemKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }> = [
+  { id: 'access', to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null },
+  ...PRIMARY_NAV_ORDER.flatMap((path) => {
+    const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
+    return item ? [{ id: PRIMARY_NAV_ITEM_IDS[path], to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
+  }),
+]
 
 function DeferredGenerationQueueHeaderWidget() {
   const [shouldRender, setShouldRender] = useState(false)
@@ -86,9 +89,8 @@ function AppShellLayout() {
   const headerNavigation = headerNavigationQuery.data ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false && hasAuthPermission(permissionKeys, item.permissionKey))
-  // The logo goes home; accounts that cannot open home land on the access overview instead of a blocked-page bounce.
-  const logoTarget = hasAuthPermission(permissionKeys, 'page.home.view') ? '/' : '/access'
+  const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
+  const logoTarget = '/access'
   const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
   const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)
   const shouldShowHeaderSearch = headerNavigation.search !== false && !isAnonymousSession
@@ -124,7 +126,7 @@ function AppShellLayout() {
             <NavLink
               to={logoTarget}
               className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
-              aria-label={logoTarget === '/' ? t('appShell.goHome') : t('appShell.availablePages')}
+              aria-label={t('appShell.availablePages')}
               title={APP_BRAND_TOOLTIP}
               onMouseEnter={() => prefetchAppRoute(logoTarget)}
               onFocus={() => prefetchAppRoute(logoTarget)}

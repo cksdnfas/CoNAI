@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 import { collectWorkflowNodeDraftIssues, hasWorkflowFieldValue } from '../image-generation-drafts'
 import type { ComfyUIServerTestState, SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { GenerationControllerFieldStack } from './shared-generation-controller'
-import { GenerateActionBar, GenerateActionBarIconButton } from './generate-action-bar'
+import { GenerateActionBar, GenerateActionBarIconButton, GenerateActionDock } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
 import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
@@ -421,8 +421,6 @@ export function ComfyWorkflowControllerPanel({
           {workflowDescription ? <Text variant="muted">{workflowDescription}</Text> : null}
         </div>
       </div>
-
-      {inlineActionBar}
     </div>
   )
 
@@ -541,6 +539,9 @@ export function ComfyWorkflowControllerPanel({
 
         {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
       </div>
+
+      {/* 생성 버튼·서버·결과 그룹은 필드 아래에 고정해 스크롤 위치와 상관없이 바로 누를 수 있게 한다. */}
+      {useDrawerCompactChrome ? null : <GenerateActionDock>{inlineActionBar}</GenerateActionDock>}
     </section>
   )
 }
