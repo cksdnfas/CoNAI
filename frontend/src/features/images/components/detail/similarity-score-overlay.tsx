@@ -20,9 +20,30 @@ interface SimilarityScoreOverlayCardProps {
 
 type Translate = ReturnType<typeof useI18n>['t']
 
-/** Format one score into the compact badge string already used by image similarity UI. */
+/** Format one 0-100 score for the raw detail rows. */
 function formatSimilarityValue(value?: number) {
   return typeof value === 'number' ? value.toFixed(1) : '—'
+}
+
+/** Format one 0-100 score as a whole percentage for the badge and summary. */
+function formatSimilarityPercent(value?: number) {
+  return typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value)}%` : '—'
+}
+
+/** Plain-language band that matches the badge colour thresholds. */
+function getSimilarityBandLabel(similarity: number, t: Translate) {
+  if (similarity >= 92) return t({ ko: '거의 같음', en: 'Nearly identical' })
+  if (similarity >= 82) return t({ ko: '매우 비슷함', en: 'Very similar' })
+  if (similarity >= 68) return t({ ko: '비슷함', en: 'Similar' })
+  if (similarity >= 52) return t({ ko: '조금 비슷함', en: 'Somewhat similar' })
+  return t({ ko: '별로 비슷하지 않음', en: 'Not very similar' })
+}
+
+const MATCH_TYPE_LABELS: Record<SimilarImage['matchType'], { ko: string; en: string }> = {
+  exact: { ko: '동일 이미지', en: 'Exact match' },
+  'near-duplicate': { ko: '거의 중복', en: 'Near duplicate' },
+  similar: { ko: '유사 이미지', en: 'Similar image' },
+  'color-similar': { ko: '색감 유사', en: 'Similar colours' },
 }
 
 /** Map score bands onto the shared similarity badge palette. */
@@ -72,7 +93,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          {formatSimilarityValue(badgeValue)}
+          {formatSimilarityPercent(badgeValue)}
         </Badge>
 
         <AnchoredPopup
@@ -93,25 +114,35 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
             },
           }}
         >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="font-semibold text-foreground">{t('images.components.detail.similarity.score.overlay.score.details')}</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-foreground">
+              {t({ ko: '유사도 {percent}', en: '{percent} similar' }, { percent: formatSimilarityPercent(badgeValue) })}
+            </span>
             {popupBadgeLabel ? <Badge variant="outline" className="px-2 py-0.5 tracking-normal normal-case">{popupBadgeLabel}</Badge> : null}
           </div>
+          <p className="mt-0.5 text-muted-foreground">{getSimilarityBandLabel(badgeValue, t)}</p>
 
-          <div className="grid gap-1.5">
-            {rows.map((row) => (
-              <div key={row.key} className="flex items-start justify-between gap-2 leading-4">
-                <span className="text-muted-foreground">{row.label}</span>
-                <span className={cn(
-                  'text-right text-foreground',
-                  row.tone === 'success' && 'text-emerald-400',
-                  row.tone === 'danger' && 'text-destructive',
-                )}>
-                  {row.value}
-                </span>
+          {rows.length > 0 ? (
+            <details className="mt-2" onClick={(event) => event.stopPropagation()}>
+              <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">
+                {t('images.components.detail.similarity.score.overlay.score.details')}
+              </summary>
+              <div className="mt-1.5 grid gap-1.5">
+                {rows.map((row) => (
+                  <div key={row.key} className="flex items-start justify-between gap-2 leading-4">
+                    <span className="text-muted-foreground">{row.label}</span>
+                    <span className={cn(
+                      'text-right font-mono text-foreground',
+                      row.tone === 'success' && 'text-emerald-400',
+                      row.tone === 'danger' && 'text-destructive',
+                    )}>
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </details>
+          ) : null}
         </AnchoredPopup>
       </div>
     </div>
@@ -177,7 +208,7 @@ export function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
   return (
     <SimilarityScoreOverlayCard
       badgeValue={item.similarity}
-      popupBadgeLabel={item.matchType}
+      popupBadgeLabel={MATCH_TYPE_LABELS[item.matchType] ? t(MATCH_TYPE_LABELS[item.matchType]) : undefined}
       rows={rows}
     />
   )
@@ -186,9 +217,9 @@ export function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
 /** Build per-field rows for prompt-similarity results. */
 function buildPromptSimilarImageRows(item: PromptSimilarImage, t: Translate): SimilarityOverlayRow[] {
   const fields = [
-    { key: 'positive', label: 'Positive', score: item.positive },
-    { key: 'negative', label: 'Negative', score: item.negative },
-    { key: 'auto', label: 'Auto', score: item.auto },
+    { key: 'positive', label: t({ ko: '긍정 프롬프트', en: 'Positive prompt' }), score: item.positive },
+    { key: 'negative', label: t({ ko: '부정 프롬프트', en: 'Negative prompt' }), score: item.negative },
+    { key: 'auto', label: t({ ko: '자동 태그', en: 'Auto tags' }), score: item.auto },
   ]
 
   const rows: SimilarityOverlayRow[] = fields
@@ -234,7 +265,7 @@ export function PromptSimilarImageScoreOverlay({ item }: { item: PromptSimilarIm
   return (
     <SimilarityScoreOverlayCard
       badgeValue={item.combinedSimilarity}
-      popupBadgeLabel={t('images.components.detail.similarity.score.overlay.text')}
+      popupBadgeLabel={t({ ko: '프롬프트 비교', en: 'Prompt match' })}
       rows={rows}
     />
   )
