@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { ArrowUp, ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { GenerateActionBar, GenerateActionBarIconButton, type GenerateActionBarVariant } from './generate-action-bar'
@@ -26,9 +27,9 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenA
     <section className={compact ? 'space-y-0' : 'space-y-3'}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="truncate text-base font-semibold text-foreground">NovelAI</div>
+          <Heading level={3} as="div" className="truncate">NovelAI</Heading>
           {connected
-            ? <Badge variant="secondary">{t('image-generation.components.nai.generation.panel.sections.connected')}</Badge>
+            ? <Badge variant="secondary" className="bg-success-soft text-success-soft-foreground">{t('image-generation.components.nai.generation.panel.sections.connected')}</Badge>
             : <Badge variant="outline">{t('image-generation.components.nai.generation.panel.sections.disconnected')}</Badge>}
           {connected && tierName ? <Badge variant="outline">{tierName}</Badge> : null}
           {connected && anlasBalance !== undefined ? <Badge variant="outline">Anlas {formatNumber(anlasBalance)}</Badge> : null}
@@ -57,7 +58,7 @@ type NaiControllerInsetBlockProps = {
 
 /** Render one dense inset block inside the NAI controller surface. */
 export function NaiControllerInsetBlock({ children, className }: NaiControllerInsetBlockProps) {
-  return <div className={cn('border-t border-border/70 pt-4', className)}>{children}</div>
+  return <div className={cn('pt-2', className)}>{children}</div>
 }
 
 interface NaiPromptSectionProps {

@@ -88,7 +88,6 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         tool="comfyui"
         value={isWorkflowTextSegmentValue(value) ? value : ''}
         placeholder={field.placeholder || ''}
-        className="rounded-none border-x-0 border-y border-border/80"
         invalid={invalid}
         errorMessageId={errorMessageId}
         onChange={onChange}

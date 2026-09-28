@@ -1,6 +1,8 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { BookmarkPlus, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Separator } from '@/components/ui/separator'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { getTextSegmentSpreadsheetRows, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
@@ -66,75 +68,79 @@ export function TextSegmentSpreadsheetInput({
   }
 
   return (
-    <div className={cn('theme-input-surface overflow-hidden rounded-sm border border-border/80', className)}>
-      {rows.map((row, index) => (
-        <div key={index} className="flex items-stretch border-b border-border/75 last:border-b-0">
-          <div className="min-w-0 flex-1">
-            <WildcardInlinePickerField
-              tool={tool}
-              multiline
-              rows={DEFAULT_PROMPT_TEXTAREA_ROWS}
-              value={row}
-              placeholder={placeholder}
-              showDetectedSyntax={showDetectedSyntax}
-              autocompletePromptType={autocompletePromptType}
-              invalid={invalid}
-              errorMessageId={errorMessageId}
-              className="min-h-[8.5rem] !rounded-none !border-0 !bg-transparent px-3 py-2"
-              onChange={(nextValue) => handleRowChange(index, nextValue)}
-            />
-          </div>
+    <div className={cn('space-y-1', className)}>
+      {/* One recessed tray: a single input outline around every row, tonal side actions, spacing-free row dividers. */}
+      <div
+        className={cn(
+          'theme-input-surface overflow-hidden rounded-sm border transition-[border-color,box-shadow] focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15',
+          invalid && 'border-destructive/70 focus-within:border-destructive/70 focus-within:ring-destructive/20',
+        )}
+      >
+        {rows.map((row, index) => (
+          <Fragment key={index}>
+            {index > 0 ? <Separator /> : null}
+            <div className="flex items-stretch">
+              <div className="min-w-0 flex-1">
+                <WildcardInlinePickerField
+                  tool={tool}
+                  multiline
+                  rows={DEFAULT_PROMPT_TEXTAREA_ROWS}
+                  value={row}
+                  placeholder={placeholder}
+                  showDetectedSyntax={showDetectedSyntax}
+                  autocompletePromptType={autocompletePromptType}
+                  invalid={invalid}
+                  errorMessageId={errorMessageId}
+                  className="min-h-[8.5rem] !rounded-none !border-0 !bg-transparent px-3 py-2 focus:!ring-0"
+                  onChange={(nextValue) => handleRowChange(index, nextValue)}
+                />
+              </div>
 
-          <div className="flex w-11 shrink-0 flex-col border-l border-border/75">
-            <Button
-              ref={(node) => {
-                presetButtonRefs.current.set(index, node)
-              }}
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => setPresetPickerRowIndex((current) => current === index ? null : index)}
-              aria-label={t('image-generation.components.text.segment.spreadsheet.input.insert.preset.into.prompt.row', { row: index + 1 })}
-              title={t('image-generation.components.text.segment.spreadsheet.input.preset')}
-              className="min-h-0 flex-[7] rounded-none px-2 text-muted-foreground"
-            >
-              <BookmarkPlus className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => handleRemoveRow(index)}
-              aria-label={t('image-generation.components.text.segment.spreadsheet.input.delete.prompt.row', { row: index + 1 })}
-              title={t('image-generation.components.text.segment.spreadsheet.input.delete')}
-              className="min-h-0 flex-[3] rounded-none border-t border-border/75 px-2 text-muted-foreground"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+              <div className="flex w-10 shrink-0 flex-col items-center gap-1 bg-foreground/4 py-1.5">
+                <IconButton
+                  ref={(node: HTMLButtonElement | null) => {
+                    presetButtonRefs.current.set(index, node)
+                  }}
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => setPresetPickerRowIndex((current) => current === index ? null : index)}
+                  label={t('image-generation.components.text.segment.spreadsheet.input.insert.preset.into.prompt.row', { row: index + 1 })}
+                  tooltipSide="left"
+                >
+                  <BookmarkPlus />
+                </IconButton>
+                <IconButton
+                  size="icon-sm"
+                  variant="ghost"
+                  className="mt-auto hover:text-destructive"
+                  onClick={() => handleRemoveRow(index)}
+                  label={t('image-generation.components.text.segment.spreadsheet.input.delete.prompt.row', { row: index + 1 })}
+                  tooltipSide="left"
+                >
+                  <Trash2 />
+                </IconButton>
 
-            <PromptPresetInlinePicker
-              open={presetPickerRowIndex === index}
-              anchorRef={{ current: presetButtonRefs.current.get(index) ?? null }}
-              onClose={() => setPresetPickerRowIndex(null)}
-              onInsert={(text) => handleInsertPreset(index, text)}
-            />
-          </div>
-        </div>
-      ))}
-
-      <div className="flex border-t border-border/75">
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          onClick={handleAddRow}
-          aria-label={t('image-generation.components.text.segment.spreadsheet.input.add.prompt.row')}
-          title={t('image-generation.components.text.segment.spreadsheet.input.add.input.row')}
-          className="h-9 w-full rounded-none"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
+                <PromptPresetInlinePicker
+                  open={presetPickerRowIndex === index}
+                  anchorRef={{ current: presetButtonRefs.current.get(index) ?? null }}
+                  onClose={() => setPresetPickerRowIndex(null)}
+                  onInsert={(text) => handleInsertPreset(index, text)}
+                />
+              </div>
+            </div>
+          </Fragment>
+        ))}
       </div>
+
+      <Button
+        type="button"
+        size="xs"
+        variant="ghost"
+        onClick={handleAddRow}
+      >
+        <Plus />
+        {t({ ko: '행 추가', en: 'Add row' })}
+      </Button>
     </div>
   )
 }

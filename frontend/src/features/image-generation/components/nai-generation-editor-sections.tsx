@@ -7,6 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Text } from '@/components/ui/text'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -160,11 +161,11 @@ export function NaiGenerationEditorSections({
         )}
       >
         {!supportsCharacterPrompts ? (
-          <div className="text-xs text-[#ffb4ab]">{t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}</div>
+          <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}</Text>
         ) : (
           <>
-            <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
-              <div className="text-sm font-medium text-foreground">AI's Choice</div>
+            <ToggleRow variant="detail" className="justify-between">
+              <span className="font-medium">AI's Choice</span>
               <Switch
                 checked={naiForm.characterPositionAiChoice}
                 disabled={!canUseCharacterPositions}
@@ -193,46 +194,47 @@ export function NaiGenerationEditorSections({
               </NaiControllerInsetBlock>
             ) : null}
 
-            {hasCharacters ? <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-low/40">
-              {naiForm.characters.map((character, index) => (
-                <div
-                  key={`nai-character-${index}`}
-                  className={index === selectedCharacterIndex
-                    ? 'space-y-3 bg-surface-low/90 px-3 py-3 ring-1 ring-inset ring-accent/45'
-                    : 'space-y-3 px-3 py-3'}
-                  onClick={() => setSelectedCharacterIndex(index)}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-sm font-medium text-foreground">Character {index + 1}</div>
-                      <Badge variant="outline">{useCharacterPositions ? `${character.centerX} · ${character.centerY}` : "AI's Choice"}</Badge>
+            {hasCharacters ? (
+              <div className="space-y-1">
+                {naiForm.characters.map((character, index) => (
+                  <div
+                    key={`nai-character-${index}`}
+                    data-selected={index === selectedCharacterIndex || undefined}
+                    className="space-y-3 rounded-sm p-3 transition-colors data-[selected=true]:bg-primary/8"
+                    onClick={() => setSelectedCharacterIndex(index)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Text as="div" variant="label">Character {index + 1}</Text>
+                        <Badge variant="outline">{useCharacterPositions ? `${character.centerX} · ${character.centerY}` : "AI's Choice"}</Badge>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          handleRemoveCharacterPrompt(index)
+                        }}
+                      >
+                        <Trash2 />
+                        {t('image-generation.components.nai.common.remove')}
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleRemoveCharacterPrompt(index)
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      {t('image-generation.components.nai.common.remove')}
-                    </Button>
-                  </div>
 
-                  <PromptToggleField
-                    tool="nai"
-                    positiveValue={character.prompt}
-                    negativeValue={character.uc}
-                    onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
-                    onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
-                    positiveRows={4}
-                    negativeRows={3}
-                  />
-                </div>
-              ))}
-            </div> : null}
+                    <PromptToggleField
+                      tool="nai"
+                      positiveValue={character.prompt}
+                      negativeValue={character.uc}
+                      onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
+                      onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
+                      positiveRows={4}
+                      negativeRows={3}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </>
         )}
       </Section>
@@ -277,7 +279,7 @@ export function NaiGenerationEditorSections({
             {naiForm.action === 'infill' ? (
               <FormField label={t({ ko: '마스크 이미지', en: 'Mask Image' })}>
                 <div className="space-y-3">
-                  <div className="text-xs text-muted-foreground">{t('image-generation.components.nai.generation.editor.sections.you.can.create.the.mask.in.the')}</div>
+                  <Text variant="caption">{t('image-generation.components.nai.generation.editor.sections.you.can.create.the.mask.in.the')}</Text>
                   <div className="flex flex-wrap gap-2">
                     <ImageAttachmentPickerButton
                       label={naiForm.maskImage
@@ -299,7 +301,7 @@ export function NaiGenerationEditorSections({
             ) : null}
 
             <NaiControllerInsetBlock className="space-y-4">
-              <div className="text-sm font-medium text-foreground">{t({ ko: '이미지 옵션', en: 'Image Options' })}</div>
+              <Text variant="label">{t({ ko: '이미지 옵션', en: 'Image Options' })}</Text>
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField label={t({ ko: '강도', en: 'Strength' })}>
                   <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
@@ -310,8 +312,8 @@ export function NaiGenerationEditorSections({
               </div>
 
               {naiForm.action === 'infill' ? (
-                <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
-                  <div className="text-sm text-foreground">{t({ ko: '원본', en: 'Original' })}</div>
+                <ToggleRow variant="detail" className="justify-between">
+                  <span className="font-medium">{t({ ko: '원본', en: 'Original' })}</span>
                   <Switch checked={naiForm.addOriginalImage} onCheckedChange={(checked) => setNaiForm((current) => ({ ...current, addOriginalImage: checked }))} />
                 </ToggleRow>
               ) : null}
@@ -389,10 +391,10 @@ function rollNaiSeed() {
 /** Render one on/off setting as a label + Switch row that lines up with the grid's form fields. */
 function NaiSwitchField({ label, checked, onCheckedChange }: { label: string, checked: boolean, onCheckedChange: (checked: boolean) => void }) {
   return (
-    <label className="flex min-h-11 items-center justify-between gap-3 self-end rounded-sm bg-surface-low px-3 py-2 text-sm font-medium text-foreground sm:min-h-9">
+    <ToggleRow variant="detail" className="min-h-11 justify-between self-end py-2 font-medium sm:min-h-9">
       <span className="min-w-0 truncate">{label}</span>
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
-    </label>
+    </ToggleRow>
   )
 }
 
@@ -536,20 +538,22 @@ function NaiSettingsSection({
           ) : null}
         </div>
 
-        <div className="border-t border-border/70 pt-3">
-          <button
+        <div>
+          <Button
             type="button"
-            className="flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40"
+            variant="nav"
+            size="sm"
+            className="-mx-2 w-[calc(100%+1rem)] gap-2"
             aria-expanded={isAdvancedOpen}
             aria-controls={advancedRegionId}
             onClick={toggleAdvancedOpen}
           >
-            <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', !isAdvancedOpen && '-rotate-90')} aria-hidden />
-            <span className="shrink-0">{t({ ko: '고급', en: 'Advanced' })}</span>
+            <ChevronDown className={cn('transition-transform', !isAdvancedOpen && '-rotate-90')} aria-hidden />
+            <span className="shrink-0 text-xs font-semibold uppercase tracking-overline">{t({ ko: '고급', en: 'Advanced' })}</span>
             {!isAdvancedOpen ? (
-              <span className="min-w-0 truncate text-[11px] font-normal normal-case tracking-normal">{advancedSummary}</span>
+              <span className="min-w-0 truncate text-xs">{advancedSummary}</span>
             ) : null}
-          </button>
+          </Button>
 
           {isAdvancedOpen ? (
             <div id={advancedRegionId} className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

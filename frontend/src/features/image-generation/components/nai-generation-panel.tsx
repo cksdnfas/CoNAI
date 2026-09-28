@@ -414,7 +414,7 @@ export function NaiGenerationPanel({
           ? useDrawerCompactChrome
             ? (headerPortalTarget ? createPortal(compactHeaderContent, headerPortalTarget) : null)
             : (
-              <div className="shrink-0 space-y-3 border-b border-border/70 pb-4">
+              <div className="shrink-0 space-y-3">
                 {compactHeaderContent}
               </div>
             )

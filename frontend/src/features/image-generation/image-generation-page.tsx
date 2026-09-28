@@ -55,7 +55,7 @@ const WorkflowReservationsPanelLazy = lazy(async () => {
 })
 
 function PanelFallback() {
-  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+  return <div className="ui-tone-plinth min-h-[16rem] animate-pulse rounded-sm" />
 }
 
 export function ImageGenerationPage() {
@@ -231,10 +231,7 @@ export function ImageGenerationPage() {
       )}
     >
       <div className={cn('space-y-6', useWideSplitPaneScroll && 'shrink-0 pb-6')}>
-        <PageHeader
-          eyebrow={t({ ko: '생성', en: 'Create' })}
-          title={t({ ko: '이미지 생성', en: 'Image Generation' })}
-        />
+        <PageHeader title={t({ ko: '이미지 생성', en: 'Image Generation' })} />
 
         <SegmentedTabBar
           value={activeTab}

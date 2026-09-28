@@ -4,9 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
+import { Inset } from '@/components/ui/inset'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Text } from '@/components/ui/text'
 import { getAppSettings } from '@/lib/api-settings-general'
 import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { useI18n } from '@/i18n'
@@ -421,7 +424,7 @@ export function CodexGenerationPanel({
   const headerToolbarContent = (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0 flex items-center gap-2">
-        <div className="truncate text-base font-semibold text-foreground">Codex</div>
+        <Heading level={3} as="div" className="truncate">Codex</Heading>
       </div>
       <div className="flex items-center gap-1">
         {showStatusRecovery ? (
@@ -490,7 +493,7 @@ export function CodexGenerationPanel({
         {useDrawerCompactChrome
           ? (headerPortalTarget ? createPortal(headerToolbarContent, headerPortalTarget) : null)
           : (
-            <div className="shrink-0 space-y-3 border-b border-border/70 pb-4">
+            <div className="shrink-0 space-y-3">
               {inlineHeaderContent}
             </div>
           )}
@@ -512,7 +515,6 @@ export function CodexGenerationPanel({
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label={t({ ko: '비율', en: 'Aspect Ratio' })}>
               <Select
-                variant="detail"
                 value={codexForm.aspectRatio}
                 onChange={(event) => handleFieldChange('aspectRatio', event.target.value)}
               >
@@ -524,7 +526,6 @@ export function CodexGenerationPanel({
 
             <FormField label={t({ ko: '해상도', en: 'Resolution' })} hint={outputSizeHint}>
               <Select
-                variant="detail"
                 value={codexForm.resolution}
                 onChange={(event) => handleFieldChange('resolution', event.target.value)}
               >
@@ -538,11 +539,11 @@ export function CodexGenerationPanel({
 
         <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })}>
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/40 p-3">
+            <Inset className="space-y-3 px-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-medium text-foreground">{t({ ko: '참조 이미지', en: 'Reference Image' })}</div>
-                  <div className="text-xs text-muted-foreground">{t({ ko: '편집용 입력 이미지', en: 'Input image for editing' })}</div>
+                  <Text variant="label">{t({ ko: '참조 이미지', en: 'Reference Image' })}</Text>
+                  <Text variant="caption">{t({ ko: '편집용 입력 이미지', en: 'Input image for editing' })}</Text>
                 </div>
                 <ImageAttachmentPickerButton
                   label={codexForm.referenceImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
@@ -566,13 +567,13 @@ export function CodexGenerationPanel({
                   </Button>
                 </div>
               ) : null}
-            </div>
+            </Inset>
 
-            <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/40 p-3">
+            <Inset className="space-y-3 px-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-medium text-foreground">{t({ ko: '마스크 이미지', en: 'Mask Image' })}</div>
-                  <div className="text-xs text-muted-foreground">{t({ ko: '인페인트 영역 지정', en: 'Inpaint area mask' })}</div>
+                  <Text variant="label">{t({ ko: '마스크 이미지', en: 'Mask Image' })}</Text>
+                  <Text variant="caption">{t({ ko: '인페인트 영역 지정', en: 'Inpaint area mask' })}</Text>
                 </div>
                 <ImageAttachmentPickerButton
                   label={codexForm.maskImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
@@ -591,9 +592,9 @@ export function CodexGenerationPanel({
                   </Button>
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground">{t({ ko: '참조 이미지를 먼저 선택해.', en: 'Choose a reference image first.' })}</div>
+                <Text variant="caption">{t({ ko: '참조 이미지를 먼저 선택해.', en: 'Choose a reference image first.' })}</Text>
               )}
-            </div>
+            </Inset>
           </div>
         </Section>
 
