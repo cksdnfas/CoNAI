@@ -5,9 +5,12 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 
-// Tonal plinth, no outline (DESIGN_PRESET D1): surface-low on the page, recessed to surface-lowest when nested
-// inside another raised surface (Section, Card, Panel, drawer). Variants differ only in their header typography.
-const sectionVariants = cva('ui-tone-plinth overflow-hidden rounded-sm', {
+/**
+ * Flat by default (DESIGN_PRESET "Flat"): a heading row + content on the page tone, no box, no padding. Separate
+ * sections with spacing on the parent (`space-y-6`/`space-y-8`). `tone="raised"` keeps the old tonal plinth for
+ * the rare block that must read as a surface (a floating controller, a standalone card on a busy canvas).
+ */
+const sectionVariants = cva('min-w-0', {
   variants: {
     variant: {
       page: '',
@@ -15,17 +18,23 @@ const sectionVariants = cva('ui-tone-plinth overflow-hidden rounded-sm', {
       drawer: '',
       controller: '',
     },
+    tone: {
+      flat: '',
+      raised: 'ui-tone-plinth overflow-hidden rounded-sm',
+    },
   },
   defaultVariants: {
     variant: 'page',
+    tone: 'flat',
   },
 })
 
 type SectionVariant = NonNullable<VariantProps<typeof sectionVariants>['variant']>
+type SectionTone = NonNullable<VariantProps<typeof sectionVariants>['tone']>
 
 type SectionHeadingElement = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'div'
 
-const sectionSlots: Record<SectionVariant, {
+type SectionSlots = {
   header: string
   headerRow?: string
   titleBlock: string
@@ -33,43 +42,50 @@ const sectionSlots: Record<SectionVariant, {
   headingAs: SectionHeadingElement
   actions: string
   body: string
-}> = {
+}
+
+const sectionSlots: Record<SectionVariant, SectionSlots> = {
   page: {
-    header: 'flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between',
+    header: 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between',
     titleBlock: 'min-w-0 flex-1',
-    heading: 'text-xl font-semibold tracking-tight text-foreground',
+    heading: 'text-base font-semibold tracking-tight text-foreground',
     headingAs: 'h2',
     actions: 'flex shrink-0 flex-wrap items-center gap-2',
-    body: 'space-y-4 px-4 py-4',
+    body: 'space-y-4',
   },
   settings: {
-    header: 'flex items-center justify-between gap-3 px-4 py-3',
+    header: 'flex min-h-8 items-center justify-between gap-3',
     titleBlock: 'min-w-0 flex-1',
-    heading: 'text-xl font-semibold tracking-tight text-foreground',
-    headingAs: 'p',
+    heading: 'text-sm font-semibold tracking-tight text-foreground',
+    headingAs: 'h3',
     actions: 'flex shrink-0 items-center gap-2',
-    body: 'space-y-4 px-4 py-4',
+    body: 'space-y-4',
   },
   drawer: {
-    header: 'flex items-center justify-between gap-3 px-4 py-3',
+    header: 'flex min-h-8 items-center justify-between gap-3',
     titleBlock: 'min-w-0 flex-1',
     heading: 'text-2xs font-semibold uppercase tracking-overline text-muted-foreground',
     headingAs: 'div',
     actions: 'flex shrink-0 items-center gap-2',
-    body: 'px-4 py-4',
+    body: '',
   },
   controller: {
-    header: 'px-4 py-3',
-    headerRow: 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between',
+    header: '',
+    headerRow: 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between',
     titleBlock: 'min-w-0',
-    heading: 'text-xl font-semibold tracking-tight text-foreground',
+    heading: 'text-base font-semibold tracking-tight text-foreground',
     headingAs: 'p',
     actions: 'flex flex-wrap gap-2',
-    body: 'space-y-4 px-4 py-4',
+    body: 'space-y-4',
   },
 }
 
+/** Padding added around header and body when the section is a raised plinth (`tone="raised"`). */
+const RAISED_SLOT_PADDING = { header: 'px-4 py-3', body: 'px-4 py-4' }
+
 type SectionProps = ComponentProps<'section'> & VariantProps<typeof sectionVariants> & {
+  /** `flat` (default): heading + content, no surface. `raised`: the tonal plinth, for blocks that truly float. */
+  tone?: SectionTone
   heading?: ReactNode
   headingAs?: SectionHeadingElement
   description?: ReactNode
@@ -80,9 +96,10 @@ type SectionProps = ComponentProps<'section'> & VariantProps<typeof sectionVaria
   bodyClassName?: string
 }
 
-/** Render one tonal content section with an optional heading row and collapsible body. */
+/** Render one content section: an optional heading row (title, description, actions) and a collapsible body. */
 function Section({
   variant,
+  tone,
   heading,
   headingAs,
   description,
@@ -98,6 +115,7 @@ function Section({
   const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(defaultOpen)
   const slots = sectionSlots[variant ?? 'page']
+  const isRaised = tone === 'raised'
   const Heading = headingAs ?? slots.headingAs
   const hasHeader = Boolean(heading || description || actions || collapsible)
   const toggleLabel = isOpen
@@ -131,14 +149,24 @@ function Section({
   )
 
   return (
-    <section data-slot="section" data-surface="raised" className={cn(sectionVariants({ variant }), className)} {...props}>
+    <section
+      data-slot="section"
+      data-tone={isRaised ? 'raised' : 'flat'}
+      data-surface={isRaised ? 'raised' : undefined}
+      className={cn(sectionVariants({ variant, tone }), className)}
+      {...props}
+    >
       {hasHeader ? (
-        <div className={cn(slots.header, headerClassName)}>
+        <div className={cn(slots.header, isRaised && RAISED_SLOT_PADDING.header, headerClassName)}>
           {slots.headerRow ? <div className={slots.headerRow}>{headerContent}</div> : headerContent}
         </div>
       ) : null}
-      {/* No divider under the header: a short top gap on the body keeps the two apart by spacing. */}
-      {isOpen ? <div className={cn(slots.body, hasHeader && 'pt-1', bodyClassName)}>{children}</div> : null}
+      {/* No divider under the header: a short gap keeps heading and content apart by spacing. */}
+      {isOpen ? (
+        <div className={cn(slots.body, isRaised ? RAISED_SLOT_PADDING.body : hasHeader && 'pt-2', isRaised && hasHeader && 'pt-1', bodyClassName)}>
+          {children}
+        </div>
+      ) : null}
     </section>
   )
 }

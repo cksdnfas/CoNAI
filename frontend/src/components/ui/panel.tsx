@@ -4,12 +4,16 @@ import { Slot } from 'radix-ui'
 import { cn } from '@/lib/utils'
 
 /**
- * Tonal block surface (DESIGN_PRESET D1): separation by tone, never by outline.
- * Padding follows the appearance density tokens (--theme-panel-padding-x/y).
+ * Tonal block surface: separation by tone, never by outline. Padding follows the density tokens
+ * (--theme-panel-padding-x/y). Flat rule: a Panel is a real box, so use it only where a surface is meant (drop zone,
+ * floating control cluster, clickable media card). `tone="none"` gives the same padding / interactive behaviour with
+ * no surface (hover wash only); for label/value rows use ListRow / SettingRow instead of Panels.
  */
 const panelVariants = cva('min-w-0', {
   variants: {
     tone: {
+      /** No surface: transparent, hover wash when interactive. */
+      none: 'bg-transparent',
       /** Recessed tray: inside a Section / Card, or for code, previews and lists on a raised parent. */
       lowest: 'bg-surface-lowest',
       /** Default plinth on the page background (same tone as Section). */
@@ -41,6 +45,7 @@ const panelVariants = cva('min-w-0', {
     },
   },
   compoundVariants: [
+    { interactive: true, tone: 'none', className: 'hover:bg-fill' },
     { interactive: true, tone: 'lowest', className: 'hover:bg-surface-container' },
     { interactive: true, tone: 'low', className: 'hover:bg-surface-high' },
     { interactive: true, tone: 'container', className: 'hover:bg-surface-high' },
@@ -57,8 +62,9 @@ const panelVariants = cva('min-w-0', {
 
 type PanelTone = NonNullable<VariantProps<typeof panelVariants>['tone']>
 
-/** data-surface drives the automatic tone of nested Section / Inset / EmptyState and of secondary Buttons. */
-const PANEL_SURFACE: Record<PanelTone, 'recessed' | 'raised' | 'high'> = {
+/** data-surface only steps secondary / ghost Buttons up one tone on a `high` panel; nesting no longer recesses. */
+const PANEL_SURFACE: Record<PanelTone, 'recessed' | 'raised' | 'high' | undefined> = {
+  none: undefined,
   lowest: 'recessed',
   low: 'raised',
   container: 'raised',

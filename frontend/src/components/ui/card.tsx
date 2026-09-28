@@ -2,13 +2,21 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * Flat by default (DESIGN_PRESET "Flat"): header + content on the page tone. `tone="raised"` restores the tonal card
+ * with its ambient shadow for a card that must read as a surface.
+ */
+function Card({ className, tone = "flat", ...props }: React.ComponentProps<"div"> & { tone?: "flat" | "raised" }) {
+  const isRaised = tone === "raised"
+
   return (
     <div
       data-slot="card"
-      data-surface="raised"
+      data-tone={tone}
+      data-surface={isRaised ? "raised" : undefined}
       className={cn(
-        "theme-card theme-card-shadow ui-tone-card flex flex-col rounded-sm text-foreground transition-colors",
+        "theme-card flex flex-col text-foreground transition-colors",
+        isRaised && "theme-card-shadow ui-tone-card rounded-sm",
         className
       )}
       {...props}

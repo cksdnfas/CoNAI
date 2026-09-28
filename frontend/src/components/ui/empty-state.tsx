@@ -3,9 +3,8 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 import { Text } from './text'
 
-// Tonal fill instead of the old dashed outline (DESIGN_PRESET D1). Recesses to surface-lowest inside a raised
-// surface (Section, Card, Panel, drawer), so it stays visible without a className override.
-const emptyStateVariants = cva('ui-tone-plinth rounded-sm', {
+// Flat: no box. The icon key and the spacing carry it; it sits in lists and sections without adding a plinth.
+const emptyStateVariants = cva('rounded-sm', {
   variants: {
     size: {
       default: 'flex w-full flex-col items-center justify-center gap-3 px-6 py-10 text-center',
