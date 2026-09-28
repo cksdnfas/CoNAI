@@ -9,17 +9,27 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        /** Primary CTA: one per view. Primary fill with a faint secondary sheen; text uses the contrast-picked primary-foreground. */
         default:
-          "bg-primary text-primary-foreground shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_14%,transparent)] hover:bg-primary/92 hover:shadow-[0_0_28px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
+          "bg-primary bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_22%,var(--primary)),var(--primary)_65%)] text-primary-foreground shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_14%,transparent)] hover:brightness-108 hover:shadow-[0_0_28px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
         destructive:
           "bg-destructive-soft text-destructive-soft-foreground hover:brightness-110 focus-visible:ring-destructive/25",
-        outline:
-          "border border-border bg-surface-container/70 text-foreground hover:bg-surface-high hover:text-foreground",
+        /** Default non-primary action: tonal fill, no border. */
         secondary:
-          "border border-border bg-transparent text-foreground hover:bg-surface-highest hover:text-foreground",
+          "bg-surface-high text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest",
+        /** Lowest-emphasis filled action for dense toolbars and sidebars. */
+        subtle:
+          "bg-surface-low text-muted-foreground hover:bg-surface-container hover:text-foreground aria-expanded:bg-surface-container aria-expanded:text-foreground",
+        /** Icon toolbars and inline actions: no fill until hover. */
         ghost:
           "text-muted-foreground hover:bg-surface-high hover:text-foreground",
+        /** Sidebar / list navigation row. Mark the current row with data-active="true" or aria-current. */
+        nav:
+          "w-full justify-start text-left font-normal text-muted-foreground hover:bg-surface-high hover:text-foreground data-[active=true]:bg-primary/12 data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:[&_svg]:text-primary aria-[current=page]:bg-primary/12 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=true]:bg-primary/12 aria-[current=true]:font-medium aria-[current=true]:text-foreground",
         link: "text-secondary underline-offset-4 hover:underline",
+        /** @deprecated Renders as `secondary`; kept only until the call-site rename lands. */
+        outline:
+          "bg-surface-high text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
