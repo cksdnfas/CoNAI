@@ -4,11 +4,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Text } from '@/components/ui/text'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
-import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
-import { cn } from '@/lib/utils'
 import { hasAssignedFinalResult, resolveSavedGraphWorkflowFinalResultNodeCount, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-locked'
@@ -197,34 +196,31 @@ export function SavedGraphList({
     const titleLines = [graph.name, graph.description?.trim() || null, summaryLine].filter((line): line is string => Boolean(line))
 
     return (
-      <button
+      <Button
         key={`workflow-${graph.id}`}
         type="button"
+        variant="nav"
+        data-active={selectedGraphId === graph.id}
         onClick={() => onLoadGraph(graph)}
-        className={getNavigationItemClassName({
-          active: selectedGraphId === graph.id,
-          className: 'block w-full px-3 py-2 text-left',
-        })}
+        className="h-auto flex-col items-stretch gap-1 px-3 py-2"
         style={{ paddingLeft: `${12 + depth * 18}px` }}
         title={titleLines.join('\n')}
       >
-        <div className="flex min-w-0 items-center gap-2">
-          <FileCode2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <div className={cn('min-w-0 truncate text-sm font-medium', selectedGraphId === graph.id ? 'text-primary' : 'text-foreground')}>
-            {graph.name}
-          </div>
+        <span className="flex min-w-0 items-center gap-2">
+          <FileCode2 className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 truncate">{graph.name}</span>
           {issueMessages.length > 0 ? (
-            <Badge variant="outline" className="h-5 min-w-5 shrink-0 justify-center px-1.5" title={issueMessages.join('\n')} aria-label={t({ ko: '주의', en: 'Warning' })}>
+            <Badge className="ml-auto h-5 min-w-5 shrink-0 justify-center bg-warning-soft px-1.5 text-warning-soft-foreground" title={issueMessages.join('\n')} aria-label={t({ ko: '주의', en: 'Warning' })}>
               !
             </Badge>
           ) : null}
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-[11px] leading-tight text-muted-foreground">
+        </span>
+        <Text as="span" variant="caption" className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-2xs leading-tight">
           <span>{t({ ko: '노드 {count}', en: 'Nodes {count}' }, { count: formatNumber(summary.nodeCount) })}</span>
           <span>{t({ ko: '연결 {count}', en: 'Edges {count}' }, { count: formatNumber(summary.edgeCount) })}</span>
           <span>{t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(summary.finalResultNodeCount) })}</span>
-        </div>
-      </button>
+        </Text>
+      </Button>
     )
   }
 
@@ -265,21 +261,18 @@ export function SavedGraphList({
               <span className="h-4 w-4" />
             )}
           </Button>
-          <button
+          <Button
             type="button"
+            variant="nav"
+            data-active={selectedFolderId === folder.id}
             onClick={() => onSelectFolder(folder.id)}
-            className={getNavigationItemClassName({
-              active: selectedFolderId === folder.id,
-              className: 'flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left',
-            })}
+            className="min-w-0 flex-1 px-2"
             style={{ paddingLeft: `${4 + depth * 18}px` }}
             title={folder.name}
           >
-            <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className={cn('min-w-0 truncate text-sm font-medium', selectedFolderId === folder.id ? 'text-primary' : 'text-foreground')}>
-              {folder.name}
-            </span>
-          </button>
+            <Folder className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">{folder.name}</span>
+          </Button>
         </div>
 
         {isExpanded ? (
@@ -310,7 +303,7 @@ export function SavedGraphList({
       className="sticky top-24 z-30 isolate self-start max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]"
       bodyClassName="space-y-1 overflow-y-auto pr-1"
       headerExtra={
-        <div className="space-y-3 border-b border-white/5 pb-3">
+        <div className="space-y-3 pb-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">{leftToolbar}</div>
             <div className="flex items-center justify-end gap-2">
@@ -325,20 +318,17 @@ export function SavedGraphList({
         </div>
       }
     >
-      <button
+      <Button
         type="button"
+        variant="nav"
+        data-active={selectedFolderId === null && selectedGraphId === null}
         onClick={() => onSelectFolder(null)}
-        className={getNavigationItemClassName({
-          active: selectedFolderId === null && selectedGraphId === null,
-          className: 'flex w-full items-center gap-2 px-3 py-2 text-left',
-        })}
+        className="px-3"
         title="Root"
       >
-        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className={cn('truncate text-sm font-medium', selectedFolderId === null && selectedGraphId === null ? 'text-primary' : 'text-foreground')}>
-          Root
-        </span>
-      </button>
+        <Folder className="h-4 w-4 shrink-0" />
+        <span className="truncate">Root</span>
+      </Button>
 
       {rootEntries.map((entry) => entry.type === 'folder' ? renderFolderNode(entry.folder, 0) : renderWorkflowRow(entry.workflow, 0))}
 

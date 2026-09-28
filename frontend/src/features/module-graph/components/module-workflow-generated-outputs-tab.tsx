@@ -2,7 +2,10 @@ import { useCallback, useMemo } from 'react'
 import { Download, Square, SquareCheckBig, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Inset } from '@/components/ui/inset'
+import { Panel } from '@/components/ui/panel'
+import { Section } from '@/components/ui/section'
+import { Text } from '@/components/ui/text'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import { ImageList } from '@/features/images/components/image-list/image-list'
@@ -116,97 +119,95 @@ export function ModuleWorkflowGeneratedOutputsTab({
   }, [isDownloading, onDownloadItems, outputItemById, t])
 
   return (
-    <Card>
-      <CardHeader className="space-y-0 border-b border-border/70 pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="min-w-0 flex-1 text-base">{t('module-graph.components.module.workflow.generated.outputs.tab.generated.outputs')}</CardTitle>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant="outline">{outputProgressLabel}</Badge>
+    <Section
+      heading={t('module-graph.components.module.workflow.generated.outputs.tab.generated.outputs')}
+      headingAs="h3"
+      actions={(
+        <>
+          <Badge variant="outline">{outputProgressLabel}</Badge>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={onToggleVisibleSelection}
+            disabled={outputItems.length === 0}
+          >
+            {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            {allVisibleSelected ? t('module-graph.components.module.workflow.generated.outputs.tab.clear.page') : t('module-graph.components.module.workflow.generated.outputs.tab.select.page')}
+          </Button>
+          {canDeleteOutputs ? (
             <Button
               type="button"
               size="sm"
-              variant="secondary"
-              onClick={onToggleVisibleSelection}
-              disabled={outputItems.length === 0}
+              variant="destructive"
+              onClick={onClearAll}
+              disabled={isDeletingOutputs || totalOutputCount === 0}
             >
-              {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              {allVisibleSelected ? t('module-graph.components.module.workflow.generated.outputs.tab.clear.page') : t('module-graph.components.module.workflow.generated.outputs.tab.select.page')}
+              <Trash2 className="h-4 w-4" />
+              {t({ ko: '전체 비우기', en: 'Clear all' })}
             </Button>
-            {canDeleteOutputs ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                onClick={onClearAll}
-                disabled={isDeletingOutputs || totalOutputCount === 0}
-              >
-                <Trash2 className="h-4 w-4" />
-                {t({ ko: '전체 비우기', en: 'Clear all' })}
-              </Button>
-            ) : null}
+          ) : null}
+        </>
+      )}
+    >
+      {isCopyPanelOpen ? (
+        <Panel tone="lowest">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Text variant="label">{t({ ko: '선택한 생성 결과를 감시 폴더로 복사', en: 'Copy selected outputs to watched folder' })}</Text>
+            <Badge variant="outline">{selectedOutputIds.length}</Badge>
           </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+            <div className="space-y-2">
+              <Text as="div" variant="overline" className="font-medium">{t({ ko: '대상 폴더', en: 'Target folder' })}</Text>
+              <Select value={copyTargetFolderId} onChange={(event) => onCopyTargetFolderChange(event.target.value)}>
+                <option value="">{t('module-graph.components.module.workflow.generated.outputs.tab.select.folder')}</option>
+                {watchedFolders.map((folder) => (
+                  <option key={folder.id} value={String(folder.id)}>
+                    {folder.folder_name}
+                  </option>
+                ))}
+              </Select>
+              {copyTargetFolderId ? (
+                <div className="text-xs text-muted-foreground">
+                  {selectedCopyTargetFolder?.folder_path}
+                </div>
+              ) : null}
+            </div>
+
+            <Button type="button" variant="ghost" onClick={onCloseCopyPanel} disabled={isCopying}>
+              {t({ ko: '취소', en: 'Cancel' })}
+            </Button>
+            <Button type="button" onClick={onCopySelected} disabled={isCopying || watchedFoldersLoading || !copyTargetFolderId}>
+              {isCopying ? t({ ko: '복사 중…', en: 'Copying…' }) : t({ ko: '선택 항목 복사', en: 'Copy Selected' })}
+            </Button>
+          </div>
+        </Panel>
+      ) : null}
+
+      {outputItems.length === 0 ? (
+        <EmptyState title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })} />
+      ) : (
+        <div className="space-y-3">
+          <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
+          <ImageList
+            items={imageItems}
+            layout="grid"
+            selectable
+            forceSelectionMode
+            selectedIds={selectedOutputIds}
+            onSelectedIdsChange={onSelectedOutputIdsChange}
+            getItemId={getGeneratedOutputImageId}
+            minColumnWidth={260}
+            gridItemHeight={320}
+            columnGap={20}
+            rowGap={20}
+            renderItemOverlay={renderGeneratedOutputOverlay}
+          />
+          <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isCopyPanelOpen ? (
-          <div className="rounded-sm border border-border bg-surface-low px-4 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm font-medium text-foreground">{t({ ko: '선택한 생성 결과를 감시 폴더로 복사', en: 'Copy selected outputs to watched folder' })}</div>
-              <Badge variant="outline">{selectedOutputIds.length}</Badge>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
-              <div className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '대상 폴더', en: 'Target folder' })}</div>
-                <Select value={copyTargetFolderId} onChange={(event) => onCopyTargetFolderChange(event.target.value)}>
-                  <option value="">{t('module-graph.components.module.workflow.generated.outputs.tab.select.folder')}</option>
-                  {watchedFolders.map((folder) => (
-                    <option key={folder.id} value={String(folder.id)}>
-                      {folder.folder_name}
-                    </option>
-                  ))}
-                </Select>
-                {copyTargetFolderId ? (
-                  <div className="text-xs text-muted-foreground">
-                    {selectedCopyTargetFolder?.folder_path}
-                  </div>
-                ) : null}
-              </div>
-
-              <Button type="button" variant="ghost" onClick={onCloseCopyPanel} disabled={isCopying}>
-                {t({ ko: '취소', en: 'Cancel' })}
-              </Button>
-              <Button type="button" onClick={onCopySelected} disabled={isCopying || watchedFoldersLoading || !copyTargetFolderId}>
-                {isCopying ? t({ ko: '복사 중…', en: 'Copying…' }) : t({ ko: '선택 항목 복사', en: 'Copy Selected' })}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {outputItems.length === 0 ? (
-          <EmptyState title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })} />
-        ) : (
-          <div className="space-y-3">
-            <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
-            <ImageList
-              items={imageItems}
-              layout="grid"
-              selectable
-              forceSelectionMode
-              selectedIds={selectedOutputIds}
-              onSelectedIdsChange={onSelectedOutputIdsChange}
-              getItemId={getGeneratedOutputImageId}
-              minColumnWidth={260}
-              gridItemHeight={320}
-              columnGap={20}
-              rowGap={20}
-              renderItemOverlay={renderGeneratedOutputOverlay}
-            />
-            <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </Section>
   )
 }
 
@@ -241,7 +242,7 @@ function WorkflowOutputPagination({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+    <Inset className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-muted-foreground">
       <span>{t({ ko: '페이지 {page} / {totalPages} · {progress} · 페이지당 50개', en: 'page {page} / {totalPages} · {progress} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel })}</span>
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" variant="secondary" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
@@ -251,6 +252,6 @@ function WorkflowOutputPagination({
           {t({ ko: '다음', en: 'Next' })}
         </Button>
       </div>
-    </div>
+    </Inset>
   )
 }

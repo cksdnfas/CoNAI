@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { ArrowLeft, Copy, Download, FolderPlus, PenSquare, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
 import { SavedGraphList } from './saved-graph-list'
@@ -62,56 +62,44 @@ export function ModuleGraphWorkflowListSidebar({
       onSelectFolder={onSelectFolder}
       leftToolbar={
         workflowView === 'edit' ? (
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
-            variant="secondary"
-            className="bg-surface-low"
+            variant="subtle"
             onClick={onLeaveEditor}
-            aria-label={t({ ko: '목록으로', en: 'Back to list' })}
-            title={t({ ko: '목록으로', en: 'Back to list' })}
+            label={t({ ko: '목록으로', en: 'Back to list' })}
           >
             <ArrowLeft className="h-4 w-4" />
-          </Button>
+          </IconButton>
         ) : null
       }
       rightToolbar={(
         <>
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
-            variant="secondary"
-            className="bg-surface-low"
+            variant="subtle"
             onClick={onRefreshWorkspace}
-            aria-label={t({ ko: '새로고침', en: 'Refresh' })}
-            title={t({ ko: '새로고침', en: 'Refresh' })}
+            label={t({ ko: '새로고침', en: 'Refresh' })}
           >
             <RefreshCw className="h-4 w-4" />
-          </Button>
+          </IconButton>
           {workflowView === 'browse' && !selectedGraphRecord ? (
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
-              variant="secondary"
-              className="bg-surface-low"
+              variant="subtle"
               onClick={onOpenBrowseManage}
-              aria-label={browseManageModalTitle}
-              title={browseManageModalTitle}
+              label={browseManageModalTitle}
             >
               <FolderPlus className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : null}
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
-            variant="secondary"
-            className="bg-surface-low"
+            variant="subtle"
             onClick={onCreateWorkflow}
-            aria-label={t({ ko: '새 워크플로우', en: 'New workflow' })}
-            title={t({ ko: '새 워크플로우', en: 'New workflow' })}
+            label={t({ ko: '새 워크플로우', en: 'New workflow' })}
           >
             <Plus className="h-4 w-4" />
-          </Button>
+          </IconButton>
           {workflowView === 'browse' ? (
             <>
               <input
@@ -127,83 +115,65 @@ export function ModuleGraphWorkflowListSidebar({
                   }
                 }}
               />
-              <Button
-                type="button"
+              <IconButton
                 size="icon-sm"
-                variant="secondary"
-                className="bg-surface-low"
+                variant="subtle"
                 onClick={() => importInputRef.current?.click()}
-                aria-label={t({ ko: '워크플로우 가져오기', en: 'Import workflow' })}
-                title={t({ ko: '워크플로우 가져오기', en: 'Import workflow' })}
+                label={t({ ko: '워크플로우 가져오기', en: 'Import workflow' })}
               >
                 <Upload className="h-4 w-4" />
-              </Button>
+              </IconButton>
             </>
           ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
-              variant="secondary"
-              className="bg-surface-low"
+              variant="subtle"
               onClick={onDuplicateWorkflow}
-              aria-label={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
-              title={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
+              label={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
             >
               <Copy className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
-              variant="secondary"
-              className="bg-surface-low"
+              variant="subtle"
               onClick={onExportWorkflow}
-              aria-label={t({ ko: '워크플로우 내보내기', en: 'Export workflow' })}
-              title={t({ ko: '워크플로우 내보내기', en: 'Export workflow' })}
+              label={t({ ko: '워크플로우 내보내기', en: 'Export workflow' })}
             >
               <Download className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
-              variant="secondary"
-              className="bg-surface-low"
+              variant="subtle"
               onClick={onEditWorkflow}
-              aria-label={t({ ko: '워크플로우 편집', en: 'Edit workflow' })}
-              title={t({ ko: '워크플로우 편집', en: 'Edit workflow' })}
+              label={t({ ko: '워크플로우 편집', en: 'Edit workflow' })}
             >
               <PenSquare className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
-              variant="secondary"
-              className="bg-surface-low"
+              variant="subtle"
               onClick={onDeleteWorkflow}
-              aria-label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
-              title={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
+              label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
             >
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : null}
           {workflowView === 'browse' && !selectedGraphRecord && selectedFolderRecord ? (
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
-              variant="secondary"
-              className="bg-surface-low"
+              variant="subtle"
               onClick={() => onDeleteFolder(selectedFolderRecord.id)}
-              aria-label={t({ ko: '폴더 삭제', en: 'Delete folder' })}
-              title={t({ ko: '폴더 삭제', en: 'Delete folder' })}
+              label={t({ ko: '폴더 삭제', en: 'Delete folder' })}
             >
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : null}
         </>
       )}

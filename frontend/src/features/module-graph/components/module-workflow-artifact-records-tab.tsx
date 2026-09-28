@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { Square, SquareCheckBig, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Inset } from '@/components/ui/inset'
+import { Panel } from '@/components/ui/panel'
+import { Section } from '@/components/ui/section'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useImageListSelection } from '@/features/images/components/image-list/use-image-list-selection'
@@ -88,145 +90,145 @@ export function ModuleWorkflowArtifactRecordsTab({
   )
 
   return (
-    <Card>
-      <CardHeader className="space-y-4 border-b border-border/70 pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="min-w-0 flex-1 text-base">{t('module-graph.components.module.workflow.artifact.records.tab.text.and.intermediate.artifacts')}</CardTitle>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant="outline">{artifactProgressLabel}</Badge>
+    <Section
+      heading={t('module-graph.components.module.workflow.artifact.records.tab.text.and.intermediate.artifacts')}
+      headingAs="h3"
+      actions={(
+        <>
+          <Badge variant="outline">{artifactProgressLabel}</Badge>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={onToggleVisibleSelection}
+            disabled={artifacts.length === 0}
+            title={allVisibleSelected ? 'Clear visible artifacts' : 'Select visible artifacts'}
+            aria-label={allVisibleSelected ? 'Clear visible artifacts' : 'Select visible artifacts'}
+            data-no-select-drag="true"
+          >
+            {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            {allVisibleSelected ? t('module-graph.components.module.workflow.artifact.records.tab.clear.page') : t('module-graph.components.module.workflow.artifact.records.tab.select.page')}
+          </Button>
+          {canDeleteArtifacts ? (
             <Button
               type="button"
               size="sm"
-              variant="secondary"
-              onClick={onToggleVisibleSelection}
-              disabled={artifacts.length === 0}
-              title={allVisibleSelected ? 'Clear visible artifacts' : 'Select visible artifacts'}
-              aria-label={allVisibleSelected ? 'Clear visible artifacts' : 'Select visible artifacts'}
+              variant="destructive"
+              onClick={onClearAll}
+              disabled={isDeletingArtifacts || totalArtifactCount === 0}
               data-no-select-drag="true"
             >
-              {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              {allVisibleSelected ? t('module-graph.components.module.workflow.artifact.records.tab.clear.page') : t('module-graph.components.module.workflow.artifact.records.tab.select.page')}
+              <Trash2 className="h-4 w-4" />
+              {t({ ko: '전체 비우기', en: 'Clear all' })}
             </Button>
-            {canDeleteArtifacts ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                onClick={onClearAll}
-                disabled={isDeletingArtifacts || totalArtifactCount === 0}
-                data-no-select-drag="true"
+          ) : null}
+        </>
+      )}
+    >
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+        <Input
+          value={artifactSearchTerm}
+          onChange={(event) => onArtifactSearchTermChange(event.target.value)}
+          placeholder={t('module-graph.components.module.workflow.artifact.records.tab.search.by.workflow.port.path.or.content')}
+        />
+        <Select value={artifactTypeFilter} onChange={(event) => onArtifactTypeFilterChange(event.target.value)}>
+          <option value="all">{t('module-graph.components.module.workflow.artifact.records.tab.all.types')}</option>
+          {artifactTypeOptions.map((artifactType) => (
+            <option key={artifactType} value={artifactType}>{artifactType}</option>
+          ))}
+        </Select>
+      </div>
+      {artifacts.length === 0 ? (
+        <EmptyState title={t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.', en: 'No text or intermediate artifacts match the search/filter.' })} />
+      ) : (
+        <div ref={setArtifactSelectionContainer} className="space-y-3">
+          <WorkflowArtifactPagination page={page} totalPages={totalPages} visibleCount={artifacts.length} totalCount={totalArtifactCount} onPageChange={onPageChange} />
+          {artifacts.map((artifact) => {
+            const execution = executionById.get(artifact.execution_id)
+            const workflowName = execution
+              ? (workflowNameById.get(execution.graph_workflow_id) ?? `Workflow #${execution.graph_workflow_id}`)
+              : 'Unknown workflow'
+            const isSelected = selectedArtifactIdSet.has(artifact.id)
+            const previewText = buildArtifactTextPreview(artifact, 220)
+
+            return (
+              <Panel
+                key={artifact.id}
+                tone="lowest"
+                interactive
+                data-selected={isSelected}
+                data-image-id={String(artifact.id)}
+                className="image-list-selectable"
+                onClick={() => {
+                  if (shouldSuppressClick()) {
+                    return
+                  }
+                  onToggleArtifactSelection(artifact.id)
+                }}
               >
-                <Trash2 className="h-4 w-4" />
-                {t({ ko: '전체 비우기', en: 'Clear all' })}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-          <Input
-            value={artifactSearchTerm}
-            onChange={(event) => onArtifactSearchTermChange(event.target.value)}
-            placeholder={t('module-graph.components.module.workflow.artifact.records.tab.search.by.workflow.port.path.or.content')}
-          />
-          <Select value={artifactTypeFilter} onChange={(event) => onArtifactTypeFilterChange(event.target.value)}>
-            <option value="all">{t('module-graph.components.module.workflow.artifact.records.tab.all.types')}</option>
-            {artifactTypeOptions.map((artifactType) => (
-              <option key={artifactType} value={artifactType}>{artifactType}</option>
-            ))}
-          </Select>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {artifacts.length === 0 ? (
-          <EmptyState title={t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.', en: 'No text or intermediate artifacts match the search/filter.' })} />
-        ) : (
-          <div ref={setArtifactSelectionContainer} className="space-y-3">
-            <WorkflowArtifactPagination page={page} totalPages={totalPages} visibleCount={artifacts.length} totalCount={totalArtifactCount} onPageChange={onPageChange} />
-            {artifacts.map((artifact) => {
-              const execution = executionById.get(artifact.execution_id)
-              const workflowName = execution
-                ? (workflowNameById.get(execution.graph_workflow_id) ?? `Workflow #${execution.graph_workflow_id}`)
-                : 'Unknown workflow'
-              const isSelected = selectedArtifactIdSet.has(artifact.id)
-              const previewText = buildArtifactTextPreview(artifact, 220)
-
-              return (
-                <div
-                  key={artifact.id}
-                  data-image-id={String(artifact.id)}
-                  className={`image-list-selectable rounded-sm border px-4 py-3 transition ${isSelected ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-surface-low'}`}
-                  onClick={() => {
-                    if (shouldSuppressClick()) {
-                      return
-                    }
-                    onToggleArtifactSelection(artifact.id)
-                  }}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="truncate text-sm font-medium text-foreground">{workflowName}</div>
-                        <Badge variant="outline">{artifact.artifact_type}</Badge>
-                        <Badge variant="outline">{artifact.port_key}</Badge>
-                        {execution?.status ? <Badge variant="outline">{execution.status}</Badge> : null}
-                      </div>
-
-                      <div className="text-xs text-muted-foreground">
-                        Execution #{artifact.execution_id} · {formatDateTime(artifact.created_date)}
-                      </div>
-
-                      {previewText ? (
-                        <div className="overflow-hidden text-sm text-foreground whitespace-pre-wrap break-all">{previewText}</div>
-                      ) : null}
-
-                      {artifact.storage_path ? (
-                        <div className="overflow-hidden text-[11px] text-muted-foreground break-all">{artifact.storage_path}</div>
-                      ) : null}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="truncate text-sm font-medium text-foreground">{workflowName}</div>
+                      <Badge variant="outline">{artifact.artifact_type}</Badge>
+                      <Badge variant="outline">{artifact.port_key}</Badge>
+                      {execution?.status ? <Badge variant="outline">{execution.status}</Badge> : null}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="text-xs text-muted-foreground">
+                      Execution #{artifact.execution_id} · {formatDateTime(artifact.created_date)}
+                    </div>
+
+                    {previewText ? (
+                      <div className="overflow-hidden text-sm text-foreground whitespace-pre-wrap break-all">{previewText}</div>
+                    ) : null}
+
+                    {artifact.storage_path ? (
+                      <div className="overflow-hidden text-2xs text-muted-foreground break-all">{artifact.storage_path}</div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="secondary"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onToggleArtifactSelection(artifact.id)
+                      }}
+                      title={isSelected ? 'Deselect artifact' : 'Select artifact'}
+                      aria-label={isSelected ? 'Deselect artifact' : 'Select artifact'}
+                      data-no-select-drag="true"
+                    >
+                      {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    </Button>
+                    {canDeleteArtifacts ? (
                       <Button
                         type="button"
                         size="icon-sm"
-                        variant="secondary"
+                        variant="destructive"
                         onClick={(event) => {
                           event.stopPropagation()
-                          onToggleArtifactSelection(artifact.id)
+                          onDeleteSingle(artifact.id)
                         }}
-                        title={isSelected ? 'Deselect artifact' : 'Select artifact'}
-                        aria-label={isSelected ? 'Deselect artifact' : 'Select artifact'}
+                        disabled={isDeletingArtifacts}
+                        title={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
+                        aria-label={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
                         data-no-select-drag="true"
                       >
-                        {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                      {canDeleteArtifacts ? (
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="destructive"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onDeleteSingle(artifact.id)
-                          }}
-                          disabled={isDeletingArtifacts}
-                          title={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
-                          aria-label={t({ ko: '결과물 삭제', en: 'Delete artifact' })}
-                          data-no-select-drag="true"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      ) : null}
-                    </div>
+                    ) : null}
                   </div>
                 </div>
-              )
-            })}
-            <WorkflowArtifactPagination page={page} totalPages={totalPages} visibleCount={artifacts.length} totalCount={totalArtifactCount} onPageChange={onPageChange} />
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              </Panel>
+            )
+          })}
+          <WorkflowArtifactPagination page={page} totalPages={totalPages} visibleCount={artifacts.length} totalCount={totalArtifactCount} onPageChange={onPageChange} />
+        </div>
+      )}
+    </Section>
   )
 }
 
@@ -261,7 +263,7 @@ function WorkflowArtifactPagination({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+    <Inset className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-muted-foreground">
       <span>{t({ ko: '페이지 {page} / {totalPages} · {progress} · 페이지당 50개', en: 'page {page} / {totalPages} · {progress} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel })}</span>
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" variant="secondary" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
@@ -271,6 +273,6 @@ function WorkflowArtifactPagination({
           {t({ ko: '다음', en: 'Next' })}
         </Button>
       </div>
-    </div>
+    </Inset>
   )
 }

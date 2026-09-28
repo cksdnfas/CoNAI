@@ -5,7 +5,8 @@ import { CopyPlus, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Section } from '@/components/ui/section'
+import { StatTile } from '@/components/ui/stat-tile'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -491,33 +492,17 @@ export function ModuleWorkflowOutputManagementPanel({
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader className="border-b border-border/70 pb-4">
-          <CardTitle className="text-base">
-            {selectedFolderRecord
-              ? t('module-graph.components.module.workflow.output.management.panel.value.workflow.outputs', { name: selectedFolderRecord.name })
-              : t('module-graph.components.module.workflow.output.management.panel.workflow.outputs')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '워크플로', en: 'Workflows' })}</div>
-            <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.workflow_count}</div>
-          </div>
-          <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '실행', en: 'Executions' })}</div>
-            <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.execution_count}</div>
-          </div>
-          <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '결과물', en: 'Artifacts' })}</div>
-            <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.artifact_count}</div>
-          </div>
-          <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t('module-graph.components.module.workflow.output.management.panel.final.results')}</div>
-            <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.final_result_count}</div>
-          </div>
-        </CardContent>
-      </Card>
+      <Section
+        heading={selectedFolderRecord
+          ? t('module-graph.components.module.workflow.output.management.panel.value.workflow.outputs', { name: selectedFolderRecord.name })
+          : t('module-graph.components.module.workflow.output.management.panel.workflow.outputs')}
+        bodyClassName="grid gap-3 space-y-0 sm:grid-cols-2 xl:grid-cols-4"
+      >
+        <StatTile label={t({ ko: '워크플로', en: 'Workflows' })} value={formatNumber(browseContent.scope.workflow_count)} valueClassName="text-lg" />
+        <StatTile label={t({ ko: '실행', en: 'Executions' })} value={formatNumber(browseContent.scope.execution_count)} valueClassName="text-lg" />
+        <StatTile label={t({ ko: '결과물', en: 'Artifacts' })} value={formatNumber(browseContent.scope.artifact_count)} valueClassName="text-lg" />
+        <StatTile label={t('module-graph.components.module.workflow.output.management.panel.final.results')} value={formatNumber(browseContent.scope.final_result_count)} valueClassName="text-lg" />
+      </Section>
 
       <SegmentedTabBar value={activeTab} items={browseTabItems} onChange={(next) => setActiveTab(next as BrowseTab)} />
 
