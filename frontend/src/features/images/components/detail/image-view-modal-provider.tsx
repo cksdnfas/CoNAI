@@ -2,7 +2,13 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type PropsWi
 import { useQueryClient } from '@tanstack/react-query'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ImageRecord } from '@/types/image'
-import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
+import {
+  ImageViewModalContext,
+  type ImageViewModalAccessOptions,
+  type ImageViewModalOpenInput,
+  type ImageViewModalSyncInput,
+  type ImageViewSequenceTotal,
+} from './image-view-modal-context'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 
 type ImageViewModalOverlayModule = typeof import('./image-view-modal-overlay')
@@ -57,6 +63,8 @@ interface ImageViewModalState {
   compositeHashIndexByHash: Map<string, number>
   sourceId: string | null
   sourceItemsByHash: Record<string, ImageRecord>
+  sequenceTotal: ImageViewSequenceTotal | null
+  sequenceHasMore: boolean
   openSessionId: number
   stripFocusRequestId: number
   stripFocusBehavior: ScrollBehavior | null
@@ -151,6 +159,18 @@ function areCompositeHashesEqual(currentHashes: string[], nextHashes: string[]) 
   return true
 }
 
+function areSequenceTotalsEqual(current: ImageViewSequenceTotal | null, next: ImageViewSequenceTotal | null) {
+  if (current === next) {
+    return true
+  }
+
+  if (!current || !next || current.status !== next.status) {
+    return false
+  }
+
+  return current.status !== 'known' || next.status !== 'known' || current.count === next.count
+}
+
 function mergeSourceItemsByHash(currentItemsByHash: Record<string, ImageRecord>, nextItemsByHash: Record<string, ImageRecord>) {
   for (const compositeHash in nextItemsByHash) {
     if (currentItemsByHash[compositeHash] !== nextItemsByHash[compositeHash]) {
@@ -179,6 +199,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     compositeHashIndexByHash: new Map(),
     sourceId: null,
     sourceItemsByHash: {},
+    sequenceTotal: null,
+    sequenceHasMore: false,
     openSessionId: 0,
     stripFocusRequestId: 0,
     stripFocusBehavior: null,
@@ -253,6 +275,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         sourceItemsByHash: isFreshOpen || isSourceChanged
           ? nextSourceItemsByHash
           : { ...current.sourceItemsByHash, ...nextSourceItemsByHash },
+        sequenceTotal: input.sequenceTotal ?? null,
+        sequenceHasMore: input.sequenceHasMore ?? false,
         openSessionId: isFreshOpen ? current.openSessionId + 1 : current.openSessionId,
         stripFocusRequestId: shouldFocusStrip ? current.stripFocusRequestId + 1 : current.stripFocusRequestId,
         stripFocusBehavior: nextStripFocusBehavior,
@@ -261,7 +285,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     })
   }, [queryClient])
 
-  const syncImageViewSequence = useCallback((input: { compositeHashes: string[]; sourceId: string; sourceItems?: ImageRecord[] }) => {
+  const syncImageViewSequence = useCallback((input: ImageViewModalSyncInput) => {
     setModalState((current) => {
       if (!current.compositeHash || !current.sourceId || current.sourceId !== input.sourceId) {
         return current
@@ -277,8 +301,12 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       const mergedSourceItemsByHash = mergeSourceItemsByHash(current.sourceItemsByHash, nextSourceItemsByHash)
       const isSameSequence = areCompositeHashesEqual(current.compositeHashes, nextCompositeHashes)
       const isSameItems = mergedSourceItemsByHash === current.sourceItemsByHash
+      const nextSequenceTotal = input.sequenceTotal ?? null
+      const nextSequenceHasMore = input.sequenceHasMore ?? false
+      const isSameTotal = areSequenceTotalsEqual(current.sequenceTotal, nextSequenceTotal)
+        && current.sequenceHasMore === nextSequenceHasMore
 
-      if (isSameSequence && isSameItems) {
+      if (isSameSequence && isSameItems && isSameTotal) {
         return current
       }
 
@@ -287,6 +315,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         compositeHashes: nextCompositeHashes,
         compositeHashIndexByHash: nextCompositeHashIndexByHash,
         sourceItemsByHash: mergedSourceItemsByHash,
+        sequenceTotal: isSameTotal ? current.sequenceTotal : nextSequenceTotal,
+        sequenceHasMore: nextSequenceHasMore,
       }
     })
   }, [])
@@ -298,6 +328,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       compositeHashIndexByHash: new Map(),
       sourceId: null,
       sourceItemsByHash: {},
+      sequenceTotal: null,
+      sequenceHasMore: false,
       openSessionId: current.openSessionId,
       stripFocusRequestId: current.stripFocusRequestId,
       stripFocusBehavior: null,
@@ -442,6 +474,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
             initialImage={activeSourceItem}
             activeIndex={activeIndex}
             totalCount={modalState.compositeHashes.length}
+            sequenceTotal={modalState.sequenceTotal}
+            sequenceHasMore={modalState.sequenceHasMore}
             openSessionId={modalState.openSessionId}
             canViewPrevious={canViewPrevious}
             canViewNext={canViewNext}

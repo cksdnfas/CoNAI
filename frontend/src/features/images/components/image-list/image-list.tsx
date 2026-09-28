@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
-import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
+import { useImageViewModal, type ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import type { ImageRecord } from '@/types/image'
 const ImageListGridLazy = lazy(async () => {
@@ -54,6 +54,7 @@ export function ImageList({
   shouldBlurItemPreview,
   onPreviewIntent,
   modalAccessOptions,
+  sequenceTotal,
 }: ImageListProps) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -74,6 +75,16 @@ export function ImageList({
     [itemCompositeHashes],
   )
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  // Rebuild from primitives so callers passing a fresh object each render do not re-run modal sync.
+  const sequenceTotalStatus = sequenceTotal?.status
+  const sequenceTotalCount = sequenceTotal?.status === 'known' ? sequenceTotal.count : null
+  const stableSequenceTotal = useMemo<ImageViewSequenceTotal | undefined>(() => {
+    if (sequenceTotalStatus === 'known') {
+      return { status: 'known', count: sequenceTotalCount ?? 0 }
+    }
+
+    return sequenceTotalStatus ? { status: sequenceTotalStatus } : undefined
+  }, [sequenceTotalCount, sequenceTotalStatus])
   const resolvedColumnCount = useImageListColumnCount(containerElement, minColumnWidth, columnGap, preferredColumnCount)
   const loadMoreSentinelRef = useImageListLoadMore({
     hasMore: scrollMode === 'window' && hasMore,
@@ -130,6 +141,8 @@ export function ImageList({
                   compositeHashes: itemCompositeHashes,
                   sourceId: modalNavigationSourceId,
                   sourceItems: items,
+                  sequenceTotal: stableSequenceTotal,
+                  sequenceHasMore: hasMore,
                   accessOptions: modalAccessOptions,
                 }
               : {
@@ -154,7 +167,7 @@ export function ImageList({
         })
       }
     },
-    [activationMode, imageViewModal, itemCompositeHashes, items, location.pathname, modalAccessOptions, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIdSet, selectedIds, selectionMode, shouldSuppressClick],
+    [activationMode, hasMore, imageViewModal, itemCompositeHashes, items, location.pathname, modalAccessOptions, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIdSet, selectedIds, selectionMode, shouldSuppressClick, stableSequenceTotal],
   )
 
   const handlePreviewIntent = useCallback((image: ImageRecord) => {
@@ -197,8 +210,10 @@ export function ImageList({
       compositeHashes: itemCompositeHashes,
       sourceId: modalNavigationSourceId,
       sourceItems: items,
+      sequenceTotal: stableSequenceTotal,
+      sequenceHasMore: hasMore,
     })
-  }, [activationMode, activeModalIndexInList, imageViewModal, itemCompositeHashes, items, modalNavigationSourceId])
+  }, [activationMode, activeModalIndexInList, hasMore, imageViewModal, itemCompositeHashes, items, modalNavigationSourceId, stableSequenceTotal])
 
   useEffect(() => {
     if (activationMode !== 'modal') {

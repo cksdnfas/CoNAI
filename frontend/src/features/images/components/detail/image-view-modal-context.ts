@@ -7,11 +7,24 @@ export interface ImageViewModalAccessOptions {
   allowGroupAssignAction?: boolean
 }
 
+/**
+ * Real size of the list the modal navigates, when the source knows more than its loaded page.
+ * `pending` while the count request is in flight, `unavailable` when it failed or is not offered.
+ */
+export type ImageViewSequenceTotal =
+  | { status: 'known'; count: number }
+  | { status: 'pending' }
+  | { status: 'unavailable' }
+
 export interface ImageViewModalOpenInput {
   compositeHash: string
   compositeHashes?: string[]
   sourceId?: string
   sourceItems?: ImageRecord[]
+  /** Total for the whole source list; omit when the source has no total. */
+  sequenceTotal?: ImageViewSequenceTotal
+  /** Whether the source can load more items than `compositeHashes`. */
+  sequenceHasMore?: boolean
   stripFocusBehavior?: ScrollBehavior | null
   accessOptions?: ImageViewModalAccessOptions
 }
@@ -20,6 +33,8 @@ export interface ImageViewModalSyncInput {
   compositeHashes: string[]
   sourceId: string
   sourceItems?: ImageRecord[]
+  sequenceTotal?: ImageViewSequenceTotal
+  sequenceHasMore?: boolean
 }
 
 export interface ImageViewModalApi {

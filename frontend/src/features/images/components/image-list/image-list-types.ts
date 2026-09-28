@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
+import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
 
 export type ImageListLayoutMode = 'grid' | 'masonry'
@@ -34,4 +34,6 @@ export interface ImageListProps {
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
   onPreviewIntent?: (image: ImageRecord) => void
   modalAccessOptions?: ImageViewModalAccessOptions
+  /** Real total of the source list for the modal counter; omit when the source has none. */
+  sequenceTotal?: ImageViewSequenceTotal
 }

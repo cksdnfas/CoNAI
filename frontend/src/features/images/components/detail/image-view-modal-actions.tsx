@@ -6,12 +6,15 @@ import { type ImageDetailViewHeaderControls } from '@/features/images/image-deta
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
-import type { ImageViewModalAccessOptions } from './image-view-modal-context'
+import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from './image-view-modal-context'
 
 interface ImageViewModalActionsProps {
   compositeHash: string
   activeIndex: number
+  /** Number of loaded items the modal can step through. */
   totalCount: number
+  sequenceTotal?: ImageViewSequenceTotal | null
+  sequenceHasMore?: boolean
   controls: ImageDetailViewHeaderControls
   accessOptions?: ImageViewModalAccessOptions
   onClose: () => void
@@ -22,13 +25,28 @@ export function ImageViewModalActions({
   compositeHash,
   activeIndex,
   totalCount,
+  sequenceTotal = null,
+  sequenceHasMore = false,
   controls,
   accessOptions,
   onClose,
 }: ImageViewModalActionsProps) {
   const navigate = useNavigate()
-  const { t } = useI18n()
-  const showCounter = totalCount > 1 && activeIndex >= 0
+  const { t, formatNumber } = useI18n()
+  const showCounter = activeIndex >= 0 && (
+    totalCount > 1
+    || sequenceHasMore
+    || (sequenceTotal !== null && (sequenceTotal.status !== 'known' || sequenceTotal.count > 1))
+  )
+  // The denominator is the source's real total, never just the loaded page. Without a total
+  // source, a trailing "+" marks that more items can still be loaded.
+  const counterTotalLabel = sequenceTotal?.status === 'known'
+    ? formatNumber(Math.max(sequenceTotal.count, totalCount))
+    : sequenceTotal?.status === 'pending'
+      ? t('images.components.detail.image.view.modal.actions.counting')
+      : sequenceTotal?.status === 'unavailable'
+        ? '—'
+        : `${formatNumber(totalCount)}${sequenceHasMore ? '+' : ''}`
 
   const allowDetailNavigation = accessOptions?.allowDetailNavigation !== false
   const allowEditAction = accessOptions?.allowEditAction !== false
@@ -46,7 +64,7 @@ export function ImageViewModalActions({
       <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={onClose} aria-label={t('images.components.detail.image.view.modal.actions.close')} title={t('images.components.detail.image.view.modal.actions.close')}>
         <X className="h-4 w-4" />
       </Button>
-      {showCounter ? <div className="shrink-0 px-2 text-xs text-muted-foreground">{activeIndex + 1} / {totalCount}</div> : null}
+      {showCounter ? <div className="shrink-0 px-2 text-xs text-muted-foreground">{formatNumber(activeIndex + 1)} / {counterTotalLabel}</div> : null}
       {allowDetailNavigation ? (
         <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={openDetailPage} aria-label={t('images.components.detail.image.view.modal.actions.open.detail.page')} title={t('images.components.detail.image.view.modal.actions.detail.page')}>
           <ExternalLink className="h-4 w-4" />

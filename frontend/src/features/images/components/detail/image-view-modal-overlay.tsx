@@ -4,13 +4,15 @@ import { useI18n } from '@/i18n'
 import { ImageDetailView } from '@/features/images/image-detail-view'
 import { ImageViewModalActions } from './image-view-modal-actions'
 import type { ImageRecord } from '@/types/image'
-import type { ImageViewModalAccessOptions } from './image-view-modal-context'
+import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from './image-view-modal-context'
 
 interface ImageViewModalOverlayProps {
   compositeHash: string
   initialImage?: ImageRecord | null
   activeIndex: number
   totalCount: number
+  sequenceTotal: ImageViewSequenceTotal | null
+  sequenceHasMore: boolean
   openSessionId: number
   canViewPrevious: boolean
   canViewNext: boolean
@@ -26,6 +28,8 @@ export function ImageViewModalOverlay({
   initialImage,
   activeIndex,
   totalCount,
+  sequenceTotal,
+  sequenceHasMore,
   openSessionId,
   canViewPrevious,
   canViewNext,
@@ -74,6 +78,8 @@ export function ImageViewModalOverlay({
               compositeHash={compositeHash}
               activeIndex={activeIndex}
               totalCount={totalCount}
+              sequenceTotal={sequenceTotal}
+              sequenceHasMore={sequenceHasMore}
               controls={controls}
               accessOptions={accessOptions}
               onClose={onClose}

@@ -5,6 +5,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useHomeSearch } from '@/features/home/home-search-context'
 import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
+import type { ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { getHomeFeedProgressSummary } from '@/features/home/home-feed-progress'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
 import { useI18n } from '@/i18n'
@@ -196,6 +197,17 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     [imagesQuery.data?.pages, visibleImages.length, feedTotalQuery.data],
   )
 
+  // Viewer counter denominator: the real feed total, pending while it is counted, and
+  // unavailable when the count failed or a search could not report an exact total.
+  const isFeedTotalUnavailable = feedTotalQuery.isError || (feedTotalQuery.isSuccess && feedTotalQuery.data === null)
+  const feedSequenceTotal = useMemo<ImageViewSequenceTotal>(() => {
+    if (feedProgress.isTotalKnown) {
+      return { status: 'known', count: feedProgress.totalCount }
+    }
+
+    return isFeedTotalUnavailable ? { status: 'unavailable' } : { status: 'pending' }
+  }, [feedProgress.isTotalKnown, feedProgress.totalCount, isFeedTotalUnavailable])
+
   useEffect(() => {
     setSelectedIds([])
   }, [appliedChips])
@@ -345,6 +357,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     visibleImages,
     imageListResetKey,
     feedProgress,
+    feedSequenceTotal,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,
     selectedIds,

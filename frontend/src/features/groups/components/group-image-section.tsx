@@ -10,6 +10,7 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
+import type { ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
 import { getGroupImageFeedProgressSummary } from '../group-image-feed-progress'
 
@@ -103,6 +104,9 @@ export function GroupImageSection({
     : isError
       ? '—'
       : null
+  const sequenceTotal: ImageViewSequenceTotal = feedProgress.isTotalKnown
+    ? { status: 'known', count: feedProgress.totalCount }
+    : { status: isError ? 'unavailable' : 'pending' }
 
   return (
     <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-4'}>
@@ -256,6 +260,7 @@ export function GroupImageSection({
             renderItemOverlay={renderItemOverlay}
             renderItemPersistentOverlay={renderItemPersistentOverlay}
             shouldBlurItemPreview={shouldBlurItemPreview}
+            sequenceTotal={sequenceTotal}
           />
 
           <div className="flex flex-col items-center gap-3 pb-3">

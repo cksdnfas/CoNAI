@@ -44,6 +44,7 @@ export function HomePage() {
     visibleImages,
     imageListResetKey,
     feedProgress,
+    feedSequenceTotal,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,
     selectedIds,
@@ -184,6 +185,7 @@ export function HomePage() {
             gridItemHeight={280}
             renderItemPersistentOverlay={renderItemPersistentOverlay}
             shouldBlurItemPreview={shouldBlurItemPreview}
+            sequenceTotal={feedSequenceTotal}
           />
 
           <div className="flex flex-col items-center gap-3 pb-6">
