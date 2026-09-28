@@ -410,9 +410,9 @@ export function WallpaperEasingGraph({
           )
         })}
 
-        <text x={GRAPH_PADDING} y={18} className="fill-muted-foreground text-[11px]">{t({ ko: '빠름', en: 'Fast' })}</text>
-        <text x={GRAPH_PADDING} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">{t({ ko: '눌림', en: 'Press' })}</text>
-        <text x={GRAPH_SIZE + GRAPH_PADDING - 14} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">{t({ ko: '시간', en: 'Time' })}</text>
+        <text x={GRAPH_PADDING} y={18} className="fill-muted-foreground text-2xs">{t({ ko: '빠름', en: 'Fast' })}</text>
+        <text x={GRAPH_PADDING} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-2xs">{t({ ko: '눌림', en: 'Press' })}</text>
+        <text x={GRAPH_SIZE + GRAPH_PADDING - 14} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-2xs">{t({ ko: '시간', en: 'Time' })}</text>
 
         <path d={`M ${mapWallpaperEasingGraphX(0)} ${mapWallpaperEasingGraphY(0)} L ${mapWallpaperEasingGraphX(1)} ${mapWallpaperEasingGraphY(1)}`} stroke="color-mix(in srgb, var(--muted-foreground) 48%, transparent)" strokeDasharray="5 6" strokeWidth="1.5" fill="none" />
         <path d={path} stroke="var(--primary)" strokeWidth="4" fill="none" />
@@ -470,10 +470,10 @@ export function WallpaperEasingGraph({
                   }}
                 />
               ) : null}
-              <text x={pointX} y={pointY - 24} textAnchor="middle" className={isSelected ? 'fill-primary text-[11px] font-semibold' : 'fill-foreground text-[11px] font-semibold'}>
+              <text x={pointX} y={pointY - 24} textAnchor="middle" className={isSelected ? 'fill-primary text-2xs font-semibold' : 'fill-foreground text-2xs font-semibold'}>
                 {label}
               </text>
-              <text x={pointX} y={pointY + 31} textAnchor="middle" className={isSelected ? 'fill-primary text-[10px] font-medium' : 'fill-muted-foreground text-[10px] font-medium'}>
+              <text x={pointX} y={pointY + 31} textAnchor="middle" className={isSelected ? 'fill-primary text-2xs font-medium' : 'fill-muted-foreground text-2xs font-medium'}>
                 {valueText}
               </text>
             </g>
@@ -582,7 +582,7 @@ function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAni
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-medium text-foreground">{meta.title}</div>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
+          <div className="mt-2 flex flex-wrap gap-1.5 text-2xs text-muted-foreground">
             {kind === 'transition' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{transitionDurationMs}ms</span> : null}
             {kind === 'transition' && config?.transitionStyle ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{config.transitionStyle}</span> : null}
             {kind === 'hover' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{t({ ko: '강도', en: 'Intensity' })} {getWallpaperHoverMotionAmount(config?.hoverMotion ?? 1).toFixed(1)}</span> : null}

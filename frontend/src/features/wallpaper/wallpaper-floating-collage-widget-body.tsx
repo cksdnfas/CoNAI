@@ -423,6 +423,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
 
         if (mode === 'runtime' && widget.settings.imageClickAction !== 'none' && onOpenImage && image) {
           return (
+            // eslint-disable-next-line no-restricted-syntax -- wallpaper runtime image card: the rendered art is the click target
             <button
               key={card.key}
               type="button"

@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import { Select } from '@/components/ui/select'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Field } from '@/components/ui/field'
@@ -126,7 +128,7 @@ function renderWallpaperAnimationEditorCard({
 }) {
   return (
     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-      <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{title}</div>
+      <div className="mb-2 text-xs font-semibold tracking-overline text-muted-foreground uppercase">{title}</div>
       {children}
     </div>
   )
@@ -144,8 +146,8 @@ export function WallpaperInspectorSectionCard({
   className?: string
 }) {
   return (
-    <section className={cn('space-y-3 rounded-sm border border-border/70 bg-background/35 p-3', className)}>
-      <div className="text-sm font-semibold text-foreground">{title}</div>
+    <section className={cn('space-y-3 rounded-sm bg-surface-lowest p-3', className)}>
+      <Text as="div" variant="title">{title}</Text>
       {children}
     </section>
   )
@@ -165,19 +167,22 @@ export function WallpaperInspectorDisclosure({
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="rounded-sm border border-border/70 bg-background/45">
-      <button
+    <div className="rounded-sm bg-surface-lowest">
+      <Button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+        variant="nav"
+        size="sm"
+        aria-expanded={open}
+        className="justify-between px-3"
         onClick={() => {
           setOpen((current) => !current)
         }}
       >
-        <div className="text-xs font-semibold tracking-[0.14em] text-foreground uppercase">{title}</div>
+        <span className="text-2xs font-semibold uppercase tracking-overline text-foreground">{title}</span>
         <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open ? 'rotate-180' : undefined)} />
-      </button>
+      </Button>
 
-      {open ? <div className="space-y-2 border-t border-border/60 px-3 py-3">{children}</div> : null}
+      {open ? <div className="space-y-2 px-3 pb-3 pt-1">{children}</div> : null}
     </div>
   )
 }

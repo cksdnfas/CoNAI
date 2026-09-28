@@ -189,7 +189,7 @@ export function WallpaperImageWidgetEditorFields({
                 motionStrength={selectedWidget.settings.motionStrength}
                 editorContent={(
                   <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                    <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
+                    <div className="mb-2 text-xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
                     <Field label={t({ ko: '강도', en: 'Strength' })}>
                       <NumberStepperInput
                         variant="settings"
@@ -319,7 +319,7 @@ export function WallpaperImageWidgetEditorFields({
               motionSpeed={selectedWidget.settings.motionSpeed}
               editorContent={(
                 <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                  <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
+                  <div className="mb-2 text-xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label={t({ ko: '움직임 강도', en: 'Motion strength' })}>
                       <NumberStepperInput
@@ -379,7 +379,7 @@ export function WallpaperImageWidgetEditorFields({
               }}
               editorContent={(
                 <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                  <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{t({ ko: '교체 옵션', en: 'Swap options' })}</div>
+                  <div className="mb-2 text-xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '교체 옵션', en: 'Swap options' })}</div>
                   <div className="space-y-3">
                     <Field label={t({ ko: '이미지 교체 기준', en: 'Image swap trigger' })}>
                       <Select

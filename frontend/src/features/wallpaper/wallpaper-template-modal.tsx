@@ -1,5 +1,4 @@
 import { LayoutTemplate } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { WALLPAPER_TEMPLATES, type WallpaperTemplateDefinition } from './wallpaper-templates'
@@ -23,10 +22,11 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
     >
       <div className="grid gap-3 sm:grid-cols-2">
         {WALLPAPER_TEMPLATES.map((template) => (
+          // eslint-disable-next-line no-restricted-syntax -- rich template card (preview art + copy); Button's inline sizing does not fit
           <button
             key={template.id}
             type="button"
-            className="group overflow-hidden rounded-sm border border-border bg-surface-low text-left transition hover:border-secondary/70 hover:bg-surface-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+            className="group cursor-pointer overflow-hidden rounded-sm bg-surface-low text-left transition-colors hover:bg-surface-high focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
             onClick={() => onApply(template)}
           >
             <div className="relative h-28 overflow-hidden" style={{ background: template.accent }}>
@@ -36,9 +36,9 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
             <div className="p-4">
               <div className="font-semibold text-foreground">{t(template.name)}</div>
               <p className="mt-1 text-sm leading-5 text-muted-foreground">{t(template.description)}</p>
-              <Button type="button" variant="ghost" size="sm" className="mt-3 pointer-events-none px-0 text-secondary">
+              <span className="mt-3 inline-block text-sm font-medium text-secondary group-hover:underline underline-offset-4">
                 {t({ ko: '이 템플릿 사용', en: 'Use this template' })}
-              </Button>
+              </span>
             </div>
           </button>
         ))}

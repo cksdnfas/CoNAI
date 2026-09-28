@@ -1,3 +1,4 @@
+import { Switch } from '@/components/ui/switch'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
@@ -59,21 +60,19 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
           </Field>
           <ToggleRow>
             <span className="flex-1">{t({ ko: '초 표시', en: 'Show seconds' })}</span>
-            <input
-              type="checkbox"
+            <Switch
               checked={selectedWidget.settings.showSeconds}
-              onChange={(event) => {
-                updateWidgetSettings({ showSeconds: event.target.checked })
+              onCheckedChange={(checked) => {
+                updateWidgetSettings({ showSeconds: checked })
               }}
             />
           </ToggleRow>
           <ToggleRow>
             <span className="flex-1">{t({ ko: '날짜 표시', en: 'Show date' })}</span>
-            <input
-              type="checkbox"
+            <Switch
               checked={selectedWidget.settings.showDate !== false}
-              onChange={(event) => {
-                updateWidgetSettings({ showDate: event.target.checked })
+              onCheckedChange={(checked) => {
+                updateWidgetSettings({ showDate: checked })
               }}
             />
           </ToggleRow>

@@ -1,9 +1,10 @@
+import { EmptyState } from '@/components/ui/empty-state'
+import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import {
   WallpaperInspectorDisclosure,
   WallpaperInspectorSectionCard,
@@ -35,9 +36,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
   const { t } = useI18n()
   if (!selectedWidget) {
     return (
-      <div className={cn('rounded-sm border border-dashed border-border bg-surface-low px-4 py-8 text-center text-sm text-muted-foreground')}>
-        {t({ ko: '위젯을 선택해.', en: 'Select a widget.' })}
-      </div>
+      <EmptyState size="compact" title={t({ ko: '위젯을 선택해.', en: 'Select a widget.' })} />
     )
   }
 
@@ -85,11 +84,10 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
             <ToggleRow>
               <span className="flex-1">{t({ ko: '하위 그룹 포함', en: 'Include child groups' })}</span>
-              <input
-                type="checkbox"
+              <Switch
                 checked={selectedWidget.settings.includeChildren !== false}
-                onChange={(event) => {
-                  updateWidgetSettings({ includeChildren: event.target.checked })
+                onCheckedChange={(checked) => {
+                  updateWidgetSettings({ includeChildren: checked })
                 }}
               />
             </ToggleRow>
@@ -102,33 +100,30 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
         >
           <ToggleRow>
             <span className="flex-1">{t({ ko: '제목 표시', en: 'Show title' })}</span>
-            <input
-              type="checkbox"
+            <Switch
               checked={selectedWidget.settings.showTitle === true}
-              onChange={(event) => {
-                updateWidgetSettings({ showTitle: event.target.checked })
+              onCheckedChange={(checked) => {
+                updateWidgetSettings({ showTitle: checked })
               }}
             />
           </ToggleRow>
 
           <ToggleRow>
             <span className="flex-1">{t({ ko: '배경 표시', en: 'Show background' })}</span>
-            <input
-              type="checkbox"
+            <Switch
               checked={selectedWidget.settings.showBackground === true}
-              onChange={(event) => {
-                updateWidgetSettings({ showBackground: event.target.checked })
+              onCheckedChange={(checked) => {
+                updateWidgetSettings({ showBackground: checked })
               }}
             />
           </ToggleRow>
 
           <ToggleRow>
             <span className="flex-1">{t({ ko: '경계선 표시', en: 'Show border' })}</span>
-            <input
-              type="checkbox"
+            <Switch
               checked={selectedWidget.settings.showBorder === true}
-              onChange={(event) => {
-                updateWidgetSettings({ showBorder: event.target.checked })
+              onCheckedChange={(checked) => {
+                updateWidgetSettings({ showBorder: checked })
               }}
             />
           </ToggleRow>
@@ -150,11 +145,10 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               {selectedWidget.type === 'group-image-view' || selectedWidget.type === 'image-showcase' ? (
                 <ToggleRow>
                   <span className="flex-1">{t({ ko: '호버 시 자동재생 일시정지', en: 'Pause autoplay on hover' })}</span>
-                  <input
-                    type="checkbox"
+                  <Switch
                     checked={selectedWidget.settings.pauseOnHover !== false}
-                    onChange={(event) => {
-                      updateWidgetSettings({ pauseOnHover: event.target.checked })
+                    onCheckedChange={(checked) => {
+                      updateWidgetSettings({ pauseOnHover: checked })
                     }}
                   />
                 </ToggleRow>
@@ -194,22 +188,20 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
           <ToggleRow>
             <span className="flex-1">{t({ ko: '위젯 숨김', en: 'Hide widget' })}</span>
-            <input
-              type="checkbox"
+            <Switch
               checked={selectedWidget.hidden}
-              onChange={(event) => {
-                onPatchWidget(selectedWidget.id, { hidden: event.target.checked })
+              onCheckedChange={(checked) => {
+                onPatchWidget(selectedWidget.id, { hidden: checked })
               }}
             />
           </ToggleRow>
 
           <ToggleRow>
             <span className="flex-1">{t({ ko: '위젯 잠금', en: 'Lock widget' })}</span>
-            <input
-              type="checkbox"
+            <Switch
               checked={selectedWidget.locked}
-              onChange={(event) => {
-                onPatchWidget(selectedWidget.id, { locked: event.target.checked })
+              onCheckedChange={(checked) => {
+                onPatchWidget(selectedWidget.id, { locked: checked })
               }}
             />
           </ToggleRow>

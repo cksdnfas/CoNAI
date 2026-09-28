@@ -15,11 +15,10 @@ import {
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
-import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import { listWallpaperWidgetDefinitions } from './wallpaper-widget-registry'
 import { getWallpaperWidgetLibrarySearchSummary, type WallpaperWidgetLibraryFolderId } from './wallpaper-widget-library-search'
 import type { WallpaperWidgetDefinition, WallpaperWidgetType } from './wallpaper-types'
@@ -82,21 +81,14 @@ const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder(
 
   return (
     <div className="space-y-1">
-      <button
-        type="button"
-        onClick={handleToggleFolder}
-        className={getNavigationItemClassName({
-          active: false,
-          className: 'flex items-center gap-2 px-2 py-2',
-        })}
-      >
+      <Button type="button" variant="nav" aria-expanded={isExpanded} onClick={handleToggleFolder} className="gap-2 px-2">
         {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
         <Folder className="h-4 w-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{t(folder.title)}</span>
-        <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+        <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-2xs">
           {folder.widgets.length}
         </Badge>
-      </button>
+      </Button>
 
       {isExpanded ? (
         <div className="space-y-1">
@@ -104,22 +96,18 @@ const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder(
             const Icon = getWallpaperWidgetIcon(widget.type)
             const isSelected = selectedWidgetType === widget.type
             return (
-              <button
+              <Button
                 key={widget.type}
                 type="button"
+                variant="nav"
+                data-active={isSelected}
                 onClick={() => onAddWidget(widget.type)}
-                className={getNavigationItemClassName({
-                  active: isSelected,
-                  density: 'sm',
-                  className: 'flex items-center gap-2 pl-10 pr-2',
-                })}
+                className="gap-2 pl-10 pr-2"
               >
-                <Icon className={cn('h-4 w-4 shrink-0', isSelected ? 'text-primary' : 'text-muted-foreground')} />
-                <div className={cn('min-w-0 flex-1 truncate text-sm font-medium', isSelected ? 'text-primary' : 'text-foreground')}>
-                  {t(widget.title)}
-                </div>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-foreground">{t(widget.title)}</span>
                 <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </button>
+              </Button>
             )
           })}
         </div>

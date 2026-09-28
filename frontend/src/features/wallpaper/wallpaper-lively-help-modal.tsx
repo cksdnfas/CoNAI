@@ -28,7 +28,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
       })}
     >
       <div className="space-y-5">
-        <div className="rounded-sm border border-secondary/35 bg-secondary/8 p-4">
+        <div className="rounded-sm bg-surface-low p-4">
           <div className="flex items-start gap-3">
             <Wallpaper className="mt-0.5 h-5 w-5 shrink-0 text-secondary" />
             <div className="space-y-1">
@@ -70,7 +70,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
               body: t({ ko: 'Lively의 월페이퍼 추가에서 웹 페이지를 선택하고 URL을 붙여 넣어.', en: 'In Lively, add a wallpaper, choose Web Page, and paste the URL.' }),
             },
           ].map(({ icon: Icon, title, body }) => (
-            <li key={title} className="rounded-sm border border-border bg-surface-low p-3">
+            <li key={title} className="rounded-sm bg-surface-low p-3">
               <Icon className="mb-3 h-4 w-4 text-secondary" />
               <div className="text-sm font-semibold text-foreground">{title}</div>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">{body}</p>
@@ -79,7 +79,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
         </ol>
 
         <div className="space-y-2">
-          <div className="text-xs font-semibold tracking-[0.16em] text-secondary uppercase">
+          <div className="text-xs font-semibold tracking-overline text-secondary uppercase">
             {t({ ko: '현재 월페이퍼 URL', en: 'Current wallpaper URL' })}
           </div>
           {runtimeUrl ? (
@@ -90,13 +90,13 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
               </Button>
             </div>
           ) : (
-            <div className="rounded-sm border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+            <div className="rounded-sm bg-surface-low px-3 py-4 text-sm text-muted-foreground">
               {t({ ko: '월페이퍼를 먼저 저장하면 고유 URL이 표시돼.', en: 'Save the wallpaper first to get its unique URL.' })}
             </div>
           )}
         </div>
 
-        <div className="flex items-start gap-3 rounded-sm border border-border bg-surface-low p-3 text-sm text-muted-foreground">
+        <div className="flex items-start gap-3 rounded-sm bg-surface-low p-3 text-sm text-muted-foreground">
           <Server className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />
           <p className="leading-6">
             {t({

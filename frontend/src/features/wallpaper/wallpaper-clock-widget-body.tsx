@@ -90,7 +90,7 @@ export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
       >
         {!isCompact && showDate ? (
           <div className="flex w-[30%] min-w-[118px] flex-col justify-between border-r border-foreground/15 py-1 pr-4">
-            <span className="text-[10px] font-semibold tracking-[0.24em] text-secondary uppercase">CoNAI</span>
+            <span className="text-2xs font-semibold tracking-[0.24em] text-secondary uppercase">CoNAI</span>
             <span className="text-pretty font-medium leading-snug text-foreground/72" style={{ fontSize: dateSize }}>{dateText}</span>
           </div>
         ) : null}
@@ -108,6 +108,7 @@ export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
 
   if (style === 'glass') {
     return (
+      // eslint-disable-next-line no-restricted-syntax -- wallpaper widget art: the glass clock tints the desktop behind it, not a scrim
       <div ref={containerRef} className="relative flex h-full min-h-0 flex-col justify-center overflow-hidden rounded-[inherit] border border-white/14 bg-black/18 px-[5%] py-[4%] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_20px_70px_rgba(0,0,0,0.16)] backdrop-blur-md">
         <div className="pointer-events-none absolute -top-1/2 right-[-8%] aspect-square h-[150%] rounded-full bg-secondary/13 blur-3xl" />
         <div className="relative flex items-baseline gap-[0.1em] font-semibold tracking-[-0.07em] tabular-nums drop-shadow-[0_3px_18px_rgba(0,0,0,0.3)]" style={{ fontSize: timeSize, lineHeight: 0.9 }}>

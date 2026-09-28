@@ -355,6 +355,7 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
   }
 
   return (
+    // eslint-disable-next-line no-restricted-syntax -- wallpaper runtime image surface: the rendered art is the click target
     <button
       type="button"
       className={cn(className, 'relative isolate block w-full cursor-zoom-in transform-gpu transition-[transform,box-shadow] duration-200 ease-out')}

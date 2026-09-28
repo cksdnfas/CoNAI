@@ -123,7 +123,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
   const cardContent = (
     <>
       {showTitle ? (
-        <div className={cn('px-3 py-2 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase', showBorder ? 'border-b border-border/60' : 'border-b-0')}>{title}</div>
+        <div className={cn('px-3 py-2 text-2xs font-semibold tracking-overline text-secondary uppercase', showBorder ? 'border-b border-border/60' : 'border-b-0')}>{title}</div>
       ) : null}
       <div className="min-h-0 flex-1 p-3">
         <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
@@ -134,6 +134,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
   return (
     <div className="relative h-full w-full group">
       {mode === 'editor' ? (
+        // eslint-disable-next-line no-restricted-syntax -- the widget card itself is the drag/select surface (pointer handlers); Button styles would restyle the rendered widget
         <button
           type="button"
           onClick={() => onSelectWidget?.(widget.id)}
@@ -151,24 +152,26 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
 
       {mode === 'editor' && !widget.locked ? (
         <>
+          {/* eslint-disable-next-line no-restricted-syntax -- pointer-driven move handle sized to the widget corner */}
           <button
             type="button"
             aria-label={t({ ko: '위젯 이동', en: 'Move widget' })}
             onPointerDown={onStartMove}
             className={cn(
-              'absolute left-2 top-2 flex touch-none items-center justify-center rounded-[5px] border border-border/80 bg-background/92 text-muted-foreground shadow-sm transition select-none',
+              'absolute left-2 top-2 flex touch-none items-center justify-center rounded-sm bg-surface-high/92 text-muted-foreground shadow-elevation-1 transition select-none',
               useMoveHandle ? 'h-7 min-w-7 px-1.5 opacity-100' : 'h-5 min-w-5 px-1 opacity-0 group-hover:opacity-100',
               isSelected ? 'opacity-100' : null,
             )}
           >
             <GripVertical className={useMoveHandle ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
           </button>
+          {/* eslint-disable-next-line no-restricted-syntax -- pointer-driven resize handle sized to the widget corner */}
           <button
             type="button"
             aria-label={t({ ko: '위젯 크기 조절', en: 'Resize widget' })}
             onPointerDown={onStartResize}
             className={cn(
-              'absolute bottom-2 right-2 flex touch-none items-center justify-center rounded-[5px] border border-border/80 bg-background/92 text-muted-foreground shadow-sm transition select-none',
+              'absolute bottom-2 right-2 flex touch-none items-center justify-center rounded-sm bg-surface-high/92 text-muted-foreground shadow-elevation-1 transition select-none',
               useMoveHandle ? 'h-7 min-w-7 px-1.5 opacity-100' : 'h-4 w-4 opacity-0 group-hover:opacity-100',
               isSelected ? 'opacity-100' : null,
             )}
@@ -449,6 +452,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
           }}
           onClick={handleClosePreviewImage}
         >
+          {/* eslint-disable-next-line no-restricted-syntax -- wallpaper runtime preview: framed image art (glass frame colours are intentional) */}
           <button
             type="button"
             aria-label={t({ ko: '이미지 미리보기 닫기', en: 'Close image preview' })}
@@ -457,6 +461,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
               handleClosePreviewImage()
             }}
             className={cn(
+              // eslint-disable-next-line no-restricted-syntax -- glass frame of the wallpaper image preview (artwork styling, not a scrim)
               'max-h-full max-w-full overflow-hidden rounded-[24px] border border-white/14 bg-black/14 shadow-[0_16px_40px_rgba(0,0,0,0.18),0_36px_96px_rgba(0,0,0,0.42)] transition-[transform,opacity,box-shadow] will-change-transform',
               isPreviewVisible ? 'opacity-100' : 'opacity-0',
             )}

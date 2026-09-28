@@ -34,11 +34,11 @@ export function WallpaperEasingPreviewCard({
   className?: string
 }) {
   const cardClassName = cn(
-    'rounded-sm border p-2.5 transition',
+    'rounded-sm p-2.5 transition-colors',
     selected
-      ? 'border-primary bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]'
-      : 'border-border bg-surface-low',
-    interactive && 'hover:border-primary/50 hover:bg-surface-high',
+      ? 'bg-primary/10 ring-1 ring-primary/40'
+      : 'bg-surface-low',
+    interactive && 'hover:bg-surface-high',
     className,
   )
 
@@ -51,23 +51,25 @@ export function WallpaperEasingPreviewCard({
         <div className="min-w-0 flex flex-1 items-center gap-1.5">
           {leading ? <div className="shrink-0">{leading}</div> : null}
           {interactive && onSelect ? (
-            <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
+            // eslint-disable-next-line no-restricted-syntax -- title + description block of a preview card, not a toolbar action
+            <button type="button" onClick={onSelect} className="min-w-0 flex-1 cursor-pointer text-left">
               {titleContent}
-              {description ? <div className="mt-0.5 text-[11px] text-muted-foreground">{description}</div> : null}
+              {description ? <div className="mt-0.5 text-2xs text-muted-foreground">{description}</div> : null}
             </button>
           ) : (
-            <div className="min-w-0 flex-1">{titleContent}{description ? <div className="mt-0.5 text-[11px] text-muted-foreground">{description}</div> : null}</div>
+            <div className="min-w-0 flex-1">{titleContent}{description ? <div className="mt-0.5 text-2xs text-muted-foreground">{description}</div> : null}</div>
           )}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-0.5">{actions}</div> : null}
       </div>
 
       {interactive && onSelect ? (
-        <button type="button" onClick={onSelect} className="block w-full rounded-sm border border-border/70 bg-background/80 px-2 py-1.5 text-left">
+        // eslint-disable-next-line no-restricted-syntax -- the easing graph itself is the click target
+        <button type="button" onClick={onSelect} className="block w-full cursor-pointer rounded-sm bg-surface-lowest px-2 py-1.5 text-left">
           {graphContent}
         </button>
       ) : (
-        <div className="rounded-sm border border-border/70 bg-background/80 px-2 py-1.5">
+        <div className="rounded-sm bg-surface-lowest px-2 py-1.5">
           {graphContent}
         </div>
       )}
@@ -116,7 +118,7 @@ export function WallpaperSavedEasingPresetsSection({
   const { t } = useI18n()
 
   return (
-    <div className="space-y-3 border-t border-border/70 pt-4">
+    <div className="space-y-3 pt-4">
       <input
         ref={importInputRef}
         type="file"
@@ -153,13 +155,13 @@ export function WallpaperSavedEasingPresetsSection({
       </div>
 
       {importExportMessage ? (
-        <div className="rounded-sm border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary">
+        <div className="rounded-sm bg-info-soft px-3 py-2 text-xs text-info-soft-foreground">
           {importExportMessage}
         </div>
       ) : null}
 
       {importExportError ? (
-        <div className="rounded-sm border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="rounded-sm bg-destructive-soft px-3 py-2 text-xs text-destructive-soft-foreground">
           {importExportError}
         </div>
       ) : null}
@@ -174,10 +176,10 @@ export function WallpaperSavedEasingPresetsSection({
               <div
                 key={preset.id}
                 className={cn(
-                  'rounded-sm border p-2.5 transition',
+                  'rounded-sm p-2.5 transition-colors',
                   selectedEasing === preset.easing
-                    ? 'border-primary bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]'
-                    : 'border-border bg-surface-low',
+                    ? 'bg-primary/10 ring-1 ring-primary/40'
+                    : 'bg-surface-low',
                 )}
               >
                 <div className="mb-2 flex items-start justify-between gap-2">
@@ -221,11 +223,11 @@ export function WallpaperSavedEasingPresetsSection({
                     </Button>
                   </div>
                 </div>
-                <div className="rounded-sm border border-border/70 bg-background/80 px-2 py-1.5">
+                <div className="rounded-sm bg-surface-lowest px-2 py-1.5">
                   <WallpaperEasingGraphPreview easing={preset.easing} className="h-11 w-full" />
                 </div>
                 {isDuplicateName ? (
-                  <div className="mt-2 text-[11px] text-destructive">{t({ ko: '같은 이름의 프리셋이 이미 있어.', en: 'A preset with the same name already exists.' })}</div>
+                  <div className="mt-2 text-2xs text-destructive">{t({ ko: '같은 이름의 프리셋이 이미 있어.', en: 'A preset with the same name already exists.' })}</div>
                 ) : null}
               </div>
             ) : (
@@ -277,7 +279,7 @@ export function WallpaperSavedEasingPresetsSection({
           })}
         </div>
       ) : (
-        <div className="rounded-sm border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
+        <div className="rounded-sm bg-surface-lowest px-3 py-5 text-center text-xs text-muted-foreground">
           {t({ ko: '아직 저장한 커스텀 프리셋이 없어.', en: 'There are no saved custom presets yet.' })}
         </div>
       )}

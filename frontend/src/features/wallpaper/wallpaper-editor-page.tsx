@@ -2,7 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, Maximize2, Minimize2, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { PageHeader } from '@/components/common/page-header'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Field } from '@/components/ui/field'
+import { Heading } from '@/components/ui/heading'
+import { Panel } from '@/components/ui/panel'
+import { Text } from '@/components/ui/text'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -448,24 +455,21 @@ export function WallpaperEditorPage() {
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-xl border border-border/80 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_8%,transparent),transparent_38%),var(--surface-container)] shadow-[0_18px_48px_rgba(0,0,0,0.16)]">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">{t({ ko: '월페이퍼 스튜디오', en: 'Wallpaper Studio' })}</h1>
-              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background/60 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {activePreset && !hasUnsavedPresetChanges ? <Check className="h-3 w-3 text-secondary" /> : null}
-                {!activePreset
-                  ? t({ ko: '초안', en: 'Draft' })
-                  : hasUnsavedPresetChanges
-                    ? t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
-                    : t({ ko: '저장됨', en: 'Saved' })}
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">{t({ ko: '캔버스를 편집하고 Lively용 URL로 바로 실행해.', en: 'Compose the canvas and run it directly in Lively.' })}</p>
-          </div>
-
-          <div className="flex items-center gap-2">
+      <PageHeader
+        title={t({ ko: '월페이퍼 스튜디오', en: 'Wallpaper Studio' })}
+        titleAccessory={(
+          <Badge variant="secondary" className="normal-case tracking-normal">
+            {activePreset && !hasUnsavedPresetChanges ? <Check className="text-secondary" /> : null}
+            {!activePreset
+              ? t({ ko: '초안', en: 'Draft' })
+              : hasUnsavedPresetChanges
+                ? t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
+                : t({ ko: '저장됨', en: 'Saved' })}
+          </Badge>
+        )}
+        description={t({ ko: '캔버스를 편집하고 Lively용 URL로 바로 실행해.', en: 'Compose the canvas and run it directly in Lively.' })}
+        actions={(
+          <>
             <Button variant="secondary" size="sm" onClick={() => setIsTemplateModalOpen(true)}>
               <LayoutTemplate className="h-4 w-4" />
               <span className="hidden sm:inline">{t({ ko: '템플릿', en: 'Templates' })}</span>
@@ -508,12 +512,13 @@ export function WallpaperEditorPage() {
             >
               <HelpCircle className="h-4 w-4" />
             </Button>
-          </div>
-        </div>
+          </>
+        )}
+      />
 
+      <Panel tone="low" padding="none" className="overflow-hidden">
         <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(190px,0.75fr)_minmax(220px,1.15fr)_minmax(190px,0.7fr)] lg:items-end">
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '프리셋', en: 'Preset' })}</div>
+          <Field label={t({ ko: '프리셋', en: 'Preset' })}>
             <Select
               value={effectiveActivePresetId ?? '__new__'}
               onChange={(event) => {
@@ -525,10 +530,9 @@ export function WallpaperEditorPage() {
                 <option key={preset.id} value={preset.id}>{preset.name}</option>
               ))}
             </Select>
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '이름', en: 'Name' })}</div>
+          <Field label={t({ ko: '이름', en: 'Name' })}>
             <Input
               variant="settings"
               value={layoutPreset.name}
@@ -541,34 +545,35 @@ export function WallpaperEditorPage() {
                 }), { coalesceKey: 'name' })
               }}
             />
-          </div>
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '캔버스', en: 'Canvas' })}</div>
+          </Field>
+          <Field label={t({ ko: '캔버스', en: 'Canvas' })}>
             <Select value={layoutPreset.canvasPresetId} onChange={(event) => handleChangeCanvasPreset(event.target.value)}>
               {listWallpaperCanvasPresets().map((preset) => (
                 <option key={preset.id} value={preset.id}>{preset.name} · {preset.aspectRatioLabel}</option>
               ))}
             </Select>
-          </div>
+          </Field>
         </div>
 
         {activePresetRuntimePath ? (
-          <button
+          <Button
             type="button"
-            className="flex w-full min-w-0 items-center gap-2 border-t border-border/70 bg-background/25 px-4 py-2 text-left text-xs text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
+            variant="nav"
+            size="sm"
+            className="h-auto rounded-none bg-surface-lowest px-4 py-2 text-xs"
             onClick={() => void handleCopyRuntimeUrl()}
           >
             <ClipboardCopy className="h-3.5 w-3.5 shrink-0 text-secondary" />
             <span className="shrink-0 font-medium">{t({ ko: 'Lively URL', en: 'Lively URL' })}</span>
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{activePresetRuntimeUrl}</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-2xs">{activePresetRuntimeUrl}</span>
             <span className="shrink-0">{t({ ko: '복사', en: 'Copy' })}</span>
-          </button>
+          </Button>
         ) : (
-          <div className="border-t border-border/70 bg-background/20 px-4 py-2 text-xs text-muted-foreground">
+          <div className="bg-surface-lowest px-4 py-2 text-xs text-muted-foreground">
             {t({ ko: '저장하면 Lively용 고유 URL이 생성돼.', en: 'Save once to create a unique Lively URL.' })}
           </div>
         )}
-      </section>
+      </Panel>
 
       <AnchoredPopup
         open={isWorkspaceMenuOpen}
@@ -576,7 +581,7 @@ export function WallpaperEditorPage() {
         onClose={() => setIsWorkspaceMenuOpen(false)}
         className="w-64 p-2"
       >
-        <div className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '프리셋 작업', en: 'Preset actions' })}</div>
+        <Text as="div" variant="overline" className="px-2 pb-2 pt-1 font-semibold">{t({ ko: '프리셋 작업', en: 'Preset actions' })}</Text>
         {[
           { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: () => void handleCreateBlankCanvas() },
           { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
@@ -584,11 +589,12 @@ export function WallpaperEditorPage() {
           { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
           { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
         ].map(({ icon: Icon, label, disabled, action, destructive }) => (
-          <button
+          <Button
             key={label}
             type="button"
+            variant="nav"
             disabled={disabled}
-            className={`flex w-full items-center gap-3 rounded-sm px-2.5 py-2 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${destructive ? 'text-destructive hover:bg-destructive/10' : 'text-foreground hover:bg-surface-high'}`}
+            className={destructive ? 'gap-3 text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground' : 'gap-3 text-foreground'}
             onClick={() => {
               setIsWorkspaceMenuOpen(false)
               action()
@@ -596,7 +602,7 @@ export function WallpaperEditorPage() {
           >
             <Icon className="h-4 w-4" />
             {label}
-          </button>
+          </Button>
         ))}
       </AnchoredPopup>
 
@@ -618,7 +624,7 @@ export function WallpaperEditorPage() {
               <div className="flex w-full flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="text-xs font-medium text-foreground">{canvasPreset.name}</span>
-                  <span className="rounded-full border border-border bg-background/50 px-2 py-0.5 text-[10px] text-muted-foreground">{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows}</span>
+                  <Badge variant="secondary" className="normal-case tracking-normal">{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows}</Badge>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -644,12 +650,13 @@ export function WallpaperEditorPage() {
             }}
           />
 
-          <section className="space-y-3 rounded-xl border border-border/80 bg-surface-container/70 p-4">
-            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '선택 위젯 컨트롤', en: 'Selected widget controls' })}</h2>
+          <Panel asChild tone="low" stack>
+            <section>
+            <Heading level={3}>{t({ ko: '선택 위젯 컨트롤', en: 'Selected widget controls' })}</Heading>
 
             {selectedWidget ? (
               <>
-                <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-sm bg-surface-lowest px-3 py-2 text-xs text-muted-foreground">
                   {[
                     ['X', selectedWidget.x],
                     ['Y', selectedWidget.y],
@@ -657,7 +664,7 @@ export function WallpaperEditorPage() {
                     ['H', selectedWidget.h],
                   ].map(([label, value]) => (
                     <div key={String(label)} className="inline-flex items-center gap-1.5">
-                      <span className="font-semibold tracking-[0.16em] uppercase">{label}</span>
+                      <span className="text-2xs font-semibold uppercase tracking-overline">{label}</span>
                       <span className="text-sm font-medium text-foreground">{value}</span>
                     </div>
                   ))}
@@ -703,19 +710,17 @@ export function WallpaperEditorPage() {
                 </div>
               </>
             ) : (
-              <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-center text-sm text-muted-foreground">
-                {t({ ko: '위젯을 선택해.', en: 'Select a widget.' })}
-              </div>
+              <EmptyState size="compact" title={t({ ko: '위젯을 선택해.', en: 'Select a widget.' })} />
             )}
-          </section>
+            </section>
+          </Panel>
 
-          <section className="space-y-3 rounded-xl border border-border/80 bg-surface-container/70 p-4">
-            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '위젯 순서', en: 'Widget order' })}</h2>
+          <Panel asChild tone="low" stack>
+            <section>
+            <Heading level={3}>{t({ ko: '위젯 순서', en: 'Widget order' })}</Heading>
 
             {orderedWidgets.length === 0 ? (
-              <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-center text-sm text-muted-foreground">
-                {t({ ko: '아직 추가된 위젯이 없어.', en: 'No widgets added yet.' })}
-              </div>
+              <EmptyState size="compact" title={t({ ko: '아직 추가된 위젯이 없어.', en: 'No widgets added yet.' })} />
             ) : (
               <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
                 {orderedWidgets.map((widget, index) => {
@@ -724,7 +729,7 @@ export function WallpaperEditorPage() {
                   return (
                     <div
                       key={widget.id}
-                      className={`flex w-full items-center gap-3 rounded-sm border px-3 py-2 text-left transition ${isSelected ? 'border-secondary bg-secondary/10' : 'border-border bg-surface-low hover:border-secondary/60 hover:bg-surface-high'} ${isDragOver ? 'border-primary border-dashed bg-primary/8' : ''}`}
+                      className={`flex w-full items-center gap-1 rounded-sm pr-2 transition-colors ${isSelected ? 'bg-primary/12' : 'bg-surface-lowest'} ${isDragOver ? 'ring-1 ring-primary/60' : ''}`}
                       draggable={!isCoarsePointer}
                       onDragStart={() => {
                         if (isCoarsePointer) {
@@ -754,9 +759,11 @@ export function WallpaperEditorPage() {
                         setDragOverWidgetId(null)
                       }}
                     >
-                      <button
+                      <Button
                         type="button"
-                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        variant="nav"
+                        className="h-auto min-w-0 flex-1 gap-3 px-3 py-2"
+                        aria-current={isSelected ? 'true' : undefined}
                         onClick={() => setSelectedWidgetId(widget.id)}
                       >
                         <div className="flex items-center gap-2 text-muted-foreground">
@@ -765,17 +772,19 @@ export function WallpaperEditorPage() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-medium text-foreground">{getWallpaperWidgetDisplayTitle(widget, t)}</div>
-                          <div className="truncate text-[11px] text-muted-foreground">{t(getWallpaperWidgetDefinition(widget.type).title)}</div>
+                          <div className="truncate text-2xs text-muted-foreground">{t(getWallpaperWidgetDefinition(widget.type).title)}</div>
                         </div>
-                      </button>
+                      </Button>
                       <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                         {isCoarsePointer ? (
                           <>
-                            <button
-                              type="button"
-                              aria-label={t({ ko: '앞으로 이동', en: 'Move forward' })}
+                            <IconButton
+                              variant="subtle"
+                              size="icon-sm"
+                              className="touch-none"
+                              label={t({ ko: '앞으로 이동', en: 'Move forward' })}
+                              tooltip={false}
                               disabled={index === 0}
-                              className="flex h-8 w-8 touch-none items-center justify-center rounded-sm border border-border bg-background text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={(event) => {
                                 event.stopPropagation()
                                 setLayoutPreset((current) => moveWallpaperWidgetToOrder(current, widget.id, index))
@@ -783,12 +792,14 @@ export function WallpaperEditorPage() {
                               }}
                             >
                               <ArrowUp className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={t({ ko: '뒤로 이동', en: 'Move backward' })}
+                            </IconButton>
+                            <IconButton
+                              variant="subtle"
+                              size="icon-sm"
+                              className="touch-none"
+                              label={t({ ko: '뒤로 이동', en: 'Move backward' })}
+                              tooltip={false}
                               disabled={index === orderedWidgets.length - 1}
-                              className="flex h-8 w-8 touch-none items-center justify-center rounded-sm border border-border bg-background text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={(event) => {
                                 event.stopPropagation()
                                 setLayoutPreset((current) => moveWallpaperWidgetToOrder(current, widget.id, index + 2))
@@ -796,7 +807,7 @@ export function WallpaperEditorPage() {
                               }}
                             >
                               <ArrowDown className="h-4 w-4" />
-                            </button>
+                            </IconButton>
                           </>
                         ) : null}
                         {widget.hidden ? <EyeOff className="h-3.5 w-3.5" /> : null}
@@ -807,12 +818,13 @@ export function WallpaperEditorPage() {
                 })}
               </div>
             )}
-          </section>
+            </section>
+          </Panel>
         </div>
 
-        <section className="self-start space-y-4 overflow-y-auto rounded-xl border border-border/80 bg-surface-container/75 p-4 xl:sticky xl:top-24 xl:max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]">
-          <div className="border-b border-border/70 pb-3">
-            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '위젯 설정', en: 'Widget settings' })}</h2>
+        <section data-surface="raised" className="self-start space-y-4 overflow-y-auto rounded-sm bg-surface-low p-4 xl:sticky xl:top-24 xl:max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]">
+          <div>
+            <Heading level={3}>{t({ ko: '위젯 설정', en: 'Widget settings' })}</Heading>
             <div className="mt-1 truncate text-xs text-muted-foreground">{selectedWidget ? getWallpaperWidgetDisplayTitle(selectedWidget, t) : t({ ko: '선택된 위젯 없음', en: 'No widget selected' })}</div>
           </div>
 

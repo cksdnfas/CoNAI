@@ -324,14 +324,15 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
   return (
     <>
-      <button type="button" className="block w-full text-left" onClick={handleOpenPicker}>
+      {/* eslint-disable-next-line no-restricted-syntax -- the trigger is a whole easing preview card; Button's inline sizing would squash it */}
+      <button type="button" className="block w-full cursor-pointer rounded-sm text-left focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none" onClick={handleOpenPicker}>
         <WallpaperEasingPreviewCard
           label={pickerLabel}
           description={summary}
           easing={normalizedValue}
           selected={false}
           interactive={false}
-          className="hover:border-primary/50 hover:bg-surface-high"
+          className="hover:bg-surface-high"
         />
       </button>
 
@@ -404,11 +405,11 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                   selectedIndex={selectedPointIndex}
                   onSelectIndex={setSelectedPointIndex}
                 />
-                <div className="rounded-sm border border-border/70 bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+                <div className="rounded-sm bg-surface-low px-3 py-2 text-xs text-muted-foreground">
                   {t({ ko: '점을 클릭하면 아래 값이 같이 선택되고, 숫자는 좌우 드래그로도 조절돼. 선택된 점은 방향키로 미세 조정할 수 있어.', en: 'Click a point to select its values below. You can also drag left and right on the numbers, and fine-tune the selected point with the arrow keys.' })}
                 </div>
                 {selectedPointIndex !== null && selectedPointIndex > 0 && selectedPointIndex < customStops.length - 1 ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2 rounded-sm bg-surface-low px-3 py-2">
                     <div className="mr-2 text-xs text-muted-foreground">{t({ ko: `선택된 점 ${selectedPointIndex}`, en: `Selected point ${selectedPointIndex}` })}</div>
                     <Button type="button" size="xs" variant="secondary" onClick={handleDuplicateSelectedPoint}>
                       {t({ ko: '복제', en: 'Duplicate' })}
@@ -437,9 +438,9 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                         role="button"
                         tabIndex={0}
                         className={cn(
-                          'grid w-full gap-2 rounded-sm border p-3 text-left transition sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end',
+                          'grid w-full gap-2 rounded-sm p-3 text-left transition-colors sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end',
                           isSelected
-                            ? 'border-primary bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]'
+                            ? 'bg-primary/10 ring-1 ring-primary/40'
                             : 'border-border/70 bg-surface-low hover:border-primary/40 hover:bg-surface-high',
                         )}
                         onClick={() => setSelectedPointIndex(index)}
@@ -507,11 +508,11 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                 extraContent={(
                   <>
                     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '현재 커스텀 곡선', en: 'Current custom curve' })}</div>
-                      <div className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '현재 커스텀 곡선', en: 'Current custom curve' })}</div>
+                      <div className="rounded-sm bg-surface-lowest px-3 py-2">
                         <WallpaperEasingGraphPreview easing={customEasing} className="h-16 w-full" />
                       </div>
-                      <div className="mt-3 rounded-sm border border-border/70 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
+                      <div className="mt-3 rounded-sm bg-surface-lowest px-3 py-2 font-mono text-xs text-foreground break-all">
                         {customEasing}
                       </div>
                     </div>

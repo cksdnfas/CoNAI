@@ -267,7 +267,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
               />
               <div className="absolute inset-x-0 bottom-0 z-[1] bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
                 <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
-                <div className="mt-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-white/78">
+                <div className="mt-1 flex items-center justify-between gap-2 text-2xs uppercase tracking-overline text-white/78">
                   <span>{entry.badge}</span>
                   <span className="truncate">{isFront ? entry.createdLabel : `-${order}`}</span>
                 </div>
@@ -277,6 +277,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
 
           if (mode === 'runtime' && onOpenImage) {
             return (
+              // eslint-disable-next-line no-restricted-syntax -- wallpaper runtime image card: the rendered art is the click target
               <button
                 key={entry.id}
                 type="button"
@@ -316,7 +317,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
         })}
 
         {recentEntries.length > 1 ? (
-          <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">
+          <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-2xs font-medium uppercase tracking-overline text-foreground/90 backdrop-blur-sm">
             {t({ ko: '스택', en: 'Stack' })}
           </div>
         ) : null}
@@ -350,7 +351,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
         >
           <div className="absolute inset-x-0 bottom-0 z-[1] bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
             <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
-            <div className="mt-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-white/78">
+            <div className="mt-1 flex items-center justify-between gap-2 text-2xs uppercase tracking-overline text-white/78">
               <span>{entry.badge}</span>
               <span className="truncate">{entry.createdLabel}</span>
             </div>
@@ -556,7 +557,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
     return (
       <div className="flex h-full items-end rounded-sm border border-border/70 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_24%,transparent),transparent_55%),linear-gradient(180deg,transparent,color-mix(in_srgb,var(--primary)_10%,transparent)),var(--surface-low)] p-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-secondary">{t({ ko: '대표 이미지', en: 'Featured image' })}</div>
+          <div className="text-xs uppercase tracking-overline text-secondary">{t({ ko: '대표 이미지', en: 'Featured image' })}</div>
           <div className="text-sm font-medium text-foreground">{t({ ko: '설정에서 쇼케이스용 그룹을 골라.', en: 'Choose a showcase group in settings.' })}</div>
         </div>
       </div>
@@ -622,7 +623,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
               />
             ))}
           </div>
-          <div className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/92 backdrop-blur-sm">
+          <div className="rounded-full bg-background/70 px-2 py-0.5 text-2xs font-medium uppercase tracking-overline text-foreground/92 backdrop-blur-sm">
             {kenBurnsEnabled ? t({ ko: '켄 번즈', en: 'Ken Burns' }) : t({ ko: '자동', en: 'Auto' })}
           </div>
         </div>

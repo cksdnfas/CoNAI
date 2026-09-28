@@ -46,8 +46,8 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   const nowMs = Date.now()
   const queueItems = [
     { id: 'queued', label: t('wallpaper.wallpaper.widget.bodies.queued'), value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q', ageLabel: getWallpaperQueueAgeLabelFromAnchor('queued', queueSummary.oldestQueuedAnchorMs, t, formatNumber, nowMs) },
-    { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: queueSummary.running, tone: '#3ddc97', short: 'R', ageLabel: getWallpaperQueueAgeLabelFromAnchor('running', queueSummary.oldestRunningAnchorMs, t, formatNumber, nowMs) },
-    { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: queueSummary.failed, tone: '#ff6b6b', short: 'F', ageLabel: null },
+    { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: queueSummary.running, tone: 'var(--success)', short: 'R', ageLabel: getWallpaperQueueAgeLabelFromAnchor('running', queueSummary.oldestRunningAnchorMs, t, formatNumber, nowMs) },
+    { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: queueSummary.failed, tone: 'var(--destructive)', short: 'F', ageLabel: null },
     { id: 'workflow', label: t('wallpaper.wallpaper.widget.bodies.workflow'), value: queueSummary.workflows, tone: 'var(--primary)', short: 'W', ageLabel: null },
   ]
   const maxValue = Math.max(...queueItems.map((item) => item.value), 1)
@@ -58,10 +58,10 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
       <div className="flex h-full flex-col justify-center gap-3 rounded-sm bg-[linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_55%)] px-1 py-1 text-xs sm:text-sm">
         <div className="mb-0.5 flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-background/45 px-3 py-2 backdrop-blur-sm">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.running')}</div>
+            <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.running')}</div>
             <div className="text-sm font-semibold text-foreground">{t('wallpaper.wallpaper.widget.bodies.totalactive.tolocalestring.en.us.active', { totalActive: formatNumber(totalActive) })}</div>
           </div>
-          <div className="rounded-full border border-border/70 bg-surface-low px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="rounded-full border border-border/70 bg-surface-low px-2 py-0.5 text-2xs uppercase tracking-overline text-muted-foreground">
             {queueSummary.failed > 0 ? t('wallpaper.wallpaper.widget.bodies.needs.attention') : t('wallpaper.wallpaper.widget.bodies.stable')}
           </div>
         </div>
@@ -72,12 +72,12 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
             <div key={item.label} className="space-y-1.5 rounded-sm border border-border/60 bg-background/35 px-3 py-2.5 backdrop-blur-sm">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-background" style={{ backgroundColor: item.tone }}>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full text-2xs font-semibold text-background" style={{ backgroundColor: item.tone }}>
                     {item.short}
                   </span>
                   <div>
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
-                    {item.ageLabel ? <div className="mt-0.5 text-[10px] text-muted-foreground/85">{item.ageLabel}</div> : null}
+                    <div className="text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
+                    {item.ageLabel ? <div className="mt-0.5 text-2xs text-muted-foreground/85">{item.ageLabel}</div> : null}
                   </div>
                 </div>
                 <div className={cn('text-sm font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
@@ -121,8 +121,8 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
                   {formatNumber(item.value)}
                 </div>
               </div>
-              <div className="relative mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
-              {item.ageLabel ? <div className="relative mt-1 text-[10px] text-muted-foreground/85">{item.ageLabel}</div> : null}
+              <div className="relative mt-2 text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
+              {item.ageLabel ? <div className="relative mt-1 text-2xs text-muted-foreground/85">{item.ageLabel}</div> : null}
             </div>
           )
         })}
@@ -135,11 +135,11 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
       {queueItems.map((item) => (
         <div key={item.label} className="relative overflow-hidden rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--background)_20%,transparent),transparent),var(--surface-low)] px-2 py-3">
           <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: item.tone }} />
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
+          <div className="text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
           <div className={cn('mt-1 text-lg font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
             {formatNumber(item.value)}
           </div>
-          {item.ageLabel ? <div className="mt-1 text-[10px] text-muted-foreground/85">{item.ageLabel}</div> : null}
+          {item.ageLabel ? <div className="mt-1 text-2xs text-muted-foreground/85">{item.ageLabel}</div> : null}
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-lowest/90">
             <div
               className="h-full rounded-full transition-[width] duration-700 ease-out"
@@ -211,7 +211,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
         : (index % 3 === 1 ? 0.1 : 0)
     return Math.max(0.16, Math.min(1, 0.22 + intensity * 0.5 + wave * 0.22 * motionStrength + emphasisBoost))
   })
-  const statusTone = summary.failed > 0 ? '#ff6b6b' : summary.running > 0 ? '#3ddc97' : 'var(--secondary)'
+  const statusTone = summary.failed > 0 ? 'var(--destructive)' : summary.running > 0 ? 'var(--success)' : 'var(--secondary)'
   const activityBadge = summary.running > 0
     ? t('wallpaper.wallpaper.widget.bodies.running.25981e1a')
     : summary.queued > 0
@@ -224,13 +224,13 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
     <div className="flex h-full flex-col justify-between gap-3 rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_18%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_8%,transparent),transparent_60%)] px-3 py-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.activity')}</div>
+          <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.activity')}</div>
           <div className="mt-1 flex items-end gap-2">
             <span className="text-2xl font-semibold tracking-[-0.08em] text-foreground sm:text-3xl">{summary.running + summary.queued}</span>
             <span className="pb-1 text-xs text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.active.load')}</span>
           </div>
         </div>
-        <div className="rounded-full border border-border/70 bg-background/50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/92 backdrop-blur-sm">
+        <div className="rounded-full border border-border/70 bg-background/50 px-2 py-1 text-2xs font-medium uppercase tracking-overline text-foreground/92 backdrop-blur-sm">
           {activityBadge}
         </div>
       </div>
@@ -251,7 +251,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
         ))}
       </div>
 
-      <div className="grid grid-cols-4 gap-2 text-center text-[11px] sm:text-xs">
+      <div className="grid grid-cols-4 gap-2 text-center text-2xs sm:text-xs">
         {[
           { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: summary.running },
           { id: 'queued', label: t('wallpaper.wallpaper.widget.bodies.queued'), value: summary.queued },
@@ -259,7 +259,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
           { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: summary.failed },
         ].map((item) => (
           <div key={item.label} className="rounded-sm border border-border/60 bg-background/35 px-2 py-1.5 backdrop-blur-sm">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{item.label}</div>
+            <div className="text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
             <div className={cn('mt-1 font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
               {formatNumber(item.value)}
             </div>
@@ -267,7 +267,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 text-2xs uppercase tracking-overline text-muted-foreground">
         <span>{emphasis === 'queue' ? t('wallpaper.wallpaper.widget.bodies.queue.focus') : emphasis === 'results' ? t('wallpaper.wallpaper.widget.bodies.results.focus') : t('wallpaper.wallpaper.widget.bodies.mixed')}</span>
         <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : t('wallpaper.wallpaper.widget.bodies.not.updated.yet')}</span>
       </div>
