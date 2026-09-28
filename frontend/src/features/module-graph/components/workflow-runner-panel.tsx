@@ -80,7 +80,7 @@ export function WorkflowRunnerPanel({
       ].join(' · ')
     : null
   const latestExecutionStatus = latestExecution?.status ?? null
-  const latestExecutionStatusLabel = latestExecutionStatus ? getGraphExecutionStatusLabel(latestExecutionStatus) : null
+  const latestExecutionStatusLabel = latestExecutionStatus ? getGraphExecutionStatusLabel(latestExecutionStatus, t) : null
   const shouldShowLatestExecutionResults = latestExecution?.status === 'completed'
   const latestExecutionFinalResultWarnings = useMemo(() => listFinalResultLifecycleWarnings(latestExecutionLogs), [latestExecutionLogs])
   const latestExecutionFinalResultWarning = latestExecutionFinalResultWarnings[0] ?? null
@@ -124,7 +124,7 @@ export function WorkflowRunnerPanel({
       : latestExecution.status === 'running'
         ? t({ ko: '실행 중이라 완료 후 결과물이 표시돼.', en: 'This run is still running; results will appear after it completes.' })
         : latestExecution.status === 'failed'
-          ? localizeGraphWorkflowErrorMessage(latestExecution.error_message, t({ ko: '실행에 실패해서 결과물이 없어.', en: 'This run failed, so there are no results to show.' }))
+          ? localizeGraphWorkflowErrorMessage(latestExecution.error_message, t, t({ ko: '실행에 실패해서 결과물이 없어.', en: 'This run failed, so there are no results to show.' }))
             ?? t({ ko: '실행에 실패해서 결과물이 없어.', en: 'This run failed, so there are no results to show.' })
           : latestExecution.status === 'cancelled'
             ? t({ ko: '취소된 실행이라 결과물이 없어.', en: 'This run was cancelled, so there are no results to show.' })
@@ -220,7 +220,7 @@ export function WorkflowRunnerPanel({
                 <AlertTitle className="flex flex-wrap items-center gap-1.5">
                   <span>{t({ ko: '최근 결과', en: 'Latest result' })}</span>
                   <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
-                  <Badge variant="outline">{getGraphExecutionStatusLabel(latestExecution.status)}</Badge>
+                  <Badge variant="outline">{getGraphExecutionStatusLabel(latestExecution.status, t)}</Badge>
                   {latestExecutionArtifactCountLabel ? (
                     <Badge variant={latestExecutionArtifactCount && latestExecutionArtifactCount > 0 ? 'secondary' : 'outline'}>{latestExecutionArtifactCountLabel}</Badge>
                   ) : null}

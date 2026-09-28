@@ -132,7 +132,7 @@ export function ModuleWorkflowEmptyRunsTab({
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={execution.status === 'failed' ? 'destructive' : 'outline'}>{getGraphExecutionStatusLabel(execution.status)}</Badge>
+                      <Badge variant={execution.status === 'failed' ? 'destructive' : 'outline'}>{getGraphExecutionStatusLabel(execution.status, t)}</Badge>
                       {execution.queue_position !== null && execution.queue_position !== undefined ? <Badge variant="outline">{t({ ko: '대기열 {position}', en: 'Queue {position}' }, { position: formatNumber(execution.queue_position) })}</Badge> : null}
                       <Button type="button" size="sm" variant="ghost" onClick={() => onToggleQueueSelection(execution.id)}>
                         {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
@@ -150,9 +150,9 @@ export function ModuleWorkflowEmptyRunsTab({
                       )}
                     </div>
                   </div>
-                  {localizeGraphWorkflowErrorMessage(execution.error_message, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' })) ? (
+                  {localizeGraphWorkflowErrorMessage(execution.error_message, t, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' })) ? (
                     <Inset className="mt-3 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
-                      {localizeGraphWorkflowErrorMessage(execution.error_message, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' }))}
+                      {localizeGraphWorkflowErrorMessage(execution.error_message, t, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' }))}
                     </Inset>
                   ) : null}
                 </Inset>

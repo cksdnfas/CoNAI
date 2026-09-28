@@ -558,7 +558,7 @@ export function GenerationQueueHeaderWidget() {
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
-                            <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status)}</Badge>
+                            <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
                             <Badge variant="outline">{getReservationTypeLabel(schedule.schedule_type, t)}</Badge>
                           </div>
                           <div className="text-[11px] text-muted-foreground">
@@ -569,9 +569,9 @@ export function GenerationQueueHeaderWidget() {
                             {nextRunAt ? <span>{t('image-generation.components.generation.queue.header.widget.next.enqueue.attempt.value', { nextRunAt })}</span> : null}
                             {lastEnqueuedAt ? <span>{t('image-generation.components.generation.queue.header.widget.last.queued.value', { lastEnqueuedAt })}</span> : null}
                           </div>
-                          {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message) ? (
+                          {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t) ? (
                             <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2 text-[11px] text-muted-foreground">
-                              {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message)}
+                              {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)}
                             </div>
                           ) : null}
                         </div>

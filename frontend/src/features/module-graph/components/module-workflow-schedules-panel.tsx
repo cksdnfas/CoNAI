@@ -324,7 +324,7 @@ export function ModuleWorkflowSchedulesPanel({
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
-                        <Badge variant={getScheduleStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status)}</Badge>
+                        <Badge variant={getScheduleStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
                         <Badge variant="outline">{getScheduleTypeLabel(schedule.schedule_type, t)}</Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -359,10 +359,10 @@ export function ModuleWorkflowSchedulesPanel({
                       </Button>
                     </div>
                   </div>
-                  {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message) ? (
+                  {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t) ? (
                     <Inset className="mt-3 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{t({ ko: '중지/정지 사유', en: 'Stop reason' })}</span>
-                      <span className="ml-2">{getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message)}</span>
+                      <span className="ml-2">{getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)}</span>
                     </Inset>
                   ) : null}
                 </Inset>
