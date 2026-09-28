@@ -16,7 +16,6 @@ import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 interface ModuleWorkflowEditorViewProps {
   isDesktopPageLayout: boolean
-  workflowListSidebar: ReactNode
   nodesCount: number
   graphSummary: SavedGraphWorkflowSummary
   graphCanvas: ReactNode
@@ -129,7 +128,6 @@ function getValidationStatus(issues: WorkflowValidationIssue[], t: ReturnType<ty
 /** Render the edit-mode layout with graph canvas controls and the execution-results drawer. */
 export function ModuleWorkflowEditorView({
   isDesktopPageLayout,
-  workflowListSidebar,
   nodesCount,
   graphSummary,
   graphCanvas,
@@ -165,9 +163,7 @@ export function ModuleWorkflowEditorView({
   ].join(' · ')
 
   return (
-    <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
-      {workflowListSidebar}
-
+    <div>
       <div className="space-y-6">
         <Section
           headingAs="div"
@@ -192,7 +188,7 @@ export function ModuleWorkflowEditorView({
                   </Button>
                   <IconButton
                     size="icon-sm"
-                    variant="subtle"
+                    variant="ghost"
                     onClick={onWorkflowDebugModeToggle}
                     active={workflowDebugMode}
                     label={workflowDebugMode ? t({ ko: '워크플로우 디버그 모드 끄기', en: 'Turn off workflow debug mode' }) : t({ ko: '워크플로우 디버그 모드 켜기', en: 'Turn on workflow debug mode' })}
@@ -202,7 +198,7 @@ export function ModuleWorkflowEditorView({
                   <div ref={validationPopupRef} className="relative">
                     <IconButton
                       size="icon-sm"
-                      variant="subtle"
+                      variant="ghost"
                       data-tone={validationStatus.tone}
                       className={cn(
                         validationStatus.tone === 'ready' && 'text-success hover:text-success',
@@ -230,7 +226,7 @@ export function ModuleWorkflowEditorView({
                   </div>
                   <IconButton
                     size="icon-sm"
-                    variant="subtle"
+                    variant="ghost"
                     onClick={onOpenModuleLibrary}
                     label={t({ ko: '모듈 추가', en: 'Add module' })}
                   >
@@ -238,7 +234,7 @@ export function ModuleWorkflowEditorView({
                   </IconButton>
                   <IconButton
                     size="icon-sm"
-                    variant="subtle"
+                    variant="ghost"
                     onClick={onAutoLayout}
                     disabled={nodesCount === 0}
                     label={t({ ko: '자동 정렬', en: 'Auto layout' })}
@@ -247,7 +243,7 @@ export function ModuleWorkflowEditorView({
                   </IconButton>
                   <IconButton
                     size="icon-sm"
-                    variant="subtle"
+                    variant="ghost"
                     onClick={onDuplicateSelectedNode}
                     disabled={!hasSelectedNode}
                     label={t({ ko: '노드 복제', en: 'Duplicate node' })}
@@ -256,7 +252,7 @@ export function ModuleWorkflowEditorView({
                   </IconButton>
                   <IconButton
                     size="icon-sm"
-                    variant="subtle"
+                    variant="ghost"
                     className="ml-1 text-destructive hover:text-destructive"
                     onClick={onRemoveSelectedNode}
                     disabled={!hasSelectedNode}
@@ -266,7 +262,7 @@ export function ModuleWorkflowEditorView({
                   </IconButton>
                   <IconButton
                     size="icon-sm"
-                    variant="subtle"
+                    variant="ghost"
                     className="text-destructive hover:text-destructive"
                     onClick={onRemoveSelectedEdge}
                     disabled={!hasSelectedEdge}
@@ -276,7 +272,7 @@ export function ModuleWorkflowEditorView({
                   </IconButton>
                   <IconButton
                     size="icon-sm"
-                    variant="subtle"
+                    variant="ghost"
                     className="ml-2 text-warning hover:text-warning"
                     onClick={onResetCanvas}
                     label={t({ ko: '초기화', en: 'Reset' })}

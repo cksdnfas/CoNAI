@@ -64,7 +64,7 @@ const STICKY_ACTION_BAR_SLOT_ID = 'generation-sticky-action-bar'
 type NarrowView = 'edit' | 'result'
 
 function PanelFallback() {
-  return <div className="ui-tone-plinth min-h-[16rem] animate-pulse rounded-sm" />
+  return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
 }
 
 export function ImageGenerationPage() {
@@ -261,7 +261,7 @@ export function ImageGenerationPage() {
     : null
 
   const toolbar = (
-    <div className="flex min-h-12 shrink-0 items-center gap-2 sm:gap-3">
+    <div data-slot="page-toolbar" className="flex min-h-14 shrink-0 items-center gap-2 py-2 sm:gap-3">
       <SegmentedControl
         value={isProviderTab ? activeTab : ''}
         items={providerItems}
@@ -295,6 +295,15 @@ export function ImageGenerationPage() {
     </div>
   )
 
+  // The workflow workspace is its own page root (explorer sidebar + content); it hosts this toolbar in its content column.
+  if (activeTab === 'workflows') {
+    return (
+      <Suspense fallback={<PanelFallback />}>
+        <ModuleWorkflowWorkspaceLazy toolbar={toolbar} />
+      </Suspense>
+    )
+  }
+
   return (
     <div
       className={cn(
@@ -303,15 +312,9 @@ export function ImageGenerationPage() {
         useWideSplitPaneScroll && 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
       )}
     >
-      <div className={cn(useWideSplitPaneScroll && 'shrink-0 pb-4')}>
+      <div className={cn(useWideSplitPaneScroll && 'shrink-0 pb-2')}>
         {toolbar}
       </div>
-
-      {activeTab === 'workflows' ? (
-        <Suspense fallback={<PanelFallback />}>
-          <ModuleWorkflowWorkspaceLazy embedded />
-        </Suspense>
-      ) : null}
 
       {activeTab === 'reservations' ? (
         <Suspense fallback={<PanelFallback />}>

@@ -24,7 +24,6 @@ function WorkflowContentFallback() {
 /** Render the browse-mode content block for the module-graph workspace. */
 export function ModuleGraphWorkflowBrowseContent({
   isDesktopPageLayout,
-  workflowListSidebar,
   workflowBrowseSidePanel,
   selectedGraphRecord,
   selectedFolderRecord,
@@ -50,7 +49,6 @@ export function ModuleGraphWorkflowBrowseContent({
   onCancelExecution,
 }: {
   isDesktopPageLayout: boolean
-  workflowListSidebar: ReactNode
   workflowBrowseSidePanel: ReactNode
   selectedGraphRecord: GraphWorkflowRecord | null
   selectedFolderRecord: GraphWorkflowFolderRecord | null
@@ -80,7 +78,6 @@ export function ModuleGraphWorkflowBrowseContent({
   return (
     <ModuleWorkflowBrowseView
       isDesktopPageLayout={isDesktopPageLayout}
-      workflowListSidebar={workflowListSidebar}
       workflowRunnerPanel={workflowBrowseSidePanel}
       graphExecutionPanel={selectedGraphRecord ? (
         <GraphExecutionPanel
@@ -123,7 +120,6 @@ export function ModuleGraphWorkflowBrowseContent({
 /** Render the edit-mode content block for the module-graph workspace. */
 export function ModuleGraphWorkflowEditorContent({
   isDesktopPageLayout,
-  workflowListSidebar,
   nodesCount,
   graphSummary,
   selectedNode,
@@ -148,7 +144,6 @@ export function ModuleGraphWorkflowEditorContent({
   onCloseEditorSupport,
 }: {
   isDesktopPageLayout: boolean
-  workflowListSidebar: ReactNode
   nodesCount: number
   graphSummary: SavedGraphWorkflowSummary
   selectedNode: ModuleGraphNode | null
@@ -175,7 +170,6 @@ export function ModuleGraphWorkflowEditorContent({
   return (
     <ModuleWorkflowEditorView
       isDesktopPageLayout={isDesktopPageLayout}
-      workflowListSidebar={workflowListSidebar}
       nodesCount={nodesCount}
       graphSummary={graphSummary}
       hasSelectedNode={Boolean(selectedNode)}

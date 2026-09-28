@@ -2,14 +2,12 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, FileCode2, Folder, Search } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
+import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
 import { hasAssignedFinalResult, resolveSavedGraphWorkflowFinalResultNodeCount, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
-
-const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-locked'
 
 type SavedGraphListProps = {
   graphs: GraphWorkflowSummaryRecord[]
@@ -195,26 +193,20 @@ export function SavedGraphList({
     const titleLines = [graph.name, graph.description?.trim() || null, summaryLine].filter((line): line is string => Boolean(line))
 
     return (
-      <Button
+      <SidebarItem
         key={`workflow-${graph.id}`}
-        type="button"
-        variant="nav"
-        data-active={selectedGraphId === graph.id}
+        icon={FileCode2}
+        label={graph.name}
+        active={selectedGraphId === graph.id}
+        depth={depth}
         onClick={() => onLoadGraph(graph)}
-        className="px-3"
-        style={{ paddingLeft: `${12 + depth * 18}px` }}
         title={titleLines.join('\n')}
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          <FileCode2 className="h-4 w-4 shrink-0" />
-          <span className="min-w-0 truncate">{graph.name}</span>
-          {issueMessages.length > 0 ? (
-            <Badge className="ml-auto h-5 min-w-5 shrink-0 justify-center bg-warning-soft px-1.5 text-warning-soft-foreground" title={issueMessages.join('\n')} aria-label={t({ ko: '주의', en: 'Warning' })}>
-              !
-            </Badge>
-          ) : null}
-        </span>
-      </Button>
+        trailing={issueMessages.length > 0 ? (
+          <Badge className="h-5 min-w-5 justify-center bg-warning-soft px-1.5 text-warning-soft-foreground" title={issueMessages.join('\n')} aria-label={t({ ko: '주의', en: 'Warning' })}>
+            !
+          </Badge>
+        ) : null}
+      />
     )
   }
 
@@ -238,44 +230,33 @@ export function SavedGraphList({
     ].sort((left, right) => sortTreeEntries(left, right, locale))
 
     return (
-      <div key={`folder-${folder.id}`} className="space-y-1">
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            className="h-7 w-7 shrink-0"
-            onClick={() => toggleFolder(folder.id)}
-            disabled={!hasChildren}
-            aria-label={isExpanded ? t({ ko: '폴더 접기', en: 'Collapse folder' }) : t({ ko: '폴더 펼치기', en: 'Expand folder' })}
-          >
-            {hasChildren ? (
-              isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
-            ) : (
-              <span className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="nav"
-            data-active={selectedFolderId === folder.id}
+      <div key={`folder-${folder.id}`} className="flex flex-col gap-0.5">
+        <div className="flex min-w-0 items-center gap-0.5">
+          <SidebarItem
+            icon={Folder}
+            label={folder.name}
+            active={selectedFolderId === folder.id}
+            depth={depth}
+            className="min-w-0 flex-1"
             onClick={() => onSelectFolder(folder.id)}
-            className="min-w-0 flex-1 px-2"
-            style={{ paddingLeft: `${4 + depth * 18}px` }}
             title={folder.name}
-          >
-            <Folder className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate">{folder.name}</span>
-          </Button>
+          />
+          {hasChildren ? (
+            <IconButton
+              size="icon-xs"
+              variant="ghost"
+              className="shrink-0"
+              onClick={() => toggleFolder(folder.id)}
+              label={isExpanded ? t({ ko: '폴더 접기', en: 'Collapse folder' }) : t({ ko: '폴더 펼치기', en: 'Expand folder' })}
+            >
+              {isExpanded ? <ChevronDown /> : <ChevronRight />}
+            </IconButton>
+          ) : null}
         </div>
 
-        {isExpanded ? (
-          <div className="space-y-1">
-            {childEntries.map((entry) => entry.type === 'folder'
-              ? renderFolderNode(entry.folder, depth + 1)
-              : renderWorkflowRow(entry.workflow, depth + 1))}
-          </div>
-        ) : null}
+        {isExpanded ? childEntries.map((entry) => entry.type === 'folder'
+          ? renderFolderNode(entry.folder, depth + 1)
+          : renderWorkflowRow(entry.workflow, depth + 1)) : null}
       </div>
     )
   }
@@ -289,41 +270,36 @@ export function SavedGraphList({
   )
 
   return (
-    <ExplorerSidebar
-      title={t({ ko: '탐색기', en: 'Explorer' })}
-      floatingFrame
-      floatingLockStorageKey={WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY}
-      className="sticky top-24 z-30 isolate self-start max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]"
-      bodyClassName="space-y-1 overflow-y-auto pr-1"
-      headerExtra={
-        <div className="space-y-3 pb-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">{leftToolbar}</div>
-            <div className="flex items-center justify-end gap-2">
-              {rightToolbar}
-            </div>
-          </div>
-
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t({ ko: '검색', en: 'Search' })} className="h-8 pl-9 text-sm" />
-          </div>
+    <div className="flex min-w-0 flex-col gap-2">
+      {leftToolbar || rightToolbar ? (
+        <div className="flex flex-wrap items-center gap-0.5">
+          {leftToolbar}
+          {rightToolbar}
         </div>
-      }
-    >
-      <Button
-        type="button"
-        variant="nav"
-        data-active={selectedFolderId === null && selectedGraphId === null}
-        onClick={() => onSelectFolder(null)}
-        className="px-3"
-        title="Root"
-      >
-        <Folder className="h-4 w-4 shrink-0" />
-        <span className="truncate">Root</span>
-      </Button>
+      ) : null}
 
-      {rootEntries.map((entry) => entry.type === 'folder' ? renderFolderNode(entry.folder, 0) : renderWorkflowRow(entry.workflow, 0))}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={t({ ko: '검색', en: 'Search' })}
+          aria-label={t({ ko: '워크플로우 검색', en: 'Search workflows' })}
+          className="h-8 pl-8 text-xs"
+        />
+      </div>
+
+      <SidebarNav aria-label={t({ ko: '워크플로우', en: 'Workflows' })}>
+        <SidebarItem
+          icon={Folder}
+          label="Root"
+          active={selectedFolderId === null && selectedGraphId === null}
+          onClick={() => onSelectFolder(null)}
+        />
+
+        {rootEntries.map((entry) => entry.type === 'folder' ? renderFolderNode(entry.folder, 0) : renderWorkflowRow(entry.workflow, 0))}
+      </SidebarNav>
 
       {graphs.length === 0 && folders.length === 0 ? (
         <EmptyState
@@ -339,6 +315,6 @@ export function SavedGraphList({
           title={t({ ko: '검색 결과가 없어', en: 'No search results' })}
         />
       ) : null}
-    </ExplorerSidebar>
+    </div>
   )
 }

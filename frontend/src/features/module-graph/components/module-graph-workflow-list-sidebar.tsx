@@ -63,42 +63,42 @@ export function ModuleGraphWorkflowListSidebar({
       leftToolbar={
         workflowView === 'edit' ? (
           <IconButton
-            size="icon-sm"
-            variant="subtle"
+            size="icon-xs"
+            variant="ghost"
             onClick={onLeaveEditor}
             label={t({ ko: '목록으로', en: 'Back to list' })}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft />
           </IconButton>
         ) : null
       }
       rightToolbar={(
         <>
           <IconButton
-            size="icon-sm"
-            variant="subtle"
+            size="icon-xs"
+            variant="ghost"
             onClick={onRefreshWorkspace}
             label={t({ ko: '새로고침', en: 'Refresh' })}
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw />
           </IconButton>
           {workflowView === 'browse' && !selectedGraphRecord ? (
             <IconButton
-              size="icon-sm"
-              variant="subtle"
+              size="icon-xs"
+              variant="ghost"
               onClick={onOpenBrowseManage}
               label={browseManageModalTitle}
             >
-              <FolderPlus className="h-4 w-4" />
+              <FolderPlus />
             </IconButton>
           ) : null}
           <IconButton
-            size="icon-sm"
-            variant="subtle"
+            size="icon-xs"
+            variant="ghost"
             onClick={onCreateWorkflow}
             label={t({ ko: '새 워크플로우', en: 'New workflow' })}
           >
-            <Plus className="h-4 w-4" />
+            <Plus />
           </IconButton>
           {workflowView === 'browse' ? (
             <>
@@ -116,63 +116,63 @@ export function ModuleGraphWorkflowListSidebar({
                 }}
               />
               <IconButton
-                size="icon-sm"
-                variant="subtle"
+                size="icon-xs"
+                variant="ghost"
                 onClick={() => importInputRef.current?.click()}
                 label={t({ ko: '워크플로우 가져오기', en: 'Import workflow' })}
               >
-                <Upload className="h-4 w-4" />
+                <Upload />
               </IconButton>
             </>
           ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
             <IconButton
-              size="icon-sm"
-              variant="subtle"
+              size="icon-xs"
+              variant="ghost"
               onClick={onDuplicateWorkflow}
               label={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
             >
-              <Copy className="h-4 w-4" />
+              <Copy />
             </IconButton>
           ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
             <IconButton
-              size="icon-sm"
-              variant="subtle"
+              size="icon-xs"
+              variant="ghost"
               onClick={onExportWorkflow}
               label={t({ ko: '워크플로우 내보내기', en: 'Export workflow' })}
             >
-              <Download className="h-4 w-4" />
+              <Download />
             </IconButton>
           ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
             <IconButton
-              size="icon-sm"
-              variant="subtle"
+              size="icon-xs"
+              variant="ghost"
               onClick={onEditWorkflow}
               label={t({ ko: '워크플로우 편집', en: 'Edit workflow' })}
             >
-              <PenSquare className="h-4 w-4" />
+              <PenSquare />
             </IconButton>
           ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
             <IconButton
-              size="icon-sm"
-              variant="subtle"
+              size="icon-xs"
+              variant="ghost"
               onClick={onDeleteWorkflow}
               label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 />
             </IconButton>
           ) : null}
           {workflowView === 'browse' && !selectedGraphRecord && selectedFolderRecord ? (
             <IconButton
-              size="icon-sm"
-              variant="subtle"
+              size="icon-xs"
+              variant="ghost"
               onClick={() => onDeleteFolder(selectedFolderRecord.id)}
               label={t({ ko: '폴더 삭제', en: 'Delete folder' })}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 />
             </IconButton>
           ) : null}
         </>

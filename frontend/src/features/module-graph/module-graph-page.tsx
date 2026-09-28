@@ -1,7 +1,8 @@
-import { Suspense, lazy, useMemo } from 'react'
+import { Suspense, lazy, useMemo, type ReactNode } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { PageHeader } from '@/components/common/page-header'
+import { PageToolbar } from '@/components/common/page-toolbar'
+import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ModuleGraphWorkflowListSidebar } from './components/module-graph-page-sections'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -32,14 +33,15 @@ const ModuleGraphWorkspaceModalsLazy = lazy(async () => {
 })
 
 type ModuleWorkflowWorkspaceProps = {
-  embedded?: boolean
+  /** The host page's toolbar row (generation page: provider switch + view icons). Defaults to a titled PageToolbar. */
+  toolbar?: ReactNode
 }
 
 function WorkflowPageFallback() {
-  return <div className="min-h-[16rem] animate-pulse rounded-sm bg-surface-low" />
+  return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
 }
 
-function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorkspaceProps) {
+function ModuleWorkflowWorkspaceInner({ toolbar }: ModuleWorkflowWorkspaceProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const reactFlow = useReactFlow()
@@ -484,18 +486,20 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   })
 
   return (
-    <div className={embedded ? 'space-y-6' : 'space-y-8'}>
-      {!embedded ? (
-        <PageHeader
-          title={workflowView === 'browse' ? t({ ko: '워크플로우', en: 'Workflow' }) : t({ ko: '워크플로우 편집기', en: 'Workflow Editor' })}
-        />
-      ) : null}
+    // The page root: the saved-workflow explorer is the page sidebar (a drawer on narrow screens).
+    <PageWithSidebar
+      storageKey="module-graph"
+      sidebar={workflowListSidebar}
+      sidebarLabel={t({ ko: '탐색기', en: 'Explorer' })}
+      sidebarWidth={264}
+      toolbar={toolbar ?? <PageToolbar title={workflowView === 'browse' ? t({ ko: '워크플로우', en: 'Workflow' }) : t({ ko: '워크플로우 편집기', en: 'Workflow Editor' })} />}
+      contentClassName="space-y-6"
+    >
 
       {workflowView === 'browse' ? (
         <Suspense fallback={<WorkflowPageFallback />}>
           <ModuleGraphWorkflowBrowseContentLazy
             isDesktopPageLayout={isDesktopPageLayout}
-            workflowListSidebar={workflowListSidebar}
             workflowBrowseSidePanel={workflowBrowseSidePanel}
             selectedGraphRecord={selectedGraphRecord}
             selectedFolderRecord={selectedFolderRecord}
@@ -525,7 +529,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
         <Suspense fallback={<WorkflowPageFallback />}>
           <ModuleGraphWorkflowEditorContentLazy
             isDesktopPageLayout={isDesktopPageLayout}
-            workflowListSidebar={workflowListSidebar}
             nodesCount={nodes.length}
             graphSummary={currentWorkflowGraphSummary}
             selectedNode={selectedNode}
@@ -590,14 +593,14 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           onAddModule={handleAddModuleFromLibrary}
         />
       </Suspense>
-    </div>
+    </PageWithSidebar>
   )
 }
 
-export function ModuleWorkflowWorkspace({ embedded = false }: ModuleWorkflowWorkspaceProps) {
+export function ModuleWorkflowWorkspace({ toolbar }: ModuleWorkflowWorkspaceProps) {
   return (
     <ReactFlowProvider>
-      <ModuleWorkflowWorkspaceInner embedded={embedded} />
+      <ModuleWorkflowWorkspaceInner toolbar={toolbar} />
     </ReactFlowProvider>
   )
 }
