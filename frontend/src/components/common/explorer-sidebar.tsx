@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react'
 import { Pin, PinOff } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { textVariants } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -137,17 +137,16 @@ export function ExplorerSidebar({
         <div className={cn('min-h-0 flex-1', bodyClassName, shouldLimitUnfixedCompactHeight && 'flex-none overflow-y-visible')}>{children}</div>
 
         {shouldShowFloatingLockAction ? (
-          <div className="mt-4">
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="w-full"
+          <div className="mt-3 flex justify-end">
+            <IconButton
+              size="icon-sm"
+              variant="ghost"
+              active={isFloatingLocked}
               onClick={() => setIsFloatingLocked((current) => !current)}
+              label={isFloatingLocked ? t({ ko: '사이드바 고정 해제', en: 'Unpin sidebar' }) : t({ ko: '사이드바 고정', en: 'Pin sidebar' })}
             >
-              {isFloatingLocked ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-              {isFloatingLocked ? t({ ko: '사이드바 고정 해제', en: 'Unpin sidebar' }) : t({ ko: '사이드바 고정', en: 'Pin sidebar' })}
-            </Button>
+              {isFloatingLocked ? <PinOff /> : <Pin />}
+            </IconButton>
           </div>
         ) : null}
       </div>
