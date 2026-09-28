@@ -77,11 +77,14 @@ function WildcardItemSection({
       actions={<span className="text-xs tabular-nums text-muted-foreground">{formatNumber(items.length)}</span>}
       bodyClassName="pt-2"
     >
-      <div className="flex h-8 items-center gap-3 border-b border-line text-xs text-muted-foreground/75">
-        <span className="w-8 shrink-0 text-center">{t({ ko: '번호', en: 'No.' })}</span>
-        <span className="min-w-0 flex-1">{t({ ko: '내용', en: 'Content' })}</span>
-        <span className="w-16 shrink-0 text-right">{t({ ko: '가중치', en: 'Weight' })}</span>
-      </div>
+      <ListRow
+        size="sm"
+        className="text-xs text-muted-foreground/75"
+        leading={<span className="w-8 text-center">{t({ ko: '번호', en: 'No.' })}</span>}
+        trailing={<span className="w-16 text-right">{t({ ko: '가중치', en: 'Weight' })}</span>}
+      >
+        {t({ ko: '내용', en: 'Content' })}
+      </ListRow>
       {items.length > 0 ? items.map((item, index) => (
         <ListRow
           key={item.id}

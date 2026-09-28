@@ -360,11 +360,10 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
               )}
             >
               {selectedPreset.description ? <p className="pb-2 text-sm text-muted-foreground">{selectedPreset.description}</p> : null}
-              <div className="flex h-8 items-center gap-3 border-b border-line text-xs text-muted-foreground/75">
-                <span className="w-8 shrink-0 text-center">{t('prompts.components.prompt.preset.panel.number')}</span>
+              <ListRow size="sm" className="text-xs text-muted-foreground/75" leading={<span className="w-8 text-center">{t('prompts.components.prompt.preset.panel.number')}</span>}>
                 <span className="w-2/5 min-w-0 shrink-0">{t('prompts.components.prompt.preset.panel.description')}</span>
                 <span className="min-w-0 flex-1">{t('prompts.components.prompt.preset.panel.value')}</span>
-              </div>
+              </ListRow>
               {(selectedPreset.items ?? []).map((item, index) => (
                 <ListRow key={item.id} className="items-start py-2.5" leading={<span className="w-8 text-center text-xs tabular-nums text-muted-foreground">{index + 1}</span>}>
                   <span className="w-2/5 min-w-0 shrink-0 break-words">{item.description}</span>

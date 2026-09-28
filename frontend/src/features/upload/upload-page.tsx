@@ -366,7 +366,9 @@ export function UploadPage() {
         <Upload />
         {isUploading
           ? t('uploadPageSections.uploading')
-          : t({ ko: '업로드{count}', en: 'Upload{count}' }, { count: uploadFiles.length > 0 ? ` ${formatNumber(uploadFiles.length)}` : '' })}
+          : uploadFiles.length > 0
+            ? t({ ko: '업로드 {count}', en: 'Upload {count}' }, { count: formatNumber(uploadFiles.length) })
+            : t({ ko: '업로드', en: 'Upload' })}
       </Button>
     </>
   )

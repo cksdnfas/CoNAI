@@ -128,9 +128,9 @@ export function UploadDropZone({
 }
 
 /** Thin inline progress bar for one queue row. */
-function RowProgress({ percent, tone = 'primary' }: { percent: number; tone?: 'primary' | 'destructive' }) {
+function RowProgress({ percent, tone = 'primary', className }: { percent: number; tone?: 'primary' | 'destructive'; className?: string }) {
   return (
-    <span className="block h-1 w-20 overflow-hidden rounded-full bg-fill sm:w-44" aria-hidden>
+    <span className={cn('block h-1 w-44 overflow-hidden rounded-full bg-fill', className)} aria-hidden>
       <span
         className={cn('block h-full rounded-full transition-[width] duration-200', tone === 'destructive' ? 'bg-destructive' : 'bg-primary')}
         style={{ width: `${percent}%` }}
@@ -244,7 +244,7 @@ export function UploadQueueList({
                 leading={<QueueThumb preview={previews[index]} />}
                 trailing={(
                   <>
-                    <RowProgress percent={state.percent} tone={state.status === 'failed' ? 'destructive' : 'primary'} />
+                    <RowProgress percent={state.percent} tone={state.status === 'failed' ? 'destructive' : 'primary'} className="hidden sm:block" />
                     <span
                       className={cn(
                         'w-14 text-right text-xs',
@@ -271,6 +271,7 @@ export function UploadQueueList({
                   <span className={cn('block truncate text-xs', state.error ? 'text-destructive' : 'text-muted-foreground')} title={state.error}>
                     {state.error ?? formatBytes(file.size)}
                   </span>
+                  <RowProgress percent={state.percent} tone={state.status === 'failed' ? 'destructive' : 'primary'} className="mt-1.5 w-full sm:hidden" />
                 </span>
               </ListRow>
             )
@@ -294,7 +295,7 @@ export function UploadQueueList({
                 )}
                 trailing={(
                   <>
-                    <RowProgress percent={100} />
+                    <RowProgress percent={100} className="hidden sm:block" />
                     <span className="w-14 text-right text-xs text-success">{t({ ko: '완료', en: 'Done' })}</span>
                     {detailPath ? (
                       <IconButton asChild variant="ghost" size="icon-xs" label={t({ ko: '상세 열기', en: 'Open details' })}>
