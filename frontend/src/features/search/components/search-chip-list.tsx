@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
+import { SEARCH_OPERATOR_CYCLE_HINT, SEARCH_OPERATOR_DESCRIPTIONS, SEARCH_OPERATOR_LABELS, SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import { getSearchScopeStyle } from '@/features/search/search-utils'
 import type { SearchChip } from '@/features/search/search-types'
 import { useI18n } from '@/i18n'
@@ -38,11 +38,14 @@ export function SearchChipList({
               <button
                 type="button"
                 onClick={() => onCycleOperator(chip.id)}
-                className="rounded-sm border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-bold tracking-[0.16em] text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_8%,transparent)] transition hover:border-primary/55 hover:bg-primary/18 active:scale-[0.98]"
-                aria-label={t({ ko: '{label} 연산자 변경', en: 'Change {label} operator' }, { label: chip.label })}
-                title={t('search.components.search.chip.list.click.to.cycle.or.and.not')}
+                className="rounded-sm border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-bold tracking-[0.08em] text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_8%,transparent)] transition hover:border-primary/55 hover:bg-primary/18 active:scale-[0.98]"
+                aria-label={t(
+                  { ko: '{label}: {operator}. {hint}', en: '{label}: {operator}. {hint}' },
+                  { label: chip.label, operator: t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), hint: t(SEARCH_OPERATOR_CYCLE_HINT) },
+                )}
+                title={[t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), t(SEARCH_OPERATOR_CYCLE_HINT)].join('\n')}
               >
-                {chip.operator}
+                {t(SEARCH_OPERATOR_LABELS[chip.operator])}
               </button>
               <span className="min-w-0 flex-1 truncate text-sm text-foreground" style={chip.color ? { color: chip.color } : undefined}>
                 {chip.label}

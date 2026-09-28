@@ -5,7 +5,7 @@ import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
 import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
-import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
+import { SEARCH_OPERATOR_DESCRIPTIONS, SEARCH_OPERATOR_LABELS, SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import { createRatingSearchChip, getSearchScopeStyle } from '@/features/search/search-utils'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { useSearchSuggestionData } from '@/features/search/use-search-suggestion-data'
@@ -297,7 +297,16 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '최근 검색', en: 'Recent searches' })}</div>
               <div className="flex shrink-0 items-center gap-2">
-                <button type="button" onClick={() => void clearHistoryEntries()} className="text-xs text-muted-foreground transition hover:text-foreground">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(t({ ko: '최근 검색 기록을 모두 지울까요?', en: 'Clear all recent searches?' }))) {
+                      void clearHistoryEntries()
+                    }
+                  }}
+                  disabled={historyEntries.length === 0}
+                  className="text-xs text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+                >
                   {t({ ko: '히스토리 비우기', en: 'Clear history' })}
                 </button>
               </div>
@@ -324,8 +333,8 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                             <span className="rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getSearchScopeStyle(chip.scope)}>
                               {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
                             </span>
-                            <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">
-                              {chip.operator}
+                            <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.08em] text-primary" title={t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator])}>
+                              {t(SEARCH_OPERATOR_LABELS[chip.operator])}
                             </span>
                             <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
                               {chip.label}

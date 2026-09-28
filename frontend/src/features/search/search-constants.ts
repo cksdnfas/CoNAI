@@ -1,4 +1,5 @@
-import type { SearchAiToolOption, SearchScope } from './search-types'
+import type { TranslationDictionary } from '@/i18n'
+import type { SearchAiToolOption, SearchOperator, SearchScope } from './search-types'
 
 export const SEARCH_SCOPE_TABS: Array<{ value: SearchScope }> = [
   { value: 'positive' },
@@ -18,6 +19,24 @@ export const SEARCH_SCOPE_LABEL_KEYS: Record<SearchScope, string> = {
   model: 'search.search.constants.model',
   lora: 'search.search.constants.lora',
   tool: 'search.search.constants.tool',
+}
+
+/** Plain-language chip operator labels (AND = must match, OR = any of, NOT = exclude). */
+export const SEARCH_OPERATOR_LABELS: Record<SearchOperator, TranslationDictionary> = {
+  AND: { ko: '포함', en: 'Include' },
+  OR: { ko: '또는', en: 'Any' },
+  NOT: { ko: '제외', en: 'Exclude' },
+}
+
+export const SEARCH_OPERATOR_DESCRIPTIONS: Record<SearchOperator, TranslationDictionary> = {
+  AND: { ko: '포함: 이 조건이 반드시 있어야 합니다', en: 'Include: images must match this' },
+  OR: { ko: '또는: "또는" 조건 중 하나만 맞으면 됩니다', en: 'Any: images need to match at least one "Any" filter' },
+  NOT: { ko: '제외: 이 조건이 있는 이미지는 뺍니다', en: 'Exclude: images matching this are left out' },
+}
+
+export const SEARCH_OPERATOR_CYCLE_HINT: TranslationDictionary = {
+  ko: '클릭하면 포함 → 또는 → 제외 순으로 바뀝니다',
+  en: 'Click to switch Include → Any → Exclude',
 }
 
 export const SEARCH_TEXT_INPUT_SCOPES: SearchScope[] = ['positive', 'negative', 'auto', 'model', 'lora']
