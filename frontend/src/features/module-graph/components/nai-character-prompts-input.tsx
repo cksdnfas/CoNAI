@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { NaiCharacterPositionBoard } from '@/features/image-generation/components/nai-character-position-board'
+import { WildcardInlinePickerField } from '@/features/image-generation/components/wildcard-inline-picker-field'
 import { useI18n } from '@/i18n'
 import {
   NAI_CHARACTER_GRID_X_OPTIONS,
@@ -204,20 +204,25 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
 
             <label className="space-y-2">
               <span className="text-sm font-medium text-foreground">Prompt</span>
-              <Textarea
+              <WildcardInlinePickerField
+                tool="nai"
+                multiline
                 rows={4}
                 value={draft.prompt}
-                onChange={(event) => handleChange(index, 'prompt', event.target.value)}
+                onChange={(nextValue) => handleChange(index, 'prompt', nextValue)}
                 placeholder=""
               />
             </label>
 
             <label className="space-y-2">
               <span className="text-sm font-medium text-foreground">{t({ ko: '네거티브 프롬프트', en: 'Negative Prompt' })}</span>
-              <Textarea
+              <WildcardInlinePickerField
+                tool="nai"
+                multiline
                 rows={3}
+                autocompletePromptType="negative"
                 value={draft.uc}
-                onChange={(event) => handleChange(index, 'uc', event.target.value)}
+                onChange={(nextValue) => handleChange(index, 'uc', nextValue)}
                 placeholder=""
               />
             </label>
