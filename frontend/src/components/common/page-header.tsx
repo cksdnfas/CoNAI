@@ -12,6 +12,10 @@ interface PageHeaderProps {
   className?: string
 }
 
+/**
+ * @deprecated Flat redesign: use `PageToolbar` (components/common/page-toolbar) — one 56px row, title left, icon
+ * actions right, no eyebrow / description. Kept only until every page has migrated.
+ */
 export function PageHeader({ eyebrow, title, titleAccessory, description, actions, className }: PageHeaderProps) {
   return (
     <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)}>
