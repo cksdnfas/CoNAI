@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Copy, Eye, Plus, Sparkles } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Modal, ModalFooter } from '@/components/ui/modal'
@@ -73,10 +74,10 @@ export function MiniMaxH3DirectorPromptBuilder({
   }
 
   return <>
-    <section className="space-y-4 rounded-sm border border-border/80 bg-surface-low/50 p-4">
+    <section className="ui-tone-plinth space-y-4 rounded-sm p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-medium text-foreground">{t({ ko: '프롬프트 빌더', en: 'Prompt builder' })}</div>
+          <Text as="div" variant="title">{t({ ko: '프롬프트 빌더', en: 'Prompt builder' })}</Text>
           <div className="mt-1 text-2xs text-muted-foreground">{state.mode}</div>
         </div>
         <div className="flex flex-wrap gap-2">

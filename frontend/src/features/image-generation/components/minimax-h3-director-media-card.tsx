@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { Film, ImageIcon, Music2, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { buildWorkflowInputAssetUrl, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import { cn } from '@/lib/utils'
 import {
@@ -270,19 +271,20 @@ export function MiniMaxH3DirectorMediaCard({
         onToggleMenu()
       }}
       className={cn(
-        'relative min-w-0 overflow-hidden rounded-sm border bg-background/25 transition touch-pan-y select-none',
-        disabled ? 'cursor-not-allowed opacity-65' : 'cursor-pointer hover:border-primary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-        sorting && 'z-10 scale-[1.015] border-primary shadow-lg ring-2 ring-primary/25',
-        hasIssue ? 'border-destructive ring-2 ring-destructive/20' : 'border-border/80',
+        // Tonal card on the lane tray; states read as rings instead of a recoloured outline.
+        'relative min-w-0 overflow-hidden rounded-sm bg-surface-container transition touch-pan-y select-none',
+        disabled ? 'cursor-not-allowed opacity-65' : 'cursor-pointer hover:ring-1 hover:ring-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+        sorting && 'z-10 scale-[1.015] shadow-elevation-2 ring-2 ring-primary/50',
+        hasIssue && 'ring-2 ring-destructive/60',
       )}
     >
-      <div className="relative flex min-h-28 max-h-64 w-full items-center justify-center overflow-hidden bg-black/20 p-1">
+      <div className="relative flex min-h-28 max-h-64 w-full items-center justify-center overflow-hidden bg-surface-lowest p-1">
         <MiniMaxDirectorMediaPreview item={item} asset={asset} onSourceDimensionsChange={handleSourceDimensionsChange} />
         <Badge className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate bg-background/88">{label}</Badge>
       </div>
 
       {aspectRatio || children ? (
-        <div data-minimax-interactive="true" className="space-y-2 border-t border-border/70 p-3" onClick={(event) => event.stopPropagation()}>
+        <div data-minimax-interactive="true" className="space-y-2 p-3" onClick={(event) => event.stopPropagation()}>
           {aspectRatio ? (
             <Badge data-minimax-aspect-ratio variant="outline" className="normal-case tracking-normal tabular-nums">
               {aspectRatio}
@@ -293,13 +295,13 @@ export function MiniMaxH3DirectorMediaCard({
       ) : null}
 
       {menuOpen && !disabled ? (
-        <div data-minimax-interactive="true" role="menu" aria-label={menuLabel} className="absolute inset-x-2 top-11 z-20 overflow-hidden rounded-sm border border-border bg-background/96 p-1 shadow-xl backdrop-blur">
-          <button type="button" role="menuitem" className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-xs text-foreground hover:bg-surface-high" onClick={(event) => { event.stopPropagation(); onRequestReplace() }}>
-            <RefreshCw className="h-4 w-4" />{replaceLabel}
-          </button>
-          <button type="button" role="menuitem" className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-xs text-destructive hover:bg-destructive/10" onClick={(event) => { event.stopPropagation(); onDelete() }}>
-            <Trash2 className="h-4 w-4" />{deleteLabel}
-          </button>
+        <div data-minimax-interactive="true" data-surface="high" role="menu" aria-label={menuLabel} className="absolute inset-x-2 top-11 z-20 overflow-hidden rounded-md bg-surface-high p-1 shadow-elevation-2">
+          <Button type="button" variant="nav" size="sm" role="menuitem" className="text-xs text-foreground" onClick={(event) => { event.stopPropagation(); onRequestReplace() }}>
+            <RefreshCw />{replaceLabel}
+          </Button>
+          <Button type="button" variant="nav" size="sm" role="menuitem" className="text-xs text-destructive hover:text-destructive" onClick={(event) => { event.stopPropagation(); onDelete() }}>
+            <Trash2 />{deleteLabel}
+          </Button>
         </div>
       ) : null}
     </div>

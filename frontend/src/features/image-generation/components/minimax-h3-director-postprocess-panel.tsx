@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { Inset } from '@/components/ui/inset'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
@@ -21,8 +23,8 @@ const QUALITY_OPTIONS = ['Low', 'Medium', 'High', 'Ultra'] as const
 
 function ToggleRow({ checked, label, onChange, port }: { checked: boolean; label: string; onChange: (checked: boolean) => void; port?: ReactNode }) {
   return (
-    <label className="flex min-w-0 items-start gap-2 rounded-sm border border-border/70 bg-background/25 px-3 py-2">
-      <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    <label className="flex min-w-0 cursor-pointer items-start gap-2.5 rounded-sm bg-foreground/4 px-3 py-2 transition-colors hover:bg-foreground/8">
+      <Checkbox className="mt-px" checked={checked} onCheckedChange={(next) => onChange(next === true)} />
       <span className="min-w-0 flex-1">
         <span className="block text-xs font-medium text-foreground">{label}</span>
       </span>
@@ -75,7 +77,7 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
       ) : null}
 
       {showRtx && value.rtx.enabled ? (
-        <div className="space-y-3 rounded-sm border border-border/70 bg-background/20 p-3">
+        <Inset className="space-y-3 px-3">
           <div className="grid gap-3 md:grid-cols-2">
             <ToggleRow checked={value.rtx.denoise} label={t({ ko: 'RTX 노이즈 제거', en: 'RTX denoise' })} port={renderInputPort?.('postprocess.rtx.denoise')} onChange={(denoise) => patchRtx({ denoise })} />
             <div className="space-y-1">
@@ -144,7 +146,7 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
             <ToggleRow checked={value.rtx.use_mmap} label={t({ ko: '디스크 mmap 허용', en: 'Allow disk mmap' })} port={renderInputPort?.('postprocess.rtx.use_mmap')} onChange={(use_mmap) => patchRtx({ use_mmap })} />
             <ToggleRow checked={value.rtx.auto_unload_models} label={t({ ko: '모델 자동 언로드', en: 'Auto-unload models' })} port={renderInputPort?.('postprocess.rtx.auto_unload_models')} onChange={(auto_unload_models) => patchRtx({ auto_unload_models })} />
           </div>
-        </div>
+        </Inset>
       ) : null}
     </section>
   )

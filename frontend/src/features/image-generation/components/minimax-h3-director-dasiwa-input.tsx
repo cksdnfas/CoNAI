@@ -4,6 +4,7 @@ import { Film, ImageIcon, Music2, Plus, RotateCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Inset } from '@/components/ui/inset'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -683,7 +684,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                 step={0.25}
                 value={trimStart}
                 aria-label={t({ ko: '크롭 시작 마커', en: 'Crop start marker' })}
-                className="absolute inset-x-0 top-0 h-3 w-full accent-amber-400"
+                className="absolute inset-x-0 top-0 h-3 w-full accent-warning"
                 onChange={(event) => {
                   const nextStart = Math.max(0, Math.min(trimEnd - 2, Number(event.target.value)))
                   updateTimelineItem(item.id, { trim_start: nextStart, duration: trimEnd - nextStart })
@@ -696,7 +697,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                 step={0.25}
                 value={trimEnd}
                 aria-label={t({ ko: '크롭 끝 마커', en: 'Crop end marker' })}
-                className="absolute inset-x-0 bottom-0 h-3 w-full accent-sky-400"
+                className="absolute inset-x-0 bottom-0 h-3 w-full accent-info"
                 onChange={(event) => {
                   const nextEnd = Math.min(sourceDuration, Math.max(trimStart + 2, Number(event.target.value)))
                   updateTimelineItem(item.id, { trim_end: nextEnd, duration: nextEnd - trimStart })
@@ -737,10 +738,11 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
     return (
       <div key={`frame-slot-${slot}`} className="space-y-1">
         {inputKey ? renderInputPort?.(inputKey) : null}
-        <button
+        <Button
           type="button"
+          variant="subtle"
           disabled={isUploading}
-          className="flex min-h-36 w-full min-w-0 flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-border/80 px-3 text-xs text-muted-foreground hover:border-primary/45 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-auto min-h-36 w-full min-w-0 flex-col gap-2 px-3 text-xs whitespace-normal"
           onClick={() => {
             requestedFrameSlotRef.current = slot
             visualInputRef.current?.click()
@@ -750,7 +752,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         >
           <span className="font-medium text-foreground">{label}</span>
           <span>{t({ ko: '이미지를 추가하거나 놓아줘.', en: 'Add or drop an image.' })}</span>
-        </button>
+        </Button>
       </div>
     )
   }
@@ -811,9 +813,9 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       </div>
 
       {mode === 'Image Inpaint' ? (
-        <div className="rounded-sm border border-border/70 bg-surface-low/50 px-3 py-2 text-xs text-muted-foreground">
+        <Inset className="px-3 py-2 text-xs text-muted-foreground">
           {t({ ko: '이미지 1장만 사용하며 영상·오디오는 지원하지 않아. 결과는 단일 이미지로 저장돼.', en: 'Uses exactly one image with no video or audio references. The result is saved as a single image.' })}
-        </div>
+        </Inset>
       ) : null}
 
       {boundedValue.error ? <Alert variant="destructive"><AlertDescription>{boundedValue.error}</AlertDescription></Alert> : null}
@@ -919,9 +921,9 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
               {issues.slice(0, 6).map((issue) => (
                 <li key={`${issue.code}-${issue.itemId ?? issue.field ?? ''}`}>
                   {issue.itemId ? (
-                    <button type="button" className="text-left underline-offset-2 hover:underline" onClick={(event) => { event.stopPropagation(); setMenuItemId(issue.itemId ?? null) }}>
+                    <Button type="button" variant="link" size="xs" className="h-auto p-0 text-left whitespace-normal text-current" onClick={(event) => { event.stopPropagation(); setMenuItemId(issue.itemId ?? null) }}>
                       {t({ ko: issue.ko, en: issue.en })}
-                    </button>
+                    </Button>
                   ) : t({ ko: issue.ko, en: issue.en })}
                 </li>
               ))}
@@ -931,7 +933,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       ) : null}
 
       {isFieldVisible('timeline_data') ? <>
-      <div className={cn('space-y-3 rounded-sm border bg-surface-low/50 p-3', selectedLane === 'image' ? 'border-primary/50 ring-1 ring-primary/15' : 'border-border/80')} onClick={() => setSelectedLane('image')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'image')}>
+      <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', selectedLane === 'image' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('image')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'image')}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-medium text-foreground"><ImageIcon className="h-4 w-4" />{isReferenceMediaMode ? t({ ko: '이미지', en: 'Images' }) : t({ ko: '키 프레임', en: 'Key frames' })}</div>
           <div className="flex items-center gap-1">
@@ -965,20 +967,20 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
             })}
           </div>
         ) : mode === 'T2VA' ? (
-          <div className="flex min-h-28 items-center justify-center rounded-sm border border-dashed border-border/60 text-xs text-muted-foreground">{t({ ko: 'T2VA는 입력 프레임 없이 텍스트로 생성해.', en: 'T2VA generates from text without input frames.' })}</div>
+          <div className="flex min-h-28 items-center justify-center rounded-sm bg-foreground/4 px-3 text-center text-xs text-muted-foreground">{t({ ko: 'T2VA는 입력 프레임 없이 텍스트로 생성해.', en: 'T2VA generates from text without input frames.' })}</div>
         ) : visualItems.length > 0 ? (
           <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
             {visualItems.map((item) => renderMediaCard(item, visualItems.filter((candidate) => candidate.type === item.type && candidate.slot <= item.slot).length))}
           </div>
         ) : (
-          <button type="button" className="flex min-h-28 w-full items-center justify-center rounded-sm border border-dashed border-border/80 text-xs text-muted-foreground hover:border-primary/45 hover:text-foreground" onClick={() => visualInputRef.current?.click()}>
+          <Button type="button" variant="subtle" className="h-auto min-h-28 w-full px-3 text-xs whitespace-normal" onClick={() => visualInputRef.current?.click()}>
             {mode === null ? t({ ko: '실행 모드는 상위 노드가 결정해. 참조 미디어를 추가할 수 있어.', en: 'An upstream node selects the mode. You can add reference media.' }) : t({ ko: '이미지를 추가하거나 놓으세요.', en: 'Add or drop an image.' })}
-          </button>
+          </Button>
         )}
       </div>
 
       {isReferenceMediaMode ? (
-        <div className={cn('space-y-3 rounded-sm border bg-surface-low/50 p-3', selectedLane === 'video' ? 'border-primary/50 ring-1 ring-primary/15' : 'border-border/80')} onClick={() => setSelectedLane('video')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'video')}>
+        <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', selectedLane === 'video' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('video')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'video')}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs font-medium"><Film className="h-4 w-4" />{t({ ko: '영상', en: 'Video' })}</div>
             <div className="flex items-center gap-1">
@@ -989,11 +991,11 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           </div>
           {renderInputPort?.('reference_video')}
           {videoItems.length > 0 ? <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>{videoItems.map((item, index) => renderMediaCard(item, index + 1))}</div>
-            : <button type="button" disabled={isUploading} className="flex min-h-20 w-full items-center justify-center rounded-sm border border-dashed border-border/80 text-xs text-muted-foreground" onClick={() => videoInputRef.current?.click()}>{t({ ko: '영상을 추가하거나 놓으세요.', en: 'Add or drop a video.' })}</button>}
+            : <Button type="button" variant="subtle" disabled={isUploading} className="h-auto min-h-20 w-full px-3 text-xs whitespace-normal" onClick={() => videoInputRef.current?.click()}>{t({ ko: '영상을 추가하거나 놓으세요.', en: 'Add or drop a video.' })}</Button>}
         </div>
       ) : null}
 
-      <div className={cn('space-y-3 rounded-sm border p-3', !isReferenceMediaMode ? 'border-border/50 bg-muted/20 opacity-60' : selectedLane === 'audio' ? 'border-primary/50 bg-surface-low/50 ring-1 ring-primary/15' : 'border-border/80 bg-surface-low/50')} onClick={() => { if (isReferenceMediaMode) setSelectedLane('audio') }} onDragOver={(event) => { if (isReferenceMediaMode) event.preventDefault() }} onDrop={(event) => isReferenceMediaMode ? handleLaneDrop(event, 'audio') : event.preventDefault()}>
+      <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', !isReferenceMediaMode ? 'opacity-60' : selectedLane === 'audio' && 'ring-1 ring-inset ring-primary/45')} onClick={() => { if (isReferenceMediaMode) setSelectedLane('audio') }} onDragOver={(event) => { if (isReferenceMediaMode) event.preventDefault() }} onDrop={(event) => isReferenceMediaMode ? handleLaneDrop(event, 'audio') : event.preventDefault()}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-medium text-foreground"><Music2 className="h-4 w-4" />{t({ ko: '오디오', en: 'Audio' })}</div>
           <div className="flex items-center gap-1">
@@ -1010,20 +1012,20 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         </div>
         {isReferenceMediaMode ? renderInputPort?.('reference_audio') : null}
         {!isReferenceMediaMode ? (
-          <div className="flex min-h-20 items-center justify-center rounded-sm border border-dashed border-border/60 text-xs text-muted-foreground">{t({ ko: '기본 모드에서는 오디오 참조를 사용하지 않아.', en: 'Base modes do not use audio references.' })}</div>
+          <div className="flex min-h-20 items-center justify-center rounded-sm bg-foreground/4 px-3 text-center text-xs text-muted-foreground">{t({ ko: '기본 모드에서는 오디오 참조를 사용하지 않아.', en: 'Base modes do not use audio references.' })}</div>
         ) : audioItems.length > 0 ? (
           <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
             {audioItems.map((item, index) => getMediaLane(item) === 'audio'
               ? renderMediaCard(item, index + 1, `Audio ${index + 1}`)
-              : <div key={`${item.id}-audio`} className="rounded-sm border border-border/70 p-3 text-xs">
+              : <div key={`${item.id}-audio`} className="rounded-sm bg-foreground/4 p-3 text-xs">
                   <span className="font-medium">Audio {index + 1}</span>
                   <span className="ml-2 text-muted-foreground">{t({ ko: 'Video {index}와 연결됨 · 동일 구간 사용', en: 'Linked to Video {index} · shared trim' }, { index: videoItems.findIndex((video) => video.id === item.id) + 1 })}</span>
                 </div>)}
           </div>
         ) : (
-          <button type="button" className="flex min-h-20 w-full items-center justify-center rounded-sm border border-dashed border-border/80 text-xs text-muted-foreground hover:border-primary/45 hover:text-foreground" onClick={() => audioInputRef.current?.click()}>
+          <Button type="button" variant="subtle" className="h-auto min-h-20 w-full px-3 text-xs whitespace-normal" onClick={() => audioInputRef.current?.click()}>
             {t({ ko: '오디오를 추가하거나 여기에 놓아줘.', en: 'Add audio or drop it here.' })}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -1040,7 +1042,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         />
       ) : null}
 
-      {status ? <div className="rounded-sm border border-border/70 bg-background/35 px-3 py-2 text-xs text-muted-foreground">{status}</div> : null}
+      {status ? <Inset role="status" className="px-3 py-2 text-xs text-muted-foreground">{status}</Inset> : null}
 
     </div>
   )
