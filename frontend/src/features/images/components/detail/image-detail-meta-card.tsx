@@ -27,7 +27,7 @@ import type { ImageRecord } from '@/types/image'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
-import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems } from './image-detail-utils'
+import { formatBytes, getDownloadName, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems, parseImageTimestamp } from './image-detail-utils'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface ImageDetailMetaCardProps {
@@ -168,7 +168,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const imageViewModal = useImageViewModal()
   const { addScopedTextChip } = useHomeSearch()
   const { showSnackbar } = useSnackbar()
-  const { t } = useI18n()
+  const { t, formatDateTime } = useI18n()
   const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>(() => loadPromptDisplayMode())
   const [promptGroupingOptions, setPromptGroupingOptions] = useState<PromptGroupingDisplayOptions>(() => loadPromptGroupingOptions())
   const [isPromptGroupingOptionsOpen, setIsPromptGroupingOptionsOpen] = useState(false)
@@ -194,7 +194,14 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const autoPromptContent = getImageAutoPromptContent(image)
   const artistPromptSection = getImageArtistPromptSection(image)
   const autoPromptCopyText = useMemo(() => getImageAutoPromptCopyText(image), [image])
-  const generationParamItems = getImageGenerationParamItems(image)
+  const generationParamItems = getImageGenerationParamItems(image, t)
+  const fileName = image.original_file_path ? getDownloadName(image.original_file_path) : null
+  const firstSeenDate = parseImageTimestamp(image.first_seen_date)
+  const firstSeenLabel = firstSeenDate ? formatDateTime(firstSeenDate) : null
+  const technicalItems = [
+    image.original_file_path ? { id: 'path', label: t({ ko: '파일 경로', en: 'File path' }), value: image.original_file_path } : null,
+    image.composite_hash ? { id: 'hash', label: t({ ko: '복합 해시', en: 'Composite hash' }), value: image.composite_hash } : null,
+  ].filter((item): item is { id: string; label: string; value: string } => item !== null)
   const modelSearchValue = getImageModelSearchValue(image)
   const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
   const canTogglePromptGrouping = positivePromptTermItems.length > 0 || negativePromptTermItems.length > 0
@@ -292,6 +299,15 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     }
   }
 
+  const handleCopyTechnicalValue = async (value: string) => {
+    try {
+      await copyTextToClipboard(value)
+      showSnackbar({ message: t({ ko: '복사했습니다.', en: 'Copied.' }), tone: 'info' })
+    } catch {
+      showSnackbar({ message: t({ ko: '복사하지 못했습니다.', en: 'Could not copy.' }), tone: 'error' })
+    }
+  }
+
   const handleSaveArtistPromptLinkTemplate = (template: string) => {
     void artistPromptLinkMutation.mutateAsync({ artistLinkUrlTemplate: template })
   }
@@ -334,12 +350,19 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         </div>
       </div>
 
-      <div className={metaItemClassName}>
-        <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '복합 해시', en: 'Composite hash' })}</p>
-        <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-2">
+        {fileName ? (
+          <div className={firstSeenLabel ? metaItemClassName : `${metaItemClassName} sm:col-span-2`}>
+            <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일 이름', en: 'File name' })}</p>
+            <p className="mt-2 break-all text-foreground">{fileName}</p>
+          </div>
+        ) : null}
+        {firstSeenLabel ? (
+          <div className={fileName ? metaItemClassName : `${metaItemClassName} sm:col-span-2`}>
+            <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '추가된 날짜', en: 'Added' })}</p>
+            <p className="mt-2 text-foreground">{firstSeenLabel}</p>
+          </div>
+        ) : null}
         <div className={metaItemClassName}>
           <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '크기', en: 'Dimensions' })}</p>
           <p className="mt-2 text-foreground">{image.width && image.height ? `${image.width} × ${image.height}` : '—'}</p>
@@ -372,12 +395,6 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             <p className="mt-2 break-words text-foreground">{item.value}</p>
           </div>
         ))}
-        {image.original_file_path ? (
-          <div className={`${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '경로', en: 'Path' })}</p>
-            <p className="mt-2 break-all font-mono text-xs text-foreground/88">{image.original_file_path}</p>
-          </div>
-        ) : null}
         {extractedPromptCards.length > 0 ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -467,6 +484,34 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           </div>
         ) : null}
       </div>
+
+      {technicalItems.length > 0 ? (
+        <details className={metaItemClassName}>
+          <summary className="cursor-pointer select-none text-[11px] uppercase tracking-[0.18em] marker:text-muted-foreground">
+            {t({ ko: '기술 정보', en: 'Technical details' })}
+          </summary>
+          <div className="mt-3 space-y-3">
+            {technicalItems.map((item) => (
+              <div key={item.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em]">{item.label}</p>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => void handleCopyTechnicalValue(item.value)}
+                    aria-label={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label: item.label })}
+                    title={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label: item.label })}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="mt-1 break-all font-mono text-xs text-foreground/88">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <ArtistPromptLinkSettingsModal
         open={isArtistPromptSettingsOpen}

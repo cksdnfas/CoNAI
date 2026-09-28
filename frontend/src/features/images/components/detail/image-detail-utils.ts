@@ -1,4 +1,5 @@
 import type { ImageRecord } from '@/types/image'
+import type { TranslationInput } from '@/i18n'
 import type { SimilaritySettings } from '@conai/shared'
 import { formatPromptTagCopyText, parseTaglistTokens } from '@/components/common/tag-result-utils'
 import { buildImageDownloadUrl } from '@/lib/api-images'
@@ -24,6 +25,14 @@ export function getDownloadName(path?: string | null, compositeHash?: string | n
   }
 
   return compositeHash ? `${compositeHash}.png` : 'image'
+}
+
+/** Parse a server timestamp; SQLite `YYYY-MM-DD HH:MM:SS` values are UTC without a zone suffix. */
+export function parseImageTimestamp(value?: string | null) {
+  if (!value) return null
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(' ', 'T')}Z` : value
+  const date = new Date(normalized)
+  return Number.isNaN(date.getTime()) ? null : date
 }
 
 export type ImageDetailRenderMode = 'thumbnail' | 'original'
@@ -174,15 +183,15 @@ function formatMetadataScalar(value?: string | number | null) {
 }
 
 /** Build generation-parameter display items from one image record. */
-export function getImageGenerationParamItems(image: ImageRecord): ImageGenerationParamItem[] {
+export function getImageGenerationParamItems(image: ImageRecord, t: (input: TranslationInput) => string): ImageGenerationParamItem[] {
   const generationParams = image.ai_metadata?.generation_params
 
   return [
-    { id: 'steps', label: 'Steps', value: formatMetadataScalar(generationParams?.steps) },
-    { id: 'cfg-scale', label: 'CFG scale', value: formatMetadataScalar(generationParams?.cfg_scale) },
-    { id: 'sampler', label: 'Sampler', value: formatMetadataScalar(generationParams?.sampler) },
-    { id: 'seed', label: 'Seed', value: formatMetadataScalar(generationParams?.seed) },
-    { id: 'scheduler', label: 'Scheduler', value: formatMetadataScalar(generationParams?.scheduler) },
+    { id: 'steps', label: t({ ko: '스텝', en: 'Steps' }), value: formatMetadataScalar(generationParams?.steps) },
+    { id: 'cfg-scale', label: t({ ko: 'CFG 스케일', en: 'CFG scale' }), value: formatMetadataScalar(generationParams?.cfg_scale) },
+    { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), value: formatMetadataScalar(generationParams?.sampler) },
+    { id: 'seed', label: t({ ko: '시드', en: 'Seed' }), value: formatMetadataScalar(generationParams?.seed) },
+    { id: 'scheduler', label: t({ ko: '스케줄러', en: 'Scheduler' }), value: formatMetadataScalar(generationParams?.scheduler) },
   ]
     .filter((item): item is ImageGenerationParamItem => Boolean(item.value))
     .map((item) => ({ ...item, value: item.value as string }))

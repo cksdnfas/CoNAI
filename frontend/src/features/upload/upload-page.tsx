@@ -74,8 +74,8 @@ export function UploadPage() {
       return []
     }
 
-    return getImageGenerationParamItems(extractResult)
-  }, [extractResult])
+    return getImageGenerationParamItems(extractResult, t)
+  }, [extractResult, t])
 
   const {
     uploadFiles,
