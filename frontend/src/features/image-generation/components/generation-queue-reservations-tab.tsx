@@ -5,7 +5,6 @@ import { useI18n } from '@/i18n'
 import type { GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '@/features/module-graph/module-graph-shared'
 import { getErrorMessage } from '../image-generation-shared'
-import { STATUS_BADGE_CLASS } from './generation-status-tone'
 import {
   formatReservationTimestamp,
   getActiveWorkflowReservationScheduleCount,
@@ -77,7 +76,7 @@ export function GenerationQueueReservationsTab({
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Text as="div" variant="label" className="truncate">{schedule.name}</Text>
-                      <Badge variant={getReservationStatusVariant(schedule.status)} className={schedule.status === 'active' ? STATUS_BADGE_CLASS.success : undefined}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
+                      <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
                       <Badge variant="outline">{getReservationTypeLabel(schedule, t, formatNumber)}</Badge>
                     </div>
                     <div className="text-2xs text-muted-foreground">

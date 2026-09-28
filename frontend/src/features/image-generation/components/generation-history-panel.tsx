@@ -36,7 +36,6 @@ import {
 import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
 import { countStateFromQuery, formatCountDisplay } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
-import { STATUS_BADGE_CLASS } from './generation-status-tone'
 import {
   getErrorMessage,
   getRetryableHistoryQueueJobId,
@@ -658,7 +657,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {inFlightHistoryCount > 0 ? <Badge variant="secondary" className={STATUS_BADGE_CLASS.info}>{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
+          {inFlightHistoryCount > 0 ? <Badge variant="info">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
           <IconButton
             size="icon-sm"
             variant="secondary"
@@ -706,7 +705,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Badge variant="secondary" className={STATUS_BADGE_CLASS.warning}>{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}</Badge>
+              <Badge variant="warning">{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}</Badge>
               <Button
                 type="button"
                 size="sm"

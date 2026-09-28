@@ -11,6 +11,10 @@ const badgeVariants = cva(
       variant: {
         default: "bg-primary/14 text-secondary",
         secondary: "bg-surface-highest text-muted-foreground",
+        /** Status tones: soft token fills that stay legible in dark and light. */
+        success: "bg-success-soft text-success-soft-foreground",
+        warning: "bg-warning-soft text-warning-soft-foreground",
+        info: "bg-info-soft text-info-soft-foreground",
         destructive: "bg-destructive-soft text-destructive-soft-foreground",
         outline: "bg-transparent text-muted-foreground ring-1 ring-outline-input",
         ghost: "bg-transparent text-muted-foreground",

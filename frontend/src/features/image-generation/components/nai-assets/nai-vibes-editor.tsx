@@ -11,7 +11,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAIVibeDraft, type SelectedImageDraft } from '../../image-generation-shared'
-import { STATUS_BADGE_CLASS } from '../generation-status-tone'
 import { ImageAttachmentPickerButton } from '../image-attachment-picker'
 import { NaiSelectedImageCard } from '../nai-selected-image-card'
 import { NaiSavedAssetBrowser, type NaiSavedAssetBrowserProps } from './nai-saved-asset-browser'
@@ -92,11 +91,11 @@ export function NaiVibesEditor({
                   <div className="flex flex-wrap items-center gap-2">
                     <Text as="div" variant="label">Vibe {index + 1}</Text>
                     {!showEncodeStatus ? null : vibe.encoded ? (
-                      <Badge variant="secondary" className={STATUS_BADGE_CLASS.success}>{t('image-generation.components.nai.vibes.section.ready')}</Badge>
+                      <Badge variant="success">{t('image-generation.components.nai.vibes.section.ready')}</Badge>
                     ) : vibe.image ? (
-                      <Badge variant="secondary" className={STATUS_BADGE_CLASS.info}>{t('image-generation.components.nai.vibes.section.auto.encode')}</Badge>
+                      <Badge variant="info">{t('image-generation.components.nai.vibes.section.auto.encode')}</Badge>
                     ) : (
-                      <Badge variant="secondary" className={STATUS_BADGE_CLASS.warning}>{t('image-generation.components.nai.vibes.section.image.required')}</Badge>
+                      <Badge variant="warning">{t('image-generation.components.nai.vibes.section.image.required')}</Badge>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

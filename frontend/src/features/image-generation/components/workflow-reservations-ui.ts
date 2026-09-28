@@ -4,7 +4,7 @@ import type { GraphExecutionRecord, GraphWorkflowScheduleRecord } from '@/lib/ap
 type Translate = (input: TranslationInput, params?: TranslationParams) => string
 type FormatNumber = (value: number) => string
 
-export type ReservationStatusVariant = 'secondary' | 'destructive' | 'outline'
+export type ReservationStatusVariant = 'success' | 'destructive' | 'outline'
 
 export function isActiveReservationExecution(status: GraphExecutionRecord['status']) {
   return status === 'queued' || status === 'running'
@@ -48,7 +48,7 @@ export function formatReservationTimestamp(value: string | null | undefined, loc
 /** Status badge variant shared by the header widget and the autorun panel. */
 export function getReservationStatusVariant(status: GraphWorkflowScheduleRecord['status']): ReservationStatusVariant {
   if (status === 'active') {
-    return 'secondary'
+    return 'success'
   }
 
   if (status === 'error_stopped' || status === 'overlap_stopped') {

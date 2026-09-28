@@ -4,6 +4,7 @@ import { ExternalLink, Languages } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
 import { Button } from '@/components/ui/button'
+import { ToggleChip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Inset } from '@/components/ui/inset'
 import { Modal, ModalBody } from '@/components/ui/modal'
@@ -285,18 +286,14 @@ export function CharacterRelatedTagOptionsPopup({
             {RELATED_TAG_CATEGORIES.map((category) => {
               const checked = selectedCategories.includes(category)
               return (
-                <Button
+                <ToggleChip
                   key={category}
-                  type="button"
-                  size="sm"
-                  variant="nav"
-                  data-active={checked}
-                  aria-pressed={checked}
+                  pressed={checked}
                   onClick={() => onToggleCategory(category)}
-                  className="bg-foreground/5 text-xs"
+                  className="w-full justify-start"
                 >
                   {category}
-                </Button>
+                </ToggleChip>
               )
             })}
           </div>

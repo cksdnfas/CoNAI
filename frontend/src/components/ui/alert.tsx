@@ -11,6 +11,12 @@ const alertVariants = cva(
         default: "bg-surface-high/70 text-foreground",
         destructive:
           "bg-destructive-soft text-destructive-soft-foreground *:data-[slot=alert-description]:text-destructive-soft-foreground/85 [&>svg]:text-current",
+        warning:
+          "bg-warning-soft text-warning-soft-foreground *:data-[slot=alert-description]:text-warning-soft-foreground/85 [&>svg]:text-current",
+        success:
+          "bg-success-soft text-success-soft-foreground *:data-[slot=alert-description]:text-success-soft-foreground/85 [&>svg]:text-current",
+        info:
+          "bg-info-soft text-info-soft-foreground *:data-[slot=alert-description]:text-info-soft-foreground/85 [&>svg]:text-current",
       },
     },
     defaultVariants: {

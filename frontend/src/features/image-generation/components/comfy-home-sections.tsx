@@ -16,7 +16,6 @@ import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS } from '@/lib/api-image-generation-workflows'
 import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
 import type { ComfyUIServerTestState } from '../image-generation-shared'
-import { STATUS_BADGE_CLASS } from './generation-status-tone'
 
 type WorkflowListSectionProps = {
   workflows: GenerationWorkflow[]
@@ -205,18 +204,18 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-foreground">{server.name}</span>
-                      <Badge variant={isActive ? 'secondary' : 'outline'} className={isActive ? STATUS_BADGE_CLASS.success : undefined}>{isActive ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
+                      <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
                       {!isModalServer && server.is_default ? <Badge variant="secondary">{t({ ko: '대표', en: 'Default' })}</Badge> : null}
                       {isModalServer ? <Badge variant="outline">Modal</Badge> : null}
                       {isModalServer ? (
                         <Badge variant="outline">{t('image-generation.components.comfy.home.sections.modal.server.auto.check.skipped')}</Badge>
                       ) : connectionStatus ? (
-                        <Badge variant="secondary" className={connectionStatus.is_connected ? STATUS_BADGE_CLASS.success : STATUS_BADGE_CLASS.destructive}>
+                        <Badge variant={connectionStatus.is_connected ? 'success' : 'destructive'}>
                           {connectionStatus.is_connected ? t({ ko: '연결됨', en: 'Connected' }) : t({ ko: '실패', en: 'Failed' })}
                         </Badge>
                       ) : null}
                       {connectionStatus?.is_connected && !isModalServer ? (
-                        <Badge variant={connectionStatus.is_idle ? 'outline' : 'secondary'} className={connectionStatus.is_idle ? undefined : STATUS_BADGE_CLASS.warning}>
+                        <Badge variant={connectionStatus.is_idle ? 'outline' : 'warning'}>
                           {connectionStatus.is_idle ? 'idle' : t({ ko: '사용 중', en: 'Busy' })}
                         </Badge>
                       ) : null}

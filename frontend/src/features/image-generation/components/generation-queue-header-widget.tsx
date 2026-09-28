@@ -21,7 +21,6 @@ import { getGraphWorkflowNames, getGraphWorkflowSchedules } from '@/lib/api-modu
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
-import { STATUS_BADGE_CLASS } from './generation-status-tone'
 import {
   canRetryGenerationQueueCancellation,
   getGenerationQueueDurationLabel,
@@ -188,10 +187,7 @@ const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCance
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 text-2xs">
           <div className="flex min-w-0 items-center gap-2">
-            <Badge
-              variant="secondary"
-              className={isCancelRequested ? STATUS_BADGE_CLASS.warning : isRunning ? STATUS_BADGE_CLASS.info : undefined}
-            >
+            <Badge variant={isCancelRequested ? 'warning' : isRunning ? 'info' : 'secondary'}>
               {statusLabel}
             </Badge>
             <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
