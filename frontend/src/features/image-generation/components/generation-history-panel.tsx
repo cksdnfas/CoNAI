@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ListX, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
-import { Inset } from '@/components/ui/inset'
-import { Badge } from '@/components/ui/badge'
+import { RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
-import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Text } from '@/components/ui/text'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { ImageList } from '@/features/images/components/image-list/image-list'
@@ -21,30 +15,14 @@ import { useImageListColumnPreference } from '@/features/images/components/image
 import type { ImageRecord } from '@/types/image'
 import { getRuntimeGenerationHistorySettings } from '@/lib/api-settings'
 import {
-  cleanupFailedGenerationHistory,
-  clearGenerationHistoryScope,
-  deleteGenerationHistoryRecord,
-  downloadGenerationHistorySelection,
   getGenerationHistory,
   getGenerationWorkflowHistory,
 } from '@/lib/api-image-generation-history'
-import {
-  cleanupPublicGenerationWorkflowFailedHistory,
-  clearPublicGenerationWorkflowHistory,
-  getPublicGenerationWorkflowHistory,
-} from '@/lib/api-public-workflows'
-import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
+import { getPublicGenerationWorkflowHistory } from '@/lib/api-public-workflows'
+import type { GenerationServiceType } from '@/lib/api-image-generation-types'
 import { countStateFromQuery, formatCountDisplay } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
-import {
-  getErrorMessage,
-  getRetryableHistoryQueueJobId,
-} from '../image-generation-shared'
-import {
-  getUniqueRetryableHistoryQueueJobIds,
-  retryGenerationHistoryRecords,
-  runGenerationHistoryMutationBatch,
-} from './generation-history-retry-actions'
+import { getErrorMessage } from '../image-generation-shared'
 import {
   GENERATION_HISTORY_ACTIVE_REFRESH_MS,
   GENERATION_HISTORY_PAGE_SIZE,
@@ -56,19 +34,18 @@ import {
   dedupeHistoryRecords,
   getGenerationHistorySelectionId,
   getHistoryRecordStatusSummary,
-  getHistoryRecoveryDetail,
-  getHistoryRecoveryLabel,
   hasActiveGenerationHistory,
   hasPostprocessPendingHistory,
   hasStableHistoryPageBoundary,
   isHistoryRecordDownloadReady,
   mapHistoryRecordToImageRecord,
-  readAcknowledgedRecoveryIds,
   readCachedHistoryPage,
-  writeAcknowledgedRecoveryIds,
 } from './generation-history-panel-helpers'
+import { GenerationHistoryHeader } from './generation-history-header'
+import { GenerationHistoryRecoveryPanel } from './generation-history-recovery-panel'
+import { useGenerationHistoryActions, useHistoryRecoveryAcknowledgement } from './use-generation-history-actions'
 import { EmptyState } from '@/components/ui/empty-state'
-import { LoadingState, Spinner } from '@/components/ui/loading-state'
+import { LoadingState } from '@/components/ui/loading-state'
 import { ErrorState } from '@/components/ui/error-state'
 
 type GenerationHistoryPanelProps = {
@@ -82,9 +59,7 @@ type GenerationHistoryPanelProps = {
 
 /** Render generation history using the shared image-list surface instead of per-record cards. */
 export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
-  const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
-  const confirm = useConfirm()
   const queryClient = useQueryClient()
   const authStatusQuery = useAuthStatusQuery()
   // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 기존 refresh cadence 가 그대로 되살아난다.
@@ -98,11 +73,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     maxColumnCount: maxHistoryColumnCount,
   } = useImageListColumnPreference('history')
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
-  const [isDeletingSelection, setIsDeletingSelection] = useState(false)
-  const [isDownloadingSelection, setIsDownloadingSelection] = useState(false)
-  const [isCleaningFailed, setIsCleaningFailed] = useState(false)
-  const [isClearingHistory, setIsClearingHistory] = useState(false)
-  const [retryingQueueJobIds, setRetryingQueueJobIds] = useState<Set<number>>(() => new Set())
   const [historyRefreshWatchUntil, setHistoryRefreshWatchUntil] = useState(0)
   const isAdmin = authStatusQuery.data?.isAdmin === true
   const requesterAccountId = authStatusQuery.data?.accountId ?? null
@@ -124,7 +94,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => `${GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX}${historyQueryKey.join(':')}`,
     [historyQueryKey],
   )
-  const [acknowledgedRecoveryIds, setAcknowledgedRecoveryIds] = useState<Set<number>>(() => readAcknowledgedRecoveryIds(recoveryAckStorageKey))
+  const { acknowledgedRecoveryIds, acknowledgeRecoveryRecords } = useHistoryRecoveryAcknowledgement(recoveryAckStorageKey)
   // QLIST-4: 사용자가 명시적으로 요청한 새로고침만 로드된 전 페이지를 다시 읽는다.
   const isFullHistoryRefreshRef = useRef(false)
   // 첫 페이지 경계가 밀린 리프레시는(신규 행 유입) 뒤 페이지 캐시를 재사용할 수 없다.
@@ -231,9 +201,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     }
   }, [isFetchingHistory])
 
-  useEffect(() => {
-    setAcknowledgedRecoveryIds(readAcknowledgedRecoveryIds(recoveryAckStorageKey))
-  }, [recoveryAckStorageKey])
 
   useEffect(() => {
     if (refreshNonce === 0) {
@@ -259,7 +226,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => retryableHistoryRecords.filter((record) => !acknowledgedRecoveryIds.has(record.id)).slice(0, 4),
     [acknowledgedRecoveryIds, retryableHistoryRecords],
   )
-  const isRetryingRunRecovery = retryingQueueJobIds.size > 0
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyTotalCount = historyQuery.data?.pages[0]?.total
   const applyHistoryRatingSafety = historySafetySettingsQuery.data?.applyRatingSafetyToGenerationHistory === true
@@ -359,332 +325,57 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     setSelectedHistoryIds([])
   }, [])
 
-  const handleDeleteSelected = useCallback(async () => {
-    if (!isAdmin) {
-      showSnackbar({ message: t('image-generation.components.generation.history.panel.only.admin.accounts.can.delete'), tone: 'error' })
-      return
-    }
-
-    if (selectedHistoryRecords.length === 0 || isDeletingSelection) {
-      return
-    }
-
-    const selectedCount = selectedHistoryRecords.length
-    const confirmed = await confirm({
-      title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
-      description: t('image-generation.components.generation.history.panel.selected.valueresults.to.the.recycle.bin.and', { count: formatNumber(selectedCount) }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (!confirmed) {
-      return
-    }
-
-    try {
-      setIsDeletingSelection(true)
-      const result = await runGenerationHistoryMutationBatch(
-        selectedHistoryRecords,
-        (record) => deleteGenerationHistoryRecord(record.id, true),
-      )
-      const failedSelectionIds = new Set(result.failedItems.map(({ item }) => getGenerationHistorySelectionId(item)))
-      setSelectedHistoryIds((current) => current.filter((id) => failedSelectionIds.has(id)))
-      await refreshHistory()
-      if (result.failedItems.length === 0) {
-        showSnackbar({ message: t('image-generation.components.generation.history.panel.valueresults.moved.to.recyclebin', { count: formatNumber(selectedCount) }), tone: 'info' })
-      } else if (result.successfulItems.length > 0) {
-        showSnackbar({
-          message: t(
-            { ko: '{deleted}개 삭제, {failed}개 실패했어.', en: '{deleted} deleted, {failed} failed.' },
-            { deleted: formatNumber(result.successfulItems.length), failed: formatNumber(result.failedItems.length) },
-          ),
-          tone: 'error',
-        })
-      } else {
-        showSnackbar({ message: getErrorMessage(result.failedItems[0]?.error, t('image-generation.components.generation.history.panel.failed.to.delete.history')), tone: 'error' })
-      }
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.delete.history')), tone: 'error' })
-    } finally {
-      setIsDeletingSelection(false)
-    }
-  }, [confirm, formatNumber, isAdmin, isDeletingSelection, refreshHistory, selectedHistoryRecords, showSnackbar, t])
-
-  const handleCleanupFailed = useCallback(async () => {
-    if (isCleaningFailed) {
-      return
-    }
-
-    // Clear history 와 같은 범위(서비스/워크플로 + 계정)로만 정리한다.
-    const runCleanup = (dryRun: boolean) => (
-      isPublicView && publicWorkflowSlug
-        ? cleanupPublicGenerationWorkflowFailedHistory(publicWorkflowSlug, { dryRun })
-        : cleanupFailedGenerationHistory({
-            serviceType,
-            workflowId,
-            mine: !isAdmin,
-            dryRun,
-          })
-    )
-
-    try {
-      setIsCleaningFailed(true)
-      // 로드된 페이지가 아니라 서버 범위 전체의 실제 개수로 확인을 받는다.
-      const preview = await runCleanup(true)
-      if (preview.deleted <= 0) {
-        showSnackbar({ message: t({ ko: '정리할 실패 기록이 없어.', en: 'There are no failed records to clean up.' }), tone: 'info' })
-        return
-      }
-
-      const confirmed = await confirm({
-        title: t({ ko: '실패 기록 정리', en: 'Clean up failed records' }),
-        description: isPublicView
-          ? t(
-              { ko: '이 공용 워크플로에서 내 실패 기록 {count}개를 목록에서 지울까? 원본 미디어는 유지돼.', en: 'Remove {count} of my failed records for this public workflow? Original media will be kept.' },
-              { count: formatNumber(preview.deleted) },
-            )
-          : t(
-              { ko: '이 생성 페이지의 실패 기록 {count}개를 목록에서 지울까? 원본 미디어는 유지돼.', en: 'Remove {count} failed records from this generation page? Original media will be kept.' },
-              { count: formatNumber(preview.deleted) },
-            ),
-        confirmLabel: t({ ko: '정리', en: 'Clean up' }),
-        tone: 'destructive',
-      })
-      if (!confirmed) {
-        return
-      }
-
-      const result = await runCleanup(false)
-      setSelectedHistoryIds([])
-      await refreshHistory()
-      showSnackbar({
-        message: result.deleted > 0
-          ? t(
-              { ko: '실패 기록 {count}개를 정리했어.', en: 'Cleaned up {count} failed records.' },
-              { count: formatNumber(result.deleted) },
-            )
-          : t({ ko: '정리할 실패 기록이 없어.', en: 'There are no failed records to clean up.' }),
-        tone: 'info',
-      })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.clean.up.failed.history')), tone: 'error' })
-    } finally {
-      setIsCleaningFailed(false)
-    }
-  }, [confirm, formatNumber, isAdmin, isCleaningFailed, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, showSnackbar, t, workflowId])
-
-  const handleClearHistory = useCallback(async () => {
-    if (isClearingHistory) {
-      return
-    }
-
-    const confirmed = await confirm({
-      title: t({ ko: '히스토리 비우기', en: 'Clear history' }),
-      description: isPublicView
-        ? t({
-            ko: '이 공용 워크플로에서 내 완료·실패 히스토리 목록을 비울까? 원본 미디어는 유지돼.',
-            en: 'Clear my completed and failed history for this public workflow? Original media will be kept.',
-          })
-        : t({
-            ko: '이 생성 페이지의 완료·실패 히스토리 목록을 비울까? 원본 미디어는 유지돼.',
-            en: 'Clear completed and failed history for this generation page? Original media will be kept.',
-          }),
-      confirmLabel: t({ ko: '비우기', en: 'Clear' }),
-      tone: 'destructive',
-    })
-    if (!confirmed) {
-      return
-    }
-
-    try {
-      setIsClearingHistory(true)
-      const result = isPublicView && publicWorkflowSlug
-        ? await clearPublicGenerationWorkflowHistory(publicWorkflowSlug)
-        : await clearGenerationHistoryScope({
-            serviceType,
-            workflowId,
-            mine: !isAdmin,
-          })
-      setSelectedHistoryIds([])
-      await refreshHistory()
-      showSnackbar({
-        message: result.deleted > 0
-          ? t(
-              { ko: '히스토리 {count}개를 목록에서 지웠어. 원본 미디어는 유지돼.', en: 'Removed {count} history records. Original media was kept.' },
-              { count: formatNumber(result.deleted) },
-            )
-          : t({ ko: '정리할 완료·실패 히스토리가 없어.', en: 'There is no completed or failed history to clear.' }),
-        tone: 'info',
-      })
-    } catch (error) {
-      showSnackbar({
-        message: getErrorMessage(error, t({ ko: '히스토리 목록을 비우지 못했어.', en: 'Failed to clear the history list.' })),
-        tone: 'error',
-      })
-    } finally {
-      setIsClearingHistory(false)
-    }
-  }, [confirm, formatNumber, isAdmin, isClearingHistory, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, showSnackbar, t, workflowId])
-
-  const acknowledgeRecoveryRecords = useCallback((records: GenerationHistoryRecord[]) => {
-    if (records.length === 0) {
-      return
-    }
-
-    setAcknowledgedRecoveryIds((current) => {
-      const next = new Set(current)
-      for (const record of records) {
-        next.add(record.id)
-      }
-      writeAcknowledgedRecoveryIds(recoveryAckStorageKey, next)
-      return next
-    })
-  }, [recoveryAckStorageKey])
-
-  const handleAcknowledgeRunRecovery = useCallback(() => {
-    acknowledgeRecoveryRecords(visibleRetryableHistoryRecords)
-  }, [acknowledgeRecoveryRecords, visibleRetryableHistoryRecords])
-
-  const handleRetryHistoryRecords = useCallback(async (
-    records: readonly GenerationHistoryRecord[],
-    options: { successMessage: string; failureMessage: string },
-  ) => {
-    const retryableRecords = collectRetryableHistoryRecords(records)
-    if (retryableRecords.length === 0 || isRetryingRunRecovery) {
-      return
-    }
-
-    const queueJobIds = getUniqueRetryableHistoryQueueJobIds(retryableRecords)
-    if (queueJobIds.length === 0) {
-      return
-    }
-
-    try {
-      setRetryingQueueJobIds(new Set(queueJobIds))
-      const retryResult = await retryGenerationHistoryRecords({
-        records: retryableRecords,
-        queryClient,
-        refreshHistory,
-        showSnackbar,
-        successMessage: options.successMessage,
-        failureMessage: options.failureMessage,
-        partialFailureMessage: (successCount, failureCount) => t(
-          { ko: '{succeeded}개 재실행 등록, {failed}개 실패했어.', en: '{succeeded} retries queued, {failed} failed.' },
-          { succeeded: formatNumber(successCount), failed: formatNumber(failureCount) },
-        ),
-      })
-      if (retryResult.successfulItems.length > 0) {
-        const succeededQueueJobIds = new Set(retryResult.successfulItems)
-        acknowledgeRecoveryRecords(retryableRecords.filter((record) => {
-          const queueJobId = getRetryableHistoryQueueJobId(record)
-          return queueJobId !== null && succeededQueueJobIds.has(queueJobId)
-        }))
-      }
-    } finally {
-      setRetryingQueueJobIds(new Set())
-    }
-  }, [acknowledgeRecoveryRecords, formatNumber, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar, t])
-
-  const handleRetryHistoryRecord = useCallback(async (record: GenerationHistoryRecord) => {
-    await handleRetryHistoryRecords([record], {
-      successMessage: t({ ko: '큐 재실행 작업을 등록했어.', en: 'Added the retry job to the queue.' }),
-      failureMessage: t({ ko: '큐 재실행 등록에 실패했어.', en: 'Failed to add the retry job.' }),
-    })
-  }, [handleRetryHistoryRecords, t])
-
-  const handleRetryVisibleRecoveryRecords = useCallback(async () => {
-    await handleRetryHistoryRecords(visibleRetryableHistoryRecords, {
-      successMessage: t(
-        { ko: '재실행 작업 {count}개를 큐에 등록했어.', en: 'Added {count} retry jobs to the queue.' },
-        { count: formatNumber(visibleRetryableHistoryRecords.length) },
-      ),
-      failureMessage: t({ ko: '일괄 재실행 등록에 실패했어.', en: 'Failed to add retry jobs.' }),
-    })
-  }, [formatNumber, handleRetryHistoryRecords, t, visibleRetryableHistoryRecords])
-
-  const handleRetrySelectedHistoryRecords = useCallback(async () => {
-    await handleRetryHistoryRecords(selectedRetryableHistoryRecords, {
-      successMessage: t(
-        { ko: '선택한 재실행 작업 {count}개를 큐에 등록했어.', en: 'Added {count} selected retry jobs to the queue.' },
-        { count: formatNumber(selectedRetryableHistoryRecords.length) },
-      ),
-      failureMessage: t({ ko: '선택 재실행 등록에 실패했어.', en: 'Failed to add selected retry jobs.' }),
-    })
-  }, [formatNumber, handleRetryHistoryRecords, selectedRetryableHistoryRecords, t])
-
-  const handleDownloadSelected = useCallback(async (type: 'thumbnail' | 'original') => {
-    if (downloadableHistoryIds.length === 0 || isDownloadingSelection) {
-      return
-    }
-
-    try {
-      setIsDownloadingSelection(true)
-      const selectedRecord = downloadableHistoryRecords.length === 1 ? downloadableHistoryRecords[0] : null
-      await downloadGenerationHistorySelection(downloadableHistoryIds, type, selectedRecord ? {
-        originalFilePath: selectedRecord.actual_file_name,
-        contentType: selectedRecord.actual_mime_type,
-      } : undefined)
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.download.the.selected.images')), tone: 'error' })
-    } finally {
-      setIsDownloadingSelection(false)
-    }
-  }, [downloadableHistoryIds, downloadableHistoryRecords, isDownloadingSelection, showSnackbar, t])
+  const {
+    isDeletingSelection,
+    isDownloadingSelection,
+    isCleaningFailed,
+    isClearingHistory,
+    retryingQueueJobIds,
+    isRetryingRunRecovery,
+    handleDeleteSelected,
+    handleCleanupFailed,
+    handleClearHistory,
+    handleAcknowledgeRunRecovery,
+    handleRetryHistoryRecord,
+    handleRetryVisibleRecoveryRecords,
+    handleRetrySelectedHistoryRecords,
+    handleDownloadSelected,
+  } = useGenerationHistoryActions({
+    serviceType,
+    workflowId,
+    publicWorkflowSlug,
+    isAdmin,
+    isPublicView,
+    refreshHistory,
+    setSelectedHistoryIds,
+    selectedHistoryRecords,
+    selectedRetryableHistoryRecords,
+    visibleRetryableHistoryRecords,
+    downloadableHistoryRecords,
+    downloadableHistoryIds,
+    acknowledgeRecoveryRecords,
+  })
 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>
-      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            {onBack ? (
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={onBack}
-                label={t('image-generation.components.generation.history.panel.back.to.workflow.list')}
-              >
-                <ArrowLeft />
-              </IconButton>
-            ) : null}
-            <Heading level={2}>{t('image-generation.components.generation.history.panel.generation.history')}</Heading>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-            <span>{historyLabel}</span>
-            {!isPublicView ? <span>· {isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</span> : null}
-            <span>· {t({ ko: '전체 기록 {count}', en: 'Total records: {count}' }, { count: historyTotalLabel })}</span>
-            {hasHiddenHistoryItems ? <span>· {t({ ko: '일부는 등급 설정으로 숨김', en: 'Some hidden by rating settings' })}</span> : null}
-            {historyQuery.isRefetching && !historyQuery.isFetchingNextPage ? <span>· {t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span> : null}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {inFlightHistoryCount > 0 ? <Badge variant="info">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
-          <IconButton
-            size="icon-sm"
-            variant="secondary"
-            onClick={() => void handleClearHistory()}
-            disabled={isClearingHistory || historyRecords.length === 0}
-            label={isClearingHistory
-              ? t({ ko: '히스토리 비우는 중', en: 'Clearing history' })
-              : isPublicView
-                ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' })
-                : t({ ko: '히스토리 비우기', en: 'Clear history' })}
-          >
-            {isClearingHistory ? <Spinner /> : <ListX />}
-          </IconButton>
-          <IconButton
-            size="icon-sm"
-            variant="secondary"
-            onClick={handleCleanupFailed}
-            disabled={isCleaningFailed || cleanupFailedHistoryCount === 0}
-            label={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
-          >
-            <Trash2 />
-          </IconButton>
-          <IconButton size="icon-sm" variant="secondary" onClick={() => void refreshHistory({ watchForNewRows: true })} label={t('image-generation.components.generation.history.panel.refresh.history')}>
-            <RefreshCw className={cn(historyQuery.isFetching && 'animate-spin')} />
-          </IconButton>
-        </div>
-      </div>
+      <GenerationHistoryHeader
+        onBack={onBack}
+        historyLabel={historyLabel}
+        isPublicView={isPublicView}
+        isAdmin={isAdmin}
+        historyTotalLabel={historyTotalLabel}
+        hasHiddenHistoryItems={hasHiddenHistoryItems}
+        isRefreshing={historyQuery.isRefetching && !historyQuery.isFetchingNextPage}
+        isFetching={historyQuery.isFetching}
+        inFlightHistoryCount={inFlightHistoryCount}
+        historyRecordCount={historyRecords.length}
+        cleanupFailedHistoryCount={cleanupFailedHistoryCount}
+        isClearingHistory={isClearingHistory}
+        isCleaningFailed={isCleaningFailed}
+        handleClearHistory={handleClearHistory}
+        handleCleanupFailed={handleCleanupFailed}
+        refreshHistory={refreshHistory}
+      />
 
       {historyQuery.isError ? (
         <ErrorState
@@ -696,73 +387,14 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       {isHistoryLoading ? <LoadingState variant="inline" label={t('image-generation.components.generation.history.panel.loading.history')} /> : null}
 
       {!isHistoryLoading && visibleRetryableHistoryRecords.length > 0 ? (
-        <Inset className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <Text variant="title">{t({ ko: '실행 복구', en: 'Run recovery' })}</Text>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {t({ ko: '재실행 가능한 실패/취소 큐 {count}개', en: '{count} failed or canceled queue records are rerun-ready' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Badge variant="warning">{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}</Badge>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => void handleRetryVisibleRecoveryRecords()}
-                disabled={isRetryingRunRecovery}
-              >
-                <RotateCcw className={cn('h-4 w-4', isRetryingRunRecovery && 'animate-spin')} />
-                {isRetryingRunRecovery
-                  ? t({ ko: '등록 중', en: 'Queueing' })
-                  : t({ ko: '모두 재실행', en: 'Rerun all' })}
-              </Button>
-              <Button type="button" size="sm" variant="secondary" onClick={handleAcknowledgeRunRecovery}>
-                {t({ ko: '확인', en: 'Dismiss' })}
-              </Button>
-            </div>
-          </div>
-
-          <div className="divide-y divide-outline-subtle">
-            {visibleRetryableHistoryRecords.map((record) => {
-              const queueJobId = getRetryableHistoryQueueJobId(record)
-              const isRetrying = queueJobId !== null && retryingQueueJobIds.has(queueJobId)
-              const workflowLabel = record.workflow_name?.trim() || (
-                record.service_type === 'comfyui'
-                  ? t({ ko: 'ComfyUI 실행 #{id}', en: 'ComfyUI run #{id}' }, { id: record.id })
-                  : record.service_type === 'codex'
-                    ? t({ ko: 'Codex 실행 #{id}', en: 'Codex run #{id}' }, { id: record.id })
-                    : t({ ko: 'NAI 실행 #{id}', en: 'NAI run #{id}' }, { id: record.id })
-              )
-
-              return (
-                <div key={record.id} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <Badge variant="outline">{getHistoryRecoveryLabel(record, t)}</Badge>
-                      <span className="truncate text-sm font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
-                      {typeof queueJobId === 'number' ? <span className="text-xs text-muted-foreground">#{queueJobId}</span> : null}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{getHistoryRecoveryDetail(record, t)}</div>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="shrink-0"
-                    onClick={() => void handleRetryHistoryRecord(record)}
-                    disabled={isRetryingRunRecovery}
-                    data-no-select-drag="true"
-                  >
-                    <RotateCcw className={cn('h-4 w-4', isRetrying && 'animate-spin')} />
-                    {isRetrying ? t({ ko: '등록 중', en: 'Queueing' }) : t({ ko: '재실행', en: 'Rerun' })}
-                  </Button>
-                </div>
-              )
-            })}
-          </div>
-        </Inset>
+        <GenerationHistoryRecoveryPanel
+          visibleRetryableHistoryRecords={visibleRetryableHistoryRecords}
+          retryingQueueJobIds={retryingQueueJobIds}
+          isRetryingRunRecovery={isRetryingRunRecovery}
+          handleRetryVisibleRecoveryRecords={handleRetryVisibleRecoveryRecords}
+          handleAcknowledgeRunRecovery={handleAcknowledgeRunRecovery}
+          handleRetryHistoryRecord={handleRetryHistoryRecord}
+        />
       ) : null}
 
       <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
