@@ -32,7 +32,7 @@ import {
   PaginationControls,
   TableLoading,
   TagsTable,
-  formatCompactK,
+  formatCompactCount,
   getDefaultExpandedTreeIds,
   getDefaultRelatedTagOptions,
   getLocalizedTreeLabel,
@@ -82,7 +82,7 @@ function DanbooruDatabaseMissingNotice({ database }: { database: DanbooruBrowser
 }
 
 export function PromptDanbooruBrowserPanel() {
-  const { language, t } = useI18n()
+  const { language, t, formatNumber } = useI18n()
   const isDesktopPageLayout = useDesktopPageLayout()
   const [selectedNodeId, setSelectedNodeId] = useState('tags')
   const [searchInput, setSearchInput] = useState('')
@@ -190,12 +190,12 @@ export function PromptDanbooruBrowserPanel() {
     ? t(
       { ko: '표시 {start}-{end} / 전체 {total}', en: 'Showing {start}-{end} / {total}' },
       {
-        start: formatCompactK(pageProgress.start),
-        end: formatCompactK(pageProgress.end),
-        total: formatCompactK(pageProgress.totalCount),
+        start: formatNumber(pageProgress.start),
+        end: formatNumber(pageProgress.end),
+        total: formatCompactCount(pageProgress.totalCount, formatNumber),
       },
     )
-    : t({ ko: '{count}개 표시 가능', en: '{count} available' }, { count: formatCompactK(currentCount) })
+    : t({ ko: '{count}개 표시 가능', en: '{count} available' }, { count: formatCompactCount(currentCount, formatNumber) })
 
   const tagItems = useMemo(() => tagsQuery.data?.items ?? [], [tagsQuery.data?.items])
   const artistItems = useMemo(() => artistsQuery.data?.items ?? [], [artistsQuery.data?.items])
@@ -213,9 +213,9 @@ export function PromptDanbooruBrowserPanel() {
     const hasChildren = (childCountByParentId.get(node.id) ?? 0) > 0
     const countLabel = hasChildren && node.directCount !== undefined
       ? node.directCount === 0
-        ? `(${formatCompactK(node.count)})`
-        : `${formatCompactK(node.directCount)}(${formatCompactK(node.count)})`
-      : formatCompactK(node.count)
+        ? `(${formatCompactCount(node.count, formatNumber)})`
+        : `${formatCompactCount(node.directCount, formatNumber)}(${formatCompactCount(node.count, formatNumber)})`
+      : formatCompactCount(node.count, formatNumber)
 
     return (
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
@@ -223,7 +223,7 @@ export function PromptDanbooruBrowserPanel() {
         <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">{countLabel}</span>
       </div>
     )
-  }, [childCountByParentId, language])
+  }, [childCountByParentId, formatNumber, language])
 
   const sortTreeItems = useCallback((left: DanbooruBrowserTreeNode, right: DanbooruBrowserTreeNode) => {
     const rootOrder: Record<string, number> = { artists: 0, tags: 1, characters: 2 }
@@ -291,7 +291,7 @@ export function PromptDanbooruBrowserPanel() {
     <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
       <ExplorerSidebar
         title="Danbooru DB"
-        badge={<Badge variant="outline">{formatCompactK(summaryQuery.data?.counts.tags ?? 0)}</Badge>}
+        badge={<Badge variant="outline">{formatCompactCount(summaryQuery.data?.counts.tags ?? 0, formatNumber)}</Badge>}
         floatingFrame
         floatingLockStorageKey="conai:prompts:danbooru-sidebar-locked"
         className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}

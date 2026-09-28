@@ -50,11 +50,11 @@ export function getDefaultExpandedTreeIds(section: DanbooruBrowserSection): stri
   return []
 }
 
-export function formatCompactK(value: number): string {
-  if (!Number.isFinite(value)) return '0'
-  if (Math.abs(value) < 1000) return String(value)
-  const formatted = (value / 1000).toFixed(1).replace(/\.0$/, '')
-  return `${formatted}K`
+const COMPACT_COUNT_FORMAT: Intl.NumberFormatOptions = { notation: 'compact', maximumFractionDigits: 1 }
+
+/** Short locale-aware count for dense cells (1.2K, 3.4M / 1.2천, 340만); exact values belong in titles and ranges. */
+export function formatCompactCount(value: number, formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string): string {
+  return formatNumber(Number.isFinite(value) ? value : 0, COMPACT_COUNT_FORMAT)
 }
 
 export function parseRelatedTagScoreInput(value: string): number | undefined {
@@ -139,7 +139,7 @@ export function getRelatedTagLabel(tag: DanbooruBrowserRelatedTagRecord) {
 }
 
 export function PaginationControls({ pagination, visibleCount, onPageChange }: { pagination?: DanbooruBrowserPagination; visibleCount: number; onPageChange: (page: number) => void }) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   if (!pagination || pagination.totalPages <= 1) return null
 
   const progress = resolveDanbooruBrowserProgress({
@@ -152,12 +152,12 @@ export function PaginationControls({ pagination, visibleCount, onPageChange }: {
     ? t(
       { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / {total}' },
       {
-        start: formatCompactK(progress.start),
-        end: formatCompactK(progress.end),
-        total: formatCompactK(progress.totalCount),
+        start: formatNumber(progress.start),
+        end: formatNumber(progress.end),
+        total: formatCompactCount(progress.totalCount, formatNumber),
       },
     )
-    : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatCompactK(progress.totalCount) })
+    : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatCompactCount(progress.totalCount, formatNumber) })
 
   return (
     <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4 text-sm text-muted-foreground">
@@ -211,7 +211,7 @@ export function EmptyTable() {
 }
 
 export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord[]; language: string }) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   if (items.length === 0) return <EmptyTable />
 
   return (
@@ -219,7 +219,7 @@ export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord
       {items.map((item) => (
         <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-high/60">
           <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{getLocalizedGeneralTagLabel(item, language)}</div>
-          <div className="text-right font-mono text-muted-foreground tabular-nums" title={String(item.usageCount)}>{formatCompactK(item.usageCount)}</div>
+          <div className="text-right font-mono text-muted-foreground tabular-nums" title={formatNumber(item.usageCount)}>{formatCompactCount(item.usageCount, formatNumber)}</div>
         </div>
       ))}
     </SettingsResourceTable>
@@ -227,7 +227,7 @@ export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord
 }
 
 export function ArtistsTable({ items, language }: { items: DanbooruBrowserArtistRecord[]; language: string }) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   if (items.length === 0) return <EmptyTable />
 
   return (
@@ -235,7 +235,7 @@ export function ArtistsTable({ items, language }: { items: DanbooruBrowserArtist
       {items.map((item) => (
         <div key={item.tagId} className="grid grid-cols-[minmax(0,1fr)_120px_64px] items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-high/60">
           <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{getLocalizedGeneralTagLabel(item, language)}</div>
-          <div className="text-right font-mono text-muted-foreground tabular-nums" title={String(item.worksCount)}>{formatCompactK(item.worksCount)}</div>
+          <div className="text-right font-mono text-muted-foreground tabular-nums" title={formatNumber(item.worksCount)}>{formatCompactCount(item.worksCount, formatNumber)}</div>
           <div className="flex justify-center"><DanbooruLinkButton href={item.danbooruUrl} label={t({ ko: 'Danbooru에서 {name} 열기', en: 'Open {name} on Danbooru' }, { name: item.name })} /></div>
         </div>
       ))}
@@ -438,7 +438,7 @@ export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruB
 }
 
 export function CharactersTable({ items, language }: { items: DanbooruBrowserCharacterRecord[]; language: string }) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const [translationTarget, setTranslationTarget] = useState<DanbooruBrowserCharacterRecord | null>(null)
   const showTranslationActions = language === 'ko'
   if (items.length === 0) return <EmptyTable />
@@ -464,7 +464,7 @@ export function CharactersTable({ items, language }: { items: DanbooruBrowserCha
           >
             <CharacterImageCell item={item} />
             <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{getLocalizedGeneralTagLabel(item, language)}</div>
-            <div className="pt-0.5 text-left font-mono text-muted-foreground tabular-nums" title={String(item.worksCount)}>{formatCompactK(item.worksCount)}</div>
+            <div className="pt-0.5 text-left font-mono text-muted-foreground tabular-nums" title={formatNumber(item.worksCount)}>{formatCompactCount(item.worksCount, formatNumber)}</div>
             <div className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">
               {item.copyrights.length > 0 ? item.copyrights.map((copyright) => getLocalizedGeneralTagLabel(copyright, language)).join('\n') : '—'}
             </div>
