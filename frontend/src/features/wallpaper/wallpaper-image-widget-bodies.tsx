@@ -557,7 +557,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
     return (
       <div className="flex h-full items-end rounded-sm border border-border/70 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_24%,transparent),transparent_55%),linear-gradient(180deg,transparent,color-mix(in_srgb,var(--primary)_10%,transparent)),var(--surface-low)] p-3">
         <div>
-          <div className="text-xs uppercase tracking-overline text-secondary">{t({ ko: '대표 이미지', en: 'Featured image' })}</div>
+          <div className="text-xs uppercase tracking-overline text-secondary-text">{t({ ko: '대표 이미지', en: 'Featured image' })}</div>
           <div className="text-sm font-medium text-foreground">{t({ ko: '설정에서 쇼케이스용 그룹을 골라.', en: 'Choose a showcase group in settings.' })}</div>
         </div>
       </div>

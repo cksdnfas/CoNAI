@@ -61,7 +61,7 @@ function isTextPreviewEntry(entry: WorkflowArtifactEntry) {
 function ArtifactFileIcon({ entry }: { entry: WorkflowArtifactEntry }) {
   const previewKind = getPreviewKind(entry)
   if (previewKind === 'image') return <ImageIcon className="h-9 w-9 text-info" />
-  if (previewKind === 'video') return <FileVideo className="h-9 w-9 text-secondary" />
+  if (previewKind === 'video') return <FileVideo className="h-9 w-9 text-secondary-text" />
   if (previewKind === 'audio') return <FileAudio className="h-9 w-9 text-success" />
   if (previewKind === 'text') return <FileText className="h-9 w-9 text-warning" />
   return <File className="h-9 w-9 text-muted-foreground" />

@@ -90,14 +90,14 @@ export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
       >
         {!isCompact && showDate ? (
           <div className="flex w-[30%] min-w-[118px] flex-col justify-between border-r border-foreground/15 py-1 pr-4">
-            <span className="text-2xs font-semibold tracking-[0.24em] text-secondary uppercase">CoNAI</span>
+            <span className="text-2xs font-semibold tracking-[0.24em] text-secondary-text uppercase">CoNAI</span>
             <span className="text-pretty font-medium leading-snug text-foreground/72" style={{ fontSize: dateSize }}>{dateText}</span>
           </div>
         ) : null}
         <div className={cn('flex min-w-0 flex-1 flex-col justify-center', !isCompact && 'pl-5')}>
           <div className="flex min-w-0 items-baseline gap-[0.08em] font-medium tracking-[-0.075em] tabular-nums" style={{ fontSize: timeSize, lineHeight: 0.86 }}>
             <span>{time}</span>
-            {showSeconds ? <span className="tracking-[-0.04em] text-secondary" style={{ fontSize: secondSize }}>{formattedTime.second}</span> : null}
+            {showSeconds ? <span className="tracking-[-0.04em] text-secondary-text" style={{ fontSize: secondSize }}>{formattedTime.second}</span> : null}
             {formattedTime.dayPeriod ? <span className="ml-1 tracking-[0.08em] text-foreground/52 uppercase" style={{ fontSize: dateSize }}>{formattedTime.dayPeriod}</span> : null}
           </div>
           {isCompact && showDate ? <div className="mt-2 truncate font-medium text-foreground/60" style={{ fontSize: dateSize }}>{dateText}</div> : null}
@@ -113,7 +113,7 @@ export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
         <div className="pointer-events-none absolute -top-1/2 right-[-8%] aspect-square h-[150%] rounded-full bg-secondary/13 blur-3xl" />
         <div className="relative flex items-baseline gap-[0.1em] font-semibold tracking-[-0.07em] tabular-nums drop-shadow-[0_3px_18px_rgba(0,0,0,0.3)]" style={{ fontSize: timeSize, lineHeight: 0.9 }}>
           <span>{time}</span>
-          {showSeconds ? <span className="text-secondary" style={{ fontSize: secondSize }}>{formattedTime.second}</span> : null}
+          {showSeconds ? <span className="text-secondary-text" style={{ fontSize: secondSize }}>{formattedTime.second}</span> : null}
           {formattedTime.dayPeriod ? <span className="ml-1 tracking-[0.1em] text-white/55 uppercase" style={{ fontSize: dateSize }}>{formattedTime.dayPeriod}</span> : null}
         </div>
         {showDate ? <div className="relative mt-2 truncate font-medium tracking-[0.02em] text-white/66" style={{ fontSize: dateSize }}>{dateText}</div> : null}

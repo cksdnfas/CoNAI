@@ -123,7 +123,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
   const cardContent = (
     <>
       {showTitle ? (
-        <div className={cn('px-3 py-2 text-2xs font-semibold tracking-overline text-secondary uppercase', showBorder ? 'border-b border-border/60' : 'border-b-0')}>{title}</div>
+        <div className={cn('px-3 py-2 text-2xs font-semibold tracking-overline text-secondary-text uppercase', showBorder ? 'border-b border-border/60' : 'border-b-0')}>{title}</div>
       ) : null}
       <div className="min-h-0 flex-1 p-3">
         <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={onOpenImage} />

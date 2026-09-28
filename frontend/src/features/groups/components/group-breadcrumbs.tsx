@@ -36,7 +36,7 @@ export function GroupBreadcrumbs({ items, selectedGroupId, rootLabel, compact = 
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <Folder className="h-4 w-4 shrink-0 text-secondary" />
+        <Folder className="h-4 w-4 shrink-0 text-secondary-text" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{currentItem.name}</span>
       </div>
     )
@@ -45,7 +45,7 @@ export function GroupBreadcrumbs({ items, selectedGroupId, rootLabel, compact = 
   return (
     <nav className="flex min-h-10 items-center gap-1 overflow-x-auto rounded-sm bg-surface-lowest px-3 py-1.5 text-sm text-muted-foreground" aria-label={t({ ko: '그룹 경로', en: 'Group path' })}>
       <Button type="button" variant="ghost" size="sm" onClick={onOpenRoot} className="px-1.5 font-normal">
-        <Folder className="h-4 w-4 text-secondary" />
+        <Folder className="h-4 w-4 text-secondary-text" />
         <span>{rootLabel}</span>
       </Button>
       {items.map((item) => (

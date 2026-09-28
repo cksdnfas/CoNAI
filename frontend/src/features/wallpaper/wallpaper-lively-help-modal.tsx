@@ -30,7 +30,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
       <div className="space-y-5">
         <div className="rounded-sm bg-surface-low p-4">
           <div className="flex items-start gap-3">
-            <Wallpaper className="mt-0.5 h-5 w-5 shrink-0 text-secondary" />
+            <Wallpaper className="mt-0.5 h-5 w-5 shrink-0 text-secondary-text" />
             <div className="space-y-1">
               <div className="font-semibold text-foreground">Lively Wallpaper</div>
               <p className="text-sm leading-6 text-muted-foreground">
@@ -43,7 +43,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
                 href={LIVELY_WALLPAPER_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-secondary hover:underline"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-secondary-text hover:underline"
               >
                 {t({ ko: 'Lively Wallpaper 받기', en: 'Get Lively Wallpaper' })}
                 <ExternalLink className="h-3.5 w-3.5" />
@@ -71,7 +71,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
             },
           ].map(({ icon: Icon, title, body }) => (
             <li key={title} className="rounded-sm bg-surface-low p-3">
-              <Icon className="mb-3 h-4 w-4 text-secondary" />
+              <Icon className="mb-3 h-4 w-4 text-secondary-text" />
               <div className="text-sm font-semibold text-foreground">{title}</div>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">{body}</p>
             </li>
@@ -79,7 +79,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
         </ol>
 
         <div className="space-y-2">
-          <div className="text-xs font-semibold tracking-overline text-secondary uppercase">
+          <div className="text-xs font-semibold tracking-overline text-secondary-text uppercase">
             {t({ ko: '현재 월페이퍼 URL', en: 'Current wallpaper URL' })}
           </div>
           {runtimeUrl ? (
@@ -97,7 +97,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
         </div>
 
         <div className="flex items-start gap-3 rounded-sm bg-surface-low p-3 text-sm text-muted-foreground">
-          <Server className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />
+          <Server className="mt-0.5 h-4 w-4 shrink-0 text-secondary-text" />
           <p className="leading-6">
             {t({
               ko: 'Lively가 URL을 계속 불러올 수 있도록 CoNAI 서버를 실행해 둬야 해. 주소의 호스트나 포트가 바뀌면 Lively에 등록한 URL도 갱신해야 해.',

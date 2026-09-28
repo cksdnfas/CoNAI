@@ -80,7 +80,7 @@ export function SearchSuggestionList({
                 onClick={() => onSelectSuggestion(item)}
                 variant="nav" className={suggestionRowClassName}
               >
-                <span className="truncate text-sm text-secondary">{item.prompt}</span>
+                <span className="truncate text-sm text-secondary-text">{item.prompt}</span>
                 <span className="shrink-0 text-sm text-muted-foreground">{formatNumber(item.usage_count)}</span>
               </Button>
             ))
@@ -145,7 +145,7 @@ export function SearchSuggestionList({
               onClick={() => onSelectMetadataSuggestion(item.value)}
               variant="nav" className={suggestionRowClassName}
             >
-              <span className="truncate text-sm text-secondary">{item.value}</span>
+              <span className="truncate text-sm text-secondary-text">{item.value}</span>
               <span className="shrink-0 text-sm text-muted-foreground">{formatNumber(item.count)}</span>
             </Button>
           ))

@@ -39,7 +39,7 @@ const buttonVariants = cva(
         /** Sidebar / list navigation row. Mark the current row with data-active="true" or aria-current. */
         nav:
           "w-full justify-start text-left font-normal text-muted-foreground hover:bg-surface-high hover:text-foreground in-data-[surface=high]:hover:bg-surface-highest data-[active=true]:bg-primary/12 data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:[&_svg]:text-primary aria-[current=page]:bg-primary/12 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=true]:bg-primary/12 aria-[current=true]:font-medium aria-[current=true]:text-foreground",
-        link: "text-secondary underline-offset-4 hover:underline",
+        link: "text-secondary-text underline-offset-4 hover:underline",
         /**
          * Glass icon buttons in the floating app header (search, queue, account). Chrome lives in
          * `.theme-shell-icon-button` (index.css): translucent low tone, blur, hairline; open/pressed tint with primary.

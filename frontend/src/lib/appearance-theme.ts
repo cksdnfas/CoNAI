@@ -11,10 +11,10 @@ import {
 } from './appearance-presets'
 import {
   ensureDarkerTone,
+  ensureTextContrast,
+  getContrastRatio,
   getContrastTextColor,
-  getRelativeLuminance,
   mixColors,
-  normalizeHexPair,
   resolveThemeMode,
   toAlphaColor,
 } from './appearance-color-utils'
@@ -153,6 +153,12 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     : baseMonoFamily
   const shadowBase = mode === 'light' ? '#6b5146' : '#050505'
 
+  // 작은 보조 텍스트도 모든 면(가장 짙은 surface-highest 포함)에서 4.5:1 이상 읽히게 한다.
+  const textBackgrounds = [surfacePalette.background, surfacePalette.surfaceLow, surfacePalette.surfaceHigh, surfacePalette.surfaceHighest]
+  const mutedForeground = ensureTextContrast(surfacePalette.mutedForeground, textBackgrounds, 4.5, surfacePalette.foreground)
+  // 라이트 모드의 secondary는 채움용 옅은 색이라 글자로 쓰면 안 보인다. 글자용은 primary에서 따로 만든다.
+  const secondaryText = ensureTextContrast(mode === 'light' ? primary : secondary, textBackgrounds, 4.5, surfacePalette.foreground)
+
   return {
     '--radius': RADIUS_PRESETS[appearance.radiusPreset].radius,
     '--background': surfacePalette.background,
@@ -160,7 +166,7 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--card': surfacePalette.card,
     '--card-foreground': surfacePalette.cardForeground,
     '--muted': surfacePalette.muted,
-    '--muted-foreground': surfacePalette.mutedForeground,
+    '--muted-foreground': mutedForeground,
     '--accent': surfacePalette.accent,
     '--accent-foreground': surfacePalette.accentForeground,
     '--border': surfacePalette.border,
@@ -175,6 +181,7 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--primary-foreground': primaryForeground,
     '--secondary': secondary,
     '--secondary-foreground': secondaryForeground,
+    '--secondary-text': secondaryText,
     '--ring': ring,
     '--theme-primary-soft': mixColors(primary, tintBase, 0.82),
     '--theme-secondary-soft': mixColors(secondary, tintBase, secondaryTintRatio),
@@ -224,23 +231,6 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--theme-badge-rating': appearance.ratingBadgeColor,
     '--theme-badge-rating-soft': toAlphaColor(appearance.ratingBadgeColor, 0.14),
   }
-}
-
-export function getContrastRatio(foreground: string, background: string) {
-  const fg = normalizeHexPair(foreground)
-  const bg = normalizeHexPair(background)
-  if (!fg || !bg) {
-    return null
-  }
-
-  const luminance = (color: { r: number; g: number; b: number }) =>
-    0.2126 * getRelativeLuminance(color.r) +
-    0.7152 * getRelativeLuminance(color.g) +
-    0.0722 * getRelativeLuminance(color.b)
-
-  const lighter = Math.max(luminance(fg), luminance(bg))
-  const darker = Math.min(luminance(fg), luminance(bg))
-  return (lighter + 0.05) / (darker + 0.05)
 }
 
 export function getAppearanceContrastIssues(appearance: AppearanceThemeSettings): AppearanceContrastIssue[] {

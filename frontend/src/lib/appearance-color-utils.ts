@@ -108,3 +108,33 @@ export function ensureDarkerTone(base: string, color: string, minStep: number, t
 
   return mixColors(base, toward, high)
 }
+
+function getColorLuminance(color: string) {
+  const value = normalizeHexPair(color)
+  if (!value) return null
+  return 0.2126 * getRelativeLuminance(value.r) + 0.7152 * getRelativeLuminance(value.g) + 0.0722 * getRelativeLuminance(value.b)
+}
+
+/** WCAG contrast ratio between two #rrggbb colours; null when either is not a hex colour. */
+export function getContrastRatio(colorA: string, colorB: string) {
+  const a = getColorLuminance(colorA)
+  const b = getColorLuminance(colorB)
+  if (a === null || b === null) return null
+  const [lighter, darker] = a > b ? [a, b] : [b, a]
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+/**
+ * Mix `color` toward `toward` just far enough to reach `minRatio` contrast on every given background.
+ * Custom themes can pick any accent/muted colour, so text tokens get a readability floor here.
+ */
+export function ensureTextContrast(color: string, backgrounds: string[], minRatio: number, toward: string) {
+  const meets = (candidate: string) => backgrounds.every((background) => (getContrastRatio(candidate, background) ?? minRatio) >= minRatio)
+  if (meets(color)) return color
+
+  for (let step = 1; step <= 20; step += 1) {
+    const candidate = mixColors(color, toward, step / 20)
+    if (meets(candidate)) return candidate
+  }
+  return toward
+}

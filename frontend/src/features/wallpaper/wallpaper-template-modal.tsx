@@ -32,7 +32,7 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
               <div className="p-4">
                 <div className="font-semibold text-foreground">{t(template.name)}</div>
                 <p className="mt-1 text-sm leading-5 text-muted-foreground">{t(template.description)}</p>
-                <span className="mt-3 inline-block text-sm font-medium text-secondary group-hover:underline underline-offset-4">
+                <span className="mt-3 inline-block text-sm font-medium text-secondary-text group-hover:underline underline-offset-4">
                   {t({ ko: '이 템플릿 사용', en: 'Use this template' })}
                 </span>
               </div>

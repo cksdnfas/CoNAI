@@ -149,7 +149,7 @@ export const SURFACE_PRESETS: Record<Exclude<SurfacePreset, 'custom'>, SurfacePr
         card: '#ffffff',
         cardForeground: '#241814',
         muted: '#efe6e2',
-        mutedForeground: '#7b5f55',
+        mutedForeground: '#6b5048',
         accent: '#f7ece8',
         accentForeground: '#241814',
         border: 'rgb(90 65 56 / 0.12)',

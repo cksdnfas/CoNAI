@@ -459,7 +459,7 @@ export function WallpaperEditorPage() {
         title={t({ ko: '월페이퍼 스튜디오', en: 'Wallpaper Studio' })}
         titleAccessory={(
           <Badge variant="secondary" className="normal-case tracking-normal">
-            {activePreset && !hasUnsavedPresetChanges ? <Check className="text-secondary" /> : null}
+            {activePreset && !hasUnsavedPresetChanges ? <Check className="text-secondary-text" /> : null}
             {!activePreset
               ? t({ ko: '초안', en: 'Draft' })
               : hasUnsavedPresetChanges
@@ -563,7 +563,7 @@ export function WallpaperEditorPage() {
             className="h-auto rounded-none bg-surface-lowest px-4 py-2 text-xs"
             onClick={() => void handleCopyRuntimeUrl()}
           >
-            <ClipboardCopy className="h-3.5 w-3.5 shrink-0 text-secondary" />
+            <ClipboardCopy className="h-3.5 w-3.5 shrink-0 text-secondary-text" />
             <span className="shrink-0 font-medium">{t({ ko: 'Lively URL', en: 'Lively URL' })}</span>
             <span className="min-w-0 flex-1 truncate font-mono text-2xs">{activePresetRuntimeUrl}</span>
             <span className="shrink-0">{t({ ko: '복사', en: 'Copy' })}</span>
