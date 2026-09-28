@@ -24,7 +24,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
       title={t({ ko: 'Lively Wallpaper 연결 도움말', en: 'Connect with Lively Wallpaper' })}
     >
       <div className="space-y-5">
-        <div className="flex items-center gap-3 rounded-sm bg-surface-low p-3">
+        <div className="flex items-center gap-3 border-b border-line pb-3">
           <Wallpaper className="h-5 w-5 shrink-0 text-secondary-text" />
           <div className="min-w-0 flex-1 font-semibold text-foreground">Lively Wallpaper</div>
           <a
@@ -38,7 +38,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
           </a>
         </div>
 
-        <ol className="grid gap-3 sm:grid-cols-3">
+        <ol className="grid gap-5 sm:grid-cols-3">
           {[
             {
               icon: MonitorPlay,
@@ -56,7 +56,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
               body: t({ ko: 'Lively의 월페이퍼 추가에서 웹 페이지를 선택하고 URL을 붙여 넣어.', en: 'In Lively, add a wallpaper, choose Web Page, and paste the URL.' }),
             },
           ].map(({ icon: Icon, title, body }) => (
-            <li key={title} className="rounded-sm bg-surface-low p-3">
+            <li key={title}>
               <Icon className="mb-3 h-4 w-4 text-secondary-text" />
               <div className="text-sm font-semibold text-foreground">{title}</div>
               {body ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{body}</p> : null}
@@ -73,7 +73,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
           </div>
         ) : null}
 
-        <div className="flex items-start gap-3 rounded-sm bg-surface-low p-3 text-sm text-muted-foreground">
+        <div className="flex items-start gap-3 border-t border-line pt-4 text-sm text-muted-foreground">
           <Server className="mt-0.5 h-4 w-4 shrink-0 text-secondary-text" />
           <p className="leading-6">
             {t({

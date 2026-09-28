@@ -344,7 +344,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
       ref={canvasRef}
       className={cn(
         'relative overflow-hidden bg-background',
-        isRuntimeMode ? 'mx-auto' : 'mx-auto w-full rounded-sm border border-border/80',
+        isRuntimeMode ? 'mx-auto' : 'mx-auto w-full rounded-sm border border-line',
       )}
       style={isRuntimeMode
         ? {
@@ -490,8 +490,8 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
   }
 
   return (
-    <div className="rounded-sm border border-border bg-surface-low p-3 sm:p-4">
-      <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+    <div className="min-w-0">
+      <div className="mb-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
         {editorHeader ?? (
           <>
             <span>{canvasPreset.name}</span>

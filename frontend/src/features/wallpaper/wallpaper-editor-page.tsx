@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, Maximize2, Minimize2, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { PageHeader } from '@/components/common/page-header'
-import { Badge } from '@/components/ui/badge'
+import { PageToolbar } from '@/components/common/page-toolbar'
+import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Field } from '@/components/ui/field'
-import { Heading } from '@/components/ui/heading'
-import { Panel } from '@/components/ui/panel'
-import { Tip } from '@/components/ui/tooltip'
+import { RowGroup } from '@/components/ui/row-group'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -122,7 +119,6 @@ export function WallpaperEditorPage() {
   const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null)
   const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null)
   const isCoarsePointer = useIsCoarsePointer()
-  const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false)
   const [selectedLibraryWidgetType, setSelectedLibraryWidgetType] = useState<WallpaperWidgetType | null>(null)
   const [isLivelyHelpOpen, setIsLivelyHelpOpen] = useState(false)
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
@@ -453,114 +449,102 @@ export function WallpaperEditorPage() {
     syncWallpaperPresetState(savedPresets, null)
   }
 
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        title={t({ ko: '월페이퍼 스튜디오', en: 'Wallpaper Studio' })}
-        titleAccessory={activePreset && hasUnsavedPresetChanges ? (
-          <Badge variant="secondary" className="normal-case tracking-normal">
-            {t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })}
-          </Badge>
-        ) : null}
-        actions={(
-          <>
-            <div className="flex items-center gap-1">
-              <IconButton variant="ghost" size="icon-sm" onClick={() => setIsTemplateModalOpen(true)} label={t({ ko: '템플릿', en: 'Templates' })}>
-                <LayoutTemplate className="h-4 w-4" />
-              </IconButton>
-              <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '미리보기', en: 'Preview' })}>
-                <a href={draftRuntimePath} target="_blank" rel="noreferrer">
-                  <Eye className="h-4 w-4" />
-                </a>
-              </IconButton>
-              <IconButton variant="ghost" size="icon-sm" disabled={!canUndo} onClick={undoLayoutEdit} label={t({ ko: '실행 취소 (Ctrl+Z)', en: 'Undo (Ctrl+Z)' })}>
-                <Undo2 className="h-4 w-4" />
-              </IconButton>
-              <IconButton variant="ghost" size="icon-sm" disabled={!canRedo} onClick={redoLayoutEdit} label={t({ ko: '다시 실행 (Ctrl+Shift+Z)', en: 'Redo (Ctrl+Shift+Z)' })}>
-                <Redo2 className="h-4 w-4" />
-              </IconButton>
-            </div>
-            <Button size="sm" disabled={wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()}>
-              <Save className="h-4 w-4" />
-              {t({ ko: '저장', en: 'Save' })}
-            </Button>
-            <IconButton
-              ref={workspaceMenuAnchorRef}
-              variant="ghost"
-              size="icon-sm"
-              label={t({ ko: '더 많은 작업', en: 'More actions' })}
-              onClick={() => setIsWorkspaceMenuOpen((current) => !current)}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </IconButton>
-            <IconButton
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setIsLivelyHelpOpen(true)}
-              label={t({ ko: 'Lively 연결 도움말', en: 'Lively connection help' })}
-            >
-              <HelpCircle className="h-4 w-4" />
-            </IconButton>
-          </>
-        )}
+  const unsavedLabel = t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
+  const toolbar = (
+    <PageToolbar
+      start={(
+        <Select
+          aria-label={t({ ko: '프리셋', en: 'Preset' })}
+          className="h-8 w-44 sm:w-52"
+          value={effectiveActivePresetId ?? '__new__'}
+          onChange={(event) => {
+            void handleLoadPreset(event.target.value === '__new__' ? null : event.target.value)
+          }}
+        >
+          <option value="__new__" hidden>{t({ ko: '미저장 새 캔버스', en: 'Unsaved new canvas' })}</option>
+          {savedPresets.map((preset) => (
+            <option key={preset.id} value={preset.id}>{preset.name}</option>
+          ))}
+        </Select>
+      )}
+      actions={(
+        <>
+          <IconButton variant="ghost" size="icon-sm" onClick={() => setIsTemplateModalOpen(true)} label={t({ ko: '템플릿', en: 'Templates' })}>
+            <LayoutTemplate />
+          </IconButton>
+          <IconButton variant="ghost" size="icon-sm" disabled={!canUndo} onClick={undoLayoutEdit} label={t({ ko: '실행 취소 (Ctrl+Z)', en: 'Undo (Ctrl+Z)' })}>
+            <Undo2 />
+          </IconButton>
+          <IconButton variant="ghost" size="icon-sm" disabled={!canRedo} onClick={redoLayoutEdit} label={t({ ko: '다시 실행 (Ctrl+Shift+Z)', en: 'Redo (Ctrl+Shift+Z)' })}>
+            <Redo2 />
+          </IconButton>
+          <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '미리보기', en: 'Preview' })}>
+            <a href={draftRuntimePath} target="_blank" rel="noreferrer">
+              <Eye />
+            </a>
+          </IconButton>
+          <IconButton
+            ref={workspaceMenuAnchorRef}
+            variant="ghost"
+            size="icon-sm"
+            label={t({ ko: '더 많은 작업', en: 'More actions' })}
+            aria-expanded={isWorkspaceMenuOpen}
+            onClick={() => setIsWorkspaceMenuOpen((current) => !current)}
+          >
+            <MoreHorizontal />
+          </IconButton>
+          <IconButton variant="ghost" size="icon-sm" onClick={() => setIsLivelyHelpOpen(true)} label={t({ ko: 'Lively 연결 도움말', en: 'Lively connection help' })}>
+            <HelpCircle />
+          </IconButton>
+          {activePreset && hasUnsavedPresetChanges ? (
+            <span className="ml-1 size-2 shrink-0 rounded-full bg-primary" role="status" aria-label={unsavedLabel} title={unsavedLabel} />
+          ) : null}
+          <Button size="sm" className="ml-1" disabled={wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()}>
+            <Save />
+            {t({ ko: '저장', en: 'Save' })}
+          </Button>
+        </>
+      )}
+    >
+      <Input
+        aria-label={t({ ko: '이름', en: 'Name' })}
+        placeholder={t({ ko: '이름', en: 'Name' })}
+        className="h-8 min-w-0 flex-1 sm:max-w-64"
+        value={layoutPreset.name}
+        onChange={(event) => {
+          const name = event.target.value
+          setLayoutPreset((current) => ({
+            ...current,
+            name,
+            updatedAt: new Date().toISOString(),
+          }), { coalesceKey: 'name' })
+        }}
       />
+      <Select
+        aria-label={t({ ko: '캔버스', en: 'Canvas' })}
+        className="h-8 w-40 shrink-0"
+        value={layoutPreset.canvasPresetId}
+        onChange={(event) => handleChangeCanvasPreset(event.target.value)}
+      >
+        {listWallpaperCanvasPresets().map((preset) => (
+          <option key={preset.id} value={preset.id}>{preset.name} · {preset.aspectRatioLabel}</option>
+        ))}
+      </Select>
+    </PageToolbar>
+  )
 
-      <Panel tone="low" padding="none" className="overflow-hidden">
-        <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(190px,0.75fr)_minmax(220px,1.15fr)_minmax(190px,0.7fr)] lg:items-end">
-          <Field label={t({ ko: '프리셋', en: 'Preset' })}>
-            <Select
-              value={effectiveActivePresetId ?? '__new__'}
-              onChange={(event) => {
-                void handleLoadPreset(event.target.value === '__new__' ? null : event.target.value)
-              }}
-            >
-              <option value="__new__" hidden>{t({ ko: '미저장 새 캔버스', en: 'Unsaved new canvas' })}</option>
-              {savedPresets.map((preset) => (
-                <option key={preset.id} value={preset.id}>{preset.name}</option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label={t({ ko: '이름', en: 'Name' })}>
-            <Input
-              variant="settings"
-              value={layoutPreset.name}
-              onChange={(event) => {
-                const name = event.target.value
-                setLayoutPreset((current) => ({
-                  ...current,
-                  name,
-                  updatedAt: new Date().toISOString(),
-                }), { coalesceKey: 'name' })
-              }}
-            />
-          </Field>
-          <Field label={t({ ko: '캔버스', en: 'Canvas' })}>
-            <Select value={layoutPreset.canvasPresetId} onChange={(event) => handleChangeCanvasPreset(event.target.value)}>
-              {listWallpaperCanvasPresets().map((preset) => (
-                <option key={preset.id} value={preset.id}>{preset.name} · {preset.aspectRatioLabel}</option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-
-        {activePresetRuntimePath ? (
-          <Tip content={t({ ko: 'Lively URL 복사', en: 'Copy Lively URL' })}>
-            <Button
-              type="button"
-              variant="nav"
-              size="sm"
-              className="h-auto rounded-none bg-surface-lowest px-4 py-2 text-xs"
-              onClick={() => void handleCopyRuntimeUrl()}
-            >
-              <ClipboardCopy className="h-3.5 w-3.5 shrink-0 text-secondary-text" />
-              <span className="shrink-0 font-medium">{t({ ko: 'Lively URL', en: 'Lively URL' })}</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-2xs">{activePresetRuntimeUrl}</span>
-            </Button>
-          </Tip>
-        ) : null}
-      </Panel>
-
+  return (
+    <PageWithSidebar
+      storageKey="wallpaper"
+      sidebar={(
+        <WallpaperWidgetLibrarySidebar
+          selectedWidgetType={selectedLibraryWidgetType}
+          onAddWidget={handleAddWidget}
+        />
+      )}
+      sidebarLabel={t({ ko: '위젯 라이브러리', en: 'Widget library' })}
+      toolbar={toolbar}
+    >
       <AnchoredPopup
         open={isWorkspaceMenuOpen}
         anchorRef={workspaceMenuAnchorRef}
@@ -591,45 +575,23 @@ export function WallpaperEditorPage() {
         ))}
       </AnchoredPopup>
 
-      <div className={isCanvasFocusMode ? 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_310px]' : 'grid gap-4 xl:grid-cols-[250px_minmax(0,1fr)_310px]'}>
-        {!isCanvasFocusMode ? (
-          <WallpaperWidgetLibrarySidebar
-            selectedWidgetType={selectedLibraryWidgetType}
-            onAddWidget={handleAddWidget}
-          />
-        ) : null}
-
-        <div className="min-w-0 space-y-3">
+      <div className="grid gap-8 pt-2 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-0">
+        <div className="min-w-0 space-y-8 xl:pr-8">
           <WallpaperCanvasView
             canvasPreset={canvasPreset}
             layoutPreset={layoutPreset}
             mode="editor"
             selectedWidgetId={effectiveSelectedWidgetId}
-            editorHeader={(
-              <div className="flex w-full items-center justify-end">
-                <IconButton
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setIsCanvasFocusMode((current) => !current)}
-                  label={isCanvasFocusMode
-                    ? t({ ko: '집중 보기 종료', en: 'Exit focus view' })
-                    : t({ ko: '캔버스 집중 보기', en: 'Focus canvas' })}
-                >
-                  {isCanvasFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                </IconButton>
-              </div>
-            )}
             onSelectWidget={setSelectedWidgetId}
             onUpdateWidgetFrame={(widgetId, patch) => {
               setLayoutPreset((current) => patchSelectedWidget(current, widgetId, patch))
             }}
           />
 
-          <Panel asChild tone="low" stack>
-            <section>
-            <div className="flex items-center justify-between gap-2">
-              <Heading level={3}>{t({ ko: '선택 위젯 컨트롤', en: 'Selected widget controls' })}</Heading>
-              {selectedWidget ? (
+          <RowGroup
+            heading={t({ ko: '선택 위젯 컨트롤', en: 'Selected widget controls' })}
+            bodyClassName="space-y-3 pt-1"
+            actions={selectedWidget ? (
                 <IconButton
                   variant="ghost"
                   size="icon-sm"
@@ -640,14 +602,13 @@ export function WallpaperEditorPage() {
                     notifyInfo(t({ ko: '위젯을 삭제했어. 실행 취소(Ctrl+Z)로 되돌릴 수 있어.', en: 'Widget deleted. Undo (Ctrl+Z) brings it back.' }))
                   }}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 />
                 </IconButton>
-              ) : null}
-            </div>
-
+            ) : null}
+          >
             {selectedWidget ? (
               <>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-sm bg-surface-lowest px-3 py-2 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
                   {[
                     ['X', selectedWidget.x],
                     ['Y', selectedWidget.y],
@@ -689,24 +650,20 @@ export function WallpaperEditorPage() {
             ) : (
               <EmptyState size="compact" title={t({ ko: '위젯을 선택해.', en: 'Select a widget.' })} />
             )}
-            </section>
-          </Panel>
+          </RowGroup>
 
-          <Panel asChild tone="low" stack>
-            <section>
-            <Heading level={3}>{t({ ko: '위젯 순서', en: 'Widget order' })}</Heading>
-
+          <RowGroup heading={t({ ko: '위젯 순서', en: 'Widget order' })}>
             {orderedWidgets.length === 0 ? (
               <EmptyState size="compact" title={t({ ko: '아직 추가된 위젯이 없어.', en: 'No widgets added yet.' })} />
             ) : (
-              <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
+              <div className="max-h-[320px] overflow-auto pr-1">
                 {orderedWidgets.map((widget, index) => {
                   const isSelected = effectiveSelectedWidgetId === widget.id
                   const isDragOver = dragOverWidgetId === widget.id && draggedWidgetId !== widget.id
                   return (
                     <div
                       key={widget.id}
-                      className={`flex w-full items-center gap-1 rounded-sm pr-2 transition-colors ${isSelected ? 'bg-primary/12' : 'bg-surface-lowest'} ${isDragOver ? 'ring-1 ring-primary/60' : ''}`}
+                      className={`flex w-full items-center gap-1 border-b border-line pr-2 transition-colors last:border-b-0 ${isSelected ? 'bg-primary/8' : ''} ${isDragOver ? 'ring-1 ring-inset ring-primary/60' : ''}`}
                       draggable={!isCoarsePointer}
                       onDragStart={() => {
                         if (isCoarsePointer) {
@@ -739,7 +696,7 @@ export function WallpaperEditorPage() {
                       <Button
                         type="button"
                         variant="nav"
-                        className="h-auto min-w-0 flex-1 gap-3 px-3 py-2"
+                        className="h-auto min-w-0 flex-1 gap-3 rounded-none px-2 py-2"
                         aria-current={isSelected ? 'true' : undefined}
                         onClick={() => setSelectedWidgetId(widget.id)}
                       >
@@ -753,7 +710,7 @@ export function WallpaperEditorPage() {
                         {isCoarsePointer ? (
                           <>
                             <IconButton
-                              variant="subtle"
+                              variant="ghost"
                               size="icon-sm"
                               className="touch-none"
                               label={t({ ko: '앞으로 이동', en: 'Move forward' })}
@@ -768,7 +725,7 @@ export function WallpaperEditorPage() {
                               <ArrowUp className="h-4 w-4" />
                             </IconButton>
                             <IconButton
-                              variant="subtle"
+                              variant="ghost"
                               size="icon-sm"
                               className="touch-none"
                               label={t({ ko: '뒤로 이동', en: 'Move backward' })}
@@ -792,14 +749,17 @@ export function WallpaperEditorPage() {
                 })}
               </div>
             )}
-            </section>
-          </Panel>
+          </RowGroup>
         </div>
 
-        <section data-surface="raised" className="self-start space-y-4 overflow-y-auto rounded-sm bg-surface-low p-4 xl:sticky xl:top-24 xl:max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]">
+        {/* Inspector: a right column split from the canvas by one hairline (stacks under it below xl). */}
+        <aside
+          aria-label={t({ ko: '위젯 설정', en: 'Widget settings' })}
+          className="min-w-0 space-y-4 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-y-auto xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6"
+        >
           <div>
-            <Heading level={3}>{t({ ko: '위젯 설정', en: 'Widget settings' })}</Heading>
-            {selectedWidget ? <div className="mt-1 truncate text-xs text-muted-foreground">{getWallpaperWidgetDisplayTitle(selectedWidget, t)}</div> : null}
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">{t({ ko: '위젯 설정', en: 'Widget settings' })}</h2>
+            {selectedWidget ? <div className="mt-0.5 truncate text-xs text-muted-foreground">{getWallpaperWidgetDisplayTitle(selectedWidget, t)}</div> : null}
           </div>
 
           <WallpaperWidgetInspector
@@ -809,7 +769,7 @@ export function WallpaperEditorPage() {
               setLayoutPreset((current) => patchSelectedWidget(current, widgetId, patch), { coalesceKey: `settings:${widgetId}` })
             }}
           />
-        </section>
+        </aside>
       </div>
 
       <WallpaperLivelyHelpModal
@@ -823,6 +783,6 @@ export function WallpaperEditorPage() {
         onClose={() => setIsTemplateModalOpen(false)}
         onApply={handleApplyTemplate}
       />
-    </div>
+    </PageWithSidebar>
   )
 }

@@ -1,10 +1,9 @@
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState, type MouseEvent } from 'react'
 import {
   BarChart3,
   ChevronDown,
   ChevronRight,
   Clock3,
-  Folder,
   Grid2x2,
   ImageIcon,
   Images,
@@ -13,11 +12,9 @@ import {
   Search,
   Type,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
-import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
+import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 import { listWallpaperWidgetDefinitions } from './wallpaper-widget-registry'
 import { getWallpaperWidgetLibrarySearchSummary, type WallpaperWidgetLibraryFolderId } from './wallpaper-widget-library-search'
@@ -77,39 +74,34 @@ const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder(
   onToggleFolder,
   t,
 }: WallpaperWidgetLibraryFolderProps) {
-  const handleToggleFolder = useCallback(() => onToggleFolder(folder.id), [folder.id, onToggleFolder])
+  const handleToggleFolder = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    // Only expand / collapse: keep the mobile drawer open.
+    event.preventDefault()
+    onToggleFolder(folder.id)
+  }, [folder.id, onToggleFolder])
 
   return (
-    <div className="space-y-1">
-      <Button type="button" variant="nav" aria-expanded={isExpanded} onClick={handleToggleFolder} className="gap-2 px-2">
-        {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
-        <Folder className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{t(folder.title)}</span>
-      </Button>
+    <>
+      <SidebarItem
+        icon={isExpanded ? ChevronDown : ChevronRight}
+        label={t(folder.title)}
+        aria-expanded={isExpanded}
+        onClick={handleToggleFolder}
+        className="font-medium text-foreground"
+      />
 
-      {isExpanded ? (
-        <div className="space-y-1 pl-6">
-          {folder.widgets.map((widget) => {
-            const Icon = getWallpaperWidgetIcon(widget.type)
-            const isSelected = selectedWidgetType === widget.type
-            return (
-              <Button
-                key={widget.type}
-                type="button"
-                variant="nav"
-                data-active={isSelected}
-                onClick={() => onAddWidget(widget.type)}
-                className="gap-2"
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-foreground">{t(widget.title)}</span>
-                <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </Button>
-            )
-          })}
-        </div>
-      ) : null}
-    </div>
+      {isExpanded ? folder.widgets.map((widget) => (
+        <SidebarItem
+          key={widget.type}
+          icon={getWallpaperWidgetIcon(widget.type)}
+          label={t(widget.title)}
+          depth={1}
+          active={selectedWidgetType === widget.type}
+          onClick={() => onAddWidget(widget.type)}
+          trailing={<Plus className="size-3.5 text-muted-foreground" aria-hidden />}
+        />
+      )) : null}
+    </>
   )
 })
 
@@ -140,49 +132,39 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
   }, [])
 
   return (
-    <ExplorerSidebar
-      title={t({ ko: '위젯 라이브러리', en: 'Widget library' })}
-      badge={searchSummary.hasSearch ? (
-        <Badge
-          variant="outline"
-          title={t({ ko: `검색 결과 ${searchSummary.visibleWidgetCount} / 전체 ${searchSummary.totalWidgetCount}`, en: `${searchSummary.visibleWidgetCount} / ${searchSummary.totalWidgetCount} matching widgets` })}
-        >
-          {searchSummary.badgeText}
-        </Badge>
-      ) : null}
-      floatingFrame
-      floatingLockStorageKey="conai:wallpaper:widget-library-sidebar-locked"
-      className="sticky top-24 z-20 isolate self-start max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]"
-      bodyClassName="space-y-1 overflow-y-auto pr-1"
-      headerExtra={
-        <div className="space-y-3 border-b border-white/5 pb-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder={t({ ko: '위젯 검색', en: 'Search widgets' })}
-              className="h-8 pl-9 text-sm"
-            />
-          </div>
-        </div>
-      }
-    >
-      {searchSummary.visibleFolders.map((folder) => (
-        <WallpaperWidgetLibraryFolder
-          key={folder.id}
-          folder={folder}
-          isExpanded={searchSummary.hasSearch ? true : !collapsedFolderIdSet.has(folder.id)}
-          selectedWidgetType={selectedWidgetType}
-          onAddWidget={onAddWidget}
-          onToggleFolder={toggleFolder}
-          t={t}
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={t({ ko: '위젯 검색', en: 'Search widgets' })}
+          aria-label={t({ ko: '위젯 검색', en: 'Search widgets' })}
+          className="h-8 pl-8 text-xs"
         />
-      ))}
+      </div>
+
+      <SidebarNav aria-label={t({ ko: '위젯 라이브러리', en: 'Widget library' })}>
+        {searchSummary.hasSearch ? (
+          <SidebarGroupLabel>{searchSummary.badgeText}</SidebarGroupLabel>
+        ) : null}
+        {searchSummary.visibleFolders.map((folder) => (
+          <WallpaperWidgetLibraryFolder
+            key={folder.id}
+            folder={folder}
+            isExpanded={searchSummary.hasSearch ? true : !collapsedFolderIdSet.has(folder.id)}
+            selectedWidgetType={selectedWidgetType}
+            onAddWidget={onAddWidget}
+            onToggleFolder={toggleFolder}
+            t={t}
+          />
+        ))}
+      </SidebarNav>
 
       {!hasVisibleWidgets ? (
         <EmptyState size="compact" title={t({ ko: '검색 결과가 없어', en: 'No matching widgets' })} />
       ) : null}
-    </ExplorerSidebar>
+    </div>
   )
 }

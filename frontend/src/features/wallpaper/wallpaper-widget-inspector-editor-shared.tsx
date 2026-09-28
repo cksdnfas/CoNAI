@@ -127,14 +127,14 @@ function renderWallpaperAnimationEditorCard({
   children: ReactNode
 }) {
   return (
-    <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-      <div className="mb-2 text-xs font-semibold tracking-overline text-muted-foreground uppercase">{title}</div>
+    <div className="space-y-2 py-1">
+      <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{title}</div>
       {children}
     </div>
   )
 }
 
-/** Render one card-like section inside the wallpaper widget inspector. */
+/** Render one flat inspector section: a heading over its fields, split from the previous section by a hairline. */
 export function WallpaperInspectorSectionCard({
   title,
   children,
@@ -146,7 +146,7 @@ export function WallpaperInspectorSectionCard({
   className?: string
 }) {
   return (
-    <section className={cn('space-y-3 rounded-sm bg-surface-lowest p-3', className)}>
+    <section className={cn('space-y-3 border-t border-line pt-4 first:border-t-0 first:pt-0', className)}>
       <Text as="div" variant="title">{title}</Text>
       {children}
     </section>
@@ -167,13 +167,13 @@ export function WallpaperInspectorDisclosure({
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="rounded-sm bg-surface-lowest">
+    <div>
       <Button
         type="button"
         variant="nav"
         size="sm"
         aria-expanded={open}
-        className="justify-between px-3"
+        className="-mx-2 w-[calc(100%+1rem)] justify-between px-2"
         onClick={() => {
           setOpen((current) => !current)
         }}
@@ -182,7 +182,7 @@ export function WallpaperInspectorDisclosure({
         <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open ? 'rotate-180' : undefined)} />
       </Button>
 
-      {open ? <div className="space-y-2 px-3 pb-3 pt-1">{children}</div> : null}
+      {open ? <div className="space-y-2 pb-2 pt-1">{children}</div> : null}
     </div>
   )
 }
