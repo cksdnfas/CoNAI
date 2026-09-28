@@ -128,11 +128,6 @@ export function getLocalizedTreeLabel(node: Pick<DanbooruBrowserTreeNode, 'id' |
   return node.label
 }
 
-export function getSectionTitle(node: DanbooruBrowserSelectedNode, language: string) {
-  if (node.id === node.section) return getLocalizedTreeLabel(node, language)
-  return getLocalizedTreeLabel(node, language)
-}
-
 type LocalizedDanbooruName = Pick<DanbooruBrowserTagRecord | DanbooruBrowserRelatedTagRecord | DanbooruBrowserArtistRecord | DanbooruBrowserCharacterRecord | DanbooruBrowserCopyrightRecord, 'displayName' | 'translatedName'>
 
 export function getLocalizedGeneralTagLabel(tag: LocalizedDanbooruName, language: string) {
@@ -165,7 +160,7 @@ export function PaginationControls({ pagination, visibleCount, onPageChange }: {
     : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatCompactCount(progress.totalCount, formatNumber) })
 
   return (
-    <div className="flex items-center justify-between gap-3 pt-2 text-sm text-muted-foreground">
+    <div className="flex items-center justify-between gap-3 pt-2 text-xs text-muted-foreground">
       <span>
         {t({ ko: '페이지 {page} / {totalPages} · {progress}', en: 'page {page} / {totalPages} · {progress}' }, {
           page: pagination.page,
@@ -173,11 +168,11 @@ export function PaginationControls({ pagination, visibleCount, onPageChange }: {
           progress: progressLabel,
         })}
       </span>
-      <div className="flex gap-2">
-        <IconButton size="icon-sm" variant="secondary" disabled={pagination.page <= 1} onClick={() => onPageChange(Math.max(1, pagination.page - 1))} label={t({ ko: '이전', en: 'Previous' })}>
+      <div className="flex gap-1">
+        <IconButton size="icon-sm" variant="ghost" disabled={pagination.page <= 1} onClick={() => onPageChange(Math.max(1, pagination.page - 1))} label={t({ ko: '이전', en: 'Previous' })}>
           <ChevronLeft />
         </IconButton>
-        <IconButton size="icon-sm" variant="secondary" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange(pagination.page + 1)} label={t({ ko: '다음', en: 'Next' })}>
+        <IconButton size="icon-sm" variant="ghost" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange(pagination.page + 1)} label={t({ ko: '다음', en: 'Next' })}>
           <ChevronRight />
         </IconButton>
       </div>
@@ -197,9 +192,11 @@ export function DanbooruLinkButton({ href, label }: { href: string; label: strin
 
 export function TableLoading({ columns = 3 }: { columns?: number }) {
   return (
-    <div className="space-y-2 rounded-sm bg-surface-low p-3">
+    <div>
       {Array.from({ length: 8 }).map((_, index) => (
-        <Skeleton key={`${columns}-${index}`} className="h-10 w-full rounded-sm" />
+        <div key={`${columns}-${index}`} className="flex min-h-11 items-center border-b border-line last:border-b-0">
+          <Skeleton className="h-4 w-full max-w-md rounded-sm" />
+        </div>
       ))}
     </div>
   )
@@ -461,7 +458,7 @@ export function CharactersTable({ items, language }: { items: DanbooruBrowserCha
             </div>
             <div className="flex justify-center gap-1">
               {showTranslationActions && item.relatedTags.length > 0 ? (
-                <IconButton size="icon-sm" variant="secondary" onClick={() => setTranslationTarget(item)} label={t({ ko: 'Related tags 번역', en: 'Translate related tags' })}>
+                <IconButton size="icon-sm" variant="ghost" onClick={() => setTranslationTarget(item)} label={t({ ko: 'Related tags 번역', en: 'Translate related tags' })}>
                   <Languages className="h-4 w-4" />
                 </IconButton>
               ) : null}

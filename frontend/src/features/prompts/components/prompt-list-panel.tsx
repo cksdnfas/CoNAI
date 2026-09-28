@@ -29,6 +29,7 @@ interface PromptListPanelProps {
   onActivatePrompt: (item: PromptCollectionItem) => void
   isLockedPromptItem: (item: PromptCollectionItem) => boolean
   canDeletePromptItem: (item: PromptCollectionItem) => boolean
+  getGroupName?: (item: PromptCollectionItem) => string | null | undefined
 }
 
 export function PromptListPanel({
@@ -51,6 +52,7 @@ export function PromptListPanel({
   onActivatePrompt,
   isLockedPromptItem,
   canDeletePromptItem,
+  getGroupName,
 }: PromptListPanelProps) {
   const { t, formatNumber } = useI18n()
   const progress = resolvePromptListProgress({ page, pageSize: limit, visibleCount: items.length, totalCount: total })
@@ -66,9 +68,9 @@ export function PromptListPanel({
     : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatNumber(progress.totalCount) })
 
   return (
-    <section className="space-y-4">
+    <section>
       {isError ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mb-4">
           <AlertTitle>{t('prompts.components.prompt.list.panel.failed.to.load.prompts')}</AlertTitle>
           <AlertDescription>{errorMessage ?? t('prompts.components.prompt.list.panel.an.unknown.error.occurred')}</AlertDescription>
         </Alert>
@@ -79,59 +81,57 @@ export function PromptListPanel({
       ) : null}
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>
-        <div className="space-y-1">
-          {isLoading || items.length > 0 ? (
-            <div className="hidden grid-cols-[32px_auto_minmax(0,1fr)_auto] gap-x-2 px-3 py-2 text-2xs font-semibold uppercase tracking-overline text-muted-foreground sm:grid">
-              <span />
-              <span className="min-w-[2.5rem] sm:min-w-[3rem]">{t({ ko: '사용량', en: 'Usage' })}</span>
-              <span>{t({ ko: '프롬프트', en: 'Prompt' })}</span>
-              <span className="text-right">{t({ ko: '작업', en: 'Actions' })}</span>
-            </div>
-          ) : null}
+        {isLoading || items.length > 0 ? (
+          <div className="flex h-8 items-center gap-3 border-b border-line px-2 text-xs text-muted-foreground/75">
+            <span className="w-4 shrink-0" />
+            <span className="flex-1">{t({ ko: '프롬프트', en: 'Prompt' })}</span>
+            <span className="min-w-10 text-right">{t({ ko: '사용', en: 'Uses' })}</span>
+          </div>
+        ) : null}
 
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 10 }).map((_, index) => (
-                <Skeleton key={index} className="h-12 w-full rounded-sm" />
-              ))}
+        {isLoading
+          ? Array.from({ length: 10 }).map((_, index) => (
+            <div key={index} className="flex min-h-11 items-center border-b border-line px-2 last:border-b-0">
+              <Skeleton className="h-4 w-full max-w-md rounded-sm" />
             </div>
-          ) : null}
+          ))
+          : null}
 
-          {!isLoading && items.length > 0
-            ? items.map((item) => {
-              const isLocked = isLockedPromptItem(item)
-              return (
-                <PromptListItem
-                  key={`${item.type}-${item.id}`}
-                  item={item}
-                  selected={selectedPromptIdSet.has(item.id)}
-                  active={activePrompt?.type === item.type && activePrompt?.prompt === item.prompt}
-                  canAssign={!isLocked}
-                  canDelete={canDeletePromptItem(item)}
-                  onToggleSelect={(checked) => onTogglePromptSelection(item.id, checked)}
-                  onAssignGroup={() => onAssignPrompt(item)}
-                  onDelete={() => onDeletePrompt(item)}
-                  onActivate={() => onActivatePrompt(item)}
-                />
-              )
-            })
-            : null}
-        </div>
+        {!isLoading && items.length > 0
+          ? items.map((item) => {
+            const isLocked = isLockedPromptItem(item)
+            return (
+              <PromptListItem
+                key={`${item.type}-${item.id}`}
+                item={item}
+                groupName={getGroupName?.(item)}
+                selected={selectedPromptIdSet.has(item.id)}
+                active={activePrompt?.type === item.type && activePrompt?.prompt === item.prompt}
+                canAssign={!isLocked}
+                canDelete={canDeletePromptItem(item)}
+                onToggleSelect={(checked) => onTogglePromptSelection(item.id, checked)}
+                onAssignGroup={() => onAssignPrompt(item)}
+                onDelete={() => onDeletePrompt(item)}
+                onActivate={() => onActivatePrompt(item)}
+              />
+            )
+          })
+          : null}
       </div>
 
       {totalPages > 0 ? (
-        <div className="flex items-center justify-between gap-3 pt-4 text-sm text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 pt-4 text-xs text-muted-foreground">
           <span>
             {t(
               { ko: '페이지 {page} / {totalPages} · {progress}', en: 'page {page} / {totalPages} · {progress}' },
               { page, totalPages, progress: progressLabel },
             )}
           </span>
-          <div className="flex gap-2">
-            <IconButton size="icon-sm" variant="secondary" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))} label={t({ ko: '이전', en: 'Previous' })}>
+          <div className="flex gap-1">
+            <IconButton size="icon-sm" variant="ghost" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))} label={t({ ko: '이전', en: 'Previous' })}>
               <ChevronLeft />
             </IconButton>
-            <IconButton size="icon-sm" variant="secondary" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} label={t({ ko: '다음', en: 'Next' })}>
+            <IconButton size="icon-sm" variant="ghost" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} label={t({ ko: '다음', en: 'Next' })}>
               <ChevronRight />
             </IconButton>
           </div>

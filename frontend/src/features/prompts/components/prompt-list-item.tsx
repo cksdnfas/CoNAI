@@ -2,13 +2,14 @@ import { FolderInput, Sparkles, Trash2 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
-import { cn } from '@/lib/utils'
+import { ListRow } from '@/components/ui/list-row'
 import type { PromptCollectionItem } from '@/types/prompt'
 import { useI18n } from '@/i18n'
 import { formatPromptUsageCount } from '../prompt-page-utils'
 
 interface PromptListItemProps {
   item: PromptCollectionItem
+  groupName?: string | null
   selected?: boolean
   active?: boolean
   canAssign?: boolean
@@ -19,7 +20,8 @@ interface PromptListItemProps {
   onActivate?: () => void
 }
 
-export function PromptListItem({ item, selected = false, active = false, canAssign = true, canDelete = true, onToggleSelect, onAssignGroup, onDelete, onActivate }: PromptListItemProps) {
+/** One prompt as a hairline row: checkbox · text · group · row actions (on hover) · usage count. Click copies. */
+export function PromptListItem({ item, groupName, selected = false, active = false, canAssign = true, canDelete = true, onToggleSelect, onAssignGroup, onDelete, onActivate }: PromptListItemProps) {
   const { t } = useI18n()
   const stopAction = (event: MouseEvent<HTMLElement>) => {
     event.preventDefault()
@@ -27,48 +29,43 @@ export function PromptListItem({ item, selected = false, active = false, canAssi
   }
 
   return (
-    <div
-      className={cn(
-        'prompt-list-selectable group relative grid cursor-pointer grid-cols-[32px_auto_minmax(0,1fr)_auto] items-center gap-x-2 rounded-sm bg-surface-container px-3 py-2 transition-colors hover:bg-surface-high',
-        active ? 'ring-1 ring-primary/50 bg-surface-high' : null,
-      )}
+    <ListRow
+      interactive
+      selected={selected}
+      className="prompt-list-selectable group relative"
       data-prompt-id={item.id}
-      data-selected={selected ? 'true' : 'false'}
       data-active={active ? 'true' : 'false'}
       onClick={() => onActivate?.()}
       title={t('prompts.components.prompt.list.item.click.to.copy')}
-    >
-      <div className="flex justify-center" data-no-select-drag="true" onClick={stopAction}>
-        <Checkbox checked={selected} onCheckedChange={(checked) => onToggleSelect?.(checked === true)} aria-label={t({ ko: '{prompt} 선택', en: 'Select {prompt}' }, { prompt: item.prompt })} />
-      </div>
-      <span className="min-w-[2.5rem] text-left text-2xs font-mono text-muted-foreground tabular-nums sm:min-w-[3rem]" title={String(item.usage_count)}>{formatPromptUsageCount(item.usage_count)}</span>
-      <div className="min-w-0 pr-1">
-        <div className="break-all text-sm leading-5 font-semibold text-foreground">{item.prompt}</div>
-      </div>
-      <div className="flex items-center justify-end gap-1 sm:gap-1.5" data-no-select-drag="true" onClick={stopAction}>
-        {active ? <Sparkles className="h-3.5 w-3.5 text-primary" /> : null}
-        <IconButton
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => onAssignGroup?.()}
-          label={t('prompts.components.prompt.list.item.assign.prompt.group')}
-          disabled={!canAssign}
-        >
-          <FolderInput className="h-4 w-4" />
-        </IconButton>
-        {canDelete ? (
-          <IconButton
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onDelete?.()}
-            label={t('prompts.components.prompt.list.item.delete.prompt')}
-            disabled={!canDelete}
+      leading={(
+        <span className="flex" data-no-select-drag="true" onClick={stopAction}>
+          <Checkbox checked={selected} onCheckedChange={(checked) => onToggleSelect?.(checked === true)} aria-label={t({ ko: '{prompt} 선택', en: 'Select {prompt}' }, { prompt: item.prompt })} />
+        </span>
+      )}
+      trailing={(
+        <>
+          <span
+            className="flex items-center gap-0.5 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
+            data-no-select-drag="true"
+            onClick={stopAction}
           >
-            <Trash2 className="h-4 w-4" />
-          </IconButton>
-        ) : null}
-      </div>
-      <div className="prompt-list-selection-frame pointer-events-none absolute inset-0 z-10 rounded-sm" />
-    </div>
+            <IconButton variant="ghost" size="icon-xs" onClick={() => onAssignGroup?.()} label={t('prompts.components.prompt.list.item.assign.prompt.group')} disabled={!canAssign}>
+              <FolderInput />
+            </IconButton>
+            {canDelete ? (
+              <IconButton variant="ghost" size="icon-xs" onClick={() => onDelete?.()} label={t('prompts.components.prompt.list.item.delete.prompt')}>
+                <Trash2 />
+              </IconButton>
+            ) : null}
+          </span>
+          {active ? <Sparkles className="size-3.5 text-primary" aria-hidden /> : null}
+          <span className="min-w-10 text-right text-xs tabular-nums text-muted-foreground" title={String(item.usage_count)}>{formatPromptUsageCount(item.usage_count)}</span>
+        </>
+      )}
+    >
+      <span className="min-w-0 break-all">{item.prompt}</span>
+      {groupName ? <span className="shrink-0 text-xs text-muted-foreground">{groupName}</span> : null}
+      <span className="prompt-list-selection-frame pointer-events-none absolute inset-0 z-10 rounded-sm" />
+    </ListRow>
   )
 }

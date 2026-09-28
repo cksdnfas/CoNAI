@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Folder, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
-import { HierarchyNav } from '@/components/common/hierarchy-nav'
+import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
-import { SectionHeading } from '@/components/common/section-heading'
+import { PageWithSidebar } from '@/components/common/page-with-sidebar'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ListRow } from '@/components/ui/list-row'
+import { RowGroup } from '@/components/ui/row-group'
+import { SidebarGroupLabel, SidebarNav } from '@/components/ui/sidebar'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -13,14 +17,14 @@ import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { buildPromptPresetInsertionText, createPromptPreset, deletePromptPreset, getPromptPresets, updatePromptPreset, type PromptPresetMutationInput, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { copyTextToClipboard } from '@/lib/clipboard'
-import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
-import { cn } from '@/lib/utils'
+import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { getErrorMessage } from '@/features/image-generation/image-generation-shared'
+import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './prompt-page-toolbar'
+import { SidebarTree } from './sidebar-tree'
 
 type PromptPresetEditorState =
   | { mode: 'create'; defaultParentId: number | null }
@@ -210,13 +214,12 @@ function PromptPresetEditorModal({
 }
 
 /** Render the prompt preset management workspace under Prompts > Presets. */
-export function PromptPresetPanel() {
+export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageToolbarBaseProps }) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
-  const isWideLayout = useDesktopPageLayout()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const canCreatePresets = hasAuthPermission(permissionKeys, 'prompts.create')
   const canUpdatePresets = hasAuthPermission(permissionKeys, 'prompts.update')
@@ -299,96 +302,92 @@ export function PromptPresetPanel() {
     await deleteMutation.mutateAsync({ presetId: selectedPreset.id, cascade: hasChildren })
   }
 
-  return (
-    <div className={cn('grid gap-6', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
-      <aside className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-semibold text-foreground">{t('prompts.components.prompt.preset.panel.presets')}</div>
-          {canCreatePresets ? (
-            <IconButton size="icon-sm" variant="secondary" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} label={t('prompts.components.prompt.preset.panel.add.preset')}>
-              <Plus className="h-4 w-4" />
-            </IconButton>
-          ) : null}
-        </div>
-
-        <div className="rounded-sm bg-surface-low p-2">
-          {presetsQuery.isLoading ? (
-            <div className="px-3 py-4 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.loading.presets')}</div>
-          ) : entries.length > 0 ? (
-            <HierarchyNav
-              items={entries.map((entry) => entry.preset)}
-              expandable
-              selectedId={selectedPresetId}
-              onSelect={(preset) => setSelectedPresetId(preset.id)}
-              getId={(preset) => preset.id}
-              getParentId={(preset) => preset.parent_id}
-              getLabel={(preset) => <span className="truncate">{preset.name}</span>}
-              sortItems={(left, right) => left.name.localeCompare(right.name)}
-              renderIcon={(_, state) => (state.hasChildren || state.isSelected ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-            />
-          ) : (
-            <div className="px-3 py-4 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.no.presets.yet')}</div>
-          )}
-        </div>
-      </aside>
-
-      <section className="space-y-4 rounded-sm bg-surface-low p-4">
-        <SectionHeading
-          variant="inside"
-          heading={selectedPreset ? selectedPreset.name : t('prompts.components.prompt.preset.panel.select.preset')}
-          actions={selectedPreset ? (
-            <div className="flex items-center gap-2">
-              {canUpdatePresets ? (
-                <IconButton size="icon-sm" variant="secondary" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} label={t('prompts.components.prompt.preset.panel.edit.preset')}>
-                  <Pencil className="h-4 w-4" />
-                </IconButton>
-              ) : null}
-              {canDeletePresets ? (
-                <IconButton size="icon-sm" variant="secondary" onClick={() => void handleDeleteSelected()} label={t('prompts.components.prompt.preset.panel.delete.preset')}>
-                  <Trash2 className="h-4 w-4" />
-                </IconButton>
-              ) : null}
-            </div>
-          ) : undefined}
+  const sidebar = (
+    <SidebarNav>
+      <SidebarGroupLabel
+        actions={canCreatePresets ? (
+          <IconButton size="icon-xs" variant="ghost" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} label={t('prompts.components.prompt.preset.panel.add.preset')}>
+            <Plus />
+          </IconButton>
+        ) : undefined}
+      >
+        {t('prompts.components.prompt.preset.panel.presets')}
+      </SidebarGroupLabel>
+      {presetsQuery.isLoading ? Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="my-0.5 h-8 w-full rounded-sm" />) : null}
+      {!presetsQuery.isLoading && entries.length > 0 ? (
+        <SidebarTree
+          items={entries.map((entry) => entry.preset)}
+          selectedId={selectedPresetId}
+          onSelect={(preset) => setSelectedPresetId(preset.id)}
+          getId={(preset) => preset.id}
+          getParentId={(preset) => preset.parent_id}
+          getLabel={(preset) => preset.name}
+          sortItems={(left, right) => left.name.localeCompare(right.name)}
         />
+      ) : null}
+      {!presetsQuery.isLoading && entries.length === 0 ? (
+        <p className="px-2.5 py-2 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.no.presets.yet')}</p>
+      ) : null}
+    </SidebarNav>
+  )
 
+  return (
+    <>
+      <PageWithSidebar
+        storageKey="prompts"
+        sidebarLabel={t('prompts.components.prompt.preset.panel.presets')}
+        sidebar={sidebar}
+        toolbar={<PromptPageToolbar {...toolbarProps} />}
+      >
         {selectedPreset ? (
-          <div className="space-y-4">
-            {selectedPreset.description ? <div className="text-sm text-muted-foreground">{selectedPreset.description}</div> : null}
-
-            <SettingsSegmentedTable
-              value="items"
-              items={[{ value: 'items', label: t('prompts.components.prompt.preset.panel.description.value') }]}
-              onChange={() => undefined}
-              gridClassName="grid-cols-[3rem_minmax(9rem,0.45fr)_minmax(12rem,1fr)] gap-x-3"
-              headers={[
-                t('prompts.components.prompt.preset.panel.number'),
-                t('prompts.components.prompt.preset.panel.description'),
-                t('prompts.components.prompt.preset.panel.value'),
-              ]}
-              minWidthClassName="min-w-[620px]"
+          <div className="max-w-5xl space-y-8 pt-2">
+            <RowGroup
+              headingAs="h2"
+              heading={selectedPreset.name}
+              actions={(
+                <>
+                  {canUpdatePresets ? (
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} label={t('prompts.components.prompt.preset.panel.edit.preset')}>
+                      <Pencil />
+                    </IconButton>
+                  ) : null}
+                  {canDeletePresets ? (
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => void handleDeleteSelected()} label={t('prompts.components.prompt.preset.panel.delete.preset')}>
+                      <Trash2 />
+                    </IconButton>
+                  ) : null}
+                </>
+              )}
             >
-              {(selectedPreset.items ?? []).map((item, index) => (
-                <div key={item.id} className="grid grid-cols-[3rem_minmax(9rem,0.45fr)_minmax(12rem,1fr)] items-start gap-x-3 px-4 py-3 text-sm transition-colors hover:bg-surface-high/60">
-                  <div className="text-center font-medium tabular-nums text-muted-foreground">{index + 1}</div>
-                  <div className="break-words text-foreground">{item.description}</div>
-                  <div className="whitespace-pre-wrap break-words text-foreground/92">{item.value}</div>
-                </div>
-              ))}
-            </SettingsSegmentedTable>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-medium text-foreground">{t('prompts.components.prompt.preset.panel.insertion.preview')}</div>
-                <IconButton size="icon-sm" variant="secondary" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview} label={t('prompts.components.prompt.preset.panel.copy')}>
-                  <Copy className="h-4 w-4" />
-                </IconButton>
+              {selectedPreset.description ? <p className="pb-2 text-sm text-muted-foreground">{selectedPreset.description}</p> : null}
+              <div className="flex h-8 items-center gap-3 border-b border-line text-xs text-muted-foreground/75">
+                <span className="w-8 shrink-0 text-center">{t('prompts.components.prompt.preset.panel.number')}</span>
+                <span className="w-2/5 min-w-0 shrink-0">{t('prompts.components.prompt.preset.panel.description')}</span>
+                <span className="min-w-0 flex-1">{t('prompts.components.prompt.preset.panel.value')}</span>
               </div>
-              <pre className="max-h-64 overflow-auto rounded-sm bg-surface-lowest px-3 py-3 text-xs leading-5 text-foreground/90 whitespace-pre-wrap">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</pre>
-            </div>
+              {(selectedPreset.items ?? []).map((item, index) => (
+                <ListRow key={item.id} className="items-start py-2.5" leading={<span className="w-8 text-center text-xs tabular-nums text-muted-foreground">{index + 1}</span>}>
+                  <span className="w-2/5 min-w-0 shrink-0 break-words">{item.description}</span>
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-foreground/90">{item.value}</span>
+                </ListRow>
+              ))}
+            </RowGroup>
+
+            <RowGroup
+              heading={t('prompts.components.prompt.preset.panel.insertion.preview')}
+              actions={(
+                <IconButton size="icon-sm" variant="ghost" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview} label={t('prompts.components.prompt.preset.panel.copy')}>
+                  <Copy />
+                </IconButton>
+              )}
+            >
+              <pre className="max-h-64 overflow-auto rounded-sm bg-fill px-3 py-3 text-xs leading-5 whitespace-pre-wrap text-foreground/90">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</pre>
+            </RowGroup>
           </div>
-        ) : null}
-      </section>
+        ) : (
+          <EmptyState size="compact" title={t('prompts.components.prompt.preset.panel.select.preset')} />
+        )}
+      </PageWithSidebar>
 
       <PromptPresetEditorModal
         open={editorState !== null}
@@ -416,6 +415,6 @@ export function PromptPresetPanel() {
           await createMutation.mutateAsync(input)
         }}
       />
-    </div>
+    </>
   )
 }

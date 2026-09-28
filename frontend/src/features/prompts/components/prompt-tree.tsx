@@ -1,19 +1,19 @@
-import { useMemo } from 'react'
-import { Folder, FolderOpen } from 'lucide-react'
-import { HierarchyNav } from '@/components/common/hierarchy-nav'
-import { Button } from '@/components/ui/button'
+import { useCallback, useMemo } from 'react'
+import type { SidebarItemProps } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 import type { PromptGroupRecord } from '@/types/prompt'
+import { SidebarTree } from './sidebar-tree'
 
 interface PromptTreeProps {
   groups: PromptGroupRecord[]
   selectedGroupId?: number | null
-  totalCount?: number
   onSelectGroup: (groupId?: number | null) => void
+  getIcon?: (group: PromptGroupRecord) => SidebarItemProps['icon']
 }
 
-export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGroup }: PromptTreeProps) {
-  const { formatNumber, t } = useI18n()
+/** Visible prompt groups as sidebar folder rows. Parents show "direct(total)" counts. */
+export function PromptTree({ groups, selectedGroupId, onSelectGroup, getIcon }: PromptTreeProps) {
+  const { formatNumber } = useI18n()
   const treeGroups = useMemo(() => groups.filter((group) => group.id === 0 || Boolean(group.is_visible)), [groups])
   const visibleGroupIds = useMemo(() => new Set(treeGroups.map((group) => group.id)), [treeGroups])
   const { childCountByGroupId, totalPromptCountByGroupId } = useMemo(() => {
@@ -55,45 +55,29 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
     }
   }, [treeGroups, visibleGroupIds])
 
+  const getId = useCallback((group: PromptGroupRecord) => group.id, [])
+  const getParentId = useCallback((group: PromptGroupRecord) => (group.parent_id != null && visibleGroupIds.has(group.parent_id) ? group.parent_id : null), [visibleGroupIds])
+  const sortGroups = useCallback((left: PromptGroupRecord, right: PromptGroupRecord) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name), [])
+
   return (
-    <div className="space-y-3">
-      <Button
-        type="button"
-        variant="nav"
-        data-active={selectedGroupId == null}
-        aria-current={selectedGroupId == null ? 'true' : undefined}
-        onClick={() => onSelectGroup(undefined)}
-      >
-        {t({ ko: '전체 프롬프트 ({count})', en: 'All prompts ({count})' }, { count: formatNumber(totalCount) })}
-      </Button>
-
-      <HierarchyNav
-        items={treeGroups}
-        expandable
-        selectedId={selectedGroupId}
-        onSelect={(group) => onSelectGroup(group.id)}
-        getId={(group) => group.id}
-        getParentId={(group) => (group.parent_id != null && visibleGroupIds.has(group.parent_id) ? group.parent_id : null)}
-        getLabel={(group) => {
-          const directCount = group.prompt_count ?? 0
-          const hasChildren = (childCountByGroupId.get(group.id) ?? 0) > 0
-          const totalWithDescendants = totalPromptCountByGroupId.get(group.id) ?? directCount
-          const countLabel = hasChildren
-            ? directCount === 0
-              ? `(${formatNumber(totalWithDescendants)})`
-              : `${formatNumber(directCount)}(${formatNumber(totalWithDescendants)})`
-            : formatNumber(directCount)
-
-          return (
-            <div className="flex min-w-0 items-center justify-between gap-2">
-              <span className="truncate">{group.group_name}</span>
-              <span className="shrink-0 text-xs tabular-nums">{countLabel}</span>
-            </div>
-          )
-        }}
-        sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}
-        renderIcon={(group, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-      />
-    </div>
+    <SidebarTree
+      items={treeGroups}
+      selectedId={selectedGroupId}
+      onSelect={(group) => onSelectGroup(group.id)}
+      getId={getId}
+      getParentId={getParentId}
+      getLabel={(group) => group.group_name}
+      getCount={(group) => {
+        const directCount = group.prompt_count ?? 0
+        const hasChildren = (childCountByGroupId.get(group.id) ?? 0) > 0
+        const totalWithDescendants = totalPromptCountByGroupId.get(group.id) ?? directCount
+        if (!hasChildren) return formatNumber(directCount)
+        return directCount === 0
+          ? `(${formatNumber(totalWithDescendants)})`
+          : `${formatNumber(directCount)}(${formatNumber(totalWithDescendants)})`
+      }}
+      getIcon={getIcon}
+      sortItems={sortGroups}
+    />
   )
 }

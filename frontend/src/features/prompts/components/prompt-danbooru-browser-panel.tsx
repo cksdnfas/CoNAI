@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Folder, FolderOpen, Search, SlidersHorizontal, X } from 'lucide-react'
-import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
-import { HierarchyNav } from '@/components/common/hierarchy-nav'
-import { Heading } from '@/components/ui/heading'
+import { SlidersHorizontal } from 'lucide-react'
+import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
+import { SidebarGroupLabel, SidebarNav } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   getDanbooruBrowserArtists,
@@ -14,11 +12,12 @@ import {
   getDanbooruBrowserSummary,
   getDanbooruBrowserTags,
 } from '@/lib/api-danbooru-browser'
-import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
-import { cn } from '@/lib/utils'
 import type { DanbooruBrowserDatabaseInfo, DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
 import { useCanSeeServerDetails } from '../use-can-see-server-details'
+import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './prompt-page-toolbar'
+import { SidebarTree } from './sidebar-tree'
+import { ToolbarSearchField } from './toolbar-search-field'
 import {
   CHARACTER_PAGE_SIZE,
   DEFAULT_PAGE_SIZE,
@@ -35,7 +34,6 @@ import {
   getDefaultExpandedTreeIds,
   getDefaultRelatedTagOptions,
   getLocalizedTreeLabel,
-  getSectionTitle,
   parseRelatedTagLimitInput,
   parseRelatedTagScoreInput,
   persistRelatedTagOptions,
@@ -79,9 +77,8 @@ function DanbooruDatabaseMissingNotice({ database }: { database: DanbooruBrowser
   )
 }
 
-export function PromptDanbooruBrowserPanel() {
+export function PromptDanbooruBrowserPanel({ toolbarProps }: { toolbarProps: PromptPageToolbarBaseProps }) {
   const { language, t, formatNumber } = useI18n()
-  const isDesktopPageLayout = useDesktopPageLayout()
   const [selectedNodeId, setSelectedNodeId] = useState('tags')
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -190,21 +187,17 @@ export function PromptDanbooruBrowserPanel() {
 
   const getNodeParentId = useCallback((node: DanbooruBrowserTreeNode) => node.parentId, [])
 
-  const getNodeLabel = useCallback((node: DanbooruBrowserTreeNode) => {
+  const getNodeLabel = useCallback((node: DanbooruBrowserTreeNode) => getLocalizedTreeLabel(node, language), [language])
+
+  const getNodeCount = useCallback((node: DanbooruBrowserTreeNode) => {
     const hasChildren = (childCountByParentId.get(node.id) ?? 0) > 0
-    const countLabel = hasChildren && node.directCount !== undefined
-      ? node.directCount === 0
+    if (hasChildren && node.directCount !== undefined) {
+      return node.directCount === 0
         ? `(${formatCompactCount(node.count, formatNumber)})`
         : `${formatCompactCount(node.directCount, formatNumber)}(${formatCompactCount(node.count, formatNumber)})`
-      : formatCompactCount(node.count, formatNumber)
-
-    return (
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <span className="min-w-0 truncate">{getLocalizedTreeLabel(node, language)}</span>
-        <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">{countLabel}</span>
-      </div>
-    )
-  }, [childCountByParentId, formatNumber, language])
+    }
+    return formatCompactCount(node.count, formatNumber)
+  }, [childCountByParentId, formatNumber])
 
   const sortTreeItems = useCallback((left: DanbooruBrowserTreeNode, right: DanbooruBrowserTreeNode) => {
     const rootOrder: Record<string, number> = { artists: 0, tags: 1, characters: 2 }
@@ -223,10 +216,6 @@ export function PromptDanbooruBrowserPanel() {
     return leftLabel.localeCompare(rightLabel, ['ko', 'en'], { numeric: true, sensitivity: 'base' })
   }, [language])
 
-  const renderTreeIcon = useCallback((_node: DanbooruBrowserTreeNode, state: { hasChildren: boolean }) => (
-    state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />
-  ), [])
-
   const handleApplySearch = useCallback(() => {
     setSearchQuery(searchInput.trim())
   }, [searchInput])
@@ -235,14 +224,6 @@ export function PromptDanbooruBrowserPanel() {
     setSearchInput('')
     setSearchQuery('')
   }, [])
-
-  const handleSearchInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setSearchInput(event.target.value)
-  }, [])
-
-  const handleSearchInputKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') handleApplySearch()
-  }, [handleApplySearch])
 
   const handleToggleRelatedTagOptionsOpen = useCallback(() => {
     setIsRelatedTagOptionsOpen((open) => !open)
@@ -268,86 +249,68 @@ export function PromptDanbooruBrowserPanel() {
     setRelatedTagLimitInput(defaults.limitInput)
   }, [])
 
+  const sidebar = (
+    <SidebarNav>
+      <SidebarGroupLabel>Danbooru DB</SidebarGroupLabel>
+      {summaryQuery.isLoading ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="my-0.5 h-8 w-full rounded-sm" />) : null}
+      {summaryQuery.isError ? (
+        <Alert variant="destructive" className="mt-2">
+          <AlertTitle>{t({ ko: 'DB 요약 로드 실패', en: 'Failed to load DB summary' })}</AlertTitle>
+          <AlertDescription>{summaryQuery.error instanceof Error ? summaryQuery.error.message : t({ ko: '알 수 없는 오류', en: 'Unknown error' })}</AlertDescription>
+        </Alert>
+      ) : null}
+      {!summaryQuery.isLoading && !summaryQuery.isError ? (
+        <SidebarTree
+          key={activeSection}
+          items={tree}
+          defaultExpandedIds={defaultExpandedTreeIds}
+          selectedId={selectedNodeId}
+          onSelect={handleSelectNode}
+          getId={getNodeId}
+          getParentId={getNodeParentId}
+          getLabel={getNodeLabel}
+          getCount={getNodeCount}
+          sortItems={sortTreeItems}
+        />
+      ) : null}
+    </SidebarNav>
+  )
+
   return (
-    <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
-      <ExplorerSidebar
-        title="Danbooru DB"
-        floatingFrame
-        floatingLockStorageKey="conai:prompts:danbooru-sidebar-locked"
-        className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
-        bodyClassName="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
-      >
-        {summaryQuery.isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <Skeleton key={index} className="h-9 w-full rounded-sm" />
-            ))}
-          </div>
-        ) : null}
-
-        {summaryQuery.isError ? (
-          <Alert variant="destructive">
-            <AlertTitle>{t({ ko: 'DB 요약 로드 실패', en: 'Failed to load DB summary' })}</AlertTitle>
-            <AlertDescription>{summaryQuery.error instanceof Error ? summaryQuery.error.message : t({ ko: '알 수 없는 오류', en: 'Unknown error' })}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {!summaryQuery.isLoading && !summaryQuery.isError ? (
-          <HierarchyNav
-            key={activeSection}
-            items={tree}
-            expandable
-            defaultExpandedIds={defaultExpandedTreeIds}
-            selectedId={selectedNodeId}
-            onSelect={handleSelectNode}
-            getId={getNodeId}
-            getParentId={getNodeParentId}
-            getLabel={getNodeLabel}
-            sortItems={sortTreeItems}
-            renderIcon={renderTreeIcon}
-          />
-        ) : null}
-      </ExplorerSidebar>
-
-      <section className="relative z-0 space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <Heading level={2}>{getSectionTitle(selectedNode, language)}</Heading>
-          </div>
-
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px]">
-            <div className="flex gap-2">
-              <Input
-                value={searchInput}
-                onChange={handleSearchInputChange}
-                onKeyDown={handleSearchInputKeyDown}
-                placeholder={t({ ko: '검색', en: 'Search' })}
-              />
-              <IconButton variant="secondary" onClick={handleApplySearch} label={t({ ko: '검색', en: 'Search' })}>
-                <Search className="h-4 w-4" />
+    <PageWithSidebar
+      storageKey="prompts"
+      sidebarLabel="Danbooru DB"
+      sidebar={sidebar}
+      toolbar={(
+        <PromptPageToolbar
+          {...toolbarProps}
+          actions={activeSection === 'characters' ? (
+            <div ref={relatedTagOptionsAnchorRef}>
+              <IconButton
+                variant="ghost"
+                size="icon-sm"
+                active={relatedTagFilterActive || isRelatedTagOptionsOpen}
+                onClick={handleToggleRelatedTagOptionsOpen}
+                label={t({ ko: 'Related tags 표시 옵션', en: 'Related tags display options' })}
+                aria-haspopup="dialog"
+                aria-expanded={isRelatedTagOptionsOpen}
+              >
+                <SlidersHorizontal />
               </IconButton>
-              {activeSection === 'characters' ? (
-                <div ref={relatedTagOptionsAnchorRef}>
-                  <IconButton
-                    variant={relatedTagFilterActive ? 'default' : 'secondary'}
-                    onClick={handleToggleRelatedTagOptionsOpen}
-                    label={t({ ko: 'Related tags 표시 옵션', en: 'Related tags display options' })}
-                    aria-haspopup="dialog"
-                    aria-expanded={isRelatedTagOptionsOpen}
-                  >
-                    <SlidersHorizontal className="h-4 w-4" />
-                  </IconButton>
-                </div>
-              ) : null}
-              {searchQuery ? (
-                <IconButton variant="ghost" onClick={handleClearSearch} label={t('prompts.components.prompt.toolbar.search.reset')}>
-                  <X className="h-4 w-4" />
-                </IconButton>
-              ) : null}
             </div>
-          </div>
-        </div>
-
+          ) : undefined}
+        >
+          <ToolbarSearchField
+            value={searchInput}
+            placeholder={t({ ko: '검색', en: 'Search' })}
+            onChange={setSearchInput}
+            onSubmit={handleApplySearch}
+            onClear={handleClearSearch}
+          />
+        </PromptPageToolbar>
+      )}
+    >
+      <div className="space-y-4">
         <CharacterRelatedTagOptionsPopup
           open={activeSection === 'characters' && isRelatedTagOptionsOpen}
           anchorRef={relatedTagOptionsAnchorRef}
@@ -379,7 +342,7 @@ export function PromptDanbooruBrowserPanel() {
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'characters' ? <CharactersTable items={characterItems} language={language} /> : null}
 
         {isDanbooruDbAvailable ? <PaginationControls pagination={pagination} visibleCount={activeItemCount} onPageChange={setPage} /> : null}
-      </section>
-    </div>
+      </div>
+    </PageWithSidebar>
   )
 }

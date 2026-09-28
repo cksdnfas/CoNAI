@@ -1,14 +1,11 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { PageHeader } from '@/components/common/page-header'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { Heading } from '@/components/ui/heading'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { exportPromptGroups } from '@/lib/api-prompts'
 import { copyTextToClipboard } from '@/lib/clipboard'
-import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
-import { cn } from '@/lib/utils'
 import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 import { PromptCollectModal } from './components/prompt-collect-modal'
 import { PromptGroupAssignModal } from './components/prompt-group-assign-modal'
@@ -16,10 +13,13 @@ import { PromptGroupEditorModal } from './components/prompt-group-editor-modal'
 import { PromptDanbooruGroupingModal } from './components/prompt-danbooru-grouping-modal'
 import { PromptListPanel } from './components/prompt-list-panel'
 import { PromptSelectionBar } from './components/prompt-selection-bar'
-import { PromptSidebar } from './components/prompt-sidebar'
+import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './components/prompt-page-toolbar'
+import { PromptGroupActions, PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
-import { PromptToolbar } from './components/prompt-toolbar'
+import { PromptSortMenu } from './components/prompt-toolbar'
+import { ToolbarSearchField } from './components/toolbar-search-field'
 import { usePromptListSelection } from './components/use-prompt-list-selection'
+import { isPromptTypeView, parsePromptPageView, type PromptPageView } from './prompt-page-view'
 import { canDeletePromptItem, isDanbooruPromptGroup, isLockedPromptGroup, isLockedPromptItem, isProtectedLoRAPromptGroup } from './prompt-page-utils'
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
@@ -36,13 +36,6 @@ type GroupEditorState =
   | { mode: 'edit'; group: PromptGroupRecord }
   | null
 
-type PromptPageTopTab = PromptTypeFilter | 'wildcards' | 'presets' | 'danbooru'
-
-const WildcardGenerationPanelLazy = lazy(async () => {
-  const module = await import('@/features/image-generation/components/wildcard-generation-panel')
-  return { default: module.WildcardGenerationPanel }
-})
-
 const PromptPresetPanelLazy = lazy(async () => {
   const module = await import('./components/prompt-preset-panel')
   return { default: module.PromptPresetPanel }
@@ -53,41 +46,58 @@ const PromptDanbooruBrowserPanelLazy = lazy(async () => {
   return { default: module.PromptDanbooruBrowserPanel }
 })
 
-function PanelFallback() {
-  return <div className="min-h-[16rem] rounded-sm bg-surface-low animate-pulse" />
+function PanelFallback({ toolbarProps }: { toolbarProps: PromptPageToolbarBaseProps }) {
+  return (
+    <div>
+      <PromptPageToolbar {...toolbarProps} />
+      <div className="min-h-64 animate-pulse rounded-sm bg-fill" />
+    </div>
+  )
 }
 
+/** /prompts. The old `?tab=wildcards` view was the same panel as /wildcards, so that link now goes there. */
 export function PromptPage() {
+  const [searchParams] = useSearchParams()
+  if (searchParams.get('tab') === 'wildcards') {
+    return <Navigate to="/wildcards" replace />
+  }
+
+  return <PromptPageContent />
+}
+
+function PromptPageContent() {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const promptListRef = useRef<HTMLDivElement | null>(null)
-  const isDesktopPageLayout = useDesktopPageLayout()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = parsePromptPageView(searchParams.get('tab'))
   const authStatusQuery = useAuthStatusQuery()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const canViewWildcards = hasAuthPermission(permissionKeys, 'page.wildcards.view')
-  const promptPageTabs = useMemo<Array<{ value: PromptPageTopTab; label: string }>>(() => [
-    { value: 'positive', label: t({ ko: '긍정', en: 'Positive' }) },
-    { value: 'negative', label: t({ ko: '부정', en: 'Negative' }) },
-    { value: 'auto', label: t({ ko: '자동', en: 'Auto' }) },
-    { value: 'danbooru', label: t({ ko: '단부루', en: 'Danbooru' }) },
-    ...(canViewWildcards ? [{ value: 'wildcards' as const, label: t({ ko: '와일드카드', en: 'Wildcard' }) }] : []),
-    { value: 'presets', label: t({ ko: '프리셋', en: 'Preset' }) },
-  ], [canViewWildcards, t])
 
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false)
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
   const [isDanbooruGroupingModalOpen, setIsDanbooruGroupingModalOpen] = useState(false)
-  const [activeTopTab, setActiveTopTab] = useState<PromptPageTopTab>('positive')
-  const [promptType, setPromptType] = useState<PromptTypeFilter>('positive')
+  const [promptType, setPromptType] = useState<PromptTypeFilter>(isPromptTypeView(view) ? view : 'positive')
   const [selectedGroupId, setSelectedGroupId] = useState<number | null | undefined>(undefined)
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<PromptSortBy>('usage_count')
   const [sortOrder, setSortOrder] = useState<PromptSortOrder>('DESC')
   const [page, setPage] = useState(1)
+  const [previousView, setPreviousView] = useState(view)
+  // The view lives in the URL (back/forward, deep links): follow it during render instead of in an effect.
+  if (previousView !== view) {
+    setPreviousView(view)
+    setSelectedGroupId(undefined)
+    setPage(1)
+    if (isPromptTypeView(view)) {
+      setPromptType(view)
+    }
+  }
   const [selectedPromptIds, setSelectedPromptIds] = useState<number[]>([])
   const [activePrompt, setActivePrompt] = useState<{ prompt: string; type: PromptTypeFilter } | null>(null)
   const [assignModalState, setAssignModalState] = useState<AssignModalState>(null)
@@ -138,8 +148,6 @@ export function PromptPage() {
   const assignableGroups = editablePromptGroups
   const editableParentGroups = editablePromptGroups
   const isSearching = searchQuery.trim().length > 0
-  const currentSectionTitle = selectedGroup?.group_name
-    ?? (isSearching ? t({ ko: '검색 결과', en: 'Search results' }) : t({ ko: '전체 프롬프트', en: 'All prompts' }))
   const currentSectionCount = pagination?.total ?? 0
   // While searching, the list total is the match count, not the library total the sidebar labels "All prompts".
   const sidebarTotalCount = selectedGroupId == null && !isSearching && currentSectionCount > 0 ? currentSectionCount : totalCount
@@ -190,15 +198,9 @@ export function PromptPage() {
   })
 
   useEffect(() => {
-    if (activeTopTab === 'wildcards' && !canViewWildcards) {
-      setActiveTopTab(promptType)
-    }
-  }, [activeTopTab, canViewWildcards, promptType])
-
-  useEffect(() => {
     setSelectedPromptIds([])
     setAssignModalState(null)
-  }, [activeTopTab, promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder])
+  }, [view, promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder])
 
   useEffect(() => {
     if (!activePrompt) {
@@ -230,18 +232,31 @@ export function PromptPage() {
     setPage(1)
   }
 
-  const handleChangeTopTab = (nextTab: PromptPageTopTab) => {
-    setActiveTopTab(nextTab)
+  const handleChangeView = (nextView: PromptPageView) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (nextView === 'positive') {
+        next.delete('tab')
+      } else {
+        next.set('tab', nextView)
+      }
+      return next
+    }, { replace: true })
+  }
 
-    if (nextTab === 'wildcards' || nextTab === 'presets' || nextTab === 'danbooru') {
-      setSelectedGroupId(undefined)
-      setPage(1)
-      return
+  const toolbarProps: PromptPageToolbarBaseProps = {
+    view,
+    promptType,
+    canViewWildcards,
+    onChangeView: handleChangeView,
+  }
+
+  const getPromptGroupName = (item: PromptCollectionItem) => {
+    const groupId = item.group_info?.id ?? item.group_id
+    if (groupId == null || groupId === 0 || groupId === selectedGroupId) {
+      return null
     }
-
-    setPromptType(nextTab)
-    setSelectedGroupId(undefined)
-    setPage(1)
+    return item.group_info?.group_name ?? promptGroupById.get(groupId)?.group_name ?? null
   }
 
   const handleActivatePrompt = async (prompt: string, type: PromptTypeFilter = promptType) => {
@@ -404,167 +419,168 @@ export function PromptPage() {
     setSelectedPromptIds([])
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader title={t({ ko: '프롬프트', en: 'Prompts' })} />
+  if (view === 'presets') {
+    return (
+      <Suspense fallback={<PanelFallback toolbarProps={toolbarProps} />}>
+        <PromptPresetPanelLazy toolbarProps={toolbarProps} />
+      </Suspense>
+    )
+  }
 
-      <SegmentedTabBar
-        value={activeTopTab}
-        items={promptPageTabs}
-        onChange={(nextTab) => handleChangeTopTab(nextTab as PromptPageTopTab)}
+  if (view === 'danbooru') {
+    return (
+      <Suspense fallback={<PanelFallback toolbarProps={toolbarProps} />}>
+        <PromptDanbooruBrowserPanelLazy toolbarProps={toolbarProps} />
+      </Suspense>
+    )
+  }
+
+  return (
+    <>
+      <PageWithSidebar
+        storageKey="prompts"
+        sidebarLabel={t({ ko: '그룹', en: 'Groups' })}
+        sidebar={(
+          <PromptSidebar
+            groups={groupsQuery.data ?? []}
+            selectedGroupId={selectedGroupId}
+            totalCount={sidebarTotalCount}
+            groupsLoading={groupsQuery.isLoading}
+            groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? t('prompts.prompt.page.an.unknown.error.occurred') : null}
+            canCollect={promptType !== 'auto'}
+            onSelectGroup={(groupId) => {
+              setSelectedGroupId(groupId)
+              setPage(1)
+            }}
+            onCreateGroup={() => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) })}
+            onExportGroups={() => void handleExportGroups()}
+            onImportGroups={() => importInputRef.current?.click()}
+            onOpenSummary={() => setIsSummaryModalOpen(true)}
+            onOpenCollect={() => setIsCollectModalOpen(true)}
+            onOpenDanbooruGrouping={() => setIsDanbooruGroupingModalOpen(true)}
+          />
+        )}
+        sidebarFooter={(
+          <PromptGroupActions
+            onEditGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
+            onDeleteGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupProtected ? () => void handleDeleteSelectedGroup() : undefined}
+            onMoveGroupUp={canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
+            onMoveGroupDown={canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
+          />
+        )}
+        toolbar={(
+          <PromptPageToolbar
+            {...toolbarProps}
+            actions={(
+              <PromptSortMenu
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onChangeSortBy={(value) => {
+                  setSortBy(value)
+                  setPage(1)
+                }}
+                onChangeSortOrder={(value) => {
+                  setSortOrder(value)
+                  setPage(1)
+                }}
+              />
+            )}
+          >
+            <ToolbarSearchField
+              value={searchInput}
+              placeholder={t('prompts.components.prompt.toolbar.search.prompts')}
+              onChange={setSearchInput}
+              onSubmit={handleApplySearch}
+              onClear={handleClearSearch}
+            />
+          </PromptPageToolbar>
+        )}
+      >
+        <PromptListPanel
+          items={items}
+          selectedPromptIdSet={selectedPromptIdSet}
+          activePrompt={activePrompt}
+          isLoading={promptSearchQuery.isLoading}
+          isError={promptSearchQuery.isError}
+          errorMessage={promptSearchQuery.error instanceof Error ? promptSearchQuery.error.message : null}
+          isDraggingSelection={isDraggingSelection}
+          totalPages={pagination?.totalPages ?? 0}
+          page={pagination?.page ?? 1}
+          limit={pagination?.limit ?? 40}
+          total={pagination?.total ?? 0}
+          promptListRef={promptListRef}
+          onPageChange={setPage}
+          onTogglePromptSelection={handleTogglePromptSelection}
+          onAssignPrompt={(item) => setAssignModalState({ mode: 'single', item })}
+          onDeletePrompt={(item) => void handleDeleteSinglePrompt(item)}
+          onActivatePrompt={(item) => {
+            if (shouldSuppressClick()) {
+              return
+            }
+            void handleActivatePrompt(item.prompt, item.type)
+          }}
+          isLockedPromptItem={(item) => isLockedPromptItem(item, promptGroupById)}
+          canDeletePromptItem={(item) => canDeletePromptItem(item, promptGroupById)}
+          getGroupName={getPromptGroupName}
+        />
+      </PageWithSidebar>
+
+      <PromptSelectionBar
+        selectedCount={selectedPromptItems.length}
+        isSubmitting={batchAssignPromptsMutation.isPending}
+        isDeleting={deletePromptMutation.isPending || deletePromptsMutation.isPending}
+        onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 변경할 수 없어.', en: 'Protected auto-group items cannot be changed manually.' }), tone: 'error' }) : handleOpenMultiAssignModal}
+        onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 삭제할 수 없어.', en: 'Protected auto-group items cannot be deleted manually.' }), tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
+        onClear={() => setSelectedPromptIds([])}
       />
 
-      {activeTopTab === 'wildcards' ? (
-        <Suspense fallback={<PanelFallback />}>
-          <WildcardGenerationPanelLazy refreshNonce={0} />
-        </Suspense>
-      ) : activeTopTab === 'presets' ? (
-        <Suspense fallback={<PanelFallback />}>
-          <PromptPresetPanelLazy />
-        </Suspense>
-      ) : activeTopTab === 'danbooru' ? (
-        <Suspense fallback={<PanelFallback />}>
-          <PromptDanbooruBrowserPanelLazy />
-        </Suspense>
-      ) : (
-        <>
-          <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
-            <PromptSidebar
-              groups={groupsQuery.data ?? []}
-              selectedGroupId={selectedGroupId}
-              totalCount={sidebarTotalCount}
-              groupsLoading={groupsQuery.isLoading}
-              groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? t('prompts.prompt.page.an.unknown.error.occurred') : null}
-              canCollect={promptType !== 'auto'}
-              onSelectGroup={(groupId) => {
-                setSelectedGroupId(groupId)
-                setPage(1)
-              }}
-              onCreateGroup={() => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) })}
-              onEditGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
-              onDeleteGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupProtected ? () => void handleDeleteSelectedGroup() : undefined}
-              onMoveGroupUp={canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
-              onMoveGroupDown={canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
-              onExportGroups={() => void handleExportGroups()}
-              onImportGroups={() => importInputRef.current?.click()}
-              onOpenSummary={() => setIsSummaryModalOpen(true)}
-              onOpenCollect={() => setIsCollectModalOpen(true)}
-              onOpenDanbooruGrouping={() => setIsDanbooruGroupingModalOpen(true)}
-              canMoveGroupUp={canMoveGroupUp}
-              canMoveGroupDown={canMoveGroupDown}
-            />
+      <PromptGroupAssignModal
+        open={assignModalState !== null}
+        groups={assignableGroups}
+        selectedCount={assignModalState?.mode === 'single' ? 1 : selectedPromptItems.length}
+        isSubmitting={assignSinglePromptMutation.isPending || batchAssignPromptsMutation.isPending}
+        onClose={() => setAssignModalState(null)}
+        onSubmit={handleSubmitAssign}
+      />
 
-            <section className="relative z-0 space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <Heading level={2}>{currentSectionTitle}</Heading>
-                </div>
+      <PromptGroupEditorModal
+        open={groupEditorState !== null}
+        mode={groupEditorState?.mode ?? 'create'}
+        promptType={promptType}
+        groups={editableParentGroups}
+        group={groupEditorState?.mode === 'edit' ? groupEditorState.group : null}
+        defaultParentId={groupEditorState?.mode === 'create' ? groupEditorState.defaultParentId : null}
+        isSubmitting={createPromptGroupMutation.isPending || updatePromptGroupMutation.isPending}
+        onClose={() => setGroupEditorState(null)}
+        onSubmit={handleSubmitGroupEditor}
+      />
 
-                <PromptToolbar
-                  searchInput={searchInput}
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSearchInputChange={setSearchInput}
-                  onApplySearch={handleApplySearch}
-                  onClearSearch={handleClearSearch}
-                  onChangeSortBy={(value) => {
-                    setSortBy(value)
-                    setPage(1)
-                  }}
-                  onChangeSortOrder={(value) => {
-                    setSortOrder(value)
-                    setPage(1)
-                  }}
-                />
-              </div>
+      <PromptCollectModal
+        open={isCollectModalOpen}
+        isSubmitting={collectPromptsMutation.isPending}
+        onClose={() => setIsCollectModalOpen(false)}
+        onSubmit={async (input) => {
+          await collectPromptsMutation.mutateAsync(input)
+        }}
+      />
 
-              <PromptListPanel
-                items={items}
-                selectedPromptIdSet={selectedPromptIdSet}
-                activePrompt={activePrompt}
-                isLoading={promptSearchQuery.isLoading}
-                isError={promptSearchQuery.isError}
-                errorMessage={promptSearchQuery.error instanceof Error ? promptSearchQuery.error.message : null}
-                isDraggingSelection={isDraggingSelection}
-                totalPages={pagination?.totalPages ?? 0}
-                page={pagination?.page ?? 1}
-                limit={pagination?.limit ?? 40}
-                total={pagination?.total ?? 0}
-                promptListRef={promptListRef}
-                onPageChange={setPage}
-                onTogglePromptSelection={handleTogglePromptSelection}
-                onAssignPrompt={(item) => setAssignModalState({ mode: 'single', item })}
-                onDeletePrompt={(item) => void handleDeleteSinglePrompt(item)}
-                onActivatePrompt={(item) => {
-                  if (shouldSuppressClick()) {
-                    return
-                  }
-                  void handleActivatePrompt(item.prompt, item.type)
-                }}
-                isLockedPromptItem={(item) => isLockedPromptItem(item, promptGroupById)}
-                canDeletePromptItem={(item) => canDeletePromptItem(item, promptGroupById)}
-              />
-            </section>
-          </div>
+      <PromptDanbooruGroupingModal
+        open={isDanbooruGroupingModalOpen}
+        onClose={() => setIsDanbooruGroupingModalOpen(false)}
+        onInfo={(message) => showSnackbar({ message, tone: 'info' })}
+        onError={(message) => showSnackbar({ message, tone: 'error' })}
+      />
 
-          <PromptSelectionBar
-            selectedCount={selectedPromptItems.length}
-            isSubmitting={batchAssignPromptsMutation.isPending}
-            isDeleting={deletePromptMutation.isPending || deletePromptsMutation.isPending}
-            onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 변경할 수 없어.', en: 'Protected auto-group items cannot be changed manually.' }), tone: 'error' }) : handleOpenMultiAssignModal}
-            onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 삭제할 수 없어.', en: 'Protected auto-group items cannot be deleted manually.' }), tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
-            onClear={() => setSelectedPromptIds([])}
-          />
+      <PromptSummaryModal
+        open={isSummaryModalOpen}
+        promptType={promptType}
+        statistics={statisticsQuery.data}
+        topPrompts={topPromptsQuery.data ?? []}
+        groupStatistics={groupStatisticsQuery.data ?? []}
+        onClose={() => setIsSummaryModalOpen(false)}
+      />
 
-          <PromptGroupAssignModal
-            open={assignModalState !== null}
-            groups={assignableGroups}
-            selectedCount={assignModalState?.mode === 'single' ? 1 : selectedPromptItems.length}
-            isSubmitting={assignSinglePromptMutation.isPending || batchAssignPromptsMutation.isPending}
-            onClose={() => setAssignModalState(null)}
-            onSubmit={handleSubmitAssign}
-          />
-
-          <PromptGroupEditorModal
-            open={groupEditorState !== null}
-            mode={groupEditorState?.mode ?? 'create'}
-            promptType={promptType}
-            groups={editableParentGroups}
-            group={groupEditorState?.mode === 'edit' ? groupEditorState.group : null}
-            defaultParentId={groupEditorState?.mode === 'create' ? groupEditorState.defaultParentId : null}
-            isSubmitting={createPromptGroupMutation.isPending || updatePromptGroupMutation.isPending}
-            onClose={() => setGroupEditorState(null)}
-            onSubmit={handleSubmitGroupEditor}
-          />
-
-          <PromptCollectModal
-            open={isCollectModalOpen}
-            isSubmitting={collectPromptsMutation.isPending}
-            onClose={() => setIsCollectModalOpen(false)}
-            onSubmit={async (input) => {
-              await collectPromptsMutation.mutateAsync(input)
-            }}
-          />
-
-          <PromptDanbooruGroupingModal
-            open={isDanbooruGroupingModalOpen}
-            onClose={() => setIsDanbooruGroupingModalOpen(false)}
-            onInfo={(message) => showSnackbar({ message, tone: 'info' })}
-            onError={(message) => showSnackbar({ message, tone: 'error' })}
-          />
-
-          <PromptSummaryModal
-            open={isSummaryModalOpen}
-            promptType={promptType}
-            statistics={statisticsQuery.data}
-            topPrompts={topPromptsQuery.data ?? []}
-            groupStatistics={groupStatisticsQuery.data ?? []}
-            onClose={() => setIsSummaryModalOpen(false)}
-          />
-
-          <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => void handleImportFileChange(event)} />
-        </>
-      )}
-    </div>
+      <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => void handleImportFileChange(event)} />
+    </>
   )
 }
