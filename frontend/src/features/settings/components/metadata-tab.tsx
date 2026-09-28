@@ -1,5 +1,3 @@
-import { Save } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@conai/shared'
@@ -9,16 +7,15 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SectionDirtyBadge } from './settings-section-status'
 
 interface MetadataTabProps {
   metadataDraft: MetadataExtractionSettings | null
   onPatchMetadata: (patch: Partial<MetadataExtractionSettings>) => void
-  onSave: () => void
-  isSaving: boolean
   hasChanges: boolean
 }
 
-export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, hasChanges }: MetadataTabProps) {
+export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: MetadataTabProps) {
   const { t } = useI18n()
   const isStealthEnabled = metadataDraft?.enableSecondaryExtraction === true
 
@@ -28,17 +25,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
         <Section
           variant="settings"
           heading={t({ ko: '메타데이터', en: 'Metadata' })}
-          actions={
-            <Button
-              size="icon-sm"
-              onClick={onSave}
-              disabled={!metadataDraft || isSaving || !hasChanges}
-              aria-label={hasChanges ? t('metadataTab.metadataSave') : t({ ko: '메타데이터 설정 변경 없음', en: 'No metadata settings changes' })}
-              title={hasChanges ? t('metadataTab.metadataSave') : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          }
+          actions={<SectionDirtyBadge dirty={hasChanges} />}
         >
           <div className="grid gap-4 md:grid-cols-2">
             {metadataDraft ? (

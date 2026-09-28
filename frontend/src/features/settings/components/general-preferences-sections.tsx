@@ -1,5 +1,3 @@
-import { Save } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,6 +9,7 @@ import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SectionDirtyBadge } from './settings-section-status'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
 
@@ -19,9 +18,8 @@ interface GeneralPreferencesSectionsProps {
   generalDraft: GeneralSettings | null
   onPatchGeneral: (patch: Partial<GeneralSettings>) => void
   onPatchDeleteProtection: (patch: Partial<GeneralSettings['deleteProtection']>) => void
-  onSave: () => void
-  isSaving: boolean
-  hasChanges: boolean
+  /** Whether a section has edits waiting in the page save bar. */
+  isSectionDirty: (section: GeneralPreferenceSection) => boolean
 }
 
 const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; label: { ko: string; en: string } }> = [
@@ -43,24 +41,10 @@ export function GeneralPreferencesSections({
   generalDraft,
   onPatchGeneral,
   onPatchDeleteProtection,
-  onSave,
-  isSaving,
-  hasChanges,
+  isSectionDirty,
 }: GeneralPreferencesSectionsProps) {
   const { t, languageOverride } = useI18n()
   const visibleSections = new Set(sections)
-
-  const saveAction = (
-    <Button
-      size="icon-sm"
-      onClick={onSave}
-      disabled={!generalDraft || isSaving || !hasChanges}
-      aria-label={hasChanges ? t({ ko: '설정 저장', en: 'Save settings' }) : t({ ko: '설정 변경 없음', en: 'No settings changes' })}
-      title={hasChanges ? t({ ko: '설정 저장', en: 'Save settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-    >
-      <Save className="h-4 w-4" />
-    </Button>
-  )
 
   const updateHeaderNavigationItem = (key: HeaderNavigationItemKey, checked: boolean) => {
     if (!generalDraft) return
@@ -80,7 +64,7 @@ export function GeneralPreferencesSections({
   return (
     <div className="space-y-6">
       {visibleSections.has('basic') ? (
-        <Section variant="settings" heading={t({ ko: '기본 설정', en: 'General' })} actions={saveAction}>
+        <Section variant="settings" heading={t({ ko: '기본 설정', en: 'General' })} actions={<SectionDirtyBadge dirty={isSectionDirty('basic')} />}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field
               label={t({ ko: '언어', en: 'Language' })}
@@ -108,7 +92,7 @@ export function GeneralPreferencesSections({
       ) : null}
 
       {visibleSections.has('appearance') ? (
-        <Section variant="settings" heading={t({ ko: '탐색 및 표시', en: 'Navigation and display' })} actions={saveAction}>
+        <Section variant="settings" heading={t({ ko: '탐색 및 표시', en: 'Navigation and display' })} actions={<SectionDirtyBadge dirty={isSectionDirty('appearance')} />}>
           <div className="grid gap-4 md:grid-cols-2">
             <ToggleRow>
               <input type="checkbox" checked={generalDraft.enableGallery ?? true} onChange={(event) => onPatchGeneral({ enableGallery: event.target.checked })} />
@@ -140,7 +124,7 @@ export function GeneralPreferencesSections({
       ) : null}
 
       {visibleSections.has('library') ? (
-        <Section variant="settings" heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={saveAction}>
+        <Section variant="settings" heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={<SectionDirtyBadge dirty={isSectionDirty('library')} />}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })}>
               <Select
@@ -157,7 +141,7 @@ export function GeneralPreferencesSections({
       ) : null}
 
       {visibleSections.has('safety') ? (
-        <Section variant="settings" heading={t({ ko: '안전 및 정리', en: 'Safety and cleanup' })} actions={saveAction}>
+        <Section variant="settings" heading={t({ ko: '안전 및 정리', en: 'Safety and cleanup' })} actions={<SectionDirtyBadge dirty={isSectionDirty('safety')} />}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t({ ko: '휴지통 경로', en: 'Recycle bin path' })}>
               <Input

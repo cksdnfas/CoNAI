@@ -1,4 +1,4 @@
-import { RefreshCw, Save } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,6 +9,7 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { VideoOptimizationTab } from './video-optimization-tab'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SectionDirtyBadge } from './settings-section-status'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
   { label: '720p', width: 1280, height: 720 },
@@ -49,23 +50,15 @@ interface ImageSaveTabProps {
   showMediaSettings?: boolean
   imageSaveDraft: ImageSaveSettings | null
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
-  onSave: () => void
-  isSaving: boolean
   hasImageSaveChanges: boolean
   thumbnailDraft: ThumbnailSettings | null
   onPatchThumbnail: (patch: Partial<ThumbnailSettings>) => void
-  onSaveThumbnail: () => void
-  isSavingThumbnail: boolean
   hasThumbnailChanges: boolean
   generationThrottleDraft: GenerationThrottleSettings | null
   onPatchGenerationThrottle: (patch: GenerationThrottleDraftPatch) => void
-  onSaveGenerationThrottle: () => void
-  isSavingGenerationThrottle: boolean
   hasGenerationThrottleChanges: boolean
   videoOptimizationDraft: VideoOptimizationSettings | null
   onPatchVideoOptimization: (patch: Partial<VideoOptimizationSettings>) => void
-  onSaveVideoOptimization: () => void
-  isSavingVideoOptimization: boolean
   hasVideoOptimizationChanges: boolean
 }
 
@@ -75,23 +68,15 @@ export function ImageSaveTab({
   showMediaSettings = true,
   imageSaveDraft,
   onPatchImageSave,
-  onSave,
-  isSaving,
   hasImageSaveChanges,
   thumbnailDraft,
   onPatchThumbnail,
-  onSaveThumbnail,
-  isSavingThumbnail,
   hasThumbnailChanges,
   generationThrottleDraft,
   onPatchGenerationThrottle,
-  onSaveGenerationThrottle,
-  isSavingGenerationThrottle,
   hasGenerationThrottleChanges,
   videoOptimizationDraft,
   onPatchVideoOptimization,
-  onSaveVideoOptimization,
-  isSavingVideoOptimization,
   hasVideoOptimizationChanges,
 }: ImageSaveTabProps) {
   const { t } = useI18n()
@@ -103,17 +88,7 @@ export function ImageSaveTab({
         <Section
           variant="settings"
           heading={t({ ko: '생성 텀 / 쓰로틀', en: 'Generation pacing / throttle' })}
-          actions={
-            <Button
-              size="icon-sm"
-              onClick={onSaveGenerationThrottle}
-              disabled={!generationThrottleDraft || isSavingGenerationThrottle || !hasGenerationThrottleChanges}
-              aria-label={hasGenerationThrottleChanges ? t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' }) : t({ ko: '생성 텀 설정 변경 없음', en: 'No generation throttle changes' })}
-              title={hasGenerationThrottleChanges ? t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          }
+          actions={<SectionDirtyBadge dirty={hasGenerationThrottleChanges} />}
         >
           {generationThrottleDraft ? (
             <div className="space-y-5">
@@ -249,17 +224,7 @@ export function ImageSaveTab({
         <Section
           variant="settings"
           heading={t({ ko: '이미지 저장', en: 'Image saving' })}
-          actions={
-            <Button
-              size="icon-sm"
-              onClick={onSave}
-              disabled={!imageSaveDraft || isSaving || !hasImageSaveChanges}
-              aria-label={hasImageSaveChanges ? t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' }) : t({ ko: '이미지 저장 설정 변경 없음', en: 'No image saving settings changes' })}
-              title={hasImageSaveChanges ? t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          }
+          actions={<SectionDirtyBadge dirty={hasImageSaveChanges} />}
         >
           <div className="grid gap-4 md:grid-cols-2">
             {imageSaveDraft ? (
@@ -402,17 +367,7 @@ export function ImageSaveTab({
         <Section
           variant="settings"
           heading={t({ ko: '썸네일', en: 'Thumbnail' })}
-          actions={
-            <Button
-              size="icon-sm"
-              onClick={onSaveThumbnail}
-              disabled={!thumbnailDraft || isSavingThumbnail || !hasThumbnailChanges}
-              aria-label={hasThumbnailChanges ? t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' }) : t({ ko: '썸네일 설정 변경 없음', en: 'No thumbnail settings changes' })}
-              title={hasThumbnailChanges ? t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          }
+          actions={<SectionDirtyBadge dirty={hasThumbnailChanges} />}
         >
           {thumbnailDraft ? (
             <div className="grid gap-4 md:grid-cols-2">
@@ -454,8 +409,6 @@ export function ImageSaveTab({
       <VideoOptimizationTab
         videoOptimizationDraft={videoOptimizationDraft}
         onPatchVideoOptimization={onPatchVideoOptimization}
-        onSave={onSaveVideoOptimization}
-        isSaving={isSavingVideoOptimization}
         hasChanges={hasVideoOptimizationChanges}
       />
       </>

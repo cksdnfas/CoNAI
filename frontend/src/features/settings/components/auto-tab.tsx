@@ -1,5 +1,6 @@
-import { Loader2, Plus, Save } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Loader2, Plus } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
+import { SectionDirtyBadge } from './settings-section-status'
 import { AutoOverviewCard } from './auto-overview-card'
 import { KaloscopeSettingsCard } from './kaloscope-settings-card'
 import { TaggerSettingsCard } from './tagger-settings-card'
@@ -28,14 +29,6 @@ export function AutoTab({
   onMoveRatingTierUp,
   onMoveRatingTierDown,
   onReorderRatingTier,
-  onSaveTagger,
-  onSaveKaloscope,
-  onSaveRatingWeights,
-  onSaveRatingTiers,
-  isSavingTagger,
-  isSavingKaloscope,
-  isSavingRatingWeights,
-  isSavingRatingTiers,
   hasTaggerChanges,
   hasKaloscopeChanges,
   hasRatingWeightsChanges,
@@ -59,17 +52,7 @@ export function AutoTab({
       <section>
         <KaloscopeSettingsCard
           heading="Kaloscope"
-          actions={
-            <Button
-              size="icon-sm"
-              onClick={onSaveKaloscope}
-              disabled={!kaloscopeDraft || isSavingKaloscope || !hasKaloscopeChanges}
-              aria-label={hasKaloscopeChanges ? t({ ko: 'Kaloscope 저장', en: 'Save Kaloscope' }) : t({ ko: 'Kaloscope 변경 없음', en: 'No Kaloscope changes' })}
-              title={hasKaloscopeChanges ? t({ ko: 'Kaloscope 저장', en: 'Save Kaloscope' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          }
+          actions={<SectionDirtyBadge dirty={hasKaloscopeChanges} />}
           kaloscopeDraft={kaloscopeDraft}
           kaloscopeStatus={kaloscopeStatus}
           onPatchKaloscope={onPatchKaloscope}
@@ -79,17 +62,12 @@ export function AutoTab({
       <section>
         <TaggerSettingsCard
           heading="WD Tagger"
-          actions={
-            <Button
-              size="icon-sm"
-              onClick={onSaveTagger}
-              disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies || !hasTaggerChanges}
-              aria-label={isCheckingTaggerDependencies ? t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' }) : hasTaggerChanges ? t({ ko: 'WD Tagger 저장', en: 'Save WD Tagger' }) : t({ ko: 'WD Tagger 변경 없음', en: 'No WD Tagger changes' })}
-              title={isCheckingTaggerDependencies ? t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' }) : hasTaggerChanges ? t({ ko: 'WD Tagger 저장', en: 'Save WD Tagger' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-            >
-              {isCheckingTaggerDependencies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            </Button>
-          }
+          actions={(
+            <>
+              {isCheckingTaggerDependencies ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label={t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' })} /> : null}
+              <SectionDirtyBadge dirty={hasTaggerChanges} />
+            </>
+          )}
           taggerDraft={taggerDraft}
           taggerModels={taggerModels}
           onPatchTagger={onPatchTagger}
@@ -99,17 +77,7 @@ export function AutoTab({
       <section>
         <RatingWeightSettingsCard
           heading={t({ ko: '평가 가중치', en: 'Rating weights' })}
-          actions={
-            <Button
-              size="icon-sm"
-              onClick={onSaveRatingWeights}
-              disabled={!ratingWeightsDraft || isSavingRatingWeights || ratingWeightValidationMessages.length > 0 || !hasRatingWeightsChanges}
-              aria-label={hasRatingWeightsChanges ? t({ ko: '평가 가중치 저장', en: 'Save rating weights' }) : t({ ko: '평가 가중치 변경 없음', en: 'No rating weight changes' })}
-              title={hasRatingWeightsChanges ? t({ ko: '평가 가중치 저장', en: 'Save rating weights' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          }
+          actions={<SectionDirtyBadge dirty={hasRatingWeightsChanges} />}
           ratingWeightsDraft={ratingWeightsDraft}
           ratingTiersDraft={ratingTiersDraft}
           validationMessages={ratingWeightValidationMessages}
@@ -120,29 +88,14 @@ export function AutoTab({
       <section>
         <RatingTierSettingsCard
           heading={t({ ko: '평가 등급', en: 'Rating tiers' })}
-          actions={
+          actions={(
             <>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="outline"
-                onClick={onAddRatingTier}
-                aria-label={t({ ko: '등급 추가', en: 'Add tier' })}
-                title={t({ ko: '등급 추가', en: 'Add tier' })}
-              >
+              <SectionDirtyBadge dirty={hasRatingTiersChanges} />
+              <IconButton size="icon-sm" variant="outline" onClick={onAddRatingTier} label={t({ ko: '등급 추가', en: 'Add tier' })}>
                 <Plus className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon-sm"
-                onClick={onSaveRatingTiers}
-                disabled={!ratingTiersDraft || isSavingRatingTiers || ratingTierValidationMessages.length > 0 || !hasRatingTiersChanges}
-                aria-label={hasRatingTiersChanges ? t({ ko: '평가 등급 저장', en: 'Save rating tiers' }) : t({ ko: '평가 등급 변경 없음', en: 'No rating tier changes' })}
-                title={hasRatingTiersChanges ? t({ ko: '평가 등급 저장', en: 'Save rating tiers' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-              >
-                <Save className="h-4 w-4" />
-              </Button>
+              </IconButton>
             </>
-          }
+          )}
           ratingTiersDraft={ratingTiersDraft}
           validationMessages={ratingTierValidationMessages}
           onPatchRatingTier={onPatchRatingTier}

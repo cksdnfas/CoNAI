@@ -22,6 +22,7 @@ import {
 import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
+import { InstantApplyHint } from './settings-section-status'
 
 const QUERY_KEY = ['mcp-http-settings'] as const
 const SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore']
@@ -79,7 +80,12 @@ export function McpHttpSettingsCard() {
       variant="settings"
       heading="MCP"
       description={t({ ko: '외부 AI 에이전트가 API 키로 이 서버의 기능을 쓸 수 있게 해. 키마다 허용할 권한을 고를 수 있어.', en: 'Let external AI agents use this server with an API key. Choose what each key is allowed to do.' })}
-      actions={query.data?.enabled ? <Badge>{t({ ko: '활성', en: 'On' })}</Badge> : <Badge variant="outline">{t({ ko: '비활성', en: 'Off' })}</Badge>}
+      actions={(
+        <>
+          <InstantApplyHint />
+          {query.data?.enabled ? <Badge>{t({ ko: '활성', en: 'On' })}</Badge> : <Badge variant="outline">{t({ ko: '비활성', en: 'Off' })}</Badge>}
+        </>
+      )}
     >
       {query.isLoading ? <Skeleton className="h-40 w-full rounded-sm" /> : null}
       {query.isError ? <Inset className="text-sm text-destructive">{query.error instanceof Error ? query.error.message : t({ ko: 'MCP 설정을 불러오지 못했어.', en: 'Could not load MCP settings.' })}</Inset> : null}

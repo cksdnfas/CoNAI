@@ -6,10 +6,12 @@ export interface AppearanceTabProps {
   isDirty: boolean
   onPatchAppearance: (patch: Partial<AppearanceSettings>) => void
   onReset: () => void
-  onCancel: () => void
-  onSave: () => void
   onExport: () => void
   onImport: (file: File) => void | Promise<void>
+  /** File name of an imported package currently previewed on the live theme, or null. */
+  importPreviewFileName: string | null
+  onApplyImportPreview: () => void
+  onRevertImportPreview: () => void
   onSavePresetSlots: (presetSlots: AppearancePresetSlot[]) => void
   onUploadCustomFont: (target: 'sans' | 'mono', file: File) => void | Promise<void>
   onClearCustomFont: (target: 'sans' | 'mono') => void

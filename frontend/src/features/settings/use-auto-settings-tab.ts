@@ -13,6 +13,7 @@ import type {
   TaggerSettings,
 } from '@conai/shared'
 import type { AutoTabProps } from './components/auto-tab-types'
+import { areSettingsDraftsEqual, type SettingsDraftSection } from './settings-draft-sections'
 import { useI18n } from '@/i18n'
 
 interface UseAutoSettingsTabOptions {
@@ -93,10 +94,6 @@ function validateRatingTiersDraft(tiers: RatingTierRecord[] | null, t: ReturnTyp
   return Array.from(new Set(messages))
 }
 
-function areSettingsDraftsEqual(left: unknown, right: unknown) {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
 /** Keep tier ranges continuous while respecting edited boundaries. */
 function normalizeRatingTierDrafts(tiers: RatingTierRecord[]) {
   if (tiers.length === 0) {
@@ -127,7 +124,7 @@ export function useAutoSettingsTab({
   refreshAutoQueries,
   notifyInfo,
   notifyError,
-}: UseAutoSettingsTabOptions): { tabProps: AutoTabProps } {
+}: UseAutoSettingsTabOptions): { tabProps: AutoTabProps; draftSections: SettingsDraftSection[] } {
   const queryClient = useQueryClient()
   const { t } = useI18n()
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
@@ -204,10 +201,6 @@ export function useAutoSettingsTab({
       setTaggerDependencyResult(null)
       hasAutoCheckedTaggerDependenciesRef.current = false
       await queryClient.invalidateQueries({ queryKey: ['tagger-status'] })
-      notifyInfo(t({ ko: '프롬프트 추출 태거 설정을 저장했어.', en: 'Prompt extraction tagger settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '태거 설정 저장에 실패했어.', en: 'Failed to save tagger settings.' }))
     },
   })
 
@@ -217,10 +210,6 @@ export function useAutoSettingsTab({
       syncSettingsCache(settings)
       setKaloscopeDraft(settings.kaloscope)
       await refreshAutoQueries()
-      notifyInfo(t({ ko: '자동 프롬프트 추출 설정을 저장했어.', en: 'Auto prompt extraction settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: 'Kaloscope 설정 저장에 실패했어.', en: 'Failed to save Kaloscope settings.' }))
     },
   })
 
@@ -229,10 +218,6 @@ export function useAutoSettingsTab({
     onSuccess: (weights) => {
       queryClient.setQueryData(['rating-weights'], weights)
       setRatingWeightsDraft(weights)
-      notifyInfo(t({ ko: '평가 가중치를 저장했어.', en: 'Rating weights saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '평가 가중치 저장에 실패했어.', en: 'Failed to save rating weights.' }))
     },
   })
 
@@ -241,10 +226,6 @@ export function useAutoSettingsTab({
     onSuccess: (tiers) => {
       queryClient.setQueryData(['rating-tiers'], tiers)
       setRatingTiersDraft(tiers)
-      notifyInfo(t({ ko: '평가 등급 설정을 저장했어.', en: 'Rating tier settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '평가 등급 설정 저장에 실패했어.', en: 'Failed to save rating tier settings.' }))
     },
   })
 
@@ -441,14 +422,13 @@ export function useAutoSettingsTab({
     reorderRatingTierDraft(tierId, effectiveRatingTiersDraft[nextIndex].id)
   }
 
-  const handleSaveRatingWeights = () => {
+  const handleSaveRatingWeights = async () => {
     if (!effectiveRatingWeightsDraft) return
     if (ratingWeightValidationMessages.length > 0) {
-      notifyError(ratingWeightValidationMessages[0])
-      return
+      throw new Error(ratingWeightValidationMessages[0])
     }
 
-    void ratingWeightsMutation.mutateAsync({
+    await ratingWeightsMutation.mutateAsync({
       general_weight: effectiveRatingWeightsDraft.general_weight,
       sensitive_weight: effectiveRatingWeightsDraft.sensitive_weight,
       questionable_weight: effectiveRatingWeightsDraft.questionable_weight,
@@ -456,11 +436,10 @@ export function useAutoSettingsTab({
     })
   }
 
-  const handleSaveRatingTiers = () => {
+  const handleSaveRatingTiers = async () => {
     if (!effectiveRatingTiersDraft) return
     if (ratingTierValidationMessages.length > 0) {
-      notifyError(ratingTierValidationMessages[0])
-      return
+      throw new Error(ratingTierValidationMessages[0])
     }
 
     const normalizedTiers = effectiveRatingTiersDraft.map((tier, index) => ({
@@ -472,7 +451,7 @@ export function useAutoSettingsTab({
       feed_visibility: tier.feed_visibility ?? 'show',
     }))
 
-    void ratingTiersMutation.mutateAsync(normalizedTiers)
+    await ratingTiersMutation.mutateAsync(normalizedTiers)
   }
 
   const handleAutoTestHashInputChange = (value: string) => {
@@ -500,7 +479,47 @@ export function useAutoSettingsTab({
     void kaloscopeAutoTestMutation.mutateAsync(autoTestMedia.compositeHash)
   }
 
+  const draftSections: SettingsDraftSection[] = [
+    {
+      id: 'kaloscope',
+      label: 'Kaloscope',
+      tab: 'auto',
+      isDirty: hasKaloscopeChanges,
+      save: async () => {
+        if (effectiveKaloscopeDraft) await kaloscopeMutation.mutateAsync(effectiveKaloscopeDraft)
+      },
+      discard: () => setKaloscopeDraft(null),
+    },
+    {
+      id: 'tagger',
+      label: 'WD Tagger',
+      tab: 'auto',
+      isDirty: hasTaggerChanges,
+      save: async () => {
+        if (effectiveTaggerDraft) await taggerMutation.mutateAsync(effectiveTaggerDraft)
+      },
+      discard: () => setTaggerDraft(null),
+    },
+    {
+      id: 'rating-weights',
+      label: t({ ko: '평가 가중치', en: 'Rating weights' }),
+      tab: 'auto',
+      isDirty: hasRatingWeightsChanges,
+      save: handleSaveRatingWeights,
+      discard: () => setRatingWeightsDraft(null),
+    },
+    {
+      id: 'rating-tiers',
+      label: t({ ko: '평가 등급', en: 'Rating tiers' }),
+      tab: 'auto',
+      isDirty: hasRatingTiersChanges,
+      save: handleSaveRatingTiers,
+      discard: () => setRatingTiersDraft(null),
+    },
+  ]
+
   return {
+    draftSections,
     tabProps: {
       taggerDraft: effectiveTaggerDraft,
       kaloscopeDraft: effectiveKaloscopeDraft,
@@ -521,14 +540,6 @@ export function useAutoSettingsTab({
       onMoveRatingTierUp: (tierId: number) => moveRatingTierDraft(tierId, 'up'),
       onMoveRatingTierDown: (tierId: number) => moveRatingTierDraft(tierId, 'down'),
       onReorderRatingTier: reorderRatingTierDraft,
-      onSaveTagger: () => effectiveTaggerDraft && void taggerMutation.mutateAsync(effectiveTaggerDraft),
-      onSaveKaloscope: () => effectiveKaloscopeDraft && void kaloscopeMutation.mutateAsync(effectiveKaloscopeDraft),
-      onSaveRatingWeights: handleSaveRatingWeights,
-      onSaveRatingTiers: handleSaveRatingTiers,
-      isSavingTagger: taggerMutation.isPending,
-      isSavingKaloscope: kaloscopeMutation.isPending,
-      isSavingRatingWeights: ratingWeightsMutation.isPending,
-      isSavingRatingTiers: ratingTiersMutation.isPending,
       hasTaggerChanges,
       hasKaloscopeChanges,
       hasRatingWeightsChanges,

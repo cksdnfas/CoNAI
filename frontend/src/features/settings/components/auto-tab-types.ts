@@ -32,14 +32,6 @@ export interface AutoTabProps {
   onMoveRatingTierUp: (tierId: number) => void
   onMoveRatingTierDown: (tierId: number) => void
   onReorderRatingTier: (sourceTierId: number, targetTierId: number) => void
-  onSaveTagger: () => void
-  onSaveKaloscope: () => void
-  onSaveRatingWeights: () => void
-  onSaveRatingTiers: () => void
-  isSavingTagger: boolean
-  isSavingKaloscope: boolean
-  isSavingRatingWeights: boolean
-  isSavingRatingTiers: boolean
   hasTaggerChanges: boolean
   hasKaloscopeChanges: boolean
   hasRatingWeightsChanges: boolean

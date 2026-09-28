@@ -1,5 +1,3 @@
-import { Save } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n, type TranslationDictionary } from '@/i18n'
@@ -9,6 +7,7 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import type { VideoOptimizationSettings } from '@conai/shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SectionDirtyBadge } from './settings-section-status'
 
 /** Select value shown when CRF/audio no longer match any preset; never sent to the server. */
 const CUSTOM_PRESET_VALUE = 'custom'
@@ -22,8 +21,6 @@ const VIDEO_PRESETS: Array<{ value: VideoOptimizationSettings['preset']; label: 
 interface VideoOptimizationTabProps {
   videoOptimizationDraft: VideoOptimizationSettings | null
   onPatchVideoOptimization: (patch: Partial<VideoOptimizationSettings>) => void
-  onSave: () => void
-  isSaving: boolean
   hasChanges: boolean
 }
 
@@ -31,8 +28,6 @@ interface VideoOptimizationTabProps {
 export function VideoOptimizationTab({
   videoOptimizationDraft,
   onPatchVideoOptimization,
-  onSave,
-  isSaving,
   hasChanges,
 }: VideoOptimizationTabProps) {
   const { t } = useI18n()
@@ -48,17 +43,7 @@ export function VideoOptimizationTab({
         <Section
           variant="settings"
           heading={t({ ko: '비디오 최적화', en: 'Video optimization' })}
-          actions={
-            <Button
-              size="icon-sm"
-              onClick={onSave}
-              disabled={!videoOptimizationDraft || isSaving || !hasChanges}
-              aria-label={hasChanges ? t({ ko: '비디오 최적화 설정 저장', en: 'Save video optimization settings' }) : t({ ko: '비디오 최적화 설정 변경 없음', en: 'No video optimization settings changes' })}
-              title={hasChanges ? t({ ko: '비디오 최적화 설정 저장', en: 'Save video optimization settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          }
+          actions={<SectionDirtyBadge dirty={hasChanges} />}
         >
           {videoOptimizationDraft ? (
             <div className="space-y-4">

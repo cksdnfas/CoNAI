@@ -22,7 +22,9 @@ import type {
   VideoOptimizationSettings,
 } from '@conai/shared'
 import type { GeneralPreferenceSection } from './components/general-preferences-sections'
+import { SettingsSaveBar } from './components/settings-save-bar'
 import { SettingsTabNav } from './components/settings-tab-nav'
+import { areSettingsDraftsEqual, saveSettingsDraftSections, type SettingsDraftSection } from './settings-draft-sections'
 import { parseSettingsTab, type SettingsTab } from './settings-tabs'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 import { useAppearanceSettingsTab } from './use-appearance-settings-tab'
@@ -86,10 +88,6 @@ const LlmConnectionsTabLazy = lazy(async () => {
 
 type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
 
-function areSettingsDraftsEqual(left: unknown, right: unknown) {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
 /** General-settings fields rendered (and therefore saved) by each preference section. */
 const GENERAL_SECTION_FIELDS = {
   basic: ['language', 'promptForDownloadLocation'],
@@ -98,19 +96,29 @@ const GENERAL_SECTION_FIELDS = {
   safety: ['deleteProtection', 'generationHistoryMaxItems', 'autoCleanupCanvasOnShutdown', 'applyRatingSafetyToGenerationHistory'],
 } as const satisfies Record<GeneralPreferenceSection, ReadonlyArray<keyof GeneralSettings>>
 
+/** Tab that renders each general preference section. */
+const GENERAL_SECTION_TABS: Record<GeneralPreferenceSection, SettingsTab> = {
+  basic: 'general',
+  appearance: 'general',
+  library: 'library',
+  safety: 'system',
+}
+
+const GENERAL_SECTIONS = Object.keys(GENERAL_SECTION_FIELDS) as GeneralPreferenceSection[]
+
 function pickGeneralFields(settings: GeneralSettings, fields: ReadonlyArray<keyof GeneralSettings>): Partial<GeneralSettings> {
   return Object.fromEntries(fields.map((field) => [field, settings[field]])) as Partial<GeneralSettings>
 }
 
 function SettingsSectionFallback() {
-  return <div className="min-h-[16rem] rounded-sm border border-border/80 bg-surface-low/50 animate-pulse" />
+  return <div className="min-h-[16rem] rounded-sm bg-surface-low/50 animate-pulse" />
 }
 
-/** Keep the settings page as a composition root for tab-level state and access. */
+/** Keep the settings page as a composition root for tab-level state, the page-wide save bar and access. */
 export function SettingsPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const [searchParams, setSearchParams] = useSearchParams()
   const rawSection = searchParams.get('section')
@@ -121,6 +129,7 @@ export function SettingsPage() {
   const [thumbnailDraft, setThumbnailDraft] = useState<ThumbnailSettings | null>(null)
   const [generationThrottleDraft, setGenerationThrottleDraft] = useState<GenerationThrottleSettings | null>(null)
   const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
+  const [isSavingAll, setIsSavingAll] = useState(false)
   const isDesktopPageLayout = useDesktopPageLayout()
   const canOpenSettings = authStatusQuery.data?.isAdmin === true || authStatusQuery.data?.hasCredentials !== true
 
@@ -203,14 +212,13 @@ export function SettingsPage() {
       pickGeneralFields(savedGeneral, GENERAL_SECTION_FIELDS[section]),
     ),
   )
-  const isGeneralDraftDirty = Boolean(effectiveGeneralDraft && savedGeneral && !areSettingsDraftsEqual(effectiveGeneralDraft, savedGeneral))
   const isMetadataDraftDirty = Boolean(effectiveMetadataDraft && settingsQuery.data?.metadataExtraction && !areSettingsDraftsEqual(effectiveMetadataDraft, settingsQuery.data.metadataExtraction))
   const isImageSaveDraftDirty = Boolean(effectiveImageSaveDraft && settingsQuery.data?.imageSave && !areSettingsDraftsEqual(effectiveImageSaveDraft, settingsQuery.data.imageSave))
   const isThumbnailDraftDirty = Boolean(effectiveThumbnailDraft && settingsQuery.data?.thumbnail && !areSettingsDraftsEqual(effectiveThumbnailDraft, settingsQuery.data.thumbnail))
   const isGenerationThrottleDraftDirty = Boolean(effectiveGenerationThrottleDraft && settingsQuery.data?.generationThrottle && !areSettingsDraftsEqual(effectiveGenerationThrottleDraft, settingsQuery.data.generationThrottle))
   const isVideoOptimizationDraftDirty = Boolean(effectiveVideoOptimizationDraft && settingsQuery.data?.videoOptimization && !areSettingsDraftsEqual(effectiveVideoOptimizationDraft, settingsQuery.data.videoOptimization))
 
-  const { tabProps: appearanceTabProps } = useAppearanceSettingsTab({
+  const { tabProps: appearanceTabProps, draftSection: appearanceDraftSection } = useAppearanceSettingsTab({
     isActive: activeTab === 'general',
     currentAppearance: settingsQuery.data?.appearance,
     savedAppearance,
@@ -219,7 +227,7 @@ export function SettingsPage() {
     notifyError,
   })
 
-  const { tabProps: autoTabProps } = useAutoSettingsTab({
+  const { tabProps: autoTabProps, draftSections: autoDraftSections } = useAutoSettingsTab({
     isActive: activeTab === 'auto',
     taggerSettings: settingsQuery.data?.tagger,
     kaloscopeSettings: settingsQuery.data?.kaloscope,
@@ -229,6 +237,7 @@ export function SettingsPage() {
     notifyError,
   })
 
+  // Save mutations only sync caches and drafts; the save bar reports success and failures for all of them at once.
   const generalMutation = useMutation({
     mutationFn: updateGeneralSettings,
     onSuccess: (settings, savedFields) => {
@@ -236,10 +245,6 @@ export function SettingsPage() {
       // Only refresh the saved section's fields so unsaved edits in other sections stay in the draft.
       const savedKeys = Object.keys(savedFields) as Array<keyof GeneralSettings>
       setGeneralDraft((currentDraft) => currentDraft ? { ...currentDraft, ...pickGeneralFields(settings.general, savedKeys) } : null)
-      notifyInfo(t({ ko: '일반 설정을 저장했어.', en: 'General settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '일반 설정 저장에 실패했어.', en: 'Failed to save general settings.' }))
     },
   })
 
@@ -248,10 +253,6 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setMetadataDraft(settings.metadataExtraction)
-      notifyInfo(t({ ko: '메타데이터 추출 설정을 저장했어.', en: 'Metadata extraction settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '메타데이터 설정 저장에 실패했어.', en: 'Failed to save metadata settings.' }))
     },
   })
 
@@ -276,10 +277,6 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setImageSaveDraft(settings.imageSave)
-      notifyInfo(t({ ko: '이미지 저장 설정을 저장했어.', en: 'Image save settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '이미지 저장 설정 저장에 실패했어.', en: 'Failed to save image save settings.' }))
     },
   })
 
@@ -288,10 +285,6 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setThumbnailDraft(settings.thumbnail)
-      notifyInfo(t({ ko: '썸네일 설정을 저장했어.', en: 'Thumbnail settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '썸네일 설정 저장에 실패했어.', en: 'Failed to save thumbnail settings.' }))
     },
   })
 
@@ -300,10 +293,6 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setGenerationThrottleDraft(settings.generationThrottle)
-      notifyInfo(t({ ko: '생성 텀 설정을 저장했어.', en: 'Generation throttle settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '생성 텀 설정 저장에 실패했어.', en: 'Failed to save generation throttle settings.' }))
     },
   })
 
@@ -312,26 +301,113 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setVideoOptimizationDraft(settings.videoOptimization)
-      notifyInfo(t({ ko: '비디오 최적화 설정을 저장했어.', en: 'Video optimization settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '비디오 최적화 설정 저장에 실패했어.', en: 'Failed to save video optimization settings.' }))
     },
   })
 
-  const hasUnsavedSettingsChanges = isGeneralDraftDirty
-    || isMetadataDraftDirty
-    || isImageSaveDraftDirty
-    || isThumbnailDraftDirty
-    || isGenerationThrottleDraftDirty
-    || isVideoOptimizationDraftDirty
-    || appearanceTabProps.isDirty
-    || autoTabProps.hasTaggerChanges
-    || autoTabProps.hasKaloscopeChanges
-    || autoTabProps.hasRatingWeightsChanges
-    || autoTabProps.hasRatingTiersChanges
+  const generalSectionLabels: Record<GeneralPreferenceSection, string> = {
+    basic: t({ ko: '기본 설정', en: 'General' }),
+    appearance: t({ ko: '탐색 및 표시', en: 'Navigation and display' }),
+    library: t({ ko: '라이브러리 동작', en: 'Library behavior' }),
+    safety: t({ ko: '안전 및 정리', en: 'Safety and cleanup' }),
+  }
+
+  // Every draft on the page, in the order the tabs show them; the save bar works on the dirty subset.
+  const draftSections: SettingsDraftSection[] = [
+    ...GENERAL_SECTIONS.map((section): SettingsDraftSection => ({
+      id: `general-${section}`,
+      label: generalSectionLabels[section],
+      tab: GENERAL_SECTION_TABS[section],
+      isDirty: isGeneralSectionDirty(section),
+      save: async () => {
+        if (effectiveGeneralDraft) await generalMutation.mutateAsync(pickGeneralFields(effectiveGeneralDraft, GENERAL_SECTION_FIELDS[section]))
+      },
+      discard: () => setGeneralDraft((currentDraft) => (
+        currentDraft && savedGeneral ? { ...currentDraft, ...pickGeneralFields(savedGeneral, GENERAL_SECTION_FIELDS[section]) } : currentDraft
+      )),
+    })),
+    appearanceDraftSection,
+    {
+      id: 'metadata',
+      label: t({ ko: '메타데이터', en: 'Metadata' }),
+      tab: 'library',
+      isDirty: isMetadataDraftDirty,
+      save: async () => {
+        if (effectiveMetadataDraft) await metadataMutation.mutateAsync(effectiveMetadataDraft)
+      },
+      discard: () => setMetadataDraft(null),
+    },
+    {
+      id: 'image-save',
+      label: t({ ko: '이미지 저장', en: 'Image saving' }),
+      tab: 'media',
+      isDirty: isImageSaveDraftDirty,
+      save: async () => {
+        if (effectiveImageSaveDraft) await imageSaveMutation.mutateAsync(effectiveImageSaveDraft)
+      },
+      discard: () => setImageSaveDraft(null),
+    },
+    {
+      id: 'thumbnail',
+      label: t({ ko: '썸네일', en: 'Thumbnail' }),
+      tab: 'media',
+      isDirty: isThumbnailDraftDirty,
+      save: async () => {
+        if (effectiveThumbnailDraft) await thumbnailMutation.mutateAsync(effectiveThumbnailDraft)
+      },
+      discard: () => setThumbnailDraft(null),
+    },
+    {
+      id: 'video-optimization',
+      label: t({ ko: '비디오 최적화', en: 'Video optimization' }),
+      tab: 'media',
+      isDirty: isVideoOptimizationDraftDirty,
+      save: async () => {
+        if (effectiveVideoOptimizationDraft) await videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft)
+      },
+      discard: () => setVideoOptimizationDraft(null),
+    },
+    ...autoDraftSections,
+    {
+      id: 'generation-throttle',
+      label: t({ ko: '생성 텀', en: 'Generation pacing' }),
+      tab: 'generation',
+      isDirty: isGenerationThrottleDraftDirty,
+      save: async () => {
+        if (effectiveGenerationThrottleDraft) await generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft)
+      },
+      discard: () => setGenerationThrottleDraft(null),
+    },
+  ]
+  const dirtySections = draftSections.filter((section) => section.isDirty)
+
+  const handleSaveAll = async () => {
+    if (isSavingAll || dirtySections.length === 0) {
+      return
+    }
+
+    setIsSavingAll(true)
+    const failures = await saveSettingsDraftSections(dirtySections, t({ ko: '저장에 실패했어.', en: 'Save failed.' }))
+    setIsSavingAll(false)
+
+    if (failures.length === 0) {
+      notifyInfo(t({ ko: '변경 {count}건을 저장했어.', en: 'Saved {count} changes.' }, { count: formatNumber(dirtySections.length) }))
+      return
+    }
+
+    const savedCount = dirtySections.length - failures.length
+    const details = failures.map((failure) => `${failure.section.label}: ${failure.message}`).join(' · ')
+    notifyError(savedCount > 0
+      ? t({ ko: '{saved}건은 저장했지만 {failed}건은 실패했어. {details}', en: 'Saved {saved}, but {failed} failed. {details}' }, { saved: formatNumber(savedCount), failed: formatNumber(failures.length), details })
+      : t({ ko: '{failed}건을 저장하지 못했어. {details}', en: 'Could not save {failed} changes. {details}' }, { failed: formatNumber(failures.length), details }))
+  }
+
+  const handleDiscardAll = () => {
+    dirtySections.forEach((section) => section.discard())
+    notifyInfo(t({ ko: '저장하지 않은 변경을 되돌렸어.', en: 'Reverted unsaved changes.' }))
+  }
+
   useUnsavedSettingsGuard(
-    hasUnsavedSettingsChanges,
+    dirtySections.length > 0,
     t({ ko: '저장하지 않은 설정 변경이 있어. 이 페이지를 떠나면 사라져. 계속할까?', en: 'You have unsaved settings changes. They will be lost if you leave this page. Continue?' }),
   )
 
@@ -372,11 +448,6 @@ export function SettingsPage() {
   const patchGeneralDraft = (patch: Partial<GeneralSettings>) => {
     if (!effectiveGeneralDraft) return
     setGeneralDraft({ ...effectiveGeneralDraft, ...patch })
-  }
-
-  const saveGeneralSection = (section: GeneralPreferenceSection) => {
-    if (!effectiveGeneralDraft) return
-    void generalMutation.mutateAsync(pickGeneralFields(effectiveGeneralDraft, GENERAL_SECTION_FIELDS[section]))
   }
 
   const patchDeleteProtectionDraft = (patch: Partial<GeneralSettings['deleteProtection']>) => {
@@ -435,24 +506,23 @@ export function SettingsPage() {
   const imageSaveTabProps = {
     imageSaveDraft: effectiveImageSaveDraft,
     onPatchImageSave: patchImageSaveDraft,
-    onSave: () => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft),
-    isSaving: imageSaveMutation.isPending,
     hasImageSaveChanges: isImageSaveDraftDirty,
     thumbnailDraft: effectiveThumbnailDraft,
     onPatchThumbnail: patchThumbnailDraft,
-    onSaveThumbnail: () => effectiveThumbnailDraft && void thumbnailMutation.mutateAsync(effectiveThumbnailDraft),
-    isSavingThumbnail: thumbnailMutation.isPending,
     hasThumbnailChanges: isThumbnailDraftDirty,
     generationThrottleDraft: effectiveGenerationThrottleDraft,
     onPatchGenerationThrottle: patchGenerationThrottleDraft,
-    onSaveGenerationThrottle: () => effectiveGenerationThrottleDraft && void generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft),
-    isSavingGenerationThrottle: generationThrottleMutation.isPending,
     hasGenerationThrottleChanges: isGenerationThrottleDraftDirty,
     videoOptimizationDraft: effectiveVideoOptimizationDraft,
     onPatchVideoOptimization: patchVideoOptimizationDraft,
-    onSaveVideoOptimization: () => effectiveVideoOptimizationDraft && void videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft),
-    isSavingVideoOptimization: videoOptimizationMutation.isPending,
     hasVideoOptimizationChanges: isVideoOptimizationDraftDirty,
+  }
+
+  const generalSectionsProps = {
+    generalDraft: effectiveGeneralDraft,
+    onPatchGeneral: patchGeneralDraft,
+    onPatchDeleteProtection: patchDeleteProtectionDraft,
+    isSectionDirty: isGeneralSectionDirty,
   }
 
   return (
@@ -473,45 +543,18 @@ export function SettingsPage() {
           <Suspense fallback={<SettingsSectionFallback />}>
             {activeTab === 'general' ? (
               <div className="space-y-6">
-                <GeneralPreferencesSectionsLazy
-                  sections={['basic']}
-                  generalDraft={effectiveGeneralDraft}
-                  onPatchGeneral={patchGeneralDraft}
-                  onPatchDeleteProtection={patchDeleteProtectionDraft}
-                  onSave={() => saveGeneralSection('basic')}
-                  isSaving={generalMutation.isPending}
-                  hasChanges={isGeneralSectionDirty('basic')}
-                />
-                <GeneralPreferencesSectionsLazy
-                  sections={['appearance']}
-                  generalDraft={effectiveGeneralDraft}
-                  onPatchGeneral={patchGeneralDraft}
-                  onPatchDeleteProtection={patchDeleteProtectionDraft}
-                  onSave={() => saveGeneralSection('appearance')}
-                  isSaving={generalMutation.isPending}
-                  hasChanges={isGeneralSectionDirty('appearance')}
-                />
+                <GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} />
                 <AppearanceTabLazy {...appearanceTabProps} />
               </div>
             ) : null}
 
             {activeTab === 'library' ? (
               <div className="space-y-6">
-                <GeneralPreferencesSectionsLazy
-                  sections={['library']}
-                  generalDraft={effectiveGeneralDraft}
-                  onPatchGeneral={patchGeneralDraft}
-                  onPatchDeleteProtection={patchDeleteProtectionDraft}
-                  onSave={() => saveGeneralSection('library')}
-                  isSaving={generalMutation.isPending}
-                  hasChanges={isGeneralSectionDirty('library')}
-                />
+                <GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} />
                 <FoldersTabLazy {...foldersTabProps} />
                 <MetadataTabLazy
                   metadataDraft={effectiveMetadataDraft}
                   onPatchMetadata={patchMetadataDraft}
-                  onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
-                  isSaving={metadataMutation.isPending}
                   hasChanges={isMetadataDraftDirty}
                 />
               </div>
@@ -544,15 +587,7 @@ export function SettingsPage() {
             {activeTab === 'system' ? (
               <div className="space-y-6">
                 <McpHttpSettingsCardLazy />
-                <GeneralPreferencesSectionsLazy
-                  sections={['safety']}
-                  generalDraft={effectiveGeneralDraft}
-                  onPatchGeneral={patchGeneralDraft}
-                  onPatchDeleteProtection={patchDeleteProtectionDraft}
-                  onSave={() => saveGeneralSection('safety')}
-                  isSaving={generalMutation.isPending}
-                  hasChanges={isGeneralSectionDirty('safety')}
-                />
+                <GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} />
               </div>
             ) : null}
 
@@ -571,6 +606,14 @@ export function SettingsPage() {
               />
             ) : null}
           </Suspense>
+
+          <SettingsSaveBar
+            dirtySections={dirtySections}
+            isSaving={isSavingAll}
+            onSave={() => void handleSaveAll()}
+            onDiscard={handleDiscardAll}
+            onOpenTab={setActiveTab}
+          />
         </section>
       </div>
     </div>

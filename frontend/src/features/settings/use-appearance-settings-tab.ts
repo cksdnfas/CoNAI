@@ -6,6 +6,7 @@ import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearan
 import type { AppearanceTabProps } from './components/appearance-tab.types'
 import type { AppearancePresetSlot, AppearanceSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
+import { areSettingsDraftsEqual, type SettingsDraftSection } from './settings-draft-sections'
 
 interface UseAppearanceSettingsTabOptions {
   /** Whether the appearance tab is currently active. */
@@ -38,29 +39,27 @@ export function useAppearanceSettingsTab({
   syncSettingsCache,
   notifyInfo,
   notifyError,
-}: UseAppearanceSettingsTabOptions): { tabProps: AppearanceTabProps } {
+}: UseAppearanceSettingsTabOptions): { tabProps: AppearanceTabProps; draftSection: SettingsDraftSection } {
   const { t } = useI18n()
   const [appearanceDraft, setAppearanceDraft] = useState<AppearanceSettings | null>(null)
+  // An imported package is only previewed on the live theme until the user applies or reverts it.
+  const [importPreview, setImportPreview] = useState<{ appearance: AppearanceSettings; fileName: string } | null>(null)
   const effectiveAppearanceDraft = appearanceDraft ?? currentAppearance ?? null
 
   useEffect(() => {
     if (isActive) {
-      applyAppearanceTheme(effectiveAppearanceDraft ?? savedAppearance)
+      applyAppearanceTheme(importPreview?.appearance ?? effectiveAppearanceDraft ?? savedAppearance)
       return
     }
 
     applyAppearanceTheme(savedAppearance)
-  }, [effectiveAppearanceDraft, isActive, savedAppearance])
+  }, [effectiveAppearanceDraft, importPreview, isActive, savedAppearance])
 
   const appearanceMutation = useMutation({
     mutationFn: updateAppearanceSettings,
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setAppearanceDraft(settings.appearance)
-      notifyInfo(t({ ko: '화면 설정을 저장했어.', en: 'Appearance settings saved.' }))
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : t({ ko: '화면 설정 저장에 실패했어.', en: 'Failed to save appearance settings.' }))
     },
   })
 
@@ -92,8 +91,7 @@ export function useAppearanceSettingsTab({
     setAppearanceDraft({ ...effectiveAppearanceDraft, ...patch })
   }
 
-  const isDirty =
-    JSON.stringify(effectiveAppearanceDraft ?? savedAppearance) !== JSON.stringify(savedAppearance)
+  const isDirty = !areSettingsDraftsEqual(effectiveAppearanceDraft ?? savedAppearance, savedAppearance)
 
   const handleAppearanceReset = () => {
     setAppearanceDraft((draft) => ({
@@ -104,12 +102,18 @@ export function useAppearanceSettingsTab({
 
   const handleAppearanceCancel = () => {
     setAppearanceDraft(savedAppearance)
+    setImportPreview(null)
     applyAppearanceTheme(savedAppearance)
   }
 
-  const handleAppearanceSave = () => {
+  const handleAppearanceSave = async () => {
     if (!effectiveAppearanceDraft) return
-    void appearanceMutation.mutateAsync(extractAppearanceTheme(effectiveAppearanceDraft))
+    // Slot names are edited in the draft too, so send them along when they changed.
+    const presetSlots = normalizeAppearancePresetSlots(effectiveAppearanceDraft.presetSlots)
+    await appearanceMutation.mutateAsync({
+      ...extractAppearanceTheme(effectiveAppearanceDraft),
+      ...(areSettingsDraftsEqual(presetSlots, savedAppearance.presetSlots) ? {} : { presetSlots }),
+    })
   }
 
   const handleAppearanceExport = async () => {
@@ -143,11 +147,21 @@ export function useAppearanceSettingsTab({
         throw new Error(t({ ko: 'Appearance JSON 구조를 확인하지 못했어.', en: 'Could not verify the Appearance JSON structure.' }))
       }
 
-      await appearanceMutation.mutateAsync(importedAppearance)
-      notifyInfo(t({ ko: '화면 설정 패키지를 불러와 저장했어.', en: 'Imported and saved the appearance package.' }))
+      setImportPreview({ appearance: importedAppearance, fileName: file.name })
     } catch (error) {
       notifyError(error instanceof Error ? error.message : t({ ko: '화면 설정 파일을 불러오지 못했어.', en: 'Failed to load the appearance settings file.' }))
     }
+  }
+
+  const handleApplyImportPreview = () => {
+    if (!importPreview) return
+    setAppearanceDraft(importPreview.appearance)
+    setImportPreview(null)
+    notifyInfo(t({ ko: '가져온 테마를 초안에 적용했어. 아래 저장 바에서 저장하면 반영돼.', en: 'Applied the imported theme to the draft. Save from the bar below to keep it.' }))
+  }
+
+  const handleRevertImportPreview = () => {
+    setImportPreview(null)
   }
 
   const handleAppearancePresetSlotsSave = (presetSlots: AppearancePresetSlot[]) => {
@@ -196,17 +210,28 @@ export function useAppearanceSettingsTab({
     notifyInfo(t({ ko: '{targetLabel} 업로드 폰트를 draft에서 해제했어. 저장하면 반영돼.', en: 'Cleared the {targetLabel} uploaded font from the draft. Save to apply.' }, { targetLabel: target === 'sans' ? t({ ko: '본문', en: 'body' }) : t({ ko: '모노', en: 'mono' }) }))
   }
 
+  const draftSection: SettingsDraftSection = {
+    id: 'appearance',
+    label: t({ ko: '테마', en: 'Theme' }),
+    tab: 'general',
+    isDirty,
+    save: handleAppearanceSave,
+    discard: handleAppearanceCancel,
+  }
+
   return {
+    draftSection,
     tabProps: {
       appearanceDraft: effectiveAppearanceDraft,
       savedAppearance,
       isDirty,
       onPatchAppearance: patchAppearanceDraft,
       onReset: handleAppearanceReset,
-      onCancel: handleAppearanceCancel,
-      onSave: handleAppearanceSave,
       onExport: handleAppearanceExport,
       onImport: handleAppearanceImport,
+      importPreviewFileName: importPreview?.fileName ?? null,
+      onApplyImportPreview: handleApplyImportPreview,
+      onRevertImportPreview: handleRevertImportPreview,
       onSavePresetSlots: handleAppearancePresetSlotsSave,
       onUploadCustomFont: handleAppearanceFontUpload,
       onClearCustomFont: handleAppearanceFontClear,
