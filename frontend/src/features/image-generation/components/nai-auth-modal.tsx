@@ -35,7 +35,6 @@ export function NaiAuthModal({
       open={open}
       onClose={onClose}
       title={t({ ko: 'NovelAI 토큰 연결', en: 'Connect NovelAI Token' })}
-      description={t({ ko: 'NovelAI 영구 API 토큰을 저장해서 연결해.', en: 'Connect by saving a NovelAI persistent API token.' })}
       widthClassName="max-w-2xl"
     >
       <ModalBody>

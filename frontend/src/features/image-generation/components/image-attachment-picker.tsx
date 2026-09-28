@@ -4,7 +4,7 @@ import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -126,13 +126,8 @@ function buildImageAttachmentImportSourceCandidates(image: ImageRecord) {
 }
 
 /** Render one compact empty state using shared alert styling. */
-function ImageAttachmentEmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <Alert>
-      <AlertTitle>{title}</AlertTitle>
-      <AlertDescription>{description}</AlertDescription>
-    </Alert>
-  )
+function ImageAttachmentEmptyState({ title }: { title: string }) {
+  return <EmptyState size="compact" title={title} />
 }
 
 /** Render one browser-style image list section for system/save sources. */
@@ -189,7 +184,7 @@ function ImageAttachmentBrowserSection({
           )}
         />
       ) : (
-        <ImageAttachmentEmptyState title={t({ ko: '선택할 이미지가 없어', en: 'No images to select' })} description={t({ ko: '검색 조건을 바꾸거나 다른 소스를 골라봐.', en: 'Change the search terms or choose another source.' })} />
+        <ImageAttachmentEmptyState title={t({ ko: '선택할 이미지가 없어', en: 'No images to select' })} />
       )}
     </div>
   )

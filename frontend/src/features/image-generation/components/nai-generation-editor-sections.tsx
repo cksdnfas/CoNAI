@@ -280,7 +280,6 @@ export function NaiGenerationEditorSections({
             {naiForm.action === 'infill' ? (
               <FormField label={t({ ko: '마스크 이미지', en: 'Mask Image' })}>
                 <div className="space-y-3">
-                  <Text variant="caption">{t('image-generation.components.nai.generation.editor.sections.you.can.create.the.mask.in.the')}</Text>
                   <div className="flex flex-wrap gap-2">
                     <ImageAttachmentPickerButton
                       label={naiForm.maskImage

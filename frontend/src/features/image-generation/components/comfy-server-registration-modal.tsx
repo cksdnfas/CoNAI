@@ -63,11 +63,11 @@ export function ComfyServerRegistrationModal({
           </Field>
         </div>
 
-        <Field label={t({ ko: '설명', en: 'Description' })} hint={t({ ko: '선택', en: 'Optional' })}>
+        <Field label={t({ ko: '설명', en: 'Description' })}>
           <Input variant="settings" value={form.description} onChange={(event) => onFieldChange('description', event.target.value)} placeholder={t({ ko: '메인 GPU 서버', en: 'Main GPU server' })} />
         </Field>
 
-        <Field label={t({ ko: '라우팅 태그', en: 'Routing tags' })} hint={t({ ko: '쉼표로 구분', en: 'Comma-separated' })}>
+        <Field label={t({ ko: '라우팅 태그', en: 'Routing tags' })}>
           <Input variant="settings" value={form.routingTags} onChange={(event) => onFieldChange('routingTags', event.target.value)} placeholder="gpu4090, high-vram, fast-lane" />
         </Field>
 

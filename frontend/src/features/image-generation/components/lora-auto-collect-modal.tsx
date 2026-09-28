@@ -233,7 +233,6 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
         }
       }}
       title={t({ ko: 'LoRA 자동 수집', en: 'LoRA auto-collection' })}
-      description={t({ ko: '폴더 덤프를 읽어서 자동 수집용 LoRA 와일드카드 트리를 다시 만들자.', en: 'Read a folder dump and rebuild the LoRA wildcard tree for auto-collection.' })}
       widthClassName="max-w-3xl"
     >
       <ModalBody className="space-y-5">
