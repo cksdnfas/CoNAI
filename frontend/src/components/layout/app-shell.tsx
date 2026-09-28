@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
-import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
+import { matchPath, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
 import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/components/home-search-ui'
@@ -150,6 +150,8 @@ function AppShellLayout() {
                 <nav className="flex min-w-max items-center gap-1 pr-10 sm:pr-2" aria-label={t('appShell.mainPageNavigation')}>
                   {visibleNavItems.map(({ to, labelKey, icon: Icon }) => {
                     const label = t(labelKey)
+                    // Resolved here (not via NavLink's render props) so the Tip trigger can merge a plain className.
+                    const isActive = matchPath({ path: to, end: to === '/' }, location.pathname) !== null
 
                     return (
                     <Tip key={to} content={label} side="bottom">
@@ -162,21 +164,15 @@ function AppShellLayout() {
                       onMouseEnter={() => prefetchAppRoute(to)}
                       onFocus={() => prefetchAppRoute(to)}
                       onDragStart={(event) => event.preventDefault()}
-                      className={({ isActive }) =>
-                        cn(
-                          // Icon-only; from xl (1280px) the active page also shows its label.
-                          'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-foreground/70 transition-colors duration-300 outline-none hover:bg-surface-high hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 select-none',
-                          isDraggingNav && 'pointer-events-none',
-                          isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary xl:w-auto xl:px-3',
-                        )
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <Icon className="h-4 w-4 shrink-0" />
-                          <span className={cn('sr-only', isActive && 'xl:not-sr-only xl:whitespace-nowrap xl:text-sm xl:font-medium')}>{label}</span>
-                        </>
+                      className={cn(
+                        // Icon-only; from xl (1280px) the active page also shows its label.
+                        'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-foreground/70 transition-colors duration-300 outline-none hover:bg-surface-high hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 select-none',
+                        isDraggingNav && 'pointer-events-none',
+                        isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary xl:w-auto xl:px-3',
                       )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className={cn('sr-only', isActive && 'xl:not-sr-only xl:whitespace-nowrap xl:text-sm xl:font-medium')}>{label}</span>
                     </NavLink>
                     </Tip>
                     )
