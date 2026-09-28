@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ArrowLeft, ListX, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Heading } from '@/components/ui/heading'
@@ -8,6 +9,8 @@ import { cn } from '@/lib/utils'
 
 type GenerationHistoryHeaderProps = {
   onBack?: () => void
+  /** Replaces the heading and scope line; the scope actions stay on the right. */
+  leading?: ReactNode
   historyLabel: string
   isPublicView: boolean
   isAdmin: boolean
@@ -28,6 +31,7 @@ type GenerationHistoryHeaderProps = {
 /** Title, scope/count summary and scope-level actions for the generation history panel. */
 export function GenerationHistoryHeader({
   onBack,
+  leading,
   historyLabel,
   isPublicView,
   isAdmin,
@@ -46,32 +50,41 @@ export function GenerationHistoryHeader({
 }: GenerationHistoryHeaderProps) {
   const { t } = useI18n()
 
-  return (
-    <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
-          {onBack ? (
-            <IconButton
-              size="icon-sm"
-              variant="ghost"
-              onClick={onBack}
-              label={t('image-generation.components.generation.history.panel.back.to.workflow.list')}
-            >
-              <ArrowLeft />
-            </IconButton>
-          ) : null}
-          <Heading level={2}>{t('image-generation.components.generation.history.panel.generation.history')}</Heading>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-          <span>{historyLabel}</span>
-          {!isPublicView ? <span>· {isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</span> : null}
-          <span>· {t({ ko: '전체 기록 {count}', en: 'Total records: {count}' }, { count: historyTotalLabel })}</span>
-          {hasHiddenHistoryItems ? <span>· {t({ ko: '일부는 등급 설정으로 숨김', en: 'Some hidden by rating settings' })}</span> : null}
-          {isRefreshing ? <span>· {t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span> : null}
-        </div>
-      </div>
+  const backButton = onBack ? (
+    <IconButton
+      size="icon-sm"
+      variant="ghost"
+      onClick={onBack}
+      label={t('image-generation.components.generation.history.panel.back.to.workflow.list')}
+    >
+      <ArrowLeft />
+    </IconButton>
+  ) : null
 
-      <div className="flex flex-wrap gap-2">
+  return (
+    <div className={cn('flex shrink-0 gap-3', leading ? 'items-center justify-between' : 'flex-col sm:flex-row sm:items-start sm:justify-between')}>
+      {leading ? (
+        <div className="flex min-w-0 items-center gap-2">
+          {backButton}
+          {leading}
+        </div>
+      ) : (
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            {backButton}
+            <Heading level={2}>{t('image-generation.components.generation.history.panel.generation.history')}</Heading>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            <span>{historyLabel}</span>
+            {!isPublicView ? <span>· {isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</span> : null}
+            <span>· {t({ ko: '전체 기록 {count}', en: 'Total records: {count}' }, { count: historyTotalLabel })}</span>
+            {hasHiddenHistoryItems ? <span>· {t({ ko: '일부는 등급 설정으로 숨김', en: 'Some hidden by rating settings' })}</span> : null}
+            {isRefreshing ? <span>· {t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span> : null}
+          </div>
+        </div>
+      )}
+
+      <div className="flex shrink-0 flex-wrap gap-2">
         {inFlightHistoryCount > 0 ? <Badge variant="info">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
         <IconButton
           size="icon-sm"
