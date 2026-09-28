@@ -1,7 +1,7 @@
 import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { useI18n } from '@/i18n'
-import { getGroupHierarchyCountLabel, type GroupCountMaps } from '@/features/groups/group-count-utils'
+import { getGroupHierarchyCountDescription, getGroupHierarchyCountLabel, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import type { GroupWithHierarchy } from '@/types/group'
 
 interface GroupTreeProps {
@@ -12,7 +12,7 @@ interface GroupTreeProps {
 }
 
 export function GroupTree({ groups, countMaps, selectedGroupId, onSelectGroup }: GroupTreeProps) {
-  const { formatNumber } = useI18n()
+  const { formatNumber, t } = useI18n()
 
   return (
     <HierarchyNav
@@ -24,11 +24,15 @@ export function GroupTree({ groups, countMaps, selectedGroupId, onSelectGroup }:
       getParentId={(group) => group.parent_id}
       getLabel={(group) => {
         const countLabel = getGroupHierarchyCountLabel(group, countMaps, formatNumber)
+        const countDescription = getGroupHierarchyCountDescription(group, countMaps, formatNumber, t)
 
         return (
           <div className="flex min-w-0 items-center justify-between gap-2">
             <span className="truncate">{group.name}</span>
-            <span className="shrink-0 text-xs tabular-nums">{countLabel}</span>
+            <span className="shrink-0 text-xs tabular-nums" title={countDescription}>
+              <span aria-hidden="true">{countLabel}</span>
+              <span className="sr-only">{countDescription}</span>
+            </span>
           </div>
         )
       }}

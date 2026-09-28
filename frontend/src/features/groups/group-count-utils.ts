@@ -1,3 +1,4 @@
+import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { GroupWithHierarchy } from '@/types/group'
 
 export interface GroupCountMaps {
@@ -90,6 +91,27 @@ export function getGroupHierarchyCountLabel(
   const totalWithDescendants = countMaps.totalImageCountByGroupId.get(group.id) ?? directCount
 
   return formatHierarchyCountLabel({ directCount, totalWithDescendants, hasChildren, formatNumber })
+}
+
+/** Spell out the compact `direct(total)` tree count for tooltips and screen readers. */
+export function getGroupHierarchyCountDescription(
+  group: GroupWithHierarchy,
+  countMaps: GroupCountMaps,
+  formatNumber: (value: number) => string,
+  t: (input: TranslationInput, params?: TranslationParams) => string,
+) {
+  const directCount = getGroupDirectImageCount(group)
+  const hasChildren = (countMaps.childCountByGroupId.get(group.id) ?? 0) > 0
+  const totalWithDescendants = countMaps.totalImageCountByGroupId.get(group.id) ?? directCount
+
+  if (!hasChildren) {
+    return t({ ko: '이미지 {count}개', en: '{count} images' }, { count: formatNumber(directCount) })
+  }
+
+  return t(
+    { ko: '이 그룹 {direct} · 하위 포함 {total}', en: 'This group {direct} · with subgroups {total}' },
+    { direct: formatNumber(directCount), total: formatNumber(totalWithDescendants) },
+  )
 }
 
 export function getGroupHierarchyTotalCount(group: GroupWithHierarchy, countMaps: GroupCountMaps) {

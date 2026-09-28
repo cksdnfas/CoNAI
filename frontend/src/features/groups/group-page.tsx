@@ -174,7 +174,6 @@ export function GroupPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isWideLayout ? 'Image' : undefined}
         title={t({ ko: '그룹', en: 'Groups' })}
         actions={!selectedGroupId && isCustomSource ? (
           <>
@@ -207,7 +206,9 @@ export function GroupPage() {
             <FolderTree className="h-4 w-4 shrink-0" />
             <span className="truncate">{t({ ko: '폴더 탐색', en: 'Browse folders' })}</span>
           </span>
-          <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(allGroups.length)}</span>
+          <span className="text-xs tabular-nums text-muted-foreground">{isCustomSource
+            ? t({ ko: '그룹 {count}개', en: '{count} groups' }, { count: formatNumber(allGroups.length) })
+            : t({ ko: '폴더 {count}개', en: '{count} folders' }, { count: formatNumber(allGroups.length) })}</span>
         </Button>
       ) : null}
 

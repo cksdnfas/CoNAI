@@ -4,7 +4,7 @@ import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { buildGroupCountMaps, getGroupHierarchyCountLabel } from '@/features/groups/group-count-utils'
+import { buildGroupCountMaps, getGroupHierarchyCountDescription, getGroupHierarchyCountLabel } from '@/features/groups/group-count-utils'
 import { buildGroupOptionItems } from '@/features/groups/group-option-utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { useI18n } from '@/i18n'
@@ -79,11 +79,15 @@ export function GroupAssignModal({
                 getParentId={(group) => group.parent_id}
                 getLabel={(group) => {
                   const countLabel = getGroupHierarchyCountLabel(group, { childCountByGroupId, totalImageCountByGroupId }, formatNumber)
+                  const countDescription = getGroupHierarchyCountDescription(group, { childCountByGroupId, totalImageCountByGroupId }, formatNumber, t)
 
                   return (
                     <div className="flex min-w-0 items-center justify-between gap-2">
                       <span className="truncate">{group.name}</span>
-                      <span className="shrink-0 text-xs tabular-nums">{countLabel}</span>
+                      <span className="shrink-0 text-xs tabular-nums" title={countDescription}>
+                        <span aria-hidden="true">{countLabel}</span>
+                        <span className="sr-only">{countDescription}</span>
+                      </span>
                     </div>
                   )
                 }}
