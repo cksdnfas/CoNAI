@@ -1,9 +1,11 @@
-import { createPortal } from 'react-dom'
 import { Boxes, Copy, PowerOff, SlidersHorizontal, Sparkles, Trash2, Unplug } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { cn } from '@/lib/utils'
+import { useViewportPointAnchor } from './use-viewport-point-anchor'
 
 type PaneActionMenuState = {
   kind: 'pane'
@@ -44,124 +46,97 @@ export function ModuleGraphActionMenu({
   onClose: () => void
 }) {
   const { t } = useI18n()
+  const anchorRef = useViewportPointAnchor(state.anchor)
   useOverlayBackClose({ open: true, onClose })
 
-  if (typeof document === 'undefined') {
-    return null
-  }
-
-  return createPortal(
-    <div className="pointer-events-none fixed inset-0 z-40">
-      <div
-        className={cn(
-          'pointer-events-auto fixed min-w-[180px] rounded-sm border border-border/70 bg-background/92 p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.35)] backdrop-blur-md',
-          state.kind === 'node' ? '-translate-x-1/2 -translate-y-full' : undefined,
-        )}
-        style={{ left: state.anchor.x, top: state.anchor.y }}
-        role="dialog"
+  return (
+    <Popover open onOpenChange={(open) => { if (!open) onClose() }}>
+      <PopoverAnchor virtualRef={anchorRef} />
+      <PopoverContent
+        side={state.kind === 'node' ? 'top' : 'bottom'}
+        align={state.kind === 'node' ? 'center' : 'start'}
+        sideOffset={state.kind === 'node' ? 8 : 0}
+        className="w-auto min-w-[180px] p-1.5"
         aria-label={t({ ko: '퀵 메뉴', en: 'Quick menu' })}
+        // Keep the canvas focus (and avoid opening the first tooltip) when the menu appears under the pointer.
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-border/70 px-2 py-1.5">
-          <span className="text-[11px] font-semibold text-muted-foreground">{t({ ko: '퀵 메뉴', en: 'Quick menu' })}</span>
-          {state.kind === 'node' ? <span className="max-w-[112px] truncate text-[11px] text-muted-foreground">{state.nodeName}</span> : null}
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+          <Text as="span" variant="caption" className="font-semibold">{t({ ko: '퀵 메뉴', en: 'Quick menu' })}</Text>
+          {state.kind === 'node' ? <Text as="span" variant="caption" className="max-w-[112px] truncate">{state.nodeName}</Text> : null}
         </div>
 
-        <div className="mt-1 flex items-center gap-1">
+        <div className="mt-0.5 flex items-center gap-1">
           {state.kind === 'pane' ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="h-8 w-8"
-              onClick={onOpenNodePicker}
-              title={t({ ko: '노드 추가', en: 'Add node' })}
-              aria-label={t({ ko: '노드 추가', en: 'Add node' })}
-            >
+            <IconButton variant="ghost" size="icon-sm" onClick={onOpenNodePicker} label={t({ ko: '노드 추가', en: 'Add node' })}>
               <Boxes className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : (
             <>
-              <Button
-                type="button"
+              <IconButton
                 variant="ghost"
                 size="icon-sm"
-                className="h-8 w-8"
                 onClick={onShowRecommendedNodes}
-                title={t({ ko: '{name} 추천 연결 노드', en: '{name} recommended linked nodes' }, { name: state.nodeName })}
-                aria-label={t({ ko: '추천 연결 노드', en: 'Recommended linked nodes' })}
+                label={t({ ko: '{name} 추천 연결 노드', en: '{name} recommended linked nodes' }, { name: state.nodeName })}
               >
                 <Sparkles className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
+              </IconButton>
+              <IconButton
                 variant="ghost"
                 size="icon-sm"
-                className="h-8 w-8"
                 onClick={onDuplicateNode}
-                title={t({ ko: '{name} 복제', en: 'Duplicate {name}' }, { name: state.nodeName })}
-                aria-label={t({ ko: '노드 복제', en: 'Duplicate node' })}
+                label={t({ ko: '{name} 복제', en: 'Duplicate {name}' }, { name: state.nodeName })}
               >
                 <Copy className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
+              </IconButton>
+              <IconButton
                 variant="ghost"
                 size="icon-sm"
-                className="h-8 w-8"
                 onClick={onDisconnectAllConnections}
-                title={t({ ko: '{name} 모든 연결 끊기', en: 'Disconnect all connections for {name}' }, { name: state.nodeName })}
-                aria-label={t({ ko: '모든 연결 끊기', en: 'Disconnect all connections' })}
+                label={t({ ko: '{name} 모든 연결 끊기', en: 'Disconnect all connections for {name}' }, { name: state.nodeName })}
               >
                 <Unplug className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
+              </IconButton>
+              <IconButton
                 variant="ghost"
                 size="icon-sm"
-                className={cn('h-8 w-8', state.disabled ? 'text-amber-300' : undefined)}
+                aria-pressed={state.disabled === true}
+                className={cn(state.disabled && 'text-warning hover:text-warning')}
                 onClick={onToggleNodeDisabled}
-                title={state.disabled
+                label={state.disabled
                   ? t({ ko: '{name} 비활성화 해제', en: 'Enable {name}' }, { name: state.nodeName })
                   : t({ ko: '{name} 비활성화', en: 'Disable {name}' }, { name: state.nodeName })}
-                aria-label={state.disabled
-                  ? t({ ko: '노드 비활성화 해제', en: 'Enable node' })
-                  : t({ ko: '노드 비활성화', en: 'Disable node' })}
               >
                 <PowerOff className="h-4 w-4" />
-              </Button>
+              </IconButton>
               {state.hasAdvancedOutputPorts ? (
-                <Button
-                  type="button"
+                <IconButton
                   variant="ghost"
                   size="icon-sm"
-                  className={cn('h-8 w-8', state.advancedOutputPortsEnabled ? 'text-primary' : undefined)}
+                  aria-pressed={state.advancedOutputPortsEnabled === true}
+                  className={cn(state.advancedOutputPortsEnabled && 'text-primary hover:text-primary')}
                   onClick={onToggleAdvancedOutputs}
-                  title={state.advancedOutputPortsEnabled
+                  label={state.advancedOutputPortsEnabled
                     ? t({ ko: '{name} 일반 출력 모드', en: '{name} standard output mode' }, { name: state.nodeName })
                     : t({ ko: '{name} 고급 출력 모드', en: '{name} advanced output mode' }, { name: state.nodeName })}
-                  aria-label={state.advancedOutputPortsEnabled
-                    ? t({ ko: '일반 출력 모드로 전환', en: 'Switch to standard output mode' })
-                    : t({ ko: '고급 출력 모드로 전환', en: 'Switch to advanced output mode' })}
                 >
                   <SlidersHorizontal className="h-4 w-4" />
-                </Button>
+                </IconButton>
               ) : null}
-              <Button
-                type="button"
-                variant="ghost"
+              <IconButton
+                variant="destructive"
                 size="icon-sm"
-                className="h-8 w-8 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
                 onClick={onRemoveNode}
-                title={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: state.nodeName })}
-                aria-label={t({ ko: '노드 삭제', en: 'Delete node' })}
+                label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: state.nodeName })}
               >
                 <Trash2 className="h-4 w-4" />
-              </Button>
+              </IconButton>
             </>
           )}
         </div>
-      </div>
-    </div>,
-    document.body,
+      </PopoverContent>
+    </Popover>
   )
 }

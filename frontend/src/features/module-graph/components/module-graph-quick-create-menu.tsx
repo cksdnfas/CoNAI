@@ -1,16 +1,18 @@
-import { useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Sparkles } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Sparkles, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
+import { Text } from '@/components/ui/text'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
-import { cn } from '@/lib/utils'
 import { getModuleBaseDisplayName } from '../module-graph-shared'
 import { CUSTOM_NODE_GROUP_ORDER_INDEX, SAVED_MODULE_GROUP_ORDER_INDEX, SYSTEM_GROUP_ORDER_INDEX, getCustomNodeGroup, getModuleGroupSortIndex, getSavedModuleGroup, getSystemModuleGroup, isCustomNodeModule, isGenerationModule, localizeModuleGroupLabel, shouldHideFromModuleLibrary } from './module-library-groups'
 import type { RecommendedModuleMatch } from './module-graph-canvas'
+import { useViewportPointAnchor } from './use-viewport-point-anchor'
 import { EmptyState } from '@/components/ui/empty-state'
 
 type QuickCreateTab = 'recommended' | 'system' | 'generation' | 'custom-nodes'
@@ -43,6 +45,8 @@ export function ModuleGraphQuickCreateMenu({
   onClose: () => void
 }) {
   const { t, locale } = useI18n()
+  const anchorRef = useViewportPointAnchor(anchor)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const tabOptions = mode === 'connect'
     ? ([
         { key: 'recommended', label: t({ ko: '추천 노드', en: 'Recommended' }) },
@@ -172,25 +176,22 @@ export function ModuleGraphQuickCreateMenu({
     ? t({ ko: '이 포트와 바로 연결할 만한 추천 노드가 아직 없어.', en: 'There are no recommended nodes that can connect directly to this port yet.' })
     : t({ ko: '조건에 맞는 노드를 찾지 못했어.', en: 'No nodes matched your conditions.' })
 
-  if (typeof document === 'undefined') {
-    return null
-  }
-
-  return createPortal(
-    <div className="fixed inset-0 z-40" onMouseDown={onClose}>
-      <div
-        className="fixed z-50 w-[360px] max-w-[calc(100vw-24px)] rounded-sm border border-border bg-surface-container/95 shadow-2xl backdrop-blur-sm"
-        style={{ left: anchor.x, top: anchor.y }}
-        role="dialog"
+  return (
+    <Popover open onOpenChange={(open) => { if (!open) onClose() }}>
+      <PopoverAnchor virtualRef={anchorRef} />
+      <PopoverContent
+        side="bottom"
+        align="start"
+        sideOffset={0}
+        className="w-[360px] max-w-[calc(100vw-24px)] p-0"
         aria-label={t({ ko: '노드 빠른 생성 메뉴', en: 'Quick node creation menu' })}
-        onMouseDown={(event) => event.stopPropagation()}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          searchInputRef.current?.focus()
+        }}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            onClose()
-            return
-          }
-
           if (flatVisibleModules.length === 0) {
             return
           }
@@ -211,11 +212,11 @@ export function ModuleGraphQuickCreateMenu({
           }
         }}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5">
-          <div className="text-sm font-semibold text-foreground">{mode === 'connect' ? t({ ko: '추천 노드 추가', en: 'Add recommended node' }) : t({ ko: '노드 추가', en: 'Add node' })}</div>
-          <Button type="button" variant="ghost" size="icon-xs" onClick={onClose} aria-label={t({ ko: '빠른 생성 메뉴 닫기', en: 'Close quick create menu' })} title={t({ ko: '닫기', en: 'Close' })}>
-            ×
-          </Button>
+        <div className="flex items-center justify-between gap-3 px-3 pt-2.5">
+          <Text as="div" variant="title">{mode === 'connect' ? t({ ko: '추천 노드 추가', en: 'Add recommended node' }) : t({ ko: '노드 추가', en: 'Add node' })}</Text>
+          <IconButton variant="ghost" size="icon-xs" onClick={onClose} label={t({ ko: '빠른 생성 메뉴 닫기', en: 'Close quick create menu' })}>
+            <X />
+          </IconButton>
         </div>
 
         <div className="space-y-3 p-3">
@@ -235,7 +236,7 @@ export function ModuleGraphQuickCreateMenu({
           </div>
 
           <Input
-            autoFocus
+            ref={searchInputRef}
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder={activeTab === 'recommended' ? t({ ko: '추천 노드 검색', en: 'Search recommended nodes' }) : t({ ko: '노드 검색', en: 'Search nodes' })}
@@ -247,11 +248,11 @@ export function ModuleGraphQuickCreateMenu({
             ) : groupedModules.map((group) => (
               <div key={group.key} className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">{activeTab === 'recommended' ? group.label : localizeModuleGroupLabel(group.label, t)}</div>
+                  <Text as="div" variant="overline" className="font-medium">{activeTab === 'recommended' ? group.label : localizeModuleGroupLabel(group.label, t)}</Text>
                   <Badge variant="outline">{group.modules.length}</Badge>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-0.5">
                   {group.modules.map((item) => {
                     const module = item.module
                     const isActive = activeModuleId === module.id
@@ -260,20 +261,19 @@ export function ModuleGraphQuickCreateMenu({
                       .join('\n')
 
                     return (
-                      <button
+                      <Button
                         key={module.id}
                         type="button"
-                        className={cn(
-                          'flex w-full items-center rounded-sm border border-border bg-surface-low px-3 py-2 text-left text-sm font-medium text-foreground transition hover:bg-surface-high',
-                          activeTab === 'recommended' && 'border-primary/35 bg-primary/6',
-                          isActive && 'border-primary bg-primary/10 shadow-sm',
-                        )}
+                        variant="nav"
+                        data-active={isActive}
+                        className="px-3 text-foreground"
                         onMouseEnter={() => setActiveModuleId(module.id)}
                         onClick={() => onSelectModule(module)}
                         title={itemTitle || undefined}
                       >
+                        {activeTab === 'recommended' ? <Sparkles className="size-3.5" aria-hidden /> : null}
                         <span className="truncate">{getModuleBaseDisplayName(module)}</span>
-                      </button>
+                      </Button>
                     )
                   })}
                 </div>
@@ -281,8 +281,7 @@ export function ModuleGraphQuickCreateMenu({
             ))}
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </PopoverContent>
+    </Popover>
   )
 }
