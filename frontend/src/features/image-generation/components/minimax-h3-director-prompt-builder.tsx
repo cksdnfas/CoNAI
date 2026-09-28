@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Copy, Eye, Plus, Sparkles } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
@@ -35,6 +36,8 @@ export function MiniMaxH3DirectorPromptBuilder({
 }: MiniMaxH3DirectorPromptBuilderProps) {
   const { t } = useI18n()
   const [previewOpen, setPreviewOpen] = useState(false)
+  // Draft shot number for the [Shot N] marker; null while its dialog is closed.
+  const [shotNumberDraft, setShotNumberDraft] = useState<string | null>(null)
   const preview = buildMiniMaxH3DirectorPrompt(state)
   const patchState = (patch: Partial<MiniMaxH3DirectorBuilderState>) => onChange({ ...state, ...patch })
   const patchRef = (patch: Partial<MiniMaxH3DirectorBuilderState['ref']>) => onChange({ ...state, ref: { ...state.ref, ...patch } })
@@ -44,8 +47,7 @@ export function MiniMaxH3DirectorPromptBuilder({
       {content}
     </div>
   )
-  const insertShotMarker = () => {
-    const shotNumber = window.prompt(t({ ko: '샷 번호', en: 'Shot number' }), '1')?.trim()
+  const insertShotMarker = (shotNumber: string) => {
     if (!shotNumber) return
     const marker = `[Shot ${shotNumber}] `
     if (state.prompt_mode === 'simple') {
@@ -78,7 +80,7 @@ export function MiniMaxH3DirectorPromptBuilder({
           <div className="mt-1 text-[11px] text-muted-foreground">{state.mode}</div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={insertShotMarker}>
+          <Button type="button" size="sm" variant="outline" onClick={() => setShotNumberDraft('1')}>
             <Plus className="h-3.5 w-3.5" />[Shot N]
           </Button>
           {state.mode === 'REF2VA' ? (
@@ -175,6 +177,31 @@ export function MiniMaxH3DirectorPromptBuilder({
           <Button type="button" onClick={() => setPreviewOpen(false)}>{t({ ko: '완료', en: 'Done' })}</Button>
         </ModalFooter>
       </div>
+    </Modal>
+
+    <Modal
+      open={shotNumberDraft !== null}
+      title={t({ ko: '샷 마커 추가', en: 'Add shot marker' })}
+      widthClassName="max-w-md"
+      onClose={() => setShotNumberDraft(null)}
+    >
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          insertShotMarker(shotNumberDraft?.trim() ?? '')
+          setShotNumberDraft(null)
+        }}
+      >
+        <label className="block space-y-2">
+          <span className="text-sm text-muted-foreground">{t({ ko: '샷 번호', en: 'Shot number' })}</span>
+          <Input autoFocus value={shotNumberDraft ?? ''} onChange={(event) => setShotNumberDraft(event.target.value)} />
+        </label>
+        <ModalFooter>
+          <Button type="button" variant="secondary" onClick={() => setShotNumberDraft(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+          <Button type="submit" disabled={!shotNumberDraft?.trim()}>{t({ ko: '추가', en: 'Add' })}</Button>
+        </ModalFooter>
+      </form>
     </Modal>
   </>
 }

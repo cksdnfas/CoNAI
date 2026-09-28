@@ -5,9 +5,11 @@ import { Copy, Eye, EyeOff, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import {
   createMcpHttpApiKey,
@@ -46,6 +48,9 @@ export function McpHttpSettingsCard() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
+  const confirm = useConfirm()
+  // Draft name for a new key; null while the name dialog is closed.
+  const [newKeyName, setNewKeyName] = useState<string | null>(null)
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: getMcpHttpSettings })
   const commit = (settings: NonNullable<typeof query.data>) => queryClient.setQueryData(QUERY_KEY, settings)
@@ -87,10 +92,7 @@ export function McpHttpSettingsCard() {
           <div className="flex gap-2">
             <Input variant="settings" readOnly value={endpoint} className="font-mono" />
             <Button type="button" size="icon-sm" variant="outline" onClick={() => void copy(endpoint)} aria-label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })} title={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></Button>
-            <Button type="button" size="icon-sm" variant="outline" disabled={busy} onClick={() => {
-              const name = window.prompt(t({ ko: '키 이름', en: 'Key name' }), '에이전트 키')?.trim()
-              if (name) createKey.mutate({ name, scopes: ['read'] })
-            }} aria-label={t({ ko: '키 추가', en: 'Add key' })} title={t({ ko: '키 추가', en: 'Add key' })}><Plus /></Button>
+            <Button type="button" size="icon-sm" variant="outline" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))} aria-label={t({ ko: '키 추가', en: 'Add key' })} title={t({ ko: '키 추가', en: 'Add key' })}><Plus /></Button>
           </div>
           <div className="space-y-3">
             {query.data.keys.map((key) => {
@@ -105,8 +107,14 @@ export function McpHttpSettingsCard() {
                     })} aria-label={visible ? t({ ko: '키 숨기기', en: 'Hide key' }) : t({ ko: '키 보기', en: 'Show key' })}>{visible ? <EyeOff /> : <Eye />}</Button>
                     <Button type="button" size="icon-sm" variant="outline" onClick={() => void copy(key.apiKey)} aria-label={t({ ko: '키 복사', en: 'Copy key' })} title={t({ ko: '키 복사', en: 'Copy key' })}><Copy /></Button>
                     <Button type="button" size="icon-sm" variant="outline" disabled={busy} onClick={() => rotateKey.mutate(key.id)} aria-label={t({ ko: '키 새로 발급', en: 'Regenerate key' })} title={t({ ko: '키 새로 발급', en: 'Regenerate key' })}><RefreshCw /></Button>
-                    <Button type="button" size="icon-sm" variant="outline" disabled={busy} onClick={() => {
-                      if (window.confirm(t({ ko: '이 키를 폐기할까?', en: 'Revoke this key?' }))) revokeKey.mutate(key.id)
+                    <Button type="button" size="icon-sm" variant="outline" disabled={busy} onClick={async () => {
+                      const confirmed = await confirm({
+                        title: t({ ko: '키 폐기', en: 'Revoke key' }),
+                        description: t({ ko: '이 키를 폐기할까?', en: 'Revoke this key?' }),
+                        confirmLabel: t({ ko: '폐기', en: 'Revoke' }),
+                        tone: 'destructive',
+                      })
+                      if (confirmed) revokeKey.mutate(key.id)
                     }} aria-label={t({ ko: '키 폐기', en: 'Revoke key' })} title={t({ ko: '키 폐기', en: 'Revoke key' })}><Trash2 /></Button>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -132,6 +140,32 @@ export function McpHttpSettingsCard() {
           </div>
         </div>
       ) : null}
+
+      <Modal open={newKeyName !== null} onClose={() => setNewKeyName(null)} title={t({ ko: 'MCP 키 추가', en: 'Add MCP key' })} widthClassName="max-w-md">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            const name = newKeyName?.trim()
+            if (!name) {
+              return
+            }
+
+            createKey.mutate({ name, scopes: ['read'] })
+            setNewKeyName(null)
+          }}
+        >
+          <ModalBody>
+            <label className="block space-y-2">
+              <span className="text-sm text-muted-foreground">{t({ ko: '키 이름', en: 'Key name' })}</span>
+              <Input variant="settings" autoFocus value={newKeyName ?? ''} onChange={(event) => setNewKeyName(event.target.value)} />
+            </label>
+            <ModalFooter>
+              <Button type="button" variant="secondary" onClick={() => setNewKeyName(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+              <Button type="submit" disabled={!newKeyName?.trim() || busy}>{t({ ko: '추가', en: 'Add' })}</Button>
+            </ModalFooter>
+          </ModalBody>
+        </form>
+      </Modal>
     </Section>
   )
 }
