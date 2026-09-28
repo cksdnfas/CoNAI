@@ -13,8 +13,10 @@ import { ImageSelectionBar } from '@/features/images/components/image-selection-
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
+import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
+import { useHomeSearch } from './home-search-context'
 import { useHomePageData } from './use-home-page-data'
 
 /** Keep item href identity stable so memoized image cells skip keystroke re-renders. */
@@ -26,6 +28,7 @@ function getHomeImageHref(image: ImageRecord) {
 export function HomePage() {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const { appliedChips, removeAppliedChip, cycleAppliedChipOperator, clearAppliedChips } = useHomeSearch()
   const {
     columnCount: homeColumnCount,
     setColumnCount: setHomeColumnCount,
@@ -102,6 +105,18 @@ export function HomePage() {
             </>
           }
         />
+      ) : null}
+
+      {!isAnonymousSession && appliedChips.length > 0 ? (
+        <PageInset className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '적용된 필터', en: 'Active filters' })}</div>
+            <Button size="sm" variant="ghost" onClick={clearAppliedChips}>
+              {t({ ko: '모두 지우기', en: 'Clear all' })}
+            </Button>
+          </div>
+          <SearchChipList chips={appliedChips} title={null} onCycleOperator={cycleAppliedChipOperator} onRemove={removeAppliedChip} />
+        </PageInset>
       ) : null}
 
       {imagesQuery.isError ? (

@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { clearSearchHistory, deleteSearchHistory, getSearchHistory, saveSearchHistory } from '@/lib/api-search'
 import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchOperator, SearchScope } from '@/features/search/search-types'
 import { buildSearchChipKey, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
+import { buildHomeSearchString, decodeSearchChipsParam, encodeSearchChipsParam, readSearchChipsParam } from './home-search-url'
 
 export type TextSearchScope = Exclude<SearchScope, 'rating' | 'tool'>
 type AddScopedTextChipOptions = { operator?: SearchOperator; apply?: boolean }
@@ -32,6 +33,9 @@ interface HomeSearchContextValue {
   addRatingChip: (chip: SearchChip) => void
   cycleChipOperator: (chipId: string) => void
   removeChip: (chipId: string) => void
+  removeAppliedChip: (chipId: string) => void
+  cycleAppliedChipOperator: (chipId: string) => void
+  clearAppliedChips: () => void
   applySearch: () => void
   clearSearch: () => void
   selectHistoryEntry: (entry: SearchHistoryEntry) => void
@@ -54,13 +58,22 @@ function appendUniqueSearchChip(chips: SearchChip[], chip: SearchChip) {
 export function HomeSearchProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const location = useLocation()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [searchScope, setSearchScopeState] = useState<SearchScope>('positive')
   const [searchInput, setSearchInputState] = useState('')
-  const [draftChips, setDraftChips] = useState<SearchChip[]>([])
-  const [appliedChips, setAppliedChips] = useState<SearchChip[]>([])
+  const isHomeRoute = location.pathname === '/'
+  const urlSearchQuery = isHomeRoute ? readSearchChipsParam(location.search) : null
+  // The Home URL owns the applied search; other pages keep the last one Home showed.
+  const [homeSearchQuery, setHomeSearchQuery] = useState(() => urlSearchQuery ?? '')
+  const [draftChips, setDraftChips] = useState<SearchChip[]>(() => decodeSearchChipsParam(urlSearchQuery ?? ''))
+  if (urlSearchQuery !== null && urlSearchQuery !== homeSearchQuery) {
+    setHomeSearchQuery(urlSearchQuery)
+    setDraftChips(decodeSearchChipsParam(urlSearchQuery))
+  }
+  const appliedChips = useMemo(() => decodeSearchChipsParam(homeSearchQuery), [homeSearchQuery])
 
   const historyQuery = useQuery({
     queryKey: ['search-history'],
@@ -121,20 +134,29 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setDraftChips((current) => appendUniqueSearchChip(current, chip))
   }, [])
 
+  /** Push the applied search into the Home URL so reload, bookmarks, and Back all see it. */
+  const navigateToAppliedChips = useCallback((nextChips: SearchChip[]) => {
+    if (nextChips.length === 0 && !isHomeRoute) {
+      setHomeSearchQuery('')
+      return
+    }
+
+    const search = buildHomeSearchString(encodeSearchChipsParam(nextChips))
+    navigate({ pathname: '/', search }, { replace: isHomeRoute && location.search === search })
+  }, [isHomeRoute, location.search, navigate])
+
   const commitSearchChips = useCallback((nextChips: SearchChip[]) => {
     setDraftChips(nextChips)
-    setAppliedChips(nextChips)
     setSearchInputState('')
-    // 동일 칩을 다시 적용하면 appliedChips 참조가 그대로라 쿼리 키가 안 바뀐다.
+    // 동일 칩을 다시 적용하면 쿼리 키가 안 바뀐다.
     // staleTime(30s) 안에서는 네트워크 요청이 아예 안 나가므로 명시적으로 무효화한다.
     void queryClient.invalidateQueries({ queryKey: ['home-images'] })
+    navigateToAppliedChips(nextChips)
 
     if (nextChips.length === 0) {
       showSnackbar({ message: t('homeSearchContext.noSearchChipsAreActive'), tone: 'info' })
       return
     }
-
-    navigate('/')
 
     void saveHistoryEntryMutation({
       label: buildSearchHistoryLabel(nextChips, {
@@ -142,7 +164,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       }),
       chips: nextChips,
     })
-  }, [navigate, queryClient, saveHistoryEntryMutation, showSnackbar, t])
+  }, [navigateToAppliedChips, queryClient, saveHistoryEntryMutation, showSnackbar, t])
 
   const addTextChip = useCallback(() => {
     if (searchScope === 'rating' || searchScope === 'tool') {
@@ -238,9 +260,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
 
   const clearSearch = useCallback(() => {
     setDraftChips([])
-    setAppliedChips([])
     setSearchInputState('')
-  }, [])
+    navigateToAppliedChips([])
+  }, [navigateToAppliedChips])
 
   const cycleChipOperator = useCallback((chipId: string) => {
     setDraftChips((current) => current.map((chip) => (chip.id === chipId ? { ...chip, operator: cycleSearchOperator(chip.operator) } : chip)))
@@ -250,16 +272,27 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setDraftChips((current) => current.filter((chip) => chip.id !== chipId))
   }, [])
 
+  const removeAppliedChip = useCallback((chipId: string) => {
+    navigateToAppliedChips(appliedChips.filter((chip) => chip.id !== chipId))
+  }, [appliedChips, navigateToAppliedChips])
+
+  const cycleAppliedChipOperator = useCallback((chipId: string) => {
+    navigateToAppliedChips(appliedChips.map((chip) => (chip.id === chipId ? { ...chip, operator: cycleSearchOperator(chip.operator) } : chip)))
+  }, [appliedChips, navigateToAppliedChips])
+
+  const clearAppliedChips = useCallback(() => {
+    navigateToAppliedChips([])
+  }, [navigateToAppliedChips])
+
   const selectHistoryEntry = useCallback((entry: SearchHistoryEntry) => {
     setDraftChips(entry.chips)
-    setAppliedChips(entry.chips)
     setSearchInputState('')
     // commitSearchChips 와 같은 이유로, 같은 저장 검색을 다시 고르면 키가 안 바뀐다.
     void queryClient.invalidateQueries({ queryKey: ['home-images'] })
     openDrawer()
-    navigate('/')
+    navigateToAppliedChips(entry.chips)
     showSnackbar({ message: t('homeSearchContext.savedSearchReapplied'), tone: 'info' })
-  }, [navigate, openDrawer, queryClient, showSnackbar, t])
+  }, [navigateToAppliedChips, openDrawer, queryClient, showSnackbar, t])
 
   const deleteHistoryEntry = useCallback(async (entryId: string) => {
     await deleteHistoryEntryMutation(entryId)
@@ -290,6 +323,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       addRatingChip,
       cycleChipOperator,
       removeChip,
+      removeAppliedChip,
+      cycleAppliedChipOperator,
+      clearAppliedChips,
       applySearch,
       clearSearch,
       selectHistoryEntry,
@@ -304,9 +340,11 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       addTextChip,
       appliedChips,
       applySearch,
+      clearAppliedChips,
       clearHistoryEntries,
       clearSearch,
       closeDrawer,
+      cycleAppliedChipOperator,
       cycleChipOperator,
       deleteHistoryEntry,
       draftChips,
@@ -314,6 +352,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       historyQuery.isLoading,
       isDrawerOpen,
       openDrawer,
+      removeAppliedChip,
       removeChip,
       searchInput,
       searchScope,
