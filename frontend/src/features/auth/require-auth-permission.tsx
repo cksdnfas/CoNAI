@@ -17,11 +17,9 @@ export function AuthStatusErrorState({ error, isRetrying, onRetry }: { error: un
 
   return (
     <div role="alert" className="flex min-h-[40vh] items-center justify-center">
-      <div className="w-full max-w-md space-y-3 rounded-sm bg-surface-low px-5 py-4">
+      <div className="w-full max-w-md space-y-3">
         <div className="flex items-start gap-3">
-          <div className="rounded-sm bg-destructive-soft p-2 text-destructive-soft-foreground">
-            <AlertTriangle className="h-4 w-4" />
-          </div>
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
           <div className="min-w-0 space-y-1">
             <div className="text-sm font-semibold text-foreground">{t('requireAuthPermission.statusUnavailable')}</div>
             {error instanceof Error && error.message ? (
@@ -53,7 +51,7 @@ export function RequireAuthPermission({ permissionKey, children }: RequireAuthPe
   })
 
   if (authStatusQuery.isLoading) {
-    return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
+    return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />
   }
 
   if (canViewPage) {
@@ -70,5 +68,5 @@ export function RequireAuthPermission({ permissionKey, children }: RequireAuthPe
     )
   }
 
-  return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
+  return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />
 }

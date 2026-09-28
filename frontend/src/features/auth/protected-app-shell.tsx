@@ -10,7 +10,7 @@ export function ProtectedAppShell() {
   const authStatusQuery = useAuthStatusQuery()
 
   if (authStatusQuery.isLoading) {
-    return <div className="min-h-screen bg-surface-low animate-pulse" />
+    return <div className="min-h-screen bg-background" />
   }
 
   if (authStatusQuery.data?.hasCredentials && !authStatusQuery.data.authenticated) {

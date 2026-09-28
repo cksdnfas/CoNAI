@@ -26,7 +26,7 @@ export function NotFoundPage() {
             </Link>
           </Button>
           {canGoBack ? (
-            <IconButton variant="secondary" onClick={() => navigate(-1)} label={t({ ko: '뒤로 가기', en: 'Go back' })}>
+            <IconButton variant="ghost" onClick={() => navigate(-1)} label={t({ ko: '뒤로 가기', en: 'Go back' })}>
               <ArrowLeft />
             </IconButton>
           ) : null}

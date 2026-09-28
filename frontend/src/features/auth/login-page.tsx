@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleHelp, UserPlus } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Field } from '@/components/ui/field'
-import { Inset } from '@/components/ui/inset'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
@@ -131,7 +130,7 @@ export function LoginPage() {
   })
 
   if (authStatusQuery.isLoading) {
-    return <div className="min-h-screen bg-surface-low animate-pulse" />
+    return <div className="min-h-screen bg-background" />
   }
 
   if (authStatusQuery.data?.authenticated) {
@@ -153,7 +152,7 @@ export function LoginPage() {
           <LanguageSwitch className="w-full max-w-[240px]" />
         </div>
 
-        <Panel tone="low" padding="lg" className="space-y-6">
+        <Panel tone="none" padding="lg" className="theme-floating-panel space-y-6 rounded-md">
           <div className="flex items-start justify-between gap-3">
             <Heading level={1}>{t('loginPage.signIn')}</Heading>
             <div className="flex shrink-0 items-center gap-2">
@@ -238,9 +237,7 @@ export function LoginPage() {
         <ModalBody>
           <div className="text-sm text-muted-foreground">{t('loginPage.recoveryForgotPassword')}</div>
 
-          <Inset className="text-sm text-muted-foreground">
-            {t('loginPage.recoveryAdminLost')}
-          </Inset>
+          <p className="text-sm text-muted-foreground">{t('loginPage.recoveryAdminLost')}</p>
         </ModalBody>
       </Modal>
 
@@ -271,9 +268,9 @@ export function LoginPage() {
               <Input type="password" value={guestPassword} onChange={(event) => setGuestPassword(event.target.value)} autoComplete="new-password" />
             </Field>
 
-            <Inset className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {t({ ko: '게스트 계정은 언제든 초기화될 수 있어.', en: 'Guest accounts may be reset at any time.' })}
-            </Inset>
+            </p>
 
             <ModalFooter>
               <Button type="button" variant="ghost" onClick={() => setIsGuestModalOpen(false)} disabled={guestSignupMutation.isPending}>

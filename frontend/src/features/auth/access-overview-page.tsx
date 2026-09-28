@@ -8,7 +8,6 @@ import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Text } from '@/components/ui/text'
-import { PageHeader } from '@/components/common/page-header'
 import { useI18n } from '@/i18n'
 import { getPublicGenerationWorkflows } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
@@ -23,28 +22,24 @@ interface AccessEntryCardProps {
   icon: LucideIcon
 }
 
-/** Render one compact access card with a direct jump target. */
+/** One cell of the flat access grid: icon, label, arrow; hairline below, hover wash. */
 function AccessEntryCard({ label, description, href, icon: Icon }: AccessEntryCardProps) {
   return (
     <Link
       to={href}
       className={cn(
-        'group flex items-center gap-3 rounded-sm bg-surface-container px-4 py-3 transition-colors',
-        'hover:bg-surface-high focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+        'group flex min-h-14 items-center gap-3 border-b border-line px-2 py-2.5 transition-colors',
+        'hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
       )}
     >
-      <div className="rounded-sm bg-primary/10 p-2 text-primary transition-colors group-hover:bg-primary/14">
-        <Icon className="h-4 w-4" />
-      </div>
+      <Icon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden />
 
       <div className="min-w-0 flex-1 space-y-0.5">
         <Text as="div" variant="title" className="truncate">{label}</Text>
         {description ? <Text as="div" variant="caption" className="truncate">{description}</Text> : null}
       </div>
 
-      <div className="shrink-0 text-muted-foreground transition-colors group-hover:text-foreground">
-        <ArrowRight className="h-4 w-4" />
-      </div>
+      <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden />
     </Link>
   )
 }
@@ -124,7 +119,7 @@ export function AccessOverviewPage() {
   })
 
   if (authStatusQuery.isLoading) {
-    return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
+    return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />
   }
 
   const accessibleItems = listAccessiblePageAccessItems(authStatus?.permissionKeys ?? [])
@@ -136,8 +131,8 @@ export function AccessOverviewPage() {
   const publicWorkflows = publicWorkflowsQuery.data ?? []
 
   return (
-    <div className="space-y-5">
-      <PageHeader title={t('appShell.availablePages')} />
+    <div className="space-y-8 pt-2">
+      <h1 className="sr-only">{t('appShell.availablePages')}</h1>
 
       {blockedRoute ? (
         <BlockedRouteNotice
@@ -151,13 +146,13 @@ export function AccessOverviewPage() {
       {accessibleItems.length === 0 && publicWorkflows.length === 0 ? (
         <EmptyState icon={ShieldCheck} title={t({ ko: '지금 열 수 있는 페이지가 없어.', en: 'There are no pages available right now.' })} />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-10">
           {pageItems.length > 0 ? (
-            <section className="space-y-2.5">
+            <section className="space-y-2">
               {publicWorkflows.length > 0 ? (
-                <Heading level={3}>{t({ ko: '페이지', en: 'Pages' })}</Heading>
+                <Heading level={3} className="text-sm">{t({ ko: '페이지', en: 'Pages' })}</Heading>
               ) : null}
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
                 {pageItems.map(({ path, labelKey, icon }) => (
                   <AccessEntryCard
                     key={path}
@@ -175,9 +170,9 @@ export function AccessOverviewPage() {
           ) : null}
 
           {publicWorkflows.length > 0 ? (
-            <section className="space-y-2.5">
-              <Heading level={3}>{t({ ko: '공용 워크플로우', en: 'Public workflows' })}</Heading>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <section className="space-y-2">
+              <Heading level={3} className="text-sm">{t({ ko: '공용 워크플로우', en: 'Public workflows' })}</Heading>
+              <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
                 {publicWorkflows.map((workflow) => (
                   <AccessEntryCard
                     key={workflow.id}

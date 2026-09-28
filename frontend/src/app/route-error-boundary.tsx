@@ -40,8 +40,8 @@ export function RouteErrorBoundary() {
           </>
         )}
       >
-        <details className="rounded-sm bg-surface-lowest px-3 py-2.5 text-xs text-muted-foreground">
-          <summary className="cursor-pointer select-none font-medium">{t({ ko: '기술 정보', en: 'Technical details' })}</summary>
+        <details className="border-t border-line pt-3 text-xs text-muted-foreground">
+          <summary className="cursor-pointer select-none font-semibold text-foreground">{t({ ko: '기술 정보', en: 'Technical details' })}</summary>
           <p className="mt-2 break-all font-mono">{message}</p>
         </details>
       </SystemMessagePanel>
