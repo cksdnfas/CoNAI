@@ -19,6 +19,7 @@ import { GroupAssignModal } from './components/group-assign-modal'
 import { GroupImageSection } from './components/group-image-section'
 import { GroupDownloadModal } from './components/group-download-modal'
 import { GroupOptionsMenu } from './components/group-options-menu'
+import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { buildGroupCountMaps } from './group-count-utils'
@@ -173,7 +174,8 @@ export function GroupPage() {
   }, [selectedGroupId, selectedSource.key])
 
   return (
-    <div className="space-y-6">
+    // Leave room under the list for the fixed selection bar while it is up.
+    <div className={cn('space-y-6', selectedGroupImageIds.length > 0 && 'pb-24')}>
       <PageHeader
         title={t({ ko: '그룹', en: 'Groups' })}
         actions={!selectedGroupId && isCustomSource ? (
@@ -362,42 +364,30 @@ export function GroupPage() {
         isDownloading={downloadGroupArchiveMutation.isPending && downloadScope === 'selection'}
         extraActions={
           <>
-            <Button
-              size="sm"
-              variant="secondary"
+            <SelectionBarAction
+              icon={FolderPlus}
+              label={assignToGroupMutation.isPending ? t('groups.group.page.adding.to.group') : t('groups.group.page.add.to.custom.group')}
               onClick={handleOpenAssignModal}
               disabled={assignToGroupMutation.isPending || assignableCustomGroupsQuery.isPending}
-              data-no-select-drag="true"
-            >
-              <FolderPlus className="h-4 w-4" />
-              {assignToGroupMutation.isPending ? t('groups.group.page.adding.to.group') : t('groups.group.page.add.to.custom.group')}
-            </Button>
+            />
             {isCustomSource ? (
-              <Button
-                size="sm"
-                variant="secondary"
+              <SelectionBarAction
+                icon={FolderMinus}
+                label={removeGroupImagesMutation.isPending ? t('groups.group.page.removing') : t('groups.group.page.remove.from.current.group')}
                 onClick={() => void handleRemoveSelectedImages()}
                 disabled={removeGroupImagesMutation.isPending}
-                data-no-select-drag="true"
-              >
-                <FolderMinus className="h-4 w-4" />
-                {removeGroupImagesMutation.isPending ? t('groups.group.page.removing') : t('groups.group.page.remove.from.current.group')}
-              </Button>
+              />
             ) : null}
           </>
         }
         trailingActions={canDeleteImages ? (
-          <Button
-            size="icon-sm"
+          <SelectionBarAction
+            icon={Trash2}
+            label={deleteSelectedImagesMutation.isPending ? t('groups.group.page.deleting') : t('groups.group.page.delete.selected')}
             variant="destructive"
             onClick={() => void handleDeleteSelectedImages()}
             disabled={deleteSelectedImagesMutation.isPending || selectedGroupCompositeHashes.length === 0}
-            title={deleteSelectedImagesMutation.isPending ? t('groups.group.page.deleting') : t('groups.group.page.delete.selected')}
-            aria-label={deleteSelectedImagesMutation.isPending ? t('groups.group.page.deleting') : t('groups.group.page.delete.selected')}
-            data-no-select-drag="true"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          />
         ) : undefined}
         onDownload={handleOpenSelectionDownloadModal}
         onClear={() => setSelectedGroupImageIds([])}

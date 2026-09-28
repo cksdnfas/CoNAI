@@ -1,8 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { CheckCheck, Download } from 'lucide-react'
-import { SelectionActionBar } from '@/components/common/selection-action-bar'
+import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
-import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { ImageDownloadType } from '@/lib/api-images'
 import { ImageDownloadOptionMenu } from './image-download-option-menu'
@@ -23,7 +22,10 @@ interface ImageSelectionBarProps {
   onSelectAllLoaded?: () => void
 }
 
-/** Render a minimal bottom action bar for image selection workflows. */
+/**
+ * Bottom action bar for image selections. Actions passed in should be SelectionBarAction so every
+ * gallery shows the same buttons: icon + label on wide screens, icon + tooltip on narrow ones.
+ */
 export function ImageSelectionBar({
   selectedCount,
   downloadableCount,
@@ -59,28 +61,25 @@ export function ImageSelectionBar({
       selectedCount={selectedCount}
       description={statusText ?? downloadStatusText}
       onClear={onClear}
-      compactActions
+      responsiveActions
       actions={(
         <>
           {onSelectAllLoaded && loadedCount !== undefined && selectedCount < loadedCount ? (
-            <Button
-              size="icon-sm"
-              variant="secondary"
+            <SelectionBarAction
+              icon={CheckCheck}
+              label={t({ ko: '불러온 항목 모두 선택', en: 'Select all loaded' })}
               onClick={onSelectAllLoaded}
-              title={t({ ko: '불러온 항목 모두 선택', en: 'Select all loaded' })}
-              aria-label={t({ ko: '불러온 항목 모두 선택', en: 'Select all loaded' })}
-              data-no-select-drag="true"
-            >
-              <CheckCheck className="h-4 w-4" />
-            </Button>
+            />
           ) : null}
 
           {extraActions}
 
           {showDownloadAction ? (
             <span ref={containerRef} className="relative inline-flex">
-              <Button
-                size="icon-sm"
+              <SelectionBarAction
+                icon={Download}
+                label={downloadLabel}
+                variant="default"
                 onClick={() => {
                   if (onDownloadSelect) {
                     setIsOpen((current) => !current)
@@ -89,12 +88,7 @@ export function ImageSelectionBar({
                   onDownload?.()
                 }}
                 disabled={downloadableCount <= 0 || isDownloading}
-                title={downloadLabel}
-                aria-label={downloadLabel}
-                data-no-select-drag="true"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
+              />
 
               {onDownloadSelect ? (
                 <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top" closeOnBack>

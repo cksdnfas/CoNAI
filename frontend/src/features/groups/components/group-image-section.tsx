@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { Bot, Images, LayoutGrid, Minus, Pencil, Plus, RotateCcw } from 'lucide-react'
+import { Bot, Images, Pencil } from 'lucide-react'
 import { Inset } from '@/components/ui/inset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { ImageListColumnControl } from '@/features/images/components/image-list/image-list-column-control'
 import { ImageListFeedFooter } from '@/features/images/components/image-list/image-list-feed-footer'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import type { GroupRecord } from '@/types/group'
@@ -165,44 +166,14 @@ export function GroupImageSection({
               </>
             ) : null}
             {preferredColumnCount !== undefined && onColumnCountChange ? (
-              <div className="inline-flex items-center gap-1 rounded-sm border border-border/80 bg-surface-container px-1 py-1" aria-label={t({ ko: '한 줄 이미지 수', en: 'Images per row' })}>
-                <LayoutGrid className="mx-1 h-4 w-4 text-muted-foreground" />
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant="ghost"
-                  onClick={() => onColumnCountChange(Math.max(minColumnCount, preferredColumnCount - 1))}
-                  disabled={preferredColumnCount <= minColumnCount}
-                  aria-label={t({ ko: '열 수 줄이기', en: 'Decrease columns' })}
-                  title={t({ ko: '열 수 줄이기', en: 'Decrease columns' })}
-                >
-                  <Minus className="h-3.5 w-3.5" />
-                </Button>
-                <span className="min-w-6 text-center text-xs font-semibold tabular-nums text-foreground">{preferredColumnCount}</span>
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant="ghost"
-                  onClick={() => onColumnCountChange(Math.min(maxColumnCount, preferredColumnCount + 1))}
-                  disabled={preferredColumnCount >= maxColumnCount}
-                  aria-label={t({ ko: '열 수 늘리기', en: 'Increase columns' })}
-                  title={t({ ko: '열 수 늘리기', en: 'Increase columns' })}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-                {onColumnCountReset && defaultColumnCount !== undefined && preferredColumnCount !== defaultColumnCount ? (
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    onClick={onColumnCountReset}
-                    aria-label={t({ ko: '기본 열 수로 복원', en: 'Reset columns' })}
-                    title={t({ ko: '기본 열 수로 복원', en: 'Reset columns' })}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </Button>
-                ) : null}
-              </div>
+              <ImageListColumnControl
+                value={preferredColumnCount}
+                defaultValue={defaultColumnCount}
+                min={minColumnCount}
+                max={maxColumnCount}
+                onChange={onColumnCountChange}
+                onReset={onColumnCountReset}
+              />
             ) : null}
             {toolbarActions}
           </div>

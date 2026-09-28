@@ -13,10 +13,12 @@ import { GroupAssignModal } from '@/features/groups/components/group-assign-moda
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { ImageListFeedFooter } from '@/features/images/components/image-list/image-list-feed-footer'
-import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
+import { ImageListColumnControl } from '@/features/images/components/image-list/image-list-column-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
+import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
 import { HomeSortMenu } from './components/home-sort-menu'
@@ -115,7 +117,8 @@ export function HomePage() {
   }
 
   return (
-    <div className="space-y-6">
+    // Leave room under the list for the fixed selection bar while it is up.
+    <div className={cn('space-y-6', selectedIds.length > 0 && 'pb-24')}>
       <PageHeader eyebrow={isAnonymousSession ? t({ ko: '공개', en: 'Public' }) : undefined} title={t('pageAccessCatalog.home')} />
 
       {isAnonymousSession ? (
@@ -210,6 +213,14 @@ export function HomePage() {
                 <span>{t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span>
               ) : null}
               <HomeSortMenu value={sortOrder} onChange={setSortOrder} />
+              <ImageListColumnControl
+                value={homeColumnCount}
+                defaultValue={defaultHomeColumnCount}
+                min={minHomeColumnCount}
+                max={maxHomeColumnCount}
+                onChange={setHomeColumnCount}
+                onReset={resetHomeColumnCount}
+              />
             </div>
           </Inset>
 
@@ -243,15 +254,6 @@ export function HomePage() {
             loadMoreError={imagesQuery.isFetchNextPageError ? imagesQuery.error : null}
             onRetry={handleRetryNextPage}
           />
-          <ImageListColumnFloatingControl
-            value={homeColumnCount}
-            defaultValue={defaultHomeColumnCount}
-            min={minHomeColumnCount}
-            max={maxHomeColumnCount}
-            title={t('homePage.homeCardsPerRow')}
-            onChange={setHomeColumnCount}
-            onReset={resetHomeColumnCount}
-          />
         </>
       ) : null}
 
@@ -262,30 +264,21 @@ export function HomePage() {
             downloadableCount={selectedCompositeHashes.length}
             isDownloading={isDownloading}
             extraActions={
-              <Button
-                size="icon-sm"
-                variant="secondary"
+              <SelectionBarAction
+                icon={FolderPlus}
+                label={assignToGroupMutation.isPending ? t('homePage.addingToGroup') : t('homePage.addToGroup')}
                 onClick={handleOpenAssignModal}
                 disabled={assignToGroupMutation.isPending || groupsQuery.isPending}
-                title={assignToGroupMutation.isPending ? t('homePage.addingToGroup') : t('homePage.addToGroup')}
-                aria-label={assignToGroupMutation.isPending ? t('homePage.addingToGroup') : t('homePage.addToGroup')}
-                data-no-select-drag="true"
-              >
-                <FolderPlus className="h-4 w-4" />
-              </Button>
+              />
             }
             trailingActions={canDeleteImages ? (
-              <Button
-                size="icon-sm"
+              <SelectionBarAction
+                icon={Trash2}
+                label={isDeleting ? t({ ko: '삭제 중', en: 'Deleting' }) : t({ ko: '선택 삭제', en: 'Delete selection' })}
                 variant="destructive"
                 onClick={() => void handleDeleteSelected()}
                 disabled={isDeleting || selectedCompositeHashes.length === 0}
-                title={isDeleting ? t({ ko: '삭제 중', en: 'Deleting' }) : t({ ko: '선택 삭제', en: 'Delete selection' })}
-                aria-label={isDeleting ? t({ ko: '삭제 중', en: 'Deleting' }) : t({ ko: '선택 삭제', en: 'Delete selection' })}
-                data-no-select-drag="true"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              />
             ) : undefined}
             onDownloadSelect={handleDownloadSelected}
             onClear={() => setSelectedIds([])}
