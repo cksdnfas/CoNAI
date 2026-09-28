@@ -1,8 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react'
-import { Pin, PinOff } from 'lucide-react'
-import { IconButton } from '@/components/ui/icon-button'
+import type { CSSProperties, PropsWithChildren, ReactNode } from 'react'
 import { textVariants } from '@/components/ui/text'
-import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 
@@ -13,12 +10,19 @@ interface ExplorerSidebarProps extends PropsWithChildren {
   headerExtra?: ReactNode
   className?: string
   bodyClassName?: string
+  /** Keeps the compact sticky behaviour on narrow screens. The floating frame itself is gone (flat redesign). */
   floatingFrame?: boolean
+  /** @deprecated No effect: the pin toggle was removed with the floating frame. */
   floatingLockStorageKey?: string
+  /** @deprecated Always reports false: the sidebar no longer floats. */
   onFloatingChange?: (isFloating: boolean) => void
 }
 
-/** Render a reusable sidebar shell for explorer-style navigation panels. */
+/**
+ * Legacy explorer sidebar shell, flattened: no surface, no floating frame, no pin. On desktop a hairline on the right
+ * separates it from the content. New pages use `PageWithSidebar` + `SidebarNav` instead; this stays until the
+ * remaining callers migrate.
+ */
 export function ExplorerSidebar({
   title,
   badge,
@@ -26,129 +30,47 @@ export function ExplorerSidebar({
   className,
   bodyClassName,
   floatingFrame = false,
-  floatingLockStorageKey,
-  onFloatingChange,
   children,
 }: ExplorerSidebarProps) {
-  const { t } = useI18n()
-  const asideRef = useRef<HTMLElement | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
-  const [isFloating, setIsFloating] = useState(false)
-  const [isFloatingLocked, setIsFloatingLocked] = useState(() => {
-    if (typeof window === 'undefined' || !floatingLockStorageKey) {
-      return false
-    }
 
-    return window.localStorage.getItem(floatingLockStorageKey) === 'true'
-  })
-
-  useEffect(() => {
-    if (!floatingLockStorageKey || typeof window === 'undefined') {
-      return
-    }
-
-    window.localStorage.setItem(floatingLockStorageKey, isFloatingLocked ? 'true' : 'false')
-  }, [floatingLockStorageKey, isFloatingLocked])
-
-  useEffect(() => {
-    if (!floatingFrame) {
-      setIsFloating(false)
-      onFloatingChange?.(false)
-      return
-    }
-
-    const node = asideRef.current
-    if (!node || typeof window === 'undefined') {
-      onFloatingChange?.(false)
-      return
-    }
-
-    let animationFrameId = 0
-
-    const updateFloatingState = () => {
-      animationFrameId = 0
-      const computedStyle = window.getComputedStyle(node)
-      const isSticky = computedStyle.position === 'sticky' || computedStyle.position === '-webkit-sticky'
-      const topOffset = Number.parseFloat(computedStyle.top || '0') || 0
-      const rect = node.getBoundingClientRect()
-      const nextIsFloating = !isFloatingLocked && isSticky && rect.top <= topOffset + 1
-      setIsFloating(nextIsFloating)
-      onFloatingChange?.(nextIsFloating)
-    }
-
-    const scheduleUpdate = () => {
-      if (animationFrameId !== 0) {
-        return
+  // Narrow screens: the sidebar stacks above the content and stays sticky with a capped height, so it needs the page
+  // tone behind it (content scrolls underneath) and a hairline below.
+  const isCompactSticky = floatingFrame && !isDesktopPageLayout
+  const sidebarStyle: CSSProperties | undefined = isCompactSticky
+    ? {
+        position: 'sticky',
+        top: 'var(--theme-shell-header-height)',
+        maxHeight: 'max(30vh, 16rem)',
       }
-      animationFrameId = window.requestAnimationFrame(updateFloatingState)
-    }
-
-    updateFloatingState()
-    window.addEventListener('scroll', scheduleUpdate, { passive: true })
-    window.addEventListener('resize', scheduleUpdate)
-
-    return () => {
-      if (animationFrameId !== 0) {
-        window.cancelAnimationFrame(animationFrameId)
-      }
-      window.removeEventListener('scroll', scheduleUpdate)
-      window.removeEventListener('resize', scheduleUpdate)
-    }
-  }, [floatingFrame, isFloatingLocked, onFloatingChange])
-
-  const shouldLimitUnfixedCompactHeight = floatingFrame && !isDesktopPageLayout && !isFloatingLocked
-  const sidebarStyle: CSSProperties | undefined = isFloatingLocked
-    ? { position: 'relative', top: 'auto' }
-    : shouldLimitUnfixedCompactHeight
-      ? {
-          position: 'sticky',
-          top: 'calc(var(--theme-shell-header-height) + 1.5rem)',
-          maxHeight: 'max(30vh, 16rem)',
-        }
-      : undefined
-  const shouldShowFloatingLockAction = floatingFrame && (isFloating || isFloatingLocked)
+    : undefined
 
   return (
     <aside
-      ref={asideRef}
       className={cn(
-        'explorer-sidebar relative flex min-h-0 flex-col rounded-sm bg-surface-lowest p-4',
+        'explorer-sidebar relative flex min-h-0 flex-col py-1',
+        isDesktopPageLayout ? 'border-r border-line pr-4' : 'border-b border-line pb-3',
+        isCompactSticky && 'bg-background',
         className,
       )}
       style={sidebarStyle}
-      data-floating={!isFloatingLocked && isFloating ? 'true' : 'false'}
+      data-floating="false"
     >
-      {floatingFrame ? <div className="explorer-sidebar-floating-frame pointer-events-none absolute inset-0 z-10 rounded-sm" /> : null}
-
       {/*
         Compact sticky mode caps the whole sidebar, so header tools + list scroll together in one container. Scrolling
         only the list left it a sliver (or nothing) under tall header tools on phones.
       */}
-      <div className={cn('flex min-h-0 flex-1 flex-col', shouldLimitUnfixedCompactHeight && '-mr-2 overflow-y-auto overscroll-contain pr-2')}>
+      <div className={cn('flex min-h-0 flex-1 flex-col', isCompactSticky && '-mr-2 overflow-y-auto overscroll-contain pr-2')}>
         {title || badge ? (
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
             {title ? <h2 className={cn(textVariants({ variant: 'overline' }), 'font-semibold')}>{title}</h2> : null}
             {badge}
           </div>
         ) : null}
 
-        {headerExtra ? <div className="mb-4">{headerExtra}</div> : null}
+        {headerExtra ? <div className="mb-3">{headerExtra}</div> : null}
 
-        <div className={cn('min-h-0 flex-1', bodyClassName, shouldLimitUnfixedCompactHeight && 'flex-none overflow-y-visible')}>{children}</div>
-
-        {shouldShowFloatingLockAction ? (
-          <div className="mt-3 flex justify-end">
-            <IconButton
-              size="icon-sm"
-              variant="ghost"
-              active={isFloatingLocked}
-              onClick={() => setIsFloatingLocked((current) => !current)}
-              label={isFloatingLocked ? t({ ko: '사이드바 고정 해제', en: 'Unpin sidebar' }) : t({ ko: '사이드바 고정', en: 'Pin sidebar' })}
-            >
-              {isFloatingLocked ? <PinOff /> : <Pin />}
-            </IconButton>
-          </div>
-        ) : null}
+        <div className={cn('min-h-0 flex-1', bodyClassName, isCompactSticky && 'flex-none overflow-y-visible')}>{children}</div>
       </div>
     </aside>
   )

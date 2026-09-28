@@ -9,8 +9,8 @@ type NavigationItemClassOptions = {
 
 /**
  * Build the shared className for navigation and selection items that cannot be a Button (e.g. block layouts).
- * Mirrors Button `variant="nav"`: muted row, surface-high hover, current row = primary/12 tint + foreground text
- * with a primary icon. Prefer `<Button variant="nav" data-active>` when the row fits a Button.
+ * Mirrors Button `variant="nav"` / SidebarItem: muted row, fill wash on hover, current row = fill + 2px primary bar on
+ * the left + foreground text. Prefer `<Button variant="nav" data-active>` when the row fits a Button.
  */
 export function getNavigationItemClassName({
   active,
@@ -23,8 +23,8 @@ export function getNavigationItemClassName({
     fullWidth && 'w-full',
     density === 'sm' ? 'px-2 py-2 text-sm' : 'px-3 py-2 text-sm',
     active
-      ? 'bg-primary/12 font-medium text-foreground [&_svg]:text-primary'
-      : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
+      ? 'bg-fill font-medium text-foreground shadow-[inset_2px_0_0_var(--primary)]'
+      : 'text-muted-foreground hover:bg-fill hover:text-foreground',
     className,
   )
 }

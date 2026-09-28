@@ -942,17 +942,6 @@
     opacity: 1;
     animation: image-list-selection-pulse 1.7s ease-in-out infinite;
   }
-
-  .explorer-sidebar-floating-frame {
-    opacity: 0;
-    transition: opacity 140ms ease, box-shadow 140ms ease;
-  }
-
-  .explorer-sidebar[data-floating='true'] .explorer-sidebar-floating-frame {
-    opacity: 1;
-    /* 떠 있는 동안은 그림자만 준다. 주황 테두리는 화면 전체를 시끄럽게 만들었다. */
-    box-shadow: var(--elevation-2);
-  }
 }
 
 /* 대문자 라벨의 자간은 라틴 문자용이다. 한글에 그대로 주면 글자가 흩어져 보인다. */
