@@ -1,4 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react'
+import { Heading } from '@/components/ui/heading'
+import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
 interface SectionHeadingProps extends ComponentProps<'div'> {
@@ -17,15 +19,15 @@ export function SectionHeading({
   className,
   ...props
 }: SectionHeadingProps) {
-  const descriptionClassName = variant === 'inside'
-    ? 'mt-2 text-sm font-semibold text-foreground'
-    : 'text-sm text-muted-foreground'
-
   return (
     <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)} {...props}>
       <div className="min-w-0">
-        <p className="text-xl font-semibold tracking-tight text-foreground">{heading}</p>
-        {description ? <p className={descriptionClassName}>{description}</p> : null}
+        <Heading level={2}>{heading}</Heading>
+        {description ? (
+          variant === 'inside'
+            ? <Text variant="title" className="mt-2">{description}</Text>
+            : <Text variant="muted">{description}</Text>
+        ) : null}
       </div>
 
       {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
