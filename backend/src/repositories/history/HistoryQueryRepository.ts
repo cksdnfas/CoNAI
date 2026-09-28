@@ -434,6 +434,52 @@ export class HistoryQueryRepository {
     };
   }
 
+  /**
+   * Ids of list-visible rows the image-generation UI renders as failed
+   * (frontend `resolveHistoryDisplayStatus(record) === 'failed'`):
+   * - generation_status = 'failed'
+   * - linked queue job failed/cancelled and no ready active result media
+   * - completed but the result file is missing (no hash or no active file)
+   */
+  static findDisplayFailedIds(filters: Omit<GenerationHistoryFilterOptions, 'limit' | 'offset'>): number[] {
+    const hasActiveResultFile = `(
+      gh.composite_hash IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM main_db.image_files active_file
+        WHERE active_file.composite_hash = gh.composite_hash
+          AND active_file.file_status = 'active'
+      )
+    )`;
+    const hasReadyResultMedia = `(
+      ${hasActiveResultFile}
+      AND EXISTS (
+        SELECT 1 FROM main_db.media_metadata im
+        WHERE im.composite_hash = gh.composite_hash
+          AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}
+      )
+    )`;
+
+    let sql = `
+      SELECT gh.id
+      FROM api_generation_history gh
+      LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
+      WHERE 1=1
+    `;
+    const params: HistoryFilterBinding[] = [];
+    sql = appendHistoryFilterConditions(sql, params, filters, { tableAlias: 'gh' });
+    sql = this.appendHistoryListVisibilityFilter(sql);
+    sql += `
+      AND (
+        gh.generation_status = 'failed'
+        OR (qj.status IN ('failed', 'cancelled') AND NOT ${hasReadyResultMedia})
+        OR (gh.generation_status = 'completed' AND NOT ${hasActiveResultFile})
+      )`;
+
+    const rows = apiGenDb.prepare(sql).all(...params) as Array<{ id: number }>;
+    return rows.map((row) => row.id);
+  }
+
   static findByStatus(status: GenerationStatus, olderThan?: string): GenerationHistoryRecord[] {
     let sql = 'SELECT * FROM api_generation_history WHERE generation_status = ?';
     const params: HistoryFilterBinding[] = [status];

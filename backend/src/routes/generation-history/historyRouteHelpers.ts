@@ -6,6 +6,7 @@ import { MediaPostprocessVisibilityService } from '../../services/mediaPostproce
 import { getActiveFileOrBlock, type ImageDownloadType } from '../images/query-file-helpers';
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers';
 import { parsePositiveInteger } from '../routeValidation';
+import type { GenerationHistoryFilterOptions, ServiceType } from '../../types/generationHistory';
 
 function parseOptionalPositiveIntegerQuery(value: unknown): number | undefined {
   const parsed = parsePositiveInteger(value);
@@ -46,6 +47,33 @@ export function applyHistoryAccessScope(req: Request, filters: Record<string, an
   }
 
   return { forceEmpty: false } as const;
+}
+
+function parseHistoryServiceType(value: unknown): ServiceType | null {
+  return value === 'comfyui' || value === 'novelai' || value === 'codex' ? value : null;
+}
+
+/**
+ * Parse the page/workflow scope shared by bulk history actions (clear, failed cleanup).
+ * Account scoping is applied separately via `applyHistoryAccessScope`.
+ */
+export function parseHistoryPageScope(query: Request['query']) {
+  const serviceType = parseHistoryServiceType(query.service_type);
+  if (!serviceType) {
+    return { filters: null, error: 'service_type must be comfyui, novelai, or codex' } as const;
+  }
+
+  const workflowIdValue = query.workflow_id;
+  const workflowId = workflowIdValue === undefined ? undefined : Number(workflowIdValue);
+  if (workflowId !== undefined && (!Number.isInteger(workflowId) || workflowId <= 0 || serviceType !== 'comfyui')) {
+    return { filters: null, error: 'workflow_id must be a positive integer for comfyui history' } as const;
+  }
+
+  const filters: GenerationHistoryFilterOptions = {
+    service_type: serviceType,
+    ...(workflowId !== undefined ? { workflow_id: workflowId } : {}),
+  };
+  return { filters, error: null } as const;
 }
 
 export function buildHistoryQueryFilters(query: Request['query'], options: { includeServiceType?: boolean } = {}) {

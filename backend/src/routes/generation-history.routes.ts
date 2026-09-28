@@ -2,13 +2,13 @@ import express, { Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { HistoryCommandService } from '../services/historyCommandService';
-import type { GenerationHistoryFilterOptions, ServiceType } from '../types/generationHistory';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
 import {
   applyHistoryAccessScope,
   buildHistoryQueryFilters,
   canAccessHistoryRecord,
+  parseHistoryPageScope,
 } from './generation-history/historyRouteHelpers';
 import {
   handleFailedGenerationHistoryCleanup,
@@ -23,10 +23,6 @@ import {
 
 const router = express.Router();
 const CLEARABLE_HISTORY_STATUSES = ['completed', 'failed'] as const;
-
-function parseHistoryServiceType(value: unknown): ServiceType | null {
-  return value === 'comfyui' || value === 'novelai' || value === 'codex' ? value : null;
-}
 
 /**
  * GET /api/generation-history
@@ -70,23 +66,12 @@ router.get(
 router.post(
   '/clear',
   asyncHandler(async (req: Request, res: Response) => {
-    const serviceType = parseHistoryServiceType(req.query.service_type);
-    if (!serviceType) {
-      res.status(400).json({ success: false, error: 'service_type must be comfyui, novelai, or codex' });
+    const { filters, error } = parseHistoryPageScope(req.query);
+    if (error) {
+      res.status(400).json({ success: false, error });
       return;
     }
 
-    const workflowIdValue = req.query.workflow_id;
-    const workflowId = workflowIdValue === undefined ? undefined : Number(workflowIdValue);
-    if (workflowId !== undefined && (!Number.isInteger(workflowId) || workflowId <= 0 || serviceType !== 'comfyui')) {
-      res.status(400).json({ success: false, error: 'workflow_id must be a positive integer for comfyui history' });
-      return;
-    }
-
-    const filters: GenerationHistoryFilterOptions = {
-      service_type: serviceType,
-      ...(workflowId !== undefined ? { workflow_id: workflowId } : {}),
-    };
     const accessScope = applyHistoryAccessScope(req, filters, req.query.mine === 'true');
     if (accessScope.forceEmpty) {
       res.status(401).json({ success: false, error: 'Authentication required' });
@@ -335,13 +320,16 @@ router.post(
 
 /**
  * POST /api/generation-history/cleanup-failed
- * Cleanup only failed generation history records
+ * Remove failed history rows for one generation page/workflow scope (same scoping as /clear).
  *
  * Query Parameters:
- * - dry_run: boolean (default: false) - Preview cleanup without deleting
+ * - service_type: comfyui | novelai | codex (required)
+ * - workflow_id: comfyui workflow id (optional)
+ * - mine: true to limit admins to their own rows (non-admins are always account-scoped)
+ * - dry_run: boolean (default: false) - Count without deleting
  *
- * Cleanup Rules:
- * - All failed records (no age restriction) → Delete from database only
+ * "Failed" matches the UI display rule (see HistoryQueryRepository.findDisplayFailedIds).
+ * Only history rows are deleted; media is kept.
  */
 router.post(
   '/cleanup-failed',

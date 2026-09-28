@@ -402,20 +402,58 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       return
     }
 
+    // Clear history 와 같은 범위(서비스/워크플로 + 계정)로만 정리한다.
+    const runCleanup = (dryRun: boolean) => (
+      isPublicView && publicWorkflowSlug
+        ? cleanupPublicGenerationWorkflowFailedHistory(publicWorkflowSlug, { dryRun })
+        : cleanupFailedGenerationHistory({
+            serviceType,
+            workflowId,
+            mine: !isAdmin,
+            dryRun,
+          })
+    )
+
     try {
       setIsCleaningFailed(true)
-      const result = isPublicView && publicWorkflowSlug
-        ? await cleanupPublicGenerationWorkflowFailedHistory(publicWorkflowSlug)
-        : await cleanupFailedGenerationHistory()
+      // 로드된 페이지가 아니라 서버 범위 전체의 실제 개수로 확인을 받는다.
+      const preview = await runCleanup(true)
+      if (preview.deleted <= 0) {
+        showSnackbar({ message: t({ ko: '정리할 실패 기록이 없어.', en: 'There are no failed records to clean up.' }), tone: 'info' })
+        return
+      }
+
+      const confirmed = window.confirm(isPublicView
+        ? t(
+            { ko: '이 공용 워크플로에서 내 실패 기록 {count}개를 목록에서 지울까? 원본 미디어는 유지돼.', en: 'Remove {count} of my failed records for this public workflow? Original media will be kept.' },
+            { count: formatNumber(preview.deleted) },
+          )
+        : t(
+            { ko: '이 생성 페이지의 실패 기록 {count}개를 목록에서 지울까? 원본 미디어는 유지돼.', en: 'Remove {count} failed records from this generation page? Original media will be kept.' },
+            { count: formatNumber(preview.deleted) },
+          ))
+      if (!confirmed) {
+        return
+      }
+
+      const result = await runCleanup(false)
       setSelectedHistoryIds([])
       await refreshHistory()
-      showSnackbar({ message: result.message || t('image-generation.components.generation.history.panel.failed.history.cleaned.up'), tone: 'info' })
+      showSnackbar({
+        message: result.deleted > 0
+          ? t(
+              { ko: '실패 기록 {count}개를 정리했어.', en: 'Cleaned up {count} failed records.' },
+              { count: formatNumber(result.deleted) },
+            )
+          : t({ ko: '정리할 실패 기록이 없어.', en: 'There are no failed records to clean up.' }),
+        tone: 'info',
+      })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.clean.up.failed.history')), tone: 'error' })
     } finally {
       setIsCleaningFailed(false)
     }
-  }, [isCleaningFailed, isPublicView, publicWorkflowSlug, refreshHistory, showSnackbar, t])
+  }, [formatNumber, isAdmin, isCleaningFailed, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, showSnackbar, t, workflowId])
 
   const handleClearHistory = useCallback(async () => {
     if (isClearingHistory) {

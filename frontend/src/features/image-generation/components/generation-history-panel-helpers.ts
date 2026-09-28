@@ -146,11 +146,10 @@ export function getHistoryRecordStatusSummary(records: GenerationHistoryResponse
 
   for (const record of records) {
     const displayStatus = resolveHistoryDisplayStatus(record)
-    if (record.generation_status === 'failed') {
+    // 실패 정리 대상은 화면에서 실패로 보이는 행과 같은 규칙이다(백엔드 findDisplayFailedIds 와 짝).
+    if (displayStatus === 'failed') {
       summary.cleanupFailed += 1
-    }
-
-    if (displayStatus === 'pending' || displayStatus === 'processing') {
+    } else if (displayStatus === 'pending' || displayStatus === 'processing') {
       summary.inFlight += 1
     }
   }

@@ -109,9 +109,28 @@ export async function clearGenerationHistoryScope(params: {
   })
 }
 
-/** Delete failed generation history records in bulk. */
-export async function cleanupFailedGenerationHistory() {
-  return requestJson<{ success: boolean; message: string; deleted: number }>('/api/generation-history/cleanup-failed', {
+/**
+ * Remove failed history rows for one generation page or workflow (same scoping as the clear action).
+ * `dryRun` only counts the matching rows; media is never deleted.
+ */
+export async function cleanupFailedGenerationHistory(params: {
+  serviceType: GenerationServiceType
+  workflowId?: number | null
+  mine?: boolean
+  dryRun?: boolean
+}) {
+  const searchParams = new URLSearchParams({ service_type: params.serviceType })
+  if (params.workflowId) {
+    searchParams.set('workflow_id', String(params.workflowId))
+  }
+  if (params.mine) {
+    searchParams.set('mine', 'true')
+  }
+  if (params.dryRun) {
+    searchParams.set('dry_run', 'true')
+  }
+
+  return requestJson<{ success: boolean; message: string; deleted: number }>(`/api/generation-history/cleanup-failed?${searchParams.toString()}`, {
     method: 'POST',
   })
 }

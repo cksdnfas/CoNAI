@@ -88,8 +88,10 @@ export async function queuePublicGenerationWorkflowJob(publicSlug: string, paylo
   })
 }
 
-export async function cleanupPublicGenerationWorkflowFailedHistory(publicSlug: string) {
-  return requestJson<PublicWorkflowCleanupResponse>(`/api/public-workflows/${encodeURIComponent(publicSlug)}/cleanup-failed`, {
+/** Remove the requester's failed public-workflow history rows; `dryRun` only counts them. */
+export async function cleanupPublicGenerationWorkflowFailedHistory(publicSlug: string, options: { dryRun?: boolean } = {}) {
+  const suffix = options.dryRun ? '?dry_run=true' : ''
+  return requestJson<PublicWorkflowCleanupResponse>(`/api/public-workflows/${encodeURIComponent(publicSlug)}/cleanup-failed${suffix}`, {
     method: 'POST',
   })
 }

@@ -1,7 +1,11 @@
 import type { Request, Response } from 'express';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { HistoryCommandService } from '../../services/historyCommandService';
-import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers';
+import type { GenerationHistoryFilterOptions } from '../../types/generationHistory';
+import { applyHistoryAccessScope, parseHistoryPageScope } from './historyRouteHelpers';
+
+/** Keep each DELETE well below SQLite's binding limit. */
+const FAILED_CLEANUP_DELETE_CHUNK_SIZE = 400;
 
 export async function handleGenerationHistoryCleanup(req: Request, res: Response) {
   const dryRun = req.query.dry_run === 'true';
@@ -22,73 +26,42 @@ export async function handleGenerationHistoryCleanup(req: Request, res: Response
 
 export async function handleFailedGenerationHistoryCleanup(req: Request, res: Response) {
   const dryRun = req.query.dry_run === 'true';
-
-  if (!isAdminRequest(req)) {
-    handleScopedFailedGenerationHistoryCleanup(req, res, dryRun);
+  const { filters, error } = parseHistoryPageScope(req.query);
+  if (error) {
+    res.status(400).json({ success: false, error });
     return;
   }
 
-  const { CleanupService } = await import('../../services/cleanupService');
-  const report = await CleanupService.cleanupFailedOnly({ dryRun });
+  const accessScope = applyHistoryAccessScope(req, filters, req.query.mine === 'true');
+  if (accessScope.forceEmpty) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
+  }
 
+  const deleted = removeDisplayFailedHistory(filters, dryRun);
   res.json({
     success: true,
-    message: dryRun
-      ? `Found ${report.deleted} failed records (preview only, no changes made)`
-      : `Successfully deleted ${report.deleted} failed records`,
     dry_run: dryRun,
-    deleted: report.deleted,
-    summary: report.summary,
-    details: report.details,
+    deleted,
+    message: dryRun
+      ? `Found ${deleted} failed generation history records (preview only, no changes made)`
+      : `Removed ${deleted} failed generation history records without deleting media`,
   });
 }
 
-function handleScopedFailedGenerationHistoryCleanup(req: Request, res: Response, dryRun: boolean) {
-  const requesterAccountId = getRequesterAccountId(req);
-  const requesterAccountType = req.session?.accountType === 'guest' ? 'guest' : null;
-
-  if (requesterAccountId === null || requesterAccountType === null) {
-    res.status(401).json({
-      success: false,
-      error: 'Authentication required',
-    });
-    return;
+/** Count or delete the rows the UI shows as failed within an already access-scoped filter. */
+export function removeDisplayFailedHistory(
+  filters: Omit<GenerationHistoryFilterOptions, 'limit' | 'offset'>,
+  dryRun: boolean,
+): number {
+  const failedIds = HistoryQueryRepository.findDisplayFailedIds(filters);
+  if (dryRun) {
+    return failedIds.length;
   }
 
-  const failedRecords = HistoryQueryRepository.findAll({
-    generation_status: 'failed',
-    requested_by_account_id: requesterAccountId,
-    requested_by_account_type: requesterAccountType,
-  });
-
-  const deleted = dryRun
-    ? failedRecords.length
-    : HistoryCommandService.deleteMany(
-        failedRecords
-          .map((record) => record.id)
-          .filter((id): id is number => typeof id === 'number'),
-      );
-
-  res.json({
-    success: true,
-    message: dryRun
-      ? `Found ${deleted} failed records (preview only, no changes made)`
-      : `Successfully deleted ${deleted} failed records`,
-    dry_run: dryRun,
-    deleted,
-    summary: {
-      failed_deleted: deleted,
-      orphaned_deleted: 0,
-      no_hash_deleted: 0,
-      stale_updated: 0,
-    },
-    details: failedRecords.map((record) => ({
-      id: record.id!,
-      reason: 'failed',
-      service_type: record.service_type,
-      created_at: record.created_at!,
-      generation_status: record.generation_status,
-      error_message: record.error_message,
-    })),
-  });
+  let deleted = 0;
+  for (let start = 0; start < failedIds.length; start += FAILED_CLEANUP_DELETE_CHUNK_SIZE) {
+    deleted += HistoryCommandService.deleteMany(failedIds.slice(start, start + FAILED_CLEANUP_DELETE_CHUNK_SIZE));
+  }
+  return deleted;
 }

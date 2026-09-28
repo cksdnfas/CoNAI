@@ -27,6 +27,7 @@ import {
 } from '../services/workflowNumericFieldPolicy';
 import type { MarkedField, WorkflowRecord } from '../types/workflow';
 import { applyHistoryAccessScope } from './generation-history/historyRouteHelpers';
+import { removeDisplayFailedHistory } from './generation-history/cleanupRouteHandlers';
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
 
 const router = Router();
@@ -548,8 +549,9 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
   });
 }));
 
-/** POST /api/public-workflows/:slug/cleanup-failed */
+/** POST /api/public-workflows/:slug/cleanup-failed - remove the requester's failed rows (UI "failed" rule). */
 router.post('/:slug/cleanup-failed', asyncHandler(async (req: Request, res: Response) => {
+  const dryRun = req.query.dry_run === 'true';
   const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
   if (!workflow) {
     res.status(404).json({ success: false, error: 'Public workflow not found' });
@@ -562,18 +564,20 @@ router.post('/:slug/cleanup-failed', asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  const deleted = HistoryCommandService.deleteByFilters({
+  const deleted = removeDisplayFailedHistory({
     workflow_id: workflow.id,
-    generation_status: 'failed',
     ...requesterScope,
-  });
+  }, dryRun);
 
   res.json({
     success: true,
+    dry_run: dryRun,
     deleted,
-    message: deleted > 0
-      ? `Removed ${deleted} failed public workflow history records`
-      : 'No failed public workflow history records to remove',
+    message: dryRun
+      ? `Found ${deleted} failed public workflow history records (preview only, no changes made)`
+      : deleted > 0
+        ? `Removed ${deleted} failed public workflow history records`
+        : 'No failed public workflow history records to remove',
   });
 }));
 
