@@ -76,13 +76,13 @@ export function ImageViewModalActions({
       </Button>
       {showCounter ? <div className="shrink-0 px-2 text-xs text-muted-foreground">{counterLabel}</div> : null}
       {allowDetailNavigation ? (
-        <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={openDetailPage} aria-label={t('images.components.detail.image.view.modal.actions.open.detail.page')} title={t('images.components.detail.image.view.modal.actions.detail.page')}>
+        <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={openDetailPage} aria-label={t('images.components.detail.image.view.modal.actions.open.detail.page')} title={t('images.components.detail.image.view.modal.actions.detail.page')}>
           <ExternalLink className="h-4 w-4" />
         </Button>
       ) : null}
       {/* The record is refetched every time the viewer opens (staleTime 0); a manual refresh only helps while it is still processing. */}
       {controls.image?.is_processing ? (
-        <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={controls.refresh} disabled={controls.isRefreshing} aria-label={t('images.components.detail.image.view.modal.actions.refresh')} title={t('images.components.detail.image.view.modal.actions.refresh')}>
+        <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={controls.refresh} disabled={controls.isRefreshing} aria-label={t('images.components.detail.image.view.modal.actions.refresh')} title={t('images.components.detail.image.view.modal.actions.refresh')}>
           <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
         </Button>
       ) : null}
@@ -92,7 +92,7 @@ export function ImageViewModalActions({
   const historyReuseButtons = historyReuseId !== null ? <GenerationHistoryReuseActions key={historyReuseId} historyId={historyReuseId} /> : null
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} /> : null
   const editButton = allowEditAction ? <ImageEditAction image={controls.image} /> : null
-  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="outline" className={overlayButtonClassName} /> : null
+  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="secondary" className={overlayButtonClassName} /> : null
   const deleteButton = allowDeleteAction ? (
     <ImageDeleteAction
       image={controls.image}

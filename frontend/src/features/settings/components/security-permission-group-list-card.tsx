@@ -34,7 +34,7 @@ export function SecurityPermissionGroupListCard({
       heading={t({ ko: '권한 그룹', en: 'Permission groups' })}
       actions={(
         <div className="flex items-center gap-2">
-          <IconButton size="icon-sm" variant="outline" onClick={onOpenGroupColors} label={t('securityGroupColorEditorModal.permissionGroupColors')}>
+          <IconButton size="icon-sm" variant="secondary" onClick={onOpenGroupColors} label={t('securityGroupColorEditorModal.permissionGroupColors')}>
             <Palette className="h-4 w-4" />
           </IconButton>
           <Button type="button" size="sm" onClick={onCreate}>

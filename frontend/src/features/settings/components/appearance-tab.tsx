@@ -112,13 +112,13 @@ export function AppearanceTab({
           actions={
             <>
               <SectionDirtyBadge dirty={isDirty} />
-              <IconButton size="icon-sm" variant="outline" onClick={onExport} disabled={isSaving} label={t({ ko: '외형 내보내기', en: 'Export appearance' })}>
+              <IconButton size="icon-sm" variant="secondary" onClick={onExport} disabled={isSaving} label={t({ ko: '외형 내보내기', en: 'Export appearance' })}>
                 <Download className="h-4 w-4" />
               </IconButton>
-              <IconButton size="icon-sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving || importPreviewFileName !== null} label={t({ ko: '외형 가져오기 (미리보기 후 적용)', en: 'Import appearance (preview first)' })}>
+              <IconButton size="icon-sm" variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isSaving || importPreviewFileName !== null} label={t({ ko: '외형 가져오기 (미리보기 후 적용)', en: 'Import appearance (preview first)' })}>
                 <Upload className="h-4 w-4" />
               </IconButton>
-              <IconButton size="icon-sm" variant="outline" onClick={onReset} disabled={!appearanceDraft || isSaving} label={t({ ko: '기본값으로 되돌리기', en: 'Restore defaults' })}>
+              <IconButton size="icon-sm" variant="secondary" onClick={onReset} disabled={!appearanceDraft || isSaving} label={t({ ko: '기본값으로 되돌리기', en: 'Restore defaults' })}>
                 <RotateCcw className="h-4 w-4" />
               </IconButton>
             </>

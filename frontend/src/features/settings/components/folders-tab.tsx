@@ -165,7 +165,7 @@ export function FoldersTab({
           heading={t({ ko: '감시 폴더 운영', en: 'Watched folder operations' })}
           description={t({ ko: '전체 스캔과 파일 검증은 유지보수 탭으로 옮겼어.', en: 'Full scan and file verification now live in the Maintenance tab.' })}
           actions={
-            <IconButton size="icon-sm" variant="outline" onClick={onRefresh} label={t({ ko: '새로고침', en: 'Refresh' })}>
+            <IconButton size="icon-sm" variant="secondary" onClick={onRefresh} label={t({ ko: '새로고침', en: 'Refresh' })}>
               <RefreshCcw className="h-4 w-4" />
             </IconButton>
           }

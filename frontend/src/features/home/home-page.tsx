@@ -134,7 +134,7 @@ export function HomePage() {
               <Button asChild>
                 <Link to="/login">{t('homePage.signIn')}</Link>
               </Button>
-              <Button asChild variant="outline">
+              <Button asChild variant="secondary">
                 <Link to="/login">{t('homePage.createGuestAccount')}</Link>
               </Button>
             </>

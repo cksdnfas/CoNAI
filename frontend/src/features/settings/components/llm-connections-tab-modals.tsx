@@ -393,7 +393,7 @@ export function LlmConnectionEditorModal({
           <>
             <IconButton
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               onClick={() => void testMutation.mutateAsync()}
               disabled={testMutation.isPending || isSaving}
               label={t('llmConnectionsTab.testConnection')}
@@ -424,7 +424,7 @@ export function LlmConnectionEditorModal({
             </IconButton>
           </>
         ) : null}
-        <IconButton size="icon-sm" variant="outline" onClick={onClose} disabled={isSaving} label={t({ ko: '취소', en: 'Cancel' })}>
+        <IconButton size="icon-sm" variant="secondary" onClick={onClose} disabled={isSaving} label={t({ ko: '취소', en: 'Cancel' })}>
           <X className="h-4 w-4" />
         </IconButton>
         <IconButton
@@ -512,7 +512,7 @@ export function LlmPresetEditorModal({
             {isDeleting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </IconButton>
         ) : null}
-        <IconButton size="icon-sm" variant="outline" onClick={onClose} disabled={isSaving || isDeleting} label={t({ ko: '취소', en: 'Cancel' })}>
+        <IconButton size="icon-sm" variant="secondary" onClick={onClose} disabled={isSaving || isDeleting} label={t({ ko: '취소', en: 'Cancel' })}>
           <X className="h-4 w-4" />
         </IconButton>
         <IconButton

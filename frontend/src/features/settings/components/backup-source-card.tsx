@@ -81,13 +81,13 @@ export function BackupSourceCard({
       bodyClassName="space-y-5"
       actions={
         <div className="flex flex-wrap gap-2">
-          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(source.id))} label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
+          <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(source.id))} label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
             <Play className="h-4 w-4" />
           </IconButton>
-          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(source.id))} label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
+          <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(source.id))} label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
             <Square className="h-4 w-4" />
           </IconButton>
-          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(source.id))} label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
+          <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(source.id))} label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
             <RotateCcw className="h-4 w-4" />
           </IconButton>
         </div>

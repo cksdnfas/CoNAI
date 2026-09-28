@@ -86,16 +86,16 @@ export function WatchedFolderCard({
       bodyClassName="space-y-5"
       actions={
         <div className="flex flex-wrap gap-2">
-          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onScan(folder.id))} label={t({ ko: '폴더 스캔', en: 'Scan folder' })}>
+          <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onScan(folder.id))} label={t({ ko: '폴더 스캔', en: 'Scan folder' })}>
             <ScanSearch className="h-4 w-4" />
           </IconButton>
-          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(folder.id))} label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
+          <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(folder.id))} label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
             <Play className="h-4 w-4" />
           </IconButton>
-          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(folder.id))} label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
+          <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(folder.id))} label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
             <Square className="h-4 w-4" />
           </IconButton>
-          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(folder.id))} label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
+          <IconButton size="icon-sm" variant="secondary" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(folder.id))} label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
             <RotateCcw className="h-4 w-4" />
           </IconButton>
         </div>

@@ -101,8 +101,8 @@ export function McpHttpSettingsCard() {
           />
           <div className="flex flex-wrap items-center gap-2">
             <Input variant="settings" readOnly value={endpoint} className="min-w-0 flex-1 basis-56 font-mono" aria-label={t({ ko: 'MCP 주소', en: 'MCP URL' })} />
-            <IconButton size="icon-sm" variant="outline" onClick={() => void copy(endpoint)} label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></IconButton>
-            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))}>
+            <IconButton size="icon-sm" variant="secondary" onClick={() => void copy(endpoint)} label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></IconButton>
+            <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))}>
               <Plus />
               {t({ ko: '키 추가', en: 'Add key' })}
             </Button>
@@ -116,14 +116,14 @@ export function McpHttpSettingsCard() {
                     <Input variant="settings" readOnly value={key.name} className="w-full sm:w-44" aria-label={t({ ko: '키 이름', en: 'Key name' })} />
                     <Input variant="settings" type={visible ? 'text' : 'password'} readOnly value={key.apiKey} className="min-w-0 flex-1 basis-48 font-mono" aria-label={t({ ko: 'API 키', en: 'API key' })} />
                     <div className="flex shrink-0 items-center gap-1">
-                      <IconButton size="icon-sm" variant="outline" onClick={() => setVisibleKeys((current) => {
+                      <IconButton size="icon-sm" variant="secondary" onClick={() => setVisibleKeys((current) => {
                         const next = new Set(current)
                         if (next.has(key.id)) next.delete(key.id)
                         else next.add(key.id)
                         return next
                       })} label={visible ? t({ ko: '키 숨기기', en: 'Hide key' }) : t({ ko: '키 보기', en: 'Show key' })}>{visible ? <EyeOff /> : <Eye />}</IconButton>
-                      <IconButton size="icon-sm" variant="outline" onClick={() => void copy(key.apiKey)} label={t({ ko: '키 복사', en: 'Copy key' })}><Copy /></IconButton>
-                      <IconButton size="icon-sm" variant="outline" disabled={busy} onClick={async () => {
+                      <IconButton size="icon-sm" variant="secondary" onClick={() => void copy(key.apiKey)} label={t({ ko: '키 복사', en: 'Copy key' })}><Copy /></IconButton>
+                      <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={async () => {
                         const confirmed = await confirm({
                           title: t({ ko: '키 새로 발급', en: 'Regenerate key' }),
                           description: t({ ko: '지금 키를 쓰는 에이전트는 새 키로 바꿔야 다시 연결돼. 새로 발급할까?', en: 'Agents using the current key must switch to the new one to reconnect. Regenerate?' }),
@@ -132,7 +132,7 @@ export function McpHttpSettingsCard() {
                         })
                         if (confirmed) rotateKey.mutate(key.id)
                       }} label={t({ ko: '키 새로 발급', en: 'Regenerate key' })}><RefreshCw /></IconButton>
-                      <IconButton size="icon-sm" variant="outline" disabled={busy} onClick={async () => {
+                      <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={async () => {
                         const confirmed = await confirm({
                           title: t({ ko: '키 폐기', en: 'Revoke key' }),
                           description: t({ ko: '이 키를 폐기할까?', en: 'Revoke this key?' }),

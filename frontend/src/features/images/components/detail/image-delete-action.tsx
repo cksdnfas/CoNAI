@@ -83,7 +83,7 @@ export function ImageDeleteAction({ image, className, onDeleted }: ImageDeleteAc
     <IconButton
       label={label}
       size="icon-sm"
-      variant="outline"
+      variant="secondary"
       className={cn(className, 'text-destructive hover:text-destructive')}
       onClick={() => void handleDelete()}
       disabled={isDeleting}

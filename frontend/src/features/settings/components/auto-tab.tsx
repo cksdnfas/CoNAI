@@ -91,7 +91,7 @@ export function AutoTab({
           actions={(
             <>
               <SectionDirtyBadge dirty={hasRatingTiersChanges} />
-              <IconButton size="icon-sm" variant="outline" onClick={onAddRatingTier} label={t({ ko: '등급 추가', en: 'Add tier' })}>
+              <IconButton size="icon-sm" variant="secondary" onClick={onAddRatingTier} label={t({ ko: '등급 추가', en: 'Add tier' })}>
                 <Plus className="h-4 w-4" />
               </IconButton>
             </>

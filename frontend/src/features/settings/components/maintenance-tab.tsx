@@ -158,10 +158,10 @@ export function MaintenanceTab({
         description={t({ ko: '특정 이미지로 Kaloscope·WD Tagger 결과를 바로 확인하는 점검용 도구야.', en: 'Diagnostic tool for checking Kaloscope and WD Tagger output on a specific image.' })}
         actions={(
           <>
-            <Button size="sm" variant="outline" onClick={autoTabProps.onResolveAutoTestMedia} disabled={!autoTabProps.autoTestHashInput.trim() || autoTabProps.isResolvingAutoTestMedia}>
+            <Button size="sm" variant="secondary" onClick={autoTabProps.onResolveAutoTestMedia} disabled={!autoTabProps.autoTestHashInput.trim() || autoTabProps.isResolvingAutoTestMedia}>
               {t({ ko: '해시 확인', en: 'Check hash' })}
             </Button>
-            <Button size="sm" variant="outline" onClick={autoTabProps.onRandomAutoTestMedia} disabled={autoTabProps.isPickingRandomAutoTestMedia}>
+            <Button size="sm" variant="secondary" onClick={autoTabProps.onRandomAutoTestMedia} disabled={autoTabProps.isPickingRandomAutoTestMedia}>
               {t({ ko: '랜덤 선택', en: 'Random pick' })}
             </Button>
           </>
