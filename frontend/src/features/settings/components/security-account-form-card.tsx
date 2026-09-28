@@ -2,7 +2,8 @@ import { KeyRound, Save, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
-import { SettingsField, SettingsSection } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { SettingsSection } from './settings-primitives'
 
 interface SecurityAccountFormCardProps {
   hasCredentials: boolean
@@ -62,15 +63,15 @@ export function SecurityAccountFormCard({
       {!hasCredentials ? (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label={t({ ko: '아이디', en: 'Username' })}>
+            <Field label={t({ ko: '아이디', en: 'Username' })}>
               <Input
                 variant="settings"
                 value={setupUsername}
                 onChange={(event) => onSetupUsernameChange(event.target.value)}
                 autoComplete="username"
               />
-            </SettingsField>
-            <SettingsField label={t({ ko: '비밀번호', en: 'Password' })}>
+            </Field>
+            <Field label={t({ ko: '비밀번호', en: 'Password' })}>
               <Input
                 type="password"
                 variant="settings"
@@ -78,7 +79,7 @@ export function SecurityAccountFormCard({
                 onChange={(event) => onSetupPasswordChange(event.target.value)}
                 autoComplete="new-password"
               />
-            </SettingsField>
+            </Field>
           </div>
           <div className="flex justify-end">
             <Button type="button" onClick={onSubmitSetup} disabled={isSetupDisabled}>
@@ -89,7 +90,7 @@ export function SecurityAccountFormCard({
       ) : (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
-            <SettingsField label={t({ ko: '현재 비밀번호', en: 'Current password' })}>
+            <Field label={t({ ko: '현재 비밀번호', en: 'Current password' })}>
               <Input
                 type="password"
                 variant="settings"
@@ -97,8 +98,8 @@ export function SecurityAccountFormCard({
                 onChange={(event) => onCurrentPasswordChange(event.target.value)}
                 autoComplete="current-password"
               />
-            </SettingsField>
-            <SettingsField label={t({ ko: '새 아이디', en: 'New username' })}>
+            </Field>
+            <Field label={t({ ko: '새 아이디', en: 'New username' })}>
               <Input
                 variant="settings"
                 value={nextUsername}
@@ -106,8 +107,8 @@ export function SecurityAccountFormCard({
                 autoComplete="username"
                 placeholder={currentUsername ?? t({ ko: '새 아이디', en: 'New username' })}
               />
-            </SettingsField>
-            <SettingsField label={t({ ko: '새 비밀번호', en: 'New password' })}>
+            </Field>
+            <Field label={t({ ko: '새 비밀번호', en: 'New password' })}>
               <Input
                 type="password"
                 variant="settings"
@@ -115,7 +116,7 @@ export function SecurityAccountFormCard({
                 onChange={(event) => onNextPasswordChange(event.target.value)}
                 autoComplete="new-password"
               />
-            </SettingsField>
+            </Field>
           </div>
           <div className="flex justify-end">
             <Button

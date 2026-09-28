@@ -2,8 +2,8 @@ import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { toggleSelectionItem, type ModuleFieldOption } from '../image-generation-shared'
@@ -49,30 +49,30 @@ export function ModuleSaveModal({
   const exposedFieldKeySet = useMemo(() => new Set(exposedFieldKeys), [exposedFieldKeys])
   const selectedOverwriteModule = overwriteCandidates.find((module) => module.id === overwriteModuleId) ?? null
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={title}
       widthClassName="max-w-3xl"
     >
-      <SettingsModalBody className="space-y-5">
+      <ModalBody className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label={t('image-generation.components.module.save.modal.save.mode')}>
+          <Field label={t('image-generation.components.module.save.modal.save.mode')}>
             <Select value={overwriteModuleId ? String(overwriteModuleId) : ''} onChange={(event) => onOverwriteModuleIdChange?.(event.target.value ? Number(event.target.value) : null)}>
               <option value="">{t('image-generation.components.module.save.modal.create.new.module')}</option>
               {overwriteCandidates.map((module) => (
                 <option key={module.id} value={module.id}>#{module.id} {module.name}</option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t('image-generation.components.module.save.modal.module.name')}>
+          <Field label={t('image-generation.components.module.save.modal.module.name')}>
             <Input value={moduleName} onChange={(event) => onModuleNameChange(event.target.value)} placeholder={moduleNamePlaceholder} />
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t('image-generation.components.module.save.modal.description')}>
+          <Field label={t('image-generation.components.module.save.modal.description')}>
             <Input value={moduleDescription} onChange={(event) => onModuleDescriptionChange(event.target.value)} placeholder={t('image-generation.components.module.save.modal.optional')} />
-          </SettingsField>
+          </Field>
 
           {selectedOverwriteModule ? (
             <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning md:col-span-2">
@@ -100,15 +100,15 @@ export function ModuleSaveModal({
           </div>
         </div>
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
             {t('image-generation.components.module.save.modal.cancel')}
           </Button>
           <Button type="button" onClick={onSave} disabled={isSaving || moduleName.trim().length === 0}>
             {isSaving ? t('image-generation.components.module.save.modal.saving') : t('image-generation.components.module.save.modal.save')}
           </Button>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }

@@ -3,8 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { buildPromptGroupOptionItems } from '@/features/prompts/prompt-group-option-utils'
 import type { PromptGroupRecord } from '@/types/prompt'
 import { useI18n } from '@/i18n'
@@ -52,7 +51,7 @@ export function PromptGroupAssignModal({
   }
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={t('prompts.components.prompt.group.assign.modal.assign.selected.prompts.to.a.group')}
@@ -66,7 +65,7 @@ export function PromptGroupAssignModal({
           </Alert>
         ) : null}
 
-        <SettingsModalBody className="space-y-5">
+        <ModalBody className="space-y-5">
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">{t('prompts.components.prompt.group.assign.modal.target.group')}</p>
             <HierarchyPicker
@@ -87,16 +86,16 @@ export function PromptGroupAssignModal({
             />
           </div>
 
-          <SettingsModalFooter>
+          <ModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
               {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isSubmitting || groupOptions.length === 0}>
               {isSubmitting ? t('prompts.components.prompt.group.assign.modal.applying') : t('prompts.components.prompt.group.assign.modal.assign.group')}
             </Button>
-          </SettingsModalFooter>
-        </SettingsModalBody>
+          </ModalFooter>
+        </ModalBody>
       </form>
-    </SettingsModal>
+    </Modal>
   )
 }

@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
-import { SettingsSection, SettingsValueTile } from '@/features/settings/components/settings-primitives'
+import { StatTile } from '@/components/ui/stat-tile'
+import { SettingsSection } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import {
   cleanupGraphWorkflowEmptyExecutions,
@@ -274,9 +275,9 @@ export function WorkflowReservationsPanel() {
 
         {!reservationsQuery.isPending && !reservationsQuery.isError && reservationContent ? (
           <div className="grid gap-3 sm:grid-cols-3">
-            <SettingsValueTile label={t({ ko: '활성 일정', en: 'Active schedules' })} value={activeScheduleCount} valueClassName="text-lg" />
-            <SettingsValueTile label={t({ ko: '실행 중', en: 'Running' })} value={runningExecutionCount} valueClassName="text-lg" />
-            <SettingsValueTile label={t({ ko: '대기 중', en: 'Queued' })} value={queuedExecutionCount} valueClassName="text-lg" />
+            <StatTile label={t({ ko: '활성 일정', en: 'Active schedules' })} value={activeScheduleCount} valueClassName="text-lg" />
+            <StatTile label={t({ ko: '실행 중', en: 'Running' })} value={runningExecutionCount} valueClassName="text-lg" />
+            <StatTile label={t({ ko: '대기 중', en: 'Queued' })} value={queuedExecutionCount} valueClassName="text-lg" />
           </div>
         ) : null}
       </SettingsSection>

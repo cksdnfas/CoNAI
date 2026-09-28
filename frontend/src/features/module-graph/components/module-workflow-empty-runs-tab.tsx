@@ -1,7 +1,8 @@
 import { Square, SquareCheckBig, Trash2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { SettingsInsetBlock, SettingsSection } from '@/features/settings/components/settings-primitives'
+import { Inset } from '@/components/ui/inset'
+import { SettingsSection } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionRecord, GraphWorkflowNameRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
@@ -106,9 +107,9 @@ export function ModuleWorkflowEmptyRunsTab({
         )}
       >
         {queueExecutions.length === 0 ? (
-          <SettingsInsetBlock className="border-dashed py-10 text-sm text-muted-foreground">
+          <Inset className="border-dashed py-10 text-sm text-muted-foreground">
             {t({ ko: '이 범위에는 빈 실행이나 출력 없는 실행이 없어.', en: 'No empty or outputless runs in this scope.' })}
-          </SettingsInsetBlock>
+          </Inset>
         ) : (
           <div className="space-y-3">
             {queueExecutions.map((execution) => {
@@ -116,7 +117,7 @@ export function ModuleWorkflowEmptyRunsTab({
               const isCancelable = execution.status === 'queued' || execution.status === 'running'
 
               return (
-                <SettingsInsetBlock key={execution.id} className={isSelected ? 'border-primary bg-primary/8' : undefined}>
+                <Inset key={execution.id} className={isSelected ? 'border-primary bg-primary/8' : undefined}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -149,11 +150,11 @@ export function ModuleWorkflowEmptyRunsTab({
                     </div>
                   </div>
                   {localizeGraphWorkflowErrorMessage(execution.error_message, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' })) ? (
-                    <SettingsInsetBlock className="mt-3 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+                    <Inset className="mt-3 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
                       {localizeGraphWorkflowErrorMessage(execution.error_message, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' }))}
-                    </SettingsInsetBlock>
+                    </Inset>
                   ) : null}
-                </SettingsInsetBlock>
+                </Inset>
               )
             })}
           </div>

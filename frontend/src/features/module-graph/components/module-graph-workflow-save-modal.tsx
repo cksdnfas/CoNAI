@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 
 interface ModuleGraphWorkflowSaveModalProps {
@@ -57,7 +57,7 @@ export function ModuleGraphWorkflowSaveModal({
   }
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={selectedGraphVersion !== null ? t({ ko: '워크플로우 저장', en: 'Save workflow' }) : t({ ko: '워크플로우 등록', en: 'Register workflow' })}
@@ -116,6 +116,6 @@ export function ModuleGraphWorkflowSaveModal({
           </Button>
         </div>
       </div>
-    </SettingsModal>
+    </Modal>
   )
 }

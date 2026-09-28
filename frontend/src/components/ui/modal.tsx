@@ -1,11 +1,12 @@
-import { useEffect, useRef, type PropsWithChildren, type ReactNode } from 'react'
+import { useEffect, useRef, type ComponentProps, type PropsWithChildren, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from './button'
 import { useI18n } from '@/i18n'
-import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { cn } from '@/lib/utils'
+import { useOverlayBackClose } from './use-overlay-back-close'
 
-interface SettingsModalProps extends PropsWithChildren {
+interface ModalProps extends PropsWithChildren {
   open: boolean
   title: ReactNode
   description?: ReactNode
@@ -15,7 +16,8 @@ interface SettingsModalProps extends PropsWithChildren {
   closeOnBack?: boolean
 }
 
-export function SettingsModal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, children }: SettingsModalProps) {
+/** Render a portal-mounted modal dialog with a sticky header, Esc/back close and body scroll lock. */
+function Modal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, children }: ModalProps) {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -55,7 +57,7 @@ export function SettingsModal({ open, title, description, headerContent, onClose
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[6000] bg-black/78 p-3 sm:p-4 md:p-6" onMouseDown={onClose}>
+    <div data-slot="modal" className="fixed inset-0 z-[6000] bg-black/78 p-3 sm:p-4 md:p-6" onMouseDown={onClose}>
       <div
         ref={containerRef}
         role="dialog"
@@ -85,3 +87,15 @@ export function SettingsModal({ open, title, description, headerContent, onClose
     document.body,
   )
 }
+
+/** Render the compact vertical stack used for dense modal content. */
+function ModalBody({ className, ...props }: ComponentProps<'div'>) {
+  return <div data-slot="modal-body" className={cn('space-y-4', className)} {...props} />
+}
+
+/** Render the modal footer row for primary and secondary actions. */
+function ModalFooter({ className, ...props }: ComponentProps<'div'>) {
+  return <div data-slot="modal-footer" className={cn('flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4', className)} {...props} />
+}
+
+export { Modal, ModalBody, ModalFooter }

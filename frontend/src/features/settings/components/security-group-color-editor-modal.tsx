@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 import { AppearanceColorControl } from './appearance-tab-editor-shared'
-import { SettingsField } from './settings-primitives'
-import { SettingsModal } from './settings-modal'
+import { Field } from '@/components/ui/field'
+import { Modal } from '@/components/ui/modal'
 import { getPermissionGroupDisplayName, getPermissionGroupKindLabel } from './security-ui-text'
 import { getDefaultSecurityGroupColor, getSecurityGroupBadgeStyle, type SecurityGroupColorMap } from './security-group-color-utils'
 
@@ -32,7 +32,7 @@ export function SecurityGroupColorEditorModal({
   const { language, t } = useI18n()
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={t('securityGroupColorEditorModal.permissionGroupColors')}
@@ -69,7 +69,7 @@ export function SecurityGroupColorEditorModal({
                 </Button>
               </div>
 
-              <SettingsField label={t('securityGroupColorEditorModal.color')}>
+              <Field label={t('securityGroupColorEditorModal.color')}>
                 <AppearanceColorControl
                   colorValue={colorValue}
                   textValue={colorText}
@@ -77,11 +77,11 @@ export function SecurityGroupColorEditorModal({
                   onChangeColor={(value) => onChangeColor(group.groupKey, value)}
                   onChangeText={(value) => onChangeColor(group.groupKey, value)}
                 />
-              </SettingsField>
+              </Field>
             </div>
           )
         })}
       </div>
-    </SettingsModal>
+    </Modal>
   )
 }

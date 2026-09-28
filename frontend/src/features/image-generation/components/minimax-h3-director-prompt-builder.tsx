@@ -3,8 +3,7 @@ import { Copy, Eye, Plus, Sparkles } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { FormField } from '../image-generation-shared'
@@ -157,7 +156,7 @@ export function MiniMaxH3DirectorPromptBuilder({
       )}
     </section>
 
-    <SettingsModal
+    <Modal
       open={previewOpen}
       title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })}
       description={state.mode}
@@ -166,7 +165,7 @@ export function MiniMaxH3DirectorPromptBuilder({
     >
       <div className="space-y-3">
         <Textarea rows={18} readOnly value={preview} className="font-mono text-xs" />
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="outline" onClick={() => void navigator.clipboard.writeText(preview).then(
             () => onStatus(t({ ko: '프롬프트를 복사했어.', en: 'Prompt copied.' })),
             () => onStatus(t({ ko: '프롬프트 복사에 실패했어.', en: 'Failed to copy prompt.' })),
@@ -174,8 +173,8 @@ export function MiniMaxH3DirectorPromptBuilder({
             <Copy className="h-4 w-4" />{t({ ko: '복사', en: 'Copy' })}
           </Button>
           <Button type="button" onClick={() => setPreviewOpen(false)}>{t({ ko: '완료', en: 'Done' })}</Button>
-        </SettingsModalFooter>
+        </ModalFooter>
       </div>
-    </SettingsModal>
+    </Modal>
   </>
 }

@@ -1,7 +1,8 @@
 import { CircleHelp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { SettingsField, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import { buildBackupTargetPreviewPath, type NewBackupSourceDraft } from '../settings-utils'
 import { useI18n } from '@/i18n'
@@ -31,15 +32,15 @@ export function BackupSourceCreateForm({
   return (
     <div className="space-y-5">
       <div className="grid gap-4 lg:grid-cols-2">
-        <SettingsField label={t({ ko: 'source 폴더 경로', en: 'Source folder path' })}>
+        <Field label={t({ ko: 'source 폴더 경로', en: 'Source folder path' })}>
           <Input variant="settings" value={newBackupSource.source_path} onChange={(event) => onNewBackupSourceChange({ source_path: event.target.value })} placeholder="D:\\Images\\Incoming" />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: '표시 이름', en: 'Display name' })}>
+        <Field label={t({ ko: '표시 이름', en: 'Display name' })}>
           <Input variant="settings" value={newBackupSource.display_name} onChange={(event) => onNewBackupSourceChange({ display_name: event.target.value })} placeholder={t({ ko: 'Backup source A', en: 'Backup source A' })} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField
+        <Field
           label={(
             <span className="inline-flex items-center gap-1">
               {t({ ko: 'Upload 내부 대상 경로', en: 'Target path inside Upload' })}
@@ -65,33 +66,33 @@ export function BackupSourceCreateForm({
             placeholder={t({ ko: 'Backup 또는 Backup/001', en: 'Backup or Backup/001' })}
           />
           <p className="mt-2 break-all font-mono text-xs text-primary">{t({ ko: '최종 경로: {path}', en: 'Final path: {path}' }, { path: buildBackupTargetPreviewPath(newBackupSource.target_folder_name) })}</p>
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: '가져오기 모드', en: 'Import mode' })}>
+        <Field label={t({ ko: '가져오기 모드', en: 'Import mode' })}>
           <Select variant="settings" value={newBackupSource.import_mode} onChange={(event) => onNewBackupSourceChange({ import_mode: event.target.value as NewBackupSourceDraft['import_mode'] })}>
             <option value="copy_original">{t({ ko: '원본 복사', en: 'Copy original' })}</option>
             <option value="convert_webp">{t({ ko: 'WebP 변환 (메타 보존)', en: 'Convert to WebP (preserve metadata)' })}</option>
           </Select>
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
+        <Field label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
           <NumberStepperInput min={2000} allowEmpty variant="settings" value={newBackupSource.watcher_polling_interval} onValueCommit={(nextValue) => onNewBackupSourceChange({ watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null })} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>
+        <Field label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>
           <NumberStepperInput min={1} max={100} variant="settings" value={newBackupSource.webp_quality} onValueCommit={(nextValue) => onNewBackupSourceChange({ webp_quality: Number(nextValue) || 90 })} disabled={newBackupSource.import_mode !== 'convert_webp'} />
-        </SettingsField>
+        </Field>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <SettingsToggleRow>
+        <ToggleRow>
           <input type="checkbox" checked={newBackupSource.recursive} onChange={(event) => onNewBackupSourceChange({ recursive: event.target.checked })} />
           {t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
-        </SettingsToggleRow>
-        <SettingsToggleRow>
+        </ToggleRow>
+        <ToggleRow>
           <input type="checkbox" checked={newBackupSource.watcher_enabled} onChange={(event) => onNewBackupSourceChange({ watcher_enabled: event.target.checked })} />
           {t({ ko: 'watcher 시작', en: 'Start watcher' })}
-        </SettingsToggleRow>
+        </ToggleRow>
       </div>
 
       <SettingsResourceCreateActionRow

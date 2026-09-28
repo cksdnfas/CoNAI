@@ -3,13 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleHelp, ShieldCheck, UserPlus } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
+import { Field } from '@/components/ui/field'
+import { Inset } from '@/components/ui/inset'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { PageSection } from '@/components/common/page-surface'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import { createGuestAccount, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
@@ -143,12 +144,12 @@ export function LoginPage() {
                   void loginMutation.mutateAsync({ nextUsername: username.trim(), nextPassword: password })
                 }}
               >
-                <SettingsField label={t({ ko: '아이디', en: 'Username' })}>
+                <Field label={t({ ko: '아이디', en: 'Username' })}>
                   <Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
-                </SettingsField>
-                <SettingsField label={t({ ko: '비밀번호', en: 'Password' })}>
+                </Field>
+                <Field label={t({ ko: '비밀번호', en: 'Password' })}>
                   <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
-                </SettingsField>
+                </Field>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   {canCreateGuestAccount ? (
                     <Button type="button" variant="outline" onClick={() => setIsGuestModalOpen(true)}>
@@ -166,13 +167,13 @@ export function LoginPage() {
         </div>
       </div>
 
-      <SettingsModal
+      <Modal
         open={isRecoveryModalOpen}
         onClose={() => setIsRecoveryModalOpen(false)}
         title={t('loginPage.recoveryGuide')}
         widthClassName="max-w-lg"
       >
-        <SettingsModalBody>
+        <ModalBody>
           <div className="flex items-start gap-3">
             <div className="rounded-2xl bg-primary/12 p-3 text-primary">
               <ShieldCheck className="h-6 w-6" />
@@ -180,13 +181,13 @@ export function LoginPage() {
             <div className="text-sm text-muted-foreground">{t('loginPage.recoveryForgotPassword')}</div>
           </div>
 
-          <SettingsInsetBlock className="text-sm text-muted-foreground">
+          <Inset className="text-sm text-muted-foreground">
             {t('loginPage.recoveryAdminLost')}
-          </SettingsInsetBlock>
-        </SettingsModalBody>
-      </SettingsModal>
+          </Inset>
+        </ModalBody>
+      </Modal>
 
-      <SettingsModal
+      <Modal
         open={isGuestModalOpen}
         onClose={() => {
           if (guestSignupMutation.isPending) {
@@ -204,30 +205,30 @@ export function LoginPage() {
             void guestSignupMutation.mutateAsync({ nextUsername: guestUsername.trim(), nextPassword: guestPassword })
           }}
         >
-          <SettingsModalBody>
-            <SettingsField label={t({ ko: '아이디', en: 'Username' })}>
+          <ModalBody>
+            <Field label={t({ ko: '아이디', en: 'Username' })}>
               <Input value={guestUsername} onChange={(event) => setGuestUsername(event.target.value)} autoComplete="username" />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '비밀번호', en: 'Password' })}>
+            <Field label={t({ ko: '비밀번호', en: 'Password' })}>
               <Input type="password" value={guestPassword} onChange={(event) => setGuestPassword(event.target.value)} autoComplete="new-password" />
-            </SettingsField>
+            </Field>
 
-            <SettingsInsetBlock className="text-sm text-muted-foreground">
+            <Inset className="text-sm text-muted-foreground">
               {t({ ko: '게스트 계정은 언제든 초기화될 수 있어.', en: 'Guest accounts may be reset at any time.' })}
-            </SettingsInsetBlock>
+            </Inset>
 
-            <SettingsModalFooter>
+            <ModalFooter>
               <Button type="button" variant="ghost" onClick={() => setIsGuestModalOpen(false)} disabled={guestSignupMutation.isPending}>
                 {t({ ko: '취소', en: 'Cancel' })}
               </Button>
               <Button type="submit" disabled={guestSignupMutation.isPending || guestUsername.trim().length === 0 || guestPassword.length === 0}>
                 {guestSignupMutation.isPending ? t('loginPage.creating') : t('loginPage.createAndStart')}
               </Button>
-            </SettingsModalFooter>
-          </SettingsModalBody>
+            </ModalFooter>
+          </ModalBody>
         </form>
-      </SettingsModal>
+      </Modal>
     </>
   )
 }

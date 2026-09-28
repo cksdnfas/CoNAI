@@ -1,6 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
@@ -55,7 +56,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
   return (
     <div className="space-y-3">
       <WallpaperInspectorSectionCard title={t({ ko: '기본', en: 'Basics' })}>
-        <SettingsField label={t({ ko: '제목', en: 'Title' })}>
+        <Field label={t({ ko: '제목', en: 'Title' })}>
           <Input
             variant="settings"
             value={selectedWidget.settings.title}
@@ -63,11 +64,11 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               updateWidgetSettings({ title: event.target.value })
             }}
           />
-        </SettingsField>
+        </Field>
 
         {isGroupSourceWidget ? (
           <>
-            <SettingsField label={t({ ko: '그룹', en: 'Group' })}>
+            <Field label={t({ ko: '그룹', en: 'Group' })}>
               <Select
                 value={selectedWidget.settings.groupId !== null ? String(selectedWidget.settings.groupId) : ''}
                 onChange={(event) => {
@@ -80,9 +81,9 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsToggleRow>
+            <ToggleRow>
               <span className="flex-1">{t({ ko: '하위 그룹 포함', en: 'Include child groups' })}</span>
               <input
                 type="checkbox"
@@ -91,7 +92,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   updateWidgetSettings({ includeChildren: event.target.checked })
                 }}
               />
-            </SettingsToggleRow>
+            </ToggleRow>
           </>
         ) : null}
 
@@ -99,7 +100,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           title={t({ ko: '표시', en: 'Display' })}
           defaultOpen={false}
         >
-          <SettingsToggleRow>
+          <ToggleRow>
             <span className="flex-1">{t({ ko: '제목 표시', en: 'Show title' })}</span>
             <input
               type="checkbox"
@@ -108,9 +109,9 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 updateWidgetSettings({ showTitle: event.target.checked })
               }}
             />
-          </SettingsToggleRow>
+          </ToggleRow>
 
-          <SettingsToggleRow>
+          <ToggleRow>
             <span className="flex-1">{t({ ko: '배경 표시', en: 'Show background' })}</span>
             <input
               type="checkbox"
@@ -119,9 +120,9 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 updateWidgetSettings({ showBackground: event.target.checked })
               }}
             />
-          </SettingsToggleRow>
+          </ToggleRow>
 
-          <SettingsToggleRow>
+          <ToggleRow>
             <span className="flex-1">{t({ ko: '경계선 표시', en: 'Show border' })}</span>
             <input
               type="checkbox"
@@ -130,11 +131,11 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 updateWidgetSettings({ showBorder: event.target.checked })
               }}
             />
-          </SettingsToggleRow>
+          </ToggleRow>
 
           {isPreviewableImageWidget ? (
             <>
-              <SettingsField label={t({ ko: '이미지 클릭', en: 'Image click' })}>
+              <Field label={t({ ko: '이미지 클릭', en: 'Image click' })}>
                 <Select
                   value={selectedWidget.settings.imageClickAction ?? 'preview'}
                   onChange={(event) => {
@@ -144,10 +145,10 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   <option value="preview">{t({ ko: '확대 미리보기', en: 'Open preview' })}</option>
                   <option value="none">{t({ ko: '동작 없음', en: 'No action' })}</option>
                 </Select>
-              </SettingsField>
+              </Field>
 
               {selectedWidget.type === 'group-image-view' || selectedWidget.type === 'image-showcase' ? (
-                <SettingsToggleRow>
+                <ToggleRow>
                   <span className="flex-1">{t({ ko: '호버 시 자동재생 일시정지', en: 'Pause autoplay on hover' })}</span>
                   <input
                     type="checkbox"
@@ -156,7 +157,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                       updateWidgetSettings({ pauseOnHover: event.target.checked })
                     }}
                   />
-                </SettingsToggleRow>
+                </ToggleRow>
               ) : null}
 
               <WallpaperPreviewOpenAnimationEditorField
@@ -191,7 +192,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
             </>
           ) : null}
 
-          <SettingsToggleRow>
+          <ToggleRow>
             <span className="flex-1">{t({ ko: '위젯 숨김', en: 'Hide widget' })}</span>
             <input
               type="checkbox"
@@ -200,9 +201,9 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 onPatchWidget(selectedWidget.id, { hidden: event.target.checked })
               }}
             />
-          </SettingsToggleRow>
+          </ToggleRow>
 
-          <SettingsToggleRow>
+          <ToggleRow>
             <span className="flex-1">{t({ ko: '위젯 잠금', en: 'Lock widget' })}</span>
             <input
               type="checkbox"
@@ -211,7 +212,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 onPatchWidget(selectedWidget.id, { locked: event.target.checked })
               }}
             />
-          </SettingsToggleRow>
+          </ToggleRow>
         </WallpaperInspectorDisclosure>
       </WallpaperInspectorSectionCard>
 

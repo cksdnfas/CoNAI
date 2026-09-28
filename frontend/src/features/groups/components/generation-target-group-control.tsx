@@ -4,8 +4,7 @@ import { Folder, FolderInput, FolderOpen, X } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { normalizeGroupPathInput, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
 import { cn } from '@/lib/utils'
@@ -179,9 +178,9 @@ function GenerationTargetGroupModal({
   }
 
   return (
-    <SettingsModal open onClose={onClose} title={t({ ko: '결과 그룹 지정', en: 'Set result group' })} widthClassName="max-w-xl">
+    <Modal open onClose={onClose} title={t({ ko: '결과 그룹 지정', en: 'Set result group' })} widthClassName="max-w-xl">
       <form onSubmit={handleSubmit}>
-        <SettingsModalBody className="space-y-4">
+        <ModalBody className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground" htmlFor="generation-target-group-path">
               {t({ ko: '그룹 경로', en: 'Group path' })}
@@ -230,7 +229,7 @@ function GenerationTargetGroupModal({
             </div>
           ) : null}
 
-          <SettingsModalFooter>
+          <ModalFooter>
             <Button type="button" variant="ghost" onClick={() => onApply('')}>
               {t({ ko: '지정 해제', en: 'Clear' })}
             </Button>
@@ -240,9 +239,9 @@ function GenerationTargetGroupModal({
             <Button type="submit" disabled={tooDeep}>
               {t({ ko: '적용', en: 'Apply' })}
             </Button>
-          </SettingsModalFooter>
-        </SettingsModalBody>
+          </ModalFooter>
+        </ModalBody>
       </form>
-    </SettingsModal>
+    </Modal>
   )
 }

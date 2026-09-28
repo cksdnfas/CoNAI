@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 
 interface PromptCollectModalProps {
@@ -43,7 +43,7 @@ export function PromptCollectModal({ open, isSubmitting = false, onClose, onSubm
   }
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={t('prompts.components.prompt.collect.modal.collect.prompts.manually')}
@@ -57,25 +57,25 @@ export function PromptCollectModal({ open, isSubmitting = false, onClose, onSubm
           </Alert>
         ) : null}
 
-        <SettingsModalBody className="space-y-5">
-          <SettingsField label="Positive prompt">
+        <ModalBody className="space-y-5">
+          <Field label="Positive prompt">
             <Textarea rows={6} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={t('prompts.components.prompt.collect.modal.enter.the.positive.prompt.here')} />
-          </SettingsField>
+          </Field>
 
-          <SettingsField label="Negative prompt">
+          <Field label="Negative prompt">
             <Textarea rows={6} value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} placeholder={t('prompts.components.prompt.collect.modal.enter.the.negative.prompt.here')} />
-          </SettingsField>
+          </Field>
 
-          <SettingsModalFooter>
+          <ModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
               {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? t('prompts.components.prompt.collect.modal.collecting') : t('prompts.components.prompt.collect.modal.run.collect')}
             </Button>
-          </SettingsModalFooter>
-        </SettingsModalBody>
+          </ModalFooter>
+        </ModalBody>
       </form>
-    </SettingsModal>
+    </Modal>
   )
 }

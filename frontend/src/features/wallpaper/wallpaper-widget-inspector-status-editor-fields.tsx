@@ -1,6 +1,6 @@
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
-import { SettingsField } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
 import {
   WallpaperInspectorSectionCard,
   WallpaperHoverInteractionEditorFields,
@@ -30,7 +30,7 @@ export function WallpaperStatusWidgetEditorFields({
     case 'queue-status':
       return (
         <WallpaperInspectorSectionCard title={t({ ko: '데이터', en: 'Data' })}>
-          <SettingsField label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
+          <Field label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
             <Select
               value={String(selectedWidget.settings.refreshIntervalSec)}
               onChange={(event) => {
@@ -41,9 +41,9 @@ export function WallpaperStatusWidgetEditorFields({
                 <option key={seconds} value={seconds}>{seconds}s</option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '표시 방식', en: 'Display mode' })}>
+          <Field label={t({ ko: '표시 방식', en: 'Display mode' })}>
             <Select
               value={selectedWidget.settings.visualMode ?? 'tiles'}
               onChange={(event) => {
@@ -56,7 +56,7 @@ export function WallpaperStatusWidgetEditorFields({
               <option value="bars">{t({ ko: '막대', en: 'Bars' })}</option>
               <option value="rings">{t({ ko: '링', en: 'Rings' })}</option>
             </Select>
-          </SettingsField>
+          </Field>
         </WallpaperInspectorSectionCard>
       )
 
@@ -64,7 +64,7 @@ export function WallpaperStatusWidgetEditorFields({
       return (
         <>
           <WallpaperInspectorSectionCard title={t({ ko: '레이아웃', en: 'Layout' })}>
-            <SettingsField label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
+            <Field label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
               <Select
                 value={String(selectedWidget.settings.refreshIntervalSec)}
                 onChange={(event) => {
@@ -75,9 +75,9 @@ export function WallpaperStatusWidgetEditorFields({
                   <option key={seconds} value={seconds}>{seconds}s</option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '배치', en: 'Arrangement' })}>
+            <Field label={t({ ko: '배치', en: 'Arrangement' })}>
               <Select
                 value={selectedWidget.settings.displayMode ?? 'grid'}
                 onChange={(event) => {
@@ -87,9 +87,9 @@ export function WallpaperStatusWidgetEditorFields({
                 <option value="grid">{t({ ko: '그리드', en: 'Grid' })}</option>
                 <option value="stack">{t({ ko: '스택', en: 'Stack' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '표시 개수', en: 'Visible count' })}>
+            <Field label={t({ ko: '표시 개수', en: 'Visible count' })}>
               <Select
                 value={String(selectedWidget.settings.visibleCount)}
                 onChange={(event) => {
@@ -100,11 +100,11 @@ export function WallpaperStatusWidgetEditorFields({
                   <option key={count} value={count}>{count}</option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
           </WallpaperInspectorSectionCard>
 
           <WallpaperInspectorSectionCard title={t({ ko: '전환', en: 'Transition' })}>
-            <SettingsField label={t({ ko: '화면 전환 간격', en: 'Screen transition interval' })}>
+            <Field label={t({ ko: '화면 전환 간격', en: 'Screen transition interval' })}>
               <Select
                 value={String(selectedWidget.settings.shiftIntervalSec ?? 8)}
                 onChange={(event) => {
@@ -115,7 +115,7 @@ export function WallpaperStatusWidgetEditorFields({
                   <option key={seconds} value={seconds}>{seconds}s</option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
 
             <WallpaperTransitionAnimationEditorField
               transitionStyle={selectedWidget.settings.imageTransitionStyle}
@@ -152,7 +152,7 @@ export function WallpaperStatusWidgetEditorFields({
     case 'activity-pulse':
       return (
         <WallpaperInspectorSectionCard title={t({ ko: '모션', en: 'Motion' })}>
-          <SettingsField label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
+          <Field label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
             <Select
               value={String(selectedWidget.settings.refreshIntervalSec)}
               onChange={(event) => {
@@ -163,9 +163,9 @@ export function WallpaperStatusWidgetEditorFields({
                 <option key={seconds} value={seconds}>{seconds}s</option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '강조 대상', en: 'Emphasis target' })}>
+          <Field label={t({ ko: '강조 대상', en: 'Emphasis target' })}>
             <Select
               value={selectedWidget.settings.emphasis ?? 'mixed'}
               onChange={(event) => {
@@ -178,9 +178,9 @@ export function WallpaperStatusWidgetEditorFields({
               <option value="queue">{t({ ko: '실행', en: 'Queue' })}</option>
               <option value="results">{t({ ko: '결과', en: 'Results' })}</option>
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '강도', en: 'Strength' })}>
+          <Field label={t({ ko: '강도', en: 'Strength' })}>
             <NumberStepperInput
               variant="settings"
               min={0}
@@ -194,7 +194,7 @@ export function WallpaperStatusWidgetEditorFields({
                 })
               }}
             />
-          </SettingsField>
+          </Field>
         </WallpaperInspectorSectionCard>
       )
 

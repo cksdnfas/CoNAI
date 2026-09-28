@@ -4,8 +4,9 @@ import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import type { PromptGroupRecord } from '@/types/prompt'
 import { useI18n } from '@/i18n'
 
@@ -74,7 +75,7 @@ export function PromptGroupEditorModal({
   const typeLabel = promptType === 'positive' ? 'Positive' : promptType === 'negative' ? 'Negative' : 'Auto'
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={mode === 'create' ? t({ ko: '{typeLabel} 그룹 만들기', en: '{typeLabel} group' }, { typeLabel }) : t({ ko: '{typeLabel} 그룹 편집', en: '{typeLabel} group edit' }, { typeLabel })}
@@ -88,10 +89,10 @@ export function PromptGroupEditorModal({
           </Alert>
         ) : null}
 
-        <SettingsModalBody className="space-y-5">
-          <SettingsField label={t('prompts.components.prompt.group.editor.modal.group.name')}>
+        <ModalBody className="space-y-5">
+          <Field label={t('prompts.components.prompt.group.editor.modal.group.name')}>
             <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder={t('prompts.components.prompt.group.editor.modal.e.g.character.background.lora')} />
-          </SettingsField>
+          </Field>
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">{t('prompts.components.prompt.group.editor.modal.parent.group')}</p>
@@ -108,21 +109,21 @@ export function PromptGroupEditorModal({
             />
           </div>
 
-          <SettingsToggleRow className="justify-between">
+          <ToggleRow className="justify-between">
             <span className="font-medium text-foreground">{t('prompts.components.prompt.group.editor.modal.display.status')}</span>
             <input type="checkbox" checked={isVisible} onChange={(event) => setIsVisible(event.target.checked)} />
-          </SettingsToggleRow>
+          </ToggleRow>
 
-          <SettingsModalFooter>
+          <ModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
               {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? t('prompts.components.prompt.group.editor.modal.saving') : mode === 'create' ? t('prompts.components.prompt.group.editor.modal.create.group') : t('prompts.components.prompt.group.editor.modal.save.changes')}
             </Button>
-          </SettingsModalFooter>
-        </SettingsModalBody>
+          </ModalFooter>
+        </ModalBody>
       </form>
-    </SettingsModal>
+    </Modal>
   )
 }

@@ -12,8 +12,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from '@/features/settings/components/settings-primitives'
 import { getPermissionGroupDisplayName } from '@/features/settings/components/security-ui-text'
 import { useI18n } from '@/i18n'
 import type { CustomDropdownList } from '@/lib/api-image-generation-types'
@@ -110,25 +112,25 @@ export function ComfyWorkflowAuthoringModal({
   const submitLabel = mode === 'edit' ? t({ ko: '워크플로우 저장', en: 'Save workflow' }) : t({ ko: '워크플로우 등록', en: 'Register workflow' })
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={modalTitle}
       widthClassName="max-w-[1180px]"
     >
-      <SettingsModalBody className="space-y-5">
+      <ModalBody className="space-y-5">
         <SettingsSection heading={t({ ko: '기본 정보', en: 'Basic information' })}>
           <div className="grid gap-4">
-            <SettingsField label={t({ ko: '이름', en: 'Name' })}>
+            <Field label={t({ ko: '이름', en: 'Name' })}>
               <Input
                 variant="settings"
                 value={workflowName}
                 onChange={(event) => setWorkflowName(event.target.value)}
                 placeholder="ComfyUI Workflow"
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '설명', en: 'Description' })}>
+            <Field label={t({ ko: '설명', en: 'Description' })}>
               <Textarea
                 variant="settings"
                 rows={4}
@@ -136,9 +138,9 @@ export function ComfyWorkflowAuthoringModal({
                 onChange={(event) => setWorkflowDescription(event.target.value)}
                 placeholder={t({ ko: '선택', en: 'Optional' })}
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsToggleRow>
+            <ToggleRow>
               <input
                 type="checkbox"
                 checked={isPublicPage}
@@ -147,20 +149,20 @@ export function ComfyWorkflowAuthoringModal({
               <div className="min-w-0">
                 <div className="text-sm font-medium text-foreground">{t({ ko: '공용 페이지 사용', en: 'Use public page' })}</div>
               </div>
-            </SettingsToggleRow>
+            </ToggleRow>
 
             {isPublicPage ? (
               <>
-                <SettingsField label={t({ ko: '공용 slug', en: 'Public slug' })}>
+                <Field label={t({ ko: '공용 slug', en: 'Public slug' })}>
                   <Input
                     variant="settings"
                     value={publicSlug}
                     onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
                     placeholder="character-poster-generator"
                   />
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '공용 1회 요청 상한', en: 'Public per-request limit' })}>
+                <Field label={t({ ko: '공용 1회 요청 상한', en: 'Public per-request limit' })}>
                   <NumberStepperInput
                     variant="settings"
 
@@ -170,7 +172,7 @@ export function ComfyWorkflowAuthoringModal({
                     onValueCommit={(nextValue) => setPublicQueueMaxCount(nextValue)}
                     onBlur={() => setPublicQueueMaxCount(String(clampPublicQueueMaxCount(publicQueueMaxCount)))}
                   />
-                </SettingsField>
+                </Field>
 
                 <div className="grid gap-2.5 rounded-sm border border-border/70 px-3 py-3">
                   <div className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
@@ -207,7 +209,7 @@ export function ComfyWorkflowAuthoringModal({
               </>
             ) : null}
 
-            <SettingsField label={t({ ko: '결과 표시 방식', en: 'Result view' })}>
+            <Field label={t({ ko: '결과 표시 방식', en: 'Result view' })}>
               <Select
                 variant="settings"
                 value={resultViewMode}
@@ -216,11 +218,11 @@ export function ComfyWorkflowAuthoringModal({
                 <option value="history">{t({ ko: '히스토리 뷰어', en: 'History viewer' })}</option>
                 <option value="artifact_explorer">{t({ ko: '탐색형 뷰어', en: 'Explorer viewer' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
 
             {resultViewMode === 'artifact_explorer' ? (
               <>
-                <SettingsField label={t({ ko: '결과 저장 방식', en: 'Result storage mode' })}>
+                <Field label={t({ ko: '결과 저장 방식', en: 'Result storage mode' })}>
                   <Select
                     variant="settings"
                     value={artifactDirectoryMode}
@@ -229,16 +231,16 @@ export function ComfyWorkflowAuthoringModal({
                     <option value="shared">{t({ ko: '공유 폴더', en: 'Shared folder' })}</option>
                     <option value="per_run">{t({ ko: '실행별 폴더', en: 'Folder per run' })}</option>
                   </Select>
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '결과 저장 루트 경로', en: 'Result storage root path' })}>
+                <Field label={t({ ko: '결과 저장 루트 경로', en: 'Result storage root path' })}>
                   <Input
                     variant="settings"
                     value={artifactRootPath}
                     onChange={(event) => setArtifactRootPath(event.target.value)}
                     placeholder={t({ ko: '기본값: runtime/artifacts/comfy-workflows/<workflow>', en: 'Default: runtime/artifacts/comfy-workflows/<workflow>' })}
                   />
-                </SettingsField>
+                </Field>
               </>
             ) : null}
           </div>
@@ -387,13 +389,13 @@ export function ComfyWorkflowAuthoringModal({
           onReorderMarkedFieldGroup={handleReorderMarkedFieldGroup}
         />
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>{t({ ko: '취소', en: 'Cancel' })}</Button>
           <Button type="button" onClick={() => void handleSave()} disabled={isSaving || workflowName.trim().length === 0 || workflowJson.trim().length === 0 || jsonError !== null}>
             {isSaving ? t({ ko: '저장 중…', en: 'Saving…' }) : submitLabel}
           </Button>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }

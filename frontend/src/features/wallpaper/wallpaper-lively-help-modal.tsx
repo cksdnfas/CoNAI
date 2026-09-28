@@ -1,7 +1,7 @@
 import { ClipboardCopy, ExternalLink, MonitorPlay, Server, Wallpaper } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 
 interface WallpaperLivelyHelpModalProps {
@@ -17,7 +17,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
   const { t } = useI18n()
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       widthClassName="max-w-2xl"
@@ -106,6 +106,6 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
           </p>
         </div>
       </div>
-    </SettingsModal>
+    </Modal>
   )
 }

@@ -2,7 +2,10 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { RatingWeightsRecord } from '@/lib/api-settings'
-import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsValueTile } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Inset } from '@/components/ui/inset'
+import { StatTile } from '@/components/ui/stat-tile'
+import { SettingsSection } from './settings-primitives'
 import { useI18n } from '@/i18n'
 
 interface RatingWeightSettingsCardProps {
@@ -83,7 +86,7 @@ export function RatingWeightSettingsCard({
       {ratingWeightsDraft ? (
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SettingsField label={t({ ko: 'General 가중치', en: 'General weight' })}>
+            <Field label={t({ ko: 'General 가중치', en: 'General weight' })}>
               <NumberStepperInput
                 min={0}
                 step={0.1}
@@ -91,9 +94,9 @@ export function RatingWeightSettingsCard({
                 value={ratingWeightsDraft.general_weight}
                 onValueCommit={(value) => onPatchRatingWeights({ general_weight: Number(value) || 0 })}
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: 'Sensitive 가중치', en: 'Sensitive weight' })}>
+            <Field label={t({ ko: 'Sensitive 가중치', en: 'Sensitive weight' })}>
               <NumberStepperInput
                 min={0}
                 step={0.1}
@@ -101,9 +104,9 @@ export function RatingWeightSettingsCard({
                 value={ratingWeightsDraft.sensitive_weight}
                 onValueCommit={(value) => onPatchRatingWeights({ sensitive_weight: Number(value) || 0 })}
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: 'Questionable 가중치', en: 'Questionable weight' })}>
+            <Field label={t({ ko: 'Questionable 가중치', en: 'Questionable weight' })}>
               <NumberStepperInput
                 min={0}
                 step={0.1}
@@ -111,9 +114,9 @@ export function RatingWeightSettingsCard({
                 value={ratingWeightsDraft.questionable_weight}
                 onValueCommit={(value) => onPatchRatingWeights({ questionable_weight: Number(value) || 0 })}
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: 'Explicit 가중치', en: 'Explicit weight' })}>
+            <Field label={t({ ko: 'Explicit 가중치', en: 'Explicit weight' })}>
               <NumberStepperInput
                 min={0}
                 step={0.1}
@@ -121,30 +124,30 @@ export function RatingWeightSettingsCard({
                 value={ratingWeightsDraft.explicit_weight}
                 onValueCommit={(value) => onPatchRatingWeights({ explicit_weight: Number(value) || 0 })}
               />
-            </SettingsField>
+            </Field>
           </div>
 
-          <SettingsInsetBlock className="space-y-3">
+          <Inset className="space-y-3">
             <div className="text-sm font-semibold text-foreground">{t({ ko: 'score 미리보기', en: 'Score preview' })}</div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <SettingsField label={t({ ko: 'General 점수', en: 'General score' })}>
+              <Field label={t({ ko: 'General 점수', en: 'General score' })}>
                 <NumberStepperInput min={0} step={0.01} variant="settings" value={previewState.general} onValueCommit={(value) => handlePreviewPatch('general', value)} />
-              </SettingsField>
-              <SettingsField label={t({ ko: 'Sensitive 점수', en: 'Sensitive score' })}>
+              </Field>
+              <Field label={t({ ko: 'Sensitive 점수', en: 'Sensitive score' })}>
                 <NumberStepperInput min={0} step={0.01} variant="settings" value={previewState.sensitive} onValueCommit={(value) => handlePreviewPatch('sensitive', value)} />
-              </SettingsField>
-              <SettingsField label={t({ ko: 'Questionable 점수', en: 'Questionable score' })}>
+              </Field>
+              <Field label={t({ ko: 'Questionable 점수', en: 'Questionable score' })}>
                 <NumberStepperInput min={0} step={0.01} variant="settings" value={previewState.questionable} onValueCommit={(value) => handlePreviewPatch('questionable', value)} />
-              </SettingsField>
-              <SettingsField label={t({ ko: 'Explicit 점수', en: 'Explicit score' })}>
+              </Field>
+              <Field label={t({ ko: 'Explicit 점수', en: 'Explicit score' })}>
                 <NumberStepperInput min={0} step={0.01} variant="settings" value={previewState.explicit} onValueCommit={(value) => handlePreviewPatch('explicit', value)} />
-              </SettingsField>
+              </Field>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <SettingsValueTile label={t({ ko: '예상 총점', en: 'Estimated total' })} value={previewResult ? formatNumber(previewResult.score, { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—'} valueClassName="text-lg" />
-              <SettingsInsetBlock className="space-y-2 px-3 py-3">
+              <StatTile label={t({ ko: '예상 총점', en: 'Estimated total' })} value={previewResult ? formatNumber(previewResult.score, { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—'} valueClassName="text-lg" />
+              <Inset className="space-y-2 px-3 py-3">
                 <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '예상 등급', en: 'Estimated tier' })}</div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span
@@ -165,9 +168,9 @@ export function RatingWeightSettingsCard({
                     </span>
                   ) : null}
                 </div>
-              </SettingsInsetBlock>
+              </Inset>
             </div>
-          </SettingsInsetBlock>
+          </Inset>
         </>
       ) : (
         <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">

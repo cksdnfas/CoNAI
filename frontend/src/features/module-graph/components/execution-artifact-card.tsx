@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord } from '@/lib/api-module-graph'
@@ -50,7 +50,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
   ) : null
 
   const imageModal = previewUrl ? (
-    <SettingsModal
+    <Modal
       open={isImageModalOpen}
       title={displayTitle}
       widthClassName="max-w-6xl"
@@ -63,7 +63,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
         frameClassName="border-0 bg-transparent p-0"
         mediaClassName="max-h-[80vh] w-full object-contain"
       />
-    </SettingsModal>
+    </Modal>
   ) : null
 
   if (compact) {

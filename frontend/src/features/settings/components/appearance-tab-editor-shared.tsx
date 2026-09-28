@@ -5,7 +5,7 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@conai/shared'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
-import { SettingsField } from './settings-primitives'
+import { Field } from '@/components/ui/field'
 import { useI18n, type TranslationInput } from '@/i18n'
 
 export interface AppearanceTabEditorSectionProps {
@@ -218,7 +218,7 @@ export function RelatedImageColumnSlider({
   onChange: (value: number) => void
 }) {
   return (
-    <SettingsField label={label}>
+    <Field label={label}>
       <div className="space-y-2">
         <NumberStepperInput
           min={1}
@@ -233,7 +233,7 @@ export function RelatedImageColumnSlider({
           <span>6</span>
         </div>
       </div>
-    </SettingsField>
+    </Field>
   )
 }
 

@@ -3,7 +3,7 @@ import type Konva from 'konva'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { useI18n } from '@/i18n'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { ImageEditorCanvas } from './image-editor-canvas'
 import { ImageEditorLayerPanel } from './image-editor-layer-panel'
 import { ImageEditorSessionActions } from './image-editor-session-actions'
@@ -145,7 +145,7 @@ export function ImageEditorModalLayout({
   const { t } = useI18n()
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={() => {
         if (!saving) {
@@ -188,6 +188,6 @@ export function ImageEditorModalLayout({
           </div>
         </div>
       </div>
-    </SettingsModal>
+    </Modal>
   )
 }

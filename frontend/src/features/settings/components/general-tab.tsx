@@ -6,7 +6,10 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getDataRematchStatus, startDataRematchJob, type DataRematchJobSnapshot, type DataRematchOptions } from '@/lib/api-settings'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { SettingsInsetBlock, SettingsSection, SettingsToggleRow, SettingsValueTile } from './settings-primitives'
+import { Inset } from '@/components/ui/inset'
+import { StatTile } from '@/components/ui/stat-tile'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 
 const DEFAULT_DATA_REMATCH_OPTIONS: DataRematchOptions = {
   thumbnail: false,
@@ -118,7 +121,7 @@ export function GeneralTab() {
       >
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.82fr)]">
           <div className="space-y-3">
-            <SettingsToggleRow>
+            <ToggleRow>
               <input
                 type="checkbox"
                 checked={dataRematchOptions.thumbnail}
@@ -126,9 +129,9 @@ export function GeneralTab() {
                 onChange={(event) => updateDataRematchOption('thumbnail', event.target.checked)}
               />
               {t({ ko: '썸네일 재생성', en: 'Regenerate thumbnails' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
-            <SettingsToggleRow>
+            <ToggleRow>
               <input
                 type="checkbox"
                 checked={dataRematchOptions.metadata}
@@ -136,9 +139,9 @@ export function GeneralTab() {
                 onChange={(event) => updateDataRematchOption('metadata', event.target.checked)}
               />
               {t({ ko: '메타데이터 재추출', en: 'Re-extract metadata' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
-            <SettingsToggleRow>
+            <ToggleRow>
               <input
                 type="checkbox"
                 checked={dataRematchOptions.hash}
@@ -146,10 +149,10 @@ export function GeneralTab() {
                 onChange={(event) => updateDataRematchOption('hash', event.target.checked)}
               />
               {t({ ko: '해시 재생성', en: 'Regenerate hashes' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
             {dataRematchOptions.hash ? (
-              <SettingsInsetBlock className="border-[#BA1A1A]/50 bg-[#410002]/25 text-sm text-[#FFDAD6]">
+              <Inset className="border-[#BA1A1A]/50 bg-[#410002]/25 text-sm text-[#FFDAD6]">
                 <div className="flex gap-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="space-y-2">
@@ -168,19 +171,19 @@ export function GeneralTab() {
                     </label>
                   </div>
                 </div>
-              </SettingsInsetBlock>
+              </Inset>
             ) : null}
           </div>
 
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <SettingsValueTile label={t({ ko: '상태', en: 'Status' })} value={getPhaseLabel(status, language)} />
-              <SettingsValueTile
+              <StatTile label={t({ ko: '상태', en: 'Status' })} value={getPhaseLabel(status, language)} />
+              <StatTile
                 label={t({ ko: '진행', en: 'Progress' })}
                 value={status ? `${formatCount(status.processed)} / ${formatCount(status.total)}` : '-'}
               />
-              <SettingsValueTile label={t({ ko: '큐', en: 'Queued' })} value={formatCount(status?.queued ?? 0)} />
-              <SettingsValueTile
+              <StatTile label={t({ ko: '큐', en: 'Queued' })} value={formatCount(status?.queued ?? 0)} />
+              <StatTile
                 label={t({ ko: '오류/제외', en: 'Errors/skipped' })}
                 value={`${formatCount(status?.failed ?? 0)} / ${formatCount(status?.skipped ?? 0)}`}
               />
@@ -198,19 +201,19 @@ export function GeneralTab() {
             ) : null}
 
             {status?.maintenanceLock.active ? (
-              <SettingsInsetBlock className="text-xs text-muted-foreground">
+              <Inset className="text-xs text-muted-foreground">
                 {status.maintenanceLock.message ?? t({ ko: '시스템 유지보수 잠금 활성', en: 'System maintenance lock active' })}
-              </SettingsInsetBlock>
+              </Inset>
             ) : null}
 
             {latestErrors.length > 0 ? (
-              <SettingsInsetBlock className="space-y-1 text-xs text-[#FFDAD6] border-[#BA1A1A]/40 bg-[#410002]/20">
+              <Inset className="space-y-1 text-xs text-[#FFDAD6] border-[#BA1A1A]/40 bg-[#410002]/20">
                 {latestErrors.map((error) => (
                   <div key={`${error.target}-${error.error}`} className="truncate" title={`${error.target}: ${error.error}`}>
                     {error.target}: {error.error}
                   </div>
                 ))}
-              </SettingsInsetBlock>
+              </Inset>
             ) : null}
           </div>
         </div>

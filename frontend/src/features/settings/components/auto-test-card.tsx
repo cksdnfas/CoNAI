@@ -12,7 +12,10 @@ import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import type { ImageRecord } from '@/types/image'
 import { formatFileSize } from '../settings-utils'
 import { EnhancedVideoPlayer } from '@/features/images/components/detail/enhanced-video-player'
-import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsValueTile } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Inset } from '@/components/ui/inset'
+import { StatTile } from '@/components/ui/stat-tile'
+import { SettingsSection } from './settings-primitives'
 import { useI18n } from '@/i18n'
 
 function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope): TextSearchScope {
@@ -85,7 +88,7 @@ export function AutoTestCard({
 
   return (
     <SettingsSection heading={heading} actions={actions}>
-      <SettingsField label={t({ ko: 'Composite hash', en: 'Composite hash' })}>
+      <Field label={t({ ko: 'Composite hash', en: 'Composite hash' })}>
         <Input
           variant="settings"
           className="font-mono"
@@ -94,7 +97,7 @@ export function AutoTestCard({
           onKeyDown={handleHashInputKeyDown}
           placeholder={t({ ko: 'image hash', en: 'image hash' })}
         />
-      </SettingsField>
+      </Field>
 
       {autoTestMedia ? (
         <div className="pt-2">
@@ -114,17 +117,17 @@ export function AutoTestCard({
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <SettingsValueTile label={t({ ko: '타입', en: 'Type' })} value={autoTestMedia.fileType ?? '—'} />
-              <SettingsValueTile label={t({ ko: '파일', en: 'File' })} value={autoTestMedia.fileName ?? '—'} valueClassName="break-all" />
-              <SettingsValueTile label={t({ ko: '존재 여부', en: 'Exists' })} value={autoTestMedia.existsOnDisk ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })} />
-              <SettingsValueTile label={t({ ko: '크기', en: 'Size' })} value={formatFileSize(autoTestMedia.fileSize)} />
-              <SettingsValueTile
+              <StatTile label={t({ ko: '타입', en: 'Type' })} value={autoTestMedia.fileType ?? '—'} />
+              <StatTile label={t({ ko: '파일', en: 'File' })} value={autoTestMedia.fileName ?? '—'} valueClassName="break-all" />
+              <StatTile label={t({ ko: '존재 여부', en: 'Exists' })} value={autoTestMedia.existsOnDisk ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })} />
+              <StatTile label={t({ ko: '크기', en: 'Size' })} value={formatFileSize(autoTestMedia.fileSize)} />
+              <StatTile
                 label={t({ ko: '해시', en: 'Hash' })}
                 value={autoTestMedia.compositeHash}
                 className="md:col-span-2"
                 valueClassName="break-all font-mono text-xs"
               />
-              <SettingsValueTile
+              <StatTile
                 label={t({ ko: '경로', en: 'Path' })}
                 value={autoTestMedia.originalFilePath ?? '—'}
                 className="md:col-span-2"
@@ -134,24 +137,24 @@ export function AutoTestCard({
           </div>
         </div>
       ) : (
-        <SettingsInsetBlock className="text-sm text-muted-foreground">
+        <Inset className="text-sm text-muted-foreground">
           {t({ ko: '해시를 확인하거나 랜덤으로 하나 골라줘. 파일이 실제로 확인된 대상만 테스트 버튼이 열려.', en: 'Check a hash or pick one at random. Test buttons unlock only for files that are verified on disk.' })}
-        </SettingsInsetBlock>
+        </Inset>
       )}
 
       {isLoadingAutoTestImage ? (
-        <SettingsInsetBlock className="text-sm text-muted-foreground">
+        <Inset className="text-sm text-muted-foreground">
           {t({ ko: '추출 프롬프트를 불러오는 중이야…', en: 'Loading extracted prompts…' })}
-        </SettingsInsetBlock>
+        </Inset>
       ) : null}
 
       {extractedPromptCards.length > 0 ? (
-        <SettingsInsetBlock>
+        <Inset>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</div>
           <div className="mt-3">
             <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
           </div>
-        </SettingsInsetBlock>
+        </Inset>
       ) : null}
 
       <div className="flex flex-wrap gap-2">

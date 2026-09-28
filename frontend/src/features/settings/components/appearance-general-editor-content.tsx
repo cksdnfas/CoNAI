@@ -14,7 +14,7 @@ import {
   getThemeModeLabel,
   UploadedFontCard,
 } from './appearance-tab-editor-shared'
-import { SettingsField } from './settings-primitives'
+import { Field } from '@/components/ui/field'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -34,7 +34,7 @@ export function AppearanceGeneralEditorContent({
       <section className="space-y-4">
         <EditorSectionLead title={t({ ko: '기본', en: 'Basic' })} />
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label={t({ ko: '테마 모드', en: 'Theme mode' })}>
+          <Field label={t({ ko: '테마 모드', en: 'Theme mode' })}>
             <Select
               variant="settings"
               value={appearanceDraft.themeMode}
@@ -44,9 +44,9 @@ export function AppearanceGeneralEditorContent({
               <option value="dark">{getThemeModeLabel('dark', t)}</option>
               <option value="light">{getThemeModeLabel('light', t)}</option>
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '밀도', en: 'Density' })}>
+          <Field label={t({ ko: '밀도', en: 'Density' })}>
             <Select
               variant="settings"
               value={appearanceDraft.density}
@@ -58,14 +58,14 @@ export function AppearanceGeneralEditorContent({
                 </option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
         </div>
       </section>
 
       <section className="space-y-4">
         <EditorSectionLead title={t({ ko: '폰트', en: 'Font' })} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <SettingsField label={t({ ko: '폰트 프리셋', en: 'Font preset' })}>
+          <Field label={t({ ko: '폰트 프리셋', en: 'Font preset' })}>
             <Select
               variant="settings"
               value={appearanceDraft.fontPreset}
@@ -77,9 +77,9 @@ export function AppearanceGeneralEditorContent({
                 </option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: 'UI 배율 (%)', en: 'UI scale (%)' })}>
+          <Field label={t({ ko: 'UI 배율 (%)', en: 'UI scale (%)' })}>
             <NumberStepperInput
 
               min={85}
@@ -89,9 +89,9 @@ export function AppearanceGeneralEditorContent({
               value={appearanceDraft.fontScalePercent}
               onValueCommit={(nextValue) => onPatchAppearance({ fontScalePercent: Number.parseInt(nextValue || '100', 10) })}
             />
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '글자 크기 (%)', en: 'Text size (%)' })}>
+          <Field label={t({ ko: '글자 크기 (%)', en: 'Text size (%)' })}>
             <NumberStepperInput
 
               min={85}
@@ -101,9 +101,9 @@ export function AppearanceGeneralEditorContent({
               value={appearanceDraft.textScalePercent}
               onValueCommit={(nextValue) => onPatchAppearance({ textScalePercent: Number.parseInt(nextValue || '100', 10) })}
             />
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '본문 굵기', en: 'Body weight' })}>
+          <Field label={t({ ko: '본문 굵기', en: 'Body weight' })}>
             <Select
               variant="settings"
               value={appearanceDraft.bodyFontWeightPreset}
@@ -115,9 +115,9 @@ export function AppearanceGeneralEditorContent({
                 </option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '강조 굵기', en: 'Emphasis weight' })}>
+          <Field label={t({ ko: '강조 굵기', en: 'Emphasis weight' })}>
             <Select
               variant="settings"
               value={appearanceDraft.emphasisFontWeightPreset}
@@ -129,12 +129,12 @@ export function AppearanceGeneralEditorContent({
                 </option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
         </div>
 
         {appearanceDraft.fontPreset === 'custom' ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label={t({ ko: '본문 폰트', en: 'Body font' })}>
+            <Field label={t({ ko: '본문 폰트', en: 'Body font' })}>
               <UploadedFontCard
                 label={t({ ko: '본문 폰트 파일', en: 'Body font file' })}
                 fileName={appearanceDraft.customFontFileName}
@@ -143,9 +143,9 @@ export function AppearanceGeneralEditorContent({
                 onClear={() => onClearCustomFont('sans')}
                 isUploadingFont={isUploadingFont}
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '모노 폰트', en: 'Mono font' })}>
+            <Field label={t({ ko: '모노 폰트', en: 'Mono font' })}>
               <UploadedFontCard
                 label={t({ ko: '모노 폰트 파일', en: 'Mono font file' })}
                 fileName={appearanceDraft.customMonoFontFileName}
@@ -154,7 +154,7 @@ export function AppearanceGeneralEditorContent({
                 onClear={() => onClearCustomFont('mono')}
                 isUploadingFont={isUploadingFont}
               />
-            </SettingsField>
+            </Field>
           </div>
         ) : null}
       </section>
@@ -162,7 +162,7 @@ export function AppearanceGeneralEditorContent({
       <section className="space-y-4">
         <EditorSectionLead title={t({ ko: '검색 / 반응형', en: 'Search / responsive' })} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <SettingsField label={t({ ko: '데스크톱 본문 2칼럼 전환폭 (px)', en: 'Desktop content two-column breakpoint (px)' })}>
+          <Field label={t({ ko: '데스크톱 본문 2칼럼 전환폭 (px)', en: 'Desktop content two-column breakpoint (px)' })}>
             <NumberStepperInput
 
               min={768}
@@ -172,14 +172,14 @@ export function AppearanceGeneralEditorContent({
               value={appearanceDraft.desktopPageColumnsMinWidth}
               onValueCommit={(nextValue) => onPatchAppearance({ desktopPageColumnsMinWidth: Number.parseInt(nextValue || '1280', 10) })}
             />
-          </SettingsField>
+          </Field>
         </div>
       </section>
 
       <section className="space-y-4">
         <EditorSectionLead title={t({ ko: '카드 / 마감', en: 'Cards / finish' })} />
         <div className="grid gap-4 md:grid-cols-3">
-          <SettingsField label={t({ ko: '모서리', en: 'Corners' })}>
+          <Field label={t({ ko: '모서리', en: 'Corners' })}>
             <Select
               variant="settings"
               value={appearanceDraft.radiusPreset}
@@ -191,9 +191,9 @@ export function AppearanceGeneralEditorContent({
                 </option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '유리감', en: 'Glass effect' })}>
+          <Field label={t({ ko: '유리감', en: 'Glass effect' })}>
             <Select
               variant="settings"
               value={appearanceDraft.glassPreset}
@@ -205,9 +205,9 @@ export function AppearanceGeneralEditorContent({
                 </option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '그림자', en: 'Shadow' })}>
+          <Field label={t({ ko: '그림자', en: 'Shadow' })}>
             <Select
               variant="settings"
               value={appearanceDraft.shadowPreset}
@@ -219,7 +219,7 @@ export function AppearanceGeneralEditorContent({
                 </option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
         </div>
       </section>
     </div>

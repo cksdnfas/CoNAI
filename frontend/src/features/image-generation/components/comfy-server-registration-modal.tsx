@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServerFormDraft } from '../image-generation-shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -34,19 +35,19 @@ export function ComfyServerRegistrationModal({
   const canSelectRepresentative = form.backendType !== 'modal'
 
   return (
-    <SettingsModal open={open} onClose={onClose} title={title} widthClassName="max-w-2xl">
-      <SettingsModalBody className="space-y-5">
+    <Modal open={open} onClose={onClose} title={title} widthClassName="max-w-2xl">
+      <ModalBody className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label={t({ ko: '서버 이름', en: 'Server name' })}>
+          <Field label={t({ ko: '서버 이름', en: 'Server name' })}>
             <Input variant="settings" value={form.name} onChange={(event) => onFieldChange('name', event.target.value)} placeholder="Local ComfyUI" />
-          </SettingsField>
-          <SettingsField label={t({ ko: '엔드포인트', en: 'Endpoint' })}>
+          </Field>
+          <Field label={t({ ko: '엔드포인트', en: 'Endpoint' })}>
             <Input variant="settings" value={form.endpoint} onChange={(event) => onFieldChange('endpoint', event.target.value)} placeholder="http://127.0.0.1:8188" />
-          </SettingsField>
+          </Field>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label={t({ ko: '백엔드', en: 'Backend' })}>
+          <Field label={t({ ko: '백엔드', en: 'Backend' })}>
             <Select
               variant="settings"
               value={form.backendType}
@@ -55,21 +56,21 @@ export function ComfyServerRegistrationModal({
               <option value="comfyui">Local ComfyUI API</option>
               <option value="modal">Modal ComfyUI /generate</option>
             </Select>
-          </SettingsField>
-          <SettingsField label={t({ ko: '동시 실행 슬롯', en: 'Capacity' })}>
+          </Field>
+          <Field label={t({ ko: '동시 실행 슬롯', en: 'Capacity' })}>
             <NumberStepperInput variant="settings" min={1} max={100} value={form.capacity} onValueCommit={(nextValue) => onFieldChange('capacity', nextValue)} />
-          </SettingsField>
+          </Field>
         </div>
 
-        <SettingsField label={t({ ko: '설명', en: 'Description' })} hint={t({ ko: '선택', en: 'Optional' })}>
+        <Field label={t({ ko: '설명', en: 'Description' })} hint={t({ ko: '선택', en: 'Optional' })}>
           <Input variant="settings" value={form.description} onChange={(event) => onFieldChange('description', event.target.value)} placeholder={t({ ko: '메인 GPU 서버', en: 'Main GPU server' })} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: '라우팅 태그', en: 'Routing tags' })} hint={t({ ko: '쉼표로 구분', en: 'Comma-separated' })}>
+        <Field label={t({ ko: '라우팅 태그', en: 'Routing tags' })} hint={t({ ko: '쉼표로 구분', en: 'Comma-separated' })}>
           <Input variant="settings" value={form.routingTags} onChange={(event) => onFieldChange('routingTags', event.target.value)} placeholder="gpu4090, high-vram, fast-lane" />
-        </SettingsField>
+        </Field>
 
-        <SettingsToggleRow>
+        <ToggleRow>
           <input
             type="checkbox"
             checked={form.isActive}
@@ -77,10 +78,10 @@ export function ComfyServerRegistrationModal({
           />
           <span className="flex-1">{t({ ko: '활성 서버', en: 'Active server' })}</span>
           <span className="text-[11px] text-muted-foreground">{t({ ko: '생성 후보 포함', en: 'Include in routing' })}</span>
-        </SettingsToggleRow>
+        </ToggleRow>
 
         {canSelectRepresentative ? (
-          <SettingsToggleRow>
+          <ToggleRow>
             <input
               type="checkbox"
               checked={form.isDefault}
@@ -88,10 +89,10 @@ export function ComfyServerRegistrationModal({
             />
             <span className="flex-1">{t({ ko: '대표 서버', en: 'Representative server' })}</span>
             <span className="text-[11px] text-muted-foreground">{t({ ko: 'API 기본 대상', en: 'Default API target' })}</span>
-          </SettingsToggleRow>
+          </ToggleRow>
         ) : null}
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="ghost" onClick={onReset} disabled={isSubmitting}>
             {t({ ko: '초기화', en: 'Reset' })}
           </Button>
@@ -101,8 +102,8 @@ export function ComfyServerRegistrationModal({
           <Button type="button" onClick={onSubmit} disabled={isSubmitting || form.name.trim().length === 0 || form.endpoint.trim().length === 0}>
             {isSubmitting ? t({ ko: '저장 중…', en: 'Saving…' }) : submitLabel}
           </Button>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }

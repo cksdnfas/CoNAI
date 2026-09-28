@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ListX, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
-import { PageInset } from '@/components/common/page-surface'
+import { Inset } from '@/components/ui/inset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -684,7 +684,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       {isHistoryLoading ? <div className="text-sm text-muted-foreground">{t('image-generation.components.generation.history.panel.loading.history')}</div> : null}
 
       {!isHistoryLoading && visibleRetryableHistoryRecords.length > 0 ? (
-        <PageInset className="space-y-3">
+        <Inset className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-foreground">{t({ ko: '실행 복구', en: 'Run recovery' })}</div>
@@ -750,7 +750,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               )
             })}
           </div>
-        </PageInset>
+        </Inset>
       ) : null}
 
       <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
@@ -796,10 +796,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
             <div className="flex shrink-0 flex-col items-center gap-3 pb-2">
               {historyQuery.isFetchingNextPage ? (
-                <PageInset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                <Inset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   <span>{t({ ko: '기록 더 불러오는 중…', en: 'Loading more history…' })}</span>
-                </PageInset>
+                </Inset>
               ) : null}
 
               {Boolean(historyQuery.hasNextPage) && !historyQuery.isFetchingNextPage && !historyQuery.isFetchNextPageError ? (

@@ -1,8 +1,7 @@
 import { Film, ImageIcon, Images } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import type { GroupDownloadType, GroupFileCounts } from '@/types/group'
 import { useI18n } from '@/i18n'
 
@@ -60,14 +59,14 @@ export function GroupDownloadModal({
   const { t, formatNumber } = useI18n()
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={title}
       description={description ?? t('groups.components.group.download.modal.choose.which.file.type.to.download.from')}
       widthClassName="max-w-3xl"
     >
-      <SettingsModalBody>
+      <ModalBody>
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
           <Badge variant="outline">{t({ ko: '원본 {count}개', en: '{count} originals' }, { count: formatNumber(counts.original) })}</Badge>
           <Badge variant="outline">{t({ ko: 'GIF/동영상 {count}개', en: '{count} GIF/videos' }, { count: formatNumber(counts.video) })}</Badge>
@@ -103,12 +102,12 @@ export function GroupDownloadModal({
           })}
         </div>
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading || isDownloading}>
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }

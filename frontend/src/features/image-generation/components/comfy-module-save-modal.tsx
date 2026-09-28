@@ -2,8 +2,9 @@ import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Inset } from '@/components/ui/inset'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { toggleSelectionItem, type ModuleFieldOption } from '../image-generation-shared'
@@ -45,30 +46,30 @@ export function ComfyModuleSaveModal({
   const exposedFieldIdSet = useMemo(() => new Set(exposedFieldIds), [exposedFieldIds])
   const selectedOverwriteModule = overwriteCandidates.find((module) => module.id === overwriteModuleId) ?? null
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={t({ ko: 'ComfyUI 모듈 저장', en: 'Save ComfyUI module' })}
       widthClassName="max-w-3xl"
     >
-      <SettingsModalBody className="space-y-5">
+      <ModalBody className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label={t({ ko: '저장 방식', en: 'Save mode' })}>
+          <Field label={t({ ko: '저장 방식', en: 'Save mode' })}>
             <Select value={overwriteModuleId ? String(overwriteModuleId) : ''} onChange={(event) => onOverwriteModuleIdChange?.(event.target.value ? Number(event.target.value) : null)}>
               <option value="">{t({ ko: '새 모듈 생성', en: 'Create new module' })}</option>
               {overwriteCandidates.map((module) => (
                 <option key={module.id} value={module.id}>#{module.id} {module.name}</option>
               ))}
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '모듈 이름', en: 'Module name' })}>
+          <Field label={t({ ko: '모듈 이름', en: 'Module name' })}>
             <Input value={moduleName} onChange={(event) => onModuleNameChange(event.target.value)} placeholder={t({ ko: 'ComfyUI 워크플로우 모듈', en: 'ComfyUI Workflow Module' })} />
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '설명', en: 'Description' })}>
+          <Field label={t({ ko: '설명', en: 'Description' })}>
             <Input value={moduleDescription} onChange={(event) => onModuleDescriptionChange(event.target.value)} placeholder={t({ ko: '선택', en: 'Optional' })} />
-          </SettingsField>
+          </Field>
 
           {selectedOverwriteModule ? (
             <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning md:col-span-2">
@@ -99,21 +100,21 @@ export function ComfyModuleSaveModal({
               })}
             </div>
           ) : (
-            <SettingsInsetBlock className="text-sm text-muted-foreground">
+            <Inset className="text-sm text-muted-foreground">
               {t({ ko: '노출 가능한 입력 필드가 없어. 이 워크플로우는 고정 모듈로 저장돼.', en: 'There are no exposable input fields. This workflow will be saved as a fixed module.' })}
-            </SettingsInsetBlock>
+            </Inset>
           )}
         </div>
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
           <Button type="button" onClick={onSave} disabled={isSaving || moduleName.trim().length === 0}>
             {isSaving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
           </Button>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }

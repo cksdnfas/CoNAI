@@ -6,7 +6,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
 import type { GeneralSettings, HeaderNavigationItemKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
-import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Inset } from '@/components/ui/inset'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
@@ -80,7 +83,7 @@ export function GeneralPreferencesSections({
       {visibleSections.has('basic') ? (
         <SettingsSection heading={t({ ko: '기본 설정', en: 'General' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label={t({ ko: '언어', en: 'Language' })}>
+            <Field label={t({ ko: '언어', en: 'Language' })}>
               <Select
                 variant="settings"
                 value={generalDraft.language}
@@ -89,15 +92,15 @@ export function GeneralPreferencesSections({
                 <option value="ko">{t({ ko: '한국어', en: 'Korean' })}</option>
                 <option value="en">{t({ ko: '영어', en: 'English' })}</option>
               </Select>
-            </SettingsField>
-            <SettingsToggleRow>
+            </Field>
+            <ToggleRow>
               <input
                 type="checkbox"
                 checked={generalDraft.promptForDownloadLocation ?? false}
                 onChange={(event) => onPatchGeneral({ promptForDownloadLocation: event.target.checked })}
               />
               {t({ ko: '다운로드할 때 파일명과 저장 위치 확인', en: 'Ask for file name and save location' })}
-            </SettingsToggleRow>
+            </ToggleRow>
           </div>
         </SettingsSection>
       ) : null}
@@ -105,31 +108,31 @@ export function GeneralPreferencesSections({
       {visibleSections.has('appearance') ? (
         <SettingsSection heading={t({ ko: '탐색 및 표시', en: 'Navigation and display' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsToggleRow>
+            <ToggleRow>
               <input type="checkbox" checked={generalDraft.enableGallery ?? true} onChange={(event) => onPatchGeneral({ enableGallery: event.target.checked })} />
               {t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}
-            </SettingsToggleRow>
-            <SettingsToggleRow>
+            </ToggleRow>
+            <ToggleRow>
               <input type="checkbox" checked={generalDraft.showRatingBadges ?? true} onChange={(event) => onPatchGeneral({ showRatingBadges: event.target.checked })} />
               {t({ ko: '등급 배지 표시', en: 'Show rating badges' })}
-            </SettingsToggleRow>
-            <SettingsInsetBlock className="md:col-span-2">
+            </ToggleRow>
+            <Inset className="md:col-span-2">
               <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {t({ ko: '상단 네비 표시', en: 'Header navigation' })}
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {HEADER_NAVIGATION_OPTIONS.map((option) => (
-                  <SettingsToggleRow key={option.key}>
+                  <ToggleRow key={option.key}>
                     <input
                       type="checkbox"
                       checked={(generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS)[option.key] ?? true}
                       onChange={(event) => updateHeaderNavigationItem(option.key, event.target.checked)}
                     />
                     {t(option.label)}
-                  </SettingsToggleRow>
+                  </ToggleRow>
                 ))}
               </div>
-            </SettingsInsetBlock>
+            </Inset>
           </div>
         </SettingsSection>
       ) : null}
@@ -137,7 +140,7 @@ export function GeneralPreferencesSections({
       {visibleSections.has('library') ? (
         <SettingsSection heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label={t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })}>
+            <Field label={t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })}>
               <Select
                 variant="settings"
                 value={generalDraft.imageSimilarityCheckMode ?? 'always'}
@@ -146,7 +149,7 @@ export function GeneralPreferencesSections({
                 <option value="manual">{t({ ko: '수동 실행', en: 'Manual' })}</option>
                 <option value="always">{t({ ko: '상세 열 때 자동 실행', en: 'Auto on detail open' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
           </div>
         </SettingsSection>
       ) : null}
@@ -154,15 +157,15 @@ export function GeneralPreferencesSections({
       {visibleSections.has('safety') ? (
         <SettingsSection heading={t({ ko: '안전 및 정리', en: 'Safety and cleanup' })} actions={saveAction}>
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label={t({ ko: '휴지통 경로', en: 'Recycle bin path' })}>
+            <Field label={t({ ko: '휴지통 경로', en: 'Recycle bin path' })}>
               <Input
                 variant="settings"
                 value={generalDraft.deleteProtection.recycleBinPath}
                 onChange={(event) => onPatchDeleteProtection({ recycleBinPath: event.target.value })}
                 placeholder="RecycleBin"
               />
-            </SettingsField>
-            <SettingsField label={t({ ko: '생성 히스토리 최대 항목 수', en: 'Generation history maximum items' })}>
+            </Field>
+            <Field label={t({ ko: '생성 히스토리 최대 항목 수', en: 'Generation history maximum items' })}>
               <NumberStepperInput
                 variant="settings"
 
@@ -177,23 +180,23 @@ export function GeneralPreferencesSections({
                   }
                 }}
               />
-            </SettingsField>
-            <SettingsToggleRow className="md:col-span-2">
+            </Field>
+            <ToggleRow className="md:col-span-2">
               <input type="checkbox" checked={generalDraft.deleteProtection.enabled} onChange={(event) => onPatchDeleteProtection({ enabled: event.target.checked })} />
               {t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}
-            </SettingsToggleRow>
-            <SettingsToggleRow className="md:col-span-2">
+            </ToggleRow>
+            <ToggleRow className="md:col-span-2">
               <input type="checkbox" checked={generalDraft.autoCleanupCanvasOnShutdown ?? false} onChange={(event) => onPatchGeneral({ autoCleanupCanvasOnShutdown: event.target.checked })} />
               {t({ ko: '종료 시 캔버스 임시 데이터 자동 정리', en: 'Clean up temporary canvas data on exit' })}
-            </SettingsToggleRow>
-            <SettingsToggleRow className="md:col-span-2">
+            </ToggleRow>
+            <ToggleRow className="md:col-span-2">
               <input
                 type="checkbox"
                 checked={generalDraft.applyRatingSafetyToGenerationHistory ?? false}
                 onChange={(event) => onPatchGeneral({ applyRatingSafetyToGenerationHistory: event.target.checked })}
               />
               {t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}
-            </SettingsToggleRow>
+            </ToggleRow>
           </div>
         </SettingsSection>
       ) : null}

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord } from '@/lib/api-module-graph'
@@ -74,7 +74,7 @@ export function ExecutionOutputGroupCard({
         )}
       </div>
 
-      <SettingsModal
+      <Modal
         open={modalType === 'text'}
         title={group.nodeLabel}
         widthClassName="max-w-4xl"
@@ -83,9 +83,9 @@ export function ExecutionOutputGroupCard({
         <pre className="max-h-[70vh] overflow-auto text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
           {modalText}
         </pre>
-      </SettingsModal>
+      </Modal>
 
-      <SettingsModal
+      <Modal
         open={modalType === 'image'}
         title={group.nodeLabel}
         widthClassName="max-w-6xl"
@@ -100,7 +100,7 @@ export function ExecutionOutputGroupCard({
             mediaClassName="max-h-[80vh] w-full object-contain"
           />
         ) : null}
-      </SettingsModal>
+      </Modal>
     </>
   )
 }

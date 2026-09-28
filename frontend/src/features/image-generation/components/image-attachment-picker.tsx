@@ -12,7 +12,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { getImageListDisplayName, getImageListItemId, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
 import { listGenerationSaveImages } from '@/lib/api-image-generation-history'
@@ -525,7 +525,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
         {label}
       </Button>
 
-      <SettingsModal
+      <Modal
         open={isOpen}
         onClose={() => {
           if (!isImporting) {
@@ -625,7 +625,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
             />
           ) : null}
         </div>
-      </SettingsModal>
+      </Modal>
 
       <ImageSaveOptionsModal
         open={pendingImageSave !== null}

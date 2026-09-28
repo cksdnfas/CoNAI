@@ -5,8 +5,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS } from '@/lib/api-image-generation-workflows'
 import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
@@ -230,14 +232,14 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-2">
-                    <SettingsToggleRow className="min-w-[8rem] px-2 py-1 text-xs">
+                    <ToggleRow className="min-w-[8rem] px-2 py-1 text-xs">
                       <input
                         type="checkbox"
                         checked={isActive}
                         onChange={(event) => onToggleServerActive(server.id, event.target.checked)}
                       />
                       <span className="flex-1">{t({ ko: '활성', en: 'Active' })}</span>
-                    </SettingsToggleRow>
+                    </ToggleRow>
                     <Button
                       type="button"
                       size="sm"
@@ -336,21 +338,21 @@ function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList
   }
 
   return (
-    <SettingsModal open={open} onClose={onClose} title={readOnly ? t({ ko: '드롭다운 목록 상세', en: 'Dropdown list details' }) : initialList ? t({ ko: '커스텀 드롭다운 수정', en: 'Edit custom dropdown' }) : t({ ko: '커스텀 드롭다운 목록', en: 'Custom dropdown list' })} widthClassName="max-w-2xl">
-      <SettingsModalBody className="space-y-5">
-        <SettingsField label={t({ ko: '목록 이름', en: 'List name' })}>
+    <Modal open={open} onClose={onClose} title={readOnly ? t({ ko: '드롭다운 목록 상세', en: 'Dropdown list details' }) : initialList ? t({ ko: '커스텀 드롭다운 수정', en: 'Edit custom dropdown' }) : t({ ko: '커스텀 드롭다운 목록', en: 'Custom dropdown list' })} widthClassName="max-w-2xl">
+      <ModalBody className="space-y-5">
+        <Field label={t({ ko: '목록 이름', en: 'List name' })}>
           <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '목록 이름', en: 'List name' })} readOnly={readOnly} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: '설명', en: 'Description' })}>
+        <Field label={t({ ko: '설명', en: 'Description' })}>
           <Textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} readOnly={readOnly} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: '항목', en: 'Items' })}>
+        <Field label={t({ ko: '항목', en: 'Items' })}>
           <Textarea rows={10} value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder={t({ ko: '항목을 줄바꿈 또는 쉼표로 입력', en: 'Enter items separated by new lines or commas' })} readOnly={readOnly} />
-        </SettingsField>
+        </Field>
 
-        <SettingsModalFooter className="justify-between">
+        <ModalFooter className="justify-between">
           <div className="text-xs text-muted-foreground">{t({ ko: '{count}개 항목', en: '{count} items' }, { count: formatNumber(items.length) })}</div>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{readOnly ? t({ ko: '닫기', en: 'Close' }) : t({ ko: '취소', en: 'Cancel' })}</Button>
@@ -361,9 +363,9 @@ function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList
               </Button>
             ) : null}
           </div>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }
 
@@ -391,9 +393,9 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
   }
 
   return (
-    <SettingsModal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} widthClassName="max-w-3xl">
-      <SettingsModalBody className="space-y-5">
-        <SettingsField label={t({ ko: 'API 목록', en: 'API paths' })}>
+    <Modal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} widthClassName="max-w-3xl">
+      <ModalBody className="space-y-5">
+        <Field label={t({ ko: 'API 목록', en: 'API paths' })}>
           <Textarea
             variant="settings"
             rows={8}
@@ -401,7 +403,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
             onChange={(event) => setApiPathText(event.target.value)}
             placeholder={DEFAULT_COMFY_MODEL_API_PATHS.join('\n')}
           />
-        </SettingsField>
+        </Field>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">
@@ -418,15 +420,15 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
           <p className="text-muted-foreground">{t({ ko: '자동수집은 대표 ComfyUI 서버에서 실행되며 통합 + 개별 생성, 하위 폴더 통합은 항상 적용됩니다.', en: 'Auto collect runs against the representative ComfyUI server; merged + separate lists and subfolder merging are always applied.' })}</p>
         </div>
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{t({ ko: '취소', en: 'Cancel' })}</Button>
           <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting}>
             <Upload className="h-4 w-4" />
             {t({ ko: '자동수집 실행', en: 'Run auto collect' })}
           </Button>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }
 

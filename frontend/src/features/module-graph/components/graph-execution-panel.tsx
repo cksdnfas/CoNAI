@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
 import type {
@@ -485,7 +485,7 @@ export function GraphExecutionPanel({
       </Card>
 
       {executionDetail ? (
-        <SettingsModal
+        <Modal
           open={isDetailModalOpen}
           title={t({ ko: '실행 상세 #{id}', en: 'Run details #{id}' }, { id: executionDetail.execution.id })}
           headerContent={detailSectionButtons}
@@ -642,7 +642,7 @@ export function GraphExecutionPanel({
               )}
             </div>
           </div>
-        </SettingsModal>
+        </Modal>
       ) : null}
     </>
   )

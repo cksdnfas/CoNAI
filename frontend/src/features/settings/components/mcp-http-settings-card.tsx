@@ -17,7 +17,9 @@ import {
   updateMcpHttpApiKey,
   updateMcpHttpEnabled,
 } from '@/lib/api-settings-mcp'
-import { SettingsInsetBlock, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { Inset } from '@/components/ui/inset'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 
 const QUERY_KEY = ['mcp-http-settings'] as const
 const SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore']
@@ -52,13 +54,13 @@ export function McpHttpSettingsCard() {
   return (
     <SettingsSection heading="MCP" actions={query.data?.enabled ? <Badge>활성</Badge> : <Badge variant="outline">비활성</Badge>}>
       {query.isLoading ? <Skeleton className="h-40 w-full rounded-sm" /> : null}
-      {query.isError ? <SettingsInsetBlock className="text-sm text-destructive">{query.error instanceof Error ? query.error.message : 'MCP 오류'}</SettingsInsetBlock> : null}
+      {query.isError ? <Inset className="text-sm text-destructive">{query.error instanceof Error ? query.error.message : 'MCP 오류'}</Inset> : null}
       {query.data ? (
         <div className="space-y-4">
-          <SettingsToggleRow>
+          <ToggleRow>
             <input type="checkbox" checked={query.data.enabled} disabled={busy} onChange={(event) => enabled.mutate(event.target.checked)} />
             HTTP MCP
-          </SettingsToggleRow>
+          </ToggleRow>
           <div className="flex gap-2">
             <Input variant="settings" readOnly value={endpoint} className="font-mono" />
             <Button type="button" size="icon-sm" variant="outline" onClick={() => void copy(endpoint)} aria-label="MCP URL 복사"><Copy /></Button>
@@ -71,7 +73,7 @@ export function McpHttpSettingsCard() {
             {query.data.keys.map((key) => {
               const visible = visibleKeys.has(key.id)
               return (
-                <SettingsInsetBlock key={key.id} className="space-y-3">
+                <Inset key={key.id} className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Input variant="settings" readOnly value={key.name} className="max-w-44" />
                     <Input variant="settings" type={visible ? 'text' : 'password'} readOnly value={key.apiKey} className="min-w-0 flex-1 font-mono" />
@@ -95,7 +97,7 @@ export function McpHttpSettingsCard() {
                       </label>
                     ))}
                   </div>
-                </SettingsInsetBlock>
+                </Inset>
               )
             })}
           </div>

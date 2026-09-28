@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { Copy, Download, ExternalLink, File, RefreshCw, Trash2, Video } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
-import { PageInset, PageSection } from '@/components/common/page-surface'
+import { Inset } from '@/components/ui/inset'
+import { PageSection } from '@/components/common/page-surface'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
@@ -79,7 +80,7 @@ function SummaryTile({
   }
 
   return (
-    <PageInset className="min-w-0">
+    <Inset className="min-w-0">
       <div className="flex items-center justify-between gap-2">
         <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
         {copyValue ? (
@@ -95,7 +96,7 @@ function SummaryTile({
         ) : null}
       </div>
       <div className="mt-2 min-w-0 whitespace-pre-wrap break-all text-sm text-foreground">{value}</div>
-    </PageInset>
+    </Inset>
   )
 }
 
@@ -234,7 +235,7 @@ export function UploadPageUploadSection({
       />
 
       {uploadFiles.length > 0 ? (
-        <PageInset className="space-y-3">
+        <Inset className="space-y-3">
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <Badge variant="secondary">{t({ ko: '{count}개', en: '{count} files' }, { count: formatNumber(uploadFiles.length) })}</Badge>
             <Badge variant="outline">{formatBytes(uploadTotalSize)}</Badge>
@@ -251,11 +252,11 @@ export function UploadPageUploadSection({
             ))}
           </div>
           {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs text-muted-foreground">{t({ ko: '…{count}개 더 있음', en: '…{count} more' }, { count: formatNumber(uploadFiles.length - MAX_VISIBLE_FILES) })}</div> : null}
-        </PageInset>
+        </Inset>
       ) : null}
 
       {(isUploading || uploadProgress || uploadResult) ? (
-        <PageInset className="space-y-3">
+        <Inset className="space-y-3">
           <div className="flex items-center justify-between gap-3 text-sm">
             <div className="font-medium text-foreground">{t({ ko: '진행률', en: 'Progress' })}</div>
             <div className="text-muted-foreground">{uploadPercent}%</div>
@@ -266,7 +267,7 @@ export function UploadPageUploadSection({
             <span>/</span>
             <span>{formatBytes(uploadProgress?.total ?? uploadTotalSize)}</span>
           </div>
-        </PageInset>
+        </Inset>
       ) : null}
 
       {uploadError ? (
@@ -277,7 +278,7 @@ export function UploadPageUploadSection({
       ) : null}
 
       {uploadResult ? (
-        <PageInset className="space-y-4">
+        <Inset className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">{t({ ko: '성공 {count}', en: '{count} succeeded' }, { count: formatNumber(uploadResult.successful) })}</Badge>
             <Badge variant={uploadResult.failed_count > 0 ? 'outline' : 'secondary'}>{t({ ko: '실패 {count}', en: '{count} failed' }, { count: formatNumber(uploadResult.failed_count) })}</Badge>
@@ -323,7 +324,7 @@ export function UploadPageUploadSection({
               ) : null}
             </div>
           ) : null}
-        </PageInset>
+        </Inset>
       ) : null}
     </PageSection>
   )
@@ -440,7 +441,7 @@ export function UploadPageExtractSection({
     >
       <input ref={extractInputRef} type="file" accept={imageAccept} className="hidden" onChange={onExtractFileChange} />
 
-      <PageInset className="px-0 py-0">
+      <Inset className="px-0 py-0">
         <MediaFileDropSurface
           ariaLabel={t('uploadPageSections.chooseAnImageToPreview')}
           active={extractDropZone.isDragActive}
@@ -485,22 +486,22 @@ export function UploadPageExtractSection({
             />
           ) : undefined}
         </MediaFileDropSurface>
-      </PageInset>
+      </Inset>
 
       {extractFile ? (
         <div className={cn('grid gap-4', isDesktopPageLayout ? 'grid-cols-2 items-start' : 'grid-cols-1')}>
           <div className="space-y-4">
-            <PageInset className="space-y-4">
+            <Inset className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
                 <SummaryTile label="file" value={extractFile.name} />
                 <SummaryTile label="size" value={formatBytes(extractFile.size)} />
                 <SummaryTile label="type" value={extractFile.type || '—'} />
               </div>
-            </PageInset>
+            </Inset>
           </div>
 
           <div className="space-y-4">
-            <PageInset className="space-y-4">
+            <Inset className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm font-medium text-foreground">{t('uploadPageSections.editMetadata')}</div>
                 <Button type="button" variant="ghost" size="sm" onClick={onToggleRewritePanel}>
@@ -513,10 +514,10 @@ export function UploadPageExtractSection({
                   <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={onRewriteDraftChange} />
                 </div>
               ) : null}
-            </PageInset>
+            </Inset>
 
             {extractResult ? (
-              <PageInset className="space-y-4">
+              <Inset className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                   <SummaryTile label="dimensions" value={formatDimensions(extractResult.width, extractResult.height)} />
                   <SummaryTile label="size" value={formatBytes(extractResult.file_size)} />
@@ -544,9 +545,9 @@ export function UploadPageExtractSection({
                     <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
                   </div>
                 ) : (
-                  <PageInset className="text-sm text-muted-foreground">{t({ ko: '표시할 프롬프트가 없어.', en: 'No prompts to show.' })}</PageInset>
+                  <Inset className="text-sm text-muted-foreground">{t({ ko: '표시할 프롬프트가 없어.', en: 'No prompts to show.' })}</Inset>
                 )}
-              </PageInset>
+              </Inset>
             ) : null}
 
             {taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}

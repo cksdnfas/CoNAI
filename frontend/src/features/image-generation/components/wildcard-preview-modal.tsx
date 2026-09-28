@@ -1,5 +1,5 @@
 import { Braces, Copy, Sparkles, WandSparkles } from 'lucide-react'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -55,7 +55,7 @@ export function WildcardPreviewModal({
   const { t } = useI18n()
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={(
@@ -133,6 +133,6 @@ export function WildcardPreviewModal({
           </div>
         ) : null}
       </div>
-    </SettingsModal>
+    </Modal>
   )
 }

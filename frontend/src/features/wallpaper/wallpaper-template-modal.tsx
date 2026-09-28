@@ -1,6 +1,6 @@
 import { LayoutTemplate } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { WALLPAPER_TEMPLATES, type WallpaperTemplateDefinition } from './wallpaper-templates'
 
@@ -14,7 +14,7 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
   const { t } = useI18n()
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={t({ ko: '빠른 시작 템플릿', en: 'Quick-start templates' })}
@@ -43,6 +43,6 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
           </button>
         ))}
       </div>
-    </SettingsModal>
+    </Modal>
   )
 }

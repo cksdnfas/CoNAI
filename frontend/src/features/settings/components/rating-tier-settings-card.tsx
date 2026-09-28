@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import type { RatingTierRecord } from '@/features/search/search-types'
-import { SettingsField, SettingsSection } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { SettingsSection } from './settings-primitives'
 import { useI18n } from '@/i18n'
 
 interface RatingTierSettingsCardProps {
@@ -179,16 +180,16 @@ export function RatingTierSettingsCard({
                 {isExpanded ? (
                   <>
                     <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.6fr)_120px_120px_132px_140px]">
-                      <SettingsField label={t({ ko: '등급 이름', en: 'Tier name' })}>
+                      <Field label={t({ ko: '등급 이름', en: 'Tier name' })}>
                         <Input
                           variant="settings"
                           value={tier.tier_name}
                           onChange={(event) => onPatchRatingTier(tier.id, { tier_name: event.target.value })}
                           placeholder={t({ ko: 'Tier {index}', en: 'Tier {index}' }, { index: index + 1 })}
                         />
-                      </SettingsField>
+                      </Field>
 
-                      <SettingsField label={t({ ko: '최소 점수', en: 'Minimum score' })}>
+                      <Field label={t({ ko: '최소 점수', en: 'Minimum score' })}>
                         <NumberStepperInput
                           min={0}
                           step={0.1}
@@ -196,9 +197,9 @@ export function RatingTierSettingsCard({
                           value={tier.min_score}
                           onValueCommit={(value) => onPatchRatingTier(tier.id, { min_score: Number(value) || 0 })}
                         />
-                      </SettingsField>
+                      </Field>
 
-                      <SettingsField label={t({ ko: '최대 점수', en: 'Maximum score' })}>
+                      <Field label={t({ ko: '최대 점수', en: 'Maximum score' })}>
                         {isLast ? (
                           <Input variant="settings" value="∞" disabled />
                         ) : (
@@ -212,9 +213,9 @@ export function RatingTierSettingsCard({
                             })}
                           />
                         )}
-                      </SettingsField>
+                      </Field>
 
-                      <SettingsField label={t({ ko: '색상', en: 'Color' })}>
+                      <Field label={t({ ko: '색상', en: 'Color' })}>
                         <div className="flex items-center gap-2">
                           <input
                             type="color"
@@ -229,9 +230,9 @@ export function RatingTierSettingsCard({
                             placeholder={FALLBACK_TIER_COLOR}
                           />
                         </div>
-                      </SettingsField>
+                      </Field>
 
-                      <SettingsField label={t({ ko: '피드 표시', en: 'Feed visibility' })}>
+                      <Field label={t({ ko: '피드 표시', en: 'Feed visibility' })}>
                         <Select
                           variant="settings"
                           value={tier.feed_visibility ?? 'show'}
@@ -241,7 +242,7 @@ export function RatingTierSettingsCard({
                           <option value="blur">{t({ ko: '블러', en: 'Blur' })}</option>
                           <option value="hide">{t({ ko: '숨김', en: 'Hide' })}</option>
                         </Select>
-                      </SettingsField>
+                      </Field>
                     </div>
 
                     <div className="mt-3 flex items-center justify-end gap-3 text-xs text-muted-foreground">

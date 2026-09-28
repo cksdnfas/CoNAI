@@ -3,7 +3,10 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@conai/shared'
-import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Inset } from '@/components/ui/inset'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -46,7 +49,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
           <div className="grid gap-4 md:grid-cols-2">
             {metadataDraft ? (
               <>
-                <SettingsInsetBlock className="flex flex-col gap-3 text-sm text-muted-foreground md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
+                <Inset className="flex flex-col gap-3 text-sm text-muted-foreground md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
                   <span>{t('metadataTab.standardMetadataIsReadFirst')}</span>
                   <Button
                     type="button"
@@ -58,51 +61,51 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                     <RefreshCcw className={isReextracting ? 'animate-spin' : undefined} />
                     {isReextracting ? t({ ko: '등록 중...', en: 'Queuing...' }) : t({ ko: '모든 항목 재추출', en: 'Re-extract all items' })}
                   </Button>
-                </SettingsInsetBlock>
+                </Inset>
 
-                <SettingsToggleRow className="md:col-span-2">
+                <ToggleRow className="md:col-span-2">
                   <input
                     type="checkbox"
                     checked={metadataDraft.enableSecondaryExtraction}
                     onChange={(event) => onPatchMetadata({ enableSecondaryExtraction: event.target.checked })}
                   />
                   {t({ ko: 'PNG secondary extraction 활성화', en: 'Enable PNG secondary extraction' })}
-                </SettingsToggleRow>
+                </ToggleRow>
 
-                <SettingsField label={t({ ko: 'Stealth 스캔 모드', en: 'Stealth scan mode' })}>
+                <Field label={t({ ko: 'Stealth 스캔 모드', en: 'Stealth scan mode' })}>
                   <Select variant="settings" value={metadataDraft.stealthScanMode} onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}>
                     <option value="fast">{t({ ko: '빠르게', en: 'Fast' })}</option>
                     <option value="full">{t({ ko: '전체', en: 'Full' })}</option>
                     <option value="skip">{t({ ko: '건너뛰기', en: 'Skip' })}</option>
                   </Select>
                   <span className="mt-2 text-xs text-muted-foreground">{t({ ko: 'stealth 스캔 범위를 조절해.', en: 'Adjust the stealth scan range.' })}</span>
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t('metadataTab.maximumFileSizeMb')}>
+                <Field label={t('metadataTab.maximumFileSizeMb')}>
                   <NumberStepperInput min={1} variant="settings" value={metadataDraft.stealthMaxFileSizeMB} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxFileSizeMB: Number(nextValue) || 1 })} />
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t('metadataTab.maximumResolutionMp')}>
+                <Field label={t('metadataTab.maximumResolutionMp')}>
                   <NumberStepperInput min={1} variant="settings" value={metadataDraft.stealthMaxResolutionMP} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxResolutionMP: Number(nextValue) || 1 })} />
-                </SettingsField>
+                </Field>
 
-                <SettingsToggleRow>
+                <ToggleRow>
                   <input
                     type="checkbox"
                     checked={metadataDraft.skipStealthForComfyUI}
                     onChange={(event) => onPatchMetadata({ skipStealthForComfyUI: event.target.checked })}
                   />
                   {t({ ko: 'ComfyUI로 이미 판단되면 PNG stealth fallback 스킵', en: 'Skip PNG stealth fallback if already identified as ComfyUI' })}
-                </SettingsToggleRow>
+                </ToggleRow>
 
-                <SettingsToggleRow>
+                <ToggleRow>
                   <input
                     type="checkbox"
                     checked={metadataDraft.skipStealthForWebUI}
                     onChange={(event) => onPatchMetadata({ skipStealthForWebUI: event.target.checked })}
                   />
                   {t({ ko: 'WebUI로 이미 판단되면 PNG stealth fallback 스킵', en: 'Skip PNG stealth fallback if already identified as WebUI' })}
-                </SettingsToggleRow>
+                </ToggleRow>
               </>
             ) : (
               <Skeleton className="h-48 w-full rounded-sm md:col-span-2" />

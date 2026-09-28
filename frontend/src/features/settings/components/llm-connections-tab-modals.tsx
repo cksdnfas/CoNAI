@@ -18,8 +18,9 @@ import {
 import type { LlmPresetRecord } from '@conai/shared'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { SettingsModal } from './settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
 import {
   LLM_CONNECTIONS_TABLE_GRID,
@@ -124,7 +125,7 @@ function LlmConnectionFormFields({
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <SettingsField label={t('llmConnectionsTab.connectionName')} className="md:col-span-2">
+      <Field label={t('llmConnectionsTab.connectionName')} className="md:col-span-2">
         <Input
           variant="settings"
           value={draft.providerName}
@@ -133,9 +134,9 @@ function LlmConnectionFormFields({
           readOnly={mode === 'edit'}
           disabled={mode === 'edit'}
         />
-      </SettingsField>
+      </Field>
 
-      <SettingsField label={t('llmConnectionsTab.connectionType')}>
+      <Field label={t('llmConnectionsTab.connectionType')}>
         <Select
           variant="settings"
           value={draft.providerType}
@@ -145,27 +146,27 @@ function LlmConnectionFormFields({
             <option key={option.value} value={option.value}>{t(option.label)}</option>
           ))}
         </Select>
-      </SettingsField>
+      </Field>
 
-      <SettingsField label={t('llmConnectionsTab.defaultModel')}>
+      <Field label={t('llmConnectionsTab.defaultModel')}>
         <Input
           variant="settings"
           value={draft.defaultModel}
           onChange={(event) => onChange({ defaultModel: event.target.value })}
           placeholder={draft.providerType === 'llm_ollama' ? t({ ko: '예: qwen2.5:7b', en: 'e.g. qwen2.5:7b' }) : t({ ko: '예: gpt-4.1-mini, local-model', en: 'e.g. gpt-4.1-mini, local-model' })}
         />
-      </SettingsField>
+      </Field>
 
-      <SettingsField label={t({ ko: '기본 URL', en: 'Base URL' })} className="md:col-span-2">
+      <Field label={t({ ko: '기본 URL', en: 'Base URL' })} className="md:col-span-2">
         <Input
           variant="settings"
           value={draft.baseUrl}
           onChange={(event) => onChange({ baseUrl: event.target.value })}
           placeholder={buildProviderPlaceholder(draft.providerType)}
         />
-      </SettingsField>
+      </Field>
 
-      <SettingsField label={t('llmConnectionsTab.defaultTemperature')}>
+      <Field label={t('llmConnectionsTab.defaultTemperature')}>
         <NumberStepperInput
           variant="settings"
           step={0.1}
@@ -174,9 +175,9 @@ function LlmConnectionFormFields({
           onValueCommit={(value) => onChange({ defaultTemperature: value })}
           placeholder={t({ ko: '예: 0.7', en: 'e.g. 0.7' })}
         />
-      </SettingsField>
+      </Field>
 
-      <SettingsField label={t('llmConnectionsTab.defaultMaxTokens')}>
+      <Field label={t('llmConnectionsTab.defaultMaxTokens')}>
         <NumberStepperInput
           variant="settings"
           step={128}
@@ -185,9 +186,9 @@ function LlmConnectionFormFields({
           onValueCommit={(value) => onChange({ defaultMaxTokens: value })}
           placeholder={t({ ko: '예: 1024', en: 'e.g. 1024' })}
         />
-      </SettingsField>
+      </Field>
 
-      <SettingsField label={t('llmConnectionsTab.apiKeyOptional')}>
+      <Field label={t('llmConnectionsTab.apiKeyOptional')}>
         <Input
           variant="settings"
           type="password"
@@ -195,16 +196,16 @@ function LlmConnectionFormFields({
           onChange={(event) => onChange({ apiKey: event.target.value })}
           placeholder={draft.providerType === 'llm_ollama' ? t('llmConnectionsTab.usuallySafeToLeaveBlank') : apiKeyMasked || t('llmConnectionsTab.enterANewApiKey')}
         />
-      </SettingsField>
+      </Field>
 
-      <SettingsToggleRow className="md:col-span-2 justify-between gap-4">
+      <ToggleRow className="md:col-span-2 justify-between gap-4">
         <span className="text-sm text-foreground">{t({ ko: '연결 활성화', en: 'Enable connection' })}</span>
         <input
           type="checkbox"
           checked={draft.isEnabled}
           onChange={(event) => onChange({ isEnabled: event.target.checked })}
         />
-      </SettingsToggleRow>
+      </ToggleRow>
     </div>
   )
 }
@@ -224,16 +225,16 @@ function LlmPresetFormFields({
 
   return (
     <div className="grid gap-4">
-      <SettingsField label={t('llmConnectionsTab.presetName')}>
+      <Field label={t('llmConnectionsTab.presetName')}>
         <Input
           variant="settings"
           value={draft.name}
           onChange={(event) => onChange({ name: event.target.value })}
           placeholder={t({ ko: '예: item-summary-json', en: 'e.g. item-summary-json' })}
         />
-      </SettingsField>
+      </Field>
 
-      <SettingsField label={t(section.fieldLabel)}>
+      <Field label={t(section.fieldLabel)}>
         <Textarea
           variant="settings"
           rows={section.expectsJson ? 10 : 8}
@@ -242,7 +243,7 @@ function LlmPresetFormFields({
           placeholder={t(section.placeholder)}
           className={section.mono ? 'font-mono text-xs' : undefined}
         />
-      </SettingsField>
+      </Field>
 
       {mode === 'edit' && draft.createdAt ? (
         <p className="text-xs text-muted-foreground">{t({ ko: '생성: {value}', en: 'Created: {value}' }, { value: formatPresetUpdatedAt(draft.createdAt, locale) })}</p>
@@ -372,22 +373,22 @@ export function LlmConnectionEditorModal({
   const canSave = draft.providerName.trim().length > 0 && draft.baseUrl.trim().length > 0
 
   return (
-    <SettingsModal
+    <Modal
       open={isOpen}
       onClose={onClose}
       title={isEditMode ? t('llmConnectionsTab.editLlmConnection') : t('llmConnectionsTab.addLlmConnection')}
       widthClassName="max-w-3xl"
     >
-      <SettingsModalBody>
+      <ModalBody>
         <LlmConnectionFormFields
           draft={draft}
           mode={isEditMode ? 'edit' : 'create'}
           apiKeyMasked={provider?.api_key_masked}
           onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
         />
-      </SettingsModalBody>
+      </ModalBody>
 
-      <SettingsModalFooter>
+      <ModalFooter>
         {isEditMode ? (
           <>
             <Button
@@ -435,8 +436,8 @@ export function LlmConnectionEditorModal({
         >
           {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         </Button>
-      </SettingsModalFooter>
-    </SettingsModal>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -474,22 +475,22 @@ export function LlmPresetEditorModal({
   const canSave = draft.name.trim().length > 0
 
   return (
-    <SettingsModal
+    <Modal
       open={isOpen}
       onClose={onClose}
       title={isEditMode ? t({ ko: '{heading} 수정', en: 'Edit {heading}' }, { heading: t(section.heading) }) : t({ ko: '{heading} 추가', en: 'Add {heading}' }, { heading: t(section.heading) })}
       widthClassName="max-w-4xl"
     >
-      <SettingsModalBody>
+      <ModalBody>
         <LlmPresetFormFields
           draft={draft}
           mode={isEditMode ? 'edit' : 'create'}
           section={section}
           onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
         />
-      </SettingsModalBody>
+      </ModalBody>
 
-      <SettingsModalFooter>
+      <ModalFooter>
         {preset ? (
           <Button
             type="button"
@@ -520,7 +521,7 @@ export function LlmPresetEditorModal({
         >
           {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         </Button>
-      </SettingsModalFooter>
-    </SettingsModal>
+      </ModalFooter>
+    </Modal>
   )
 }

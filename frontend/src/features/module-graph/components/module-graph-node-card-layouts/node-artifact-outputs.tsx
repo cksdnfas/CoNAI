@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { NodeArtifactPreviewBody } from '../module-graph-node-artifact-preview'
 import type { ModuleGraphNode } from '../../module-graph-shared'
@@ -100,7 +100,7 @@ export function NodeArtifactOutputs({
         </div>
       ) : null}
 
-      <SettingsModal
+      <Modal
         open={Boolean(artifactTextModal)}
         title={artifactTextModal?.title ?? t({ ko: '출력 내용', en: 'Output content' })}
         widthClassName="max-w-3xl"
@@ -109,7 +109,7 @@ export function NodeArtifactOutputs({
         <pre className="max-h-[70vh] overflow-auto rounded-sm border border-border/70 bg-surface-low p-3 text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
           {artifactTextModal?.text ?? ''}
         </pre>
-      </SettingsModal>
+      </Modal>
     </>
   )
 }

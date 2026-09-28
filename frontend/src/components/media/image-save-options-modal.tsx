@@ -2,8 +2,9 @@ import { Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
 import { calculateImageSaveOutputSize, resolveImageSaveFormat, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@conai/shared'
@@ -38,8 +39,8 @@ export function ImageSaveOptionsModal({
   const resolvedFormat = resolveImageSaveFormat(options.defaultFormat, sourceInfo?.mimeType)
 
   return (
-    <SettingsModal open={open} onClose={onClose} title={title ?? t('imageSaveOptionsModal.saveImage')} widthClassName="max-w-2xl">
-      <SettingsModalBody className="space-y-5">
+    <Modal open={open} onClose={onClose} title={title ?? t('imageSaveOptionsModal.saveImage')} widthClassName="max-w-2xl">
+      <ModalBody className="space-y-5">
         <div className="flex flex-wrap gap-2">
           {sourceInfo ? (
             <>
@@ -51,7 +52,7 @@ export function ImageSaveOptionsModal({
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label={t({ ko: '포맷', en: 'Format' })}>
+          <Field label={t({ ko: '포맷', en: 'Format' })}>
             <Select
               variant="settings"
               value={options.defaultFormat}
@@ -62,9 +63,9 @@ export function ImageSaveOptionsModal({
               <option value="jpeg">JPEG</option>
               <option value="webp">WebP</option>
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '품질', en: 'Quality' })}>
+          <Field label={t({ ko: '품질', en: 'Quality' })}>
             <NumberStepperInput
 
               min={1}
@@ -73,18 +74,18 @@ export function ImageSaveOptionsModal({
               value={options.quality}
               onValueCommit={(nextValue) => onOptionsChange({ quality: Number(nextValue) || 1 })}
             />
-          </SettingsField>
+          </Field>
 
-          <SettingsToggleRow className="md:col-span-2">
+          <ToggleRow className="md:col-span-2">
             <input
               type="checkbox"
               checked={options.resizeEnabled}
               onChange={(event) => onOptionsChange({ resizeEnabled: event.target.checked })}
             />
             {t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}
-          </SettingsToggleRow>
+          </ToggleRow>
 
-          <SettingsField label={t('imageSaveOptionsModal.maxWidth')}>
+          <Field label={t('imageSaveOptionsModal.maxWidth')}>
             <NumberStepperInput
 
               min={64}
@@ -94,9 +95,9 @@ export function ImageSaveOptionsModal({
               onValueCommit={(nextValue) => onOptionsChange({ maxWidth: Number(nextValue) || 64 })}
               disabled={!options.resizeEnabled}
             />
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t('imageSaveOptionsModal.maxHeight')}>
+          <Field label={t('imageSaveOptionsModal.maxHeight')}>
             <NumberStepperInput
 
               min={64}
@@ -106,10 +107,10 @@ export function ImageSaveOptionsModal({
               onValueCommit={(nextValue) => onOptionsChange({ maxHeight: Number(nextValue) || 64 })}
               disabled={!options.resizeEnabled}
             />
-          </SettingsField>
+          </Field>
         </div>
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
@@ -117,8 +118,8 @@ export function ImageSaveOptionsModal({
             <Save className="h-4 w-4" />
             {isSaving ? t({ ko: '적용 중…', en: 'Applying…' }) : t({ ko: '적용', en: 'Apply' })}
           </Button>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }

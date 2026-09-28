@@ -12,8 +12,8 @@ import type {
   PageAccessPermissionItem,
   PermissionGroupListItem,
 } from '@/lib/api-auth'
-import { SettingsField } from './settings-primitives'
-import { SettingsModal } from './settings-modal'
+import { Field } from '@/components/ui/field'
+import { Modal } from '@/components/ui/modal'
 import { SecurityAccountManagementList } from './security-account-management-list'
 import {
   getAccountTypeLabel,
@@ -122,7 +122,7 @@ export function SecurityPermissionGroupEditorModal({
   const isBusy = isSaving || isDeleting
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={title}
@@ -143,7 +143,7 @@ export function SecurityPermissionGroupEditorModal({
         <div className="space-y-6">
           {canEditFields ? (
             <>
-              <SettingsField label={t({ ko: '그룹 이름', en: 'Group name' })}>
+              <Field label={t({ ko: '그룹 이름', en: 'Group name' })}>
                 <Input
                   variant="settings"
                   value={draft.name}
@@ -151,9 +151,9 @@ export function SecurityPermissionGroupEditorModal({
                   onChange={(event) => onDraftChange({ name: event.target.value })}
                   placeholder={t({ ko: '예: 편집팀', en: 'Example: Editors' })}
                 />
-              </SettingsField>
+              </Field>
 
-              <SettingsField label={t({ ko: '설명', en: 'Description' })}>
+              <Field label={t({ ko: '설명', en: 'Description' })}>
                 <Textarea
                   variant="settings"
                   rows={3}
@@ -162,7 +162,7 @@ export function SecurityPermissionGroupEditorModal({
                   onChange={(event) => onDraftChange({ description: event.target.value })}
                   placeholder={t({ ko: '필요하면만 적어', en: 'Add this only if needed' })}
                 />
-              </SettingsField>
+              </Field>
             </>
           ) : null}
 
@@ -211,7 +211,7 @@ export function SecurityPermissionGroupEditorModal({
 
               {canManageMembers ? (
                 <div className="grid gap-3 rounded-sm border border-border bg-surface-container p-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                  <SettingsField label={t({ ko: '계정', en: 'Account' })}>
+                  <Field label={t({ ko: '계정', en: 'Account' })}>
                     <Select
                       variant="settings"
                       value={selectedAddMemberAccountId === null ? '' : String(selectedAddMemberAccountId)}
@@ -225,7 +225,7 @@ export function SecurityPermissionGroupEditorModal({
                         </option>
                       ))}
                     </Select>
-                  </SettingsField>
+                  </Field>
 
                   <div className="flex items-end">
                     <Button
@@ -293,6 +293,6 @@ export function SecurityPermissionGroupEditorModal({
           </div>
         </div>
       )}
-    </SettingsModal>
+    </Modal>
   )
 }

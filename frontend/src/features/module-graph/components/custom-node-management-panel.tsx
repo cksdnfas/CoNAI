@@ -9,7 +9,8 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { SettingsField, SettingsValueTile } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { StatTile } from '@/components/ui/stat-tile'
 import {
   getCustomNodeSource,
   installCustomNodeDependencies,
@@ -382,30 +383,30 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               <PanelCardHeader title={t({ ko: '새 노드 스캐폴드', en: 'New node scaffold' })} description={t({ ko: '기본 폴더와 starter 파일을 바로 만들어.', en: 'Create the base folder and starter files right away.' })} />
 
               <div className="grid gap-3">
-                <SettingsField label="folder">
+                <Field label="folder">
                   <Input variant="settings" value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="weather-api" />
-                </SettingsField>
+                </Field>
 
-                <SettingsField label="node key">
+                <Field label="node key">
                   <Input variant="settings" value={nodeKey} onChange={(event) => setNodeKey(event.target.value)} placeholder="custom.weather_api" />
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '표시 이름', en: 'Display name' })}>
+                <Field label={t({ ko: '표시 이름', en: 'Display name' })}>
                   <Input variant="settings" value={nodeName} onChange={(event) => setNodeName(event.target.value)} placeholder="Weather API" />
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '설명', en: 'Description' })}>
+                <Field label={t({ ko: '설명', en: 'Description' })}>
                   <Textarea variant="settings" rows={3} value={nodeDescription} onChange={(event) => setNodeDescription(event.target.value)} placeholder={t({ ko: '선택', en: 'Optional' })} />
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '템플릿', en: 'Template' })}>
+                <Field label={t({ ko: '템플릿', en: 'Template' })}>
                   <Select variant="settings" value={scaffoldTemplate} onChange={(event) => setScaffoldTemplate(event.target.value as CustomNodeScaffoldTemplate)}>
                     <option value="empty">{t({ ko: '비어 있음', en: 'Empty' })}</option>
                     <option value="hello_world">{t({ ko: '헬로 월드', en: 'Hello World' })}</option>
                     <option value="http_json">HTTP JSON</option>
                     <option value="image_file">{t({ ko: '이미지 파일', en: 'Image File' })}</option>
                   </Select>
-                </SettingsField>
+                </Field>
                 <Button
                   type="button"
                   onClick={() => void scaffoldMutation.mutateAsync({
@@ -440,11 +441,11 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <Badge variant="outline">{selectedNodeSourceQuery.data.sourceHash.slice(0, 12)}</Badge>
                   </div>
                   <div className="grid gap-2.5 md:grid-cols-2">
-                    <SettingsValueTile label={t({ ko: '폴더', en: 'Folder' })} value={selectedNodeSourceQuery.data.folderPath} valueClassName="break-all text-xs font-medium" />
-                    <SettingsValueTile label="manifest" value={selectedNodeSourceQuery.data.manifestPath} valueClassName="break-all text-xs font-medium" />
-                    <SettingsValueTile label="entry" value={selectedNodeSourceQuery.data.entryPath} valueClassName="break-all text-xs font-medium" />
-                    <SettingsValueTile label="package.json" value={selectedNodeSourceQuery.data.packageJsonPath ?? t({ ko: '없음', en: 'None' })} valueClassName="break-all text-xs font-medium" />
-                    <SettingsValueTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? t({ ko: '없음', en: 'None' })} className="md:col-span-2" valueClassName="break-all text-xs font-medium" />
+                    <StatTile label={t({ ko: '폴더', en: 'Folder' })} value={selectedNodeSourceQuery.data.folderPath} valueClassName="break-all text-xs font-medium" />
+                    <StatTile label="manifest" value={selectedNodeSourceQuery.data.manifestPath} valueClassName="break-all text-xs font-medium" />
+                    <StatTile label="entry" value={selectedNodeSourceQuery.data.entryPath} valueClassName="break-all text-xs font-medium" />
+                    <StatTile label="package.json" value={selectedNodeSourceQuery.data.packageJsonPath ?? t({ ko: '없음', en: 'None' })} valueClassName="break-all text-xs font-medium" />
+                    <StatTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? t({ ko: '없음', en: 'None' })} className="md:col-span-2" valueClassName="break-all text-xs font-medium" />
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="outline" onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
@@ -482,7 +483,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                 </div>
               ) : null}
 
-              <SettingsField label={t({ ko: '테스트 입력 JSON', en: 'Test input JSON' })}>
+              <Field label={t({ ko: '테스트 입력 JSON', en: 'Test input JSON' })}>
                 <Textarea
                   variant="settings"
                   rows={8}
@@ -490,7 +491,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                   onChange={(event) => setTestInputsText(event.target.value)}
                   placeholder={"{\n  \"input\": \"value\"\n}"}
                 />
-              </SettingsField>
+              </Field>
               <Button type="button" variant="outline" onClick={() => void testMutation.mutateAsync()} disabled={testMutation.isPending || !selectedTestKey}>
                 {testMutation.isPending ? t({ ko: '테스트 실행 중...', en: 'Running test...' }) : t({ ko: '테스트 실행', en: 'Run test' })}
               </Button>
@@ -538,9 +539,9 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                 </div>
               ) : null}
 
-              <SettingsField label={t({ ko: '테스트 결과', en: 'Test result' })}>
+              <Field label={t({ ko: '테스트 결과', en: 'Test result' })}>
                 <Textarea variant="settings" rows={14} value={testResultText} placeholder={t({ ko: '테스트 결과가 여기에 보여.', en: 'The test result appears here.' })} readOnly />
-              </SettingsField>
+              </Field>
             </CardContent>
           </Card>
         </div>

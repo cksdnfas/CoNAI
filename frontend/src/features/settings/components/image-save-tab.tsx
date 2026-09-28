@@ -4,7 +4,9 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { GenerationThrottleSettings, ImageSaveSettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
-import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 import { VideoOptimizationTab } from './video-optimization-tab'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -129,10 +131,10 @@ export function ImageSaveTab({
                   </Button>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <SettingsField label={t({ ko: '예약 동시 실행 수', en: 'Reservation concurrency' })}>
+                  <Field label={t({ ko: '예약 동시 실행 수', en: 'Reservation concurrency' })}>
                     <NumberStepperInput min={1} max={12} variant="settings" value={generationThrottleDraft.reservations.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ reservations: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '사용자 대기열이 있을 때', en: 'When a user queue exists' })}>
+                  </Field>
+                  <Field label={t({ ko: '사용자 대기열이 있을 때', en: 'When a user queue exists' })}>
                     <Select
                       variant="settings"
                       value={generationThrottleDraft.reservations.userQueuePolicy}
@@ -141,7 +143,7 @@ export function ImageSaveTab({
                       <option value="continue_limited">{t({ ko: '예약은 1개만 계속', en: 'Keep only 1 reservation running' })}</option>
                       <option value="hold_until_empty">{t({ ko: '새 예약 시작 보류', en: 'Hold new reservations until empty' })}</option>
                     </Select>
-                  </SettingsField>
+                  </Field>
                 </div>
               </div>
 
@@ -164,16 +166,16 @@ export function ImageSaveTab({
                   </Button>
                 </div>
                 <div className="grid gap-4 md:grid-cols-5">
-                  <SettingsField label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
+                  <Field label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
                     <NumberStepperInput min={1} max={8} variant="settings" value={generationThrottleDraft.novelai.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
+                  </Field>
+                  <Field label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
                     <NumberStepperInput min={1} max={1440} variant="settings" value={generationThrottleDraft.novelai.scheduleWindowMinutes} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { scheduleWindowMinutes: Number(nextValue) || 1 } })} />
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '생성횟수', en: 'Job count' })}>
+                  </Field>
+                  <Field label={t({ ko: '생성횟수', en: 'Job count' })}>
                     <NumberStepperInput min={1} max={10000} variant="settings" value={generationThrottleDraft.novelai.scheduleJobCount} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { scheduleJobCount: Number(nextValue) || 1 } })} />
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '분배', en: 'Distribution' })}>
+                  </Field>
+                  <Field label={t({ ko: '분배', en: 'Distribution' })}>
                     <Select
                       variant="settings"
                       value={generationThrottleDraft.novelai.scheduleMode}
@@ -182,10 +184,10 @@ export function ImageSaveTab({
                       <option value="even">{t({ ko: '균등', en: 'Even' })}</option>
                       <option value="random">{t({ ko: '비균등', en: 'Random' })}</option>
                     </Select>
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
+                  </Field>
+                  <Field label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
                     <NumberStepperInput min={0} max={3600} variant="settings" value={generationThrottleDraft.novelai.minStartIntervalSeconds} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { minStartIntervalSeconds: Number(nextValue) || 0 } })} />
-                  </SettingsField>
+                  </Field>
                 </div>
               </div>
 
@@ -208,16 +210,16 @@ export function ImageSaveTab({
                   </Button>
                 </div>
                 <div className="grid gap-4 md:grid-cols-5">
-                  <SettingsField label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
+                  <Field label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
                     <NumberStepperInput min={1} max={8} variant="settings" value={generationThrottleDraft.codex.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
+                  </Field>
+                  <Field label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
                     <NumberStepperInput min={1} max={1440} variant="settings" value={generationThrottleDraft.codex.scheduleWindowMinutes} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { scheduleWindowMinutes: Number(nextValue) || 1 } })} />
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '생성횟수', en: 'Job count' })}>
+                  </Field>
+                  <Field label={t({ ko: '생성횟수', en: 'Job count' })}>
                     <NumberStepperInput min={1} max={10000} variant="settings" value={generationThrottleDraft.codex.scheduleJobCount} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { scheduleJobCount: Number(nextValue) || 1 } })} />
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '분배', en: 'Distribution' })}>
+                  </Field>
+                  <Field label={t({ ko: '분배', en: 'Distribution' })}>
                     <Select
                       variant="settings"
                       value={generationThrottleDraft.codex.scheduleMode}
@@ -226,10 +228,10 @@ export function ImageSaveTab({
                       <option value="even">{t({ ko: '균등', en: 'Even' })}</option>
                       <option value="random">{t({ ko: '비균등', en: 'Random' })}</option>
                     </Select>
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
+                  </Field>
+                  <Field label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
                     <NumberStepperInput min={0} max={3600} variant="settings" value={generationThrottleDraft.codex.minStartIntervalSeconds} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { minStartIntervalSeconds: Number(nextValue) || 0 } })} />
-                  </SettingsField>
+                  </Field>
                 </div>
               </div>
             </div>
@@ -260,7 +262,7 @@ export function ImageSaveTab({
           <div className="grid gap-4 md:grid-cols-2">
             {imageSaveDraft ? (
               <>
-                <SettingsField label={t({ ko: '기본 포맷', en: 'Default format' })}>
+                <Field label={t({ ko: '기본 포맷', en: 'Default format' })}>
                   <Select
                     variant="settings"
                     value={imageSaveDraft.defaultFormat}
@@ -271,9 +273,9 @@ export function ImageSaveTab({
                     <option value="jpeg">JPEG</option>
                     <option value="webp">WebP</option>
                   </Select>
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '품질', en: 'Quality' })}>
+                <Field label={t({ ko: '품질', en: 'Quality' })}>
                   <NumberStepperInput
 
                     min={1}
@@ -282,18 +284,18 @@ export function ImageSaveTab({
                     value={imageSaveDraft.quality}
                     onValueCommit={(nextValue) => onPatchImageSave({ quality: Number(nextValue) || 1 })}
                   />
-                </SettingsField>
+                </Field>
 
-                <SettingsToggleRow className="md:col-span-2">
+                <ToggleRow className="md:col-span-2">
                   <input
                     type="checkbox"
                     checked={imageSaveDraft.resizeEnabled}
                     onChange={(event) => onPatchImageSave({ resizeEnabled: event.target.checked })}
                   />
                   {t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}
-                </SettingsToggleRow>
+                </ToggleRow>
 
-                <SettingsField label={t({ ko: '크기 프리셋', en: 'Size presets' })}>
+                <Field label={t({ ko: '크기 프리셋', en: 'Size presets' })}>
                   <div className="flex flex-wrap gap-2">
                     {IMAGE_SAVE_SIZE_PRESETS.map((preset) => (
                       <Button
@@ -307,9 +309,9 @@ export function ImageSaveTab({
                       </Button>
                     ))}
                   </div>
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '최대 가로', en: 'Max width' })}>
+                <Field label={t({ ko: '최대 가로', en: 'Max width' })}>
                   <NumberStepperInput
 
                     min={64}
@@ -318,9 +320,9 @@ export function ImageSaveTab({
                     value={imageSaveDraft.maxWidth}
                     onValueCommit={(nextValue) => onPatchImageSave({ maxWidth: Number(nextValue) || 64 })}
                   />
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '최대 세로', en: 'Max height' })}>
+                <Field label={t({ ko: '최대 세로', en: 'Max height' })}>
                   <NumberStepperInput
 
                     min={64}
@@ -329,9 +331,9 @@ export function ImageSaveTab({
                     value={imageSaveDraft.maxHeight}
                     onValueCommit={(nextValue) => onPatchImageSave({ maxHeight: Number(nextValue) || 64 })}
                   />
-                </SettingsField>
+                </Field>
 
-                <SettingsField label={t({ ko: '적용 방식', en: 'Apply mode' })}>
+                <Field label={t({ ko: '적용 방식', en: 'Apply mode' })}>
                   <Select
                     variant="settings"
                     value={imageSaveDraft.alwaysShowDialog ? 'dialog' : 'auto'}
@@ -340,52 +342,52 @@ export function ImageSaveTab({
                     <option value="auto">{t({ ko: '설정값 자동 적용', en: 'Apply settings automatically' })}</option>
                     <option value="dialog">{t({ ko: '매번 팝업으로 확인', en: 'Confirm with a dialog every time' })}</option>
                   </Select>
-                </SettingsField>
+                </Field>
 
-                <SettingsToggleRow>
+                <ToggleRow>
                   <input
                     type="checkbox"
                     checked={imageSaveDraft.applyToGenerationAttachments}
                     onChange={(event) => onPatchImageSave({ applyToGenerationAttachments: event.target.checked })}
                   />
                   {t({ ko: '생성 첨부에 적용', en: 'Apply to generation attachments' })}
-                </SettingsToggleRow>
+                </ToggleRow>
 
-                <SettingsToggleRow>
+                <ToggleRow>
                   <input
                     type="checkbox"
                     checked={imageSaveDraft.applyToEditorSave}
                     onChange={(event) => onPatchImageSave({ applyToEditorSave: event.target.checked })}
                   />
                   {t({ ko: '에디터 저장에 적용', en: 'Apply to editor saves' })}
-                </SettingsToggleRow>
+                </ToggleRow>
 
-                <SettingsToggleRow>
+                <ToggleRow>
                   <input
                     type="checkbox"
                     checked={imageSaveDraft.applyToCanvasSave}
                     onChange={(event) => onPatchImageSave({ applyToCanvasSave: event.target.checked })}
                   />
                   {t({ ko: '캔버스 저장에 적용', en: 'Apply to canvas saves' })}
-                </SettingsToggleRow>
+                </ToggleRow>
 
-                <SettingsToggleRow>
+                <ToggleRow>
                   <input
                     type="checkbox"
                     checked={imageSaveDraft.applyToUpload}
                     onChange={(event) => onPatchImageSave({ applyToUpload: event.target.checked })}
                   />
                   {t({ ko: '업로드에 적용', en: 'Apply to uploads' })}
-                </SettingsToggleRow>
+                </ToggleRow>
 
-                <SettingsToggleRow>
+                <ToggleRow>
                   <input
                     type="checkbox"
                     checked={imageSaveDraft.applyToWorkflowOutputs}
                     onChange={(event) => onPatchImageSave({ applyToWorkflowOutputs: event.target.checked })}
                   />
                   {t({ ko: '워크플로 출력에 적용', en: 'Apply to workflow outputs' })}
-                </SettingsToggleRow>
+                </ToggleRow>
               </>
             ) : (
               <Skeleton className="h-64 w-full rounded-sm md:col-span-2" />
@@ -411,7 +413,7 @@ export function ImageSaveTab({
         >
           {thumbnailDraft ? (
             <div className="grid gap-4 md:grid-cols-2">
-              <SettingsField label={t({ ko: '썸네일 크기', en: 'Thumbnail size' })}>
+              <Field label={t({ ko: '썸네일 크기', en: 'Thumbnail size' })}>
                 <Select
                   variant="settings"
                   value={thumbnailDraft.size}
@@ -423,9 +425,9 @@ export function ImageSaveTab({
                   <option value="720">720px</option>
                   <option value="512">512px</option>
                 </Select>
-              </SettingsField>
+              </Field>
 
-              <SettingsField label={t({ ko: '썸네일 품질', en: 'Thumbnail quality' })}>
+              <Field label={t({ ko: '썸네일 품질', en: 'Thumbnail quality' })}>
                 <NumberStepperInput
 
                   min={60}
@@ -434,7 +436,7 @@ export function ImageSaveTab({
                   value={thumbnailDraft.quality}
                   onValueCommit={(nextValue) => onPatchThumbnail({ quality: Number(nextValue) || 60 })}
                 />
-              </SettingsField>
+              </Field>
 
               <p className="md:col-span-2 text-sm text-muted-foreground">
                 {t({ ko: '기존 썸네일은 재생성 필요. 계정 및 시스템의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch under Accounts and system.' })}

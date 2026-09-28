@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { SettingsField, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset } from './wallpaper-types'
 import {
@@ -335,7 +335,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
         />
       </button>
 
-      <SettingsModal
+      <Modal
         open={open}
         onClose={() => setOpen(false)}
         title={t({ ko: '이징 설정', en: 'Easing settings' })}
@@ -455,7 +455,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                         }}
                       >
                         <div className="text-sm font-medium text-foreground">{pointLabel}</div>
-                        <SettingsField label={t({ ko: '시간 X', en: 'Time X' })}>
+                        <Field label={t({ ko: '시간 X', en: 'Time X' })}>
                           <NumberStepperInput
                             variant="settings"
                             step={0.01}
@@ -466,8 +466,8 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                             onClick={(event) => event.stopPropagation()}
                             onValueCommit={(nextValue) => updateCustomPoint(index, 'x', nextValue)}
                           />
-                        </SettingsField>
-                        <SettingsField label={t({ ko: '값 Y', en: 'Value Y' })}>
+                        </Field>
+                        <Field label={t({ ko: '값 Y', en: 'Value Y' })}>
                           <NumberStepperInput
                             variant="settings"
                             step={0.01}
@@ -477,7 +477,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                             onClick={(event) => event.stopPropagation()}
                             onValueCommit={(nextValue) => updateCustomPoint(index, 'y', nextValue)}
                           />
-                        </SettingsField>
+                        </Field>
                         {!isEndpoint ? (
                           <Button
                             type="button"
@@ -517,7 +517,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                     </div>
 
                     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                      <SettingsField label={t({ ko: '프리셋으로 저장', en: 'Save as preset' })} className="gap-2">
+                      <Field label={t({ ko: '프리셋으로 저장', en: 'Save as preset' })} className="gap-2">
                         <div className="flex gap-2">
                           <Input
                             variant="settings"
@@ -536,7 +536,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                             {t({ ko: '프리셋 저장', en: 'Save preset' })}
                           </Button>
                         </div>
-                      </SettingsField>
+                      </Field>
                     </div>
 
                   </>
@@ -545,16 +545,16 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
             </div>
           )}
 
-          <SettingsModalFooter>
+          <ModalFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="button" onClick={handleApplySelection}>
               {t({ ko: '저장', en: 'Save' })}
             </Button>
-          </SettingsModalFooter>
+          </ModalFooter>
         </div>
-      </SettingsModal>
+      </Modal>
     </>
   )
 }

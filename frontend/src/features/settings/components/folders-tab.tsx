@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, ScanAllSummary, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
 import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
-import { SettingsSection, SettingsValueTile } from './settings-primitives'
+import { Modal } from '@/components/ui/modal'
+import { StatTile } from '@/components/ui/stat-tile'
+import { SettingsSection } from './settings-primitives'
 import { SettingsResourceTable } from './settings-resource-shared'
 import { WatchedFolderCard } from './watched-folder-card'
 import { WatchedFolderListItem } from './watched-folder-list-item'
@@ -13,7 +15,6 @@ import { WatchedFolderCreateForm } from './watched-folder-create-form'
 import { BackupSourceCard } from './backup-source-card'
 import { BackupSourceListItem } from './backup-source-list-item'
 import { BackupSourceCreateForm } from './backup-source-create-form'
-import { SettingsModal } from './settings-modal'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
 import { useI18n } from '@/i18n'
@@ -192,12 +193,12 @@ export function FoldersTab({
           }
         >
           <div className="grid gap-3 text-sm md:grid-cols-6">
-            <SettingsValueTile label={t({ ko: '폴더', en: 'Folders' })} value={formatNumber(folders.length)} valueClassName="text-xl" />
-            <SettingsValueTile label={t({ ko: '백업 소스', en: 'Backup sources' })} value={formatNumber(backupSources.length)} valueClassName="text-xl" />
-            <SettingsValueTile label={t({ ko: '감시 중', en: 'Watching' })} value={formatNumber(watchersHealth?.watching ?? 0)} valueClassName="text-xl" />
-            <SettingsValueTile label={t({ ko: '오류', en: 'Errors' })} value={formatNumber(watchersHealth?.error ?? 0)} valueClassName="text-xl" />
-            <SettingsValueTile label={t({ ko: '24시간 이벤트', en: 'Events 24h' })} value={formatNumber(watchersHealth?.totalEvents24h ?? 0)} valueClassName="text-xl" />
-            <SettingsValueTile label={t({ ko: '최근 스캔 로그', en: 'Latest scan log' })} value={scanLogs[0]?.folder_name ?? '—'} />
+            <StatTile label={t({ ko: '폴더', en: 'Folders' })} value={formatNumber(folders.length)} valueClassName="text-xl" />
+            <StatTile label={t({ ko: '백업 소스', en: 'Backup sources' })} value={formatNumber(backupSources.length)} valueClassName="text-xl" />
+            <StatTile label={t({ ko: '감시 중', en: 'Watching' })} value={formatNumber(watchersHealth?.watching ?? 0)} valueClassName="text-xl" />
+            <StatTile label={t({ ko: '오류', en: 'Errors' })} value={formatNumber(watchersHealth?.error ?? 0)} valueClassName="text-xl" />
+            <StatTile label={t({ ko: '24시간 이벤트', en: 'Events 24h' })} value={formatNumber(watchersHealth?.totalEvents24h ?? 0)} valueClassName="text-xl" />
+            <StatTile label={t({ ko: '최근 스캔 로그', en: 'Latest scan log' })} value={scanLogs[0]?.folder_name ?? '—'} />
           </div>
 
           {/* 전체 스캔은 60초를 훌쩍 넘기므로, 응답을 기다리는 대신 잡 진행률을 그대로 보여준다. */}
@@ -358,7 +359,7 @@ export function FoldersTab({
         </section>
       </div>
 
-      <SettingsModal
+      <Modal
         open={isAddFolderModalOpen}
         onClose={() => setIsAddFolderModalOpen(false)}
         title={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}
@@ -372,9 +373,9 @@ export function FoldersTab({
           onValidatePath={onValidatePath}
           onAddFolder={handleAddFolderFromModal}
         />
-      </SettingsModal>
+      </Modal>
 
-      <SettingsModal
+      <Modal
         open={selectedFolder != null}
         onClose={() => setSelectedFolderId(null)}
         title={selectedFolder ? selectedFolder.folder_name || t({ ko: '감시 폴더 상세', en: 'Watched folder details' }) : t({ ko: '감시 폴더 상세', en: 'Watched folder details' })}
@@ -395,9 +396,9 @@ export function FoldersTab({
             }}
           />
         ) : null}
-      </SettingsModal>
+      </Modal>
 
-      <SettingsModal
+      <Modal
         open={isAddBackupSourceModalOpen}
         onClose={() => setIsAddBackupSourceModalOpen(false)}
         title={t({ ko: '백업 소스 추가', en: 'Add backup source' })}
@@ -411,9 +412,9 @@ export function FoldersTab({
           onValidateBackupPath={onValidateBackupPath}
           onAddBackupSource={handleAddBackupSourceFromModal}
         />
-      </SettingsModal>
+      </Modal>
 
-      <SettingsModal
+      <Modal
         open={selectedBackupSource != null}
         onClose={() => setSelectedBackupSourceId(null)}
         title={selectedBackupSource ? selectedBackupSource.display_name || t({ ko: '백업 소스 상세', en: 'Backup source details' }) : t({ ko: '백업 소스 상세', en: 'Backup source details' })}
@@ -432,7 +433,7 @@ export function FoldersTab({
             }}
           />
         ) : null}
-      </SettingsModal>
+      </Modal>
     </>
   )
 }

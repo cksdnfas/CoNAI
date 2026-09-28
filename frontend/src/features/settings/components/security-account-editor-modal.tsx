@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
-import { SettingsField, SettingsValueTile } from './settings-primitives'
-import { SettingsModal } from './settings-modal'
+import { Field } from '@/components/ui/field'
+import { Modal } from '@/components/ui/modal'
+import { StatTile } from '@/components/ui/stat-tile'
 import { getAccountStatusLabel, getPermissionGroupDisplayName } from './security-ui-text'
 import { getSecurityGroupBadgeStyle, type SecurityGroupColorMap, getSecurityGroupColor } from './security-group-color-utils'
 
@@ -108,7 +109,7 @@ export function SecurityAccountEditorModal({
   }
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={account.username}
@@ -131,9 +132,9 @@ export function SecurityAccountEditorModal({
     >
       <div className="space-y-5">
         <div className="grid gap-3 md:grid-cols-3">
-          <SettingsValueTile label={t({ ko: '생성일', en: 'Created' })} value={formatDateTime(account.createdAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
-          <SettingsValueTile label={t({ ko: '수정일', en: 'Updated' })} value={formatDateTime(account.updatedAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
-          <SettingsValueTile label={t({ ko: '최근 로그인', en: 'Last login' })} value={account.lastLoginAt ? formatDateTime(account.lastLoginAt) : '—'} className="px-3 py-3" valueClassName="text-sm font-medium" />
+          <StatTile label={t({ ko: '생성일', en: 'Created' })} value={formatDateTime(account.createdAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
+          <StatTile label={t({ ko: '수정일', en: 'Updated' })} value={formatDateTime(account.updatedAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
+          <StatTile label={t({ ko: '최근 로그인', en: 'Last login' })} value={account.lastLoginAt ? formatDateTime(account.lastLoginAt) : '—'} className="px-3 py-3" valueClassName="text-sm font-medium" />
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -153,7 +154,7 @@ export function SecurityAccountEditorModal({
 
         {activeSection === 'group' ? (
           <div className="space-y-4 rounded-sm border border-border bg-surface-container p-4">
-            <SettingsField label={t({ ko: '기본 그룹', en: 'Base group' })}>
+            <Field label={t({ ko: '기본 그룹', en: 'Base group' })}>
               <Select
                 variant="settings"
                 value={groupDraft}
@@ -166,7 +167,7 @@ export function SecurityAccountEditorModal({
                   </option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
 
             <div className="space-y-2 text-sm text-muted-foreground">
               <div>{t({ ko: '커스텀 그룹 멤버십은 권한 그룹 모달에서 관리해.', en: 'Manage custom group memberships in the permission group modal.' })}</div>
@@ -198,7 +199,7 @@ export function SecurityAccountEditorModal({
           <div className="space-y-4 rounded-sm border border-border bg-surface-container p-4">
             {canChangeLegacyAdminPassword ? (
               <>
-                <SettingsField label={t({ ko: '새 비밀번호', en: 'New password' })}>
+                <Field label={t({ ko: '새 비밀번호', en: 'New password' })}>
                   <Input
                     variant="settings"
                     type="password"
@@ -207,7 +208,7 @@ export function SecurityAccountEditorModal({
                     onChange={(event) => setNextPassword(event.target.value)}
                     placeholder={t({ ko: '새 비밀번호', en: 'New password' })}
                   />
-                </SettingsField>
+                </Field>
 
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="secondary" onClick={onClose} disabled={isUpdatingPassword}>{t({ ko: '닫기', en: 'Close' })}</Button>
@@ -240,7 +241,7 @@ export function SecurityAccountEditorModal({
 
             {canDeleteAccount ? (
               <>
-                <SettingsField label={t({ ko: '확인용 사용자명', en: 'Confirmation username' })}>
+                <Field label={t({ ko: '확인용 사용자명', en: 'Confirmation username' })}>
                   <Input
                     variant="settings"
                     value={deleteConfirmText}
@@ -248,7 +249,7 @@ export function SecurityAccountEditorModal({
                     onChange={(event) => setDeleteConfirmText(event.target.value)}
                     placeholder={account.username}
                   />
-                </SettingsField>
+                </Field>
 
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="secondary" onClick={onClose} disabled={isDeletingAccount}>{t({ ko: '닫기', en: 'Close' })}</Button>
@@ -266,6 +267,6 @@ export function SecurityAccountEditorModal({
           </div>
         ) : null}
       </div>
-    </SettingsModal>
+    </Modal>
   )
 }

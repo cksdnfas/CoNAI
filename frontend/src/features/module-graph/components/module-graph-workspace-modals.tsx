@@ -1,7 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 
@@ -84,7 +84,7 @@ export function ModuleGraphWorkspaceModals({
 
   return (
     <>
-      <SettingsModal
+      <Modal
         open={workflowView === 'browse' && isBrowseManageModalOpen}
         title={browseManageModalTitle}
         onClose={onCloseBrowseManage}
@@ -107,9 +107,9 @@ export function ModuleGraphWorkspaceModals({
             />
           </Suspense>
         ) : null}
-      </SettingsModal>
+      </Modal>
 
-      <SettingsModal
+      <Modal
         open={folderDeleteTarget !== null}
         title={t({ ko: '폴더 삭제', en: 'Delete folder' })}
         onClose={onCloseFolderDelete}
@@ -139,9 +139,9 @@ export function ModuleGraphWorkspaceModals({
             </Button>
           </div>
         </div>
-      </SettingsModal>
+      </Modal>
 
-      <SettingsModal
+      <Modal
         open={isModuleLibraryOpen}
         title={t({ ko: '모듈 추가', en: 'Add module' })}
         description={t({ ko: '저장된 모듈, 시스템 모듈, 커스텀 노드를 나눠 보고 필요한 항목을 바로 그래프에 추가해.', en: 'Browse saved modules, system modules, and custom nodes separately, then add what you need directly to the graph.' })}
@@ -160,9 +160,9 @@ export function ModuleGraphWorkspaceModals({
             />
           </Suspense>
         ) : null}
-      </SettingsModal>
+      </Modal>
 
-      <SettingsModal
+      <Modal
         open={isCustomNodeManagerOpen}
         title={t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
         description={t({ ko: 'user/custom_nodes 기반 로컬 커스텀 노드를 스캔, 생성, 테스트해.', en: 'Scan, create, and test local custom nodes from user/custom_nodes.' })}
@@ -174,7 +174,7 @@ export function ModuleGraphWorkspaceModals({
             <CustomNodeManagementPanelLazy onModulesChanged={onRefreshModules} />
           </Suspense>
         ) : null}
-      </SettingsModal>
+      </Modal>
     </>
   )
 }

@@ -4,7 +4,7 @@ import { WandSparkles } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { applyDanbooruPromptGrouping, getDanbooruPromptGroupingPreview } from '@/lib/api-prompts'
 import type { DanbooruPromptGroupingTypeResult } from '@/types/prompt'
 import { useI18n } from '@/i18n'
@@ -94,7 +94,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
   const isDanbooruDbAvailable = preview?.database.available !== false
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru-based group setup' })}
@@ -154,6 +154,6 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
           </>
         ) : null}
       </div>
-    </SettingsModal>
+    </Modal>
   )
 }

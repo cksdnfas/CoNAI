@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Bot, Images, LayoutGrid, Loader2, Minus, Pencil, Plus, RotateCcw } from 'lucide-react'
-import { PageInset } from '@/components/common/page-surface'
+import { Inset } from '@/components/ui/inset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
@@ -111,7 +111,7 @@ export function GroupImageSection({
   return (
     <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-4'}>
       {!hideHeader ? (
-        <PageInset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+        <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="text-base font-semibold tracking-tight text-foreground">{t('groups.components.group.image.section.images')}</h2>
             <Badge variant="secondary">
@@ -189,7 +189,7 @@ export function GroupImageSection({
             ) : null}
             {toolbarActions}
           </div>
-        </PageInset>
+        </Inset>
       ) : null}
 
       {isLoading ? (
@@ -208,7 +208,7 @@ export function GroupImageSection({
       ) : null}
 
       {shouldShowFeedProgress ? (
-        <PageInset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
+        <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>
               {t(
@@ -231,7 +231,7 @@ export function GroupImageSection({
               </span>
             ) : null}
           </div>
-        </PageInset>
+        </Inset>
       ) : null}
 
       {!isLoading && !isError && visibleGroupImages.length > 0 ? (
@@ -265,10 +265,10 @@ export function GroupImageSection({
 
           <div className="flex flex-col items-center gap-3 pb-3">
             {isLoadingMore ? (
-              <PageInset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+              <Inset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span>{t('homePage.loadingMoreImages')}</span>
-              </PageInset>
+              </Inset>
             ) : null}
 
             {hasMore && !isLoadingMore ? (
@@ -286,9 +286,9 @@ export function GroupImageSection({
             {hasOnlyHiddenItems ? t('groups.components.group.image.section.hidden.here.by.the.current.rating.visibility') : t('groups.components.group.image.section.no.images.to.show')}
           </BottomDrawerNotice>
         ) : (
-          <PageInset className="text-sm text-muted-foreground">
+          <Inset className="text-sm text-muted-foreground">
             {hasOnlyHiddenItems ? t('groups.components.group.image.section.hidden.here.by.the.current.rating.visibility') : t('groups.components.group.image.section.no.images.to.show')}
-          </PageInset>
+          </Inset>
         )
       ) : null}
     </section>

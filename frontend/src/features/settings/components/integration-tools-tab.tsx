@@ -5,7 +5,9 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
 import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import { useI18n } from '@/i18n'
-import { SettingsInsetBlock, SettingsSection, SettingsValueTile } from './settings-primitives'
+import { Inset } from '@/components/ui/inset'
+import { StatTile } from '@/components/ui/stat-tile'
+import { SettingsSection } from './settings-primitives'
 
 const CONAI_HELPER_DOWNLOAD_PATH = '/api/settings/resources/comfyui-helper/download'
 const CONAI_HELPER_PACKAGE_FILENAME = 'conai-helper-comfyui-custom-node.zip'
@@ -55,19 +57,19 @@ export function IntegrationToolsTab() {
         }
       >
         <div className="grid gap-3 md:grid-cols-3">
-          <SettingsValueTile label={t({ ko: '패키지', en: 'Package' })} value="CoNAI Helper" />
-          <SettingsValueTile label={t({ ko: '대상', en: 'Target' })} value="ComfyUI custom_nodes" />
-          <SettingsValueTile label={t({ ko: '노드', en: 'Node' })} value="CoNAI Helper: Artifact Output" />
+          <StatTile label={t({ ko: '패키지', en: 'Package' })} value="CoNAI Helper" />
+          <StatTile label={t({ ko: '대상', en: 'Target' })} value="ComfyUI custom_nodes" />
+          <StatTile label={t({ ko: '노드', en: 'Node' })} value="CoNAI Helper: Artifact Output" />
         </div>
 
-        <SettingsInsetBlock>
+        <Inset>
           <p className="text-sm text-muted-foreground">
             {t({
               ko: 'ComfyUI에서 생성된 파일이나 폴더 단위 결과물을 CoNAI 아티팩트로 넘기기 위한 커스텀 노드입니다. ZIP을 풀어 ComfyUI custom_nodes 아래에 넣고 ComfyUI를 재시작하세요.',
               en: 'Custom node for passing ComfyUI file or folder outputs to CoNAI artifacts. Extract the ZIP into ComfyUI custom_nodes, then restart ComfyUI.',
             })}
           </p>
-        </SettingsInsetBlock>
+        </Inset>
       </SettingsSection>
     </div>
   )

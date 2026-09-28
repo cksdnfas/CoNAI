@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Download, FolderOpen, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { buildWorkflowInputAssetUrl, deleteWorkflowInputAsset, uploadWorkflowInputAsset, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
@@ -102,7 +102,7 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
   if (!allowFiles && !allowPrompt) return null
   return <>
     <Button type="button" size="icon-sm" variant="outline" disabled={disabled} onClick={() => setOpen(true)} aria-label={t({ ko: '참조 팩', en: 'Reference pack' })} title={t({ ko: '참조 팩', en: 'Reference pack' })}><FolderOpen className="h-4 w-4" /></Button>
-    <SettingsModal open={open} title={t({ ko: '참조 팩', en: 'Reference pack' })} onClose={() => { if (!busy) setOpen(false) }} widthClassName="max-w-xl">
+    <Modal open={open} title={t({ ko: '참조 팩', en: 'Reference pack' })} onClose={() => { if (!busy) setOpen(false) }} widthClassName="max-w-xl">
       <div className="space-y-4 p-4">
         <p className="text-xs text-muted-foreground">{t({ ko: 'DaSiWa JSON 형식입니다. 미디어 파일은 포함하지 않으며, 없는 파일은 적용 전에 연결해야 합니다.', en: 'DaSiWa JSON format. Media files are not embedded; attach any missing files before applying.' })}</p>
         <div className="flex flex-wrap items-center gap-2">
@@ -129,6 +129,6 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
         </div> : null}
         {message ? <div role="status" className="text-sm break-words">{message}</div> : null}
       </div>
-    </SettingsModal>
+    </Modal>
   </>
 }

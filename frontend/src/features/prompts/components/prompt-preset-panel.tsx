@@ -11,8 +11,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { SettingsField, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n } from '@/i18n'
 import { buildPromptPresetInsertionText, createPromptPreset, deletePromptPreset, getPromptPresets, updatePromptPreset, type PromptPresetMutationInput, type PromptPresetRecord } from '@/lib/api-prompt-presets'
@@ -138,20 +138,20 @@ function PromptPresetEditorModal({
   }
 
   return (
-    <SettingsModal open={open} title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" onClose={onClose}>
+    <Modal open={open} title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" onClose={onClose}>
       <form onSubmit={(event) => void handleSubmit(event)}>
-        <SettingsModalBody className="space-y-5">
+        <ModalBody className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="space-y-4">
-              <SettingsField label={t('prompts.components.prompt.preset.panel.name')}>
+              <Field label={t('prompts.components.prompt.preset.panel.name')}>
                 <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('prompts.components.prompt.preset.panel.preset.name')} required />
-              </SettingsField>
-              <SettingsField label={t('prompts.components.prompt.preset.panel.description')}>
+              </Field>
+              <Field label={t('prompts.components.prompt.preset.panel.description')}>
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder={t('prompts.components.prompt.preset.panel.optional')} />
-              </SettingsField>
+              </Field>
             </div>
 
-            <SettingsField label={t('prompts.components.prompt.preset.panel.parent.preset')}>
+            <Field label={t('prompts.components.prompt.preset.panel.parent.preset')}>
               <HierarchyPicker
                 items={selectableParents}
                 selectedId={parentId}
@@ -163,7 +163,7 @@ function PromptPresetEditorModal({
                 sortItems={(left, right) => left.name.localeCompare(right.name)}
                 rootLabel={t('prompts.components.prompt.preset.panel.root')}
               />
-            </SettingsField>
+            </Field>
           </div>
 
           <SettingsSegmentedTable
@@ -197,14 +197,14 @@ function PromptPresetEditorModal({
               </div>
             ))}
           </SettingsSegmentedTable>
-        </SettingsModalBody>
+        </ModalBody>
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{t('prompts.components.prompt.preset.panel.cancel')}</Button>
           <Button type="submit" disabled={isSubmitting}>{isSubmitting ? t('prompts.components.prompt.preset.panel.saving') : t('prompts.components.prompt.preset.panel.save')}</Button>
-        </SettingsModalFooter>
+        </ModalFooter>
       </form>
-    </SettingsModal>
+    </Modal>
   )
 }
 

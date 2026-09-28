@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Inset } from '@/components/ui/inset'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
 
@@ -28,28 +29,28 @@ export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving 
   }, [initialTemplate, open])
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={t('images.components.detail.artist.prompt.link.settings.modal.artist.prompt.link.settings')}
       description={t('images.components.detail.artist.prompt.link.settings.modal.value.will.be.replaced.with.the.badge', { key: '{key}' })}
       widthClassName="max-w-2xl"
     >
-      <SettingsModalBody>
-        <SettingsField label="URL template">
+      <ModalBody>
+        <Field label="URL template">
           <Input
             variant="detail"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder={DEFAULT_ARTIST_LINK_URL_TEMPLATE}
           />
-        </SettingsField>
+        </Field>
 
-        <SettingsInsetBlock className="text-xs text-muted-foreground">
+        <Inset className="text-xs text-muted-foreground">
           {t({ ko: '예시', en: 'Example' })}: {DEFAULT_ARTIST_LINK_URL_TEMPLATE}
-        </SettingsInsetBlock>
+        </Inset>
 
-        <SettingsModalFooter className="justify-between">
+        <ModalFooter className="justify-between">
           <Button type="button" variant="outline" onClick={() => setDraft(DEFAULT_ARTIST_LINK_URL_TEMPLATE)}>
             <RotateCcw className="h-4 w-4" />
             {t('images.components.image.list.image.list.column.floating.control.reset.to.default')}
@@ -63,8 +64,8 @@ export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving 
               {t({ ko: '저장', en: 'Save' })}
             </Button>
           </div>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }

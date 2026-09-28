@@ -2,7 +2,8 @@ import { FolderPlus, Loader2, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PageHeader } from '@/components/common/page-header'
-import { PageInset, PageSection } from '@/components/common/page-surface'
+import { Inset } from '@/components/ui/inset'
+import { PageSection } from '@/components/common/page-surface'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -131,7 +132,7 @@ export function HomePage() {
 
       {!imagesQuery.isPending && !imagesQuery.isError && visibleImages.length > 0 ? (
         <>
-          <PageInset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
+          <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>
                 {t(
@@ -164,7 +165,7 @@ export function HomePage() {
             {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
               <span>{t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span>
             ) : null}
-          </PageInset>
+          </Inset>
 
           <ImageList
             items={visibleImages}
@@ -190,10 +191,10 @@ export function HomePage() {
 
           <div className="flex flex-col items-center gap-3 pb-6">
             {imagesQuery.isFetchingNextPage ? (
-              <PageInset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+              <Inset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span>{t('homePage.loadingMoreImages')}</span>
-              </PageInset>
+              </Inset>
             ) : null}
 
             {Boolean(imagesQuery.hasNextPage) && !imagesQuery.isFetchingNextPage && !imagesQuery.isFetchNextPageError ? (

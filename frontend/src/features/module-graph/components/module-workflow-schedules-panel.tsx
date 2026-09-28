@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import { SettingsField, SettingsInsetBlock, SettingsSection } from '@/features/settings/components/settings-primitives'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { Field } from '@/components/ui/field'
+import { Inset } from '@/components/ui/inset'
+import { Modal } from '@/components/ui/modal'
+import { SettingsSection } from '@/features/settings/components/settings-primitives'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { getGraphWorkflow } from '@/lib/api-module-graph'
 import type {
@@ -298,9 +300,9 @@ export function ModuleWorkflowSchedulesPanel({
         )}
       >
         {schedules.length === 0 ? (
-          <SettingsInsetBlock className="border-dashed py-8 text-sm text-muted-foreground">
+          <Inset className="border-dashed py-8 text-sm text-muted-foreground">
             {t({ ko: '자동 실행 없음', en: 'No autoruns' })}
-          </SettingsInsetBlock>
+          </Inset>
         ) : (
           <div className="space-y-3">
             {schedules.map((schedule) => {
@@ -316,7 +318,7 @@ export function ModuleWorkflowSchedulesPanel({
                   : t({ ko: '{time} 매일', en: 'Daily at {time}' }, { time: schedule.daily_time ?? '--:--' })
 
               return (
-                <SettingsInsetBlock key={schedule.id}>
+                <Inset key={schedule.id}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -357,19 +359,19 @@ export function ModuleWorkflowSchedulesPanel({
                     </div>
                   </div>
                   {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message) ? (
-                    <SettingsInsetBlock className="mt-3 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                    <Inset className="mt-3 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{t({ ko: '중지/정지 사유', en: 'Stop reason' })}</span>
                       <span className="ml-2">{getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message)}</span>
-                    </SettingsInsetBlock>
+                    </Inset>
                   ) : null}
-                </SettingsInsetBlock>
+                </Inset>
               )
             })}
           </div>
         )}
       </SettingsSection>
 
-      <SettingsModal
+      <Modal
         open={editorMode !== null}
         onClose={resetDraft}
         title={editorMode === 'edit' ? t({ ko: '자동 실행 수정', en: 'Edit autorun' }) : t({ ko: '자동 실행 추가', en: 'Add autorun' })}
@@ -377,55 +379,55 @@ export function ModuleWorkflowSchedulesPanel({
       >
         <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SettingsField label={t({ ko: '대상 워크플로우', en: 'Target workflow' })} className="xl:col-span-2">
+            <Field label={t({ ko: '대상 워크플로우', en: 'Target workflow' })} className="xl:col-span-2">
               <Select value={draftWorkflowId} onChange={(event) => setDraftWorkflowId(event.target.value)} disabled={editorMode === 'edit' || isMutating}>
                 {workflows.map((workflow) => (
                   <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
                 ))}
               </Select>
-            </SettingsField>
-            <SettingsField label={t({ ko: '일정 방식', en: 'Schedule type' })}>
+            </Field>
+            <Field label={t({ ko: '일정 방식', en: 'Schedule type' })}>
               <Select value={draftScheduleType} onChange={(event) => setDraftScheduleType(event.target.value as GraphWorkflowScheduleType)} disabled={isMutating}>
                 <option value="once">{t({ ko: '1회 실행', en: 'Run once' })}</option>
                 <option value="interval">{t({ ko: 'N분마다', en: 'Every N minutes' })}</option>
                 <option value="daily">{t({ ko: '매일', en: 'Daily' })}</option>
               </Select>
-            </SettingsField>
-            <SettingsField label={t({ ko: '시작 상태', en: 'Initial status' })}>
+            </Field>
+            <Field label={t({ ko: '시작 상태', en: 'Initial status' })}>
               <Select value={draftEnabled} onChange={(event) => setDraftEnabled(event.target.value as 'active' | 'paused')} disabled={isMutating}>
                 <option value="active">{t({ ko: '활성', en: 'Active' })}</option>
                 <option value="paused">{t({ ko: '일시정지', en: 'Paused' })}</option>
               </Select>
-            </SettingsField>
-            <SettingsField label={t({ ko: '이름', en: 'Name' })} className="xl:col-span-2">
+            </Field>
+            <Field label={t({ ko: '이름', en: 'Name' })} className="xl:col-span-2">
               <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} disabled={isMutating} />
-            </SettingsField>
-            <SettingsField label={t({ ko: '최대 예약 횟수', en: 'Max runs' })}>
+            </Field>
+            <Field label={t({ ko: '최대 예약 횟수', en: 'Max runs' })}>
               <NumberStepperInput min={-1} value={draftMaxRunCount} onValueCommit={(nextValue) => setDraftMaxRunCount(nextValue)} disabled={isMutating} />
-            </SettingsField>
-            <SettingsField label={t({ ko: '1회 큐 등록수', en: 'Queue count per run' })}>
+            </Field>
+            <Field label={t({ ko: '1회 큐 등록수', en: 'Queue count per run' })}>
               <NumberStepperInput min={1} max={100} value={draftEnqueueCount} onValueCommit={(nextValue) => setDraftEnqueueCount(nextValue)} disabled={isMutating} />
-            </SettingsField>
-            <SettingsField label={t({ ko: '실패 처리', en: 'Failure handling' })}>
+            </Field>
+            <Field label={t({ ko: '실패 처리', en: 'Failure handling' })}>
               <Select value={draftFailurePolicy} onChange={(event) => setDraftFailurePolicy(event.target.value as GraphWorkflowScheduleFailurePolicy)} disabled={isMutating}>
                 <option value="stop">{t({ ko: '실패 시 중지', en: 'Stop on failure' })}</option>
                 <option value="continue">{t({ ko: '실패해도 계속', en: 'Continue on failure' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
             {draftScheduleType === 'once' ? (
-              <SettingsField label={t({ ko: '실행 시각', en: 'Run time' })}>
+              <Field label={t({ ko: '실행 시각', en: 'Run time' })}>
                 <Input type="datetime-local" value={draftRunAt} onChange={(event) => setDraftRunAt(event.target.value)} disabled={isMutating} />
-              </SettingsField>
+              </Field>
             ) : null}
             {draftScheduleType === 'interval' ? (
-              <SettingsField label={t({ ko: '반복 간격(분)', en: 'Repeat interval (min)' })}>
+              <Field label={t({ ko: '반복 간격(분)', en: 'Repeat interval (min)' })}>
                 <NumberStepperInput min={1} value={draftIntervalMinutes} onValueCommit={(nextValue) => setDraftIntervalMinutes(nextValue)} disabled={isMutating} />
-              </SettingsField>
+              </Field>
             ) : null}
             {draftScheduleType === 'daily' ? (
-              <SettingsField label={t({ ko: '실행 시각', en: 'Run time' })}>
+              <Field label={t({ ko: '실행 시각', en: 'Run time' })}>
                 <Input type="time" value={draftDailyTime} onChange={(event) => setDraftDailyTime(event.target.value)} disabled={isMutating} />
-              </SettingsField>
+              </Field>
             ) : null}
           </div>
 
@@ -466,7 +468,7 @@ export function ModuleWorkflowSchedulesPanel({
             </Button>
           </div>
         </form>
-      </SettingsModal>
+      </Modal>
     </>
   )
 }

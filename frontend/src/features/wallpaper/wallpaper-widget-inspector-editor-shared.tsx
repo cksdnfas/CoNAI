@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Select } from '@/components/ui/select'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { SettingsField } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { WallpaperEasingPicker } from './wallpaper-easing-picker'
@@ -199,7 +199,7 @@ export function WallpaperTransitionAnimationEditorField({
   const effectiveLabel = label ?? t({ ko: '전환 애니메이션', en: 'Transition animation' })
 
   return (
-    <SettingsField label={effectiveLabel}>
+    <Field label={effectiveLabel}>
       <WallpaperEasingPicker
         value={transitionEasing}
         fallbackPreset="easeOutCubic"
@@ -215,7 +215,7 @@ export function WallpaperTransitionAnimationEditorField({
               title: t({ ko: '전환 옵션', en: 'Transition options' }),
               children: (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <SettingsField label={t({ ko: '전환', en: 'Transition' })}>
+                  <Field label={t({ ko: '전환', en: 'Transition' })}>
                     <Select
                       value={transitionStyle ?? 'fade'}
                       onChange={(event) => {
@@ -230,8 +230,8 @@ export function WallpaperTransitionAnimationEditorField({
                       <option value="shuffle">{t({ ko: '셔플', en: 'Shuffle' })}</option>
                       <option value="none">{t({ ko: '없음', en: 'None' })}</option>
                     </Select>
-                  </SettingsField>
-                  <SettingsField label={t({ ko: '전환 시간 (ms)', en: 'Transition duration (ms)' })}>
+                  </Field>
+                  <Field label={t({ ko: '전환 시간 (ms)', en: 'Transition duration (ms)' })}>
                     <NumberStepperInput
                       variant="settings"
                       min={80}
@@ -243,7 +243,7 @@ export function WallpaperTransitionAnimationEditorField({
                         onTransitionDurationChange(clampWallpaperInspectorNumber(nextValue, durationMs, 80, 4000, 0))
                       }}
                     />
-                  </SettingsField>
+                  </Field>
                 </div>
               ),
             })}
@@ -252,7 +252,7 @@ export function WallpaperTransitionAnimationEditorField({
         )}
         onChange={onTransitionEasingChange}
       />
-    </SettingsField>
+    </Field>
   )
 }
 
@@ -267,7 +267,7 @@ export function WallpaperHoverInteractionEditorFields({
   const hoverAmount = getWallpaperHoverMotionAmount(hoverMotion ?? 1)
 
   return (
-    <SettingsField label={t({ ko: '호버 애니메이션', en: 'Hover animation' })}>
+    <Field label={t({ ko: '호버 애니메이션', en: 'Hover animation' })}>
       <WallpaperEasingPicker
         value={hoverEasing}
         fallbackPreset="easeOutCubic"
@@ -277,7 +277,7 @@ export function WallpaperHoverInteractionEditorFields({
         editorContent={renderWallpaperAnimationEditorCard({
           title: t({ ko: '호버 옵션', en: 'Hover options' }),
           children: (
-            <SettingsField label={t({ ko: '호버 반응', en: 'Hover response' })}>
+            <Field label={t({ ko: '호버 반응', en: 'Hover response' })}>
               <NumberStepperInput
                 variant="settings"
                 min={0}
@@ -289,12 +289,12 @@ export function WallpaperHoverInteractionEditorFields({
                   onHoverMotionChange(clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5))
                 }}
               />
-            </SettingsField>
+            </Field>
           ),
         })}
         onChange={onHoverEasingChange}
       />
-    </SettingsField>
+    </Field>
   )
 }
 
@@ -317,7 +317,7 @@ export function WallpaperMotionEasingEditorField({
   ].filter(Boolean).join(' · ')
 
   return (
-    <SettingsField label={effectiveLabel}>
+    <Field label={effectiveLabel}>
       <WallpaperEasingPicker
         value={easing}
         fallbackPreset={fallbackPreset}
@@ -327,7 +327,7 @@ export function WallpaperMotionEasingEditorField({
         editorContent={editorContent}
         onChange={onEasingChange}
       />
-    </SettingsField>
+    </Field>
   )
 }
 
@@ -345,7 +345,7 @@ export function WallpaperPreviewOpenAnimationEditorField({
   const summary = `${resolvedScalePercent}% · ${resolvedDurationMs}ms`
 
   return (
-    <SettingsField label={t({ ko: '클릭 확대 애니메이션', en: 'Click zoom animation' })}>
+    <Field label={t({ ko: '클릭 확대 애니메이션', en: 'Click zoom animation' })}>
       <WallpaperEasingPicker
         value={easing}
         fallbackPreset="easeOutCubic"
@@ -359,7 +359,7 @@ export function WallpaperPreviewOpenAnimationEditorField({
           title: t({ ko: '확대 미리보기 옵션', en: 'Zoom preview options' }),
           children: (
             <div className="grid gap-3 sm:grid-cols-2">
-              <SettingsField label={t({ ko: '시작 크기 (%)', en: 'Start scale (%)' })}>
+              <Field label={t({ ko: '시작 크기 (%)', en: 'Start scale (%)' })}>
                 <NumberStepperInput
                   variant="settings"
                   min={60}
@@ -371,8 +371,8 @@ export function WallpaperPreviewOpenAnimationEditorField({
                     onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
                   }}
                 />
-              </SettingsField>
-              <SettingsField label={t({ ko: '열림 시간 (ms)', en: 'Open duration (ms)' })}>
+              </Field>
+              <Field label={t({ ko: '열림 시간 (ms)', en: 'Open duration (ms)' })}>
                 <NumberStepperInput
                   variant="settings"
                   min={80}
@@ -384,13 +384,13 @@ export function WallpaperPreviewOpenAnimationEditorField({
                     onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
                   }}
                 />
-              </SettingsField>
+              </Field>
             </div>
           ),
         })}
         onChange={onEasingChange}
       />
-    </SettingsField>
+    </Field>
   )
 }
 
@@ -408,7 +408,7 @@ export function WallpaperPreviewCloseAnimationEditorField({
   const summary = `${resolvedScalePercent}% · ${resolvedDurationMs}ms`
 
   return (
-    <SettingsField label={t({ ko: '클릭 닫힘 애니메이션', en: 'Click close animation' })}>
+    <Field label={t({ ko: '클릭 닫힘 애니메이션', en: 'Click close animation' })}>
       <WallpaperEasingPicker
         value={easing}
         fallbackPreset="easeInOutCubic"
@@ -422,7 +422,7 @@ export function WallpaperPreviewCloseAnimationEditorField({
           title: t({ ko: '닫힘 미리보기 옵션', en: 'Close preview options' }),
           children: (
             <div className="grid gap-3 sm:grid-cols-2">
-              <SettingsField label={t({ ko: '끝 크기 (%)', en: 'End scale (%)' })}>
+              <Field label={t({ ko: '끝 크기 (%)', en: 'End scale (%)' })}>
                 <NumberStepperInput
                   variant="settings"
                   min={60}
@@ -434,8 +434,8 @@ export function WallpaperPreviewCloseAnimationEditorField({
                     onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
                   }}
                 />
-              </SettingsField>
-              <SettingsField label={t({ ko: '닫힘 시간 (ms)', en: 'Close duration (ms)' })}>
+              </Field>
+              <Field label={t({ ko: '닫힘 시간 (ms)', en: 'Close duration (ms)' })}>
                 <NumberStepperInput
                   variant="settings"
                   min={80}
@@ -447,12 +447,12 @@ export function WallpaperPreviewCloseAnimationEditorField({
                     onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
                   }}
                 />
-              </SettingsField>
+              </Field>
             </div>
           ),
         })}
         onChange={onEasingChange}
       />
-    </SettingsField>
+    </Field>
   )
 }

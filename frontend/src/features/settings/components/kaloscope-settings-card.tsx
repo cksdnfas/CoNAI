@@ -6,7 +6,9 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { KaloscopeServerStatus, KaloscopeSettings } from '@conai/shared'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
-import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -37,42 +39,42 @@ export function KaloscopeSettingsCard({
       <div className="grid gap-4 md:grid-cols-2">
         {kaloscopeDraft ? (
           <>
-            <SettingsToggleRow className="md:col-span-2">
+            <ToggleRow className="md:col-span-2">
               <input type="checkbox" checked={kaloscopeDraft.enabled} onChange={(event) => onPatchKaloscope({ enabled: event.target.checked })} />
               {t({ ko: 'Kaloscope 활성화', en: 'Enable Kaloscope' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
-            <SettingsToggleRow className="md:col-span-2">
+            <ToggleRow className="md:col-span-2">
               <input
                 type="checkbox"
                 checked={kaloscopeDraft.autoTagOnUpload}
                 onChange={(event) => onPatchKaloscope({ autoTagOnUpload: event.target.checked })}
               />
               {t({ ko: '업로드/스케줄러 자동 처리', en: 'Auto process uploads / scheduler' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
-            <SettingsField label={t({ ko: '디바이스', en: 'Device' })}>
+            <Field label={t({ ko: '디바이스', en: 'Device' })}>
               <Select variant="settings" value={kaloscopeDraft.device} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
                 <option value="auto">auto</option>
                 <option value="cpu">cpu</option>
                 <option value="cuda">cuda</option>
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: 'Top K', en: 'Top K' })}>
+            <Field label={t({ ko: 'Top K', en: 'Top K' })}>
               <NumberStepperInput min={1} max={200} variant="settings" value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
-            </SettingsField>
+            </Field>
 
-            <SettingsToggleRow>
+            <ToggleRow>
               <input
                 type="checkbox"
                 checked={kaloscopeDraft.keepModelLoaded}
                 onChange={(event) => onPatchKaloscope({ keepModelLoaded: event.target.checked })}
               />
               {t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
-            <SettingsField label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
+            <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <NumberStepperInput
 
                 min={1}
@@ -80,9 +82,9 @@ export function KaloscopeSettingsCard({
                 value={kaloscopeDraft.autoUnloadMinutes}
                 onValueCommit={(nextValue) => onPatchKaloscope({ autoUnloadMinutes: Number(nextValue) || 1 })}
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: 'Artist 링크 URL', en: 'Artist link URL' })} className="md:col-span-2">
+            <Field label={t({ ko: 'Artist 링크 URL', en: 'Artist link URL' })} className="md:col-span-2">
               <div className="space-y-2">
                 <Input
                   variant="settings"
@@ -98,7 +100,7 @@ export function KaloscopeSettingsCard({
                   </Button>
                 </div>
               </div>
-            </SettingsField>
+            </Field>
           </>
         ) : (
           <Skeleton className="h-56 w-full rounded-sm md:col-span-2" />

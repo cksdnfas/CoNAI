@@ -1,6 +1,6 @@
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
-import { SettingsField } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
 import {
   WallpaperHoverInteractionEditorFields,
   WallpaperInspectorSectionCard,
@@ -34,7 +34,7 @@ export function WallpaperImageWidgetEditorFields({
       return (
         <>
           <WallpaperInspectorSectionCard title={t({ ko: '레이아웃', en: 'Layout' })}>
-            <SettingsField label={t({ ko: '채우기 방식', en: 'Fit mode' })}>
+            <Field label={t({ ko: '채우기 방식', en: 'Fit mode' })}>
               <Select
                 value={selectedWidget.settings.fitMode}
                 onChange={(event) => {
@@ -45,11 +45,11 @@ export function WallpaperImageWidgetEditorFields({
                 <option value="contain">{t({ ko: '맞춤', en: 'Contain' })}</option>
                 <option value="scale-down">{t({ ko: '원본 축소', en: 'Scale down' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
           </WallpaperInspectorSectionCard>
 
           <WallpaperInspectorSectionCard title={t({ ko: '재생', en: 'Playback' })}>
-            <SettingsField label={t({ ko: '재생 방식', en: 'Playback mode' })}>
+            <Field label={t({ ko: '재생 방식', en: 'Playback mode' })}>
               <Select
                 value={playbackMode}
                 onChange={(event) => {
@@ -66,10 +66,10 @@ export function WallpaperImageWidgetEditorFields({
                 <option value="ken-burns">{t({ ko: '켄 번즈', en: 'Ken Burns' })}</option>
                 <option value="static">{t({ ko: '고정', en: 'Static' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
 
             {playbackMode !== 'static' ? (
-              <SettingsField label={t({ ko: '간격', en: 'Interval' })}>
+              <Field label={t({ ko: '간격', en: 'Interval' })}>
                 <Select
                   value={String(selectedWidget.settings.slideshowIntervalSec ?? 20)}
                   onChange={(event) => {
@@ -80,7 +80,7 @@ export function WallpaperImageWidgetEditorFields({
                     <option key={seconds} value={seconds}>{seconds}s</option>
                   ))}
                 </Select>
-              </SettingsField>
+              </Field>
             ) : null}
           </WallpaperInspectorSectionCard>
 
@@ -124,7 +124,7 @@ export function WallpaperImageWidgetEditorFields({
       return (
         <>
           <WallpaperInspectorSectionCard title={t({ ko: '레이아웃', en: 'Layout' })}>
-            <SettingsField label={t({ ko: '표시 방식', en: 'Display mode' })}>
+            <Field label={t({ ko: '표시 방식', en: 'Display mode' })}>
               <Select
                 value={selectedWidget.settings.layoutMode ?? 'grid'}
                 onChange={(event) => {
@@ -134,9 +134,9 @@ export function WallpaperImageWidgetEditorFields({
                 <option value="grid">{t({ ko: '그리드', en: 'Grid' })}</option>
                 <option value="filmstrip">{t({ ko: '필름스트립', en: 'Filmstrip' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '표시 개수', en: 'Visible count' })}>
+            <Field label={t({ ko: '표시 개수', en: 'Visible count' })}>
               <Select
                 className="w-full"
                 value={String(selectedWidget.settings.visibleCount)}
@@ -148,11 +148,11 @@ export function WallpaperImageWidgetEditorFields({
                   <option key={count} value={count}>{count}</option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
           </WallpaperInspectorSectionCard>
 
           <WallpaperInspectorSectionCard title={t({ ko: '재생', en: 'Playback' })}>
-            <SettingsField label={t({ ko: '교체 간격', en: 'Swap interval' })}>
+            <Field label={t({ ko: '교체 간격', en: 'Swap interval' })}>
               <Select
                 value={String(selectedWidget.settings.slideshowIntervalSec ?? 12)}
                 onChange={(event) => {
@@ -163,11 +163,11 @@ export function WallpaperImageWidgetEditorFields({
                   <option key={seconds} value={seconds}>{seconds}s</option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
           </WallpaperInspectorSectionCard>
 
           <WallpaperInspectorSectionCard title={t({ ko: '모션', en: 'Motion' })}>
-            <SettingsField label={t({ ko: '움직임', en: 'Movement' })}>
+            <Field label={t({ ko: '움직임', en: 'Movement' })}>
               <Select
                 value={selectedWidget.settings.motionMode ?? 'static'}
                 onChange={(event) => {
@@ -180,7 +180,7 @@ export function WallpaperImageWidgetEditorFields({
                 <option value="ambient">{t({ ko: '앰비언트', en: 'Ambient' })}</option>
                 <option value="pointer">{t({ ko: '반응형', en: 'Reactive' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
 
             {(selectedWidget.settings.motionMode ?? 'static') !== 'static' ? (
               <WallpaperMotionEasingEditorField
@@ -190,7 +190,7 @@ export function WallpaperImageWidgetEditorFields({
                 editorContent={(
                   <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
                     <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
-                    <SettingsField label={t({ ko: '강도', en: 'Strength' })}>
+                    <Field label={t({ ko: '강도', en: 'Strength' })}>
                       <NumberStepperInput
                         variant="settings"
                         min={0}
@@ -204,7 +204,7 @@ export function WallpaperImageWidgetEditorFields({
                           })
                         }}
                       />
-                    </SettingsField>
+                    </Field>
                   </div>
                 )}
                 onEasingChange={(nextValue) => {
@@ -251,7 +251,7 @@ export function WallpaperImageWidgetEditorFields({
       return (
         <>
           <WallpaperInspectorSectionCard title={t({ ko: '레이아웃', en: 'Layout' })}>
-            <SettingsField label={t({ ko: '표시 개수', en: 'Visible count' })}>
+            <Field label={t({ ko: '표시 개수', en: 'Visible count' })}>
               <Select
                 className="w-full"
                 value={String(selectedWidget.settings.visibleCount)}
@@ -263,9 +263,9 @@ export function WallpaperImageWidgetEditorFields({
                   <option key={count} value={count}>{count}</option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '이미지 크기(%)', en: 'Image size (%)' })}>
+            <Field label={t({ ko: '이미지 크기(%)', en: 'Image size (%)' })}>
               <NumberStepperInput
                 variant="settings"
                 min={50}
@@ -280,9 +280,9 @@ export function WallpaperImageWidgetEditorFields({
                   })
                 }}
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '비율 기준', en: 'Aspect basis' })}>
+            <Field label={t({ ko: '비율 기준', en: 'Aspect basis' })}>
               <Select
                 value={selectedWidget.settings.aspectMode ?? 'image'}
                 onChange={(event) => {
@@ -294,9 +294,9 @@ export function WallpaperImageWidgetEditorFields({
                 <option value="image">{t({ ko: '이미지 비율', en: 'Image ratio' })}</option>
                 <option value="slot">{t({ ko: '슬롯 고정', en: 'Fixed slot' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '채우기 방식', en: 'Fit mode' })}>
+            <Field label={t({ ko: '채우기 방식', en: 'Fit mode' })}>
               <Select
                 value={selectedWidget.settings.fitMode ?? 'cover'}
                 onChange={(event) => {
@@ -308,7 +308,7 @@ export function WallpaperImageWidgetEditorFields({
                 <option value="cover">{t({ ko: '채우기', en: 'Cover' })}</option>
                 <option value="contain">{t({ ko: '맞춤', en: 'Contain' })}</option>
               </Select>
-            </SettingsField>
+            </Field>
           </WallpaperInspectorSectionCard>
 
           <WallpaperInspectorSectionCard title={t({ ko: '모션', en: 'Motion' })}>
@@ -321,7 +321,7 @@ export function WallpaperImageWidgetEditorFields({
                 <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
                   <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <SettingsField label={t({ ko: '움직임 강도', en: 'Motion strength' })}>
+                    <Field label={t({ ko: '움직임 강도', en: 'Motion strength' })}>
                       <NumberStepperInput
                         variant="settings"
                         min={0}
@@ -335,8 +335,8 @@ export function WallpaperImageWidgetEditorFields({
                           })
                         }}
                       />
-                    </SettingsField>
-                    <SettingsField label={t({ ko: '이동 속도', en: 'Movement speed' })}>
+                    </Field>
+                    <Field label={t({ ko: '이동 속도', en: 'Movement speed' })}>
                       <NumberStepperInput
                         variant="settings"
                         min={0.2}
@@ -351,7 +351,7 @@ export function WallpaperImageWidgetEditorFields({
                           })
                         }}
                       />
-                    </SettingsField>
+                    </Field>
                   </div>
                 </div>
               )}
@@ -381,7 +381,7 @@ export function WallpaperImageWidgetEditorFields({
                 <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
                   <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{t({ ko: '교체 옵션', en: 'Swap options' })}</div>
                   <div className="space-y-3">
-                    <SettingsField label={t({ ko: '이미지 교체 기준', en: 'Image swap trigger' })}>
+                    <Field label={t({ ko: '이미지 교체 기준', en: 'Image swap trigger' })}>
                       <Select
                         value={selectedWidget.settings.imageSwapMode ?? 'bounce'}
                         onChange={(event) => {
@@ -393,10 +393,10 @@ export function WallpaperImageWidgetEditorFields({
                         <option value="bounce">{t({ ko: '튕김 횟수', en: 'Bounce count' })}</option>
                         <option value="time">{t({ ko: '시간', en: 'Time' })}</option>
                       </Select>
-                    </SettingsField>
+                    </Field>
 
                     {selectedWidget.settings.imageSwapMode === 'time' ? (
-                      <SettingsField label={t({ ko: '교체 간격(초)', en: 'Swap interval (sec)' })}>
+                      <Field label={t({ ko: '교체 간격(초)', en: 'Swap interval (sec)' })}>
                         <NumberStepperInput
                           variant="settings"
                           min={2}
@@ -411,9 +411,9 @@ export function WallpaperImageWidgetEditorFields({
                             })
                           }}
                         />
-                      </SettingsField>
+                      </Field>
                     ) : (
-                      <SettingsField label={t({ ko: '교체까지 튕김 수', en: 'Bounces before swap' })}>
+                      <Field label={t({ ko: '교체까지 튕김 수', en: 'Bounces before swap' })}>
                         <NumberStepperInput
                           variant="settings"
                           min={1}
@@ -428,7 +428,7 @@ export function WallpaperImageWidgetEditorFields({
                             })
                           }}
                         />
-                      </SettingsField>
+                      </Field>
                     )}
                   </div>
                 </div>

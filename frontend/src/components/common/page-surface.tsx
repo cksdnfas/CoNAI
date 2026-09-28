@@ -39,12 +39,3 @@ export function PageSection({
     </section>
   )
 }
-
-interface PageInsetProps extends ComponentProps<'div'> {
-  children?: ReactNode
-}
-
-/** Render one shared light inset surface for compact page summaries and empty states. */
-export function PageInset({ children, className, ...props }: PageInsetProps) {
-  return <div className={cn('rounded-sm border border-border/70 bg-surface-low/45 px-4 py-3', className)} {...props}>{children}</div>
-}

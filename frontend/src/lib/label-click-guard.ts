@@ -1,5 +1,5 @@
 /**
- * Field wrappers (FormField, SettingsField, inline `<label>` rows) wrap whole controls in `<label>`.
+ * Field wrappers (FormField, Field, inline `<label>` rows) wrap whole controls in `<label>`.
  * A click anywhere on such a label — its caption, hint, or padding — is forwarded by the browser to the
  * label's first labelable descendant. When that is a button (e.g. the "−" of NumberStepperInput or an
  * image picker button), stray clicks around the field press it. This guard cancels only that forwarding

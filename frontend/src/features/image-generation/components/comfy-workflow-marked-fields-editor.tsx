@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsField, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from '@/features/settings/components/settings-primitives'
 import type { WorkflowMarkedField, WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
@@ -302,11 +304,11 @@ export function ComfyWorkflowMarkedFieldsEditor({
                 {isExpanded ? (
                   <div className="space-y-4 border-t border-border/70 bg-background/35 px-3 py-3">
                     <div className="grid gap-3 md:grid-cols-2">
-                      <SettingsField label={t('image-generation.components.comfy.workflow.marked.fields.editor.label')}>
+                      <Field label={t('image-generation.components.comfy.workflow.marked.fields.editor.label')}>
                         <Input variant="settings" value={field.label} onChange={(event) => onFieldPatch(field.id, { label: event.target.value })} />
-                      </SettingsField>
+                      </Field>
 
-                      <SettingsField label={t('image-generation.components.comfy.workflow.marked.fields.editor.type')}>
+                      <Field label={t('image-generation.components.comfy.workflow.marked.fields.editor.type')}>
                         <Select
                           variant="settings"
                           value={field.type}
@@ -320,13 +322,13 @@ export function ComfyWorkflowMarkedFieldsEditor({
                           <option value="image">image</option>
                           <option value="node">Node</option>
                         </Select>
-                      </SettingsField>
+                      </Field>
 
-                      <SettingsField label={t('image-generation.components.comfy.workflow.marked.fields.editor.description')} className="md:col-span-2">
+                      <Field label={t('image-generation.components.comfy.workflow.marked.fields.editor.description')} className="md:col-span-2">
                         <Input variant="settings" value={field.description ?? ''} onChange={(event) => onFieldPatch(field.id, { description: event.target.value })} />
-                      </SettingsField>
+                      </Field>
 
-                      <SettingsField label={field.type === 'node' ? 'Default (JSON)' : 'Default'} className="md:col-span-2">
+                      <Field label={field.type === 'node' ? 'Default (JSON)' : 'Default'} className="md:col-span-2">
                         {field.type === 'textarea' ? (
                           <Textarea
                             variant="settings"
@@ -361,18 +363,18 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             onChange={(event) => onFieldPatch(field.id, { default_value: event.target.value })}
                           />
                         )}
-                      </SettingsField>
+                      </Field>
                     </div>
 
                     {field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa' ? (
                       <div className="space-y-4">
-                        <SettingsField label={t({ ko: '노출할 Director 필드', en: 'Visible Director fields' })}>
+                        <Field label={t({ ko: '노출할 Director 필드', en: 'Visible Director fields' })}>
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             {MINIMAX_H3_DIRECTOR_VISIBLE_FIELD_OPTIONS.map((option) => {
                               const visibleFields = field.node_visible_fields ?? [...MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS]
                               const isVisible = visibleFields.includes(option.key)
                               return (
-                                <SettingsToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                                <ToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
                                   <input
                                     type="checkbox"
                                     checked={isVisible}
@@ -389,16 +391,16 @@ export function ComfyWorkflowMarkedFieldsEditor({
                                     }}
                                   />
                                   {t({ ko: option.ko, en: option.en })}
-                                </SettingsToggleRow>
+                                </ToggleRow>
                               )
                             })}
                           </div>
-                        </SettingsField>
+                        </Field>
 
-                        <SettingsField label={t({ ko: '출력·업스케일 표시', en: 'Output and upscale controls' })}>
+                        <Field label={t({ ko: '출력·업스케일 표시', en: 'Output and upscale controls' })}>
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             {MINIMAX_H3_DIRECTOR_CONTROL_OPTIONS.map((option) => (
-                              <SettingsToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                              <ToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
                                 <input
                                   type="checkbox"
                                   checked={!field.node_hidden_controls?.includes(option.key)}
@@ -410,12 +412,12 @@ export function ComfyWorkflowMarkedFieldsEditor({
                                   }}
                                 />
                                 {t({ ko: option.ko, en: option.en })}
-                              </SettingsToggleRow>
+                              </ToggleRow>
                             ))}
                           </div>
-                        </SettingsField>
+                        </Field>
 
-                        <SettingsField label={t({ ko: 'Director 입력 범위', en: 'Director input ranges' })}>
+                        <Field label={t({ ko: 'Director 입력 범위', en: 'Director input ranges' })}>
                           <div className="grid gap-3 lg:grid-cols-3">
                             {MINIMAX_H3_DIRECTOR_NUMERIC_BOUND_OPTIONS.map((option) => (
                               <div key={option.key} className="space-y-2 rounded-sm border border-border/70 bg-background p-3">
@@ -457,44 +459,44 @@ export function ComfyWorkflowMarkedFieldsEditor({
                               </div>
                             ))}
                           </div>
-                        </SettingsField>
+                        </Field>
                       </div>
                     ) : null}
 
                     <div className="flex flex-wrap items-center gap-3">
-                      <SettingsToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                      <ToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
                         <input
                           type="checkbox"
                           checked={field.required === true}
                           onChange={(event) => onFieldPatch(field.id, { required: event.target.checked })}
                         />
                         required
-                      </SettingsToggleRow>
+                      </ToggleRow>
 
-                      <SettingsToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                      <ToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
                         <input
                           type="checkbox"
                           checked={field.default_collapsed === true}
                           onChange={(event) => onFieldPatch(field.id, { default_collapsed: event.target.checked })}
                         />
                         {t('image-generation.components.comfy.workflow.marked.fields.editor.collapsed.on.generation.screen')}
-                      </SettingsToggleRow>
+                      </ToggleRow>
 
                       {field.type === 'image' ? (
-                        <SettingsToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                        <ToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
                           <input
                             type="checkbox"
                             checked={field.simple_upload_only === true}
                             onChange={(event) => onFieldPatch(field.id, { simple_upload_only: event.target.checked })}
                           />
                           {t('image-generation.components.comfy.workflow.marked.fields.editor.simple.upload.mode')}
-                        </SettingsToggleRow>
+                        </ToggleRow>
                       ) : null}
                     </div>
 
                     {field.type === 'number' ? (
                       <div className="grid gap-4 md:grid-cols-3">
-                        <SettingsField label="Min">
+                        <Field label="Min">
                           <NumberStepperInput
                             variant="settings"
                             allowEmpty
@@ -503,9 +505,9 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             onValueCommit={(nextValue) => onFieldPatch(field.id, { min: parseOptionalNumberInput(nextValue) })}
                             placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
                           />
-                        </SettingsField>
+                        </Field>
 
-                        <SettingsField label="Max">
+                        <Field label="Max">
                           <NumberStepperInput
                             variant="settings"
                             allowEmpty
@@ -514,9 +516,9 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             onValueCommit={(nextValue) => onFieldPatch(field.id, { max: parseOptionalNumberInput(nextValue) })}
                             placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
                           />
-                        </SettingsField>
+                        </Field>
 
-                        <SettingsField label="Step">
+                        <Field label="Step">
                           <NumberStepperInput
                             variant="settings"
                             allowEmpty
@@ -527,13 +529,13 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             onValueCommit={(nextValue) => onFieldPatch(field.id, { step: parseOptionalNumberInput(nextValue) })}
                             placeholder="1"
                           />
-                        </SettingsField>
+                        </Field>
                       </div>
                     ) : null}
 
                     {field.type === 'select' ? (
                       <div className="grid gap-4 md:grid-cols-2">
-                        <SettingsField label="Dropdown List">
+                        <Field label="Dropdown List">
                           <Select
                             variant="settings"
                             value={field.dropdown_list_name ?? ''}
@@ -546,16 +548,16 @@ export function ComfyWorkflowMarkedFieldsEditor({
                               </option>
                             ))}
                           </Select>
-                        </SettingsField>
+                        </Field>
 
-                        <SettingsField label={t('image-generation.components.comfy.workflow.marked.fields.editor.manual.options')}>
+                        <Field label={t('image-generation.components.comfy.workflow.marked.fields.editor.manual.options')}>
                           <Input
                             variant="settings"
                             value={(field.options ?? []).join(', ')}
                             onChange={(event) => onFieldPatch(field.id, { options: parseMarkedFieldOptions(event.target.value) })}
                             placeholder="option1, option2"
                           />
-                        </SettingsField>
+                        </Field>
                       </div>
                     ) : null}
                   </div>

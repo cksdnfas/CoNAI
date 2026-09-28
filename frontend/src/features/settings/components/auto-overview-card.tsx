@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@conai/shared'
-import { SettingsSection, SettingsValueTile } from './settings-primitives'
+import { StatTile } from '@/components/ui/stat-tile'
+import { SettingsSection } from './settings-primitives'
 import { useI18n, type TranslationInput } from '@/i18n'
 
 interface AutoOverviewCardProps {
@@ -49,9 +50,9 @@ export function AutoOverviewCard({
   return (
     <SettingsSection heading={heading} actions={actions}>
       <div className="grid gap-4 min-[900px]:grid-cols-4">
-        <SettingsValueTile label={t({ ko: '로드된 모델', en: 'Loaded model' })} value={taggerStatus?.currentModel ?? '—'} />
-        <SettingsValueTile label={t({ ko: '현재 디바이스', en: 'Current device' })} value={taggerStatus?.currentDevice ?? '—'} />
-        <SettingsValueTile
+        <StatTile label={t({ ko: '로드된 모델', en: 'Loaded model' })} value={taggerStatus?.currentModel ?? '—'} />
+        <StatTile label={t({ ko: '현재 디바이스', en: 'Current device' })} value={taggerStatus?.currentDevice ?? '—'} />
+        <StatTile
           label={t({ ko: 'WD Tagger', en: 'WD Tagger' })}
           value={renderDependencyStatus({
             ready: taggerDependencyResult?.available ?? null,
@@ -59,7 +60,7 @@ export function AutoOverviewCard({
             t,
           })}
         />
-        <SettingsValueTile label={t({ ko: 'Kaloscope', en: 'Kaloscope' })} value={renderDependencyStatus({ ready: kaloscopeReady, t })} />
+        <StatTile label={t({ ko: 'Kaloscope', en: 'Kaloscope' })} value={renderDependencyStatus({ ready: kaloscopeReady, t })} />
       </div>
     </SettingsSection>
   )

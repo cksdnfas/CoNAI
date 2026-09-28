@@ -7,7 +7,9 @@ import { Select } from '@/components/ui/select'
 import type { BackupSource, BackupSourceUpdateInput } from '@/types/folder'
 import { useI18n } from '@/i18n'
 import { buildBackupTargetPreviewPath, formatDateTime, normalizeBackupTargetPath } from '../settings-utils'
-import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 import {
   SettingsResourceFooterActions,
   SettingsResourceMetaList,
@@ -99,15 +101,15 @@ export function BackupSourceCard({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-          <SettingsField label={t({ ko: '표시 이름', en: 'Display name' })}>
+          <Field label={t({ ko: '표시 이름', en: 'Display name' })}>
             <Input variant="settings" value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} />
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: 'source 경로', en: 'Source path' })}>
+          <Field label={t({ ko: 'source 경로', en: 'Source path' })}>
             <Input variant="settings" value={draft.source_path} onChange={(event) => setDraft((current) => ({ ...current, source_path: event.target.value }))} />
-          </SettingsField>
+          </Field>
 
-          <SettingsField
+          <Field
             label={(
               <span className="inline-flex items-center gap-1">
                 {t({ ko: 'Upload 내부 대상 경로', en: 'Target path inside Upload' })}
@@ -133,41 +135,41 @@ export function BackupSourceCard({
               placeholder={t({ ko: 'Backup 또는 Backup/001', en: 'Backup or Backup/001' })}
             />
             <p className="mt-2 break-all font-mono text-xs text-primary">{t({ ko: '최종 경로: {path}', en: 'Final path: {path}' }, { path: buildBackupTargetPreviewPath(draft.target_folder_name) })}</p>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: '가져오기 모드', en: 'Import mode' })}>
+          <Field label={t({ ko: '가져오기 모드', en: 'Import mode' })}>
             <Select variant="settings" value={draft.import_mode} onChange={(event) => setDraft((current) => ({ ...current, import_mode: event.target.value as BackupSource['import_mode'] }))}>
               <option value="copy_original">{t({ ko: '원본 복사', en: 'Copy original' })}</option>
               <option value="convert_webp">{t({ ko: 'WebP 변환 (메타 보존)', en: 'Convert to WebP (preserve metadata)' })}</option>
             </Select>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
+          <Field label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
             <NumberStepperInput min={2000} allowEmpty variant="settings" value={draft.watcher_polling_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null }))} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} />
-          </SettingsField>
+          </Field>
 
-          <SettingsField label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>
+          <Field label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>
             <NumberStepperInput min={1} max={100} variant="settings" value={draft.webp_quality} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, webp_quality: Number(nextValue) || 90 }))} disabled={draft.import_mode !== 'convert_webp'} />
-          </SettingsField>
+          </Field>
 
-          <SettingsToggleRow>
+          <ToggleRow>
             <input type="checkbox" checked={draft.recursive} onChange={(event) => setDraft((current) => ({ ...current, recursive: event.target.checked }))} />
             {t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
-          </SettingsToggleRow>
+          </ToggleRow>
 
-          <SettingsToggleRow>
+          <ToggleRow>
             <input
               type="checkbox"
               checked={draft.watcher_enabled}
               onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
             />
             {t({ ko: 'watcher 사용', en: 'Use watcher' })}
-          </SettingsToggleRow>
+          </ToggleRow>
 
-          <SettingsToggleRow>
+          <ToggleRow>
             <input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />
             {t({ ko: '백업 소스 활성화', en: 'Backup source active' })}
-          </SettingsToggleRow>
+          </ToggleRow>
         </div>
 
         <SettingsResourceMetaList

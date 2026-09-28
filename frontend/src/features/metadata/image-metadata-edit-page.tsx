@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Download, Save } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
-import { PageInset, PageSection } from '@/components/common/page-surface'
+import { Inset } from '@/components/ui/inset'
+import { PageSection } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -172,14 +173,14 @@ export function ImageMetadataEditPage() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <PageInset className="text-sm text-muted-foreground">
+              <Inset className="text-sm text-muted-foreground">
                 <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
                 <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
-              </PageInset>
-              <PageInset className="text-sm text-muted-foreground">
+              </Inset>
+              <Inset className="text-sm text-muted-foreground">
                 <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일', en: 'File' })}</p>
                 <p className="mt-2 break-all text-foreground">{downloadName}</p>
-              </PageInset>
+              </Inset>
             </div>
           </PageSection>
 

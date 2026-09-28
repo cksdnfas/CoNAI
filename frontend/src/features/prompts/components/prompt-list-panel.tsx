@@ -1,5 +1,5 @@
 import type { RefObject } from 'react'
-import { PageInset } from '@/components/common/page-surface'
+import { Inset } from '@/components/ui/inset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -74,7 +74,7 @@ export function PromptListPanel({
       ) : null}
 
       {!isLoading && items.length === 0 ? (
-        <PageInset className="text-sm text-muted-foreground">{t('prompts.components.prompt.list.panel.no.items')}</PageInset>
+        <Inset className="text-sm text-muted-foreground">{t('prompts.components.prompt.list.panel.no.items')}</Inset>
       ) : null}
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>

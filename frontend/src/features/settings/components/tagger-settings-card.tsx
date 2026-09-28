@@ -3,7 +3,9 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TaggerModelInfo, TaggerSettings } from '@conai/shared'
-import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -29,21 +31,21 @@ export function TaggerSettingsCard({
       <div className="grid gap-4 md:grid-cols-2">
         {taggerDraft ? (
           <>
-            <SettingsToggleRow className="md:col-span-2">
+            <ToggleRow className="md:col-span-2">
               <input type="checkbox" checked={taggerDraft.enabled} onChange={(event) => onPatchTagger({ enabled: event.target.checked })} />
               {t({ ko: 'WD Tagger 활성화', en: 'Enable WD Tagger' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
-            <SettingsToggleRow className="md:col-span-2">
+            <ToggleRow className="md:col-span-2">
               <input
                 type="checkbox"
                 checked={taggerDraft.autoTagOnUpload}
                 onChange={(event) => onPatchTagger({ autoTagOnUpload: event.target.checked })}
               />
               {t({ ko: '업로드 시 자동 태깅', en: 'Auto tag on upload' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
-            <SettingsField label={t({ ko: '모델', en: 'Model' })}>
+            <Field label={t({ ko: '모델', en: 'Model' })}>
               <Select variant="settings" value={taggerDraft.model} onChange={(event) => onPatchTagger({ model: event.target.value as TaggerSettings['model'] })}>
                 {taggerModels.map((model) => (
                   <option key={model.name} value={model.name}>
@@ -51,40 +53,40 @@ export function TaggerSettingsCard({
                   </option>
                 ))}
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: '디바이스', en: 'Device' })}>
+            <Field label={t({ ko: '디바이스', en: 'Device' })}>
               <Select variant="settings" value={taggerDraft.device} onChange={(event) => onPatchTagger({ device: event.target.value as TaggerSettings['device'] })}>
                 <option value="auto">auto</option>
                 <option value="cpu">cpu</option>
                 <option value="cuda">cuda</option>
               </Select>
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: 'General 임계값', en: 'General threshold' })}>
+            <Field label={t({ ko: 'General 임계값', en: 'General threshold' })}>
               <NumberStepperInput min={0} max={1} step={0.01} variant="settings" value={taggerDraft.generalThreshold} onValueCommit={(nextValue) => onPatchTagger({ generalThreshold: Number(nextValue) || 0 })} />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: 'Character 임계값', en: 'Character threshold' })}>
+            <Field label={t({ ko: 'Character 임계값', en: 'Character threshold' })}>
               <NumberStepperInput min={0} max={1} step={0.01} variant="settings" value={taggerDraft.characterThreshold} onValueCommit={(nextValue) => onPatchTagger({ characterThreshold: Number(nextValue) || 0 })} />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t({ ko: 'Python 경로', en: 'Python path' })} className="md:col-span-2">
+            <Field label={t({ ko: 'Python 경로', en: 'Python path' })} className="md:col-span-2">
               <Input variant="settings" value={taggerDraft.pythonPath} onChange={(event) => onPatchTagger({ pythonPath: event.target.value })} />
-            </SettingsField>
+            </Field>
 
-            <SettingsToggleRow>
+            <ToggleRow>
               <input
                 type="checkbox"
                 checked={taggerDraft.keepModelLoaded}
                 onChange={(event) => onPatchTagger({ keepModelLoaded: event.target.checked })}
               />
               {t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
-            </SettingsToggleRow>
+            </ToggleRow>
 
-            <SettingsField label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
+            <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <NumberStepperInput min={1} variant="settings" value={taggerDraft.autoUnloadMinutes} onValueCommit={(nextValue) => onPatchTagger({ autoUnloadMinutes: Number(nextValue) || 1 })} />
-            </SettingsField>
+            </Field>
           </>
         ) : (
           <Skeleton className="h-48 w-full rounded-sm md:col-span-2" />

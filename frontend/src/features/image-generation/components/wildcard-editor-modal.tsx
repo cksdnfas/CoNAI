@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n, type TranslationParams } from '@/i18n'
 import type { WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
@@ -653,7 +654,7 @@ export function WildcardEditorModal({
   }
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={mode === 'create'
@@ -674,25 +675,25 @@ export function WildcardEditorModal({
           </Alert>
         ) : null}
 
-        <SettingsModalBody className="space-y-5">
+        <ModalBody className="space-y-5">
           <div className={isChainTab ? 'grid gap-4 md:grid-cols-2' : 'space-y-2'}>
-            <SettingsField label={t(wildcardEditorKey('name'))}>
+            <Field label={t(wildcardEditorKey('name'))}>
               <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder={t(wildcardEditorKey('e.g.character.pose'))} />
-            </SettingsField>
+            </Field>
 
             {isChainTab ? (
-              <SettingsField label={t(wildcardEditorKey('chain.behavior'))}>
+              <Field label={t(wildcardEditorKey('chain.behavior'))}>
                 <Select variant="settings" value={chainOption} onChange={(event) => setChainOption(event.target.value as 'replace' | 'append')}>
                   <option value="replace">{t({ ko: '대체', en: 'Replace' })}</option>
                   <option value="append">{t({ ko: '뒤에 추가', en: 'Append' })}</option>
                 </Select>
-              </SettingsField>
+              </Field>
             ) : null}
           </div>
 
-          <SettingsField label={t(wildcardEditorKey('description'))}>
+          <Field label={t(wildcardEditorKey('description'))}>
             <Textarea variant="settings" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder={t(wildcardEditorKey('optional'))} />
-          </SettingsField>
+          </Field>
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">{t(wildcardEditorKey('parent.item'))}</p>
@@ -711,14 +712,14 @@ export function WildcardEditorModal({
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <SettingsToggleRow className="justify-between">
+            <ToggleRow className="justify-between">
               <span className="font-medium text-foreground">{t(wildcardEditorKey('auto.include.children'))}</span>
               <input type="checkbox" checked={includeChildren} onChange={(event) => setIncludeChildren(event.target.checked)} />
-            </SettingsToggleRow>
-            <SettingsToggleRow className="justify-between">
+            </ToggleRow>
+            <ToggleRow className="justify-between">
               <span className="font-medium text-foreground">{t(wildcardEditorKey('children.only'))}</span>
               <input type="checkbox" checked={onlyChildren} onChange={(event) => setOnlyChildren(event.target.checked)} />
-            </SettingsToggleRow>
+            </ToggleRow>
           </div>
 
           <WildcardItemDraftEditor
@@ -737,7 +738,7 @@ export function WildcardEditorModal({
             }}
           />
 
-          <SettingsModalFooter>
+          <ModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
               {t(wildcardEditorKey('cancel'))}
             </Button>
@@ -748,9 +749,9 @@ export function WildcardEditorModal({
                   ? t(wildcardEditorKey('create.item'))
                   : t(wildcardEditorKey('save.changes'))}
             </Button>
-          </SettingsModalFooter>
-        </SettingsModalBody>
+          </ModalFooter>
+        </ModalBody>
       </form>
-    </SettingsModal>
+    </Modal>
   )
 }

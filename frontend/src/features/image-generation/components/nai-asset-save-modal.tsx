@@ -1,8 +1,8 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 
 type NaiAssetSaveModalProps = {
@@ -34,22 +34,22 @@ export function NaiAssetSaveModal({
   const effectiveSubmitLabel = submitLabel ?? t('image-generation.components.nai.asset.save.modal.save')
 
   return (
-    <SettingsModal open={open} onClose={onClose} title={title} widthClassName="max-w-xl">
-      <SettingsModalBody>
-        <SettingsField label={t('image-generation.components.nai.asset.save.modal.name')}>
+    <Modal open={open} onClose={onClose} title={title} widthClassName="max-w-xl">
+      <ModalBody>
+        <Field label={t('image-generation.components.nai.asset.save.modal.name')}>
           <Input value={name} onChange={(event) => onNameChange(event.target.value)} placeholder={t('image-generation.components.nai.asset.save.modal.save.name')} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t('image-generation.components.nai.asset.save.modal.description')}>
+        <Field label={t('image-generation.components.nai.asset.save.modal.description')}>
           <Textarea
             value={description}
             onChange={(event) => onDescriptionChange(event.target.value)}
             rows={4}
             placeholder={t('image-generation.components.nai.asset.save.modal.optional')}
           />
-        </SettingsField>
+        </Field>
 
-        <SettingsModalFooter>
+        <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
             {t('image-generation.components.nai.asset.save.modal.cancel')}
           </Button>
@@ -58,8 +58,8 @@ export function NaiAssetSaveModal({
               ? t('image-generation.components.nai.asset.save.modal.saving.with.action', { action: effectiveSubmitLabel })
               : effectiveSubmitLabel}
           </Button>
-        </SettingsModalFooter>
-      </SettingsModalBody>
-    </SettingsModal>
+        </ModalFooter>
+      </ModalBody>
+    </Modal>
   )
 }

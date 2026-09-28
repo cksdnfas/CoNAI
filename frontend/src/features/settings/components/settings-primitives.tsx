@@ -1,12 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { cn } from '@/lib/utils'
-
-interface SettingsFieldProps extends ComponentProps<'label'> {
-  label: ReactNode
-  hint?: ReactNode
-  children: ReactNode
-}
 
 type SettingsSectionProps = ComponentProps<'section'> & {
   heading: ReactNode
@@ -14,14 +7,6 @@ type SettingsSectionProps = ComponentProps<'section'> & {
   children: ReactNode
   bodyClassName?: string
   headerClassName?: string
-}
-
-interface SettingsModalBodyProps extends ComponentProps<'div'> {
-  children: ReactNode
-}
-
-interface SettingsModalFooterProps extends ComponentProps<'div'> {
-  children: ReactNode
 }
 
 /** Shared minimal settings section shell used across tabs. */
@@ -38,66 +23,5 @@ export function SettingsSection({ heading, actions, children, className, bodyCla
         {children}
       </div>
     </section>
-  )
-}
-
-interface SettingsInsetBlockProps extends ComponentProps<'div'> {
-  children: ReactNode
-}
-
-/** Shared light inset surface for dense notes, previews, and grouped controls. */
-export function SettingsInsetBlock({ children, className, ...props }: SettingsInsetBlockProps) {
-  return <div className={cn('rounded-sm border border-border/70 bg-surface-low/45 px-4 py-3', className)} {...props}>{children}</div>
-}
-
-/** Shared compact modal body wrapper for dense modal content. */
-export function SettingsModalBody({ children, className, ...props }: SettingsModalBodyProps) {
-  return <div className={cn('space-y-4', className)} {...props}>{children}</div>
-}
-
-/** Shared compact modal footer row for primary and secondary actions. */
-export function SettingsModalFooter({ children, className, ...props }: SettingsModalFooterProps) {
-  return <div className={cn('flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4', className)} {...props}>{children}</div>
-}
-
-// Shared field wrapper for settings forms.
-export function SettingsField({ label, hint, children, className, ...props }: SettingsFieldProps) {
-  return (
-    <label className={cn('theme-settings-field flex flex-col text-sm', className)} {...props}>
-      <span className="flex items-center justify-between gap-3 text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-        <span className="min-w-0 truncate">{label}</span>
-        {hint ? <span className="shrink-0 text-[11px] font-medium tracking-normal text-muted-foreground normal-case">{hint}</span> : null}
-      </span>
-      {children}
-    </label>
-  )
-}
-
-interface SettingsToggleRowProps extends ComponentProps<'label'> {
-  children: ReactNode
-}
-
-// Shared toggle row used by checkbox-style settings.
-export function SettingsToggleRow({ children, className, ...props }: SettingsToggleRowProps) {
-  return (
-    <ToggleRow variant="settings" className={className} {...props}>
-      {children}
-    </ToggleRow>
-  )
-}
-
-interface SettingsValueTileProps extends ComponentProps<'div'> {
-  label: ReactNode
-  value: ReactNode
-  valueClassName?: string
-}
-
-// Shared labeled value tile for settings summaries and metadata blocks.
-export function SettingsValueTile({ label, value, className, valueClassName, ...props }: SettingsValueTileProps) {
-  return (
-    <div className={cn('min-w-0 rounded-sm border border-border/70 bg-surface-low/45 px-3 py-3', className)} {...props}>
-      <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
-      <div className={cn('mt-2 text-sm font-semibold text-foreground', valueClassName)}>{value}</div>
-    </div>
   )
 }

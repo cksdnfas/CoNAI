@@ -5,8 +5,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ToggleRow } from '@/components/ui/toggle-row'
 import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import { AutoCollectChipEditor } from './auto-collect-chip-editor'
@@ -131,7 +132,7 @@ export function GroupEditorModal({
   }
 
   return (
-    <SettingsModal
+    <Modal
       open={open}
       onClose={onClose}
       title={mode === 'create' ? t('groups.components.group.editor.modal.custom.group') : t('groups.components.group.editor.modal.custom.groups.edit')}
@@ -145,19 +146,19 @@ export function GroupEditorModal({
           </Alert>
         ) : null}
 
-        <SettingsModalBody className="space-y-5">
+        <ModalBody className="space-y-5">
           <div className="space-y-5">
-            <SettingsField label={t('groups.components.group.editor.modal.group.name')}>
+            <Field label={t('groups.components.group.editor.modal.group.name')}>
               <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('groups.components.group.editor.modal.e.g.concept.art.characters.favorites')} />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label={t('groups.components.group.editor.modal.description')}>
+            <Field label={t('groups.components.group.editor.modal.description')}>
               <Textarea
                 rows={3}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />
-            </SettingsField>
+            </Field>
 
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">{t('groups.components.group.editor.modal.group.location')}</p>
@@ -175,29 +176,29 @@ export function GroupEditorModal({
             </div>
 
             <div className="space-y-3">
-              <SettingsToggleRow className="justify-between">
+              <ToggleRow className="justify-between">
                 <p className="text-sm font-medium text-foreground">{t('groups.components.group.editor.modal.filter.apply')}</p>
                 <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
-              </SettingsToggleRow>
+              </ToggleRow>
 
               {autoCollectEnabled ? <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} /> : null}
             </div>
 
-            <SettingsField label={t('groups.components.group.editor.modal.accent.color')}>
+            <Field label={t('groups.components.group.editor.modal.accent.color')}>
               <Input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#7c3aed" />
-            </SettingsField>
+            </Field>
           </div>
 
-          <SettingsModalFooter>
+          <ModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
               {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? t('groups.components.group.editor.modal.saving') : mode === 'create' ? t('groups.components.group.editor.modal.create.group') : t('groups.components.group.editor.modal.save.changes')}
             </Button>
-          </SettingsModalFooter>
-        </SettingsModalBody>
+          </ModalFooter>
+        </ModalBody>
       </form>
-    </SettingsModal>
+    </Modal>
   )
 }

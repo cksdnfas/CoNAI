@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input'
 import type { WatchedFolder, WatchedFolderUpdateInput } from '@/types/folder'
 import { useI18n } from '@/i18n'
 import { formatDateTime, parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
-import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { Field } from '@/components/ui/field'
+import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSection } from './settings-primitives'
 import {
   SettingsResourceFooterActions,
   SettingsResourceMetaList,
@@ -103,45 +105,45 @@ export function WatchedFolderCard({
       <div className="break-all font-mono text-xs text-muted-foreground">{folder.folder_path}</div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <SettingsField label={t({ ko: '표시 이름', en: 'Display name' })}>
+        <Field label={t({ ko: '표시 이름', en: 'Display name' })}>
           <Input variant="settings" value={draft.folder_name} onChange={(event) => setDraft((current) => ({ ...current, folder_name: event.target.value }))} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: '스캔 주기(분)', en: 'Scan interval (minutes)' })}>
+        <Field label={t({ ko: '스캔 주기(분)', en: 'Scan interval (minutes)' })}>
           <NumberStepperInput min={1} variant="settings" value={draft.scan_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, scan_interval: Number(nextValue) || 1 }))} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: '제외 확장자', en: 'Excluded extensions' })}>
+        <Field label={t({ ko: '제외 확장자', en: 'Excluded extensions' })}>
           <Input variant="settings" value={draft.exclude_extensions} onChange={(event) => setDraft((current) => ({ ...current, exclude_extensions: event.target.value }))} placeholder={t({ ko: 'tmp, db, txt', en: 'tmp, db, txt' })} />
-        </SettingsField>
+        </Field>
 
-        <SettingsField label={t({ ko: '제외 패턴', en: 'Excluded patterns' })}>
+        <Field label={t({ ko: '제외 패턴', en: 'Excluded patterns' })}>
           <Input variant="settings" value={draft.exclude_patterns} onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))} placeholder={t({ ko: '@eaDir, thumbs, cache', en: '@eaDir, thumbs, cache' })} />
-        </SettingsField>
+        </Field>
 
-        <SettingsToggleRow>
+        <ToggleRow>
           <input type="checkbox" checked={draft.auto_scan} onChange={(event) => setDraft((current) => ({ ...current, auto_scan: event.target.checked }))} />
           {t({ ko: '자동 스캔', en: 'Auto scan' })}
-        </SettingsToggleRow>
+        </ToggleRow>
 
-        <SettingsToggleRow>
+        <ToggleRow>
           <input type="checkbox" checked={draft.recursive} onChange={(event) => setDraft((current) => ({ ...current, recursive: event.target.checked }))} />
           {t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
-        </SettingsToggleRow>
+        </ToggleRow>
 
-        <SettingsToggleRow>
+        <ToggleRow>
           <input
             type="checkbox"
             checked={draft.watcher_enabled}
             onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
           />
           {t({ ko: 'watcher 사용', en: 'Use watcher' })}
-        </SettingsToggleRow>
+        </ToggleRow>
 
-        <SettingsToggleRow>
+        <ToggleRow>
           <input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />
           {t({ ko: '폴더 활성화', en: 'Folder active' })}
-        </SettingsToggleRow>
+        </ToggleRow>
       </div>
 
       <SettingsResourceMetaList
