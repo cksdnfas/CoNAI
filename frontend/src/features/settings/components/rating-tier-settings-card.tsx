@@ -216,7 +216,7 @@ export function RatingTierSettingsCard({
                             type="color"
                             value={colorValue}
                             onChange={(event) => onPatchRatingTier(tier.id, { color: event.target.value })}
-                            className="h-10 w-12 cursor-pointer rounded-sm border border-border bg-transparent p-1"
+                            className="h-10 w-12 cursor-pointer rounded-sm border border-outline-input bg-surface-lowest p-1"
                           />
                           <Input
                             variant="settings"

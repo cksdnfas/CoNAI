@@ -29,7 +29,7 @@ function MaintenanceActionRow({ icon, title, description, actionLabel, busyLabel
   const confirm = useConfirm()
 
   return (
-    <div className="space-y-3 rounded-sm bg-surface-container/70 px-4 py-3">
+    <div className="space-y-3 rounded-sm bg-surface-lowest px-4 py-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 gap-3">
           <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
@@ -89,9 +89,11 @@ export function MaintenanceTab({
 
   return (
     <div className="space-y-6">
-      <section className="space-y-3 rounded-sm bg-destructive-soft/25 p-4">
+      <section data-surface="raised" className="space-y-3 rounded-sm bg-surface-low p-4">
         <div className="flex gap-3">
-          <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-destructive" />
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-destructive-soft text-destructive-soft-foreground">
+            <AlertTriangle className="h-4 w-4" />
+          </span>
           <div className="min-w-0 space-y-1">
             <Heading level={2}>{t({ ko: '유지보수', en: 'Maintenance' })}</Heading>
             <p className="text-sm text-muted-foreground">

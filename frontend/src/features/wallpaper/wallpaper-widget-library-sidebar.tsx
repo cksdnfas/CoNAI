@@ -91,7 +91,7 @@ const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder(
       </Button>
 
       {isExpanded ? (
-        <div className="space-y-1">
+        <div className="space-y-1 pl-6">
           {folder.widgets.map((widget) => {
             const Icon = getWallpaperWidgetIcon(widget.type)
             const isSelected = selectedWidgetType === widget.type
@@ -102,7 +102,7 @@ const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder(
                 variant="nav"
                 data-active={isSelected}
                 onClick={() => onAddWidget(widget.type)}
-                className="gap-2 pl-10 pr-2"
+                className="gap-2"
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate text-foreground">{t(widget.title)}</span>

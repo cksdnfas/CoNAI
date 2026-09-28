@@ -31,7 +31,7 @@ function AccessEntryCard({ label, description, href, icon: Icon, badge }: Access
     <Link
       to={href}
       className={cn(
-        'group flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 transition-colors',
+        'group flex items-center gap-3 rounded-sm bg-surface-container px-4 py-3 transition-colors',
         'hover:bg-surface-high focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
       )}
     >

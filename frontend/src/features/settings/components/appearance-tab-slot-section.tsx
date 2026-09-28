@@ -129,11 +129,11 @@ export function AppearanceTabSlotSection({
                     <span>{getDensityLabel(slotTheme.density, t)}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: slotColors?.primary }} />
-                    <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: slotColors?.secondary }} />
-                    <span className="h-5 flex-1 rounded-sm border border-border" style={{ backgroundColor: slotSurface?.background }} />
-                    <span className="h-5 flex-1 rounded-sm border border-border" style={{ backgroundColor: slotSurface?.surfaceContainer }} />
-                    <span className="h-5 flex-1 rounded-sm border border-border" style={{ backgroundColor: slotSurface?.surfaceHigh }} />
+                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: slotColors?.primary }} />
+                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: slotColors?.secondary }} />
+                    <span className="h-5 flex-1 rounded-sm border border-outline-input" style={{ backgroundColor: slotSurface?.background }} />
+                    <span className="h-5 flex-1 rounded-sm border border-outline-input" style={{ backgroundColor: slotSurface?.surfaceContainer }} />
+                    <span className="h-5 flex-1 rounded-sm border border-outline-input" style={{ backgroundColor: slotSurface?.surfaceHigh }} />
                   </div>
                 </div>
               ) : (

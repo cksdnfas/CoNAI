@@ -54,8 +54,8 @@ export function AppearanceColorEditorContent({
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold text-foreground">{getAccentPresetLabel(presetKey as AppearanceSettings['accentPreset'], t)}</div>
                   <div className="flex items-center gap-2">
-                    <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: preset.primary }} />
-                    <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: preset.secondary }} />
+                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: preset.primary }} />
+                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: preset.secondary }} />
                   </div>
                 </div>
               </PresetOptionButton>
@@ -69,8 +69,8 @@ export function AppearanceColorEditorContent({
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-foreground">{getAccentPresetLabel('custom', t)}</div>
               <div className="flex items-center gap-2">
-                <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customPrimaryColor }} />
-                <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSecondaryColor }} />
+                <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: appearanceDraft.customPrimaryColor }} />
+                <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: appearanceDraft.customSecondaryColor }} />
               </div>
             </div>
           </PresetOptionButton>
@@ -117,9 +117,9 @@ export function AppearanceColorEditorContent({
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold text-foreground">{getSurfacePresetLabel(presetKey as AppearanceSettings['surfacePreset'], t)}</div>
                   <div className="flex items-center gap-2">
-                    <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: palette.background }} />
-                    <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: palette.surfaceContainer }} />
-                    <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: palette.surfaceHigh }} />
+                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: palette.background }} />
+                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: palette.surfaceContainer }} />
+                    <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: palette.surfaceHigh }} />
                   </div>
                 </div>
               </PresetOptionButton>
@@ -133,9 +133,9 @@ export function AppearanceColorEditorContent({
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-foreground">{getSurfacePresetLabel('custom', t)}</div>
               <div className="flex items-center gap-2">
-                <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSurfaceBackgroundColor }} />
-                <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSurfaceContainerColor }} />
-                <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSurfaceHighColor }} />
+                <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: appearanceDraft.customSurfaceBackgroundColor }} />
+                <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: appearanceDraft.customSurfaceContainerColor }} />
+                <span className="h-5 w-5 rounded-full border border-outline-input" style={{ backgroundColor: appearanceDraft.customSurfaceHighColor }} />
               </div>
             </div>
           </PresetOptionButton>

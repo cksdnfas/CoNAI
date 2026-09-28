@@ -314,7 +314,7 @@ export function SettingsResourceTableRow({
       className={cn(
         'transition-colors',
         selected
-          ? 'bg-primary/6 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)]'
+          ? 'bg-primary/8 ring-1 ring-inset ring-primary/20'
           : 'bg-transparent hover:bg-surface-high/60',
       )}
       trailing={(
