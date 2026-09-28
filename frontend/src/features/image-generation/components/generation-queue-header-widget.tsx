@@ -1,14 +1,10 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ListTodo, RefreshCw, Square, Trash2 } from 'lucide-react'
+import { ListTodo, RefreshCw } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { Badge } from '@/components/ui/badge'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
-import { Progress } from '@/components/ui/progress'
-import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Text } from '@/components/ui/text'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
@@ -19,40 +15,24 @@ import { cancelGenerationQueueJob, getGenerationQueue } from '@/lib/api-image-ge
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import { getGraphWorkflowNames, getGraphWorkflowSchedules } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
-import { getErrorMessage } from '../image-generation-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
   canRetryGenerationQueueCancellation,
-  getGenerationQueueDurationLabel,
-  getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueHeaderRefreshTargets,
-  getGenerationQueueLaneLabel,
-  getGenerationQueueProgressPercent,
-  getGenerationQueueProgressStageLabel,
-  getGenerationQueueRemainingLabel,
-  getGenerationQueueRequesterLabel,
-  getGenerationQueueStartLabel,
-  getGenerationQueueStatusLabel,
-  getGenerationQueueWaitLabel,
   getGenerationQueueWorkflowLabel,
-  hasGenerationQueueLiveProgress,
   shouldEnableFilteredQueueHeaderQuery,
 } from './generation-queue-ui'
+import { GenerationQueueJobsTab, type QueueFilterValue } from './generation-queue-jobs-tab'
 import { GenerationQueueReservationsTab } from './generation-queue-reservations-tab'
 import { sortWorkflowReservationSchedules } from './workflow-reservations-ui'
-import { EmptyState } from '@/components/ui/empty-state'
-import { LoadingState } from '@/components/ui/loading-state'
-import { ErrorState } from '@/components/ui/error-state'
 
 const POPUP_LIST_CLASS_NAME = 'max-h-[min(24rem,calc(100vh-var(--theme-shell-header-height)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100vh-var(--theme-shell-header-height)-2rem))] sm:px-4'
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
 const ACTIVE_QUEUE_REFETCH_INTERVAL_MS = 3_000
-const QUEUE_ROW_CLOCK_INTERVAL_MS = 1_000
 const IDLE_QUEUE_REFETCH_INTERVAL_MS = 30_000
 const LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY = 'conai:image-generation-queue:last-seen-job-id'
 
-type QueueFilterValue = 'all' | 'novelai' | 'codex' | 'comfyui' | `workflow:${number}`
 type HeaderPopupTab = 'jobs' | 'reservations'
 
 function readLastSeenQueueJobId() {
@@ -122,130 +102,11 @@ function parseQueueFilter(value: QueueFilterValue) {
   return { serviceType: undefined, workflowId: undefined }
 }
 
-type QueueJobRowProps = {
-  record: GenerationQueueJobRecord
-  isBusy: boolean
-  isAdmin: boolean
-  onCancel: (record: GenerationQueueJobRecord) => void
-  t: ReturnType<typeof useI18n>['t']
-  formatNumber: ReturnType<typeof useI18n>['formatNumber']
-  locale: string
-}
-
-/** Tick a local clock for time-derived labels; only the row that needs it re-renders, so the memoized list stays cheap. */
-function useQueueRowNow(enabled: boolean) {
-  const [nowMs, setNowMs] = useState(() => Date.now())
-
-  useEffect(() => {
-    if (!enabled) {
-      return
-    }
-
-    const timer = window.setInterval(() => setNowMs(Date.now()), QUEUE_ROW_CLOCK_INTERVAL_MS)
-    return () => window.clearInterval(timer)
-  }, [enabled])
-
-  return nowMs
-}
-
-/**
- * 진행률 이벤트가 레코드 하나만 patch 해도 나머지 행이 리렌더되지 않도록 행 단위로 memo 한다.
- * react-query 구조 공유와 브리지의 단일 레코드 교체가 무변경 레코드의 identity 를 보존하므로
- * 얕은 비교로 충분하다.
- */
-const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCancel, t, formatNumber, locale }: QueueJobRowProps) {
-  const isCancelRequested = record.cancel_requested > 0
-  const workflowLabel = getGenerationQueueWorkflowLabel(record, t)
-  const creatorLabel = getGenerationQueueRequesterLabel(record, t)
-  const isRunning = record.status === 'running'
-  const nowMs = useQueueRowNow(isRunning)
-  const isLiveProgress = hasGenerationQueueLiveProgress(record)
-  const progressPercent = getGenerationQueueProgressPercent(record, nowMs)
-  const progressStageLabel = getGenerationQueueProgressStageLabel(record, t, formatNumber)
-  // CR-3: 업스트림 취소가 실패했을 때 사용자가 재시도할 수 있어야 한다.
-  const canRetryCancel = canRetryGenerationQueueCancellation(record)
-  const hasRecordPermission = isAdmin || record.is_mine === true
-  const canManageRecord = (!isCancelRequested || canRetryCancel) && hasRecordPermission
-  const statusLabel = isCancelRequested ? t('image-generation.components.generation.queue.header.widget.cancel.requested') : getGenerationQueueStatusLabel(record, t)
-  // 대기 작업은 위치/예상 대기/예상 시작을, 실행 작업은 단계/경과/남은 시간을 보여 준다. 추정치가 없으면 해당 조각은 빠진다.
-  const detailLabel = isRunning
-    ? [
-        progressStageLabel,
-        getGenerationQueueElapsedLabel(record, t, formatNumber, nowMs),
-        getGenerationQueueRemainingLabel(record, t, formatNumber, nowMs),
-      ].filter(Boolean).join(' · ')
-    : [
-        getGenerationQueueLaneLabel(record, t, formatNumber) ?? statusLabel,
-        getGenerationQueueWaitLabel(record, t, formatNumber),
-        getGenerationQueueStartLabel(record, t, locale),
-      ].filter(Boolean).join(' · ')
-  const durationLabel = getGenerationQueueDurationLabel(record, t, formatNumber)
-  const detailTitle = [detailLabel, durationLabel].filter(Boolean).join(' · ')
-
-  return (
-    <div className="ui-tone-plinth rounded-sm px-3 py-3">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3 text-2xs">
-          <div className="flex min-w-0 items-center gap-2">
-            <Badge variant={isCancelRequested ? 'warning' : isRunning ? 'info' : 'secondary'}>
-              {statusLabel}
-            </Badge>
-            <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
-          </div>
-          {isRunning ? (
-            <div className="shrink-0 text-2xs font-medium text-foreground">
-              {progressPercent != null
-                ? (isLiveProgress
-                  ? t({ ko: '{percent}%', en: '{percent}%' }, { percent: formatNumber(progressPercent) })
-                  : t({ ko: '예상 {percent}%', en: 'Est. {percent}%' }, { percent: formatNumber(progressPercent) }))
-                : t({ ko: '진행 중', en: 'In progress' })}
-            </div>
-          ) : null}
-        </div>
-
-        {isRunning ? (
-          <Progress
-            size="lg"
-            value={progressPercent}
-            aria-label={t({ ko: '{label} 진행률', en: '{label} progress' }, { label: workflowLabel })}
-          />
-        ) : null}
-
-        <div className="flex items-center justify-between gap-3 text-2xs text-muted-foreground">
-          <span className="min-w-0 truncate" title={detailTitle || undefined}>
-            {detailLabel}
-          </span>
-          <div className="flex min-w-0 shrink-0 items-center gap-1.5">
-            <span className="max-w-28 truncate">{record.is_mine ? t('image-generation.components.generation.queue.header.widget.value.me', { creatorLabel }) : creatorLabel}</span>
-            {canManageRecord ? (
-              <IconButton
-                size="icon-xs"
-                variant="ghost"
-                className="shrink-0"
-                onClick={() => onCancel(record)}
-                disabled={isBusy}
-                tooltipSide="left"
-                label={canRetryCancel
-                  ? t({ ko: '큐 작업 {id} 취소 재시도', en: 'Retry cancelling queue job {id}' }, { id: record.id })
-                  : isRunning
-                    ? t('image-generation.components.generation.queue.header.widget.queue.job.value.request.stop', { id: record.id })
-                    : t('image-generation.components.generation.queue.header.widget.queue.job.value.delete', { id: record.id })}
-              >
-                {isRunning ? <Square className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
-              </IconButton>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-})
-
 /** Render the global generation queue widget beside the header search action. */
 export function GenerationQueueHeaderWidget() {
   const { showSnackbar } = useSnackbar()
   const confirm = useConfirm()
-  const { t, locale, formatNumber } = useI18n()
+  const { t, formatNumber } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 기존 interval 로직이 그대로 되살아난다.
   const { status: runtimeStreamStatus } = useRuntimeEventStream()
@@ -472,14 +333,16 @@ export function GenerationQueueHeaderWidget() {
 
   return (
     <div ref={containerRef} className="relative">
-      <IconButton
-        variant="shell"
+      {/* Shell header icon: shares theme-shell-icon-button with the search and account triggers (no Button variant for the glass header). */}
+      {/* eslint-disable-next-line no-restricted-syntax -- header shell icon style, see comment above */}
+      <button
+        type="button"
         onClick={() => setIsOpen((current) => !current)}
         data-state={isOpen ? 'open' : globalActiveCount > 0 ? 'active' : 'closed'}
-        className="relative"
-        label={t('image-generation.components.generation.queue.header.widget.open.job.queue.and.reservations')}
-        tooltipSide="bottom"
+        className="theme-shell-icon-button relative inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+        aria-label={t('image-generation.components.generation.queue.header.widget.open.job.queue.and.reservations')}
         aria-expanded={isOpen}
+        title={t('image-generation.components.generation.queue.header.widget.job.queue.reservations')}
       >
         <ListTodo className="h-4 w-4" />
         {globalActiveCount > 0 ? (
@@ -488,7 +351,7 @@ export function GenerationQueueHeaderWidget() {
           </span>
         ) : null}
         {hasUnreadQueueUpdate ? <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-destructive ring-2 ring-background" aria-hidden="true" /> : null}
-      </IconButton>
+      </button>
 
       <div
         className={cn(
@@ -520,53 +383,21 @@ export function GenerationQueueHeaderWidget() {
         </div>
 
         {effectiveTab === 'jobs' ? (
-          <>
-            <div className="space-y-2 px-3 pb-1 sm:px-4">
-              <div className="flex items-center justify-between gap-3">
-                <Text as="div" variant="overline" className="font-semibold">{t({ ko: '범위', en: 'Scope' })}</Text>
-                <Badge variant={filteredActiveCount > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">{t({ ko: '작업 큐 · {count}', en: 'Job Queue · {count}' }, { count: formatNumber(filteredActiveCount) })}</Badge>
-              </div>
-              <Select value={selectedFilter} onChange={(event) => setSelectedFilter(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">
-                <option value="all">{t('image-generation.components.generation.queue.header.widget.all.queues')}</option>
-                <option value="novelai">NAI</option>
-                <option value="codex">Codex</option>
-                <option value="comfyui">{t('image-generation.components.generation.queue.header.widget.all.comfyui')}</option>
-                {workflows.map((workflow) => (
-                  <option key={workflow.id} value={`workflow:${workflow.id}`}>{workflow.name}</option>
-                ))}
-              </Select>
-              {hasGenerationPermission && workflowsQuery.isError ? <div className="text-2xs text-warning">{t('image-generation.components.generation.queue.header.widget.could.not.load.the.workflow.list.so')}</div> : null}
-            </div>
-
-            <div className={POPUP_LIST_CLASS_NAME}>
-              {activeQueueQuery.isError ? (
-                <ErrorState size="compact" title={getErrorMessage(activeQueueQuery.error, t('image-generation.components.generation.queue.header.widget.could.not.load.the.queue'))} />
-              ) : null}
-
-              {!activeQueueQuery.isError && activeQueueQuery.isPending ? <LoadingState variant="inline" label={t('image-generation.components.generation.queue.header.widget.loading.queue')} /> : null}
-
-              {!activeQueueQuery.isPending && !activeQueueQuery.isError && records.length === 0 ? (
-                <EmptyState size="compact" title={t({ ko: '지금 진행 중인 큐 작업이 없어.', en: 'No queue jobs are currently running.' })} />
-              ) : null}
-
-              {records.length > 0 ? (
-                <div className="space-y-2">
-                  {records.map((record) => (
-                    <QueueJobRow
-                      key={record.id}
-                      record={record}
-                      isBusy={pendingJobId === record.id}
-                      isAdmin={authStatusQuery.data?.isAdmin === true}
-                      onCancel={cancelJob}
-                      t={t}
-                      formatNumber={formatNumber}
-                      locale={locale}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </>
+          <GenerationQueueJobsTab
+            selectedFilter={selectedFilter}
+            onFilterChange={setSelectedFilter}
+            workflows={workflows}
+            showWorkflowListError={hasGenerationPermission && workflowsQuery.isError}
+            filteredActiveCount={filteredActiveCount}
+            records={records}
+            isPending={activeQueueQuery.isPending}
+            isError={activeQueueQuery.isError}
+            error={activeQueueQuery.error}
+            pendingJobId={pendingJobId}
+            isAdmin={authStatusQuery.data?.isAdmin === true}
+            onCancel={cancelJob}
+            listClassName={POPUP_LIST_CLASS_NAME}
+          />
         ) : (
           <GenerationQueueReservationsTab
             schedules={reservationSchedules}
