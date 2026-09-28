@@ -1,12 +1,7 @@
-import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { TypedFieldInput, type TypedFieldOption } from '@/features/shared-fields/typed-field-input'
 import { useI18n } from '@/i18n'
 
-export type ModuleGraphSelectOption = string | { value: string; label: string }
-
-const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
+export type ModuleGraphSelectOption = TypedFieldOption
 
 type ModuleGraphSimpleValueInputProps = {
   dataType: 'select' | 'number' | 'boolean' | 'text' | 'prompt' | 'json'
@@ -40,10 +35,6 @@ function formatModuleGraphOptionDefaultValue(value: unknown) {
   return serialized.length > 48 ? `${serialized.slice(0, 47)}…` : serialized
 }
 
-function isDropdownRandomOption(option: ModuleGraphSelectOption) {
-  return (typeof option === 'string' ? option : option.value) === DROPDOWN_RANDOM_OPTION_VALUE
-}
-
 export function formatModuleGraphDefaultOptionLabel(t: ReturnType<typeof useI18n>['t'], value: unknown) {
   const formattedValue = formatModuleGraphOptionDefaultValue(value)
   return formattedValue
@@ -51,94 +42,18 @@ export function formatModuleGraphDefaultOptionLabel(t: ReturnType<typeof useI18n
     : t({ ko: '선택', en: 'Select' })
 }
 
-/** Render one small shared value editor for the common scalar module-graph field types. */
-export function ModuleGraphSimpleValueInput({
-  dataType,
-  value,
-  onChange,
-  options,
-  placeholder,
-  emptyLabel,
-  allowEmptyOption = true,
-  className,
-  rows,
-  min,
-  max,
-  step,
-}: ModuleGraphSimpleValueInputProps) {
-  const { t } = useI18n()
-  const resolvedEmptyLabel = emptyLabel ?? t({ ko: '선택', en: 'Select' })
-  if (dataType === 'select') {
-    const hasRandomSelectionOption = (options ?? []).some(isDropdownRandomOption)
-
-    return (
-      <Select
-        value={typeof value === 'string' ? value : value == null ? '' : String(value)}
-        onChange={(event) => onChange(event.target.value)}
-        className={className}
-      >
-        {allowEmptyOption ? <option value="" disabled={hasRandomSelectionOption} hidden={hasRandomSelectionOption}>{resolvedEmptyLabel}</option> : null}
-        {(options ?? []).map((option) => {
-          const resolvedOption = typeof option === 'string'
-            ? { value: option, label: option }
-            : option
-
-          return <option key={resolvedOption.value} value={resolvedOption.value}>{resolvedOption.label}</option>
-        })}
-      </Select>
-    )
-  }
-
-  if (dataType === 'number') {
-    return (
-      <NumberStepperInput
-        min={min}
-        max={max}
-        step={typeof step === 'number' ? step : 1}
-        allowEmpty={allowEmptyOption}
-        value={typeof value === 'number' ? String(value) : typeof value === 'string' ? value : ''}
-        onValueCommit={(nextValue) => onChange(nextValue === '' ? '' : Number(nextValue))}
-        placeholder={placeholder}
-        className={className}
-      />
-    )
-  }
-
-  if (dataType === 'boolean') {
-    return (
-      <Select
-        value={typeof value === 'boolean' ? String(value) : ''}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          onChange(nextValue === '' ? '' : nextValue === 'true')
-        }}
-        className={className}
-      >
-        <option value="">{resolvedEmptyLabel}</option>
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </Select>
-    )
-  }
-
-  if (dataType === 'prompt' || dataType === 'json' || (dataType === 'text' && (rows ?? 0) > 1)) {
-    return (
-      <Textarea
-        rows={rows ?? (dataType === 'json' ? 6 : 4)}
-        value={typeof value === 'string' ? value : value ? JSON.stringify(value, null, 2) : ''}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className={className}
-      />
-    )
-  }
-
+/**
+ * Canvas node-card adapter over TypedFieldInput: `allowEmptyOption` maps to the empty select option / empty
+ * number, and prompts stay a plain textarea because caret-anchored wildcard popups drift under canvas zoom.
+ */
+export function ModuleGraphSimpleValueInput({ dataType, allowEmptyOption = true, ...props }: ModuleGraphSimpleValueInputProps) {
   return (
-    <Input
-      value={typeof value === 'string' ? value : value ? String(value) : ''}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      className={className}
+    <TypedFieldInput
+      kind={dataType}
+      emptyOption={dataType === 'select' ? (allowEmptyOption ? 'auto' : 'none') : undefined}
+      allowEmpty={allowEmptyOption}
+      promptEditor="plain"
+      {...props}
     />
   )
 }
