@@ -1,6 +1,6 @@
 import { useI18n } from '@/i18n'
 import type { WatchedFolder } from '@/types/folder'
-import { getWatcherStatusTone, SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
+import { getWatcherStateLabel, getWatcherStatusTone, SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
 
 interface WatchedFolderListItemProps {
   folder: WatchedFolder
@@ -18,8 +18,7 @@ export function WatchedFolderListItem({
   onOpenOptions,
 }: WatchedFolderListItemProps) {
   const { t } = useI18n()
-  const watcherLabel = watcherState || 'stopped'
-  const isWatching = watcherLabel.toLowerCase() === 'watching'
+  const isWatching = (watcherState || '').toLowerCase() === 'watching'
 
   return (
     <SettingsResourceTableRow
@@ -36,7 +35,7 @@ export function WatchedFolderListItem({
         <SettingsStatusIcon
           checked={isWatching}
           tone={getWatcherStatusTone(watcherState)}
-          title={t({ ko: 'watcher {status}', en: 'Watcher {status}' }, { status: watcherLabel })}
+          title={getWatcherStateLabel(watcherState, t)}
         />,
       ]}
     />

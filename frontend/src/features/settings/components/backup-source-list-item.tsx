@@ -1,6 +1,6 @@
 import { useI18n } from '@/i18n'
 import type { BackupSource } from '@/types/folder'
-import { getWatcherStatusTone, SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
+import { getWatcherStateLabel, getWatcherStatusTone, SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
 
 interface BackupSourceListItemProps {
   source: BackupSource
@@ -11,8 +11,7 @@ interface BackupSourceListItemProps {
 
 export function BackupSourceListItem({ source, selected = false, gridClassName, onOpenOptions }: BackupSourceListItemProps) {
   const { t } = useI18n()
-  const watcherLabel = source.watcher_status || 'stopped'
-  const isWatching = watcherLabel.toLowerCase() === 'watching'
+  const isWatching = (source.watcher_status || '').toLowerCase() === 'watching'
 
   return (
     <SettingsResourceTableRow
@@ -30,7 +29,7 @@ export function BackupSourceListItem({ source, selected = false, gridClassName, 
         <SettingsStatusIcon
           checked={isWatching}
           tone={getWatcherStatusTone(source.watcher_status)}
-          title={t({ ko: 'watcher {status}', en: 'Watcher {status}' }, { status: watcherLabel })}
+          title={getWatcherStateLabel(source.watcher_status, t)}
         />,
       ]}
     />

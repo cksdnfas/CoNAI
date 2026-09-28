@@ -38,6 +38,38 @@ export function getWatcherBadgeVariant(watcherState?: string | null): SettingsBa
   return 'outline'
 }
 
+type TranslateFn = ReturnType<typeof useI18n>['t']
+
+/** Turn a raw watcher runtime state into a user-facing status label. */
+export function getWatcherStateLabel(watcherState: string | null | undefined, t: TranslateFn): string {
+  switch ((watcherState || 'stopped').toLowerCase()) {
+    case 'watching':
+      return t({ ko: '실시간 감시 중', en: 'Watching for changes' })
+    case 'initializing':
+      return t({ ko: '감시 준비 중', en: 'Starting watcher' })
+    case 'error':
+      return t({ ko: '감시 오류', en: 'Watcher error' })
+    default:
+      return t({ ko: '실시간 감시 꺼짐', en: 'Not watching' })
+  }
+}
+
+/** Turn a raw scan log status into a user-facing label. */
+export function getScanStatusLabel(status: string | null | undefined, t: TranslateFn): string {
+  switch ((status || '').toLowerCase()) {
+    case 'success':
+      return t({ ko: '완료', en: 'Completed' })
+    case 'error':
+      return t({ ko: '오류 있음', en: 'Completed with errors' })
+    case 'in_progress':
+      return t({ ko: '진행 중', en: 'In progress' })
+    case '':
+      return '—'
+    default:
+      return status || '—'
+  }
+}
+
 /** Map watcher states to a compact icon tone for table cells. */
 export function getWatcherStatusTone(watcherState?: string | null): SettingsStatusTone {
   if (!watcherState) {

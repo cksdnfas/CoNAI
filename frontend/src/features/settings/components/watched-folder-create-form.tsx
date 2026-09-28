@@ -42,8 +42,8 @@ export function WatchedFolderCreateForm({
           <NumberStepperInput min={1} variant="settings" value={newFolder.scan_interval} onValueCommit={(nextValue) => onNewFolderChange({ scan_interval: Number(nextValue) || 1 })} />
         </Field>
 
-        <Field label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
-          <NumberStepperInput min={2000} allowEmpty variant="settings" value={newFolder.watcher_polling_interval} onValueCommit={(nextValue) => onNewFolderChange({ watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null })} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} />
+        <Field label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} hint={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })}>
+          <NumberStepperInput min={2000} allowEmpty variant="settings" value={newFolder.watcher_polling_interval} onValueCommit={(nextValue) => onNewFolderChange({ watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null })} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} disabled={!newFolder.watcher_enabled} />
         </Field>
 
         <Field label={t({ ko: '제외 확장자', en: 'Excluded extensions' })}>
@@ -66,7 +66,7 @@ export function WatchedFolderCreateForm({
         </ToggleRow>
         <ToggleRow>
           <input type="checkbox" checked={newFolder.watcher_enabled} onChange={(event) => onNewFolderChange({ watcher_enabled: event.target.checked })} />
-          {t({ ko: 'watcher 시작', en: 'Start watcher' })}
+          {t({ ko: '실시간 감시 시작', en: 'Start watching' })}
         </ToggleRow>
       </div>
 

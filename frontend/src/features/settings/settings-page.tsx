@@ -166,7 +166,7 @@ export function SettingsPage() {
     ])
   }
 
-  const { tabProps: foldersTabProps } = useFolderSettingsTab({ notifyInfo, notifyError })
+  const { tabProps: foldersTabProps } = useFolderSettingsTab({ isActive: activeTab === 'library', notifyInfo, notifyError })
 
   const effectiveGeneralDraft = generalDraft ?? settingsQuery.data?.general ?? null
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null

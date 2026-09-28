@@ -8,7 +8,7 @@ import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft }
 import { Modal } from '@/components/ui/modal'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Section } from '@/components/ui/section'
-import { SettingsResourceTable } from './settings-resource-shared'
+import { getScanStatusLabel, SettingsResourceTable } from './settings-resource-shared'
 import { WatchedFolderCard } from './watched-folder-card'
 import { WatchedFolderListItem } from './watched-folder-list-item'
 import { WatchedFolderCreateForm } from './watched-folder-create-form'
@@ -144,6 +144,10 @@ export function FoldersTab({
     }
   }, [backupSourcesById, selectedBackupSourceId])
 
+  /** Scan logs can outlive their folder, so fall back to the path's last segment before a generic label. */
+  const getScanLogFolderLabel = (log: FolderScanLog) =>
+    log.folder_name || log.folder_path?.split(/[\\/]/).filter(Boolean).pop() || t({ ko: '삭제된 폴더', en: 'Removed folder' })
+
   const handleAddFolderFromModal = async () => {
     const success = await onAddFolder()
     if (success) {
@@ -199,7 +203,7 @@ export function FoldersTab({
             <StatTile label={t({ ko: '감시 중', en: 'Watching' })} value={formatNumber(watchersHealth?.watching ?? 0)} valueClassName="text-xl" />
             <StatTile label={t({ ko: '오류', en: 'Errors' })} value={formatNumber(watchersHealth?.error ?? 0)} valueClassName="text-xl" />
             <StatTile label={t({ ko: '24시간 이벤트', en: 'Events 24h' })} value={formatNumber(watchersHealth?.totalEvents24h ?? 0)} valueClassName="text-xl" />
-            <StatTile label={t({ ko: '최근 스캔 로그', en: 'Latest scan log' })} value={scanLogs[0]?.folder_name ?? '—'} />
+            <StatTile label={t({ ko: '최근 스캔 로그', en: 'Latest scan log' })} value={scanLogs[0] ? getScanLogFolderLabel(scanLogs[0]) : '—'} />
           </div>
 
           {/* 전체 스캔은 60초를 훌쩍 넘기므로, 응답을 기다리는 대신 잡 진행률을 그대로 보여준다. */}
@@ -345,10 +349,10 @@ export function FoldersTab({
                 {scanLogs.map((log) => (
                   <div key={log.id} className={`grid items-center px-4 py-3 text-sm transition-colors hover:bg-surface-high/60 ${SCAN_LOG_TABLE_GRID}`}>
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-foreground">{log.folder_name || `Folder #${log.folder_id}`}</div>
+                      <div className="truncate font-medium text-foreground">{getScanLogFolderLabel(log)}</div>
                       {log.folder_path ? <div className="truncate font-mono text-[11px] text-muted-foreground">{log.folder_path}</div> : null}
                     </div>
-                    <div className="text-center text-xs uppercase tracking-[0.14em] text-muted-foreground">{log.status}</div>
+                    <div className={`text-center text-xs ${log.status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{getScanStatusLabel(log.status, t)}</div>
                     <div className="text-center font-medium text-foreground">{formatNumber(log.total_scanned ?? 0)}</div>
                     <div className="text-center font-medium text-foreground">{formatNumber(log.new_images ?? 0)}</div>
                     <div className="text-center font-medium text-foreground">{formatNumber(log.existing_images ?? 0)}</div>

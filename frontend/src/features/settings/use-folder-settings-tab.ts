@@ -30,7 +30,12 @@ import type { BackupSourceUpdateInput, ScanAllSummary, WatchedFolderUpdateInput 
 import { createNewBackupSourceDraft, createNewWatchedFolderDraft, normalizeBackupTargetPath, parseCommaSeparatedInput } from './settings-utils'
 import { useI18n } from '@/i18n'
 
+/** Watcher state changes on the server (starts, errors, events), so poll while the folder tab is on screen. */
+const WATCHER_STATUS_REFRESH_MS = 15_000
+
 interface UseFolderSettingsTabOptions {
+  /** Whether the library tab (which shows watcher status) is visible. */
+  isActive: boolean
   /** Show a success/info snackbar for folder tab actions. */
   notifyInfo: (message: string) => void
   /** Show an error snackbar for folder tab actions. */
@@ -38,7 +43,7 @@ interface UseFolderSettingsTabOptions {
 }
 
 /** Collect folder-tab state, queries, and actions away from SettingsPage. */
-export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSettingsTabOptions) {
+export function useFolderSettingsTab({ isActive, notifyInfo, notifyError }: UseFolderSettingsTabOptions) {
   const queryClient = useQueryClient()
   const { t, formatNumber } = useI18n()
   const [newFolder, setNewFolder] = useState(createNewWatchedFolderDraft)
@@ -57,10 +62,12 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
   const backupSourcesQuery = useQuery({
     queryKey: ['backup-sources'],
     queryFn: () => getBackupSources(false),
+    refetchInterval: isActive ? WATCHER_STATUS_REFRESH_MS : false,
   })
   const watchersHealthQuery = useQuery({
     queryKey: ['watchers-health'],
     queryFn: getWatchersHealth,
+    refetchInterval: isActive ? WATCHER_STATUS_REFRESH_MS : false,
   })
 
   const folderWatcherMap = useMemo(() => {
@@ -196,10 +203,10 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
         await restartFolderWatcher(folderId)
       }
 
-      notifyInfo(t({ ko: 'watcher를 {actionLabel}했어.', en: 'Watcher {actionLabel}.' }, { actionLabel: action === 'start' ? t({ ko: '시작', en: 'started' }) : action === 'stop' ? t({ ko: '중지', en: 'stopped' }) : t({ ko: '재시작', en: 'restarted' }) }))
+      notifyInfo(t({ ko: '실시간 감시를 {actionLabel}했어.', en: 'Watching {actionLabel}.' }, { actionLabel: action === 'start' ? t({ ko: '시작', en: 'started' }) : action === 'stop' ? t({ ko: '중지', en: 'stopped' }) : t({ ko: '재시작', en: 'restarted' }) }))
       await refreshFolderQueries()
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : t({ ko: 'watcher 제어에 실패했어.', en: 'Failed to control watcher.' }))
+      notifyError(error instanceof Error ? error.message : t({ ko: '실시간 감시를 제어하지 못했어.', en: 'Could not control watching.' }))
     }
   }
 
@@ -244,10 +251,10 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
         await restartBackupSourceWatcher(sourceId)
       }
 
-      notifyInfo(t({ ko: '백업 source watcher를 {actionLabel}했어.', en: 'Backup source watcher {actionLabel}.' }, { actionLabel: action === 'start' ? t({ ko: '시작', en: 'started' }) : action === 'stop' ? t({ ko: '중지', en: 'stopped' }) : t({ ko: '재시작', en: 'restarted' }) }))
+      notifyInfo(t({ ko: '백업 소스 실시간 감시를 {actionLabel}했어.', en: 'Backup source watching {actionLabel}.' }, { actionLabel: action === 'start' ? t({ ko: '시작', en: 'started' }) : action === 'stop' ? t({ ko: '중지', en: 'stopped' }) : t({ ko: '재시작', en: 'restarted' }) }))
       await refreshFolderQueries()
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : t({ ko: '백업 source watcher 제어에 실패했어.', en: 'Failed to control backup source watcher.' }))
+      notifyError(error instanceof Error ? error.message : t({ ko: '백업 소스 실시간 감시를 제어하지 못했어.', en: 'Could not control backup source watching.' }))
     }
   }
 

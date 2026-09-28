@@ -12,7 +12,9 @@ import { Section } from '@/components/ui/section'
 import {
   SettingsResourceFooterActions,
   SettingsResourceMetaList,
+  getScanStatusLabel,
   getWatcherBadgeVariant,
+  getWatcherStateLabel,
 } from './settings-resource-shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -85,13 +87,13 @@ export function WatchedFolderCard({
           <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onScan(folder.id))} title={t({ ko: '폴더 스캔', en: 'Scan folder' })} aria-label={t({ ko: '폴더 스캔', en: 'Scan folder' })}>
             <ScanSearch className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(folder.id))} title={t({ ko: 'watcher 시작', en: 'Start watcher' })} aria-label={t({ ko: 'watcher 시작', en: 'Start watcher' })}>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(folder.id))} title={t({ ko: '실시간 감시 시작', en: 'Start watching' })} aria-label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
             <Play className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(folder.id))} title={t({ ko: 'watcher 중지', en: 'Stop watcher' })} aria-label={t({ ko: 'watcher 중지', en: 'Stop watcher' })}>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(folder.id))} title={t({ ko: '실시간 감시 중지', en: 'Stop watching' })} aria-label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
             <Square className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(folder.id))} title={t({ ko: 'watcher 재시작', en: 'Restart watcher' })} aria-label={t({ ko: 'watcher 재시작', en: 'Restart watcher' })}>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(folder.id))} title={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })} aria-label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
             <RotateCcw className="h-4 w-4" />
           </Button>
         </div>
@@ -100,7 +102,7 @@ export function WatchedFolderCard({
       <div className="flex flex-wrap gap-2">
         {folder.is_default === 1 ? <Badge variant="secondary">{t({ ko: '기본', en: 'Default' })}</Badge> : null}
         <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
-        <Badge variant={getWatcherBadgeVariant(watcherState)}>{t({ ko: 'watcher {status}', en: 'Watcher {status}' }, { status: watcherState || 'stopped' })}</Badge>
+        <Badge variant={getWatcherBadgeVariant(watcherState)}>{getWatcherStateLabel(watcherState, t)}</Badge>
       </div>
 
       <div className="break-all font-mono text-xs text-muted-foreground">{folder.folder_path}</div>
@@ -112,6 +114,10 @@ export function WatchedFolderCard({
 
         <Field label={t({ ko: '스캔 주기(분)', en: 'Scan interval (minutes)' })}>
           <NumberStepperInput min={1} variant="settings" value={draft.scan_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, scan_interval: Number(nextValue) || 1 }))} />
+        </Field>
+
+        <Field label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} hint={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })}>
+          <NumberStepperInput min={2000} allowEmpty variant="settings" value={draft.watcher_polling_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null }))} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} disabled={!draft.watcher_enabled} />
         </Field>
 
         <Field label={t({ ko: '제외 확장자', en: 'Excluded extensions' })}>
@@ -138,7 +144,7 @@ export function WatchedFolderCard({
             checked={draft.watcher_enabled}
             onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
           />
-          {t({ ko: 'watcher 사용', en: 'Use watcher' })}
+          {t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
         </ToggleRow>
 
         <ToggleRow>
@@ -150,7 +156,7 @@ export function WatchedFolderCard({
       <SettingsResourceMetaList
         items={[
           { label: t({ ko: '최근 스캔', en: 'Latest scan' }), value: formatDateTime(folder.last_scan_date, locale) },
-          { label: t({ ko: '최근 상태', en: 'Latest status' }), value: folder.last_scan_status || '—' },
+          { label: t({ ko: '최근 상태', en: 'Latest status' }), value: getScanStatusLabel(folder.last_scan_status, t) },
           { label: t({ ko: '최근 신규 이미지', en: 'Latest new images' }), value: formatNumber(folder.last_scan_found) },
         ]}
       />

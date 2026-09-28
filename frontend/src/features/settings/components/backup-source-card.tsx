@@ -14,6 +14,7 @@ import {
   SettingsResourceFooterActions,
   SettingsResourceMetaList,
   getWatcherBadgeVariant,
+  getWatcherStateLabel,
 } from './settings-resource-shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -78,13 +79,13 @@ export function BackupSourceCard({
       bodyClassName="space-y-5"
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(source.id))} title={t({ ko: 'watcher 시작', en: 'Start watcher' })} aria-label={t({ ko: 'watcher 시작', en: 'Start watcher' })}>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(source.id))} title={t({ ko: '실시간 감시 시작', en: 'Start watching' })} aria-label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
             <Play className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(source.id))} title={t({ ko: 'watcher 중지', en: 'Stop watcher' })} aria-label={t({ ko: 'watcher 중지', en: 'Stop watcher' })}>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(source.id))} title={t({ ko: '실시간 감시 중지', en: 'Stop watching' })} aria-label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
             <Square className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(source.id))} title={t({ ko: 'watcher 재시작', en: 'Restart watcher' })} aria-label={t({ ko: 'watcher 재시작', en: 'Restart watcher' })}>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(source.id))} title={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })} aria-label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
             <RotateCcw className="h-4 w-4" />
           </Button>
         </div>
@@ -93,7 +94,7 @@ export function BackupSourceCard({
       <div className="flex flex-wrap gap-2">
         <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
         <Badge variant="outline">{t({ ko: '모드 {mode}', en: 'Mode {mode}' }, { mode: source.import_mode })}</Badge>
-        <Badge variant={getWatcherBadgeVariant(source.watcher_status)}>{t({ ko: 'watcher {status}', en: 'Watcher {status}' }, { status: source.watcher_status || 'stopped' })}</Badge>
+        <Badge variant={getWatcherBadgeVariant(source.watcher_status)}>{getWatcherStateLabel(source.watcher_status, t)}</Badge>
       </div>
 
       <div className="space-y-1 font-mono text-xs text-muted-foreground">
@@ -145,8 +146,8 @@ export function BackupSourceCard({
             </Select>
           </Field>
 
-          <Field label={t({ ko: 'watcher polling(ms, 비우면 자동)', en: 'Watcher polling (ms, empty = auto)' })}>
-            <NumberStepperInput min={2000} allowEmpty variant="settings" value={draft.watcher_polling_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null }))} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} />
+          <Field label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} hint={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })}>
+            <NumberStepperInput min={2000} allowEmpty variant="settings" value={draft.watcher_polling_interval} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null }))} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} disabled={!draft.watcher_enabled} />
           </Field>
 
           <Field label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>
@@ -164,7 +165,7 @@ export function BackupSourceCard({
               checked={draft.watcher_enabled}
               onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
             />
-            {t({ ko: 'watcher 사용', en: 'Use watcher' })}
+            {t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
           </ToggleRow>
 
           <ToggleRow>
