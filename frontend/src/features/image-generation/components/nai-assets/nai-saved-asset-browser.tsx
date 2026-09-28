@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Section } from '@/components/ui/section'
@@ -67,10 +66,10 @@ export function NaiSavedAssetBrowser({
       variant="controller"
       heading={<Text as="span" variant="overline" className="font-semibold">{title}</Text>}
       className={className}
-      bodyClassName={isExpanded ? 'space-y-0 px-3 py-3' : 'hidden'}
+      bodyClassName={isExpanded ? 'space-y-0' : 'hidden'}
       actions={(
         <>
-          <Badge variant="outline">{items.length}</Badge>
+          <span className="px-1 text-xs tabular-nums text-muted-foreground">{items.length}</span>
           <div className="w-[9.5rem] sm:w-44 md:w-52">
             <Input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder={effectiveSearchPlaceholder} />
           </div>

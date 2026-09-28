@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { Plus, Save, Trash2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -65,13 +64,13 @@ export function NaiCharacterReferencesEditor({
         description={description}
         collapsible
         defaultOpen={defaultOpen}
-        className="rounded-b-none @container"
+        className="@container"
         actions={(
           <>
-            <Badge variant="outline">{references.length}</Badge>
+            <span className="px-1 text-xs tabular-nums text-muted-foreground">{references.length}</span>
             <IconButton
               size="icon-sm"
-              variant="secondary"
+              variant="ghost"
               onClick={onAdd}
               disabled={!supportsCharacterReference}
               label={t('image-generation.components.nai.references.section.add.reference')}
@@ -84,7 +83,7 @@ export function NaiCharacterReferencesEditor({
         {!supportsCharacterReference ? <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</Text> : null}
 
         {references.length > 0 ? (
-          <div className="divide-y divide-outline-subtle">
+          <div className="divide-y divide-line">
             {references.map((reference, index) => (
               <div key={`nai-character-reference-${index}`} className="space-y-4 py-4 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -149,7 +148,7 @@ export function NaiCharacterReferencesEditor({
           imageUrl: asset.thumbnail_url || asset.image_url || asset.image_data_url,
         }))}
         emptyMessage={emptyMessage ?? t('image-generation.components.nai.references.section.no.search.results.or.saved.references')}
-        className="rounded-t-none @container"
+        className="mt-4 @container"
         onSelect={(assetId) => {
           const asset = assets.find((entry) => entry.id === assetId)
           if (asset) {

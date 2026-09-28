@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Text } from '@/components/ui/text'
 import { getAppSettings } from '@/lib/api-settings-general'
@@ -568,7 +567,7 @@ export function CodexGenerationPanel({
 
         <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
           <div className="grid gap-4 @2xl:grid-cols-2">
-            <Inset className="space-y-3 px-3">
+            <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <Text variant="label">{t({ ko: '참조 이미지', en: 'Reference Image' })}</Text>
                 <ImageAttachmentPickerButton
@@ -593,9 +592,9 @@ export function CodexGenerationPanel({
                   </Button>
                 </div>
               ) : null}
-            </Inset>
+            </div>
 
-            <Inset className="space-y-3 px-3">
+            <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <Text variant="label">{t({ ko: '마스크 이미지', en: 'Mask Image' })}</Text>
                 <ImageAttachmentPickerButton
@@ -615,7 +614,7 @@ export function CodexGenerationPanel({
                   </Button>
                 </div>
               ) : null}
-            </Inset>
+            </div>
           </div>
         </Section>
 

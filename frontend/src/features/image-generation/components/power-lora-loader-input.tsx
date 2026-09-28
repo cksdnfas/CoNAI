@@ -165,7 +165,7 @@ export function PowerLoraLoaderInput({
   if (nodeItems.length === 0) {
     return (
       <div className={cn(isCompact ? 'space-y-1' : 'space-y-2')}>
-        <div className={cn('ui-tone-plinth rounded-sm text-muted-foreground', isCompact ? 'px-2 py-1.5 text-2xs' : 'px-3 py-4 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
+        <div className={cn('text-muted-foreground', isCompact ? 'py-1.5 text-2xs' : 'py-3 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
         {addLoraControl}
       </div>
     )
@@ -174,6 +174,7 @@ export function PowerLoraLoaderInput({
   return (
     <div className={cn(isCompact ? 'space-y-0.5' : 'space-y-2')}>
       {addLoraControl}
+      <div>
       {nodeItems.map((item) => {
         const entry = nodeValue[item.key] as PowerLoraLoaderEntryValue
         return (
@@ -181,11 +182,11 @@ export function PowerLoraLoaderInput({
             key={item.key}
             data-on={entry.on === true || undefined}
             className={cn(
-              // Tonal row; an enabled LoRA gets a faint primary tint instead of a coloured outline.
-              'ui-tone-plinth grid items-center rounded-sm transition-colors data-[on=true]:bg-primary/8',
+              // Hairline row; the toggle carries the on/off state.
+              'grid items-center border-b border-line last:border-b-0',
               isCompact
-                ? 'grid-cols-[auto_minmax(0,1fr)_48px_auto] gap-2 px-2 py-1'
-                : 'grid-cols-[auto_minmax(0,1fr)_88px_auto] gap-3 px-3 py-2.5',
+                ? 'grid-cols-[auto_minmax(0,1fr)_48px_auto] gap-2 py-1'
+                : 'grid-cols-[auto_minmax(0,1fr)_88px_auto] gap-3 py-2',
             )}
           >
             <PowerLoraRowToggle
@@ -233,6 +234,7 @@ export function PowerLoraLoaderInput({
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

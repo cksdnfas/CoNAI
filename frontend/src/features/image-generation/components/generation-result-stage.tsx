@@ -185,7 +185,8 @@ export function GenerationResultStage({
       <div className={cn('flex min-h-0 gap-3', compact ? 'flex-col' : 'flex-1')}>
         <div
           className={cn(
-            'relative flex min-w-0 items-center justify-center overflow-hidden rounded-md bg-surface-container',
+            // No frame: the image (on its checkerboard) is the object on the page background.
+            'relative flex min-w-0 items-center justify-center overflow-hidden',
             compact ? 'min-h-48' : 'min-h-[16rem] flex-1',
           )}
         >

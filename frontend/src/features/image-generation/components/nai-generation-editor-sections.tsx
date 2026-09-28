@@ -148,10 +148,10 @@ export function NaiGenerationEditorSections({
         defaultOpen={hasCharacters}
         actions={(
           <>
-            <Badge variant="outline">{naiForm.characters.length}</Badge>
+            <span className="px-1 text-xs tabular-nums text-muted-foreground">{naiForm.characters.length}</span>
             <IconButton
               size="icon-sm"
-              variant="secondary"
+              variant="ghost"
               onClick={handleAddCharacterPrompt}
               disabled={!supportsCharacterPrompts}
               label={t('image-generation.components.nai.generation.editor.sections.add.character')}
@@ -196,12 +196,12 @@ export function NaiGenerationEditorSections({
             ) : null}
 
             {hasCharacters ? (
-              <div className="space-y-1">
+              <div className="divide-y divide-line">
                 {naiForm.characters.map((character, index) => (
                   <div
                     key={`nai-character-${index}`}
                     data-selected={index === selectedCharacterIndex || undefined}
-                    className="space-y-3 rounded-sm p-3 transition-colors data-[selected=true]:bg-primary/8"
+                    className="space-y-3 py-3 transition-shadow data-[selected=true]:shadow-[inset_2px_0_0_var(--primary)] data-[selected=true]:pl-3"
                     onClick={() => setSelectedCharacterIndex(index)}
                   >
                     <div className="flex items-center justify-between gap-3">

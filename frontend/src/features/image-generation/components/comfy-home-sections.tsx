@@ -8,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { IconButton } from '@/components/ui/icon-button'
-import { Panel } from '@/components/ui/panel'
 import { Switch } from '@/components/ui/switch'
 import { Text } from '@/components/ui/text'
 import { Section } from '@/components/ui/section'
@@ -51,7 +50,7 @@ export function ComfyWorkflowListSection({
       )}
       actions={(
         <>
-          <Badge variant="outline">{workflows.length}</Badge>
+          <span className="px-1 text-xs tabular-nums text-muted-foreground">{workflows.length}</span>
           <Button type="button" size="sm" variant="secondary" onClick={onCreateWorkflow}>
             <Plus className="h-4 w-4" />
             {t({ ko: '등록', en: 'Add' })}
@@ -60,16 +59,14 @@ export function ComfyWorkflowListSection({
       )}
     >
       {workflows.length > 0 ? (
-        <div className="space-y-2">
+        <div>
           {workflows.map((workflow) => {
             const isSelected = String(workflow.id) === selectedWorkflowId
             return (
-              <Panel
+              <div
                 key={workflow.id}
-                tone="lowest"
-                padding="sm"
                 data-selected={isSelected || undefined}
-                className="transition-colors data-[selected=true]:bg-primary/8"
+                className="border-b border-line px-2 py-2.5 transition-colors last:border-b-0 data-[selected=true]:bg-primary/8"
                 // The workflow's own colour marks the selected row as a left accent (tone, not an outline).
                 style={isSelected ? { boxShadow: `inset 3px 0 0 ${workflow.color || 'var(--color-primary)'}` } : undefined}
               >
@@ -142,7 +139,7 @@ export function ComfyWorkflowListSection({
                     </div>
                   </div>
                 </div>
-              </Panel>
+              </div>
             )
           })}
         </div>
@@ -191,7 +188,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
       )}
     >
       {servers.length > 0 ? (
-        <div className="space-y-2">
+        <div>
           {servers.map((server) => {
             const testState = serverTests[server.id]
             const connectionStatus = testState?.status
@@ -199,7 +196,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
             const isActive = server.is_active !== false
 
             return (
-              <Panel key={server.id} tone="lowest" padding="sm" className="text-sm text-muted-foreground">
+              <div key={server.id} className="border-b border-line py-2.5 text-sm text-muted-foreground last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -268,7 +265,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                     </div>
                   </div>
                 </div>
-              </Panel>
+              </div>
             )
           })}
         </div>
@@ -484,9 +481,9 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
         </div>
 
         {visibleLists.length > 0 ? (
-          <div className="space-y-2">
+          <div>
             {visibleLists.map((list) => (
-              <Panel key={list.id} tone="lowest" padding="sm" className="text-sm text-muted-foreground">
+              <div key={list.id} className="border-b border-line py-2.5 text-sm text-muted-foreground last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
                   {/* Auto lists also open read-only from the explicit View button; manual lists use Edit. */}
                   <div className="min-w-0 flex-1">
@@ -516,7 +513,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
                     </Button>
                   )}
                 </div>
-              </Panel>
+              </div>
             ))}
           </div>
         ) : (

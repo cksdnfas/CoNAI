@@ -232,8 +232,8 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
   }
 
   return (
-    <section data-surface="raised" className={cn('ui-tone-plinth rounded-sm', splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3 pb-1">
+    <section className={cn('min-w-0', splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
         <div className="flex min-w-0 items-center gap-2">
           {onBack ? (
             <IconButton size="icon-sm" variant="ghost" onClick={onBack} label={t('image-generation.components.workflow.artifact.explorer.panel.back.to.workflow.list')}>
@@ -261,14 +261,13 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
             </nav>
           </div>
         </div>
-        <Button type="button" size="sm" variant="secondary" onClick={() => void artifactsQuery.refetch()}>
+        <IconButton size="icon-sm" variant="ghost" onClick={() => void artifactsQuery.refetch()} label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}>
           <RefreshCw />
-          {t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
-        </Button>
+        </IconButton>
       </div>
 
       {artifactsQuery.isError ? (
-        <div className="p-4">
+        <div className="py-4">
           <Alert variant="destructive">
             <AlertTitle>{t('image-generation.components.workflow.artifact.explorer.panel.could.not.load.results')}</AlertTitle>
             <AlertDescription>{getErrorMessage(artifactsQuery.error, t('image-generation.components.workflow.artifact.explorer.panel.failed.to.fetch.result.list'))}</AlertDescription>
@@ -276,9 +275,9 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
         </div>
       ) : null}
 
-      <div className={cn('overflow-auto p-4', splitPaneScroll && 'min-h-0 flex-1')}>
+      <div className={cn('overflow-auto py-4', splitPaneScroll && 'min-h-0 flex-1')}>
         {currentPath ? (
-          <Button type="button" variant="secondary" size="sm" className="mb-4" onClick={() => setCurrentPath(getParentPath(currentPath))}>
+          <Button type="button" variant="ghost" size="sm" className="mb-4" onClick={() => setCurrentPath(getParentPath(currentPath))}>
             <Folder className="text-warning" />
             ..
           </Button>

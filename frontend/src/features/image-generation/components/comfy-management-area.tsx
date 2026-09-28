@@ -2,7 +2,6 @@ import type { ComponentProps } from 'react'
 import { ChevronDown, Wrench } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { CustomDropdownList } from '@/lib/api-image-generation-types'
@@ -52,20 +51,20 @@ export function ComfyManagementArea({
 
   return (
     <>
-    <Panel padding="sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Text as="div" variant="label">{t({ ko: 'ComfyUI 관리', en: 'ComfyUI management' })}</Text>
           <Badge variant="outline">{t({ ko: '서버 {count}', en: '{count} servers' }, { count: servers.length })}</Badge>
           <Badge variant="outline">{t({ ko: '목록 {count}', en: '{count} lists' }, { count: dropdownLists?.length ?? 0 })}</Badge>
         </div>
-        <Button type="button" size="sm" variant="secondary" onClick={onToggleManagement} aria-expanded={isManagementOpen}>
+        <Button type="button" size="sm" variant="ghost" onClick={onToggleManagement} aria-expanded={isManagementOpen}>
           <Wrench className="h-4 w-4" />
           {isManagementOpen ? t({ ko: '관리 닫기', en: 'Close management' }) : t({ ko: '관리 열기', en: 'Open management' })}
           <ChevronDown className={cn('h-4 w-4 transition-transform', isManagementOpen && 'rotate-180')} />
         </Button>
       </div>
-    </Panel>
+    </div>
 
     {servers.length === 0 || isManagementOpen ? (
       <>

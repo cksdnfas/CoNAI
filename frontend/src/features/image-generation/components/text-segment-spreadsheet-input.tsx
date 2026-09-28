@@ -69,7 +69,7 @@ export function TextSegmentSpreadsheetInput({
 
   return (
     <div className={cn('space-y-1', className)}>
-      {/* One recessed tray: a single input outline around every row, tonal side actions, spacing-free row dividers. */}
+      {/* One field fill around every row; the row actions sit on the same fill, rows split by a hairline. */}
       <div
         className={cn(
           'theme-input-surface overflow-hidden rounded-sm border transition-[border-color,box-shadow] focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15',
@@ -96,7 +96,7 @@ export function TextSegmentSpreadsheetInput({
                 />
               </div>
 
-              <div className="flex w-10 shrink-0 flex-col items-center gap-1 bg-foreground/4 py-1.5">
+              <div className="flex w-10 shrink-0 flex-col items-center gap-1 py-1.5">
                 <IconButton
                   ref={(node: HTMLButtonElement | null) => {
                     presetButtonRefs.current.set(index, node)

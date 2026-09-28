@@ -17,12 +17,12 @@ function formatWorkflowFieldTypeLabel(field: WorkflowMarkedField) {
   return field.type
 }
 
-/** Tonal field card (no outline): surface-low on the page, recessed when nested. Pair with data-surface="raised". */
-export const WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS = 'ui-tone-plinth overflow-hidden rounded-sm'
+/** Flat field block (DESIGN_PRESET "Flat"): a plain disclosure row over the field, no surface of its own. */
+export const WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS = 'min-w-0'
+/** Disclosure header: a plain row with a chevron whose hover wash bleeds a little past the field edges. */
+export const WORKFLOW_FIELD_DISCLOSURE_HEADER_CLASS = '-mx-2 h-auto w-[calc(100%+1rem)] gap-3 px-2 py-2.5 text-foreground'
 /** Body under the disclosure header, separated by spacing instead of a divider. */
-export const WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS = 'pt-0'
-/** Invalid field: a destructive ring instead of a border (the card has no outline to recolour). */
-const WORKFLOW_FIELD_INVALID_RING_CLASS = 'ring-1 ring-inset ring-destructive/60'
+export const WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS = 'pb-1'
 
 /** Selector for the fields marked by the last failed generate validation (see `data-workflow-field-invalid`). */
 export const WORKFLOW_FIELD_INVALID_SELECTOR = '[data-workflow-field-invalid="true"]'
@@ -71,23 +71,19 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
 
   return (
     <div
-      data-surface={grouped ? undefined : 'raised'}
-      className={cn(
-        grouped ? 'overflow-hidden' : WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
-        (hasNodeIssues || isInvalid) && (grouped ? 'bg-destructive-soft/40' : WORKFLOW_FIELD_INVALID_RING_CLASS),
-      )}
+      className={cn(WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS, grouped && 'py-1')}
       data-workflow-field-invalid={isInvalid ? 'true' : undefined}
     >
       <Button
         type="button"
         variant="nav"
-        className="h-auto items-start gap-3 px-4 py-3 text-foreground"
+        className={cn(WORKFLOW_FIELD_DISCLOSURE_HEADER_CLASS, 'items-start')}
         onClick={() => setIsExpanded((current) => !current)}
         aria-expanded={isExpanded}
       >
         <ChevronDown className={cn('mt-0.5 text-muted-foreground transition-transform', !isExpanded && '-rotate-90')} aria-hidden />
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <span className={cn('min-w-0 truncate font-medium', isInvalid ? 'text-destructive' : 'text-foreground')}>{fieldLabel}</span>
+          <span className={cn('min-w-0 truncate font-medium', isInvalid || hasNodeIssues ? 'text-destructive' : 'text-foreground')}>{fieldLabel}</span>
           {field.required ? <Badge variant="outline">{t('image-generation.components.workflow.field.disclosure.card.required')}</Badge> : null}
           {field.description ? (
             <span
@@ -107,14 +103,11 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
         </span>
       </Button>
       {issueMessage ? (
-        <p id={errorMessageId} className="-mt-1.5 px-4 pb-2 pl-11 text-xs text-destructive">{issueMessage}</p>
+        <p id={errorMessageId} className="-mt-1 pb-2 pl-7 text-xs text-destructive">{issueMessage}</p>
       ) : null}
 
       {isExpanded ? (
-        <div className={cn(
-          WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS,
-          field.type === 'textarea' ? 'px-3 pb-3' : 'px-4 pb-4',
-        )}>
+        <div className={WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS}>
           <WorkflowFieldInput
             field={field}
             value={value}
@@ -175,13 +168,10 @@ export function WorkflowNodeFieldDisclosureCard({
   const hasFieldIssues = fields.some((field) => Boolean(fieldIssues?.[field.id]))
 
   return (
-    <div data-surface="raised" className={cn(
-      WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
-      (issueCount > 0 || hasFieldIssues) && WORKFLOW_FIELD_INVALID_RING_CLASS,
-    )}>
-      <div className="flex items-start justify-between gap-3 px-4 py-3">
+    <div className={WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS}>
+      <div className="flex items-start justify-between gap-3 py-2">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-foreground">{nodeTitle ?? t('image-generation.components.workflow.field.group.unknown.node')}</div>
+          <div className={cn('truncate text-sm font-semibold', issueCount > 0 || hasFieldIssues ? 'text-destructive' : 'text-foreground')}>{nodeTitle ?? t('image-generation.components.workflow.field.group.unknown.node')}</div>
           {nodeId ? <div className="mt-0.5 text-2xs text-muted-foreground">{t('image-generation.components.workflow.field.group.node.id', { id: nodeId })}</div> : null}
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -190,7 +180,7 @@ export function WorkflowNodeFieldDisclosureCard({
         </div>
       </div>
 
-      <div className="divide-y divide-outline-subtle">
+      <div className="divide-y divide-line">
         {fields.map((field) => (
           <WorkflowFieldDisclosureCard
             key={field.id}

@@ -93,7 +93,7 @@ const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCance
   const detailTitle = [detailLabel, durationLabel].filter(Boolean).join(' · ')
 
   return (
-    <div className="ui-tone-plinth rounded-sm px-3 py-3">
+    <div className="border-b border-line py-3 last:border-b-0">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 text-2xs">
           <div className="flex min-w-0 items-center gap-2">
@@ -218,7 +218,7 @@ export function GenerationQueueJobsTab({
         ) : null}
 
         {records.length > 0 ? (
-          <div className="space-y-2">
+          <div>
             {records.map((record) => (
               <QueueJobRow
                 key={record.id}

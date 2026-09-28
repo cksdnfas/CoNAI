@@ -1,7 +1,6 @@
 import { RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
@@ -30,7 +29,7 @@ export function GenerationHistoryRecoveryPanel({
   const { t, formatNumber } = useI18n()
 
   return (
-    <Inset className="space-y-3">
+    <div className="space-y-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <Text variant="title">{t({ ko: '실행 복구', en: 'Run recovery' })}</Text>
@@ -52,13 +51,13 @@ export function GenerationHistoryRecoveryPanel({
               ? t({ ko: '등록 중', en: 'Queueing' })
               : t({ ko: '모두 재실행', en: 'Rerun all' })}
           </Button>
-          <Button type="button" size="sm" variant="secondary" onClick={handleAcknowledgeRunRecovery}>
+          <Button type="button" size="sm" variant="ghost" onClick={handleAcknowledgeRunRecovery}>
             {t({ ko: '확인', en: 'Dismiss' })}
           </Button>
         </div>
       </div>
 
-      <div className="divide-y divide-outline-subtle">
+      <div className="divide-y divide-line">
         {visibleRetryableHistoryRecords.map((record) => {
           const queueJobId = getRetryableHistoryQueueJobId(record)
           const isRetrying = queueJobId !== null && retryingQueueJobIds.has(queueJobId)
@@ -83,7 +82,7 @@ export function GenerationHistoryRecoveryPanel({
               <Button
                 type="button"
                 size="sm"
-                variant="secondary"
+                variant="ghost"
                 className="shrink-0"
                 onClick={() => void handleRetryHistoryRecord(record)}
                 disabled={isRetryingRunRecovery}
@@ -96,6 +95,6 @@ export function GenerationHistoryRecoveryPanel({
           )
         })}
       </div>
-    </Inset>
+    </div>
   )
 }

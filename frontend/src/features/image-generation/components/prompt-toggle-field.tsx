@@ -7,6 +7,7 @@ import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
 import {
   WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS,
+  WORKFLOW_FIELD_DISCLOSURE_HEADER_CLASS,
   WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
 } from './workflow-field-disclosure-card'
 
@@ -64,11 +65,11 @@ function PromptSpreadsheetDisclosure({
   })
 
   return (
-    <div data-surface="raised" className={WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS}>
+    <div className={WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS}>
       <Button
         type="button"
         variant="nav"
-        className="h-auto gap-3 px-4 py-3 text-foreground"
+        className={WORKFLOW_FIELD_DISCLOSURE_HEADER_CLASS}
         onClick={onToggle}
         aria-expanded={isExpanded}
       >
@@ -78,7 +79,7 @@ function PromptSpreadsheetDisclosure({
       </Button>
 
       {isExpanded ? (
-        <div className={cn(WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS, 'px-3 pb-3')}>
+        <div className={WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS}>
           <TextSegmentSpreadsheetInput
             tool={tool}
             value={value}

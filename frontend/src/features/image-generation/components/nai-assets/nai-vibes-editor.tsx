@@ -73,18 +73,18 @@ export function NaiVibesEditor({
         description={description}
         collapsible
         defaultOpen={defaultOpen}
-        className="rounded-b-none @container"
+        className="@container"
         actions={(
           <>
-            <Badge variant="outline">{vibes.length}</Badge>
-            <IconButton size="icon-sm" variant="secondary" onClick={onAdd} label={t('image-generation.components.nai.vibes.section.add.vibe')}>
+            <span className="px-1 text-xs tabular-nums text-muted-foreground">{vibes.length}</span>
+            <IconButton size="icon-sm" variant="ghost" onClick={onAdd} label={t('image-generation.components.nai.vibes.section.add.vibe')}>
               <Plus />
             </IconButton>
           </>
         )}
       >
         {vibes.length > 0 ? (
-          <div className="divide-y divide-outline-subtle">
+          <div className="divide-y divide-line">
             {vibes.map((vibe, index) => (
               <div key={`nai-vibe-${index}`} className="space-y-4 py-4 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -163,7 +163,7 @@ export function NaiVibesEditor({
           imageUrl: asset.thumbnail_url || asset.image_url || asset.image_data_url,
         }))}
         emptyMessage={emptyMessage ?? t('image-generation.components.nai.vibes.section.no.search.results.or.saved.vibes')}
-        className="rounded-t-none @container"
+        className="mt-4 @container"
         onSelect={(assetId) => {
           const asset = assets.find((entry) => entry.id === assetId)
           if (asset) {

@@ -270,7 +270,7 @@ export function WorkflowReservationsPanel() {
         variant="settings"
         heading={t({ ko: '예약작업', en: 'Reservation jobs' })}
         actions={(
-          <IconButton size="icon-sm" variant="secondary" onClick={() => void handleRefresh()} label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
+          <IconButton size="icon-sm" variant="ghost" onClick={() => void handleRefresh()} label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
             <RefreshCw />
           </IconButton>
         )}

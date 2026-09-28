@@ -64,7 +64,7 @@ export function GenerationQueueReservationsTab({
         ) : null}
 
         {schedules.length > 0 ? (
-          <div className="space-y-2">
+          <div>
             {schedules.map((schedule) => {
               const nextRunAt = formatReservationTimestamp(schedule.next_run_at, locale)
               const lastEnqueuedAt = formatReservationTimestamp(schedule.last_enqueued_at, locale)
@@ -72,7 +72,7 @@ export function GenerationQueueReservationsTab({
               const runAtLabel = getReservationRunAtLabel(schedule, t, (value) => formatReservationTimestamp(value, locale))
               const stopReasonLabel = getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)
               return (
-                <div key={schedule.id} className="ui-tone-plinth rounded-sm px-3 py-3">
+                <div key={schedule.id} className="border-b border-line py-3 last:border-b-0">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Text as="div" variant="label" className="truncate">{schedule.name}</Text>
@@ -88,7 +88,7 @@ export function GenerationQueueReservationsTab({
                       {lastEnqueuedAt ? <span>{t('image-generation.components.generation.queue.header.widget.last.queued.value', { lastEnqueuedAt })}</span> : null}
                     </div>
                     {stopReasonLabel ? (
-                      <div className="rounded-sm bg-foreground/4 px-2.5 py-2 text-2xs text-muted-foreground">
+                      <div className="text-2xs text-warning">
                         {stopReasonLabel}
                       </div>
                     ) : null}

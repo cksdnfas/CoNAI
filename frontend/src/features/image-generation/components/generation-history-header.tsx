@@ -93,11 +93,11 @@ export function GenerationHistoryHeader({
         </div>
       )}
 
-      <div className="flex shrink-0 flex-wrap gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-1">
         {inFlightHistoryCount > 0 ? <Badge variant="info">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
         <IconButton
           size="icon-sm"
-          variant="secondary"
+          variant="ghost"
           onClick={() => void handleClearHistory()}
           disabled={isClearingHistory || historyRecordCount === 0}
           label={isClearingHistory
@@ -110,14 +110,14 @@ export function GenerationHistoryHeader({
         </IconButton>
         <IconButton
           size="icon-sm"
-          variant="secondary"
+          variant="ghost"
           onClick={handleCleanupFailed}
           disabled={isCleaningFailed || cleanupFailedHistoryCount === 0}
           label={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
         >
           <Trash2 />
         </IconButton>
-        <IconButton size="icon-sm" variant="secondary" onClick={() => void refreshHistory({ watchForNewRows: true })} label={t('image-generation.components.generation.history.panel.refresh.history')}>
+        <IconButton size="icon-sm" variant="ghost" onClick={() => void refreshHistory({ watchForNewRows: true })} label={t('image-generation.components.generation.history.panel.refresh.history')}>
           <RefreshCw className={cn(isFetching && 'animate-spin')} />
         </IconButton>
       </div>
