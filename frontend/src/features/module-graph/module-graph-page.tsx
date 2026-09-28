@@ -487,8 +487,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     <div className={embedded ? 'space-y-6' : 'space-y-8'}>
       {!embedded ? (
         <PageHeader
-          eyebrow="Create"
-          title={workflowView === 'browse' ? 'Workflow' : 'Workflow Editor'}
+          eyebrow={t({ ko: '생성', en: 'Create' })}
+          title={workflowView === 'browse' ? t({ ko: '워크플로우', en: 'Workflow' }) : t({ ko: '워크플로우 편집기', en: 'Workflow Editor' })}
         />
       ) : null}
 

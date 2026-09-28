@@ -468,7 +468,7 @@ export function NaiGenerationPanel({
         <Suspense fallback={null}>
           <ImageEditorModal
             open={isImageEditorOpen}
-            title={naiForm.action === 'infill' ? 'Source and Mask Editor' : 'Source Image Editor'}
+            title={naiForm.action === 'infill' ? t({ ko: '원본·마스크 편집기', en: 'Source and Mask Editor' }) : t({ ko: '원본 이미지 편집기', en: 'Source Image Editor' })}
             sourceImageDataUrl={naiForm.sourceImage?.dataUrl}
             sourceFileName={naiForm.sourceImage?.fileName}
             maskImageDataUrl={naiForm.maskImage?.dataUrl}

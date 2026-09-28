@@ -53,7 +53,7 @@ export function NaiVibesSection({
     <div className="space-y-0">
       <Section
         variant="controller"
-        heading="Vibes"
+        heading={t({ ko: '바이브', en: 'Vibes' })}
         collapsible
         defaultOpen={false}
         className="rounded-b-none border-b-0"

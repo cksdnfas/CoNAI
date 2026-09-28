@@ -135,7 +135,7 @@ export function NaiGenerationEditorSections({
 
       <Section
         variant="controller"
-        heading="Character Prompt"
+        heading={t({ ko: '캐릭터 프롬프트', en: 'Character Prompt' })}
         collapsible
         defaultOpen={false}
         actions={(
@@ -234,14 +234,14 @@ export function NaiGenerationEditorSections({
         )}
       </Section>
 
-      <Section variant="controller" heading="Settings">
+      <Section variant="controller" heading={t({ ko: '설정', en: 'Settings' })}>
         <div className="space-y-5">
           <div className="space-y-3">
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '핵심 설정', en: 'Core' })}</div>
             <NaiControllerInsetBlock>
               <div className="grid gap-4 md:grid-cols-4">
                 <div className="md:col-span-3">
-                  <FormField label="Model">
+                  <FormField label={t({ ko: '모델', en: 'Model' })}>
                     <Select value={naiForm.model} onChange={(event) => handleNaiFieldChange('model', event.target.value)}>
                       {NAI_MODEL_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -250,7 +250,7 @@ export function NaiGenerationEditorSections({
                   </FormField>
                 </div>
 
-                <FormField label="Action">
+                <FormField label={t({ ko: '생성 방식', en: 'Action' })}>
                   <Select value={naiForm.action} onChange={(event) => handleNaiFieldChange('action', event.target.value)}>
                     {NAI_ACTION_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -265,7 +265,7 @@ export function NaiGenerationEditorSections({
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '샘플링', en: 'Sampling' })}</div>
             <NaiControllerInsetBlock>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <FormField label="Sampler">
+                <FormField label={t({ ko: '샘플러', en: 'Sampler' })}>
                   <Select value={naiForm.sampler} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
                     {NAI_SAMPLER_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -273,7 +273,7 @@ export function NaiGenerationEditorSections({
                   </Select>
                 </FormField>
 
-                <FormField label="Scheduler">
+                <FormField label={t({ ko: '스케줄러', en: 'Scheduler' })}>
                   <Select value={naiForm.scheduler} onChange={(event) => handleNaiFieldChange('scheduler', event.target.value)}>
                     {NAI_SCHEDULER_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -281,7 +281,7 @@ export function NaiGenerationEditorSections({
                   </Select>
                 </FormField>
 
-                <FormField label="Steps">
+                <FormField label={t({ ko: '스텝', en: 'Steps' })}>
                   <NumberStepperInput min={1} max={100} value={naiForm.steps} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />
                 </FormField>
 
@@ -296,7 +296,7 @@ export function NaiGenerationEditorSections({
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '출력', en: 'Output' })}</div>
             <NaiControllerInsetBlock>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <FormField label="Preset">
+                <FormField label={t({ ko: '해상도 프리셋', en: 'Preset' })}>
                   <Select value={naiForm.resolutionPreset} onChange={(event) => handleResolutionPresetChange(event.target.value)}>
                     {NAI_RESOLUTION_PRESETS.map((preset) => (
                       <option key={preset.key} value={preset.key}>{preset.label}</option>
@@ -305,19 +305,19 @@ export function NaiGenerationEditorSections({
                   </Select>
                 </FormField>
 
-                <FormField label="Width">
+                <FormField label={t({ ko: '너비', en: 'Width' })}>
                   <NumberStepperInput min={64} step={64} value={naiForm.width} onValueCommit={(nextValue) => handleNaiFieldChange('width', nextValue)} />
                 </FormField>
 
-                <FormField label="Height">
+                <FormField label={t({ ko: '높이', en: 'Height' })}>
                   <NumberStepperInput min={64} step={64} value={naiForm.height} onValueCommit={(nextValue) => handleNaiFieldChange('height', nextValue)} />
                 </FormField>
 
-                <FormField label="Samples">
+                <FormField label={t({ ko: '생성 개수', en: 'Samples' })}>
                   <NumberStepperInput min={NAI_SAMPLE_COUNT_MIN} max={maxSampleCount} step={1} value={naiForm.samples} onValueCommit={(nextValue) => handleNaiFieldChange('samples', nextValue)} />
                 </FormField>
 
-                <FormField label="Seed">
+                <FormField label={t({ ko: '시드', en: 'Seed' })}>
                   <NumberStepperInput value={naiForm.seed} onValueCommit={(nextValue) => handleNaiFieldChange('seed', nextValue)} />
                 </FormField>
 
@@ -331,7 +331,7 @@ export function NaiGenerationEditorSections({
 
                 {supportsNaiTransparentBackground(naiForm.model) ? (
                   <div className="space-y-2">
-                    <div className="text-sm font-medium text-foreground">Transparent BG</div>
+                    <div className="text-sm font-medium text-foreground">{t({ ko: '투명 배경', en: 'Transparent background' })}</div>
                     <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
                       <div className="text-sm text-foreground">{t('image-generation.components.nai.generation.editor.sections.use')}</div>
                       <input
@@ -349,9 +349,9 @@ export function NaiGenerationEditorSections({
       </Section>
 
       {naiForm.action !== 'generate' ? (
-        <Section variant="controller" heading="Images" collapsible defaultOpen={false}>
+        <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })} collapsible defaultOpen={false}>
           <div className="space-y-4">
-            <FormField label="Source Image">
+            <FormField label={t({ ko: '원본 이미지', en: 'Source Image' })}>
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <ImageAttachmentPickerButton
@@ -378,7 +378,7 @@ export function NaiGenerationEditorSections({
             </FormField>
 
             {naiForm.action === 'infill' ? (
-              <FormField label="Mask Image">
+              <FormField label={t({ ko: '마스크 이미지', en: 'Mask Image' })}>
                 <div className="space-y-3">
                   <div className="text-xs text-muted-foreground">{t('image-generation.components.nai.generation.editor.sections.you.can.create.the.mask.in.the')}</div>
                   <div className="flex flex-wrap gap-2">
@@ -407,7 +407,7 @@ export function NaiGenerationEditorSections({
                 <FormField label={t({ ko: '강도', en: 'Strength' })}>
                   <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
                 </FormField>
-                <FormField label="Noise">
+                <FormField label={t({ ko: '노이즈', en: 'Noise' })}>
                   <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.noise} onValueCommit={(nextValue) => handleNaiFieldChange('noise', nextValue)} />
                 </FormField>
               </div>

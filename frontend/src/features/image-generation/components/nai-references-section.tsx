@@ -52,7 +52,7 @@ export function NaiReferencesSection({
     <div className="space-y-0">
       <Section
         variant="controller"
-        heading="References"
+        heading={t({ ko: '레퍼런스', en: 'References' })}
         collapsible
         defaultOpen={false}
         className="rounded-b-none border-b-0"

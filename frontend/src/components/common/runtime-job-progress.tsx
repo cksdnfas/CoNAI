@@ -18,7 +18,7 @@ interface RuntimeJobProgressProps {
  * 취소된 잡은 "N개 처리 후 중단됨" 으로 표기한다 — 이미 처리된 항목은 되돌리지 않기 때문이다.
  */
 export function RuntimeJobProgress({ job, cancel, isCancelling = false, className }: RuntimeJobProgressProps) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
 
   if (!job) {
     return null
@@ -31,7 +31,7 @@ export function RuntimeJobProgress({ job, cancel, isCancelling = false, classNam
     <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>
-          {job.progress.processed} / {job.progress.total} ({job.progress.percentage}%)
+          {formatNumber(job.progress.processed)} / {formatNumber(job.progress.total)} ({formatNumber(job.progress.percentage)}%)
         </span>
 
         {isRunning && cancel ? (
