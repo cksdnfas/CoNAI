@@ -148,6 +148,8 @@
    *   --fill  hover / current-row wash and segmented trays (bg-fill)
    */
   --line: color-mix(in srgb, var(--foreground) 7%, transparent);
+  /* Side gutter of the current page content; PageWithSidebar overrides it. The sticky PageToolbar bleeds across it. */
+  --page-gutter: var(--theme-shell-inline-padding);
   --field: color-mix(in srgb, var(--foreground) 4.5%, transparent);
   --fill: color-mix(in srgb, var(--foreground) 6%, transparent);
   --surface-lowest: #0e0e0e;

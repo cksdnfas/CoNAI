@@ -111,8 +111,9 @@ export function PageWithSidebar({
         <div
           data-slot="page-with-sidebar-content"
           className={cn(
-            'min-w-0 flex-1 pb-(--theme-shell-main-padding-bottom)',
-            isDesktop ? 'px-8' : 'px-(--theme-shell-inline-padding)',
+            'min-w-0 flex-1 px-(--page-gutter) pb-(--theme-shell-main-padding-bottom)',
+            // The sticky PageToolbar bleeds its background across this gutter.
+            isDesktop ? '[--page-gutter:2rem]' : '[--page-gutter:var(--theme-shell-inline-padding)]',
             contentClassName,
           )}
         >

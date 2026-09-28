@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { usePageSidebar } from '@/components/ui/sidebar'
@@ -15,6 +15,43 @@ interface PageToolbarProps {
   /** Right slot: ghost IconButtons, one primary Button at most. */
   actions?: ReactNode
   className?: string
+  /** Stay under the app header while the page scrolls (default). Turn off for toolbars that are not at the page top. */
+  sticky?: boolean
+}
+
+/** True once the sticky toolbar has reached the header, so it only gets a surface while it floats over content. */
+function useStuckUnderHeader(enabled: boolean) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [isStuck, setIsStuck] = useState(false)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!enabled || !node || typeof window === 'undefined') {
+      setIsStuck(false)
+      return
+    }
+
+    let frame = 0
+    const update = () => {
+      frame = 0
+      const top = Number.parseFloat(window.getComputedStyle(node).top || '0') || 0
+      setIsStuck(window.scrollY > 0 && node.getBoundingClientRect().top <= top + 0.5)
+    }
+    const schedule = () => {
+      if (frame === 0) frame = window.requestAnimationFrame(update)
+    }
+
+    update()
+    window.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+    }
+  }, [enabled])
+
+  return { ref, isStuck }
 }
 
 /**
@@ -53,16 +90,29 @@ export function SidebarToggle({ className }: { className?: string }) {
  * Replaces PageHeader title rows. Inside PageWithSidebar the sidebar toggle is added automatically whenever the
  * sidebar is not visible (desktop collapsed, or any narrow screen). Wraps onto a second line on narrow screens.
  */
-export function PageToolbar({ title, start, children, actions, className }: PageToolbarProps) {
+export function PageToolbar({ title, start, children, actions, className, sticky = true }: PageToolbarProps) {
   const sidebar = usePageSidebar()
   const showSidebarToggle = Boolean(sidebar && (!sidebar.isDesktop || sidebar.collapsed))
+  const { ref, isStuck } = useStuckUnderHeader(sticky)
 
   if (!title && !start && !children && !actions && !showSidebarToggle) {
     return null
   }
 
   return (
-    <div data-slot="page-toolbar" className={cn('flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 py-2', className)}>
+    <div
+      ref={ref}
+      data-slot="page-toolbar"
+      data-stuck={isStuck || undefined}
+      className={cn(
+        'flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 py-2',
+        // Sticky under the header so the sidebar toggle and page actions stay reachable anywhere on the page. It is flat
+        // at rest and only takes a surface + hairline while it floats over scrolled content.
+        sticky && '-mx-(--page-gutter) sticky top-(--theme-shell-header-height) z-sticky px-(--page-gutter) transition-[background-color,box-shadow] duration-150',
+        sticky && isStuck && 'bg-background/92 shadow-[0_1px_0_var(--line)] backdrop-blur-md',
+        className,
+      )}
+    >
       {showSidebarToggle || title || start ? (
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           {showSidebarToggle || title ? (
