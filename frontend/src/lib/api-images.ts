@@ -384,6 +384,25 @@ export interface UploadTransferProgress {
   percent: number | null
 }
 
+/** Upload request failure that keeps the HTTP status so callers can explain it to the user. */
+export class UploadRequestError extends Error {
+  /** HTTP status; 0 for a network failure, null when the server answered 2xx with an unusable body. */
+  readonly status: number | null
+  readonly retryAfterSeconds: number | null
+
+  constructor(message: string, status: number | null, retryAfterSeconds: number | null = null) {
+    super(message)
+    this.name = 'UploadRequestError'
+    this.status = status
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+function readRetryAfterSeconds(xhr: XMLHttpRequest) {
+  const value = Number(xhr.getResponseHeader('Retry-After'))
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
 function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgress?: (progress: UploadTransferProgress) => void) {
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -404,7 +423,7 @@ function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgr
     }
 
     xhr.onerror = () => {
-      reject(new Error('Network request failed'))
+      reject(new UploadRequestError('Network request failed', 0))
     }
 
     xhr.onload = () => {
@@ -412,13 +431,13 @@ function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgr
         const payload = JSON.parse(xhr.responseText || '{}') as ApiResponse<T>
 
         if (xhr.status < 200 || xhr.status >= 300 || !payload.success) {
-          reject(new Error(payload.error || `Request failed: ${xhr.status}`))
+          reject(new UploadRequestError(payload.error || `Request failed: ${xhr.status}`, xhr.status, readRetryAfterSeconds(xhr)))
           return
         }
 
         resolve(payload.data)
       } catch {
-        reject(new Error('Invalid server response'))
+        reject(new UploadRequestError('Invalid server response', xhr.status >= 200 && xhr.status < 300 ? null : xhr.status, readRetryAfterSeconds(xhr)))
       }
     }
 
