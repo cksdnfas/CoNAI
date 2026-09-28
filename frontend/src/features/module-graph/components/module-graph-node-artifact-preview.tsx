@@ -1,4 +1,5 @@
 import type { MouseEvent } from 'react'
+import { Button } from '@/components/ui/button'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 
 /** Prevent artifact preview controls from triggering node drag or canvas selection. */
@@ -20,12 +21,12 @@ function ArtifactTextPreviewCard({
   const canOpen = Boolean(fullText && (fullText !== preview || fullText.includes('\n')))
 
   return (
-    <div className="px-1 py-1 text-[11px] leading-4 text-foreground">
+    <div className="px-1 py-1 text-2xs leading-4 text-foreground">
       <div className="max-h-[6.25rem] overflow-hidden whitespace-pre-wrap break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">{preview}</div>
       {canOpen ? (
-        <button type="button" className="mt-1 text-[10px] text-muted-foreground hover:text-foreground" onMouseDown={stopArtifactPreviewActionEvent} onClick={onOpen}>
+        <Button type="button" variant="ghost" size="xs" className="mt-1 h-5 px-1 text-2xs" onMouseDown={stopArtifactPreviewActionEvent} onClick={onOpen}>
           open
-        </button>
+        </Button>
       ) : null}
     </div>
   )
@@ -52,7 +53,7 @@ export function NodeArtifactPreviewBody({
       <InlineMediaPreview
         src={previewUrl}
         alt={previewAlt}
-        frameClassName="mt-1 border-border/50 bg-background/30 p-1"
+        frameClassName="mt-1 border-0 p-1"
         mediaClassName={compact ? 'max-h-20 w-full object-contain' : 'max-h-24 w-full object-contain'}
       />
     )
@@ -60,7 +61,7 @@ export function NodeArtifactPreviewBody({
 
   if (textPreview) {
     return (
-      <div className="mt-1 border-l border-border/40 pl-2">
+      <div className="mt-1 rounded-sm bg-surface-lowest pl-1">
         <ArtifactTextPreviewCard preview={textPreview} fullText={textValue} onOpen={onOpenText} />
       </div>
     )

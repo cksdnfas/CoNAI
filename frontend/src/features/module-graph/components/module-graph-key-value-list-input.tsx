@@ -88,7 +88,7 @@ export function ModuleGraphKeyValueListInput({
   const { t } = useI18n()
   const entries = normalizeKeyValueEntries(value)
   const visibleEntries = entries.length > 0 ? entries : [{ key: '', value: '' }]
-  const inputClassName = compact ? 'h-7 text-[11px]' : undefined
+  const inputClassName = compact ? 'h-7 text-2xs' : undefined
   const rowClassName = compact
     ? 'grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto] gap-1'
     : 'grid gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto]'
@@ -153,7 +153,7 @@ export function ModuleGraphKeyValueListInput({
           </div>
         )
       })}
-      <Button type="button" size="sm" variant="secondary" className={compact ? 'h-7 text-[11px]' : undefined} onClick={() => onChange([...visibleEntries, { key: '', value: '' }])}>
+      <Button type="button" size="sm" variant="secondary" className={compact ? 'h-7 text-2xs' : undefined} onClick={() => onChange([...visibleEntries, { key: '', value: '' }])}>
         {t({ ko: '항목 추가', en: 'Add item' })}
       </Button>
     </div>

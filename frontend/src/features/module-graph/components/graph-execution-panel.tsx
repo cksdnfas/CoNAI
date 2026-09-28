@@ -631,7 +631,7 @@ export function GraphExecutionPanel({
                         src={previewUrl}
                         mimeType={mimeType}
                         alt={`${artifact.node_id}-${artifact.port_key}`}
-                        frameClassName="mt-2 p-2"
+                        frameClassName="mt-2 border-0 p-2"
                         mediaClassName="max-h-44 w-full object-contain"
                       />
                     ) : null}

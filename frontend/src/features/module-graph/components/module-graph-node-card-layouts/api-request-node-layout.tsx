@@ -44,12 +44,12 @@ function ApiRequestInputRow({
   const { t } = useI18n()
 
   if (!port) {
-    return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
+    return <div className="min-h-[28px] border-b border-dashed border-outline-subtle" aria-hidden="true" />
   }
 
   const portTypeColor = getPortTypeColor(port.data_type)
   const statusLabel = requiredMissing ? t({ ko: '입력 필요', en: 'Input required' }) : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' })
-  const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
+  const borderColor = requiredMissing ? 'color-mix(in srgb, var(--warning) 60%, transparent)' : connected ? `${portTypeColor}88` : `${accentColor}26`
 
   return (
     <div className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties} title={buildPortTooltip(t, port, statusLabel)}>
@@ -62,12 +62,12 @@ function ApiRequestInputRow({
         onMouseDown={connected ? () => data.onDisconnectNodeInput?.(nodeId, port.key) : undefined}
       />
       <div className="flex min-h-[28px] items-start gap-2">
-        <span className="w-20 shrink-0 truncate pt-1 text-[11px] font-medium text-foreground">
+        <span className="w-20 shrink-0 truncate pt-1 text-2xs font-medium text-foreground">
           {port.label}
-          {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
+          {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
         </span>
         <div className="min-w-0 flex-1">
-          {connected ? <div className="truncate pt-1 text-[10px] text-muted-foreground">{t({ ko: '연결됨', en: 'Linked' })}</div> : children}
+          {connected ? <div className="truncate pt-1 text-2xs text-muted-foreground">{t({ ko: '연결됨', en: 'Linked' })}</div> : children}
         </div>
       </div>
     </div>
@@ -165,7 +165,7 @@ export function ApiRequestNodeLayout({
         min={field?.min}
         max={field?.max}
         emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : t({ ko: '선택', en: 'Select' })}
-        className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+        className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
       />
     )
   }
@@ -240,13 +240,13 @@ export function ApiRequestNodeLayout({
             value={entry.key}
             onChange={(event) => updateKeyValueEntry(portKey, entries, index, { ...entry, key: event.target.value })}
             placeholder={t({ ko: '키', en: 'Key' })}
-            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
           <Input
             value={connected ? t({ ko: '연결됨', en: 'Linked' }) : entry.value}
             onChange={(event) => updateKeyValueEntry(portKey, entries, index, { ...entry, value: event.target.value })}
             placeholder={t({ ko: '입력', en: 'Input' })}
-            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
             disabled={connected}
           />
           <Button type="button" size="icon-sm" variant="ghost" className="h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={() => removeKeyValueEntry(portKey, entries, index)}>
@@ -271,7 +271,7 @@ export function ApiRequestNodeLayout({
     return (
       <div className="grid gap-1">
         {entries.map((entry, index) => renderKeyValueEntryRow(portKey, port, entries, entry, index))}
-        <Button type="button" size="sm" variant="secondary" className="nodrag nowheel h-7 text-[11px]" onMouseDown={stopNodeActionEvent} onClick={() => appendKeyValueEntry(portKey, entries)}>
+        <Button type="button" size="sm" variant="secondary" className="nodrag nowheel h-7 text-2xs" onMouseDown={stopNodeActionEvent} onClick={() => appendKeyValueEntry(portKey, entries)}>
           {t({ ko: '항목 추가', en: 'Add item' })}
         </Button>
       </div>
@@ -280,7 +280,7 @@ export function ApiRequestNodeLayout({
 
   const renderPayloadPreview = (port: ModulePortDefinition) => {
     const preview = getCompactValuePreview(data.inputValues?.[port.key] ?? port.default_value)
-    return <div className="truncate pt-1 text-[10px] text-muted-foreground">{preview || t({ ko: '선택 입력', en: 'Optional input' })}</div>
+    return <div className="truncate pt-1 text-2xs text-muted-foreground">{preview || t({ ko: '선택 입력', en: 'Optional input' })}</div>
   }
 
   return (

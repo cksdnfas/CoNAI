@@ -51,8 +51,8 @@ export function renderCompactUiField({
   const normalizedValue = value ?? data.inputValues?.[field.key] ?? field.default_value
 
   return (
-    <label key={field.key} className="nodrag nowheel flex min-h-[28px] items-center gap-2 border-b border-border/30 px-1 pb-1" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
-      <span className="shrink-0 text-[11px] font-medium text-foreground">{field.label}</span>
+    <label key={field.key} className="nodrag nowheel flex min-h-[28px] items-center gap-2 border-b border-outline-subtle px-1 pb-1" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
+      <span className="shrink-0 text-2xs font-medium text-foreground">{field.label}</span>
       <div className="min-w-0 flex-1" onMouseDown={stopNodeInteraction}>
         <ModuleGraphSimpleValueInput
           dataType={getCompactUiFieldInputType(field)}
@@ -62,7 +62,7 @@ export function renderCompactUiField({
           placeholder={field.placeholder || field.description || field.label}
           emptyLabel={t({ ko: '선택', en: 'Select' })}
           allowEmptyOption={allowEmptyOption}
-          className={`h-7 min-w-0 flex-1 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          className={`h-7 min-w-0 flex-1 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
         />
       </div>
     </label>

@@ -13,7 +13,7 @@ import {
   type ModuleGraphNode,
 } from '../module-graph-shared'
 
-export const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'theme-input-surface border-border/80 focus:border-primary'
+export const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'theme-input-surface'
 
 type PortCellProps = {
   nodeId: string
@@ -71,7 +71,7 @@ export function buildHandleStyle(params: { side: 'input' | 'output'; color: stri
     borderRadius: 999,
     background: params.color,
     border: '2px solid var(--surface-container)',
-    boxShadow: `0 0 0 2px ${params.color}22`,
+    boxShadow: `0 0 0 2px color-mix(in srgb, ${params.color} 13%, transparent)`,
     left: params.side === 'input' ? -7 : undefined,
     right: params.side === 'output' ? -7 : undefined,
   }
@@ -127,7 +127,7 @@ export function PortCell({ nodeId, port, side, accentColor, connected, satisfied
   const resolvedRequiredMissingLabel = requiredMissingLabel ?? t({ ko: '입력 필요', en: 'Input required' })
 
   if (!port) {
-    return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
+    return <div className="min-h-[28px] border-b border-dashed border-outline-subtle" aria-hidden="true" />
   }
 
   const portTypeColor = getPortTypeColor(port.data_type)
@@ -138,13 +138,13 @@ export function PortCell({ nodeId, port, side, accentColor, connected, satisfied
       : null
   const statusLabel = outputStateLabel ?? (requiredMissing ? resolvedRequiredMissingLabel : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' }))
   const borderColor = outputState === 'active'
-    ? '#22c55e99'
+    ? 'color-mix(in srgb, var(--success) 60%, transparent)'
     : outputState === 'inactive'
-      ? '#64748b99'
-      : requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
+      ? 'color-mix(in srgb, var(--muted-foreground) 60%, transparent)'
+      : requiredMissing ? 'color-mix(in srgb, var(--warning) 60%, transparent)' : connected ? `${portTypeColor}88` : `${accentColor}26`
   const alignmentClass = side === 'input' ? 'pl-4 pr-2 text-left' : 'pl-2 pr-4 text-right'
   const rowJustifyClass = side === 'input' ? 'justify-start' : 'justify-end'
-  const handleColor = outputState === 'inactive' ? '#64748b' : portTypeColor
+  const handleColor = outputState === 'inactive' ? 'var(--muted-foreground)' : portTypeColor
 
   return (
     <div
@@ -163,12 +163,12 @@ export function PortCell({ nodeId, port, side, accentColor, connected, satisfied
       />
 
       <div className={`flex min-h-[28px] items-center gap-2 ${rowJustifyClass}`}>
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+        <span className="min-w-0 flex-1 truncate text-2xs font-medium text-foreground">
           {port.label}
-          {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
+          {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
         </span>
         {outputStateLabel ? (
-          <span className={`shrink-0 rounded-sm border px-1 py-0.5 text-[9px] font-medium ${outputState === 'active' ? 'border-emerald-400/40 text-emerald-200' : 'border-slate-400/30 text-slate-300'}`}>
+          <span className={`shrink-0 rounded-sm px-1 py-0.5 text-2xs font-medium ${outputState === 'active' ? 'bg-success-soft text-success-soft-foreground' : 'bg-surface-high text-muted-foreground'}`}>
             {outputState === 'active' ? t({ ko: '활성', en: 'Active' }) : t({ ko: '꺼짐', en: 'Off' })}
           </span>
         ) : null}
@@ -202,13 +202,13 @@ export function InputPortCell({
   const { t } = useI18n()
 
   if (!port) {
-    return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
+    return <div className="min-h-[28px] border-b border-dashed border-outline-subtle" aria-hidden="true" />
   }
 
   const rawValue = data.inputValues?.[port.key]
   const portTypeColor = getPortTypeColor(port.data_type)
   const statusLabel = requiredMissing ? t({ ko: '입력 필요', en: 'Input required' }) : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' })
-  const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
+  const borderColor = requiredMissing ? 'color-mix(in srgb, var(--warning) 60%, transparent)' : connected ? `${portTypeColor}88` : `${accentColor}26`
   const uiField = uiFieldOverride !== undefined ? uiFieldOverride : data.module.ui_schema?.find((field) => field.key === port.key)
   const operationKey = getModuleOperationKey(data.module)
   const isSystemCallLlmPort = operationKey === 'system.call_llm'
@@ -237,7 +237,7 @@ export function InputPortCell({
 
   const renderEditor = () => {
     if (connected) {
-      return <div className="truncate text-[10px] text-muted-foreground">{t({ ko: '연결됨', en: 'Linked' })}</div>
+      return <div className="truncate text-2xs text-muted-foreground">{t({ ko: '연결됨', en: 'Linked' })}</div>
     }
 
     if (selectOptions && data.onNodeValueChange) {
@@ -249,7 +249,7 @@ export function InputPortCell({
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
             options={selectOptions}
             emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : t({ ko: '선택', en: 'Select' })}
-            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
       )
@@ -266,7 +266,7 @@ export function InputPortCell({
             min={numberMin}
             max={uiField?.max}
             step={numberStep}
-            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
       )
@@ -280,7 +280,7 @@ export function InputPortCell({
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
             emptyLabel={hasMeaningfulValue(defaultValue) ? formatModuleGraphDefaultOptionLabel(t, defaultValue) : t({ ko: '선택', en: 'Select' })}
-            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
       )
@@ -294,7 +294,7 @@ export function InputPortCell({
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
             placeholder={uiField?.placeholder || port.label}
-            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+            className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
       )
@@ -304,7 +304,7 @@ export function InputPortCell({
       return null
     }
 
-    return preview ? <div className="truncate text-[10px] text-muted-foreground">{preview}</div> : null
+    return preview ? <div className="truncate text-2xs text-muted-foreground">{preview}</div> : null
   }
 
   return (
@@ -319,9 +319,9 @@ export function InputPortCell({
       />
 
       <div className="flex min-h-[28px] items-center gap-2">
-        <span className={`min-w-0 truncate text-[11px] font-medium text-foreground ${isPromptLikePort ? 'flex-1' : 'shrink-0'}`}>
+        <span className={`min-w-0 truncate text-2xs font-medium text-foreground ${isPromptLikePort ? 'flex-1' : 'shrink-0'}`}>
           {port.label}
-          {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
+          {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
         </span>
         {!isPromptLikePort ? <div className="min-w-0 flex-1">{renderEditor()}</div> : null}
       </div>

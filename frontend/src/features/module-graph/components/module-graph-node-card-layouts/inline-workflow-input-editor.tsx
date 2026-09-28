@@ -1,5 +1,6 @@
 import { type NodeProps } from '@xyflow/react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
@@ -34,16 +35,14 @@ export function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGra
 
   return (
     <div className="nodrag nowheel mt-2 space-y-1" onMouseDown={stopNodeInteraction}>
-      <div className="flex min-h-[28px] items-center justify-between border-b border-border/30 px-1 pb-1 text-[11px] text-foreground">
+      <label className="flex min-h-[28px] cursor-pointer items-center justify-between border-b border-outline-subtle px-1 pb-1 text-2xs text-foreground">
         <span>{t({ ko: '실행 입력', en: 'Run input' })}</span>
-        <input
-          type="checkbox"
+        <Checkbox
           checked={workflowInputEnabled}
-          onChange={(event) => data.onNodeValueChange?.(id, WORKFLOW_INPUT_ENABLED_KEY, event.target.checked)}
+          onCheckedChange={(checked) => data.onNodeValueChange?.(id, WORKFLOW_INPUT_ENABLED_KEY, checked === true)}
           onMouseDown={stopNodeInteraction}
-          className="h-4 w-4 shrink-0 accent-primary"
         />
-      </div>
+      </label>
 
       {(sourcePort.data_type === 'prompt' || sourcePort.data_type === 'text' || sourcePort.data_type === 'json') ? (
         <div onMouseDown={stopNodeInteraction}>

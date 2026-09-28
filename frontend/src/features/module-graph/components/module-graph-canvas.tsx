@@ -426,7 +426,7 @@ export function ModuleGraphCanvas({
   }, [closeActionMenu, closeQuickCreateMenu, getPasteFlowPosition, onCopySelection, onPasteSelection, rememberInteractionPoint])
 
   return (
-    <div ref={canvasRootRef} className="relative h-[760px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
+    <div ref={canvasRootRef} className="relative h-[760px] overflow-hidden rounded-sm bg-surface-lowest">
       <ReactFlow
         className={isCoarsePointer ? 'theme-graph-flow touch-scroll-safe' : 'theme-graph-flow'}
         nodes={reactFlowNodes}

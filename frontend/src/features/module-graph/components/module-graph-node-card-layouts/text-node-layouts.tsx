@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { ModuleGraphSimpleValueInput } from '../module-graph-simple-value-input'
 import { useI18n } from '@/i18n'
 import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
@@ -208,15 +209,18 @@ export function TextTransformNodeLayout({
         {suffixField ? <TextTransformInlineField id={id} data={data} field={suffixField} /> : null}
         {flagsField && showAdvancedFields ? <TextTransformInlineField id={id} data={data} field={flagsField} /> : null}
         {flagsField ? (
-          <button
+          <Button
             type="button"
-            className="nodrag nowheel flex min-h-[28px] items-center justify-between border-b border-border/30 px-1 pb-1 text-[11px] text-muted-foreground"
+            variant="ghost"
+            size="xs"
+            aria-expanded={showAdvancedFields}
+            className="nodrag nowheel min-h-[28px] justify-between px-1 text-2xs font-normal"
             onMouseDown={stopNodeActionEvent}
             onClick={() => setShowAdvancedFields((current) => !current)}
           >
             <span>flags</span>
-            <span>{showAdvancedFields ? '−' : '+'}</span>
-          </button>
+            <span aria-hidden>{showAdvancedFields ? '−' : '+'}</span>
+          </Button>
         ) : null}
       </div>
     </div>

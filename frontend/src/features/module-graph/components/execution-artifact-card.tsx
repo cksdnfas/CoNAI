@@ -36,7 +36,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
         src={previewUrl}
         mimeType={mimeType}
         alt={`${artifact.node_id}-${artifact.port_key}`}
-        frameClassName={compact ? 'border-0 bg-transparent p-0' : 'p-2'}
+        frameClassName={compact ? 'border-0 bg-transparent p-0' : 'border-0 p-2'}
         mediaClassName={cn(compact ? 'max-h-52 max-w-full w-auto object-contain' : 'max-h-52 w-full object-contain')}
         fitToMedia={compact}
       />

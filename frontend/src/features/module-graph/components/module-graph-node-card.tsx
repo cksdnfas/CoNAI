@@ -4,6 +4,7 @@ import { GripVertical, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Text } from '@/components/ui/text'
 import { MiniMaxH3DirectorDasiwaInput } from '@/features/image-generation/components/minimax-h3-director-dasiwa-input'
 import type { MiniMaxH3DirectorGraphInputKey } from '@/features/image-generation/components/minimax-h3-director-dasiwa-utils'
 import { useI18n } from '@/i18n'
@@ -179,19 +180,20 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
           ? t({ ko: 'IF 분기 출력이 연결되어 실행 때 조건 결과에 따라 건너뛸 수 있어.', en: 'An IF branch output feeds this node, so execution may skip it depending on the branch result.' })
           : t({ ko: '현재 연결과 값 기준으로 실행 경로에 들어갈 수 있어.', en: 'Current wiring and values allow this node to enter the execution path.' })
 
+  // Status tokens (not fixed hexes) so the outline reads on both the dark and the light canvas.
   const statusBorderColor =
     data.disabled === true
-      ? '#94a3b8'
+      ? 'var(--muted-foreground)'
       : executionStatus === 'completed'
-      ? '#7bd88f'
+      ? 'var(--success)'
       : executionStatus === 'failed'
-        ? '#ff8a80'
+        ? 'var(--destructive)'
         : executionStatus === 'blocked'
-          ? '#ffd180'
+          ? 'var(--warning)'
           : executionStatus === 'skipped'
-            ? '#94a3b8'
+            ? 'var(--muted-foreground)'
           : missingRequiredInputCount > 0
-            ? '#f59e0b'
+            ? 'var(--warning)'
             : `${accentColor}66`
   const isFinalResult = isFinalResultModule(module)
   const nodeLayoutKey = resolveModuleGraphNodeLayout(module)
@@ -223,7 +225,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
 
   return (
     <div
-      className={`${miniMaxDirectorUiFields.length > 0 ? 'w-[560px] max-w-[560px]' : 'w-[340px] max-w-[340px]'} rounded-sm border bg-surface-container px-2.5 py-2 text-foreground shadow-lg ${data.disabled === true ? 'opacity-60 grayscale' : ''}`}
+      className={`${miniMaxDirectorUiFields.length > 0 ? 'w-[560px] max-w-[560px]' : 'w-[340px] max-w-[340px]'} rounded-sm border bg-surface-container px-2.5 py-2 text-foreground shadow-elevation-1 ${data.disabled === true ? 'opacity-60 grayscale' : ''}`}
       style={{
         borderColor: selected ? accentColor : statusBorderColor,
         boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,
@@ -232,7 +234,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
-          <div className="module-graph-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm border border-border/70 bg-background/50 text-muted-foreground active:cursor-grabbing">
+          <div className="module-graph-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm bg-surface-high text-muted-foreground active:cursor-grabbing">
             <GripVertical className="h-4 w-4" />
           </div>
           <div className="min-w-0">
@@ -265,9 +267,10 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
                 className={`nodrag nowheel h-8 text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
               />
             ) : (
-              <button
+              <Button
                 type="button"
-                className="max-w-full cursor-pointer truncate text-left text-sm font-semibold text-foreground transition-colors hover:text-primary"
+                variant="link"
+                className="block h-auto max-w-full truncate p-0 text-left text-sm font-semibold text-foreground"
                 onClick={(event) => {
                   if (!selected) {
                     return
@@ -278,9 +281,9 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
                 title={selected ? t({ ko: '클릭해서 이름 변경', en: 'Click to rename' }) : undefined}
               >
                 {nodeDisplayLabel}
-              </button>
+              </Button>
             )}
-            {usesCustomNodeLabel ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{moduleBaseLabel}</div> : null}
+            {usesCustomNodeLabel ? <div className="mt-0.5 truncate text-2xs text-muted-foreground">{moduleBaseLabel}</div> : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
@@ -337,14 +340,14 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
 
       {miniMaxDirectorUiFields.length > 0 ? (
         <div
-          className="nodrag nowheel mt-2 space-y-3 border-t border-border/30 pt-3"
+          className="nodrag nowheel mt-3 space-y-3"
           onMouseDown={stopNodeInteraction}
           onClick={stopNodeInteraction}
         >
           {miniMaxDirectorUiFields.map((field) => (
             <div key={field.key} className="space-y-2">
               {miniMaxDirectorUiFields.length > 1 ? (
-                <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{field.label}</div>
+                <Text as="div" variant="overline" className="px-0.5 font-medium">{field.label}</Text>
               ) : null}
               <MiniMaxH3DirectorDasiwaInput
                 value={normalizeCompositeNodeValue(data.inputValues?.[field.key] ?? field.default_value)}
@@ -393,8 +396,8 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
       ) : null}
 
       {powerLoraUiFields.length > 0 ? (
-        <div className="nodrag nowheel mt-1.5 space-y-1 border-t border-border/20 pt-1.5" onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction}>
-          <div className="px-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">LoRA</div>
+        <div className="nodrag nowheel mt-2.5 space-y-1" onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction}>
+          <Text as="div" variant="overline" className="px-1 font-medium">LoRA</Text>
           {powerLoraUiFields.map((field) => {
             const value = data.inputValues?.[field.key] ?? field.default_value
             return (

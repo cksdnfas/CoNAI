@@ -1,13 +1,14 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, Boxes, CheckCircle2, Copy, RotateCcw, Save, SlidersHorizontal, Trash2, Unplug, Workflow } from 'lucide-react'
+import { AlertTriangle, Boxes, CheckCircle2, Copy, RotateCcw, Save, SlidersHorizontal, Trash2, Unplug, Workflow, X } from 'lucide-react'
 import type { WorkflowValidationIssue } from './workflow-validation-panel'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { Badge } from '@/components/ui/badge'
-import { SectionHeading } from '@/components/common/section-heading'
+import { IconButton } from '@/components/ui/icon-button'
+import { Section } from '@/components/ui/section'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
@@ -57,44 +58,43 @@ function WorkflowValidationQuickPopup({
 
   return (
     <div className="w-[min(360px,calc(100vw-2rem))] p-3">
-      <div className="flex items-center justify-between gap-2 border-b border-border/70 pb-2">
+      <div className="flex items-center justify-between gap-2 pb-1">
         <div>
-          <div className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">{t({ ko: '편집기 검증', en: 'Editor validation' })}</div>
+          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '편집기 검증', en: 'Editor validation' })}</Text>
           <div className="mt-1 text-sm font-medium text-foreground">
             {errorCount > 0 ? t({ ko: '막히는 치명 이슈가 있어.', en: 'There is a blocking critical issue.' }) : t({ ko: '저장 전 확인할 경고가 있어.', en: 'There are warnings to review before saving.' })}
           </div>
         </div>
-        <Button type="button" size="icon-xs" variant="ghost" onClick={onClose} aria-label={t({ ko: '검증 팝업 닫기', en: 'Close validation popup' })} title={t({ ko: '닫기', en: 'Close' })}>
-          <span className="text-xs">✕</span>
-        </Button>
+        <IconButton size="icon-xs" variant="ghost" onClick={onClose} label={t({ ko: '검증 팝업 닫기', en: 'Close validation popup' })}>
+          <X />
+        </IconButton>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
-        <Badge variant={errorCount > 0 ? 'outline' : 'secondary'}>{errorCount > 0 ? t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(errorCount) }) : 'ready'}</Badge>
-        {warningCount > 0 ? <Badge variant="outline">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningCount) })}</Badge> : null}
+        <Badge variant={errorCount > 0 ? 'destructive' : 'secondary'}>{errorCount > 0 ? t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(errorCount) }) : 'ready'}</Badge>
+        {warningCount > 0 ? <Badge className="bg-warning-soft text-warning-soft-foreground">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningCount) })}</Badge> : null}
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className="mt-2 space-y-0.5">
         {issues.map((issue) => (
-          <button
+          <Button
             key={issue.id}
             type="button"
+            variant="ghost"
             onClick={() => {
               onIssueSelect(issue)
               onClose()
             }}
-            className={cn(
-              'w-full rounded-sm border px-3 py-2 text-left transition hover:border-primary/50 hover:bg-surface-high',
-              issue.severity === 'error' ? 'border-rose-500/40 bg-rose-500/10' : 'border-amber-500/40 bg-amber-500/10',
-            )}
+            className="h-auto w-full flex-col items-stretch gap-1 px-2.5 py-2 text-left whitespace-normal"
           >
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="text-sm font-medium text-foreground">{issue.title}</div>
-              <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.severity === 'error' ? t({ ko: '치명', en: 'Critical' }) : t({ ko: '경고', en: 'Warning' })}</Badge>
+            <span className="flex flex-wrap items-center gap-2">
+              <AlertTriangle className={cn('size-4', issue.severity === 'error' ? 'text-destructive' : 'text-warning')} aria-hidden />
+              <span className="text-sm font-medium text-foreground">{issue.title}</span>
+              <Badge variant="outline">{issue.severity === 'error' ? t({ ko: '치명', en: 'Critical' }) : t({ ko: '경고', en: 'Warning' })}</Badge>
               <Badge variant="secondary">{issue.nodeLabel}</Badge>
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground">{issue.detail}</div>
-          </button>
+            </span>
+            <span className="pl-6 text-xs font-normal text-muted-foreground">{issue.detail}</span>
+          </Button>
         ))}
       </div>
     </div>
@@ -168,11 +168,9 @@ export function ModuleWorkflowEditorView({
       {workflowListSidebar}
 
       <div className="space-y-6">
-        <Card>
-          <CardContent className="space-y-4">
-            <SectionHeading
-              variant="inside"
-              heading={
+        <Section
+          headingAs="div"
+          heading={
                 <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                   <span className="inline-flex items-center gap-2">
                     <Boxes className="h-4 w-4 text-primary" />
@@ -208,25 +206,25 @@ export function ModuleWorkflowEditorView({
                     {t({ ko: '디버그', en: 'Debug' })} {workflowDebugMode ? 'ON' : 'OFF'}
                   </Button>
                   <div ref={validationPopupRef} className="relative">
-                    <Button
-                      type="button"
+                    <IconButton
                       size="icon-sm"
-                      variant="secondary"
+                      variant="subtle"
+                      data-tone={validationStatus.tone}
                       className={cn(
-                        validationStatus.tone === 'ready' ? 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-200' : undefined,
-                        validationStatus.tone === 'warning' ? 'border-amber-500/30 text-amber-200 hover:bg-amber-500/10 hover:text-amber-100' : undefined,
-                        validationStatus.tone === 'error' ? 'border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100' : undefined,
+                        validationStatus.tone === 'ready' && 'text-success hover:text-success',
+                        validationStatus.tone === 'warning' && 'text-warning hover:text-warning',
+                        validationStatus.tone === 'error' && 'text-destructive hover:text-destructive',
                       )}
                       onClick={() => {
                         if (validationIssues.length > 0) {
                           setIsValidationPopupOpen((open) => !open)
                         }
                       }}
-                      aria-label={validationStatus.title}
-                      title={validationStatus.title}
+                      aria-expanded={validationIssues.length > 0 ? isValidationPopupOpen : undefined}
+                      label={validationStatus.title}
                     >
                       {validationStatus.tone === 'ready' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-                    </Button>
+                    </IconButton>
 
                     <AnchoredPopup open={isValidationPopupOpen && validationIssues.length > 0} anchorRef={validationPopupRef} onClose={() => setIsValidationPopupOpen(false)} align="end" side="bottom" closeOnBack>
                       <WorkflowValidationQuickPopup
@@ -236,80 +234,65 @@ export function ModuleWorkflowEditorView({
                       />
                     </AnchoredPopup>
                   </div>
-                  <Button
-                    type="button"
+                  <IconButton
                     size="icon-sm"
-                    variant="secondary"
+                    variant="subtle"
                     onClick={onOpenModuleLibrary}
-                    aria-label={t({ ko: '모듈 추가', en: 'Add module' })}
-                    title={t({ ko: '모듈 추가', en: 'Add module' })}
+                    label={t({ ko: '모듈 추가', en: 'Add module' })}
                   >
                     <Boxes className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
+                  </IconButton>
+                  <IconButton
                     size="icon-sm"
-                    variant="secondary"
+                    variant="subtle"
                     onClick={onAutoLayout}
                     disabled={nodesCount === 0}
-                    aria-label={t({ ko: '자동 정렬', en: 'Auto layout' })}
-                    title={t({ ko: '자동 정렬', en: 'Auto layout' })}
+                    label={t({ ko: '자동 정렬', en: 'Auto layout' })}
                   >
                     <Workflow className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
+                  </IconButton>
+                  <IconButton
                     size="icon-sm"
-                    variant="secondary"
+                    variant="subtle"
                     onClick={onDuplicateSelectedNode}
                     disabled={!hasSelectedNode}
-                    aria-label={t({ ko: '노드 복제', en: 'Duplicate node' })}
-                    title={t({ ko: '노드 복제', en: 'Duplicate node' })}
+                    label={t({ ko: '노드 복제', en: 'Duplicate node' })}
                   >
                     <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
+                  </IconButton>
+                  <IconButton
                     size="icon-sm"
-                    variant="secondary"
-                    className="ml-1 border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
+                    variant="destructive"
+                    className="ml-1"
                     onClick={onRemoveSelectedNode}
                     disabled={!hasSelectedNode}
-                    aria-label={t({ ko: '노드 삭제', en: 'Delete node' })}
-                    title={t({ ko: '노드 삭제', en: 'Delete node' })}
+                    label={t({ ko: '노드 삭제', en: 'Delete node' })}
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
+                  </IconButton>
+                  <IconButton
                     size="icon-sm"
-                    variant="secondary"
-                    className="border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
+                    variant="destructive"
                     onClick={onRemoveSelectedEdge}
                     disabled={!hasSelectedEdge}
-                    aria-label={t({ ko: '엣지 삭제', en: 'Delete edge' })}
-                    title={t({ ko: '엣지 삭제', en: 'Delete edge' })}
+                    label={t({ ko: '엣지 삭제', en: 'Delete edge' })}
                   >
                     <Unplug className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
+                  </IconButton>
+                  <IconButton
                     size="icon-sm"
-                    variant="secondary"
-                    className="ml-2 border-amber-500/30 text-amber-200 hover:bg-amber-500/10 hover:text-amber-100"
+                    variant="subtle"
+                    className="ml-2 text-warning hover:text-warning"
                     onClick={onResetCanvas}
-                    aria-label={t({ ko: '초기화', en: 'Reset' })}
-                    title={t({ ko: '초기화', en: 'Reset' })}
+                    label={t({ ko: '초기화', en: 'Reset' })}
                   >
                     <RotateCcw className="h-4 w-4" />
-                  </Button>
+                  </IconButton>
                 </>
               }
-            />
-
-            {graphCanvas}
-          </CardContent>
-        </Card>
+        >
+          {graphCanvas}
+        </Section>
 
         <FloatingBottomAction type="button" onClick={onOpenEditorSupport}>
           <SlidersHorizontal className="h-4 w-4" />

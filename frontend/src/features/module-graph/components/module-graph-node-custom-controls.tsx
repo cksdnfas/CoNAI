@@ -2,6 +2,7 @@ import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-mo
 import type { ComfyUIServer } from '@/lib/api-image-generation-types'
 import type { LlmPresetOptionCollections, LlmPresetOptionRecord } from '@/lib/api-settings-llm'
 import { Select } from '@/components/ui/select'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { ModuleGraphNode } from '../module-graph-shared'
 import { normalizeOptionalString, parsePositiveIntegerish } from '../module-graph-shared'
@@ -244,7 +245,7 @@ export function ModuleGraphNodeCustomControls({ data, state }: { data: ModuleGra
 
       {state.canConfigureLlmModel ? (
         <div className="nodrag nowheel mt-2 space-y-1">
-          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '모델', en: 'Model' })}</div>
+          <Text as="div" variant="overline" className="px-0.5 font-medium">{t({ ko: '모델', en: 'Model' })}</Text>
           <Select value={state.llmSelectedProviderName} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); applyLlmModelBinding(event.target.value) }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
             <option value="">{t({ ko: '모델 선택', en: 'Select model' })}</option>
             {state.llmModelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -256,7 +257,7 @@ export function ModuleGraphNodeCustomControls({ data, state }: { data: ModuleGra
 
       {state.canConfigureLlmPreset ? (
         <div className="nodrag nowheel mt-2 space-y-1.5">
-          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '프리셋', en: 'Preset' })}</div>
+          <Text as="div" variant="overline" className="px-0.5 font-medium">{t({ ko: '프리셋', en: 'Preset' })}</Text>
           <Select value={state.llmPresetType} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); data.onNodeValueChange?.(state.id, 'preset_type', event.target.value); data.onNodeValueChange?.(state.id, 'preset_name', '') }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
             {getLlmPresetTypeOptions(t).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
@@ -264,7 +265,7 @@ export function ModuleGraphNodeCustomControls({ data, state }: { data: ModuleGra
             <option value="">{state.llmPresetsLoading ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: '프리셋 선택', en: 'Select preset' })}</option>
             {state.llmPresetEntries.map((preset) => <option key={preset.id || preset.name} value={preset.name}>{preset.name}</option>)}
           </Select>
-          {state.selectedLlmPreset ? <div className="rounded-sm border border-border/60 bg-background/45 px-2.5 py-2"><div className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '선택 내용', en: 'Selected content' })}</div><div className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-4 text-foreground">{summarizeLlmPresetContent(state.selectedLlmPreset.content)}</div></div> : null}
+          {state.selectedLlmPreset ? <div className="rounded-sm bg-surface-lowest px-2.5 py-2"><Text as="div" variant="overline" className="mb-1 font-medium">{t({ ko: '선택 내용', en: 'Selected content' })}</Text><div className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-2xs leading-4 text-foreground">{summarizeLlmPresetContent(state.selectedLlmPreset.content)}</div></div> : null}
         </div>
       ) : null}
     </>
@@ -274,7 +275,7 @@ export function ModuleGraphNodeCustomControls({ data, state }: { data: ModuleGra
 function ModelSelect({ label, onChange, options, value }: { label: string; onChange: (value: string) => void; options: ReturnType<typeof normalizeSelectOptions>; value: string }) {
   return (
     <div className="nodrag nowheel mt-2 space-y-1">
-      <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
+      <Text as="div" variant="overline" className="px-0.5 font-medium">{label}</Text>
       <Select value={value} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); onChange(event.target.value) }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
         {options.map((option) => { const optionValue = getSelectOptionValue(option); const optionLabel = typeof option === 'string' ? option : option.label; return <option key={optionValue} value={optionValue}>{optionLabel}</option> })}
       </Select>

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { NodeArtifactPreviewBody } from '../module-graph-node-artifact-preview'
 import type { ModuleGraphNode } from '../../module-graph-shared'
@@ -29,10 +31,8 @@ export function NodeArtifactOutputs({
   return (
     <>
       {hasStandaloneArtifactPreview ? (
-        <div className="mt-2 border-t border-border/20 pt-1.5">
-          <div className="flex items-center gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-            <span>{isFinalResult ? 'result' : 'output'}</span>
-          </div>
+        <div className="mt-2 border-t border-outline-subtle pt-1.5">
+          <Text as="div" variant="overline" className="px-1">{isFinalResult ? 'result' : 'output'}</Text>
           <NodeArtifactPreviewBody
             previewUrl={data.latestArtifactPreviewUrl}
             previewAlt={data.latestArtifactLabel || `${moduleName} output`}
@@ -50,15 +50,18 @@ export function NodeArtifactOutputs({
       ) : null}
 
       {hasOutputGroups ? (
-        <div className="mt-2 border-t border-border/20 pt-1.5">
+        <div className="mt-2 border-t border-outline-subtle pt-1.5">
           {outputGroups.map((group) => {
             const isExpanded = expandedOutputGroupKeySet.has(group.portKey)
 
             return (
-              <div key={group.portKey} className="border-b border-border/20 py-0.5 last:border-b-0">
-                <button
+              <div key={group.portKey} className="border-b border-outline-subtle py-0.5 last:border-b-0">
+                <Button
                   type="button"
-                  className="nodrag nowheel flex min-h-[28px] w-full items-center justify-between gap-2 px-1 text-left"
+                  variant="ghost"
+                  size="xs"
+                  aria-expanded={isExpanded}
+                  className="nodrag nowheel min-h-[28px] w-full justify-between px-1 text-left"
                   onMouseDown={stopNodeActionEvent}
                   onClick={(event) => {
                     stopNodeActionEvent(event)
@@ -70,12 +73,12 @@ export function NodeArtifactOutputs({
                   }}
                   title={`${group.portLabel} output`}
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-                    <span className="truncate text-[11px] font-medium text-foreground">{group.portLabel}</span>
-                  </div>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">{group.artifactCount}</span>
-                </button>
+                  <span className="flex min-w-0 items-center gap-2">
+                    {isExpanded ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
+                    <span className="truncate text-2xs font-medium text-foreground">{group.portLabel}</span>
+                  </span>
+                  <span className="shrink-0 text-2xs text-muted-foreground">{group.artifactCount}</span>
+                </Button>
 
                 {isExpanded ? (
                   <div className="pb-1 pl-5 pr-1">
@@ -106,7 +109,7 @@ export function NodeArtifactOutputs({
         widthClassName="max-w-3xl"
         onClose={() => setArtifactTextModal(null)}
       >
-        <pre className="max-h-[70vh] overflow-auto rounded-sm border border-border/70 bg-surface-low p-3 text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
+        <pre className="max-h-[70vh] overflow-auto rounded-sm bg-surface-low p-3 text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
           {artifactTextModal?.text ?? ''}
         </pre>
       </Modal>

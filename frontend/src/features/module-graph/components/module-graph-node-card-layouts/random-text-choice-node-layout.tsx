@@ -154,13 +154,13 @@ export function RandomTextChoiceNodeLayout({
                   value={entry.key}
                   onChange={(event) => updateEntry(index, { ...entry, key: event.target.value })}
                   placeholder={t({ ko: '이름', en: 'Name' })}
-                  className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+                  className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
                 />
                 {connected ? (
                   <Input
                     value={t({ ko: '연결됨', en: 'Linked' })}
                     onChange={() => undefined}
-                    className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+                    className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
                     disabled
                   />
                 ) : (
@@ -170,7 +170,7 @@ export function RandomTextChoiceNodeLayout({
                     onChange={(nextValue) => updateEntry(index, { ...entry, value: nextValue })}
                     placeholder={outputType === 'json' ? '{ "key": "value" }' : t({ ko: '값', en: 'Value' })}
                     emptyLabel={t({ ko: '선택', en: 'Select' })}
-                    className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+                    className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
                     allowEmptyOption
                   />
                 )}
@@ -181,7 +181,7 @@ export function RandomTextChoiceNodeLayout({
             </div>
           )
         })}
-        <Button type="button" size="sm" variant="secondary" className="nodrag nowheel h-7 text-[11px]" onMouseDown={stopNodeActionEvent} onClick={appendEntry}>
+        <Button type="button" size="sm" variant="secondary" className="nodrag nowheel h-7 text-2xs" onMouseDown={stopNodeActionEvent} onClick={appendEntry}>
           {t({ ko: '항목 추가', en: 'Add item' })}
         </Button>
       </div>
