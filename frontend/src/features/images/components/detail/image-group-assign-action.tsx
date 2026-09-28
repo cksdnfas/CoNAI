@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
-import { addImageToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
+import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
+import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
 import type { ImageRecord } from '@/types/image'
 
 interface ImageGroupAssignActionProps {
@@ -16,7 +17,7 @@ interface ImageGroupAssignActionProps {
 export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const compositeHash = image?.composite_hash ?? null
 
@@ -28,10 +29,11 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
   })
 
   const assignMutation = useMutation({
-    mutationFn: (groupId: number) => addImageToGroup(groupId, compositeHash as string),
+    // The bulk endpoint reports "already in the group" as a count instead of an English 409 message.
+    mutationFn: (groupId: number) => addImagesToGroup(groupId, [compositeHash as string]),
     onSuccess: async (result) => {
       setIsModalOpen(false)
-      showSnackbar({ message: result.message, tone: 'info' })
+      showSnackbar(formatGroupBulkAddNotice(result, t, formatNumber))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),

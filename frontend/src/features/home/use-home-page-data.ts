@@ -11,6 +11,7 @@ import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restor
 import { useI18n } from '@/i18n'
 import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
 import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
+import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
 
 interface UseHomePageDataOptions {
   /** Show a success/info snackbar for Home page actions. */
@@ -158,7 +159,12 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     onSuccess: async (result) => {
       setIsAssignModalOpen(false)
       setSelectedIds([])
-      notifyInfo(result.message)
+      const notice = formatGroupBulkAddNotice(result, t, formatNumber)
+      if (notice.tone === 'error') {
+        notifyError(notice.message)
+      } else {
+        notifyInfo(notice.message)
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),

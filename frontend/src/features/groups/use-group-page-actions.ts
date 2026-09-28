@@ -15,6 +15,7 @@ import { deleteImagesBulk } from '@/lib/api-images'
 import type { GroupDownloadType, GroupMutationInput, GroupRecord } from '@/types/group'
 import type { GroupEditorState, GroupSourceDefinition } from './group-page-shared'
 import { useI18n } from '@/i18n'
+import { formatGroupBulkAddNotice, formatGroupBulkRemoveNotice } from './group-bulk-result-messages'
 
 /** Own mutation wiring and user-triggered action handlers for the group page. */
 export function useGroupPageActions({
@@ -192,7 +193,7 @@ export function useGroupPageActions({
     onSuccess: async (result) => {
       setIsAssignModalOpen(false)
       setSelectedGroupImageIds([])
-      showSnackbar({ message: result.message, tone: 'info' })
+      showSnackbar(formatGroupBulkAddNotice(result, t, formatNumber))
       await refreshCustomGroupQueries()
     },
     onError: (error) => {
@@ -204,7 +205,7 @@ export function useGroupPageActions({
     mutationFn: ({ groupId: targetGroupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => removeImagesFromGroup(targetGroupId, compositeHashes),
     onSuccess: async (result) => {
       setSelectedGroupImageIds([])
-      showSnackbar({ message: result.message, tone: 'info' })
+      showSnackbar(formatGroupBulkRemoveNotice(result, t, formatNumber))
       await refreshCustomGroupQueries()
     },
     onError: (error) => {
