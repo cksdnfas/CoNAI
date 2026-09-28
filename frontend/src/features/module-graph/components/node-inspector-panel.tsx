@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, MousePointerClick } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -8,16 +8,14 @@ import { Inset } from '@/components/ui/inset'
 import { Panel } from '@/components/ui/panel'
 import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
-import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
 import { getLlmPresetOptions } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphKeyValueListInput } from './module-graph-key-value-list-input'
-import { ModuleGraphSimpleValueInput, formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import { formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
@@ -42,6 +40,8 @@ import {
 } from './node-inspector-panel-helpers'
 import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 import { EmptyState } from '@/components/ui/empty-state'
+import type { PromptWildcardTool } from '@/features/image-generation/components/wildcard-inline-picker-helpers'
+import { TypedFieldInput, type TypedFieldKind } from '@/features/shared-fields/typed-field-input'
 
 const MODULE_ENGINE_LABELS: Record<ModuleEngineType, TranslationInput> = {
   nai: 'NovelAI',
@@ -49,6 +49,19 @@ const MODULE_ENGINE_LABELS: Record<ModuleEngineType, TranslationInput> = {
   comfyui: 'ComfyUI',
   system: { ko: '기본 노드', en: 'Built-in node' },
   custom_js: { ko: '커스텀 노드', en: 'Custom node' },
+}
+
+/** Map a module port data type onto the shared field renderer (non-editable types fall back to text). */
+function resolveInspectorFieldKind(dataType: string): TypedFieldKind {
+  if (dataType === 'prompt' || dataType === 'json' || dataType === 'number' || dataType === 'boolean') {
+    return dataType
+  }
+  return dataType === 'image' || dataType === 'mask' ? 'image' : 'text'
+}
+
+/** Scope wildcard autocomplete to the node's engine; built-in and custom nodes use the general set. */
+function resolvePromptWildcardTool(engineType: ModuleEngineType): PromptWildcardTool {
+  return engineType === 'nai' || engineType === 'comfyui' || engineType === 'codex' ? engineType : 'general'
 }
 
 type NodeInspectorPanelProps = {
@@ -187,24 +200,28 @@ export function NodeInspectorPanel({
       : missingRequired
         ? ({ backgroundColor: 'color-mix(in srgb, var(--warning-soft) 45%, transparent)' } as CSSProperties)
         : undefined
+    const renderPortCard = (children: ReactNode) => (
+      <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+        <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+        {children}
+      </div>
+    )
+    const changePortValue = (value: unknown) => onNodeValueChange(node.id, port.key, value)
 
     if (isSystemLoadLlmPresetNode && port.key === 'preset_type') {
       const presetType = normalizeLlmPresetType(rawValue)
 
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ModuleGraphSimpleValueInput
-            dataType="select"
-            value={presetType}
-            onChange={(value) => {
-              onNodeValueChange(node.id, 'preset_type', value)
-              onNodeValueClear(node.id, 'preset_name')
-            }}
-            options={getLlmPresetTypeOptions(t)}
-            allowEmptyOption={false}
-          />
-        </div>
+      return renderPortCard(
+        <TypedFieldInput
+          kind="select"
+          value={presetType}
+          onChange={(value) => {
+            onNodeValueChange(node.id, 'preset_type', value)
+            onNodeValueClear(node.id, 'preset_name')
+          }}
+          options={getLlmPresetTypeOptions(t)}
+          emptyOption="none"
+        />,
       )
     }
 
@@ -215,17 +232,14 @@ export function NodeInspectorPanel({
       const selectedPreset = currentPresetName
         ? entries.find((preset) => preset.name === currentPresetName) ?? null
         : null
-      const presetOptions = entries.map((preset) => ({ value: preset.name, label: preset.name }))
-      const options = presetOptions
 
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ModuleGraphSimpleValueInput
-            dataType="select"
+      return renderPortCard(
+        <>
+          <TypedFieldInput
+            kind="select"
             value={currentPresetName ?? ''}
-            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-            options={options}
+            onChange={changePortValue}
+            options={entries.map((preset) => preset.name)}
             emptyLabel={llmPresetsQuery.isLoading ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: '프리셋 선택', en: 'Select preset' })}
           />
           {selectedPreset ? (
@@ -234,7 +248,7 @@ export function NodeInspectorPanel({
               <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-foreground">{summarizeLlmPresetContent(selectedPreset.content)}</pre>
             </div>
           ) : null}
-        </div>
+        </>,
       )
     }
 
@@ -259,60 +273,33 @@ export function NodeInspectorPanel({
         ? currentProviderName
         : ''
 
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ModuleGraphSimpleValueInput
-            dataType="select"
-            value={effectiveSelectValue}
-            onChange={(value) => applyLlmModelBinding(node, String(value))}
-            options={llmModelOptions}
-            emptyLabel={t({ ko: '모델 선택', en: 'Select model' })}
-          />
-        </div>
+      return renderPortCard(
+        <TypedFieldInput
+          kind="select"
+          value={effectiveSelectValue}
+          onChange={(value) => applyLlmModelBinding(node, String(value))}
+          options={llmModelOptions}
+          emptyLabel={t({ ko: '모델 선택', en: 'Select model' })}
+        />,
       )
     }
 
     if (isNaiCharacterPromptPort(port.key, port.data_type)) {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <NaiCharacterPromptsInput value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
-        </div>
-      )
+      return renderPortCard(<NaiCharacterPromptsInput value={rawValue} onChange={changePortValue} />)
     }
 
     if (isNaiVibePort(port.key, port.data_type)) {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <NaiReusableAssetInput kind="vibes" value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
-        </div>
-      )
+      return renderPortCard(<NaiReusableAssetInput kind="vibes" value={rawValue} onChange={changePortValue} />)
     }
 
     if (isNaiCharacterReferencePort(port.key, port.data_type)) {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
-        </div>
-      )
+      return renderPortCard(<NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={changePortValue} />)
     }
 
     const powerLoraLoaderValue = rawValue ?? port.default_value ?? uiField?.default_value
 
     if (isPowerLoraLoaderUiField(uiField) || hasPowerLoraLoaderEntries(powerLoraLoaderValue)) {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <PowerLoraLoaderInput
-            field={uiField}
-            value={powerLoraLoaderValue}
-            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-          />
-        </div>
-      )
+      return renderPortCard(<PowerLoraLoaderInput field={uiField} value={powerLoraLoaderValue} onChange={changePortValue} />)
     }
 
     const selectOptions = uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : []
@@ -320,110 +307,47 @@ export function NodeInspectorPanel({
 
     if (selectOptions.length > 0) {
       const defaultSelectValue = port.default_value ?? uiField?.default_value
-      const effectiveSelectValue = rawValue ?? defaultSelectValue ?? (isCodexModelPort ? selectOptions[0] : '')
 
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ModuleGraphSimpleValueInput
-            dataType="select"
-            value={effectiveSelectValue}
-            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-            options={selectOptions}
-            emptyLabel={hasMeaningfulValue(defaultSelectValue) ? formatModuleGraphDefaultOptionLabel(t, defaultSelectValue) : t({ ko: '선택', en: 'Select' })}
-            allowEmptyOption={!isCodexModelPort}
-          />
-        </div>
+      return renderPortCard(
+        <TypedFieldInput
+          kind="select"
+          value={rawValue ?? defaultSelectValue ?? (isCodexModelPort ? selectOptions[0] : '')}
+          onChange={changePortValue}
+          options={selectOptions}
+          emptyLabel={hasMeaningfulValue(defaultSelectValue) ? formatModuleGraphDefaultOptionLabel(t, defaultSelectValue) : undefined}
+          emptyOption={isCodexModelPort ? 'none' : 'auto'}
+        />,
       )
     }
 
     if (uiField?.ui_hint === 'key_value_entries') {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ModuleGraphKeyValueListInput value={rawValue ?? uiField.default_value ?? port.default_value} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
-        </div>
-      )
-    }
-
-    if (port.data_type === 'prompt' || port.data_type === 'json') {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ModuleGraphSimpleValueInput
-            dataType={port.data_type}
-            value={rawValue}
-            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-            placeholder={normalizedDescription || port.label}
-            rows={port.data_type === 'json' ? 6 : 4}
-          />
-        </div>
-      )
-    }
-
-    if (port.data_type === 'number') {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ModuleGraphSimpleValueInput
-            dataType="number"
-            value={rawValue}
-            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-            placeholder={numberPlaceholder}
-            min={numberMin}
-            max={uiField?.max}
-            step={numberStep}
-          />
-        </div>
-      )
-    }
-
-    if (port.data_type === 'boolean') {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ModuleGraphSimpleValueInput
-            dataType="boolean"
-            value={rawValue}
-            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-          />
-        </div>
-      )
-    }
-
-    if (port.data_type === 'image' || port.data_type === 'mask') {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <ImageAttachmentPickerButton label={hasExplicitValue ? t({ ko: '이미지 변경', en: 'Change image' }) : t({ ko: '이미지 선택', en: 'Select image' })} modalTitle={port.label} allowSaveDialog={false} onSelect={(image) => void onNodeImageChange(node.id, port.key, image)} />
-          {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
-            <InlineMediaPreview src={rawValue} alt={port.label} frameClassName="p-3" />
-          ) : null}
-        </div>
-      )
+      return renderPortCard(<ModuleGraphKeyValueListInput value={rawValue ?? uiField.default_value ?? port.default_value} onChange={changePortValue} />)
     }
 
     if (port.data_type === 'any') {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <div className="text-sm text-muted-foreground">
-            {t({ ko: '이 포트는 연결된 업스트림 값을 그대로 받아. 직접 편집은 지원하지 않아.', en: 'This port uses the connected upstream value as-is. Direct editing is not supported.' })}
-          </div>
-        </div>
+      return renderPortCard(
+        <div className="text-sm text-muted-foreground">
+          {t({ ko: '이 포트는 연결된 업스트림 값을 그대로 받아. 직접 편집은 지원하지 않아.', en: 'This port uses the connected upstream value as-is. Direct editing is not supported.' })}
+        </div>,
       )
     }
 
-    return (
-      <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-        <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-        <ModuleGraphSimpleValueInput
-          dataType="text"
-          value={rawValue}
-          onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-          placeholder={uiField?.placeholder || normalizedDescription || port.label}
-        />
-      </div>
+    const kind = resolveInspectorFieldKind(port.data_type)
+
+    return renderPortCard(
+      <TypedFieldInput
+        kind={kind}
+        value={rawValue}
+        onChange={changePortValue}
+        placeholder={kind === 'number' ? numberPlaceholder : kind === 'text' ? (uiField?.placeholder || normalizedDescription || port.label) : (normalizedDescription || port.label)}
+        rows={kind === 'json' ? 6 : kind === 'prompt' ? 4 : undefined}
+        promptTool={resolvePromptWildcardTool(node.data.module.engine_type)}
+        min={numberMin}
+        max={uiField?.max}
+        step={numberStep}
+        imageModalTitle={port.label}
+        onImageChange={(image) => onNodeImageChange(node.id, port.key, image)}
+      />,
     )
   }
 
@@ -434,74 +358,30 @@ export function NodeInspectorPanel({
     const clearFieldValue = () => onNodeValueClear(node.id, field.key)
 
     const renderFieldInput = () => {
-      if (field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
-        const requiresConcreteSelection = selectedNodeOperationKey === 'system.logic_if_branch' && (field.key === 'mode' || field.key === 'expected_type')
-        const defaultSelectValue = field.default_value
-        return (
-          <ModuleGraphSimpleValueInput
-            dataType="select"
-            value={requiresConcreteSelection ? (rawValue ?? defaultSelectValue) : rawValue}
-            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
-            options={field.options}
-            emptyLabel={hasMeaningfulValue(defaultSelectValue) ? formatModuleGraphDefaultOptionLabel(t, defaultSelectValue) : t({ ko: '선택', en: 'Select' })}
-            allowEmptyOption={!requiresConcreteSelection}
-          />
-        )
-      }
-
-      if (field.data_type === 'number') {
-        return (
-          <ModuleGraphSimpleValueInput
-            dataType="number"
-            value={rawValue}
-            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
-            placeholder={field.placeholder || field.label}
-            min={field.min}
-            max={field.max}
-          />
-        )
-      }
-
-      if (field.data_type === 'boolean') {
-        return (
-          <ModuleGraphSimpleValueInput
-            dataType="boolean"
-            value={rawValue}
-            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
-          />
-        )
-      }
-
       const powerLoraLoaderValue = rawValue ?? field.default_value
+      const isSelect = field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0
 
-      if (isPowerLoraLoaderUiField(field) || hasPowerLoraLoaderEntries(powerLoraLoaderValue)) {
-        return (
-          <PowerLoraLoaderInput
-            field={field}
-            value={powerLoraLoaderValue}
-            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
-          />
-        )
+      if (!isSelect && field.data_type !== 'number' && field.data_type !== 'boolean'
+        && (isPowerLoraLoaderUiField(field) || hasPowerLoraLoaderEntries(powerLoraLoaderValue))) {
+        return <PowerLoraLoaderInput field={field} value={powerLoraLoaderValue} onChange={(value) => onNodeValueChange(node.id, field.key, value)} />
       }
 
-      if (field.data_type === 'json' || field.data_type === 'prompt' || field.data_type === 'text') {
-        return (
-          <ModuleGraphSimpleValueInput
-            dataType={field.data_type}
-            value={rawValue}
-            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
-            placeholder={field.placeholder || normalizedDescription || field.label}
-            rows={field.data_type === 'json' ? 6 : 2}
-          />
-        )
-      }
+      const requiresConcreteSelection = isSelect && selectedNodeOperationKey === 'system.logic_if_branch' && (field.key === 'mode' || field.key === 'expected_type')
+      const kind = isSelect ? 'select' : resolveInspectorFieldKind(field.data_type)
 
       return (
-        <ModuleGraphSimpleValueInput
-          dataType="text"
-          value={rawValue}
+        <TypedFieldInput
+          kind={kind === 'image' ? 'text' : kind}
+          value={requiresConcreteSelection ? (rawValue ?? field.default_value) : rawValue}
           onChange={(value) => onNodeValueChange(node.id, field.key, value)}
-          placeholder={field.placeholder || normalizedDescription || field.label}
+          placeholder={kind === 'number' ? (field.placeholder || field.label) : (field.placeholder || normalizedDescription || field.label)}
+          rows={field.data_type === 'json' ? 6 : field.data_type === 'prompt' || field.data_type === 'text' ? 2 : undefined}
+          promptTool={resolvePromptWildcardTool(node.data.module.engine_type)}
+          options={field.options}
+          emptyLabel={isSelect && hasMeaningfulValue(field.default_value) ? formatModuleGraphDefaultOptionLabel(t, field.default_value) : undefined}
+          emptyOption={requiresConcreteSelection ? 'none' : undefined}
+          min={field.min}
+          max={field.max}
         />
       )
     }
