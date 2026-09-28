@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Download, Save } from 'lucide-react'
+import { ArrowLeft, Copy, Download, Save } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Inset } from '@/components/ui/inset'
@@ -13,11 +13,20 @@ import { useI18n } from '@/i18n'
 import { ImageDetailMedia } from '@/features/images/components/detail/image-detail-media'
 import { useImageSourceBack } from '@/features/images/image-source-navigation'
 import { getDownloadName, getImageDetailRenderUrl } from '@/features/images/components/detail/image-detail-utils'
+import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { downloadExistingImageWithRewrittenMetadata, getImage, saveImageMetadata } from '@/lib/api-images'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { MetadataRewriteForm } from './components/metadata-rewrite-form'
 import { buildMetadataRewritePatch, createRewriteDraftFromImage, type RewriteMetadataDraft } from './use-metadata-rewrite-draft'
+
+const SAVED_DRAFT_FIELDS = ['prompt', 'negativePrompt', 'steps', 'sampler', 'model'] as const
+
+/** Save only writes these fields (format is download-only), so compare them trimmed against the stored values. */
+function hasSavableDraftChanges(draft: RewriteMetadataDraft, baseline: RewriteMetadataDraft) {
+  return SAVED_DRAFT_FIELDS.some((field) => draft[field].trim() !== baseline[field].trim())
+}
 
 export function ImageMetadataEditPage() {
   const { compositeHash } = useParams<{ compositeHash: string }>()
@@ -41,6 +50,24 @@ export function ImageMetadataEditPage() {
 
     setDraft(createRewriteDraftFromImage(imageQuery.data))
   }, [imageQuery.data])
+
+  const baselineDraft = useMemo(() => (imageQuery.data ? createRewriteDraftFromImage(imageQuery.data) : null), [imageQuery.data])
+  const hasUnsavedChanges = Boolean(draft && baselineDraft && hasSavableDraftChanges(draft, baselineDraft))
+  const invalidStepsMessage = t('metadata.use.metadata.rewrite.draft.steps.must.be.a.number.greater.than')
+  const draftValidationError = useMemo(() => {
+    if (!draft) {
+      return null
+    }
+
+    try {
+      buildMetadataRewritePatch(draft, { invalidStepsMessage })
+      return null
+    } catch (error) {
+      return error instanceof Error ? error.message : invalidStepsMessage
+    }
+  }, [draft, invalidStepsMessage])
+
+  useUnsavedSettingsGuard(hasUnsavedChanges, t({ ko: '저장하지 않은 메타데이터 변경 사항이 있습니다. 페이지를 떠날까요?', en: 'You have unsaved metadata changes. Leave this page?' }))
 
   const downloadMutation = useMutation({
     mutationFn: async (nextDraft: RewriteMetadataDraft) => {
@@ -69,11 +96,8 @@ export function ImageMetadataEditPage() {
 
       const metadataPatch = buildMetadataRewritePatch(nextDraft, {
         clearEmptyFields: true,
-        invalidStepsMessage: t('metadata.use.metadata.rewrite.draft.steps.must.be.a.number.greater.than'),
+        invalidStepsMessage,
       })
-      if (Object.keys(metadataPatch).length === 0) {
-        throw new Error(t('metadata.image.metadata.edit.page.there.are.no.metadata.changes.to.save'))
-      }
 
       return saveImageMetadata(compositeHash, metadataPatch)
     },
@@ -103,6 +127,19 @@ export function ImageMetadataEditPage() {
   const isEditableImage = image?.file_type === 'image'
   const busy = downloadMutation.isPending || saveMutation.isPending
 
+  const handleCopyHash = async () => {
+    if (!image?.composite_hash) {
+      return
+    }
+
+    try {
+      await copyTextToClipboard(image.composite_hash)
+      showSnackbar({ message: t({ ko: '복사했습니다.', en: 'Copied.' }), tone: 'info' })
+    } catch {
+      showSnackbar({ message: t({ ko: '복사하지 못했습니다.', en: 'Could not copy.' }), tone: 'error' })
+    }
+  }
+
   const handleDownload = () => {
     if (!draft || busy) {
       return
@@ -111,8 +148,10 @@ export function ImageMetadataEditPage() {
     downloadMutation.mutate(draft)
   }
 
+  const canSave = Boolean(draft) && !busy && isEditableImage && hasUnsavedChanges && !draftValidationError
+
   const handleSave = () => {
-    if (!draft || busy) {
+    if (!draft || !canSave) {
       return
     }
 
@@ -134,11 +173,15 @@ export function ImageMetadataEditPage() {
               <ArrowLeft className="h-4 w-4" />
               {t({ ko: '돌아가기', en: 'Back' })}
             </Button>
-            <Button variant="outline" onClick={handleDownload} disabled={!draft || busy || !isEditableImage}>
+            <Button variant="outline" onClick={handleDownload} disabled={!draft || busy || !isEditableImage || Boolean(draftValidationError)}>
               <Download className="h-4 w-4" />
               {t({ ko: '다운로드', en: 'Download' })}
             </Button>
-            <Button onClick={handleSave} disabled={!draft || busy || !isEditableImage}>
+            <Button
+              onClick={handleSave}
+              disabled={!canSave}
+              title={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '변경 사항이 없습니다', en: 'No changes to save' }) : undefined}
+            >
               <Save className="h-4 w-4" />
               {t({ ko: '저장', en: 'Save' })}
             </Button>
@@ -169,16 +212,32 @@ export function ImageMetadataEditPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <Inset className="text-sm text-muted-foreground">
+              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일', en: 'File' })}</p>
+              <p className="mt-2 break-all text-foreground">{downloadName}</p>
+            </Inset>
+
+            {image.composite_hash ? (
               <Inset className="text-sm text-muted-foreground">
-                <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
-                <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
+                <details>
+                  <summary className="cursor-pointer select-none text-[11px] uppercase tracking-[0.18em]">{t({ ko: '기술 정보', en: 'Technical details' })}</summary>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '복합 해시', en: 'Composite hash' })}</p>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => void handleCopyHash()}
+                      aria-label={t({ ko: '복합 해시 복사', en: 'Copy composite hash' })}
+                      title={t({ ko: '복합 해시 복사', en: 'Copy composite hash' })}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="mt-1 break-all font-mono text-xs text-foreground/88">{image.composite_hash}</p>
+                </details>
               </Inset>
-              <Inset className="text-sm text-muted-foreground">
-                <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일', en: 'File' })}</p>
-                <p className="mt-2 break-all text-foreground">{downloadName}</p>
-              </Inset>
-            </div>
+            ) : null}
           </Section>
 
           <Section heading={t('metadata.image.metadata.edit.page.edit.metadata')}>
@@ -198,10 +257,10 @@ export function ImageMetadataEditPage() {
               />
             ) : null}
 
-            {saveMutation.isError ? (
+            {draftValidationError ? (
               <Alert variant="destructive">
-                <AlertTitle>{t('metadata.image.metadata.edit.page.save.failed')}</AlertTitle>
-                <AlertDescription>{saveMutation.error instanceof Error ? saveMutation.error.message : t('metadata.image.metadata.edit.page.an.unknown.error.occurred')}</AlertDescription>
+                <AlertTitle>{t({ ko: '입력값을 확인하세요', en: 'Check the values' })}</AlertTitle>
+                <AlertDescription>{draftValidationError}</AlertDescription>
               </Alert>
             ) : null}
           </Section>
