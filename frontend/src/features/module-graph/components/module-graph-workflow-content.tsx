@@ -18,7 +18,7 @@ const ModuleWorkflowOutputManagementPanelLazy = lazy(async () => {
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 
 function WorkflowContentFallback() {
-  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+  return <div className="min-h-[16rem] animate-pulse rounded-sm bg-surface-low" />
 }
 
 /** Render the browse-mode content block for the module-graph workspace. */

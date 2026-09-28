@@ -17,7 +17,8 @@ import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-charac
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
-const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-4'
+// Same tone role as <Inset />: surface-low on the page, recessed inside the runner Section.
+const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'ui-tone-plinth space-y-2 rounded-sm p-4'
 const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
 
 function getWorkflowSelectOptionLabel(option: string, randomSelectionLabel: string) {

@@ -2,6 +2,7 @@ import { Folder, FolderOpen, Plus } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Inset } from '@/components/ui/inset'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import type { EditorSupportSectionKey } from './module-workflow-editor-support-panel'
@@ -43,7 +44,7 @@ export function ModuleGraphWorkflowSetupFolderPanel({
   const { t } = useI18n()
 
   return (
-    <div className="space-y-3 rounded-sm border border-border/70 bg-background/40 p-3">
+    <Inset className="space-y-3 p-3">
       <div className="text-sm font-medium text-foreground">{t({ ko: '저장 폴더', en: 'Save folder' })}</div>
 
       <HierarchyPicker
@@ -67,7 +68,7 @@ export function ModuleGraphWorkflowSetupFolderPanel({
           {t({ ko: '폴더 생성', en: 'Create folder' })}
         </Button>
       </div>
-    </div>
+    </Inset>
   )
 }
 

@@ -3,7 +3,10 @@ import { ChevronDown, Folder, PenSquare, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Heading } from '@/components/ui/heading'
+import { IconButton } from '@/components/ui/icon-button'
+import { Inset } from '@/components/ui/inset'
+import { Section } from '@/components/ui/section'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Tip } from '@/components/ui/tooltip'
@@ -165,7 +168,7 @@ export function WorkflowRunnerPanel({
   })
 
   /** Run on Ctrl/Cmd+Enter from inside the panel (not from portalled modals), after committing the focused input. */
-  const handleRunShortcut = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleRunShortcut = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.nativeEvent.isComposing) {
       return
     }
@@ -186,8 +189,7 @@ export function WorkflowRunnerPanel({
   }
 
   return (
-    <Card onKeyDown={handleRunShortcut}>
-      <CardContent className="space-y-3.5">
+    <Section onKeyDown={handleRunShortcut} className="overflow-visible" bodyClassName="space-y-3.5">
         {showHeader ? (
           <SectionHeading
             variant="inside"
@@ -205,10 +207,10 @@ export function WorkflowRunnerPanel({
             {!showHeader ? (
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-2">
-                  <div className="truncate text-base font-semibold text-foreground">{selectedGraph.name}</div>
+                  <Heading level={3} className="truncate">{selectedGraph.name}</Heading>
                   {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
                   {graphSummaryLine || latestExecutionStatus ? (
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
                       {graphSummaryLine ? <span title={graphSummaryLine}>{graphSummaryLine}</span> : null}
                       {latestExecutionStatusLabel ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatusLabel}</Badge> : null}
                     </div>
@@ -217,26 +219,26 @@ export function WorkflowRunnerPanel({
 
                 <div className="flex shrink-0 items-center gap-2">
                   {onOpenFolderSettings ? (
-                    <Button type="button" size="icon-sm" variant="secondary" onClick={onOpenFolderSettings} disabled={!selectedGraph} aria-label={t({ ko: '폴더 설정', en: 'Folder settings' })} title={t({ ko: '폴더 설정', en: 'Folder settings' })}>
+                    <IconButton size="icon-sm" variant="secondary" onClick={onOpenFolderSettings} disabled={!selectedGraph} label={t({ ko: '폴더 설정', en: 'Folder settings' })}>
                       <Folder className="h-4 w-4" />
-                    </Button>
+                    </IconButton>
                   ) : null}
-                  <Button type="button" size="icon-sm" variant="secondary" onClick={onEdit} disabled={!selectedGraph} aria-label={t({ ko: '구조 수정', en: 'Edit graph' })} title={t({ ko: '구조 수정', en: 'Edit graph' })}>
+                  <IconButton size="icon-sm" variant="secondary" onClick={onEdit} disabled={!selectedGraph} label={t({ ko: '구조 수정', en: 'Edit graph' })}>
                     <PenSquare className="h-4 w-4" />
-                  </Button>
+                  </IconButton>
                   {onDeleteWorkflow ? (
-                    <Button type="button" size="icon-sm" variant="secondary" onClick={onDeleteWorkflow} disabled={!selectedGraph} aria-label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })} title={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
+                    <IconButton size="icon-sm" variant="secondary" onClick={onDeleteWorkflow} disabled={!selectedGraph} label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </IconButton>
                   ) : null}
                 </div>
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="text-base font-semibold text-foreground">{selectedGraph.name}</div>
+                <Heading level={3}>{selectedGraph.name}</Heading>
                 {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
                 {graphSummaryLine || latestExecutionStatus ? (
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
                     {graphSummaryLine ? <span title={graphSummaryLine}>{graphSummaryLine}</span> : null}
                     {latestExecutionStatusLabel ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatusLabel}</Badge> : null}
                   </div>
@@ -245,7 +247,7 @@ export function WorkflowRunnerPanel({
             )}
 
             {latestExecution ? (
-              <div className="rounded-sm bg-surface-low px-3 py-2.5">
+              <Inset className="px-3 py-2.5">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-sm font-medium text-foreground">{t({ ko: '최근 결과', en: 'Latest result' })}</span>
                   <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
@@ -286,7 +288,7 @@ export function WorkflowRunnerPanel({
                       ) : null}
                     </div>
                     {latestExecutionFinalResultWarning ? (
-                      <div className="rounded-sm border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+                      <div role="status" className="rounded-sm bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
                         <div>
                           {latestExecutionFinalResultWarning.kind === 'source_artifact_missing'
                             ? latestExecutionFinalResultWarningSourceLabel
@@ -329,7 +331,7 @@ export function WorkflowRunnerPanel({
                     )}
                   </div>
                 ) : null}
-              </div>
+              </Inset>
             ) : null}
 
             <WorkflowValidationPanel
@@ -350,7 +352,7 @@ export function WorkflowRunnerPanel({
 
             <div
               data-slot="workflow-run-action-row"
-              className="sticky bottom-0 z-10 -mx-(--theme-card-padding-x) space-y-2 border-t border-border/70 bg-surface-container px-(--theme-card-padding-x) py-3"
+              className="sticky bottom-0 z-raised -mx-4 space-y-2 border-t border-outline-subtle bg-surface-low px-4 py-3"
             >
               {runReadinessMessage ? (
                 <div
@@ -381,7 +383,6 @@ export function WorkflowRunnerPanel({
             </div>
           </div>
         ) : null}
-      </CardContent>
-    </Card>
+    </Section>
   )
 }

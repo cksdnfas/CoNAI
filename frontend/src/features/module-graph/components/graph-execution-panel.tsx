@@ -1,10 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { Eye, Play, RotateCcw, Square } from 'lucide-react'
-import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Inset } from '@/components/ui/inset'
+import { Panel } from '@/components/ui/panel'
+import { Section } from '@/components/ui/section'
+import { Text } from '@/components/ui/text'
 import { Modal } from '@/components/ui/modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
@@ -70,7 +72,7 @@ function getExecutionStatusBadgeVariant(status: GraphExecutionRecord['status']) 
   return status === 'completed' ? 'secondary' as const : 'outline' as const
 }
 
-const CODE_BLOCK_CLASS_NAME = 'overflow-auto rounded-sm border border-border bg-surface-lowest p-2.5 text-[11px] text-foreground'
+const CODE_BLOCK_CLASS_NAME = 'overflow-auto rounded-sm bg-surface-lowest p-2.5 text-2xs text-foreground'
 
 function SelectedExecutionSummary({
   executionDetail,
@@ -125,8 +127,8 @@ function SelectedExecutionSummary({
   }), [executionDetail.execution, executionDetail.logs, nodeLabelOverrides, selectedExecutionPlan, selectedGraph, t])
 
   return (
-    <div className="space-y-4 rounded-sm border border-border bg-surface-low p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-background/50 px-3 py-2 text-sm">
+    <Panel tone="container" padding="sm" className="space-y-4">
+      <Inset className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-foreground">#{executionDetail.execution.id}</span>
           <Badge variant={getExecutionStatusBadgeVariant(executionDetail.execution.status)}>{getGraphExecutionStatusLabel(executionDetail.execution.status, t)}</Badge>
@@ -134,22 +136,22 @@ function SelectedExecutionSummary({
           {selectedExecutionPlan?.targetNodeId ? <Badge variant="outline">{getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId, nodeLabelOverrides)}</Badge> : null}
           {selectedExecutionPlan?.forceRerun ? <Badge variant="outline">{t({ ko: '강제', en: 'Forced' })}</Badge> : null}
           {selectedExecutionPlan?.reusedFromExecutionId ? <Badge variant="outline">{t({ ko: '재사용 #{id}', en: 'Reused #{id}' }, { id: selectedExecutionPlan.reusedFromExecutionId })}</Badge> : null}
-          <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
+          <span className="text-2xs text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
         </div>
         <Button type="button" size="sm" variant="secondary" onClick={onOpenDetail}>
           <Eye className="h-4 w-4" />
           {t({ ko: '상세', en: 'Details' })}
         </Button>
-      </div>
+      </Inset>
 
       {executionDetail.execution.error_message ? (
-        <div className="rounded-sm border border-destructive/40 bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground">
+        <div role="alert" className="rounded-sm bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground">
           {executionDetail.execution.error_message}
         </div>
       ) : null}
 
       {llmResponseDiagnostic ? (
-        <div className="space-y-2 rounded-sm border border-destructive/40 bg-surface-container px-3 py-2 text-sm text-foreground">
+        <div className="space-y-2 rounded-sm bg-destructive-soft/45 px-3 py-2 text-sm text-foreground">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-medium">{t({ ko: 'LLM 응답 로그', en: 'LLM response log' })}</span>
@@ -170,7 +172,7 @@ function SelectedExecutionSummary({
       ) : null}
 
       {finalResultLifecycleWarning ? (
-        <div className="rounded-sm border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+        <div role="status" className="rounded-sm bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
           <div>
             {finalResultLifecycleWarning.kind === 'source_artifact_missing'
               ? finalResultLifecycleWarningSourceLabel
@@ -203,23 +205,23 @@ function SelectedExecutionSummary({
 
       {executionInputEntries.length > 0 ? (
         <div className="space-y-2.5">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
             <span>{t({ ko: '입력', en: 'Inputs' })}</span>
             <Badge variant="outline">{formatNumber(executionInputEntries.length)}</Badge>
-          </div>
+          </Text>
           <div className="grid gap-2 md:grid-cols-2">
             {executionInputEntries.map((entry) => (
-              <div key={entry.key} className="rounded-sm border border-border bg-background/50 px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{entry.label}</div>
-                {entry.label !== entry.key ? <div className="mt-0.5 text-[11px] text-muted-foreground">{entry.key}</div> : null}
+              <Inset key={entry.key} className="px-3 py-2">
+                <Text as="div" variant="overline" className="font-semibold">{entry.label}</Text>
+                {entry.label !== entry.key ? <div className="mt-0.5 text-2xs text-muted-foreground">{entry.key}</div> : null}
                 <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value, t)}</div>
-              </div>
+              </Inset>
             ))}
           </div>
         </div>
       ) : null}
 
-      <div className="rounded-sm border border-border bg-background/35 p-3">
+      <div>
         <WorkflowFinalResultsSection
           finalResults={finalResults}
           artifacts={executionDetail.artifacts}
@@ -229,10 +231,10 @@ function SelectedExecutionSummary({
       </div>
 
       <div className="space-y-2.5">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
           <span>{t({ ko: '출력', en: 'Outputs' })}</span>
           <Badge variant="outline">{formatNumber(compactArtifactGroups.length)}</Badge>
-        </div>
+        </Text>
 
         {compactArtifactGroups.length === 0 ? (
           <EmptyState size="compact" title={t({ ko: '표시할 출력 없음', en: 'No outputs to display' })} />
@@ -244,7 +246,7 @@ function SelectedExecutionSummary({
           </div>
         )}
       </div>
-    </div>
+    </Panel>
   )
 }
 
@@ -406,120 +408,116 @@ export function GraphExecutionPanel({
 
   return (
     <>
-      <Card>
-        <CardContent className="space-y-4">
-          {showHeader ? (
-            <SectionHeading
-              variant="inside"
-              heading={t({ ko: '실행 결과', en: 'Run results' })}
-              description={description}
-              actions={actionButtons}
-            />
-          ) : null}
+      <Section
+        heading={showHeader ? t({ ko: '실행 결과', en: 'Run results' }) : undefined}
+        description={showHeader ? description : undefined}
+        actions={showHeader ? actionButtons : undefined}
+      >
 
-          {!showHeader ? <div className="flex justify-end">{actionButtons}</div> : null}
+        {!showHeader ? <div className="flex justify-end">{actionButtons}</div> : null}
 
-          {!selectedGraphId ? (
-            <EmptyState
-              size="compact"
-              title={t({ ko: '그래프를 먼저 골라줘', en: 'Choose a graph first' })}
-              description={t({ ko: '워크플로우를 먼저 선택해.', en: 'Select a workflow first.' })}
-            />
-          ) : null}
+        {!selectedGraphId ? (
+          <EmptyState
+            size="compact"
+            title={t({ ko: '그래프를 먼저 골라줘', en: 'Choose a graph first' })}
+            description={t({ ko: '워크플로우를 먼저 선택해.', en: 'Select a workflow first.' })}
+          />
+        ) : null}
 
-          {selectedGraphId && executionListIsError ? (
-            <ErrorState size="compact" title={t({ ko: '실행 목록 오류', en: 'Run list error' })} description={executionListError} />
-          ) : null}
+        {selectedGraphId && executionListIsError ? (
+          <ErrorState size="compact" title={t({ ko: '실행 목록 오류', en: 'Run list error' })} description={executionListError} />
+        ) : null}
 
-          {selectedGraphId && executionList.length === 0 ? (
-            <EmptyState
-              size="compact"
-              title={t({ ko: '실행 기록이 없어', en: 'There is no run history' })}
-              description={t({ ko: '먼저 실행해줘.', en: 'Run it first.' })}
-            />
-          ) : null}
+        {selectedGraphId && executionList.length === 0 ? (
+          <EmptyState
+            size="compact"
+            title={t({ ko: '실행 기록이 없어', en: 'There is no run history' })}
+            description={t({ ko: '먼저 실행해줘.', en: 'Run it first.' })}
+          />
+        ) : null}
 
-          {selectedGraphId && (queuedCount > 0 || runningCount > 0) ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">
-                {t({ ko: '대기 {queued} · 실행 중 {running}', en: 'Queued {queued} · Running {running}' }, { queued: formatNumber(queuedCount), running: formatNumber(runningCount) })}
-              </span>
-              {activeRunningExecution ? <span>{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: activeRunningExecution.id })}</span> : null}
-              {nextQueuedExecution ? <span>{t({ ko: '다음 #{id} · {position}', en: 'Next #{id} · {position}' }, { id: nextQueuedExecution.id, position: nextQueuedExecution.queue_position ?? '?' })}</span> : null}
-            </div>
-          ) : null}
+        {selectedGraphId && (queuedCount > 0 || runningCount > 0) ? (
+          <Inset className="flex flex-wrap items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {t({ ko: '대기 {queued} · 실행 중 {running}', en: 'Queued {queued} · Running {running}' }, { queued: formatNumber(queuedCount), running: formatNumber(runningCount) })}
+            </span>
+            {activeRunningExecution ? <span>{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: activeRunningExecution.id })}</span> : null}
+            {nextQueuedExecution ? <span>{t({ ko: '다음 #{id} · {position}', en: 'Next #{id} · {position}' }, { id: nextQueuedExecution.id, position: nextQueuedExecution.queue_position ?? '?' })}</span> : null}
+          </Inset>
+        ) : null}
 
-          <div className="space-y-1.5">
-            {executionList.map((execution) => {
-              const plan = parseExecutionPlan(execution.execution_plan)
-              const modeLabel = getExecutionModeLabel(plan, t)
-              const isSelected = selectedExecutionId === execution.id
-              const selectedDetailMatches = isSelected && executionDetail?.execution.id === execution.id
+        <div className="space-y-1.5">
+          {executionList.map((execution) => {
+            const plan = parseExecutionPlan(execution.execution_plan)
+            const modeLabel = getExecutionModeLabel(plan, t)
+            const isSelected = selectedExecutionId === execution.id
+            const selectedDetailMatches = isSelected && executionDetail?.execution.id === execution.id
 
-              return (
-                <div key={execution.id} className="space-y-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onSelectExecution(isSelected ? null : execution.id)}
-                    className={cn('block w-full rounded-sm border px-2.5 py-2 text-left transition-colors hover:bg-surface-high', isSelected ? 'border-primary/50 bg-surface-high' : 'border-border bg-surface-low')}
-                    title={isSelected ? t({ ko: '다시 누르면 접기', en: 'Click again to collapse' }) : t({ ko: '클릭해서 펼치기', en: 'Click to expand' })}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="text-sm font-medium text-foreground">#{execution.id}</span>
-                        <Badge variant={getExecutionStatusBadgeVariant(execution.status)}>{getGraphExecutionStatusLabel(execution.status, t)}</Badge>
-                        <Badge variant="outline">{modeLabel}</Badge>
-                        {isSelected ? <Badge variant="secondary">{t({ ko: '선택', en: 'Selected' })}</Badge> : null}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">{formatDateTime(execution.created_date)}</div>
-                    </div>
+            return (
+              <div key={execution.id} className="space-y-1.5">
+                <Button
+                  type="button"
+                  variant="nav"
+                  data-active={isSelected}
+                  aria-expanded={isSelected}
+                  onClick={() => onSelectExecution(isSelected ? null : execution.id)}
+                  className="h-auto flex-col items-stretch gap-1 px-2.5 py-2 whitespace-normal"
+                  title={isSelected ? t({ ko: '다시 누르면 접기', en: 'Click again to collapse' }) : t({ ko: '클릭해서 펼치기', en: 'Click to expand' })}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">#{execution.id}</span>
+                      <Badge variant={getExecutionStatusBadgeVariant(execution.status)}>{getGraphExecutionStatusLabel(execution.status, t)}</Badge>
+                      <Badge variant="outline">{modeLabel}</Badge>
+                    </span>
+                    <span className="text-2xs text-muted-foreground">{formatDateTime(execution.created_date)}</span>
+                  </span>
 
-                    {(execution.status === 'queued' && execution.queue_position) || execution.cancel_requested || execution.error_message ? (
-                      <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                        {execution.status === 'queued' && execution.queue_position ? <span>{t({ ko: '순번 {position}', en: 'Position {position}' }, { position: execution.queue_position })}</span> : null}
-                        {execution.cancel_requested ? <span className="text-warning">{t({ ko: '취소 요청됨', en: 'Cancel requested' })}</span> : null}
-                        {execution.error_message ? <span className="text-destructive line-clamp-1">{execution.error_message}</span> : null}
-                      </div>
-                    ) : null}
-                  </button>
-
-                  {isSelected && executionDetailIsError ? (
-                    <ErrorState size="compact" title={t({ ko: '실행 상세 오류', en: 'Run detail error' })} description={executionDetailError} />
+                  {(execution.status === 'queued' && execution.queue_position) || execution.cancel_requested || execution.error_message ? (
+                    <span className="flex flex-wrap gap-x-2 gap-y-1 text-2xs text-muted-foreground">
+                      {execution.status === 'queued' && execution.queue_position ? <span>{t({ ko: '순번 {position}', en: 'Position {position}' }, { position: execution.queue_position })}</span> : null}
+                      {execution.cancel_requested ? <span className="text-warning">{t({ ko: '취소 요청됨', en: 'Cancel requested' })}</span> : null}
+                      {execution.error_message ? <span className="text-destructive line-clamp-1">{execution.error_message}</span> : null}
+                    </span>
                   ) : null}
-
-                  {isSelected && !executionDetailIsError && !selectedDetailMatches ? (
-                    <LoadingState variant="inline" label={t({ ko: '실행 결과 불러오는 중…', en: 'Loading run results…' })} />
-                  ) : null}
-
-                  {selectedDetailMatches && executionDetail ? (
-                    <SelectedExecutionSummary
-                      executionDetail={executionDetail}
-                      selectedGraph={selectedGraph}
-                      nodeLabelOverrides={nodeLabelOverrides}
-                      selectedExecutionPlan={selectedExecutionPlan}
-                      executionInputEntries={executionInputEntries}
-                      finalResults={finalResults}
-                      compactArtifactGroups={compactArtifactGroups}
-                      onOpenDetail={() => setIsDetailModalOpen(true)}
-                    />
-                  ) : null}
-                </div>
-              )
-            })}
-          </div>
-
-          {selectedGraphId && executionList.length > 0 && (hasMoreExecutions || totalExecutionCount > executionList.length) ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span>{t({ ko: '최근 {shown}개 표시 · 전체 {total}개', en: 'Showing latest {shown} of {total}' }, { shown: formatNumber(executionList.length), total: formatNumber(totalExecutionCount) })}</span>
-              {hasMoreExecutions && executionListPaging ? (
-                <Button type="button" size="sm" variant="secondary" onClick={executionListPaging.onLoadMore} disabled={executionListPaging.isLoadingMore}>
-                  {executionListPaging.isLoadingMore ? t({ ko: '불러오는 중…', en: 'Loading…' }) : t({ ko: '더 보기', en: 'Load more' })}
                 </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+
+                {isSelected && executionDetailIsError ? (
+                  <ErrorState size="compact" title={t({ ko: '실행 상세 오류', en: 'Run detail error' })} description={executionDetailError} />
+                ) : null}
+
+                {isSelected && !executionDetailIsError && !selectedDetailMatches ? (
+                  <LoadingState variant="inline" label={t({ ko: '실행 결과 불러오는 중…', en: 'Loading run results…' })} />
+                ) : null}
+
+                {selectedDetailMatches && executionDetail ? (
+                  <SelectedExecutionSummary
+                    executionDetail={executionDetail}
+                    selectedGraph={selectedGraph}
+                    nodeLabelOverrides={nodeLabelOverrides}
+                    selectedExecutionPlan={selectedExecutionPlan}
+                    executionInputEntries={executionInputEntries}
+                    finalResults={finalResults}
+                    compactArtifactGroups={compactArtifactGroups}
+                    onOpenDetail={() => setIsDetailModalOpen(true)}
+                  />
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+
+        {selectedGraphId && executionList.length > 0 && (hasMoreExecutions || totalExecutionCount > executionList.length) ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>{t({ ko: '최근 {shown}개 표시 · 전체 {total}개', en: 'Showing latest {shown} of {total}' }, { shown: formatNumber(executionList.length), total: formatNumber(totalExecutionCount) })}</span>
+            {hasMoreExecutions && executionListPaging ? (
+              <Button type="button" size="sm" variant="secondary" onClick={executionListPaging.onLoadMore} disabled={executionListPaging.isLoadingMore}>
+                {executionListPaging.isLoadingMore ? t({ ko: '불러오는 중…', en: 'Loading…' }) : t({ ko: '더 보기', en: 'Load more' })}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </Section>
 
       {executionDetail ? (
         <Modal
@@ -536,7 +534,7 @@ export function GraphExecutionPanel({
                   <span>#{executionDetail.execution.id}</span>
                   <Badge variant={getExecutionStatusBadgeVariant(executionDetail.execution.status)}>{getGraphExecutionStatusLabel(executionDetail.execution.status, t)}</Badge>
                   <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan, t)}</Badge>
-                  <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
+                  <span className="text-2xs text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
                 </AlertTitle>
                 <AlertDescription>
                   {selectedExecutionPlan?.targetNodeId ? (
@@ -562,17 +560,17 @@ export function GraphExecutionPanel({
 
             {executionInputEntries.length > 0 ? (
               <div ref={(node) => { detailSectionRefs.current.inputs = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
                   <span>{t({ ko: '입력', en: 'Inputs' })}</span>
                   <Badge variant="outline">{formatNumber(executionInputEntries.length)}</Badge>
-                </div>
+                </Text>
                 <div className="grid gap-2 md:grid-cols-2">
                   {executionInputEntries.map((entry) => (
-                    <div key={entry.key} className="rounded-sm border border-border bg-surface-low p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{entry.label}</div>
-                      {entry.label !== entry.key ? <div className="mt-0.5 text-[11px] text-muted-foreground">{entry.key}</div> : null}
+                    <Inset key={entry.key} className="p-3">
+                      <Text as="div" variant="overline" className="font-semibold">{entry.label}</Text>
+                      {entry.label !== entry.key ? <div className="mt-0.5 text-2xs text-muted-foreground">{entry.key}</div> : null}
                       <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value, t)}</div>
-                    </div>
+                    </Inset>
                   ))}
                 </div>
               </div>
@@ -606,17 +604,17 @@ export function GraphExecutionPanel({
             </div>
 
             <div ref={(node) => { detailSectionRefs.current.artifacts = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
                 <span>{t({ ko: '아티팩트', en: 'Artifacts' })}</span>
                 <Badge variant="outline">{executionDetail.artifacts.length}</Badge>
-              </div>
+              </Text>
               {executionDetail.artifacts.map((artifact) => {
                 const previewUrl = getArtifactPreviewUrl(artifact)
                 const mimeType = resolveGraphArtifactMimeType(artifact)
                 const parsedMetadata = parseMetadataValue(artifact.metadata)
 
                 return (
-                  <div key={artifact.id} className="rounded-sm border border-border bg-surface-low p-2.5">
+                  <Inset key={artifact.id} className="px-3 py-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -624,7 +622,7 @@ export function GraphExecutionPanel({
                           <Badge variant="outline">{artifact.artifact_type}</Badge>
                           <TechnicalReferenceHint title={`node ${artifact.node_id}\nport ${artifact.port_key}`} label={t({ ko: '아티팩트 내부 연결 정보 보기', en: 'Show internal connection info for the artifact' })} />
                         </div>
-                        <div className="text-[11px] text-muted-foreground">{formatDateTime(artifact.created_date)}</div>
+                        <div className="text-2xs text-muted-foreground">{formatDateTime(artifact.created_date)}</div>
                       </div>
                     </div>
 
@@ -638,41 +636,41 @@ export function GraphExecutionPanel({
                       />
                     ) : null}
 
-                    {artifact.storage_path ? <div className="mt-2 rounded-sm bg-surface-high px-2 py-1.5 break-all text-[11px] text-muted-foreground">{artifact.storage_path}</div> : null}
+                    {artifact.storage_path ? <div className="mt-2 rounded-sm bg-surface-lowest px-2 py-1.5 break-all text-2xs text-muted-foreground">{artifact.storage_path}</div> : null}
 
                     {parsedMetadata ? (
                       <pre className={cn(CODE_BLOCK_CLASS_NAME, 'mt-2')}>{typeof parsedMetadata === 'string' ? parsedMetadata : JSON.stringify(parsedMetadata, null, 2)}</pre>
                     ) : null}
-                  </div>
+                  </Inset>
                 )
               })}
             </div>
 
             <div ref={(node) => { detailSectionRefs.current.logs = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
                 <span>{t({ ko: '로그', en: 'Logs' })}</span>
                 <Badge variant="outline">{executionDetail.logs.length}</Badge>
-              </div>
+              </Text>
               {executionDetail.logs.length === 0 ? (
                 <EmptyState size="compact" title={t({ ko: '로그 없음', en: 'No logs' })} />
               ) : (
                 executionDetail.logs.map((log) => {
                   const parsedDetails = parseMetadataValue(log.details)
                   return (
-                    <div key={log.id} className="rounded-sm border border-border bg-surface-low p-2.5">
+                    <Inset key={log.id} data-level={log.level} className={cn('px-3 py-2.5', log.level === 'error' && 'bg-destructive-soft/45', log.level === 'warn' && 'bg-warning-soft/45')}>
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant={getGraphExecutionLogLevelBadgeVariant(log.level)}>{getGraphExecutionLogLevelLabel(log.level, t)}</Badge>
                           <span className="text-sm font-medium text-foreground" title={log.event_type}>{getGraphExecutionLogEventLabel(log.event_type, t)}</span>
                           {log.node_id ? <TechnicalReferenceHint title={`node ${log.node_id}`} label={t({ ko: '로그 대상 노드 내부 식별자 보기', en: 'Show internal identifier for the log target node' })} /> : null}
                         </div>
-                        <div className="text-[11px] text-muted-foreground">{formatDateTime(log.created_date)}</div>
+                        <div className="text-2xs text-muted-foreground">{formatDateTime(log.created_date)}</div>
                       </div>
                       <div className="mt-1.5 text-sm text-foreground">{log.message}</div>
                       {parsedDetails ? (
                         <pre className={cn(CODE_BLOCK_CLASS_NAME, 'mt-2')}>{typeof parsedDetails === 'string' ? parsedDetails : JSON.stringify(parsedDetails, null, 2)}</pre>
                       ) : null}
-                    </div>
+                    </Inset>
                   )
                 })
               )}

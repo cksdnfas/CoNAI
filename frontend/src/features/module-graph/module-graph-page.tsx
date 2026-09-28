@@ -36,7 +36,7 @@ type ModuleWorkflowWorkspaceProps = {
 }
 
 function WorkflowPageFallback() {
-  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+  return <div className="min-h-[16rem] animate-pulse rounded-sm bg-surface-low" />
 }
 
 function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorkspaceProps) {

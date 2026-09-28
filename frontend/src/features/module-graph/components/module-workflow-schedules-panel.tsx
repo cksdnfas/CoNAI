@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { Field } from '@/components/ui/field'
+import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Modal } from '@/components/ui/modal'
 import { Section } from '@/components/ui/section'
@@ -304,7 +305,7 @@ export function ModuleWorkflowSchedulesPanel({
                       <div className="text-xs text-muted-foreground">
                         {[workflowName, runAtLabel, runEnqueueCountLabel, failurePolicyLabel].filter(Boolean).join(' · ')}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-2 text-2xs text-muted-foreground">
                         <span>{runSummaryLabel}</span>
                         {(schedule.running_run_count ?? 0) > 0 ? <Badge variant="secondary">{t({ ko: '실행 중 {count}', en: 'Running {count}' }, { count: formatNumber(schedule.running_run_count ?? 0) })}</Badge> : null}
                         {(schedule.queued_run_count ?? 0) > 0 ? <Badge variant="outline">{t({ ko: '대기 {count}', en: 'Queued {count}' }, { count: formatNumber(schedule.queued_run_count ?? 0) })}</Badge> : null}
@@ -313,31 +314,31 @@ export function ModuleWorkflowSchedulesPanel({
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button type="button" size="icon-sm" variant="secondary" onClick={() => openEditEditor(schedule)} disabled={isMutating} aria-label={t({ ko: '자동 실행 수정', en: 'Edit autorun' })} title={t({ ko: '자동 실행 수정', en: 'Edit autorun' })}>
+                      <IconButton size="icon-sm" variant="secondary" onClick={() => openEditEditor(schedule)} disabled={isMutating} label={t({ ko: '자동 실행 수정', en: 'Edit autorun' })}>
                         <SquarePen className="h-4 w-4" />
-                      </Button>
+                      </IconButton>
                       {schedule.status === 'active' ? (
-                        <Button type="button" size="icon-sm" variant="secondary" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} aria-label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })} title={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
+                        <IconButton size="icon-sm" variant="secondary" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
                           <Pause className="h-4 w-4" />
-                        </Button>
+                        </IconButton>
                       ) : (
-                        <Button type="button" size="icon-sm" variant="secondary" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} aria-label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })} title={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
+                        <IconButton size="icon-sm" variant="secondary" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
                           <Play className="h-4 w-4" />
-                        </Button>
+                        </IconButton>
                       )}
-                      <Button type="button" size="icon-sm" variant="secondary" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} aria-label={t({ ko: '지금 1회 실행', en: 'Run once now' })} title={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
+                      <IconButton size="icon-sm" variant="secondary" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} label={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
                         <Rocket className="h-4 w-4" />
-                      </Button>
-                      <Button type="button" size="icon-sm" variant="secondary" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} aria-label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })} title={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
+                      </IconButton>
+                      <IconButton size="icon-sm" variant="secondary" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
                         <Trash2 className="h-4 w-4" />
-                      </Button>
+                      </IconButton>
                     </div>
                   </div>
                   {stopReasonLabel ? (
-                    <Inset className="mt-3 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                    <div role="status" className="mt-3 rounded-sm bg-warning-soft/45 px-3 py-2 text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{t({ ko: '중지/정지 사유', en: 'Stop reason' })}</span>
                       <span className="ml-2">{stopReasonLabel}</span>
-                    </Inset>
+                    </div>
                   ) : null}
                 </Inset>
               )
@@ -433,7 +434,7 @@ export function ModuleWorkflowSchedulesPanel({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={resetDraft} disabled={isMutating}>
               {t({ ko: '취소', en: 'Cancel' })}
             </Button>

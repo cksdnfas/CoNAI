@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
+import { Inset } from '@/components/ui/inset'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
@@ -108,7 +110,7 @@ export function WorkflowFolderSettingsPanel({
       {showHeader ? (
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-base font-semibold text-foreground">{selectedWorkflow ? t({ ko: '워크플로우', en: 'Workflow' }) : t({ ko: '폴더', en: 'Folder' })}</div>
+            <Heading level={3}>{selectedWorkflow ? t({ ko: '워크플로우', en: 'Workflow' }) : t({ ko: '폴더', en: 'Folder' })}</Heading>
           </div>
           <Badge variant="outline">{selectedWorkflow ? t({ ko: '워크플로우', en: 'Workflow' }) : isRootSelected ? t({ ko: '루트', en: 'Root' }) : t({ ko: '폴더', en: 'Folder' })}</Badge>
         </div>
@@ -117,7 +119,7 @@ export function WorkflowFolderSettingsPanel({
       {selectedWorkflow ? (
         <div className="space-y-4">
           <div className="space-y-1">
-            <div className="text-base font-semibold text-foreground">{selectedWorkflow.name}</div>
+            <Heading level={3}>{selectedWorkflow.name}</Heading>
             {selectedWorkflow.description ? <div className="text-sm text-muted-foreground">{selectedWorkflow.description}</div> : null}
           </div>
 
@@ -155,7 +157,7 @@ export function WorkflowFolderSettingsPanel({
             ) : null}
           </div>
 
-          <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/50 p-3">
+          <Inset className="space-y-3 p-3">
             <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 생성', en: 'Create folder' })}</div>
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
@@ -169,12 +171,12 @@ export function WorkflowFolderSettingsPanel({
                 {t({ ko: '생성 후 할당', en: 'Create and assign' })}
               </Button>
             </div>
-          </div>
+          </Inset>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="space-y-1">
-            <div className="text-base font-semibold text-foreground">{currentFolderTitle}</div>
+            <Heading level={3}>{currentFolderTitle}</Heading>
             {isRootSelected ? (
               <div className="text-sm text-muted-foreground">{t({ ko: '기본 위치', en: 'Default location' })}</div>
             ) : selectedFolder?.description ? (
@@ -223,7 +225,7 @@ export function WorkflowFolderSettingsPanel({
             </div>
           ) : null}
 
-          <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/50 p-3">
+          <Inset className="space-y-3 p-3">
             <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 생성', en: 'Create folder' })}</div>
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
@@ -231,7 +233,7 @@ export function WorkflowFolderSettingsPanel({
               <Plus className="h-4 w-4" />
               {t({ ko: '폴더 생성', en: 'Create folder' })}
             </Button>
-          </div>
+          </Inset>
         </div>
       )}
     </div>

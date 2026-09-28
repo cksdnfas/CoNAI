@@ -1,7 +1,11 @@
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Crosshair } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Inset } from '@/components/ui/inset'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 import type { WorkflowValidationIssue } from '../module-graph-types'
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 
@@ -63,56 +67,59 @@ export function WorkflowValidationPanel({
       ) : null}
 
       {shouldShowSummary ? (
-        <div className="flex flex-wrap items-start justify-between gap-3 rounded-sm border border-border/70 bg-surface-low px-4 py-3">
+        <Inset className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <AlertTriangle className={`h-4 w-4 ${errorCount > 0 ? 'text-rose-300' : 'text-amber-300'}`} />
-              <div className="text-sm font-medium text-foreground">{errorCount > 0 ? t({ ko: '치명 이슈가 있어 실행이 막혀', en: 'Critical issues are blocking execution' }) : t({ ko: '경고가 있지만 실행 전 보완 가능해', en: 'There are warnings, but you can fix them before execution' })}</div>
+              <AlertTriangle className={cn('h-4 w-4', errorCount > 0 ? 'text-destructive' : 'text-warning')} aria-hidden />
+              <Text variant="label">{errorCount > 0 ? t({ ko: '치명 이슈가 있어 실행이 막혀', en: 'Critical issues are blocking execution' }) : t({ ko: '경고가 있지만 실행 전 보완 가능해', en: 'There are warnings, but you can fix them before execution' })}</Text>
             </div>
-            <div className="text-xs text-muted-foreground">
+            <Text variant="caption">
               {errorCount > 0
                 ? t({ ko: '아래 치명 이슈를 먼저 정리해.', en: 'Resolve the critical issues below first.' })
                 : runtimeInputWaitingCount > 0
                   ? t({ ko: '실행 입력 대기 항목은 저장 가능하지만 실행 전에 값을 확인해야 해.', en: 'Runtime-input waiting items can be saved, but must be confirmed before running.' })
                   : t({ ko: '아래 경고는 저장 가능하지만 실행 전에 확인하는 쪽이 좋아.', en: 'The warnings below can be saved, but it is better to review them before execution.' })}
-            </div>
+            </Text>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {errorCount > 0 ? <Badge variant="outline">{t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(errorCount) })}</Badge> : null}
-            {warningCount > 0 ? <Badge variant="outline">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningCount) })}</Badge> : null}
+            {errorCount > 0 ? <Badge variant="destructive">{t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(errorCount) })}</Badge> : null}
+            {warningCount > 0 ? <Badge className="bg-warning-soft text-warning-soft-foreground">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningCount) })}</Badge> : null}
             {runtimeInputWaitingCount > 0 ? <Badge variant="secondary">{t({ ko: '실행 입력 {count}', en: 'Runtime inputs {count}' }, { count: formatNumber(runtimeInputWaitingCount) })}</Badge> : null}
           </div>
-        </div>
+        </Inset>
       ) : null}
 
       {issues.length > 0 ? (
-        <div className="space-y-2">
+        <ul className="space-y-2">
           {issues.map((issue) => {
             const canFocusNode = Boolean(issue.nodeId && onIssueSelect)
             const activationStateLabel = getActivationStateLabel(issue, t)
 
             return (
-              <button
+              <li
                 key={issue.id}
-                type="button"
-                onClick={() => onIssueSelect?.(issue)}
-                disabled={!canFocusNode}
-                className={`w-full rounded-sm border px-3 py-3 text-left ${issue.severity === 'error' ? 'border-rose-500/40 bg-rose-500/10' : 'border-amber-500/40 bg-amber-500/10'} ${canFocusNode ? 'cursor-pointer transition hover:border-primary/50 hover:bg-surface-high' : 'cursor-default'}`}
+                data-severity={issue.severity}
+                className={cn('rounded-sm px-3 py-3', issue.severity === 'error' ? 'bg-destructive-soft/45' : 'bg-warning-soft/45')}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-sm font-medium text-foreground">{issue.title}</div>
-                  <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.severity === 'error' ? t({ ko: '치명', en: 'Critical' }) : t({ ko: '경고', en: 'Warning' })}</Badge>
+                  <Text as="span" variant="label">{issue.title}</Text>
+                  <Badge variant="outline">{issue.severity === 'error' ? t({ ko: '치명', en: 'Critical' }) : t({ ko: '경고', en: 'Warning' })}</Badge>
                   {activationStateLabel ? <Badge variant="outline">{activationStateLabel}</Badge> : null}
                   <Badge variant="secondary">{issue.nodeLabel}</Badge>
                   {issue.nodeId ? <TechnicalReferenceHint title={`node ${issue.nodeId}${issue.portKey ? `\nport ${issue.portKey}` : ''}`} label={t({ ko: '이슈 대상 내부 식별자 보기', en: 'Show issue target internal identifier' })} /> : null}
-                  {canFocusNode ? <Badge variant="secondary">{t({ ko: '노드로 이동', en: 'Jump to node' })}</Badge> : null}
+                  {canFocusNode ? (
+                    <Button type="button" size="xs" variant="secondary" className="ml-auto" onClick={() => onIssueSelect?.(issue)}>
+                      <Crosshair aria-hidden />
+                      {t({ ko: '노드로 이동', en: 'Jump to node' })}
+                    </Button>
+                  ) : null}
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">{issue.detail}</div>
-              </button>
+                <Text variant="caption" className="mt-1">{issue.detail}</Text>
+              </li>
             )
           })}
-        </div>
+        </ul>
       ) : null}
     </div>
   )

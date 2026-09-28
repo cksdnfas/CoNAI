@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Inset } from '@/components/ui/inset'
 import { Modal } from '@/components/ui/modal'
+import { Text } from '@/components/ui/text'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord } from '@/lib/api-module-graph'
@@ -28,7 +31,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
   const hasVisualPreview = hasGraphArtifactVisualPreview(artifact)
 
   const visualPreview = hasVisualPreview && previewUrl ? (
-    <button type="button" onClick={() => setIsImageModalOpen(true)} className="group relative block max-w-full overflow-hidden rounded-sm">
+    <Button type="button" variant="ghost" onClick={() => setIsImageModalOpen(true)} className="group relative block h-auto max-w-full overflow-hidden p-0">
       <InlineMediaPreview
         src={previewUrl}
         mimeType={mimeType}
@@ -37,16 +40,16 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
         mediaClassName={cn(compact ? 'max-h-52 max-w-full w-auto object-contain' : 'max-h-52 w-full object-contain')}
         fitToMedia={compact}
       />
-      <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
+      <div className="pointer-events-none absolute inset-0 transition-colors duration-200 group-hover:bg-backdrop/30 group-focus-visible:bg-backdrop/30" />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-        <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
+        <span className="rounded-sm bg-backdrop px-2.5 py-1 text-2xs font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
       </div>
       {overlayLabel ? (
-        <div className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-1rem)] rounded-sm bg-black/70 px-2 py-1 text-[11px] font-medium text-white shadow-sm backdrop-blur-sm">
+        <div className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded-sm bg-backdrop px-2 py-1 text-2xs font-medium text-white backdrop-blur-sm">
           {overlayLabel}
         </div>
       ) : null}
-    </button>
+    </Button>
   ) : null
 
   const imageModal = previewUrl ? (
@@ -78,12 +81,12 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
 
     return (
       <>
-        <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
-          {!hideTitle ? <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{displayTitle}</div> : null}
+        <Inset className="space-y-2 p-3">
+          {!hideTitle ? <Text as="div" variant="overline" className="font-semibold">{displayTitle}</Text> : null}
           {visualPreview}
-          {!hasVisualPreview && overlayLabel ? <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{overlayLabel}</div> : null}
+          {!hasVisualPreview && overlayLabel ? <Text as="div" variant="overline" className="font-semibold">{overlayLabel}</Text> : null}
           {!previewUrl && summaryText ? <div className="text-sm leading-6 text-foreground whitespace-pre-wrap break-all">{summaryText}</div> : null}
-        </div>
+        </Inset>
         {imageModal}
       </>
     )
@@ -91,14 +94,14 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
 
   return (
     <>
-      <div className={cn('rounded-sm border border-border bg-surface-low p-3', compact ? 'space-y-2' : 'space-y-2.5')}>
+      <Inset className={cn('p-3', compact ? 'space-y-2' : 'space-y-2.5')}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-sm font-medium text-foreground">{title ?? artifact.port_key}</span>
               <Badge variant="outline">{artifact.artifact_type}</Badge>
             </div>
-            <div className="text-[11px] text-muted-foreground">{formatDateTime(artifact.created_date)}</div>
+            <div className="text-2xs text-muted-foreground">{formatDateTime(artifact.created_date)}</div>
           </div>
         </div>
 
@@ -113,7 +116,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
             ))}
           </div>
         ) : null}
-      </div>
+      </Inset>
       {imageModal}
     </>
   )

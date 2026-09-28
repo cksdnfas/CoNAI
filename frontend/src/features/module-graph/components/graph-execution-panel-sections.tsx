@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react'
+import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Inset } from '@/components/ui/inset'
+import { Text } from '@/components/ui/text'
 import { Modal } from '@/components/ui/modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
@@ -33,20 +37,21 @@ export function ExecutionOutputGroupCard({
 
   return (
     <>
-      <div className="rounded-sm border border-border/70 bg-background/25 p-2">
+      <Inset className="p-2">
         <div className="mb-1.5 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="truncate text-[13px] font-semibold text-foreground">{group.nodeLabel}</div>
-            {primaryArtifact ? <div className="truncate text-[10px] text-muted-foreground">{primaryArtifact.port_key}</div> : null}
+            <Text as="div" variant="title" className="truncate">{group.nodeLabel}</Text>
+            {primaryArtifact ? <div className="truncate text-2xs text-muted-foreground">{primaryArtifact.port_key}</div> : null}
           </div>
-          <Badge variant="outline" className="h-6 shrink-0 px-1.5 text-[10px]">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(group.artifacts.length) })}</Badge>
+          <Badge variant="outline" className="h-6 shrink-0 px-1.5">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(group.artifacts.length) })}</Badge>
         </div>
 
         {hasVisualPreview && previewUrl && primaryArtifact ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setModalType('image')}
-            className="group relative block w-full overflow-hidden rounded-sm bg-surface-lowest/80"
+            className="group relative block h-auto w-full overflow-hidden p-0"
           >
             <InlineMediaPreview
               src={previewUrl}
@@ -55,25 +60,23 @@ export function ExecutionOutputGroupCard({
               frameClassName="border-0 bg-transparent p-0"
               mediaClassName="h-[9.5rem] w-full object-contain"
             />
-            <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
+            <div className="pointer-events-none absolute inset-0 transition-colors duration-200 group-hover:bg-backdrop/30 group-focus-visible:bg-backdrop/30" />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
+              <span className="rounded-sm bg-backdrop px-2.5 py-1 text-2xs font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
             </div>
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={() => setModalType('text')}
-            className="group relative flex h-[9.5rem] w-full items-center justify-center overflow-hidden rounded-sm bg-surface-lowest/80 text-sm font-medium text-foreground transition-colors hover:bg-surface-low"
+            className="h-[9.5rem] w-full"
           >
-            <span>{t({ ko: '텍스트 컨텐츠', en: 'Text content' })}</span>
-            <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
-            </div>
-          </button>
+            <FileText aria-hidden />
+            {t({ ko: '텍스트 컨텐츠', en: 'Text content' })}
+          </Button>
         )}
-      </div>
+      </Inset>
 
       <Modal
         open={modalType === 'text'}
@@ -121,7 +124,7 @@ export function ExecutionComparisonContextBlock({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+      <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
         <span>{t({ ko: '비교 맥락', en: 'Compare context' })}</span>
         <Badge variant="outline">{t({ ko: '입력 {count}', en: 'Inputs {count}' }, { count: formatNumber(summary.runtimeInputCount) })}</Badge>
         <Badge variant="outline">{t({ ko: '원장 입력 {count}', en: 'Ledger inputs {count}' }, { count: formatNumber(summary.compactInputCount) })}</Badge>
@@ -129,14 +132,14 @@ export function ExecutionComparisonContextBlock({
         <Badge variant={summary.finalResultCount > 0 ? 'secondary' : 'outline'}>{t({ ko: '최종 {count}', en: 'Final {count}' }, { count: formatNumber(summary.finalResultCount) })}</Badge>
         {summary.issueLogCount > 0 ? <Badge variant="outline">{t({ ko: '경고/오류 {count}', en: 'Warnings/errors {count}' }, { count: formatNumber(summary.issueLogCount) })}</Badge> : null}
         {summary.finalResultWarningCount > 0 ? <Badge variant="outline">{t({ ko: '최종 경고 {count}', en: 'Final warnings {count}' }, { count: formatNumber(summary.finalResultWarningCount) })}</Badge> : null}
-      </div>
+      </Text>
 
       {visibleRows.length === 0 ? (
         <EmptyState size="compact" title={t({ ko: '압축 입출력 원장 없음', en: 'No compact input/output ledger yet' })} />
       ) : (
         <div className="space-y-1.5">
           {visibleRows.map((row) => (
-            <div key={row.id} className="rounded-sm border border-border bg-background/45 px-3 py-2">
+            <Inset key={row.id} className="px-3 py-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant={row.direction === 'output' ? 'secondary' : 'outline'}>{row.direction === 'output' ? t({ ko: '출력', en: 'Output' }) : t({ ko: '입력', en: 'Input' })}</Badge>
                 <span className="min-w-0 truncate text-sm font-medium text-foreground">{row.nodeLabel}</span>
@@ -150,7 +153,7 @@ export function ExecutionComparisonContextBlock({
                   {row.summaryText ? <div className="break-all">{row.summaryText}</div> : null}
                 </div>
               ) : null}
-            </div>
+            </Inset>
           ))}
           {hiddenRowCount > 0 ? (
             <div className="text-xs text-muted-foreground">
@@ -180,13 +183,13 @@ export function ExecutionPathDiagnosticsBlock({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+      <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
         <span>{t({ ko: '경로 진단', en: 'Path diagnostics' })}</span>
         <Badge variant="outline">{formatNumber(rows.length)}</Badge>
-      </div>
+      </Text>
       <div className="space-y-1.5">
         {visibleRows.map((row) => (
-          <div key={row.id} className="rounded-sm border border-border bg-background/45 px-3 py-2">
+          <Inset key={row.id} className="px-3 py-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <Badge variant={row.tone === 'failed' ? 'destructive' : row.tone === 'blocked' ? 'outline' : 'secondary'}>
                 {row.tone === 'failed'
@@ -199,7 +202,7 @@ export function ExecutionPathDiagnosticsBlock({
               <Badge variant="outline">{row.reasonLabel}</Badge>
             </div>
             {row.sourceLabel ? <div className="mt-1.5 break-all text-xs text-muted-foreground">{t({ ko: '원인 {value}', en: 'Cause {value}' }, { value: row.sourceLabel })}</div> : null}
-          </div>
+          </Inset>
         ))}
       </div>
       {hiddenRowCount > 0 ? (

@@ -20,7 +20,7 @@ import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 
 function GraphCanvasFallback() {
-  return <div className="min-h-[28rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+  return <div className="min-h-[28rem] animate-pulse rounded-sm bg-surface-low" />
 }
 
 /** Build the assembled editor-facing panels used by the module-graph page. */

@@ -1,8 +1,10 @@
 import { Square, SquareCheckBig, Trash2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionRecord, GraphWorkflowNameRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
@@ -117,13 +119,13 @@ export function ModuleWorkflowEmptyRunsTab({
               const isCancelable = execution.status === 'queued' || execution.status === 'running'
 
               return (
-                <Inset key={execution.id} className={isSelected ? 'border-primary bg-primary/8' : undefined}>
+                <Inset key={execution.id} data-selected={isSelected} className={isSelected ? 'bg-primary/12' : undefined}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" className="text-sm font-medium text-foreground" onClick={() => onToggleQueueSelection(execution.id)}>
+                        <Text as="span" variant="label">
                           {workflowNameById.get(execution.graph_workflow_id) ?? t({ ko: '워크플로우 #{id}', en: 'Workflow #{id}' }, { id: execution.graph_workflow_id })}
-                        </button>
+                        </Text>
                         <Badge variant={isSelected ? 'secondary' : 'outline'}>{isSelected ? t({ ko: '선택됨', en: 'Selected' }) : t({ ko: '선택', en: 'Select' })}</Badge>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
@@ -133,9 +135,15 @@ export function ModuleWorkflowEmptyRunsTab({
                     <div className="flex items-center gap-2">
                       <Badge variant={execution.status === 'failed' ? 'destructive' : 'outline'}>{getGraphExecutionStatusLabel(execution.status, t)}</Badge>
                       {execution.queue_position !== null && execution.queue_position !== undefined ? <Badge variant="outline">{t({ ko: '대기열 {position}', en: 'Queue {position}' }, { position: formatNumber(execution.queue_position) })}</Badge> : null}
-                      <Button type="button" size="sm" variant="ghost" onClick={() => onToggleQueueSelection(execution.id)}>
+                      <IconButton
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-pressed={isSelected}
+                        onClick={() => onToggleQueueSelection(execution.id)}
+                        label={isSelected ? t({ ko: '선택 해제', en: 'Deselect' }) : t({ ko: '선택', en: 'Select' })}
+                      >
                         {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                      </Button>
+                      </IconButton>
                       {isCancelable ? (
                         <Button type="button" size="sm" variant="secondary" onClick={() => onCancelSingle(execution.id)} disabled={isCleaningQueue}>
                           <XCircle className="h-4 w-4" />
@@ -150,9 +158,9 @@ export function ModuleWorkflowEmptyRunsTab({
                     </div>
                   </div>
                   {localizeGraphWorkflowErrorMessage(execution.error_message, t, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' })) ? (
-                    <Inset className="mt-3 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+                    <div role="alert" className="mt-3 rounded-sm bg-destructive-soft/45 px-3 py-2 text-xs text-foreground">
                       {localizeGraphWorkflowErrorMessage(execution.error_message, t, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' }))}
-                    </Inset>
+                    </div>
                   ) : null}
                 </Inset>
               )

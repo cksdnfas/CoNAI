@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { Text } from '@/components/ui/text'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
@@ -228,7 +229,7 @@ export function WorkflowFinalResultsSection({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+      <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
         <span>{t({ ko: '결과물', en: 'Results' })}</span>
         <Badge variant="outline">{resolvedEntries.length}</Badge>
         {resolvedEntries.length > 0 ? (
@@ -237,7 +238,7 @@ export function WorkflowFinalResultsSection({
             {nonVisualEntries.length > 0 ? <Badge variant="outline">{t({ ko: '파일 {count}', en: 'Files {count}' }, { count: nonVisualEntries.length })}</Badge> : null}
           </>
         ) : null}
-      </div>
+      </Text>
 
       {resolvedEntries.length === 0 ? (
         <EmptyState
@@ -271,11 +272,11 @@ export function WorkflowFinalResultsSection({
                 const overlayText = [entry.overlayLabel, entry.sourceNodeLabel, entry.sourcePortLabel, entry.artifact.artifact_type].filter(Boolean).join(' · ')
 
                 return (
-                  <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm" title={overlayText} aria-label={overlayText}>
+                  <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-backdrop px-2 py-1 text-2xs text-white backdrop-blur-sm" title={overlayText} aria-label={overlayText}>
                     {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
-                    {entry.sourceNodeLabel ? <span className="truncate text-white/92">{entry.sourceNodeLabel}</span> : null}
-                    {entry.sourcePortLabel ? <span className="truncate text-white/82">{entry.sourcePortLabel}</span> : null}
-                    {entry.artifact.artifact_type ? <Badge variant="secondary" className="h-5 border-white/15 bg-white/14 px-1.5 text-[10px] text-white">{entry.artifact.artifact_type}</Badge> : null}
+                    {entry.sourceNodeLabel ? <span className="truncate text-white/90">{entry.sourceNodeLabel}</span> : null}
+                    {entry.sourcePortLabel ? <span className="truncate text-white/80">{entry.sourcePortLabel}</span> : null}
+                    {entry.artifact.artifact_type ? <span className="rounded-sm bg-white/15 px-1.5 py-0.5 font-semibold uppercase tracking-overline">{entry.artifact.artifact_type}</span> : null}
                   </div>
                 )
               }}
