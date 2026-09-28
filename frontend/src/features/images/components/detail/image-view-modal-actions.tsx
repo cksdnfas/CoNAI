@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
+import { formatCountDisplay } from '@/lib/count-display'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { GenerationHistoryReuseActions } from '@/features/image-generation/components/generation-history-reuse-actions'
@@ -43,13 +44,13 @@ export function ImageViewModalActions({
   )
   // The denominator is the source's real total, never just the loaded page. Without a total
   // source, a trailing "+" marks that more items can still be loaded.
-  const counterTotalLabel = sequenceTotal?.status === 'known'
-    ? formatNumber(Math.max(sequenceTotal.count, totalCount))
-    : sequenceTotal?.status === 'pending'
-      ? t('images.components.detail.image.view.modal.actions.counting')
-      : sequenceTotal?.status === 'unavailable'
-        ? '—'
-        : `${formatNumber(totalCount)}${sequenceHasMore ? '+' : ''}`
+  const counterLabel = sequenceTotal
+    ? formatCountDisplay({
+      total: sequenceTotal.status === 'known' ? Math.max(sequenceTotal.count, totalCount) : null,
+      status: sequenceTotal.status === 'unavailable' ? 'error' : sequenceTotal.status,
+      position: activeIndex + 1,
+    }, { t, formatNumber }).text
+    : `${formatNumber(activeIndex + 1)} / ${formatNumber(totalCount)}${sequenceHasMore ? '+' : ''}`
 
   const allowDetailNavigation = accessOptions?.allowDetailNavigation !== false
   const allowEditAction = accessOptions?.allowEditAction !== false
@@ -70,7 +71,7 @@ export function ImageViewModalActions({
       <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={onClose} aria-label={t('images.components.detail.image.view.modal.actions.close')} title={t('images.components.detail.image.view.modal.actions.close')}>
         <X className="h-4 w-4" />
       </Button>
-      {showCounter ? <div className="shrink-0 px-2 text-xs text-muted-foreground">{formatNumber(activeIndex + 1)} / {counterTotalLabel}</div> : null}
+      {showCounter ? <div className="shrink-0 px-2 text-xs text-muted-foreground">{counterLabel}</div> : null}
       {allowDetailNavigation ? (
         <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={openDetailPage} aria-label={t('images.components.detail.image.view.modal.actions.open.detail.page')} title={t('images.components.detail.image.view.modal.actions.detail.page')}>
           <ExternalLink className="h-4 w-4" />

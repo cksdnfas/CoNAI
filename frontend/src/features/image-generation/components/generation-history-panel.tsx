@@ -31,6 +31,7 @@ import {
   getPublicGenerationWorkflowHistory,
 } from '@/lib/api-public-workflows'
 import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
+import { countStateFromQuery, formatCountDisplay } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
@@ -274,11 +275,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     visibilityMode: applyHistoryRatingSafety ? 'feed' : 'badge-only',
   })
   // 사용자에게 보이는 숫자는 서버 total 만 쓴다. 로드된 페이지 기준 집계는 합계처럼 보여 주지 않는다.
-  const historyTotalLabel = historyTotalCount !== undefined
-    ? formatNumber(historyTotalCount)
-    : historyQuery.isError
-      ? '—'
-      : t({ ko: '계산 중', en: 'Counting…' })
+  const historyTotalLabel = formatCountDisplay(
+    countStateFromQuery({ total: historyTotalCount, isError: historyQuery.isError }),
+    { t, formatNumber },
+  ).text
   const hasHiddenHistoryItems = visibleHistoryImages.length < historyImages.length
   const visibleHistoryRecordIds = useMemo(
     () => new Set(visibleHistoryImages.map((image) => String(image.id))),
