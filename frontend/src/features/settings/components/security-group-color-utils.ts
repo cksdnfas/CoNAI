@@ -2,7 +2,8 @@ import type { CSSProperties } from 'react'
 
 export type SecurityGroupColorMap = Record<string, string>
 
-export const SECURITY_GROUP_COLOR_STORAGE_KEY = 'conai:security:group-colors'
+/** Pre-server storage key, read once to migrate colours chosen in this browser. */
+const SECURITY_GROUP_COLOR_STORAGE_KEY = 'conai:security:group-colors'
 
 const BUILT_IN_GROUP_COLORS: Record<string, string> = {
   admin: '#ff6b8b',
@@ -49,21 +50,35 @@ export function getSecurityGroupBadgeStyle(color: string): CSSProperties {
   }
 }
 
-export function readSecurityGroupColorMap(raw: string | null): SecurityGroupColorMap {
-  if (!raw) {
+/** Keep only `groupKey -> hex colour` entries from an untrusted value (server JSON or a legacy browser copy). */
+export function normalizeSecurityGroupColorMap(value: unknown): SecurityGroupColorMap {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {}
   }
 
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([groupKey, color]) => (
+      typeof color === 'string' && isHexColor(color)
+        ? [[groupKey, color.trim()]]
+        : []
+    )),
+  )
+}
+
+/** Colours saved in this browser before they moved to the server; empty when storage is unavailable. */
+export function readLegacySecurityGroupColorMap(): SecurityGroupColorMap {
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    return Object.fromEntries(
-      Object.entries(parsed).flatMap(([groupKey, value]) => (
-        typeof value === 'string' && isHexColor(value)
-          ? [[groupKey, value]]
-          : []
-      )),
-    )
+    const raw = window.localStorage.getItem(SECURITY_GROUP_COLOR_STORAGE_KEY)
+    return raw ? normalizeSecurityGroupColorMap(JSON.parse(raw)) : {}
   } catch {
     return {}
+  }
+}
+
+export function clearLegacySecurityGroupColorMap() {
+  try {
+    window.localStorage.removeItem(SECURITY_GROUP_COLOR_STORAGE_KEY)
+  } catch {
+    // Storage can be blocked (private mode, site data off); the server copy is what counts.
   }
 }

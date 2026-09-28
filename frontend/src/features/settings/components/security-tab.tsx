@@ -1,35 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { SecurityAccountFormCard } from './security-account-form-card'
 import { SecurityAccountListCard } from './security-account-list-card'
 import { SecurityGroupColorEditorModal } from './security-group-color-editor-modal'
-import {
-  readSecurityGroupColorMap,
-  SECURITY_GROUP_COLOR_STORAGE_KEY,
-  type SecurityGroupColorMap,
-} from './security-group-color-utils'
 import { SecurityPermissionGroupEditorModal } from './security-permission-group-editor-modal'
 import { SecurityPermissionGroupListCard } from './security-permission-group-list-card'
 import { SecurityRecoveryCard } from './security-recovery-card'
 import { SecurityStatusCard } from './security-status-card'
 import { useSecurityTabData } from './security-tab-data'
+import { useSecurityGroupColors } from './use-security-group-colors'
 
 /** Compose the auth/account-management settings UI from a few focused sections. */
 export function SecurityTab() {
   const securityTabData = useSecurityTabData()
   const [isGroupColorEditorOpen, setIsGroupColorEditorOpen] = useState(false)
-  const [groupColors, setGroupColors] = useState<SecurityGroupColorMap>(() => (
-    typeof window === 'undefined'
-      ? {}
-      : readSecurityGroupColorMap(window.localStorage.getItem(SECURITY_GROUP_COLOR_STORAGE_KEY))
-  ))
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    window.localStorage.setItem(SECURITY_GROUP_COLOR_STORAGE_KEY, JSON.stringify(groupColors))
-  }, [groupColors])
+  const { groupColors, setGroupColor, resetGroupColor, commit: commitGroupColors } = useSecurityGroupColors()
 
   const colorEditableGroups = useMemo(() => {
     const orderedGroups = new Map<string, { groupKey: string; name?: string | null; systemGroup?: boolean }>()
@@ -191,15 +175,12 @@ export function SecurityTab() {
         open={isGroupColorEditorOpen}
         groups={colorEditableGroups}
         groupColors={groupColors}
-        onClose={() => setIsGroupColorEditorOpen(false)}
-        onChangeColor={(groupKey, color) => setGroupColors((current) => ({ ...current, [groupKey]: color }))}
-        onResetColor={(groupKey) => {
-          setGroupColors((current) => {
-            const next = { ...current }
-            delete next[groupKey]
-            return next
-          })
+        onClose={() => {
+          commitGroupColors()
+          setIsGroupColorEditorOpen(false)
         }}
+        onChangeColor={setGroupColor}
+        onResetColor={resetGroupColor}
       />
     </div>
   )

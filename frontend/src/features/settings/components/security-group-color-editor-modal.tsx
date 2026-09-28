@@ -1,10 +1,11 @@
 import { RotateCcw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 import { AppearanceColorControl } from './appearance-tab-editor-shared'
 import { Field } from '@/components/ui/field'
 import { Modal } from '@/components/ui/modal'
+import { InstantApplyHint } from './settings-section-status'
 import { getPermissionGroupDisplayName, getPermissionGroupKindLabel } from './security-ui-text'
 import { getDefaultSecurityGroupColor, getSecurityGroupBadgeStyle, type SecurityGroupColorMap } from './security-group-color-utils'
 
@@ -40,6 +41,10 @@ export function SecurityGroupColorEditorModal({
       widthClassName="max-w-3xl"
     >
       <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <InstantApplyHint />
+          {t({ ko: '서버에 저장돼서 모든 관리자 브라우저에 똑같이 보여.', en: 'Stored on the server, so every admin browser shows the same colors.' })}
+        </div>
         {groups.map((group) => {
           const defaultColor = getDefaultSecurityGroupColor(group.groupKey)
           const colorText = groupColors[group.groupKey] ?? defaultColor
@@ -57,16 +62,14 @@ export function SecurityGroupColorEditorModal({
                   </Badge>
                 </div>
 
-                <Button
-                  type="button"
+                <IconButton
                   size="icon-sm"
                   variant="outline"
                   onClick={() => onResetColor(group.groupKey)}
-                  title={t('securityGroupColorEditorModal.restoreDefaultColor')}
-                  aria-label={t('securityGroupColorEditorModal.restoreDefaultColor')}
+                  label={t('securityGroupColorEditorModal.restoreDefaultColor')}
                 >
                   <RotateCcw className="h-4 w-4" />
-                </Button>
+                </IconButton>
               </div>
 
               <Field label={t('securityGroupColorEditorModal.color')}>

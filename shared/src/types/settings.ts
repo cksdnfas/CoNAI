@@ -36,6 +36,8 @@ export interface GeneralSettings {
   imageSimilarityCheckMode?: ImageSimilarityCheckMode;
   applyRatingSafetyToGenerationHistory: boolean;
   generationHistoryMaxItems: number;
+  /** Admin-chosen badge colours per permission group key (`#rgb` / `#rrggbb`); missing keys use the built-in palette. */
+  permissionGroupColors?: Record<string, string>;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';

@@ -23,6 +23,9 @@ const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
 const validImageSimilarityCheckModes: ImageSimilarityCheckMode[] = ['manual', 'always'];
 const validHeaderNavigationItemKeys = new Set<string>(HEADER_NAVIGATION_ITEM_KEYS);
+const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
+const MAX_PERMISSION_GROUP_COLORS = 500;
+const MAX_PERMISSION_GROUP_KEY_LENGTH = 200;
 
 router.put(
   '/general',
@@ -78,6 +81,32 @@ router.put(
 
         if (typeof value !== 'boolean') {
           sendRouteBadRequest(res, `headerNavigation.${key} must be a boolean`);
+          return;
+        }
+      }
+    }
+
+    if (generalSettings.permissionGroupColors !== undefined) {
+      const colors = generalSettings.permissionGroupColors;
+      if (!colors || typeof colors !== 'object' || Array.isArray(colors)) {
+        sendRouteBadRequest(res, 'permissionGroupColors must be an object');
+        return;
+      }
+
+      const entries = Object.entries(colors);
+      if (entries.length > MAX_PERMISSION_GROUP_COLORS) {
+        sendRouteBadRequest(res, `permissionGroupColors can hold at most ${MAX_PERMISSION_GROUP_COLORS} groups`);
+        return;
+      }
+
+      for (const [groupKey, color] of entries) {
+        if (groupKey.length === 0 || groupKey.length > MAX_PERMISSION_GROUP_KEY_LENGTH) {
+          sendRouteBadRequest(res, 'permissionGroupColors keys must be 1-200 characters');
+          return;
+        }
+
+        if (typeof color !== 'string' || !HEX_COLOR_PATTERN.test(color)) {
+          sendRouteBadRequest(res, `permissionGroupColors.${groupKey} must be a hex color like #ff6b8b`);
           return;
         }
       }
