@@ -1,7 +1,7 @@
 import { FolderMinus, FolderPlus, FolderTree, Play, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { ErrorState } from '@/components/ui/error-state'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -251,18 +251,22 @@ export function GroupPage() {
               previewSourceKey={selectedSource.key}
               loadPreviewImage={selectedSource.getPreviewImage}
               onOpenGroup={handleOpenGroup}
+              isLoading={groupsQuery.isLoading}
+              error={groupsQuery.isError && allGroups.length === 0 ? groupsQuery.error : null}
+              onRetry={() => void groupsQuery.refetch()}
             />
           ) : null}
 
           {selectedGroupId && selectedGroupQuery.isLoading ? <Skeleton className="h-28 w-full rounded-sm" /> : null}
 
           {selectedGroupId && selectedGroupQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>{t('groups.group.page.failed.to.load.group.information')}</AlertTitle>
-              <AlertDescription>
-                {selectedGroupQuery.error instanceof Error ? selectedGroupQuery.error.message : t('groups.group.page.an.unknown.error.occurred')}
-              </AlertDescription>
-            </Alert>
+            <ErrorState
+              title={t('groups.group.page.failed.to.load.group.information')}
+              description={t({ ko: '잠시 뒤에 다시 시도해 줘.', en: 'Try again in a moment.' })}
+              error={selectedGroupQuery.error}
+              onRetry={() => void selectedGroupQuery.refetch()}
+              isRetrying={selectedGroupQuery.isFetching}
+            />
           ) : null}
 
           {selectedGroupId && selectedGroupQuery.data ? (
@@ -286,6 +290,8 @@ export function GroupPage() {
                 isLoading={groupImagesQuery.isLoading}
                 isError={groupImagesQuery.isError && groupImages.length === 0 && !groupImagesQuery.isFetchNextPageError}
                 errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
+                onRetry={() => void groupImagesQuery.refetch()}
+                isRetrying={groupImagesQuery.isRefetching}
                 hasMore={Boolean(groupImagesQuery.hasNextPage)}
                 isLoadingMore={groupImagesQuery.isFetchingNextPage}
                 loadMoreError={groupImagesQuery.isFetchNextPageError ? groupImagesQuery.error : null}

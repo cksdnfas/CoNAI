@@ -1,6 +1,9 @@
-import { FolderPlus, Trash2 } from 'lucide-react'
+import { FolderPlus, ImageOff, SearchX, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { CountSummary } from '@/components/ui/count-summary'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState } from '@/components/ui/loading-state'
 import { PageHeader } from '@/components/common/page-header'
 import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
@@ -18,6 +21,7 @@ import { useImageListColumnPreference } from '@/features/images/components/image
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { useI18n } from '@/i18n'
+import { COUNT_UNITS } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
 import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
@@ -40,7 +44,7 @@ function getHomeImageSelectionId(image: ImageRecord) {
 /** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
   const { showSnackbar } = useSnackbar()
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
   const { appliedChips, removeAppliedChip, cycleAppliedChipOperator, clearAppliedChips } = useHomeSearch()
   const {
     columnCount: homeColumnCount,
@@ -63,7 +67,7 @@ export function HomePage() {
     sortOrder,
     setSortOrder,
     canAutoLoadMore,
-    feedProgress,
+    feedCountState,
     feedSequenceTotal,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,
@@ -151,15 +155,13 @@ export function HomePage() {
       ) : null}
 
       {isInitialLoadError ? (
-        <Alert variant="destructive">
-          <AlertTitle>{errorTitle}</AlertTitle>
-          <AlertDescription className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>{imagesQuery.error instanceof Error ? imagesQuery.error.message : t('homePage.anUnknownErrorOccurred')}</span>
-            <Button size="sm" variant="outline" onClick={handleRetryInitialLoad}>
-              {t({ ko: '다시 시도', en: 'Retry' })}
-            </Button>
-          </AlertDescription>
-        </Alert>
+        <ErrorState
+          title={errorTitle}
+          description={t({ ko: '잠시 뒤에 다시 시도해 줘.', en: 'Try again in a moment.' })}
+          error={imagesQuery.error}
+          onRetry={handleRetryInitialLoad}
+          isRetrying={imagesQuery.isFetching}
+        />
       ) : null}
 
       {imagesQuery.isPending ? (
@@ -173,45 +175,29 @@ export function HomePage() {
       ) : null}
 
       {hasFeedData && visibleImages.length === 0 ? (
-        <Section heading={emptyStateTitle} description={emptyStateDescription} />
+        <EmptyState
+          icon={appliedChips.length > 0 ? SearchX : ImageOff}
+          title={emptyStateTitle}
+          description={emptyStateDescription}
+          action={!isAnonymousSession && appliedChips.length > 0 ? (
+            <Button size="sm" variant="secondary" onClick={clearAppliedChips}>
+              {t({ ko: '필터 모두 지우기', en: 'Clear all filters' })}
+            </Button>
+          ) : undefined}
+        />
       ) : null}
 
       {hasFeedData && visibleImages.length > 0 ? (
         <>
           <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>
-                {t(
-                  { ko: '표시 {visible} / 로드 {loaded}', en: 'Showing {visible} / loaded {loaded}' },
-                  { visible: formatNumber(feedProgress.visibleCount), loaded: formatNumber(feedProgress.loadedCount) },
-                )}
-              </span>
-              <span>
-                {/* The exact total arrives after the grid renders, so show the loaded
-                    count with a "+" until it does instead of blocking on the count. */}
-                {feedProgress.isTotalKnown
-                  ? t(
-                      { ko: '전체 {total}', en: '{total} total' },
-                      { total: formatNumber(feedProgress.totalCount) },
-                    )
-                  : t(
-                      { ko: '전체 {total}+', en: '{total}+ total' },
-                      { total: formatNumber(feedProgress.totalCount) },
-                    )}
-              </span>
-              {feedProgress.hiddenCount > 0 ? (
-                <span>
-                  {t(
-                    { ko: '숨김 {count}', en: '{count} hidden' },
-                    { count: formatNumber(feedProgress.hiddenCount) },
-                  )}
-                </span>
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+              {/* The one count on Home: the real total ("계산 중" until the deferred count arrives). */}
+              <CountSummary {...feedCountState} unit={COUNT_UNITS.images} className="text-sm font-medium text-foreground" />
+              {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
+                <LoadingState variant="inline" spinnerSize="sm" label={t({ ko: '새로고침 중…', en: 'Refreshing…' })} className="text-xs" />
               ) : null}
             </div>
             <div className="flex items-center gap-2">
-              {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
-                <span>{t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span>
-              ) : null}
               <HomeSortMenu value={sortOrder} onChange={setSortOrder} />
               <ImageListColumnControl
                 value={homeColumnCount}

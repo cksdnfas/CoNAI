@@ -15,6 +15,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
 import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
+import { countStateFromQuery, type CountState } from '@/lib/count-display'
 
 interface UseHomePageDataOptions {
   /** Show a success/info snackbar for Home page actions. */
@@ -230,6 +231,13 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   // Viewer counter denominator: the real feed total, pending while it is counted, and
   // unavailable when the count failed or a search could not report an exact total.
   const isFeedTotalUnavailable = feedTotalQuery.isError || (feedTotalQuery.isSuccess && feedTotalQuery.data === null)
+  // The one count Home shows: the server total (never loaded-so-far), plus rating-hidden loaded items.
+  const feedCountState = useMemo<CountState>(() => countStateFromQuery({
+    total: feedProgress.isTotalKnown ? feedProgress.totalCount : null,
+    isError: isFeedTotalUnavailable,
+    hidden: feedProgress.hiddenCount,
+  }), [feedProgress.hiddenCount, feedProgress.isTotalKnown, feedProgress.totalCount, isFeedTotalUnavailable])
+
   const feedSequenceTotal = useMemo<ImageViewSequenceTotal>(() => {
     if (feedProgress.isTotalKnown) {
       return { status: 'known', count: feedProgress.totalCount }
@@ -398,6 +406,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     setSortOrder,
     canAutoLoadMore,
     feedProgress,
+    feedCountState,
     feedSequenceTotal,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,

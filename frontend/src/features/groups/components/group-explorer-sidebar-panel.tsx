@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { ErrorState } from '@/components/ui/error-state'
 import { Badge } from '@/components/ui/badge'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -48,10 +48,11 @@ export function GroupExplorerSidebarPanel({
       ) : null}
 
       {isError ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t('groups.components.group.explorer.sidebar.panel.failed.to.load.the.group.tree')}</AlertTitle>
-          <AlertDescription>{errorMessage ?? t('groups.components.group.explorer.sidebar.panel.an.unknown.error.occurred')}</AlertDescription>
-        </Alert>
+        <ErrorState
+          size="compact"
+          title={t('groups.components.group.explorer.sidebar.panel.failed.to.load.the.group.tree')}
+          error={errorMessage ?? undefined}
+        />
       ) : null}
 
       {!isLoading && !isError ? (

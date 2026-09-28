@@ -1,10 +1,11 @@
 import { useEffect, type ReactNode } from 'react'
-import { Bot, Images, Pencil } from 'lucide-react'
+import { Bot, ImageOff, Images, Pencil } from 'lucide-react'
 import { Inset } from '@/components/ui/inset'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CountSummary } from '@/components/ui/count-summary'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { ImageListColumnControl } from '@/features/images/components/image-list/image-list-column-control'
@@ -14,6 +15,7 @@ import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
+import { COUNT_UNITS, type CountState } from '@/lib/count-display'
 import { getGroupImageFeedProgressSummary } from '../group-image-feed-progress'
 
 interface GroupImageSectionProps {
@@ -23,6 +25,9 @@ interface GroupImageSectionProps {
   isLoading: boolean
   isError: boolean
   errorMessage: string | null
+  /** Retry the first page after `isError`. */
+  onRetry?: () => void
+  isRetrying?: boolean
   hasMore: boolean
   isLoadingMore: boolean
   /** Failed next-page request; pauses auto-loading until the retry succeeds. */
@@ -48,6 +53,11 @@ interface GroupImageSectionProps {
   onCollectionFilterChange?: (value: 'all' | 'manual' | 'auto') => void
 }
 
+/** Module-level so the memoized image cells keep a stable href getter. */
+function getGroupImageHref(image: ImageRecord) {
+  return image.composite_hash ? `/images/${image.composite_hash}` : undefined
+}
+
 /** Library images can be deleted from the viewer (still admin-only). Module constant keeps ImageList memoized. */
 const GROUP_VIEWER_ACCESS_OPTIONS: ImageViewModalAccessOptions = { allowDeleteAction: true }
 
@@ -58,12 +68,13 @@ const COLLECTION_FILTER_OPTIONS = [
 ] as const
 
 export function GroupImageSection({
-  group,
   groupImages,
   resetKey,
   isLoading,
   isError,
   errorMessage,
+  onRetry,
+  isRetrying = false,
   hasMore,
   isLoadingMore,
   loadMoreError = null,
@@ -86,8 +97,7 @@ export function GroupImageSection({
   collectionFilter,
   onCollectionFilterChange,
 }: GroupImageSectionProps) {
-  const { t, formatNumber } = useI18n()
-  const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
+  const { t } = useI18n()
   const hasLoadMoreError = loadMoreError !== null && loadMoreError !== undefined
   // Stop auto-loading after a failed page; the footer's retry is the manual fallback.
   const canAutoLoadMore = hasMore && !hasLoadMoreError
@@ -113,15 +123,11 @@ export function GroupImageSection({
     visibleCount: visibleGroupImages.length,
     totalCount,
   })
-  const shouldShowFeedProgress = !isLoading && !isError && visibleGroupImages.length > 0 && (
-    isLoadingMore || feedProgress.hiddenCount > 0 || feedProgress.loadedCount < feedProgress.totalCount
-  )
-  // Never show a loaded-so-far number as the total: pending while it loads, a dash if it failed.
-  const totalCountLabel = feedProgress.isTotalKnown
-    ? formatNumber(feedProgress.totalCount)
-    : isError
-      ? '—'
-      : null
+  // The one count in this section: the list's own server total for the active filter (never
+  // loaded-so-far, never the group record's raw membership counts), pending while it loads.
+  const countState: CountState = feedProgress.isTotalKnown
+    ? { total: feedProgress.totalCount, status: 'known', hidden: feedProgress.hiddenCount }
+    : { total: null, status: isError ? 'error' : 'pending', hidden: feedProgress.hiddenCount }
   const sequenceTotal: ImageViewSequenceTotal = feedProgress.isTotalKnown
     ? { status: 'known', count: feedProgress.totalCount }
     : { status: isError ? 'unavailable' : 'pending' }
@@ -132,11 +138,7 @@ export function GroupImageSection({
         <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="text-base font-semibold tracking-tight text-foreground">{t('groups.components.group.image.section.images')}</h2>
-            <Badge variant="secondary">
-              {totalCountLabel === null
-                ? t({ ko: '전체 계산 중', en: 'Counting total…' })
-                : t({ ko: '전체 {count}', en: '{count} total' }, { count: totalCountLabel })}
-            </Badge>
+            <CountSummary {...countState} unit={COUNT_UNITS.images} className="text-sm text-muted-foreground" />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {typeof onCollectionFilterChange === 'function' ? (
@@ -159,11 +161,6 @@ export function GroupImageSection({
                   )
                 })}
               </div>
-            ) : shouldShowCollectionCounts ? (
-              <>
-                <Badge variant="outline">{t({ ko: '직접 추가 {count}', en: 'Manual {count}' }, { count: formatNumber(group.manual_added_count ?? 0) })}</Badge>
-                <Badge variant="outline">{t({ ko: '자동 수집 {count}', en: 'Auto-collected {count}' }, { count: formatNumber(group.auto_collected_count ?? 0) })}</Badge>
-              </>
             ) : null}
             {preferredColumnCount !== undefined && onColumnCountChange ? (
               <ImageListColumnControl
@@ -189,37 +186,13 @@ export function GroupImageSection({
       ) : null}
 
       {isError ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t('groups.components.group.image.section.group.images.failed.to.load')}</AlertTitle>
-          <AlertDescription>{errorMessage ?? t('groups.components.group.image.section.an.unknown.error.occurred')}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {shouldShowFeedProgress ? (
-        <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>
-              {t(
-                { ko: '표시 {visible} / 로드 {loaded}', en: 'Showing {visible} / loaded {loaded}' },
-                { visible: formatNumber(feedProgress.visibleCount), loaded: formatNumber(feedProgress.loadedCount) },
-              )}
-            </span>
-            <span>
-              {t(
-                { ko: '전체 {total}', en: '{total} total' },
-                { total: totalCountLabel ?? t({ ko: '계산 중', en: 'Counting…' }) },
-              )}
-            </span>
-            {feedProgress.hiddenCount > 0 ? (
-              <span>
-                {t(
-                  { ko: '숨김 {count}', en: '{count} hidden' },
-                  { count: formatNumber(feedProgress.hiddenCount) },
-                )}
-              </span>
-            ) : null}
-          </div>
-        </Inset>
+        <ErrorState
+          title={t('groups.components.group.image.section.group.images.failed.to.load')}
+          description={t({ ko: '잠시 뒤에 다시 시도해 줘.', en: 'Try again in a moment.' })}
+          error={errorMessage ?? undefined}
+          onRetry={onRetry}
+          isRetrying={isRetrying}
+        />
       ) : null}
 
       {!isLoading && !isError && visibleGroupImages.length > 0 ? (
@@ -229,7 +202,7 @@ export function GroupImageSection({
             resetKey={resetKey}
             layout="masonry"
             activationMode="modal"
-            getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
+            getItemHref={getGroupImageHref}
             selectable={selectable}
             selectedIds={selectedIds}
             onSelectedIdsChange={onSelectedIdsChange}
@@ -269,9 +242,10 @@ export function GroupImageSection({
             {hasOnlyHiddenItems ? t('groups.components.group.image.section.hidden.here.by.the.current.rating.visibility') : t('groups.components.group.image.section.no.images.to.show')}
           </BottomDrawerNotice>
         ) : (
-          <Inset className="text-sm text-muted-foreground">
-            {hasOnlyHiddenItems ? t('groups.components.group.image.section.hidden.here.by.the.current.rating.visibility') : t('groups.components.group.image.section.no.images.to.show')}
-          </Inset>
+          <EmptyState
+            icon={ImageOff}
+            title={hasOnlyHiddenItems ? t('groups.components.group.image.section.hidden.here.by.the.current.rating.visibility') : t('groups.components.group.image.section.no.images.to.show')}
+          />
         )
       ) : null}
     </section>
