@@ -1,4 +1,4 @@
-import { AlertTriangle, RefreshCcw } from 'lucide-react'
+import { AlertTriangle, Home, RefreshCcw } from 'lucide-react'
 import { useRouteError } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,7 @@ export function RouteErrorBoundary() {
     <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center px-6 py-10">
       <div className="w-full space-y-6">
         <PageHeader
-          eyebrow={t({ ko: '시스템', en: 'System' })}
+          eyebrow={t({ ko: '오류', en: 'Error' })}
           title={isChunkError ? t('routeErrorBoundary.appResourcesNeedToBe') : t('routeErrorBoundary.anUnexpectedErrorOccurred')}
         />
 
@@ -38,17 +38,27 @@ export function RouteErrorBoundary() {
                     <p>{t('routeErrorBoundary.aRefreshUsuallyFixesIt')}</p>
                   </>
                 ) : (
-                  <p>{message}</p>
+                  <p>{t({ ko: '이 화면을 표시하다가 문제가 생겼어. 다시 시도하거나 홈으로 이동해 줘.', en: 'Something went wrong while showing this page. Try again, or go back to Home.' })}</p>
                 )}
               </div>
             </div>
 
-            {isChunkError ? <div className="rounded-sm border border-border bg-surface-low p-3 text-xs text-muted-foreground break-all">{message}</div> : null}
+            <details className="rounded-sm border border-border bg-surface-low p-3 text-xs text-muted-foreground">
+              <summary className="cursor-pointer select-none font-medium">{t({ ko: '기술 정보', en: 'Technical details' })}</summary>
+              <p className="mt-2 break-all font-mono">{message}</p>
+            </details>
 
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={() => window.location.reload()}>
                 <RefreshCcw className="h-4 w-4" />
-                {t({ ko: '새로고침', en: 'Refresh' })}
+                {isChunkError ? t({ ko: '새로고침', en: 'Refresh' }) : t({ ko: '다시 시도', en: 'Try again' })}
+              </Button>
+              {/* A full navigation also recovers when the router itself is in a broken state. */}
+              <Button asChild variant="outline">
+                <a href="/">
+                  <Home className="h-4 w-4" />
+                  {t({ ko: '홈으로 이동', en: 'Go to Home' })}
+                </a>
               </Button>
             </div>
           </CardContent>
