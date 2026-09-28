@@ -46,7 +46,7 @@ export function ComfyWorkflowListSection({
       variant="settings"
       heading={(
         <span className="flex items-center gap-2">
-          <ListTree className="h-4 w-4 text-primary" />
+          <ListTree className="h-4 w-4 text-muted-foreground" />
           {t({ ko: '워크플로우', en: 'Workflows' })}
         </span>
       )}
@@ -174,7 +174,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
       variant="settings"
       heading={(
         <span className="flex items-center gap-2">
-          <Server className="h-4 w-4 text-primary" />
+          <Server className="h-4 w-4 text-muted-foreground" />
           {t({ ko: '서버', en: 'Servers' })}
         </span>
       )}
