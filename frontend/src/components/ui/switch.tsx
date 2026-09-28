@@ -25,7 +25,7 @@ function Switch({ className, size = 'default', ...props }: React.ComponentProps<
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
         className={cn(
-          'pointer-events-none block aspect-square h-full rounded-full shadow-elevation-1 transition-transform motion-reduce:transition-none',
+          'pointer-events-none block aspect-square h-full rounded-full shadow-key transition-transform motion-reduce:transition-none',
           'data-[state=checked]:translate-x-4 data-[state=checked]:bg-primary-foreground data-[state=unchecked]:translate-x-0 data-[state=unchecked]:bg-muted-foreground',
           size === 'sm' && 'data-[state=checked]:translate-x-3',
         )}

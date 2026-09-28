@@ -83,7 +83,8 @@ export function SegmentedControl({
       aria-orientation={isTabs ? 'horizontal' : undefined}
       onKeyDown={handleKeyDown}
       className={cn(
-        'inline-flex flex-wrap gap-1 rounded-sm bg-surface-container p-1',
+        // Flat tray: one subtle wash; the selected segment is a page-tone key raised above it.
+        'inline-flex flex-wrap gap-0.5 rounded-md bg-fill p-0.75',
         fullWidth && 'flex w-full',
         className,
       )}
@@ -110,7 +111,7 @@ export function SegmentedControl({
               fullWidth && 'flex-1',
               itemBaseClassName,
               // The selected segment sits on the page tone above the tray, like a raised key.
-              isActive && 'bg-background text-primary shadow-elevation-1 hover:bg-background hover:text-primary',
+              isActive && 'bg-background text-foreground shadow-key hover:bg-background hover:text-foreground',
             )}
           >
             {item.label}

@@ -31,9 +31,9 @@ const buttonVariants = cva(
           "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground aria-expanded:bg-foreground/10 aria-expanded:text-foreground",
           PRESSED_TINT,
         ),
-        /** Icon toolbars and inline actions: no fill until hover. */
+        /** Icon toolbars and inline actions: no fill until hover (translucent wash, reads on any surface). */
         ghost: cn(
-          "text-muted-foreground hover:bg-surface-high hover:text-foreground in-data-[surface=high]:hover:bg-surface-highest",
+          "text-muted-foreground hover:bg-fill hover:text-foreground aria-expanded:bg-fill aria-expanded:text-foreground",
           PRESSED_TINT,
         ),
         /**

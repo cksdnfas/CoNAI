@@ -70,6 +70,7 @@
   --shadow-elevation-1: var(--elevation-1);
   --shadow-elevation-2: var(--elevation-2);
   --shadow-elevation-3: var(--elevation-3);
+  --shadow-key: var(--elevation-key);
   /*
    * Stacking layers. Values keep the current order of the arbitrary layers:
    *   z-10 / z-20 / z-30 (in-component stacking)        -> raised (10)
@@ -192,6 +193,8 @@
   --elevation-1: 0 12px 32px rgb(0 0 0 / 0.32);
   --elevation-2: 0 18px 48px rgb(0 0 0 / 0.36);
   --elevation-3: 0 24px 80px rgb(0 0 0 / 0.48);
+  /* The raised key in a segmented tray / tab list: a short lift, not a floating shadow. */
+  --elevation-key: 0 1px 0 rgb(255 255 255 / 0.04), 0 2px 8px rgb(0 0 0 / 0.35);
   --backdrop: rgb(0 0 0 / 0.78);
   /* 투명 픽셀을 드러내는 체크무늬 두 톤. */
   --checker-a: #262626;
@@ -297,6 +300,7 @@
   --elevation-1: 0 8px 22px rgb(107 81 70 / 0.16);
   --elevation-2: 0 16px 40px rgb(107 81 70 / 0.2);
   --elevation-3: 0 24px 72px rgb(107 81 70 / 0.26);
+  --elevation-key: 0 1px 2px rgb(107 81 70 / 0.16), 0 2px 6px rgb(107 81 70 / 0.1);
 }
 
 @layer base {
