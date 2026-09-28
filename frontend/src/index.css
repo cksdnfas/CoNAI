@@ -62,7 +62,7 @@
   --color-info-soft: var(--info-soft);
   --color-info-soft-foreground: var(--info-soft-foreground);
   --color-backdrop: var(--backdrop);
-  --tracking-overline: 0.16em;
+  --tracking-overline: var(--overline-tracking);
   --shadow-elevation-1: var(--elevation-1);
   --shadow-elevation-2: var(--elevation-2);
   --shadow-elevation-3: var(--elevation-3);
@@ -920,4 +920,13 @@
       0 0 0 1px color-mix(in srgb, var(--secondary) 22%, transparent),
       0 0 24px color-mix(in srgb, var(--primary) 20%, transparent);
   }
+}
+
+/* 대문자 라벨의 자간은 라틴 문자용이다. 한글에 그대로 주면 글자가 흩어져 보인다. */
+:root {
+  --overline-tracking: 0.16em;
+}
+
+html:lang(ko) {
+  --overline-tracking: 0.02em;
 }
