@@ -5,7 +5,6 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { STATUS_BADGE_CLASS } from './generation-status-tone'
 
 type GenerationHistoryHeaderProps = {
   onBack?: () => void
@@ -73,7 +72,7 @@ export function GenerationHistoryHeader({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {inFlightHistoryCount > 0 ? <Badge variant="secondary" className={STATUS_BADGE_CLASS.info}>{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
+        {inFlightHistoryCount > 0 ? <Badge variant="info">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
         <IconButton
           size="icon-sm"
           variant="secondary"
