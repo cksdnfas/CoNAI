@@ -126,7 +126,8 @@ export function ModuleGraphActionMenu({
                 </IconButton>
               ) : null}
               <IconButton
-                variant="destructive"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
                 size="icon-sm"
                 onClick={onRemoveNode}
                 label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: state.nodeName })}

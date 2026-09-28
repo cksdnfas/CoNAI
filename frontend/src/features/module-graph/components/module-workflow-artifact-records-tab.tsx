@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Square, SquareCheckBig, Trash2 } from 'lucide-react'
+import { FileSearch, Square, SquareCheckBig, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Inset } from '@/components/ui/inset'
@@ -139,7 +139,7 @@ export function ModuleWorkflowArtifactRecordsTab({
         </Select>
       </div>
       {artifacts.length === 0 ? (
-        <EmptyState title={t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.', en: 'No text or intermediate artifacts match the search/filter.' })} />
+        <EmptyState icon={FileSearch} title={t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.', en: 'No text or intermediate artifacts match the search/filter.' })} />
       ) : (
         <div ref={setArtifactSelectionContainer} className="space-y-3">
           <WorkflowArtifactPagination page={page} totalPages={totalPages} visibleCount={artifacts.length} totalCount={totalArtifactCount} onPageChange={onPageChange} />

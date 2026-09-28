@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { Download, Square, SquareCheckBig, Trash2 } from 'lucide-react'
+import { Download, ImageOff, Square, SquareCheckBig, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Inset } from '@/components/ui/inset'
@@ -186,7 +186,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
       ) : null}
 
       {outputItems.length === 0 ? (
-        <EmptyState title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })} />
+        <EmptyState icon={ImageOff} title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })} />
       ) : (
         <div className="space-y-3">
           <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />

@@ -262,8 +262,8 @@ export function ModuleWorkflowEditorView({
                   </IconButton>
                   <IconButton
                     size="icon-sm"
-                    variant="destructive"
-                    className="ml-1"
+                    variant="subtle"
+                    className="ml-1 text-destructive hover:text-destructive"
                     onClick={onRemoveSelectedNode}
                     disabled={!hasSelectedNode}
                     label={t({ ko: '노드 삭제', en: 'Delete node' })}
@@ -272,7 +272,8 @@ export function ModuleWorkflowEditorView({
                   </IconButton>
                   <IconButton
                     size="icon-sm"
-                    variant="destructive"
+                    variant="subtle"
+                    className="text-destructive hover:text-destructive"
                     onClick={onRemoveSelectedEdge}
                     disabled={!hasSelectedEdge}
                     label={t({ ko: '엣지 삭제', en: 'Delete edge' })}
