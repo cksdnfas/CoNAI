@@ -268,7 +268,7 @@ export async function deleteGraphWorkflow(workflowId: number) {
 }
 
 /** Enqueue a saved graph workflow for background execution. */
-export async function executeGraphWorkflow(workflowId: number, payload?: { input_values?: Record<string, unknown> }) {
+export async function executeGraphWorkflow(workflowId: number, payload?: { input_values?: Record<string, unknown>; output_group_path?: string }) {
   return requestApiData<{
     executionId: number
     status: GraphExecutionStatus
@@ -282,7 +282,7 @@ export async function executeGraphWorkflow(workflowId: number, payload?: { input
 }
 
 /** Enqueue one selected graph node and its required upstream closure for execution. */
-export async function executeGraphNode(workflowId: number, nodeId: string, payload?: { input_values?: Record<string, unknown>; force_rerun?: boolean }) {
+export async function executeGraphNode(workflowId: number, nodeId: string, payload?: { input_values?: Record<string, unknown>; force_rerun?: boolean; output_group_path?: string }) {
   return requestApiData<{
     executionId: number
     status: GraphExecutionStatus

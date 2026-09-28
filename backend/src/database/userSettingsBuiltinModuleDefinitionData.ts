@@ -1703,7 +1703,7 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
   },
   {
     name: '최종 결과',
-    description: '업스트림 결과물 하나를 복제 없이 워크플로우의 최종 결과로 확정해.',
+    description: '업스트림 결과물 하나를 복제 없이 워크플로우의 최종 결과로 확정해. 그룹 경로를 주면 결과 이미지를 그 그룹에 넣어.',
     category: 'output',
     exposedInputs: [
       {
@@ -1715,10 +1715,27 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         multiple: false,
         description: '최종 워크플로우 결과로 기록할 업스트림 결과물 하나를 연결해.',
       },
+      {
+        key: 'group_path',
+        label: '그룹 경로',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: '결과 이미지를 넣을 그룹 경로(예: 프로젝트/이펙트). 없는 그룹은 만들고, 비우면 실행 기본 그룹을 써.',
+      },
     ],
     outputPorts: [],
     internalFixedValues: { operation_key: 'system.final_result' },
-    uiSchema: [],
+    uiSchema: [
+      {
+        key: 'group_path',
+        label: '그룹 경로',
+        data_type: 'text',
+        ui_hint: 'inline',
+        placeholder: '프로젝트/이펙트 (비우면 실행 기본 그룹)',
+      },
+    ],
     color: '#ffa726',
   },
   {

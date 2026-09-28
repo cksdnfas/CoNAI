@@ -9,6 +9,7 @@ import { decorateGraphExecutionRecord } from '../../services/graphWorkflowViewSe
 import type { GraphWorkflowDocument, GraphWorkflowExposedInput } from '../../types/moduleGraph'
 import type { McpRequestContext } from '../context'
 import { McpArtifactService } from '../../services/mcpArtifactService'
+import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup'
 
 function parseGraphDocument(graphJson: string): GraphWorkflowDocument {
   const parsed = JSON.parse(graphJson)
@@ -171,15 +172,18 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
     {
       workflow_id: z.number().int().describe('Graph workflow ID'),
       input_values: z.record(z.string(), z.unknown()).default({}).describe('Values keyed by exposed input ID. Omitted inputs use workflow defaults.'),
+      group_id: z.number().int().positive().optional().describe('Default image group for final results. A final-result node with its own group path overrides it.'),
+      group_path: mcpGroupPathSchema,
     },
-    async ({ workflow_id, input_values }) => {
+    async ({ workflow_id, input_values, group_id, group_path }) => {
       try {
         const workflow = GraphWorkflowModel.findById(workflow_id)
         if (!workflow) throw new Error(`Graph workflow ${workflow_id} not found`)
         if (!workflow.is_active) throw new Error(`Graph workflow ${workflow_id} is inactive`)
         const graph = parseGraphDocument(workflow.graph_json)
         const runtimeInputs = validateGraphInputs(graph.metadata?.exposed_inputs ?? [], input_values as Record<string, unknown>)
-        const result = await GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs })
+        const outputGroupId = resolveMcpTargetGroup(group_id, group_path)
+        const result = await GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs, outputGroupId: outputGroupId ?? null })
         const compactResult = await compactGraphExecution(result.executionId, context)
         return { content: [{ type: 'text' as const, text: JSON.stringify(compactResult, null, 2) }] }
       } catch (error) {

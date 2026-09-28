@@ -13,6 +13,24 @@ import { routeParam } from '../routeParam'
 import { sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
 import { parseGraphExecutionInputValues, parseGraphRouteInteger } from './route-helpers'
+import { GenerationTargetGroupService } from '../../services/generationTargetGroupService'
+
+/**
+ * 실행 단위 기본 결과 그룹(output_group_id | output_group_path)을 해석한다.
+ * 실패하면 응답을 보내고 undefined 를 돌려준다.
+ */
+function resolveExecutionOutputGroup(req: Request, res: Response): { groupId: number | null } | undefined {
+  const accountId = typeof req.session?.accountId === 'number' ? req.session.accountId : null
+  const resolved = GenerationTargetGroupService.resolveForAccount(accountId, {
+    groupId: req.body?.output_group_id,
+    groupPath: req.body?.output_group_path,
+  })
+  if (!resolved.ok) {
+    res.status(resolved.status).json({ success: false, error: resolved.error } as ModuleGraphResponse)
+    return undefined
+  }
+  return { groupId: resolved.groupId }
+}
 
 /** Upper bound for one batch preview request; the page only previews the newest completed runs. */
 const MAX_EXECUTION_PREVIEW_IDS = 24
@@ -136,7 +154,14 @@ export function createGraphWorkflowExecutionRoutes() {
 
     try {
       const inputValues = parseGraphExecutionInputValues(req.body?.input_values)
-      const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues)
+      if (!GraphWorkflowModel.findById(id)) {
+        return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+      }
+      const outputGroup = resolveExecutionOutputGroup(req, res)
+      if (!outputGroup) {
+        return
+      }
+      const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, undefined, false, { outputGroupId: outputGroup.groupId })
       return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error executing graph workflow:', error)
@@ -168,7 +193,11 @@ export function createGraphWorkflowExecutionRoutes() {
 
       const inputValues = parseGraphExecutionInputValues(req.body?.input_values)
       const forceRerun = req.body?.force_rerun === true
-      const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId, forceRerun)
+      const outputGroup = resolveExecutionOutputGroup(req, res)
+      if (!outputGroup) {
+        return
+      }
+      const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId, forceRerun, { outputGroupId: outputGroup.groupId })
       return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error executing graph node:', error)

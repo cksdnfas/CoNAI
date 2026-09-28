@@ -10,6 +10,7 @@ import {
 } from '@/lib/api-module-graph'
 import { buildGraphEditorSnapshot, buildGraphPayload, getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
+import { buildGraphWorkflowTargetGroupKey, readGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 
 /** Own graph save and execution actions for the module-graph page. */
 export function useModuleGraphExecutionActions({
@@ -178,7 +179,11 @@ export function useModuleGraphExecutionActions({
     try {
       setExecutingGraphId(graphId)
       onGraphSelected(graphId)
-      const result = await executeGraphWorkflow(graphId, inputValues ? { input_values: inputValues } : undefined)
+      const outputGroupPath = readGenerationTargetGroupPath(buildGraphWorkflowTargetGroupKey(graphId))
+      const result = await executeGraphWorkflow(graphId, {
+        ...(inputValues ? { input_values: inputValues } : {}),
+        ...(outputGroupPath ? { output_group_path: outputGroupPath } : {}),
+      })
       onExecutionSelected(result.executionId)
       await refetchGraphExecutions()
       showSnackbar({
@@ -227,10 +232,12 @@ export function useModuleGraphExecutionActions({
       onNodeSelected(nodeId)
       onEdgeCleared()
       setExecutingGraphId(graphId)
-      const payload = Object.keys(workflowRunInputValues).length > 0 || forceRerun
+      const outputGroupPath = readGenerationTargetGroupPath(buildGraphWorkflowTargetGroupKey(graphId))
+      const payload = Object.keys(workflowRunInputValues).length > 0 || forceRerun || outputGroupPath
         ? {
             ...(Object.keys(workflowRunInputValues).length > 0 ? { input_values: workflowRunInputValues } : {}),
             ...(forceRerun ? { force_rerun: true } : {}),
+            ...(outputGroupPath ? { output_group_path: outputGroupPath } : {}),
           }
         : undefined
       const result = await executeGraphNode(graphId, nodeId, payload)

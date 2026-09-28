@@ -1,5 +1,7 @@
 import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
+import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
+import { GroupPathService } from '../groupPathService'
 import { replacePromotedFinalResultSourceWithCanonicalMedia, tryPromoteFinalResultArtifactToGenerationHistory } from './final-result-promotion'
 import {
   writeExecutionLog,
@@ -7,12 +9,30 @@ import {
   type ParsedModuleDefinition,
 } from './shared'
 
+/**
+ * 최종 결과를 넣을 이미지 그룹을 정한다. 노드의 그룹 경로가 실행 기본 그룹보다 우선한다.
+ * 경로는 없는 그룹을 만들어 가며 해석하고, 잘못된 경로는 노드 실패로 드러낸다.
+ */
+function resolveFinalResultGroup(context: ExecutionContext, resolvedInputs: Record<string, any>) {
+  const rawPath = resolvedInputs.group_path
+  if (typeof rawPath === 'string' && rawPath.trim().length > 0) {
+    const resolved = GroupPathService.resolveOrCreate(rawPath)
+    return { groupId: resolved.groupId, source: 'node' as const, path: resolved.path }
+  }
+
+  if (context.outputGroupId) {
+    return { groupId: context.outputGroupId, source: 'execution' as const, path: GroupPathService.getPathLabel(context.outputGroupId) }
+  }
+
+  return { groupId: null, source: null, path: null }
+}
+
 /** Register one upstream artifact as an explicit workflow final result. */
 export async function executeFinalResultNode(
   context: ExecutionContext,
   node: GraphWorkflowNode,
   moduleDefinition: ParsedModuleDefinition,
-  _resolvedInputs: Record<string, any>,
+  resolvedInputs: Record<string, any>,
 ) {
   const incomingEdges = context.workflow.graph.edges.filter((edge) => edge.target_node_id === node.id && edge.target_port_key === 'value')
 
@@ -55,6 +75,8 @@ export async function executeFinalResultNode(
     return
   }
 
+  const targetGroup = resolveFinalResultGroup(context, resolvedInputs)
+
   const finalResultId = GraphExecutionFinalResultModel.create({
     execution_id: context.executionId,
     final_node_id: node.id,
@@ -72,8 +94,15 @@ export async function executeFinalResultNode(
     sourceNodeId: sourceEdge.source_node_id,
     sourcePortKey: sourceEdge.source_port_key,
     sourceArtifact,
+    groupId: targetGroup.groupId,
   })
   const canonicalReplacementResult = await replacePromotedFinalResultSourceWithCanonicalMedia(sourceArtifact, promotionResult)
+
+  // 대기열 생성 노드의 이미지는 이미 라이브러리에 있어 승격을 건너뛰므로(already_uploaded) 여기서 직접 넣는다.
+  // 승격된 경우는 history 의 assigned_group_id 로 이미 들어가 있어 중복 추가는 무시된다.
+  const groupAssignedCount = targetGroup.groupId && promotionResult.compositeHash
+    ? assignGeneratedMediaToGroup(targetGroup.groupId, [promotionResult.compositeHash])
+    : 0
 
   context.artifactsByNode.set(node.id, {})
 
@@ -111,6 +140,7 @@ export async function executeFinalResultNode(
       artifactType: sourceArtifact.type,
       promotion: promotionResult,
       canonicalReplacement: canonicalReplacementResult,
+      targetGroup: targetGroup.groupId ? { ...targetGroup, assignedNow: groupAssignedCount } : null,
     },
   })
 }

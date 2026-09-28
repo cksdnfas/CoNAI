@@ -38,6 +38,8 @@ type FinalResultPromotionParams = {
   sourceNodeId: string
   sourcePortKey: string
   sourceArtifact: RuntimeArtifact
+  /** 승격된 결과를 넣을 이미지 그룹 */
+  groupId?: number | null
 }
 
 type PromotedFinalResult = FinalResultPromotionCandidate & {
@@ -402,6 +404,7 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     generation_status: 'pending',
     workflow_id: params.workflowId,
     workflow_name: params.workflowName,
+    assigned_group_id: params.groupId ?? undefined,
     nai_model: resolveModelName(metadata) ?? (serviceType === 'codex' ? 'codex' : undefined),
     nai_sampler: candidate.sampler ?? undefined,
     nai_seed: candidate.seed ?? undefined,

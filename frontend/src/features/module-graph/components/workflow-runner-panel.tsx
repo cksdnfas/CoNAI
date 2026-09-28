@@ -16,6 +16,8 @@ import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflo
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 import { buildFinalResultLifecycleWarningSourceLabel, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
 import { WorkflowInputFields } from './workflow-input-fields'
+import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
+import { buildGraphWorkflowTargetGroupKey } from '@/features/groups/generation-target-group-store'
 
 type WorkflowRunnerPanelProps = {
   selectedGraph: GraphWorkflowRecord | null
@@ -300,10 +302,18 @@ export function WorkflowRunnerPanel({
               </Alert>
             ) : null}
 
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button type="button" onClick={onExecute} disabled={isExecuting || !canExecute}>
                 {isExecuting ? t({ ko: '실행 요청 중…', en: 'Requesting run…' }) : canExecute ? t({ ko: '실행', en: 'Run' }) : t({ ko: '실행 불가', en: 'Cannot run' })}
               </Button>
+              {selectedGraph ? (
+                <GenerationTargetGroupControl
+                  storageKey={buildGraphWorkflowTargetGroupKey(selectedGraph.id)}
+                  label={t({ ko: '기본 결과 그룹', en: 'Default result group' })}
+                  disabled={isExecuting}
+                  className="min-w-0"
+                />
+              ) : null}
             </div>
           </div>
         ) : null}

@@ -53,6 +53,7 @@ type GraphExecutionPlan = {
   forceRerun?: boolean
   reusedFromExecutionId?: number | null
   reusedNodeIds?: string[]
+  outputGroupId?: number | null
 }
 
 const VOLATILE_SYSTEM_OPERATION_KEYS = new Set([
@@ -286,6 +287,8 @@ export class GraphWorkflowExecutor {
     targetNodeId?: string
     forceRerun?: boolean
     shouldCancel?: () => boolean
+    /** 최종 결과를 넣을 기본 이미지 그룹 */
+    outputGroupId?: number | null
   }) {
     const workflowRecord = GraphWorkflowModel.findById(workflowId)
     if (!workflowRecord) {
@@ -339,6 +342,7 @@ export class GraphWorkflowExecutor {
       forceRerun,
       reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
       reusedNodeIds: reusedArtifacts.reusedNodeIds,
+      outputGroupId: options?.outputGroupId ?? null,
     }
 
     const executionPlanJson = JSON.stringify(executionPlan)
@@ -414,6 +418,7 @@ export class GraphWorkflowExecutor {
         getAbortReason: abortHandle.getReason,
         // 기존 폴링 소비처(queue-wait, codexMessageService)를 그대로 살리려고 signal 과 OR 로 합성한다.
         shouldCancel: () => abortHandle.signal.aborted || options?.shouldCancel?.() === true,
+        outputGroupId: options?.outputGroupId ?? null,
       }
 
       const { nodeById } = getExecutionGraphIndex(context)

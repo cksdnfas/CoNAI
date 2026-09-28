@@ -62,6 +62,8 @@ export type ExecutionContext = {
   /** 폴링형 취소 채널. 실행기에서 signal 과 OR 합성되어 하위 호환을 유지한다. */
   shouldCancel?: () => boolean
   graphIndex?: ExecutionGraphIndex
+  /** 실행 단위 기본 결과 그룹. 최종 결과 노드의 그룹 경로가 비었을 때 쓴다. */
+  outputGroupId?: number | null
 }
 
 /** Build once per execution and reuse node/edge lookup maps for hot-loop graph traversal. */
