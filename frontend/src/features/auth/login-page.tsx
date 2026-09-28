@@ -143,7 +143,7 @@ export function LoginPage() {
             <LanguageSwitch className="w-full max-w-[260px]" />
           </div>
           <PageHeader
-            eyebrow="Personal Access"
+            eyebrow="CoNAI"
             title={t('loginPage.signIn')}
             description=""
           />

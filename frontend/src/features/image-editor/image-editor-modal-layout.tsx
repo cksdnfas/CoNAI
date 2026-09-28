@@ -154,7 +154,7 @@ export function ImageEditorModalLayout({
         }
       }}
       title={title}
-      description="Paint-style source and mask editing for img2img and infill."
+      description={t({ ko: 'img2img·인페인트에 쓸 원본 이미지와 마스크를 그림판처럼 편집해.', en: 'Paint over the source image and mask for img2img and inpainting.' })}
       widthClassName="max-w-[96vw]"
     >
       <div className="space-y-4">
