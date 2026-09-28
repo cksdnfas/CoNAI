@@ -261,9 +261,27 @@ export function getGenerationQueueProgressStageLabel(record: GenerationQueueJobR
     || t({ ko: '실행 중', en: 'Running' })
 }
 
-/** Render the short remaining-time label used beside the progress gauge. */
-export function getGenerationQueueRemainingLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber) {
-  return formatGenerationQueueEtaSeconds(record.estimated_total_seconds, t, formatNumber)
+/**
+ * Render the "~N left" label for a running job, or null when there is no usable estimate.
+ * Counts down from `started_at` + median duration so it stays current between queue refreshes;
+ * falls back to the server snapshot (`estimated_total_seconds`) when the start time is unknown.
+ */
+export function getGenerationQueueRemainingLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber, nowMs = Date.now()) {
+  if (record.status !== 'running' || isGenerationQueueOverrunningEstimate(record, nowMs)) {
+    return null
+  }
+
+  const durationSeconds = record.estimated_duration_seconds
+  const startedAtMs = parseQueueTimestampMs(record.started_at)
+  const remainingSeconds = durationSeconds != null && durationSeconds > 0 && startedAtMs != null
+    ? durationSeconds - Math.max(0, (nowMs - startedAtMs) / 1000)
+    : record.estimated_total_seconds
+  if (remainingSeconds == null || remainingSeconds <= 0) {
+    return null
+  }
+
+  const remainingLabel = formatGenerationQueueEtaSeconds(remainingSeconds, t, formatNumber)
+  return remainingLabel ? t({ ko: '약 {remainingLabel} 남음', en: '~{remainingLabel} left' }, { remainingLabel }) : null
 }
 
 /** Render the queue lane and position so operators can see where a job is waiting. */
