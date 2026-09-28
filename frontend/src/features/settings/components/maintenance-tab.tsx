@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { AlertTriangle, FileSearch, RefreshCcw, ScanSearch, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
 import { useConfirm, type ConfirmOptions } from '@/components/ui/confirm-dialog'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
@@ -92,7 +93,7 @@ export function MaintenanceTab({
         <div className="flex gap-3">
           <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-destructive" />
           <div className="min-w-0 space-y-1">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">{t({ ko: '유지보수', en: 'Maintenance' })}</h2>
+            <Heading level={2}>{t({ ko: '유지보수', en: 'Maintenance' })}</Heading>
             <p className="text-sm text-muted-foreground">
               {t({
                 ko: '라이브러리 전체를 다시 훑거나 고치는 작업이야. 오래 걸리거나 되돌릴 수 없는 것도 있으니 설명을 읽고 실행해.',

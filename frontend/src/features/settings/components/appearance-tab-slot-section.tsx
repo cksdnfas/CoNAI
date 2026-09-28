@@ -74,32 +74,32 @@ export function AppearanceTabSlotSection({
           <div
             key={slot.id}
             className={cn(
-              'rounded-sm border p-4 transition-colors',
-              isActiveSlot ? 'border-primary bg-surface-high' : 'border-border bg-surface-low',
+              'rounded-sm p-4 transition-colors',
+              isActiveSlot ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-surface-lowest',
             )}
           >
             <div className="space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <span className="rounded-full border border-border bg-background/70 px-2 py-1 text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                  <span className="rounded-sm bg-surface-high px-2 py-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
                     {t({ ko: '슬롯 {index}', en: 'Slot {index}' }, { index: index + 1 })}
                   </span>
                   <span
                     className={cn(
-                      'rounded-full px-2 py-1 text-[11px] font-semibold',
+                      'rounded-sm px-2 py-1 text-2xs font-semibold',
                       isEmptySlot
                         ? 'bg-surface-high text-muted-foreground'
                         : isActiveSlot
                           ? 'bg-primary/14 text-primary'
                           : matchesSavedTheme
-                            ? 'bg-emerald-500/14 text-emerald-300'
+                            ? 'bg-success-soft text-success-soft-foreground'
                             : 'bg-surface-highest text-foreground',
                     )}
                   >
                     {statusLabel}
                   </span>
                 </div>
-                <div className="text-right text-[11px] text-muted-foreground">{formatSlotTimestamp(slot.updatedAt, locale, t('appearanceTabUtils.noSaveHistory'))}</div>
+                <div className="text-right text-2xs text-muted-foreground">{formatSlotTimestamp(slot.updatedAt, locale, t('appearanceTabUtils.noSaveHistory'))}</div>
               </div>
 
               <Input
@@ -118,7 +118,7 @@ export function AppearanceTabSlotSection({
               />
 
               {slotTheme ? (
-                <div className="space-y-3 rounded-sm border border-border/70 bg-surface-lowest px-3 py-3">
+                <div className="space-y-3 rounded-sm bg-surface-low px-3 py-3">
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>{getThemeModeLabel(slotTheme.themeMode, t)}</span>
                     <span>·</span>
@@ -137,7 +137,7 @@ export function AppearanceTabSlotSection({
                   </div>
                 </div>
               ) : (
-                <div className="rounded-sm border border-dashed border-border bg-background/40 px-3 py-4 text-xs text-muted-foreground">
+                <div className="rounded-sm bg-surface-low px-3 py-4 text-xs text-muted-foreground">
                   {t({ ko: '저장된 테마 없음', en: 'No saved theme' })}
                 </div>
               )}

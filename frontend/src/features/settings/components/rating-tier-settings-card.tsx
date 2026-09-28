@@ -1,6 +1,7 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, GripVertical, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { LoadingState } from '@/components/ui/loading-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
@@ -83,7 +84,7 @@ export function RatingTierSettingsCard({
   return (
     <Section variant="settings" heading={heading} actions={actions}>
       {validationMessages.length > 0 ? (
-        <div className="rounded-sm border border-[#ffb4ab]/40 bg-[#93000a]/10 px-3 py-2 text-sm text-[#ffb4ab]">
+        <div className="rounded-sm bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground">
           <div className="font-medium">{t({ ko: '저장 전에 확인해줘', en: 'Check before saving' })}</div>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
             {validationMessages.map((message) => (
@@ -107,31 +108,31 @@ export function RatingTierSettingsCard({
                 onDragOver={handleTierDragOver(tier.id)}
                 onDrop={handleTierDrop(tier.id)}
                 className={dragOverTierId === tier.id && draggedTierId !== tier.id
-                  ? 'rounded-sm border border-primary bg-surface-low/50 p-3 ring-1 ring-primary/35'
-                  : 'rounded-sm border border-border/70 bg-surface-low/35 p-3'}
+                  ? 'rounded-sm bg-primary/12 p-3 ring-1 ring-primary/35'
+                  : 'rounded-sm bg-surface-lowest p-3'}
               >
-                <div className={isExpanded ? 'flex flex-wrap items-center justify-between gap-2 border-b border-border/70 pb-3' : 'flex flex-wrap items-center justify-between gap-2'}>
+                <div className={isExpanded ? 'flex flex-wrap items-center justify-between gap-2 pb-3' : 'flex flex-wrap items-center justify-between gap-2'}>
                   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    <button
-                      type="button"
+                    <IconButton
+                      variant="ghost"
+                      size="icon-xs"
                       draggable
                       onDragStart={handleTierDragStart(tier.id)}
                       onDragEnd={handleTierDragEnd}
-                      className="inline-flex cursor-grab items-center justify-center rounded-sm border border-border/70 bg-surface-low/50 p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
-                      title={t({ ko: '드래그해서 순서 바꾸기', en: 'Drag to reorder' })}
-                      aria-label={t({ ko: '드래그해서 순서 바꾸기', en: 'Drag to reorder' })}
+                      className="cursor-grab"
+                      label={t({ ko: '드래그해서 순서 바꾸기', en: 'Drag to reorder' })}
                     >
                       <GripVertical className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
+                    </IconButton>
+                    <IconButton
+                      variant="ghost"
+                      size="icon-xs"
                       onClick={() => handleToggleTier(tier.id)}
-                      className="inline-flex items-center justify-center rounded-sm border border-border/70 bg-surface-low/50 p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
-                      title={isExpanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
-                      aria-label={isExpanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
+                      aria-expanded={isExpanded}
+                      label={isExpanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
                     >
                       <ChevronDown className={isExpanded ? 'h-4 w-4' : 'h-4 w-4 -rotate-90'} />
-                    </button>
+                    </IconButton>
                     <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorValue }} />
                     <span className="font-mono">#{formatNumber(index + 1)}</span>
                     <span className="truncate">{tier.tier_name || t({ ko: 'Tier {index}', en: 'Tier {index}' }, { index: index + 1 })}</span>
@@ -249,9 +250,7 @@ export function RatingTierSettingsCard({
           })}
         </div>
       ) : (
-        <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">
-          {t({ ko: '평가 등급을 불러오는 중…', en: 'Loading rating tiers…' })}
-        </div>
+        <LoadingState label={t({ ko: '평가 등급을 불러오는 중…', en: 'Loading rating tiers…' })} />
       )}
     </Section>
   )

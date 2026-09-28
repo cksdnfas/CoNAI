@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, KeyRound, Shield, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Inset } from '@/components/ui/inset'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
@@ -153,7 +154,7 @@ export function SecurityAccountEditorModal({
         </div>
 
         {activeSection === 'group' ? (
-          <div className="space-y-4 rounded-sm border border-border bg-surface-container p-4">
+          <div className="space-y-4 rounded-sm bg-surface-low p-4">
             <Field label={t({ ko: '기본 그룹', en: 'Base group' })}>
               <Select
                 variant="settings"
@@ -196,7 +197,7 @@ export function SecurityAccountEditorModal({
         ) : null}
 
         {activeSection === 'password' ? (
-          <div className="space-y-4 rounded-sm border border-border bg-surface-container p-4">
+          <div className="space-y-4 rounded-sm bg-surface-low p-4">
             {canChangeLegacyAdminPassword ? (
               <>
                 <Field label={t({ ko: '새 비밀번호', en: 'New password' })}>
@@ -218,17 +219,17 @@ export function SecurityAccountEditorModal({
                 </div>
               </>
             ) : (
-              <div className="rounded-sm border border-border/70 bg-background/40 px-4 py-3 text-sm text-muted-foreground">
+              <Inset className="text-sm text-muted-foreground">
                 {t({ ko: '이 계정은 레거시 관리자 자격과 동기화돼 있어서 여기서 비밀번호를 직접 바꾸지 않아. 위쪽 관리자 계정 카드에서 변경해.', en: 'This account is synced with legacy admin credentials, so do not change its password here. Use the admin account card above instead.' })}
-              </div>
+              </Inset>
             )}
           </div>
         ) : null}
 
         {activeSection === 'danger' ? (
-          <div className="space-y-4 rounded-sm border border-[#93000a]/30 bg-[#93000a]/8 p-4">
+          <div className="space-y-4 rounded-sm bg-destructive-soft/40 p-4">
             <div className="flex items-start gap-3 text-sm text-foreground">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#ff8a80]" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <div className="space-y-1">
                 <div className="font-semibold">{t({ ko: '계정 삭제', en: 'Delete account' })}</div>
                 <div className="text-muted-foreground">

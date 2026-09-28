@@ -104,7 +104,7 @@ export function GeneralPreferencesSections({
               label={t({ ko: '등급 배지 표시', en: 'Show rating badges' })}
             />
             <Inset className="md:col-span-2">
-              <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="mb-3 text-2xs font-semibold uppercase tracking-overline text-muted-foreground">
                 {t({ ko: '상단 네비 표시', en: 'Header navigation' })}
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

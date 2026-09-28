@@ -21,7 +21,7 @@ export function BackupSourceListItem({ source, selected = false, gridClassName, 
       cells={[
         <div className="min-w-0 space-y-1">
           <div className="truncate font-medium text-foreground">{source.display_name || t('backupSourceListItem.unnamedBackupSource')}</div>
-          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{source.import_mode}</div>
+          <div className="text-2xs uppercase tracking-overline text-muted-foreground">{source.import_mode}</div>
         </div>,
         <div className="break-all font-mono text-xs text-muted-foreground">{source.source_path}</div>,
         <div className="break-all font-mono text-xs text-muted-foreground">Upload/{source.target_folder_name}</div>,

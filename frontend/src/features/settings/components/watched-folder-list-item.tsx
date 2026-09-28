@@ -28,7 +28,7 @@ export function WatchedFolderListItem({
       cells={[
         <div className="min-w-0 space-y-1">
           <div className="truncate font-medium text-foreground">{folder.folder_name || t('watchedFolderListItem.unnamedFolder')}</div>
-          {folder.is_default === 1 ? <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '기본', en: 'Default' })}</div> : null}
+          {folder.is_default === 1 ? <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: '기본', en: 'Default' })}</div> : null}
         </div>,
         <div className="break-all font-mono text-xs text-muted-foreground">{folder.folder_path}</div>,
         <SettingsStatusIcon checked={folder.is_active === 1} title={folder.is_active === 1 ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })} />,

@@ -420,7 +420,7 @@ export function SettingsPage() {
     return (
       <div className="space-y-6">
         <PageHeader title={t('pageAccessCatalog.settings')} />
-        <div role="status" className="flex items-start gap-3 rounded-sm border border-border bg-surface-container/72 px-4 py-4">
+        <div role="status" className="flex items-start gap-3 rounded-sm bg-surface-low px-4 py-4">
           <div className="rounded-sm bg-primary/10 p-2 text-primary">
             <ShieldAlert className="h-4 w-4" />
           </div>
@@ -530,7 +530,7 @@ export function SettingsPage() {
       <PageHeader
         title={t({ ko: '설정', en: 'Settings' })}
         titleAccessory={(
-          <span className="inline-flex items-center rounded-sm border border-border/80 bg-surface-low px-2 py-0.5 text-xs font-medium text-muted-foreground" title={APP_BRAND_TOOLTIP}>
+          <span className="inline-flex items-center rounded-sm bg-surface-high px-2 py-0.5 text-xs font-medium text-muted-foreground" title={APP_BRAND_TOOLTIP}>
             {APP_VERSION_LABEL}
           </span>
         )}

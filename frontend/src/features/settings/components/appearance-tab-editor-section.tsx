@@ -22,7 +22,6 @@ export function AppearanceTabEditorSection(props: AppearanceTabEditorSectionProp
         items={APPEARANCE_EDITOR_TABS.map((item) => ({ ...item, label: t(item.label) }))}
         onChange={(nextTab) => setActiveTab(nextTab as AppearanceEditorTab)}
         size="xs"
-        className="border-white/5"
       />
 
       {activeTab === 'general' ? <AppearanceGeneralEditorContent {...props} /> : null}

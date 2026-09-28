@@ -173,7 +173,7 @@ export function SecurityPermissionGroupEditorModal({
               {!canEditPermissions ? <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge> : null}
             </div>
 
-            <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
+            <div className="space-y-2 rounded-sm bg-surface-low p-3">
               {permissionCatalog.length === 0 ? (
                 <div className="text-sm text-muted-foreground">{t({ ko: '표시할 페이지 권한이 아직 없어.', en: 'There are no page permissions to show yet.' })}</div>
               ) : (
@@ -182,7 +182,7 @@ export function SecurityPermissionGroupEditorModal({
                   return (
                     <label
                       key={permission.permissionKey}
-                      className="flex items-start justify-between gap-4 rounded-sm border border-border/60 bg-background/40 px-3 py-3"
+                      className="flex items-start justify-between gap-4 rounded-sm bg-surface-lowest px-3 py-3"
                     >
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-foreground">
@@ -210,7 +210,7 @@ export function SecurityPermissionGroupEditorModal({
               </div>
 
               {canManageMembers ? (
-                <div className="grid gap-3 rounded-sm border border-border bg-surface-container p-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="grid gap-3 rounded-sm bg-surface-low p-3 md:grid-cols-[minmax(0,1fr)_auto]">
                   <Field label={t({ ko: '계정', en: 'Account' })}>
                     <Select
                       variant="settings"
@@ -240,7 +240,7 @@ export function SecurityPermissionGroupEditorModal({
                 </div>
               ) : null}
 
-              <div className="rounded-sm border border-border bg-surface-container p-3">
+              <div className="rounded-sm bg-surface-low p-3">
                 <SecurityAccountManagementList
                   accounts={memberAccounts}
                   availableGroups={availableGroups}
@@ -273,7 +273,7 @@ export function SecurityPermissionGroupEditorModal({
             </section>
           ) : null}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
             <div>
               {canDelete && group ? (
                 <Button type="button" variant="destructive" onClick={() => onDelete(group.id)} disabled={isBusy}>

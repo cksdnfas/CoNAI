@@ -108,7 +108,7 @@ export function AutoTestCard({
       {autoTestMedia ? (
         <div className="pt-2">
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="overflow-hidden rounded-sm border border-border/70 bg-surface-low/45">
+            <div className="overflow-hidden rounded-sm bg-surface-lowest">
               {autoTestMedia.fileType === 'video' && autoTestMedia.imageUrl ? (
                 <EnhancedVideoPlayer renderUrl={autoTestMedia.imageUrl} preload="metadata" className="aspect-square w-full" />
               ) : autoTestMedia.thumbnailUrl || autoTestMedia.imageUrl ? (
@@ -156,7 +156,7 @@ export function AutoTestCard({
 
       {extractedPromptCards.length > 0 ? (
         <Inset>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</div>
+          <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</div>
           <div className="mt-3">
             <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
           </div>

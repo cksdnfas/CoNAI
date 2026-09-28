@@ -56,7 +56,7 @@ export function SecurityAccountFormCard({
       variant="settings"
       heading={!hasCredentials ? t({ ko: '관리자 계정', en: 'Admin account' }) : t({ ko: '관리자 계정 변경', en: 'Change admin account' })}
       actions={
-        <div className="rounded-sm border border-border/70 bg-surface-low/45 p-2 text-primary">
+        <div className="rounded-sm bg-primary/10 p-2 text-primary">
           {hasCredentials ? <KeyRound className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
         </div>
       }

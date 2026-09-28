@@ -112,12 +112,12 @@ export function KaloscopeSettingsCard({
         )}
 
         <div className="flex flex-wrap gap-2 text-xs md:col-span-2">
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-foreground">{t({ ko: '의존성', en: 'Dependencies' })} {formatKaloscopeDependencyLabel(kaloscopeStatus, t)}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '분석 프로세스', en: 'Analyzer process' })} {kaloscopeStatus?.isRunning ? t({ ko: '실행 중', en: 'running' }) : t({ ko: '꺼짐', en: 'stopped' })}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '모델 메모리 적재', en: 'Model in memory' })} {kaloscopeStatus?.modelLoaded ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '모델 파일', en: 'Model files' })} {kaloscopeStatus?.modelCached ? t({ ko: '받아 둠', en: 'downloaded' }) : t({ ko: '없음 (첫 실행 때 받음)', en: 'not yet (downloaded on first run)' })}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '모델', en: 'Model' })} {kaloscopeStatus?.currentModel ?? '—'}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '디바이스', en: 'Device' })} {kaloscopeStatus?.currentDevice ?? '—'}</span>
+          <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-foreground">{t({ ko: '의존성', en: 'Dependencies' })} {formatKaloscopeDependencyLabel(kaloscopeStatus, t)}</span>
+          <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '분석 프로세스', en: 'Analyzer process' })} {kaloscopeStatus?.isRunning ? t({ ko: '실행 중', en: 'running' }) : t({ ko: '꺼짐', en: 'stopped' })}</span>
+          <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '모델 메모리 적재', en: 'Model in memory' })} {kaloscopeStatus?.modelLoaded ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })}</span>
+          <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '모델 파일', en: 'Model files' })} {kaloscopeStatus?.modelCached ? t({ ko: '받아 둠', en: 'downloaded' }) : t({ ko: '없음 (첫 실행 때 받음)', en: 'not yet (downloaded on first run)' })}</span>
+          <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '모델', en: 'Model' })} {kaloscopeStatus?.currentModel ?? '—'}</span>
+          <span className="rounded-sm bg-surface-lowest px-3 py-1.5 text-muted-foreground">{t({ ko: '디바이스', en: 'Device' })} {kaloscopeStatus?.currentDevice ?? '—'}</span>
         </div>
       </div>
     </Section>

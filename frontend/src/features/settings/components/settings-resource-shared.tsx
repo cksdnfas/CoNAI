@@ -98,12 +98,12 @@ export function SettingsStatusIcon({ checked = false, tone = 'muted', title }: S
   return (
     <span
       className={cn(
-        'inline-flex h-7 w-7 items-center justify-center rounded-sm border',
+        'inline-flex h-7 w-7 items-center justify-center rounded-sm',
         tone === 'danger'
-          ? 'border-destructive/35 bg-destructive/10 text-destructive'
+          ? 'bg-destructive-soft text-destructive-soft-foreground'
           : checked
-            ? 'border-primary/35 bg-primary/10 text-primary'
-            : 'border-border/70 bg-surface-low/60 text-muted-foreground',
+            ? 'bg-primary/12 text-primary'
+            : 'bg-foreground/5 text-muted-foreground',
       )}
       title={title}
       aria-label={title}
@@ -171,7 +171,7 @@ export function SettingsResourceTable({
           <div
             className={cn(
               stack.header,
-              'gap-3 border-b border-border/70 bg-surface-low/55 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground',
+              'gap-3 border-b border-outline-subtle px-4 py-2.5 text-2xs font-semibold uppercase tracking-overline text-muted-foreground',
               gridClassName,
             )}
           >
@@ -181,7 +181,7 @@ export function SettingsResourceTable({
               </div>
             ))}
           </div>
-          <div className="divide-y divide-border/60">{children}</div>
+          <div className="divide-y divide-outline-subtle">{children}</div>
         </div>
       </ResourceTableLayoutContext.Provider>
     )
@@ -192,7 +192,7 @@ export function SettingsResourceTable({
       <div className={cn(minWidthClassName, 'w-full')}>
         <div
           className={cn(
-            'grid border-b border-border/70 bg-surface-low/55 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground',
+            'grid border-b border-outline-subtle px-4 py-2.5 text-2xs font-semibold uppercase tracking-overline text-muted-foreground',
             gridClassName,
           )}
         >
@@ -202,7 +202,7 @@ export function SettingsResourceTable({
             </div>
           ))}
         </div>
-        <div className="divide-y divide-border/60">{children}</div>
+        <div className="divide-y divide-outline-subtle">{children}</div>
       </div>
     </div>
   )
@@ -223,8 +223,8 @@ export function SettingsSegmentedTable({
   size = 'xs',
 }: SettingsSegmentedTableProps) {
   return (
-    <div className={cn('overflow-hidden rounded-sm border border-border/85 bg-surface-container/30', className)}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/85 px-4 py-3">
+    <div className={cn('overflow-hidden rounded-sm bg-surface-lowest', className)}>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <SegmentedControl value={value} items={items} onChange={onChange} size={size} />
         {count || actions ? (
           <div className="flex items-center gap-2">

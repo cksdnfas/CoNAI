@@ -86,7 +86,7 @@ export function SecurityAccountManagementList({
             || searchableGroups.includes(normalizedQuery)
         }}
         renderItem={(account) => (
-          <div className="flex flex-col gap-2 rounded-sm border border-border/70 bg-surface-low/35 px-3 py-2.5 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-2 rounded-sm bg-surface-lowest px-3 py-2.5 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="min-w-0 truncate text-sm font-semibold text-foreground">{account.username}</div>

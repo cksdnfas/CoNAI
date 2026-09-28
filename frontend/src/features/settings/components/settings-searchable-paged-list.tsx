@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -102,9 +103,7 @@ export function SettingsSearchablePagedList<T>({
       </div>
 
       {pagedItems.length === 0 ? (
-        <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">
-          {emptyMessage}
-        </div>
+        <EmptyState size="compact" title={emptyMessage} />
       ) : (
         <div className={cn('space-y-2', listClassName)}>
           {pagedItems.map((item) => (
@@ -116,7 +115,7 @@ export function SettingsSearchablePagedList<T>({
       )}
 
       {totalPages > 1 ? (
-        <div className={cn('flex items-center justify-between gap-3 border-t border-border/70 pt-3 text-sm text-muted-foreground', paginationClassName)}>
+        <div className={cn('flex items-center justify-between gap-3 pt-3 text-sm text-muted-foreground', paginationClassName)}>
           <span>
             {t(
               { ko: '페이지 {page} / {totalPages} · {progress}', en: 'Page {page} / {totalPages} · {progress}' },

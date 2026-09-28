@@ -316,7 +316,7 @@ export function FoldersTab({
                     cells={[
                       <div className="min-w-0">
                         <div className="truncate font-medium text-foreground">{getScanLogFolderLabel(log)}</div>
-                        {log.folder_path ? <div className="truncate font-mono text-[11px] text-muted-foreground">{log.folder_path}</div> : null}
+                        {log.folder_path ? <div className="truncate font-mono text-2xs text-muted-foreground">{log.folder_path}</div> : null}
                       </div>,
                       <span className={`text-xs ${log.status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{getScanStatusLabel(log.status, t)}</span>,
                       <span className="font-medium text-foreground">{formatNumber(log.total_scanned ?? 0)}</span>,

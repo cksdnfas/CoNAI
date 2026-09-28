@@ -228,7 +228,7 @@ export function RelatedImageColumnSlider({
           variant="settings"
           onValueCommit={(nextValue) => onChange(Number.parseInt(nextValue || '1', 10))}
         />
-        <div className="flex justify-between text-[11px] text-muted-foreground">
+        <div className="flex justify-between text-2xs text-muted-foreground">
           <span>1</span>
           <span>6</span>
         </div>
@@ -272,7 +272,7 @@ export function UploadedFontCard({
   const hasUploadedFont = Boolean(url.trim())
 
   return (
-    <div className="rounded-sm border border-border/70 bg-surface-lowest px-3 py-3">
+    <div className="rounded-sm bg-surface-lowest px-3 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-semibold text-foreground">{label}</div>
         <div className="flex flex-wrap gap-2">
@@ -300,7 +300,7 @@ export function UploadedFontCard({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span
           className={cn(
-            'rounded-full px-2 py-1 text-[11px] font-semibold',
+            'rounded-sm px-2 py-1 text-2xs font-semibold',
             hasUploadedFont ? 'bg-primary/12 text-primary' : 'bg-surface-high text-muted-foreground',
           )}
         >
@@ -308,7 +308,7 @@ export function UploadedFontCard({
         </span>
         <span className="min-w-0 break-all text-xs text-foreground">{displayName || t({ ko: '파일 없음', en: 'No file' })}</span>
       </div>
-      {hasUploadedFont ? <div className="mt-2 break-all text-[11px] text-muted-foreground">{url}</div> : null}
+      {hasUploadedFont ? <div className="mt-2 break-all text-2xs text-muted-foreground">{url}</div> : null}
     </div>
   )
 }
@@ -333,7 +333,7 @@ export function AppearanceColorControl({
         type="color"
         value={colorValue}
         onChange={(event) => onChangeColor(event.target.value)}
-        className="h-10 w-16 rounded-sm border border-border bg-surface-lowest p-1"
+        className="h-10 w-16 cursor-pointer rounded-sm border border-outline-input bg-surface-lowest p-1"
       />
       <Input variant="settings" type="text" value={textValue} onChange={(event) => onChangeText(event.target.value)} placeholder={placeholder} />
     </div>

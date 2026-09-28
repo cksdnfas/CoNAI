@@ -51,7 +51,7 @@ export function SecurityPermissionGroupListCard({
           {groups.map((group) => (
             <div
               key={group.id}
-              className="flex flex-col gap-2 rounded-sm border border-border/70 bg-surface-low/35 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-2 rounded-sm bg-surface-lowest px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0 flex flex-1 flex-wrap items-center gap-2">
                 <Badge

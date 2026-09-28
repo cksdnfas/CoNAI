@@ -51,7 +51,7 @@ export function SecurityGroupColorEditorModal({
           const colorValue = /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(colorText) ? colorText : defaultColor
 
           return (
-            <div key={group.groupKey} className="rounded-sm border border-border bg-surface-container p-4">
+            <div key={group.groupKey} className="rounded-sm bg-surface-low p-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Badge className="border-0 normal-case tracking-normal" style={getSecurityGroupBadgeStyle(colorValue)}>

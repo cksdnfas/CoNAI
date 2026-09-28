@@ -4,6 +4,8 @@ import type { RatingTierRecord } from '@/features/search/search-types'
 import type { RatingWeightsRecord } from '@/lib/api-settings'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
+import { Text } from '@/components/ui/text'
+import { LoadingState } from '@/components/ui/loading-state'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
@@ -73,7 +75,7 @@ export function RatingWeightSettingsCard({
   return (
     <Section variant="settings" heading={heading} actions={actions}>
       {validationMessages.length > 0 ? (
-        <div className="rounded-sm border border-[#ffb4ab]/40 bg-[#93000a]/10 px-3 py-2 text-sm text-[#ffb4ab]">
+        <div className="rounded-sm bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground">
           <div className="font-medium">{t({ ko: '저장 전에 확인해줘', en: 'Check before saving' })}</div>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
             {validationMessages.map((message) => (
@@ -148,7 +150,7 @@ export function RatingWeightSettingsCard({
             <div className="grid gap-3 md:grid-cols-2">
               <StatTile label={t({ ko: '예상 총점', en: 'Estimated total' })} value={previewResult ? formatNumber(previewResult.score, { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—'} valueClassName="text-lg" />
               <Inset className="space-y-2 px-3 py-3">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '예상 등급', en: 'Estimated tier' })}</div>
+                <Text as="div" variant="overline">{t({ ko: '예상 등급', en: 'Estimated tier' })}</Text>
                 <div className="flex flex-wrap items-center gap-2">
                   <span
                     className="inline-flex items-center rounded-full border px-2.5 py-1 text-sm font-semibold"
@@ -173,9 +175,7 @@ export function RatingWeightSettingsCard({
           </Inset>
         </>
       ) : (
-        <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">
-          {t({ ko: '평가 가중치를 불러오는 중…', en: 'Loading rating weights…' })}
-        </div>
+        <LoadingState label={t({ ko: '평가 가중치를 불러오는 중…', en: 'Loading rating weights…' })} />
       )}
     </Section>
   )

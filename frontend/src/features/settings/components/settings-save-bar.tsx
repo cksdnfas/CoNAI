@@ -40,21 +40,22 @@ export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, on
 
   return (
     <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-30" role="region" aria-label={t({ ko: '설정 저장', en: 'Save settings' })}>
-      <div className="theme-floating-panel flex flex-col gap-3 rounded-sm bg-surface-high px-4 py-3 shadow-elevation-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="theme-floating-panel flex flex-col gap-3 rounded-sm bg-surface-high px-4 py-3 shadow-elevation-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1" aria-live="polite">
           <div className="text-sm font-semibold text-foreground">
             {t({ ko: '변경 {count}건', en: '{count} unsaved changes' }, { count: formatNumber(dirtySections.length) })}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {dirtySections.map((section) => (
-              <button
+              <Button
                 key={section.id}
                 type="button"
-                className="rounded-full bg-surface-highest px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
+                size="xs"
+                variant="subtle"
                 onClick={() => onOpenTab(section.tab)}
               >
                 {section.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>

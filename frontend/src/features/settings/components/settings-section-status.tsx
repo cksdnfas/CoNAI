@@ -11,7 +11,7 @@ export function InstantApplyHint({ className }: { className?: string }) {
     <Tip content={t({ ko: '여기서 바꾼 건 저장 버튼 없이 바로 반영돼.', en: 'Changes here take effect right away, without the save bar.' })}>
       <span
         tabIndex={0}
-        className={cn('inline-flex items-center gap-1 rounded-full bg-surface-high px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40', className)}
+        className={cn('inline-flex items-center gap-1 rounded-sm bg-surface-high px-2 py-0.5 text-2xs font-medium whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40', className)}
       >
         <Zap className="h-3 w-3" />
         {t({ ko: '즉시 적용', en: 'Applies instantly' })}
@@ -29,7 +29,7 @@ export function SectionDirtyBadge({ dirty }: { dirty: boolean }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-primary">
+    <span className="inline-flex items-center gap-1 rounded-sm bg-primary/14 px-2 py-0.5 text-2xs font-medium whitespace-nowrap text-primary">
       <PencilLine className="h-3 w-3" />
       {t({ ko: '변경됨', en: 'Edited' })}
     </span>

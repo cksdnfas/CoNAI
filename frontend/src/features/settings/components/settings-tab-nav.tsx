@@ -1,7 +1,7 @@
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
-import { getNavigationItemClassName } from '@/components/common/navigation-item'
+import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import { type TranslationDictionary, useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import { SETTINGS_TAB_ITEMS, type SettingsTab, type SettingsTabGroup } from '../settings-tabs'
 
 interface SettingsTabNavProps {
@@ -44,24 +44,20 @@ export function SettingsTabNav({ activeTab, onChange }: SettingsTabNavProps) {
 
           return (
             <div key={group} className="space-y-1.5">
-              <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <Text as="div" variant="overline" className="px-3 font-semibold">
                 {t(SETTINGS_TAB_GROUP_LABELS[group])}
-              </div>
+              </Text>
               {items.map((item) => (
-                <button
+                <Button
                   key={item.value}
                   type="button"
+                  variant="nav"
+                  data-active={activeTab === item.value}
+                  aria-current={activeTab === item.value ? 'page' : undefined}
                   onClick={() => onChange(item.value)}
-                  className={cn(
-                    getNavigationItemClassName({
-                      active: activeTab === item.value,
-                      className: 'py-2.5 text-sm font-semibold',
-                    }),
-                    'rounded-sm',
-                  )}
                 >
                   {t(SETTINGS_TAB_LABELS[item.value])}
-                </button>
+                </Button>
               ))}
             </div>
           )

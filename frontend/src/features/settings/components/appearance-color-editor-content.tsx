@@ -1,4 +1,5 @@
-import { cn } from '@/lib/utils'
+import type { ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
 import { APPEARANCE_PRESETS, DEFAULT_APPEARANCE_SETTINGS, SURFACE_PRESETS, resolveCustomSurfaceToneColors } from '@/lib/appearance'
 import type { AppearanceSettings } from '@conai/shared'
 import {
@@ -10,6 +11,22 @@ import {
 } from './appearance-tab-editor-shared'
 import { Field } from '@/components/ui/field'
 import { useI18n } from '@/i18n'
+
+/** One selectable preset tile: tonal tray, primary tint + ring when chosen. */
+function PresetOptionButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <Button
+      type="button"
+      variant="nav"
+      data-active={active}
+      aria-pressed={active}
+      onClick={onClick}
+      className="block h-auto bg-surface-lowest px-4 py-4 data-[active=true]:ring-1 data-[active=true]:ring-primary/45"
+    >
+      {children}
+    </Button>
+  )
+}
 
 /** Render the color-focused appearance controls for presets and custom palettes. */
 export function AppearanceColorEditorContent({
@@ -29,16 +46,10 @@ export function AppearanceColorEditorContent({
             const isActive = appearanceDraft.accentPreset === presetKey
 
             return (
-              <button
+              <PresetOptionButton
                 key={presetKey}
-                type="button"
+                active={isActive}
                 onClick={() => onPatchAppearance({ accentPreset: presetKey as AppearanceSettings['accentPreset'] })}
-                className={cn(
-                  'rounded-sm border px-4 py-4 text-left transition-colors',
-                  isActive
-                    ? 'border-primary bg-surface-high text-foreground'
-                    : 'border-border bg-surface-low text-muted-foreground hover:bg-surface-high',
-                )}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold text-foreground">{getAccentPresetLabel(presetKey as AppearanceSettings['accentPreset'], t)}</div>
@@ -47,19 +58,13 @@ export function AppearanceColorEditorContent({
                     <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: preset.secondary }} />
                   </div>
                 </div>
-              </button>
+              </PresetOptionButton>
             )
           })}
 
-          <button
-            type="button"
+          <PresetOptionButton
+            active={appearanceDraft.accentPreset === 'custom'}
             onClick={() => onPatchAppearance({ accentPreset: 'custom' })}
-            className={cn(
-              'rounded-sm border px-4 py-4 text-left transition-colors',
-              appearanceDraft.accentPreset === 'custom'
-                ? 'border-primary bg-surface-high text-foreground'
-                : 'border-border bg-surface-low text-muted-foreground hover:bg-surface-high',
-            )}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-foreground">{getAccentPresetLabel('custom', t)}</div>
@@ -68,7 +73,7 @@ export function AppearanceColorEditorContent({
                 <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSecondaryColor }} />
               </div>
             </div>
-          </button>
+          </PresetOptionButton>
         </div>
 
         {appearanceDraft.accentPreset === 'custom' ? (
@@ -104,16 +109,10 @@ export function AppearanceColorEditorContent({
             const isActive = appearanceDraft.surfacePreset === presetKey
 
             return (
-              <button
+              <PresetOptionButton
                 key={presetKey}
-                type="button"
+                active={isActive}
                 onClick={() => onPatchAppearance({ surfacePreset: presetKey as AppearanceSettings['surfacePreset'] })}
-                className={cn(
-                  'rounded-sm border px-4 py-4 text-left transition-colors',
-                  isActive
-                    ? 'border-primary bg-surface-high text-foreground'
-                    : 'border-border bg-surface-low text-muted-foreground hover:bg-surface-high',
-                )}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-semibold text-foreground">{getSurfacePresetLabel(presetKey as AppearanceSettings['surfacePreset'], t)}</div>
@@ -123,19 +122,13 @@ export function AppearanceColorEditorContent({
                     <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: palette.surfaceHigh }} />
                   </div>
                 </div>
-              </button>
+              </PresetOptionButton>
             )
           })}
 
-          <button
-            type="button"
+          <PresetOptionButton
+            active={appearanceDraft.surfacePreset === 'custom'}
             onClick={() => onPatchAppearance({ surfacePreset: 'custom' })}
-            className={cn(
-              'rounded-sm border px-4 py-4 text-left transition-colors',
-              appearanceDraft.surfacePreset === 'custom'
-                ? 'border-primary bg-surface-high text-foreground'
-                : 'border-border bg-surface-low text-muted-foreground hover:bg-surface-high',
-            )}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-foreground">{getSurfacePresetLabel('custom', t)}</div>
@@ -145,7 +138,7 @@ export function AppearanceColorEditorContent({
                 <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSurfaceHighColor }} />
               </div>
             </div>
-          </button>
+          </PresetOptionButton>
         </div>
 
         {appearanceDraft.surfacePreset === 'custom' ? (
