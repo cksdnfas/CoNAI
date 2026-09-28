@@ -4,6 +4,7 @@ import { RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
@@ -264,14 +265,14 @@ export function WorkflowReservationsPanel() {
   }
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-6">
       <Section
         variant="settings"
         heading={t({ ko: '예약작업', en: 'Reservation jobs' })}
         actions={(
-          <Button type="button" size="icon-sm" variant="secondary" onClick={() => void handleRefresh()} title={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })} aria-label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          <IconButton size="icon-sm" variant="secondary" onClick={() => void handleRefresh()} label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
+            <RefreshCw />
+          </IconButton>
         )}
       >
         {reservationsQuery.isError ? (
@@ -359,6 +360,7 @@ export function WorkflowReservationsPanel() {
             </Button>
             <Button
               size="sm"
+              variant="destructive"
               onClick={() => void handleCleanupSelectedReservations()}
               disabled={isCleaningReservations || deletableReservationExecutions.length === 0}
               data-no-select-drag="true"

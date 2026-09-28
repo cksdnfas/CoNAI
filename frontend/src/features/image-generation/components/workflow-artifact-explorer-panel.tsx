@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react'
-import { createPortal } from 'react-dom'
+import { useMemo, useState, type MouseEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, ImageIcon, RefreshCw, X } from 'lucide-react'
+import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, ImageIcon, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Heading } from '@/components/ui/heading'
+import { IconButton } from '@/components/ui/icon-button'
+import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import type { WorkflowArtifactEntry } from '@/lib/api-image-generation-types'
 import { getGenerationWorkflowArtifacts } from '@/lib/api-image-generation-workflows'
@@ -57,23 +60,23 @@ function isTextPreviewEntry(entry: WorkflowArtifactEntry) {
 
 function ArtifactFileIcon({ entry }: { entry: WorkflowArtifactEntry }) {
   const previewKind = getPreviewKind(entry)
-  if (previewKind === 'image') return <ImageIcon className="h-9 w-9 text-sky-300" />
-  if (previewKind === 'video') return <FileVideo className="h-9 w-9 text-purple-300" />
-  if (previewKind === 'audio') return <FileAudio className="h-9 w-9 text-emerald-300" />
-  if (previewKind === 'text') return <FileText className="h-9 w-9 text-amber-200" />
+  if (previewKind === 'image') return <ImageIcon className="h-9 w-9 text-info" />
+  if (previewKind === 'video') return <FileVideo className="h-9 w-9 text-secondary" />
+  if (previewKind === 'audio') return <FileAudio className="h-9 w-9 text-success" />
+  if (previewKind === 'text') return <FileText className="h-9 w-9 text-warning" />
   return <File className="h-9 w-9 text-muted-foreground" />
 }
 
 function FolderThumbnail({ entry }: { entry: WorkflowArtifactEntry }) {
   return (
-    <div className="relative flex h-28 w-full items-center justify-center overflow-hidden rounded-md border border-border/70 bg-surface-container shadow-sm">
+    <div className="relative flex h-28 w-full items-center justify-center overflow-hidden rounded-sm bg-surface-container">
       {entry.thumbnailUrl ? (
-        <img src={entry.thumbnailUrl} alt="" className="h-full w-full rounded-md object-cover" loading="lazy" />
+        <img src={entry.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
       ) : (
         <ImageIcon className="h-9 w-9 text-muted-foreground/50" />
       )}
-      <div className="absolute bottom-2 right-2 rounded-md border border-yellow-100/50 bg-yellow-400/90 p-1.5 shadow-lg backdrop-blur-sm">
-        <Folder className="h-5 w-5 text-yellow-950" />
+      <div className="absolute right-2 bottom-2 rounded-sm bg-warning-soft p-1.5 text-warning-soft-foreground shadow-elevation-1">
+        <Folder className="h-5 w-5" />
       </div>
     </div>
   )
@@ -83,9 +86,9 @@ function FileThumbnail({ entry }: { entry: WorkflowArtifactEntry }) {
   const previewKind = getPreviewKind(entry)
 
   return (
-    <div className="relative flex h-28 w-full items-center justify-center overflow-hidden rounded-md border border-border/70 bg-surface-container shadow-sm">
+    <div className="relative flex h-28 w-full items-center justify-center overflow-hidden rounded-sm bg-surface-container">
       {previewKind === 'image' && entry.fileUrl ? (
-        <img src={entry.fileUrl} alt={entry.name} className="h-full w-full rounded-md object-cover" loading="lazy" />
+        <img src={entry.fileUrl} alt={entry.name} className="h-full w-full object-cover" loading="lazy" />
       ) : (
         <ArtifactFileIcon entry={entry} />
       )}
@@ -136,25 +139,26 @@ function ArtifactCard({
 
   return (
     <div
-      className="group relative rounded-md p-2 transition-colors hover:bg-surface-high"
+      className="group relative"
       onMouseEnter={updateHoverPreview}
       onMouseMove={updateHoverPreview}
       onMouseLeave={() => onHoverPreviewChange(null)}
     >
-      {isDirectory ? (
-        <button type="button" className="block w-full text-left" onDoubleClick={() => onOpenDirectory(entry.relativePath)} onClick={() => onOpenDirectory(entry.relativePath)}>
+      {isDirectory || entry.fileUrl ? (
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto w-full flex-col items-stretch gap-0 p-2 font-normal whitespace-normal"
+          onClick={() => (isDirectory ? onOpenDirectory(entry.relativePath) : onOpenFile(entry))}
+        >
           {cardBody}
-        </button>
-      ) : entry.fileUrl ? (
-        <button type="button" className="block w-full text-left" onClick={() => onOpenFile(entry)}>
-          {cardBody}
-        </button>
+        </Button>
       ) : (
-        cardBody
+        <div className="p-2">{cardBody}</div>
       )}
 
       {entry.downloadUrl ? (
-        <Button asChild size="icon-xs" variant="secondary" className="absolute right-3 top-3 opacity-0 shadow-sm transition-opacity group-hover:opacity-100" aria-label={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: entry.name })}>
+        <Button asChild size="icon-xs" variant="secondary" className="absolute top-3 right-3 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" aria-label={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: entry.name })}>
           <a href={entry.downloadUrl} download={isDirectory ? `${entry.name}.zip` : entry.name} onClick={(event) => event.stopPropagation()}>
             <Download className="h-3 w-3" />
           </a>
@@ -195,21 +199,6 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
       }
     : undefined
 
-  useEffect(() => {
-    if (!artifactModal) {
-      return
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setArtifactModal(null)
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [artifactModal])
-
   const handleOpenFile = async (entry: WorkflowArtifactEntry) => {
     const previewKind = getPreviewKind(entry)
     if (previewKind === 'image') {
@@ -243,30 +232,37 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
   }
 
   return (
-    <section className={cn('rounded-sm border border-border bg-surface-low', splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+    <section data-surface="raised" className={cn('ui-tone-plinth rounded-sm', splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3 pb-1">
         <div className="flex min-w-0 items-center gap-2">
           {onBack ? (
-            <Button type="button" size="icon-sm" variant="ghost" onClick={onBack} aria-label={t('image-generation.components.workflow.artifact.explorer.panel.back.to.workflow.list')}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+            <IconButton size="icon-sm" variant="ghost" onClick={onBack} label={t('image-generation.components.workflow.artifact.explorer.panel.back.to.workflow.list')}>
+              <ArrowLeft />
+            </IconButton>
           ) : null}
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-foreground">{t('image-generation.components.workflow.artifact.explorer.panel.explorer.view')}</h2>
-            <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            <Heading level={3}>{t('image-generation.components.workflow.artifact.explorer.panel.explorer.view')}</Heading>
+            <nav className="flex min-w-0 flex-wrap items-center gap-0.5 text-xs text-muted-foreground" aria-label={t({ ko: '경로', en: 'Path' })}>
               {breadcrumbs.map((crumb, index) => (
-                <span key={crumb.path || 'root'} className="inline-flex items-center gap-1">
-                  {index > 0 ? <span>/</span> : null}
-                  <button type="button" className="max-w-[12rem] truncate hover:text-foreground" onClick={() => setCurrentPath(crumb.path)}>
-                    {crumb.label}
-                  </button>
+                <span key={crumb.path || 'root'} className="inline-flex min-w-0 items-center gap-0.5">
+                  {index > 0 ? <span aria-hidden>/</span> : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="max-w-[12rem] px-1 font-normal"
+                    aria-current={index === breadcrumbs.length - 1 ? 'page' : undefined}
+                    onClick={() => setCurrentPath(crumb.path)}
+                  >
+                    <span className="truncate">{crumb.label}</span>
+                  </Button>
                 </span>
               ))}
-            </div>
+            </nav>
           </div>
         </div>
         <Button type="button" size="sm" variant="secondary" onClick={() => void artifactsQuery.refetch()}>
-          <RefreshCw className="mr-2 h-4 w-4" />
+          <RefreshCw />
           {t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
         </Button>
       </div>
@@ -282,10 +278,10 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
 
       <div className={cn('overflow-auto p-4', splitPaneScroll && 'min-h-0 flex-1')}>
         {currentPath ? (
-          <button type="button" className="mb-4 inline-flex items-center gap-2 rounded-sm border border-border bg-surface-container px-3 py-2 text-sm text-foreground hover:bg-surface-high" onClick={() => setCurrentPath(getParentPath(currentPath))}>
-            <Folder className="h-4 w-4 text-yellow-300" />
+          <Button type="button" variant="secondary" size="sm" className="mb-4" onClick={() => setCurrentPath(getParentPath(currentPath))}>
+            <Folder className="text-warning" />
             ..
-          </button>
+          </Button>
         ) : null}
 
         {entries.length > 0 ? (
@@ -295,13 +291,13 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
             ))}
           </div>
         ) : !artifactsQuery.isLoading ? (
-          <div className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">{t('image-generation.components.workflow.artifact.explorer.panel.no.saved.results.yet')}</div>
+          <EmptyState icon={Folder} title={t('image-generation.components.workflow.artifact.explorer.panel.no.saved.results.yet')} />
         ) : null}
       </div>
 
       {hoverPreview?.entry.fileUrl && hoverPreviewStyle ? (
         <div
-          className="pointer-events-none fixed z-[1000] w-72 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-2xl ring-1 ring-black/20"
+          className="pointer-events-none fixed z-popover w-72 rounded-md bg-surface-high p-2 text-foreground shadow-elevation-2"
           style={hoverPreviewStyle}
         >
           <img src={hoverPreview.entry.fileUrl} alt={hoverPreview.entry.name} className="max-h-72 w-full rounded-sm object-contain" />
@@ -309,21 +305,20 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
         </div>
       ) : null}
 
-      {artifactModal ? createPortal(
-        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/78 p-4 backdrop-blur-sm" onClick={() => setArtifactModal(null)}>
-          <div className={cn('relative max-h-[92vh] max-w-[92vw] overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-2xl', artifactModal.kind === 'text' ? 'w-[min(860px,92vw)]' : '')} onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-              <div className="min-w-0 truncate text-sm font-medium">{artifactModal.entry.name}</div>
-              <Button type="button" size="icon-sm" variant="ghost" onClick={() => setArtifactModal(null)} aria-label={t('image-generation.components.workflow.artifact.explorer.panel.close.result.preview')}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+      <Modal
+        open={artifactModal !== null}
+        onClose={() => setArtifactModal(null)}
+        title={<span className="block truncate">{artifactModal?.entry.name}</span>}
+        widthClassName={artifactModal?.kind === 'text' ? 'max-w-[860px]' : 'max-w-[min(92vw,1400px)]'}
+      >
+        {artifactModal ? (
+          <>
             {artifactModal.kind === 'image' ? (
-              <div className="flex max-h-[calc(92vh-3.5rem)] items-center justify-center bg-black/30 p-3">
-                <img src={artifactModal.entry.fileUrl} alt={artifactModal.entry.name} className="max-h-[calc(92vh-5rem)] max-w-[88vw] object-contain" />
+              <div className="flex items-center justify-center rounded-sm bg-surface-lowest p-3">
+                <img src={artifactModal.entry.fileUrl} alt={artifactModal.entry.name} className="max-h-[calc(92vh-8rem)] max-w-full object-contain" />
               </div>
             ) : (
-              <div className="max-h-[calc(92vh-3.5rem)] overflow-auto bg-background p-4">
+              <div className="overflow-auto rounded-sm bg-surface-lowest p-4">
                 {artifactModal.isLoading ? (
                   <div className="py-12 text-center text-sm text-muted-foreground">{t('image-generation.components.workflow.artifact.explorer.panel.loading.text')}</div>
                 ) : artifactModal.error ? (
@@ -336,10 +331,9 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
                 )}
               </div>
             )}
-          </div>
-        </div>,
-        document.body,
-      ) : null}
+          </>
+        ) : null}
+      </Modal>
     </section>
   )
 }

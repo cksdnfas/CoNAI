@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '@/features/module-graph/module-graph-shared'
 import { getErrorMessage } from '../image-generation-shared'
+import { STATUS_BADGE_CLASS } from './generation-status-tone'
 import {
   formatReservationTimestamp,
   getActiveWorkflowReservationScheduleCount,
@@ -41,9 +43,9 @@ export function GenerationQueueReservationsTab({
 
   return (
     <>
-      <div className="space-y-3 border-y border-border/70 px-3 py-3 sm:px-4">
+      <div className="space-y-3 px-3 py-3 sm:px-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t('image-generation.components.generation.queue.header.widget.summary')}</div>
+          <Text as="div" variant="overline" className="font-semibold">{t('image-generation.components.generation.queue.header.widget.summary')}</Text>
           <Badge variant={schedules.length > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">{t({ ko: '예약작업 · {count}', en: 'Reservations · {count}' }, { count: formatNumber(schedules.length) })}</Badge>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -71,11 +73,11 @@ export function GenerationQueueReservationsTab({
               const runAtLabel = getReservationRunAtLabel(schedule, t, (value) => formatReservationTimestamp(value, locale))
               const stopReasonLabel = getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)
               return (
-                <div key={schedule.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
+                <div key={schedule.id} className="ui-tone-plinth rounded-sm px-3 py-3">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
-                      <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
+                      <Text as="div" variant="label" className="truncate">{schedule.name}</Text>
+                      <Badge variant={getReservationStatusVariant(schedule.status)} className={schedule.status === 'active' ? STATUS_BADGE_CLASS.success : undefined}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
                       <Badge variant="outline">{getReservationTypeLabel(schedule, t, formatNumber)}</Badge>
                     </div>
                     <div className="text-2xs text-muted-foreground">
@@ -87,7 +89,7 @@ export function GenerationQueueReservationsTab({
                       {lastEnqueuedAt ? <span>{t('image-generation.components.generation.queue.header.widget.last.queued.value', { lastEnqueuedAt })}</span> : null}
                     </div>
                     {stopReasonLabel ? (
-                      <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2 text-2xs text-muted-foreground">
+                      <div className="rounded-sm bg-foreground/4 px-2.5 py-2 text-2xs text-muted-foreground">
                         {stopReasonLabel}
                       </div>
                     ) : null}

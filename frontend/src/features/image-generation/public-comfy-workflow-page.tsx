@@ -7,7 +7,10 @@ import { ArrowLeft, RotateCcw } from 'lucide-react'
 import { BottomDrawerNotice, BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
+import { LoadingState } from '@/components/ui/loading-state'
+import { Text } from '@/components/ui/text'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -281,7 +284,7 @@ export function PublicComfyWorkflowPage() {
   }, [isControllerOpen, isWideLayout])
 
   if (authStatusQuery.isLoading) {
-    return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
+    return <div className="ui-tone-plinth min-h-[40vh] animate-pulse rounded-sm" />
   }
 
   if (authStatusQuery.data?.hasCredentials === false) {
@@ -339,8 +342,8 @@ export function PublicComfyWorkflowPage() {
           </Button>
 
           <div>
-            <div className="text-base font-semibold text-foreground">{workflow.name}</div>
-            {workflow.description ? <div className="mt-1 text-sm text-muted-foreground">{workflow.description}</div> : null}
+            <Heading level={3} as="div">{workflow.name}</Heading>
+            {workflow.description ? <Text variant="muted" className="mt-1">{workflow.description}</Text> : null}
           </div>
         </div>
 
@@ -355,7 +358,7 @@ export function PublicComfyWorkflowPage() {
 
   const drawerControllerHeaderContent = workflow ? (
     <div className="flex items-center gap-3">
-      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflow.name}</div>
+      <Heading level={3} as="div" className="min-w-0 flex-1 truncate">{workflow.name}</Heading>
       <IconButton
         variant="ghost"
         size="icon-sm"
@@ -426,14 +429,14 @@ export function PublicComfyWorkflowPage() {
 
   const controllerPanel = workflow ? (
     isWideLayout ? (
-      <section className={cn(useWideSplitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-hidden' : 'space-y-3')}>
-        <div className="border-b border-border/70 pb-4">{desktopControllerHeaderContent}</div>
-        <div className={cn(useWideSplitPaneScroll ? 'min-h-0 flex-1 overflow-y-auto pr-2' : 'space-y-5')}>
-          <div className="space-y-5">{controllerBodyContent}</div>
+      <section className={cn(useWideSplitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6 overflow-hidden' : 'space-y-6')}>
+        <div className="shrink-0">{desktopControllerHeaderContent}</div>
+        <div className={cn(useWideSplitPaneScroll ? 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1' : undefined)}>
+          <div className="space-y-6">{controllerBodyContent}</div>
         </div>
       </section>
     ) : (
-      <div className="space-y-4 px-5 pb-5">{controllerBodyContent}</div>
+      <div className="space-y-6 px-5 pb-5">{controllerBodyContent}</div>
     )
   ) : null
 
@@ -461,7 +464,7 @@ export function PublicComfyWorkflowPage() {
         </Alert>
       ) : null}
 
-      {workflowQuery.isLoading ? <div className="text-sm text-muted-foreground">{t({ ko: '공용 워크플로우 불러오는 중…', en: 'Loading public workflow…' })}</div> : null}
+      {workflowQuery.isLoading ? <LoadingState variant="inline" label={t({ ko: '공용 워크플로우 불러오는 중…', en: 'Loading public workflow…' })} /> : null}
 
       {workflow ? (
         isWideLayout ? (
