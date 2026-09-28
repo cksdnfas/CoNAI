@@ -1,14 +1,17 @@
-import { useEffect, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { X } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 interface SnackbarProps {
-  open: boolean
-  message: string | null
+  message: string
   tone?: 'info' | 'error'
   onClose: () => void
   durationMs?: number
+  /** Changes whenever the same message is re-announced so the auto-close timer restarts. */
   nonce?: number
+  /** How many times this exact message arrived in a row. */
+  repeatCount?: number
 }
 
 const snackbarSurfaceStyleByTone: Record<NonNullable<SnackbarProps['tone']>, CSSProperties> = {
@@ -24,11 +27,13 @@ const snackbarSurfaceStyleByTone: Record<NonNullable<SnackbarProps['tone']>, CSS
   },
 }
 
-export function Snackbar({ open, message, tone = 'info', onClose, durationMs = 2800, nonce = 0 }: SnackbarProps) {
+/** Render one snackbar card; the provider owns stacking and positioning. Hovering pauses auto-close. */
+export function Snackbar({ message, tone = 'info', onClose, durationMs = 2800, nonce = 0, repeatCount = 1 }: SnackbarProps) {
   const { t } = useI18n()
+  const [isPaused, setIsPaused] = useState(false)
 
   useEffect(() => {
-    if (!open || !message) return
+    if (isPaused) return
 
     const timeoutId = window.setTimeout(() => {
       onClose()
@@ -37,31 +42,33 @@ export function Snackbar({ open, message, tone = 'info', onClose, durationMs = 2
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [durationMs, message, nonce, onClose, open])
+  }, [durationMs, isPaused, nonce, onClose])
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[7000] flex justify-end p-4 sm:p-6">
-      <div
-        className={cn(
-          'max-w-md min-w-[240px] rounded-sm border px-4 py-3 text-sm text-foreground backdrop-blur-sm transition-all duration-200',
-          open && message ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-2 opacity-0',
-        )}
-        style={snackbarSurfaceStyleByTone[tone]}
-        role="status"
-        aria-live={tone === 'error' ? 'assertive' : 'polite'}
-        aria-hidden={!open || !message}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 break-words">{message}</div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 text-xs text-muted-foreground transition hover:text-foreground"
-            aria-label={t({ ko: '닫기', en: 'Close' })}
-          >
-            {t({ ko: '닫기', en: 'Close' })}
-          </button>
+    <div
+      className="pointer-events-auto w-full max-w-md min-w-[240px] rounded-sm border px-4 py-3 text-sm text-foreground backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2 duration-200"
+      style={snackbarSurfaceStyleByTone[tone]}
+      role={tone === 'error' ? 'alert' : 'status'}
+      aria-live={tone === 'error' ? 'assertive' : 'polite'}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onFocus={() => setIsPaused(true)}
+      onBlur={() => setIsPaused(false)}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 break-words">
+          {message}
+          {repeatCount > 1 ? <span className="ml-2 text-xs font-semibold text-muted-foreground">×{repeatCount}</span> : null}
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className={cn('-mr-1 shrink-0 rounded-sm p-0.5 text-muted-foreground transition hover:text-foreground', 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35')}
+          aria-label={t({ ko: '닫기', en: 'Close' })}
+          title={t({ ko: '닫기', en: 'Close' })}
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   )

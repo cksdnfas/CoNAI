@@ -48,6 +48,7 @@ export function LoginPage() {
   const [guestPassword, setGuestPassword] = useState('')
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false)
   const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false)
+  const [loginFormNotice, setLoginFormNotice] = useState<{ tone: 'error' | 'info'; message: string } | null>(null)
 
   const nextPath = useMemo(() => {
     const params = new URLSearchParams(location.search)
@@ -78,8 +79,10 @@ export function LoginPage() {
       navigate(defaultPostLoginPath, { replace: true })
     },
     onError: (error) => {
-      setPassword('')
-      showSnackbar({ message: error instanceof Error ? error.message : t('loginPage.signInFailed'), tone: 'error' })
+      // Keep the password so a typo in the username (or a transient error) doesn't force retyping it.
+      const message = error instanceof Error ? error.message : t('loginPage.signInFailed')
+      setLoginFormNotice({ tone: 'error', message })
+      showSnackbar({ message, tone: 'error' })
     },
   })
 
@@ -108,6 +111,7 @@ export function LoginPage() {
         setIsGuestModalOpen(false)
         setUsername(error.username)
         setPassword('')
+        setLoginFormNotice({ tone: 'info', message: t('loginPage.guestAccountCreatedSignIn') })
         showSnackbar({ message: t('loginPage.guestAccountCreatedSignIn'), tone: 'error' })
         return
       }
@@ -165,15 +169,48 @@ export function LoginPage() {
                 className="space-y-4"
                 onSubmit={(event) => {
                   event.preventDefault()
-                  void loginMutation.mutateAsync({ nextUsername: username.trim(), nextPassword: password })
+                  setLoginFormNotice(null)
+                  loginMutation.mutate({ nextUsername: username.trim(), nextPassword: password })
                 }}
               >
                 <Field label={t({ ko: '아이디', en: 'Username' })}>
-                  <Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+                  <Input
+                    value={username}
+                    onChange={(event) => {
+                      setUsername(event.target.value)
+                      if (loginFormNotice?.tone === 'error') setLoginFormNotice(null)
+                    }}
+                    autoComplete="username"
+                    aria-invalid={loginFormNotice?.tone === 'error' || undefined}
+                    aria-describedby={loginFormNotice ? 'login-form-notice' : undefined}
+                  />
                 </Field>
                 <Field label={t({ ko: '비밀번호', en: 'Password' })}>
-                  <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value)
+                      if (loginFormNotice?.tone === 'error') setLoginFormNotice(null)
+                    }}
+                    autoComplete="current-password"
+                    aria-invalid={loginFormNotice?.tone === 'error' || undefined}
+                    aria-describedby={loginFormNotice ? 'login-form-notice' : undefined}
+                  />
                 </Field>
+                {loginFormNotice ? (
+                  <div
+                    id="login-form-notice"
+                    role={loginFormNotice.tone === 'error' ? 'alert' : 'status'}
+                    className={
+                      loginFormNotice.tone === 'error'
+                        ? 'rounded-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive'
+                        : 'rounded-sm border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-foreground'
+                    }
+                  >
+                    {loginFormNotice.message}
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   {canCreateGuestAccount ? (
                     <Button type="button" variant="outline" onClick={() => setIsGuestModalOpen(true)}>

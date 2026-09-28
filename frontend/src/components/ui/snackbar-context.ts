@@ -5,6 +5,7 @@ export type SnackbarTone = 'info' | 'error'
 export interface ShowSnackbarOptions {
   message: string
   tone?: SnackbarTone
+  /** Auto-close delay. Defaults to 2.8s for info; errors always stay at least 8s and can be closed by hand. */
   durationMs?: number
 }
 
