@@ -1,29 +1,15 @@
 import type { ReactNode } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Inset } from '@/components/ui/inset'
-import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { Select } from '@/components/ui/select'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { TYPED_FIELD_RANDOM_OPTION_VALUE, TypedFieldInput } from '@/features/shared-fields/typed-field-input'
 import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
-import { ImageAttachmentPickerButton } from './image-attachment-picker'
-import { TextSegmentSpreadsheetInput } from './text-segment-spreadsheet-input'
-import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
-import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { PowerLoraLoaderInput } from './power-lora-loader-input'
 import { MiniMaxH3DirectorDasiwaInput } from './minimax-h3-director-dasiwa-input'
 import { PathOptionTreeSelect } from './path-option-tree-select'
-import { useI18n, type TranslationInput } from '@/i18n'
-
-const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
-
-function getSelectOptionLabel(option: string, t: (input: TranslationInput) => string) {
-  return option === DROPDOWN_RANDOM_OPTION_VALUE ? t({ ko: '랜덤 선택', en: 'Random pick' }) : option
-}
+import { useI18n } from '@/i18n'
 
 function shouldUsePathTreeSelect(options: string[]) {
-  const pathLikeOptions = options.filter((option) => option !== DROPDOWN_RANDOM_OPTION_VALUE && /[\\/]/.test(option))
+  const pathLikeOptions = options.filter((option) => option !== TYPED_FIELD_RANDOM_OPTION_VALUE && /[\\/]/.test(option))
   return pathLikeOptions.length >= 2
 }
 
@@ -57,9 +43,6 @@ function isWorkflowNodeDraftValue(value: WorkflowFieldDraftValue): value is Reco
 /** Render a single marked-field editor for a ComfyUI workflow. */
 export function WorkflowFieldInput({ field, value, hideLabel = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, invalid = false, errorMessageId, onChange, onImageChange }: WorkflowFieldInputProps) {
   const { t } = useI18n()
-  const invalidProps = invalid
-    ? { 'aria-invalid': true as const, 'aria-describedby': errorMessageId }
-    : {}
   const fieldLabel = field.required ? `${field.label} *` : field.label
   const labelAccessory = field.description ? (
     <span
@@ -83,89 +66,13 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
     )
   }
 
-  if (field.type === 'textarea') {
-    return wrapField(
-      <TextSegmentSpreadsheetInput
-        tool="comfyui"
-        value={isWorkflowTextSegmentValue(value) ? value : ''}
-        placeholder={field.placeholder || ''}
-        invalid={invalid}
-        errorMessageId={errorMessageId}
-        onChange={onChange}
-      />,
-    )
-  }
+  const stringValue = typeof value === 'string' ? value : ''
+  const commit = (nextValue: unknown) => onChange(nextValue as WorkflowFieldDraftValue)
 
-  if (field.type === 'select') {
-    const options = field.options ?? []
-    const stringValue = typeof value === 'string' ? value : ''
-
-    if (shouldUsePathTreeSelect(options)) {
-      return wrapField(
-        <PathOptionTreeSelect
-          value={stringValue}
-          options={options}
-          modelPreviewFolder={field.model_preview_folder}
-          refreshLabel={t({ ko: 'ComfyUI 자동수집 새로고침', en: 'Refresh ComfyUI options' })}
-          isRefreshing={isRefreshingOptions}
-          onRefresh={onRefreshOptions}
-          onChange={onChange}
-        />,
-      )
-    }
-
-    return wrapField(
-      <Select value={stringValue} onChange={(event) => onChange(event.target.value)} {...invalidProps}>
-        <option value="" disabled hidden>{t({ ko: '선택', en: 'Select' })}</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {getSelectOptionLabel(option, t)}
-          </option>
-        ))}
-      </Select>,
-    )
-  }
-
-  if (field.type === 'image') {
-    const imageValue = isSelectedImageDraftValue(value) ? value : null
-    const isSimpleImageUpload = field.simple_upload_only === true
-
-    return wrapField(
-      <div className="space-y-3">
-        <ImageAttachmentPickerButton
-          label={imageValue ? t({ ko: '이미지 변경', en: 'Change image' }) : t({ ko: '이미지 선택', en: 'Choose image' })}
-          modalTitle={field.label}
-          allowSaveDialog={false}
-          uploadOnly={isSimpleImageUpload}
-          selectedImage={isSimpleImageUpload ? imageValue : null}
-          onRemove={isSimpleImageUpload ? () => void onImageChange() : undefined}
-          onSelect={(image) => void onImageChange(image)}
-        />
-        {imageValue && !isSimpleImageUpload ? (
-          <Inset className="space-y-2 p-3">
-            <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
-            <InlineMediaPreview
-              src={imageValue.dataUrl}
-              mimeType={imageValue.mimeType}
-              fileName={imageValue.fileName}
-              alt={field.label}
-              frameClassName="p-3"
-            />
-            <div className="flex justify-end">
-              <Button type="button" size="sm" variant="ghost" onClick={() => void onImageChange()}>
-                {t({ ko: '이미지 제거', en: 'Remove image' })}
-              </Button>
-            </div>
-          </Inset>
-        ) : null}
-      </div>,
-    )
-  }
-
-  if (field.type === 'node' && field.node_editor === 'power_lora_loader_rgthree') {
+  if (field.type === 'node' && (field.node_editor === 'power_lora_loader_rgthree' || field.node_editor === 'minimax_h3_director_dasiwa')) {
     const nodeValue: Record<string, unknown> = isWorkflowNodeDraftValue(value) ? value : {}
 
-    return wrapField(
+    return wrapField(field.node_editor === 'power_lora_loader_rgthree' ? (
       <PowerLoraLoaderInput
         field={field}
         value={nodeValue}
@@ -174,59 +81,57 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         onRefreshLoraOptions={onRefreshOptions}
         useValueFallback={false}
         onChange={onChange}
-      />,
-    )
-  }
-
-  if (field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa') {
-    const nodeValue: Record<string, unknown> = isWorkflowNodeDraftValue(value) ? value : {}
-
-    return wrapField(
+      />
+    ) : (
       <MiniMaxH3DirectorDasiwaInput
         value={nodeValue}
         visibleFields={field.node_visible_fields}
         hiddenControls={field.node_hidden_controls}
         numericBounds={field.node_numeric_bounds}
         onChange={onChange}
-      />,
-    )
+      />
+    ))
   }
 
-  if (field.type === 'text') {
+  if (field.type === 'select' && shouldUsePathTreeSelect(field.options ?? [])) {
     return wrapField(
-      <WildcardInlinePickerField
-        tool="comfyui"
-        value={typeof value === 'string' ? value : ''}
-        placeholder={field.placeholder || ''}
-        invalid={invalid}
-        errorMessageId={errorMessageId}
+      <PathOptionTreeSelect
+        value={stringValue}
+        options={field.options ?? []}
+        modelPreviewFolder={field.model_preview_folder}
+        refreshLabel={t({ ko: 'ComfyUI 자동수집 새로고침', en: 'Refresh ComfyUI options' })}
+        isRefreshing={isRefreshingOptions}
+        onRefresh={onRefreshOptions}
         onChange={onChange}
       />,
     )
   }
 
-  if (field.type === 'number') {
-    return wrapField(
-      <NumberStepperInput
-        min={field.min}
-        max={field.max}
-        step={field.step ?? 1}
-        allowEmpty={!field.required}
-        value={typeof value === 'string' ? value : ''}
-        placeholder={field.placeholder || ''}
-        onValueCommit={onChange}
-        {...invalidProps}
-      />,
-    )
-  }
+  const kind = field.type === 'textarea' || field.type === 'text'
+    ? 'prompt'
+    : field.type === 'select' || field.type === 'image' || field.type === 'number' ? field.type : 'text'
 
   return wrapField(
-    <Input
-      type="text"
-      value={typeof value === 'string' ? value : ''}
+    <TypedFieldInput
+      kind={kind}
+      value={kind === 'image' ? (isSelectedImageDraftValue(value) ? value : null) : field.type === 'textarea' ? (isWorkflowTextSegmentValue(value) ? value : '') : stringValue}
+      onChange={commit}
       placeholder={field.placeholder || ''}
-      onChange={(event) => onChange(event.target.value)}
-      {...invalidProps}
+      invalid={invalid}
+      errorMessageId={errorMessageId}
+      promptTool="comfyui"
+      promptLayout={field.type === 'textarea' ? 'segments' : 'single'}
+      options={field.options ?? []}
+      emptyOption="placeholder"
+      min={field.min}
+      max={field.max}
+      step={field.step ?? 1}
+      allowEmpty={!field.required}
+      numberFormat="string"
+      imageModalTitle={field.label}
+      imageUploadOnly={field.simple_upload_only === true}
+      imageRemovable
+      onImageChange={onImageChange}
     />,
   )
 }
