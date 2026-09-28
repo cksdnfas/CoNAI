@@ -10,7 +10,7 @@ interface NaiSelectedImageCardProps {
 export function NaiSelectedImageCard({ image, alt }: NaiSelectedImageCardProps) {
   return (
     <div className="space-y-2">
-      <div className="truncate text-xs text-muted-foreground">{image.fileName}</div>
+      {image.fileName ? <div className="truncate text-xs text-muted-foreground">{image.fileName}</div> : null}
       <InlineMediaPreview
         src={image.dataUrl}
         mimeType={image.mimeType}

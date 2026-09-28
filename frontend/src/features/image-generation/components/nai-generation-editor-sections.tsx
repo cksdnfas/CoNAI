@@ -28,9 +28,9 @@ import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { Section } from '@/components/ui/section'
 import { NaiControllerInsetBlock, NaiPromptSection } from './nai-generation-panel-sections'
-import { NaiReferencesSection } from './nai-references-section'
+import { NaiCharacterReferencesEditor } from './nai-assets/nai-character-references-editor'
+import { NaiVibesEditor } from './nai-assets/nai-vibes-editor'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
-import { NaiVibesSection } from './nai-vibes-section'
 import { PromptToggleField } from './prompt-toggle-field'
 
 /** Render the main editable NAI form sections while the parent panel handles data wiring and modals. */
@@ -322,39 +322,49 @@ export function NaiGenerationEditorSections({
         </Section>
       ) : null}
 
-      <NaiReferencesSection
+      <NaiCharacterReferencesEditor
         supportsCharacterReference={supportsCharacterReference}
         references={naiForm.characterReferences}
-        savedReferences={filteredSavedCharacterReferences}
-        savedReferenceSearch={savedCharacterReferenceSearch}
-        savedReferencesLoading={savedCharacterReferencesLoading}
-        onSavedReferenceSearchChange={setSavedCharacterReferenceSearch}
-        onAddReference={handleAddCharacterReference}
-        onRemoveReference={handleRemoveCharacterReference}
-        onReferenceImageChange={handleCharacterReferenceImageChange}
-        onReferenceFieldChange={handleCharacterReferenceFieldChange}
-        onOpenReferenceSaveModal={handleOpenCharacterReferenceSaveModal}
-        onLoadReferenceFromStore={handleLoadCharacterReferenceFromStore}
-        onEditReferenceFromStore={handleOpenEditCharacterReferenceFromStore}
-        onDeleteReferenceFromStore={(assetId) => void handleDeleteCharacterReferenceFromStore(assetId)}
+        onAdd={handleAddCharacterReference}
+        onRemove={handleRemoveCharacterReference}
+        onImageChange={handleCharacterReferenceImageChange}
+        onFieldChange={handleCharacterReferenceFieldChange}
+        onSave={handleOpenCharacterReferenceSaveModal}
+        library={{
+          assets: filteredSavedCharacterReferences,
+          searchValue: savedCharacterReferenceSearch,
+          isLoading: savedCharacterReferencesLoading,
+          onSearchChange: setSavedCharacterReferenceSearch,
+          onSelect: (asset) => void handleLoadCharacterReferenceFromStore(asset.id),
+          onEdit: handleOpenEditCharacterReferenceFromStore,
+          onDelete: (assetId) => void handleDeleteCharacterReferenceFromStore(assetId),
+        }}
       />
 
-      <NaiVibesSection
+      <NaiVibesEditor
         vibes={naiForm.vibes}
-        encodingVibeIndex={encodingVibeIndex}
-        naiConnected={naiConnected}
-        savedVibes={filteredSavedVibes}
-        savedVibeSearch={savedVibeSearch}
-        savedVibesLoading={savedVibesLoading}
-        onSavedVibeSearchChange={setSavedVibeSearch}
-        onAddVibe={handleAddVibe}
-        onRemoveVibe={handleRemoveVibe}
-        onVibeImageChange={handleVibeImageChange}
-        onVibeFieldChange={handleVibeFieldChange}
-        onOpenVibeSaveModal={handleOpenVibeSaveModal}
-        onLoadVibeFromStore={handleLoadVibeFromStore}
-        onEditVibeFromStore={handleOpenEditVibeFromStore}
-        onDeleteVibeFromStore={(assetId) => void handleDeleteVibeFromStore(assetId)}
+        showEncodeStatus
+        onAdd={handleAddVibe}
+        onRemove={handleRemoveVibe}
+        onImageChange={handleVibeImageChange}
+        onFieldChange={handleVibeFieldChange}
+        save={{
+          onSave: handleOpenVibeSaveModal,
+          encodingIndex: encodingVibeIndex,
+          unavailableReason: naiConnected ? undefined : t('image-generation.components.nai.vibes.section.saving.vibes.requires.novelai.login'),
+        }}
+        library={{
+          assets: filteredSavedVibes,
+          searchValue: savedVibeSearch,
+          isLoading: savedVibesLoading,
+          emptyMessage: naiConnected
+            ? undefined
+            : t('image-generation.components.nai.vibes.section.log.in.to.novelai.to.view.or'),
+          onSearchChange: setSavedVibeSearch,
+          onSelect: (asset) => void handleLoadVibeFromStore(asset.id),
+          onEdit: handleOpenEditVibeFromStore,
+          onDelete: (assetId) => void handleDeleteVibeFromStore(assetId),
+        }}
       />
 
       {showActionSection ? actionSection : null}

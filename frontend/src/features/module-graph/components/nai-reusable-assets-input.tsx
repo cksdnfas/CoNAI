@@ -1,15 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Pin, PinOff, Plus, Save, Trash2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
+import { NaiCharacterReferencesEditor } from '@/features/image-generation/components/nai-assets/nai-character-references-editor'
+import { sortNaiSavedAssets, useNaiSavedAssetPreferences } from '@/features/image-generation/components/nai-assets/nai-saved-asset-preferences'
+import { NaiVibesEditor } from '@/features/image-generation/components/nai-assets/nai-vibes-editor'
 import { buildSelectedImageDraftFromUrl } from '@/features/image-generation/image-generation-drafts'
-import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
+import type {
+  NAICharacterReferenceDraft,
+  NAIVibeDraft,
+  SelectedImageDraft,
+} from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
 import {
   getNaiVibeAsset,
@@ -17,9 +16,6 @@ import {
   listNaiVibeAssets,
 } from '@/lib/api-image-generation-nai'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
-import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { EmptyState } from '@/components/ui/empty-state'
-import { LoadingState } from '@/components/ui/loading-state'
 
 type NaiReusableAssetKind = 'vibes' | 'character_refs'
 
@@ -29,6 +25,7 @@ type NaiReusableAssetInputProps = {
   onChange: (value: unknown) => void
 }
 
+/** Node-input rows keep the image as a bare data URL (the graph JSON shape), unlike the form's SelectedImageDraft. */
 type NaiVibeDraft = {
   image?: string
   encoded: string
@@ -42,8 +39,6 @@ type NaiCharacterReferenceDraft = {
   strength: string
   fidelity: string
 }
-
-type SavedAssetSortOption = 'pinned' | 'recent' | 'latest' | 'oldest' | 'name'
 
 /** Detect whether one JSON input should render the reusable vibe picker/editor. */
 export function isNaiVibePort(portKey: string, dataType: string) {
@@ -169,191 +164,47 @@ function buildNaiCharacterReferenceValue(drafts: NaiCharacterReferenceDraft[]) {
   return nextValue.length > 0 ? nextValue : undefined
 }
 
-/** Load recently used asset ids from localStorage so pickers can prioritize repeat selections. */
-function loadRecentAssetIds(storageKey: string) {
-  if (typeof window === 'undefined') {
-    return [] as string[]
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(storageKey)
-    if (!rawValue) {
-      return [] as string[]
-    }
-
-    const parsedValue = JSON.parse(rawValue)
-    return Array.isArray(parsedValue) ? parsedValue.filter((entry): entry is string => typeof entry === 'string') : []
-  } catch {
-    return [] as string[]
-  }
+/** Wrap a bare data URL so the shared editor can preview it (node values carry no file name). */
+function toImageDraft(image?: string): SelectedImageDraft | undefined {
+  return image ? { fileName: '', dataUrl: image } : undefined
 }
 
-/** Persist one recently used asset id and keep the newest picks near the top. */
-function saveRecentAssetIds(storageKey: string, assetId: string, currentIds: string[]) {
-  const nextIds = [assetId, ...currentIds.filter((entry) => entry !== assetId)].slice(0, 20)
-
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(storageKey, JSON.stringify(nextIds))
-  }
-
-  return nextIds
+function replaceAt<T>(items: T[], index: number, patch: Partial<T>) {
+  return items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item))
 }
 
-/** Load pinned asset ids from localStorage so favorites can survive refreshes. */
-function loadPinnedAssetIds(storageKey: string) {
-  return loadRecentAssetIds(storageKey)
-}
-
-/** Toggle one pinned asset id and persist the updated favorite list. */
-function togglePinnedAssetIds(storageKey: string, assetId: string, currentIds: string[]) {
-  const nextIds = currentIds.includes(assetId)
-    ? currentIds.filter((entry) => entry !== assetId)
-    : [assetId, ...currentIds]
-
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(storageKey, JSON.stringify(nextIds))
-  }
-
-  return nextIds
-}
-
-/** Index saved asset order preferences once before comparator hot paths run. */
-function buildAssetOrderIndex(ids: string[]) {
-  return new Map(ids.map((id, index) => [id, index] as const))
-}
-
-function getAssetOrder(orderIndex: ReadonlyMap<string, number>, assetId: string) {
-  return orderIndex.get(assetId) ?? Number.MAX_SAFE_INTEGER
-}
-
-/** Sort saved asset cards so users can switch between pinned, recent use, recency, and name ordering. */
-function sortSavedAssets<T extends { id: string; label: string; created_date: string }>(
-  items: T[],
-  sort: SavedAssetSortOption,
-  recentIds: string[],
-  pinnedIds: string[],
-  locale: string,
-) {
-  const nextItems = [...items]
-
-  if (sort === 'pinned') {
-    const pinnedIdOrder = buildAssetOrderIndex(pinnedIds)
-    const recentIdOrder = buildAssetOrderIndex(recentIds)
-
-    return nextItems.sort((left, right) => {
-      const normalizedLeftPinned = getAssetOrder(pinnedIdOrder, left.id)
-      const normalizedRightPinned = getAssetOrder(pinnedIdOrder, right.id)
-
-      if (normalizedLeftPinned !== normalizedRightPinned) {
-        return normalizedLeftPinned - normalizedRightPinned
-      }
-
-      const normalizedLeftRecent = getAssetOrder(recentIdOrder, left.id)
-      const normalizedRightRecent = getAssetOrder(recentIdOrder, right.id)
-      if (normalizedLeftRecent !== normalizedRightRecent) {
-        return normalizedLeftRecent - normalizedRightRecent
-      }
-
-      return new Date(right.created_date).getTime() - new Date(left.created_date).getTime()
-    })
-  }
-
-  if (sort === 'recent') {
-    const recentIdOrder = buildAssetOrderIndex(recentIds)
-
-    return nextItems.sort((left, right) => {
-      const normalizedLeft = getAssetOrder(recentIdOrder, left.id)
-      const normalizedRight = getAssetOrder(recentIdOrder, right.id)
-
-      if (normalizedLeft !== normalizedRight) {
-        return normalizedLeft - normalizedRight
-      }
-
-      return new Date(right.created_date).getTime() - new Date(left.created_date).getTime()
-    })
-  }
-
-  if (sort === 'name') {
-    return nextItems.sort((left, right) => left.label.localeCompare(right.label, locale, { numeric: true, sensitivity: 'base' }))
-  }
-
-  return nextItems.sort((left, right) => {
-    const leftTime = new Date(left.created_date).getTime()
-    const rightTime = new Date(right.created_date).getTime()
-    return sort === 'oldest' ? leftTime - rightTime : rightTime - leftTime
-  })
-}
-
-/** Render the reusable editor and saved-asset picker for NAI vibe and reference JSON inputs. */
+/** Render the shared NAI asset editor + saved-asset picker for vibe and reference JSON inputs. */
 export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAssetInputProps) {
-  const { t, formatDateTime, locale } = useI18n()
-  const [savedVibeSearch, setSavedVibeSearch] = useState('')
-  const [savedVibeSort, setSavedVibeSort] = useState<SavedAssetSortOption>('recent')
-  const [recentVibeIds, setRecentVibeIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.vibes.recent'))
-  const [pinnedVibeIds, setPinnedVibeIds] = useState<string[]>(() => loadPinnedAssetIds('conai.nai.vibes.pinned'))
-  const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
-  const [savedCharacterReferenceSort, setSavedCharacterReferenceSort] = useState<SavedAssetSortOption>('recent')
-  const [recentCharacterReferenceIds, setRecentCharacterReferenceIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.character_refs.recent'))
-  const [pinnedCharacterReferenceIds, setPinnedCharacterReferenceIds] = useState<string[]>(() => loadPinnedAssetIds('conai.nai.character_refs.pinned'))
-  const pinnedVibeIdSet = useMemo(() => new Set(pinnedVibeIds), [pinnedVibeIds])
-  const pinnedCharacterReferenceIdSet = useMemo(() => new Set(pinnedCharacterReferenceIds), [pinnedCharacterReferenceIds])
-  const vibeDrafts = useMemo(() => (kind === 'vibes' ? parseNaiVibeDrafts(value) : []), [kind, value])
-  const characterReferenceDrafts = useMemo(() => (kind === 'character_refs' ? parseNaiCharacterReferenceDrafts(value) : []), [kind, value])
+  return kind === 'vibes'
+    ? <NaiVibeNodeInput value={value} onChange={onChange} />
+    : <NaiCharacterReferenceNodeInput value={value} onChange={onChange} />
+}
+
+function NaiVibeNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 'kind'>) {
+  const { t, locale } = useI18n()
+  const [search, setSearch] = useState('')
+  const preferences = useNaiSavedAssetPreferences('conai.nai.vibes')
+  const drafts = useMemo(() => parseNaiVibeDrafts(value), [value])
+  const formDrafts = useMemo<NAIVibeDraft[]>(() => drafts.map((draft) => ({ ...draft, image: toImageDraft(draft.image) })), [drafts])
 
   const savedVibesQuery = useQuery({
     queryKey: ['module-graph-nai-vibe-assets'],
     queryFn: () => listNaiVibeAssets(),
-    enabled: kind === 'vibes',
   })
 
-  const savedCharacterReferencesQuery = useQuery({
-    queryKey: ['module-graph-nai-character-reference-assets'],
-    queryFn: listNaiCharacterReferenceAssets,
-    enabled: kind === 'character_refs',
-  })
-
+  const { sort, recentIds, pinnedIds } = preferences
   const filteredSavedVibes = useMemo(() => {
     const items = savedVibesQuery.data || []
-    const keyword = savedVibeSearch.trim().toLowerCase()
+    const keyword = search.trim().toLowerCase()
     const filteredItems = keyword
       ? items.filter((item) => `${item.label} ${item.model}`.toLowerCase().includes(keyword))
       : items
 
-    return sortSavedAssets(filteredItems, savedVibeSort, recentVibeIds, pinnedVibeIds, locale)
-  }, [locale, pinnedVibeIds, recentVibeIds, savedVibeSearch, savedVibeSort, savedVibesQuery.data])
-
-  const filteredSavedCharacterReferences = useMemo(() => {
-    const items = savedCharacterReferencesQuery.data || []
-    const keyword = savedCharacterReferenceSearch.trim().toLowerCase()
-    const filteredItems = keyword
-      ? items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
-      : items
-
-    return sortSavedAssets(filteredItems, savedCharacterReferenceSort, recentCharacterReferenceIds, pinnedCharacterReferenceIds, locale)
-  }, [locale, pinnedCharacterReferenceIds, recentCharacterReferenceIds, savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
+    return sortNaiSavedAssets(filteredItems, sort, recentIds, pinnedIds, locale)
+  }, [locale, pinnedIds, recentIds, sort, search, savedVibesQuery.data])
 
   const updateVibes = (nextDrafts: NaiVibeDraft[]) => {
     onChange(buildNaiVibeValue(nextDrafts))
-  }
-
-  const updateCharacterReferences = (nextDrafts: NaiCharacterReferenceDraft[]) => {
-    onChange(buildNaiCharacterReferenceValue(nextDrafts))
-  }
-
-  const handleVibeImageChange = async (index: number, image?: SelectedImageDraft) => {
-    updateVibes(vibeDrafts.map((draft, draftIndex) => (
-      draftIndex === index
-        ? { ...draft, image: image?.dataUrl }
-        : draft
-    )))
-  }
-
-  const handleCharacterReferenceImageChange = async (index: number, image?: SelectedImageDraft) => {
-    updateCharacterReferences(characterReferenceDrafts.map((draft, draftIndex) => (
-      draftIndex === index
-        ? { ...draft, image: image?.dataUrl }
-        : draft
-    )))
   }
 
   const appendSavedVibe = async (asset: StoredNaiVibeAsset) => {
@@ -374,9 +225,9 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       return
     }
 
-    setRecentVibeIds((current) => saveRecentAssetIds('conai.nai.vibes.recent', asset.id, current))
+    preferences.markRecent(asset.id)
     updateVibes([
-      ...vibeDrafts,
+      ...drafts,
       {
         image,
         encoded,
@@ -384,6 +235,61 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         informationExtracted: String(detailedAsset.information_extracted),
       },
     ])
+  }
+
+  return (
+    <NaiVibesEditor
+      vibes={formDrafts}
+      defaultOpen
+      description={t({ ko: 'encoded vibe를 직접 넣거나 saved vibe를 바로 추가해.', en: 'Enter an encoded vibe directly or quickly add a saved vibe.' })}
+      emptyLabel={t({ ko: '아직 vibe 입력이 없어.', en: 'There are no vibe inputs yet.' })}
+      onAdd={() => updateVibes([...drafts, { encoded: '', strength: '0.6', informationExtracted: '1' }])}
+      onRemove={(index) => updateVibes(drafts.filter((_, draftIndex) => draftIndex !== index))}
+      onImageChange={(index, image) => updateVibes(replaceAt(drafts, index, { image: image?.dataUrl }))}
+      onFieldChange={(index, field, nextValue) => updateVibes(replaceAt(drafts, index, { [field]: nextValue }))}
+      onEncodedChange={(index, encoded) => updateVibes(replaceAt(drafts, index, { encoded }))}
+      library={{
+        assets: filteredSavedVibes,
+        searchValue: search,
+        searchPlaceholder: t({ ko: '이름 / 모델 검색', en: 'Search name / model' }),
+        emptyMessage: t({ ko: '검색 결과가 없거나 저장된 vibe가 없어.', en: 'There are no search results or saved vibes.' }),
+        isLoading: savedVibesQuery.isLoading,
+        defaultExpanded: true,
+        onSearchChange: setSearch,
+        onSelect: (asset) => void appendSavedVibe(asset),
+        sort: { value: sort, onChange: preferences.setSort },
+        pinnedIds: preferences.pinnedIdSet,
+        onTogglePin: preferences.togglePin,
+      }}
+    />
+  )
+}
+
+function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 'kind'>) {
+  const { t, locale } = useI18n()
+  const [search, setSearch] = useState('')
+  const preferences = useNaiSavedAssetPreferences('conai.nai.character_refs')
+  const drafts = useMemo(() => parseNaiCharacterReferenceDrafts(value), [value])
+  const formDrafts = useMemo<NAICharacterReferenceDraft[]>(() => drafts.map((draft) => ({ ...draft, image: toImageDraft(draft.image) })), [drafts])
+
+  const savedCharacterReferencesQuery = useQuery({
+    queryKey: ['module-graph-nai-character-reference-assets'],
+    queryFn: listNaiCharacterReferenceAssets,
+  })
+
+  const { sort, recentIds, pinnedIds } = preferences
+  const filteredSavedCharacterReferences = useMemo(() => {
+    const items = savedCharacterReferencesQuery.data || []
+    const keyword = search.trim().toLowerCase()
+    const filteredItems = keyword
+      ? items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
+      : items
+
+    return sortNaiSavedAssets(filteredItems, sort, recentIds, pinnedIds, locale)
+  }, [locale, pinnedIds, recentIds, sort, search, savedCharacterReferencesQuery.data])
+
+  const updateCharacterReferences = (nextDrafts: NaiCharacterReferenceDraft[]) => {
+    onChange(buildNaiCharacterReferenceValue(nextDrafts))
   }
 
   const appendSavedCharacterReference = async (asset: StoredNaiCharacterReferenceAsset) => {
@@ -398,7 +304,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
     }
 
     updateCharacterReferences([
-      ...characterReferenceDrafts,
+      ...drafts,
       {
         image,
         type: asset.type,
@@ -406,259 +312,36 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         fidelity: String(asset.fidelity),
       },
     ])
-    setRecentCharacterReferenceIds((current) => saveRecentAssetIds('conai.nai.character_refs.recent', asset.id, current))
-  }
-
-  const togglePinnedVibe = (assetId: string) => {
-    setPinnedVibeIds((current) => togglePinnedAssetIds('conai.nai.vibes.pinned', assetId, current))
-  }
-
-  const togglePinnedCharacterReference = (assetId: string) => {
-    setPinnedCharacterReferenceIds((current) => togglePinnedAssetIds('conai.nai.character_refs.pinned', assetId, current))
-  }
-
-  if (kind === 'vibes') {
-    return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2.5">
-          <div>
-            <div className="text-sm font-medium text-foreground">{t({ ko: 'Vibe Transfer', en: 'Vibe Transfer' })}</div>
-            <div className="text-xs text-muted-foreground">{t({ ko: 'encoded vibe를 직접 넣거나 saved vibe를 바로 추가해.', en: 'Enter an encoded vibe directly or quickly add a saved vibe.' })}</div>
-          </div>
-          <Button type="button" size="sm" variant="secondary" onClick={() => updateVibes([...vibeDrafts, { encoded: '', strength: '0.6', informationExtracted: '1' }])}>
-            <Plus className="h-4 w-4" />
-            {t({ ko: '추가', en: 'Add' })}
-          </Button>
-        </div>
-
-        {vibeDrafts.length === 0 ? (
-          <EmptyState size="compact" title={t({ ko: '아직 vibe 입력이 없어.', en: 'There are no vibe inputs yet.' })} />
-        ) : (
-          vibeDrafts.map((draft, index) => (
-            <div key={`nai-vibe-input-${index}`} className="space-y-3 rounded-sm bg-surface-low p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
-                <Button type="button" size="sm" variant="ghost" onClick={() => updateVibes(vibeDrafts.filter((_, draftIndex) => draftIndex !== index))}>
-                  <Trash2 className="h-4 w-4" />
-                  {t({ ko: '제거', en: 'Remove' })}
-                </Button>
-              </div>
-
-              <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">{t({ ko: '참조 이미지', en: 'Reference image' })}</span>
-                <ImageAttachmentPickerButton label={draft.image ? t({ ko: '참조 이미지 변경', en: 'Change reference image' }) : t({ ko: '참조 이미지 선택', en: 'Select reference image' })} modalTitle={t({ ko: 'Vibe {index} 이미지 선택', en: 'Select image for Vibe {index}' }, { index: index + 1 })} allowSaveDialog={false} onSelect={(image) => void handleVibeImageChange(index, image)} />
-                {draft.image ? <InlineMediaPreview src={draft.image} alt={`Vibe ${index + 1}`} frameClassName="p-3" /> : null}
-              </label>
-
-              <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">{t({ ko: '인코딩된 데이터', en: 'Encoded' })}</span>
-                <Textarea rows={4} value={draft.encoded} onChange={(event) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, encoded: event.target.value } : entry))} placeholder={t({ ko: '인코딩된 Vibe 데이터', en: 'Encoded Vibe payload' })} />
-              </label>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="space-y-2">
-                  <span className="text-sm font-medium text-foreground">{t({ ko: '강도', en: 'Strength' })}</span>
-                  <NumberStepperInput min={0.01} max={1} step={0.01} value={draft.strength} onValueCommit={(nextValue) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, strength: nextValue } : entry))} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium text-foreground">{t({ ko: '정보 추출량', en: 'Information Extracted' })}</span>
-                  <NumberStepperInput min={0.01} max={1} step={0.01} value={draft.informationExtracted} onValueCommit={(nextValue) => updateVibes(vibeDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, informationExtracted: nextValue } : entry))} />
-                </label>
-              </div>
-            </div>
-          ))
-        )}
-
-        <div className="space-y-2 rounded-sm bg-surface-low p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-medium text-foreground">{t({ ko: '저장된 Vibes', en: 'Saved Vibes' })}</div>
-              <Badge variant="outline">{savedVibesQuery.data?.length ?? 0}</Badge>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
-              <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder={t({ ko: '이름 / 모델 검색', en: 'Search name / model' })} />
-              <Select value={savedVibeSort} onChange={(event) => setSavedVibeSort(event.target.value as SavedAssetSortOption)}>
-                <option value="pinned">{t({ ko: '핀 우선', en: 'Pinned first' })}</option>
-                <option value="recent">{t({ ko: '최근 사용순', en: 'Recently used' })}</option>
-                <option value="latest">{t({ ko: '최신순', en: 'Newest first' })}</option>
-                <option value="oldest">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
-                <option value="name">{t({ ko: '이름순', en: 'By name' })}</option>
-              </Select>
-            </div>
-          </div>
-          {savedVibesQuery.isLoading ? (
-            <LoadingState variant="inline" />
-          ) : filteredSavedVibes.length > 0 ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              {filteredSavedVibes.map((asset) => {
-                const isPinned = pinnedVibeIdSet.has(asset.id)
-
-                return (
-                  <div key={asset.id} className="space-y-3 rounded-sm bg-surface-container p-3">
-                    <div className="flex gap-3">
-                      {asset.thumbnail_url || asset.image_url || asset.image_data_url ? (
-                        <InlineMediaPreview
-                          src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
-                          fileName={asset.label}
-                          alt={asset.label}
-                          frameClassName="h-20 w-20 shrink-0 p-1"
-                          mediaClassName="h-full w-full object-contain"
-                        />
-                      ) : (
-                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm bg-surface-lowest text-2xs text-muted-foreground">
-                          {t({ ko: '미리보기 없음', en: 'No preview' })}
-                        </div>
-                      )}
-                      <div className="min-w-0 space-y-2">
-                        <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                        <div className="truncate text-xs text-muted-foreground">{asset.model}</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {isPinned ? <Badge variant="secondary">{t({ ko: '핀', en: 'Pinned' })}</Badge> : null}
-                          <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
-                          <Badge variant="outline">{t({ ko: '정보 추출 {value}', en: 'Info extracted {value}' }, { value: asset.information_extracted })}</Badge>
-                        </div>
-                        <div className="text-2xs text-muted-foreground">{formatDateTime(asset.created_date)}</div>
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedVibe(asset.id)}>
-                        {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                        {isPinned ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
-                      </Button>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => void appendSavedVibe(asset)}>
-                        <Save className="h-4 w-4" />
-                        {t({ ko: '추가', en: 'Add' })}
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">{t({ ko: '검색 결과가 없거나 저장된 vibe가 없어.', en: 'There are no search results or saved vibes.' })}</div>
-          )}
-        </div>
-      </div>
-    )
+    preferences.markRecent(asset.id)
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2.5">
-        <div>
-          <div className="text-sm font-medium text-foreground">{t({ ko: 'Character Reference', en: 'Character Reference' })}</div>
-          <div className="text-xs text-muted-foreground">{t({ ko: 'reference 이미지를 직접 넣거나 saved reference를 추가해.', en: 'Add a reference image directly or append a saved reference.' })}</div>
-        </div>
-        <Button type="button" size="sm" variant="secondary" onClick={() => updateCharacterReferences([...characterReferenceDrafts, { type: 'character&style', strength: '0.6', fidelity: '1' }])}>
-          <Plus className="h-4 w-4" />
-          {t({ ko: '추가', en: 'Add' })}
-        </Button>
-      </div>
-
-      {characterReferenceDrafts.length === 0 ? (
-        <EmptyState size="compact" title={t({ ko: '아직 reference 입력이 없어.', en: 'There are no reference inputs yet.' })} />
-      ) : (
-        characterReferenceDrafts.map((draft, index) => (
-          <div key={`nai-character-reference-input-${index}`} className="space-y-3 rounded-sm bg-surface-low p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
-              <Button type="button" size="sm" variant="ghost" onClick={() => updateCharacterReferences(characterReferenceDrafts.filter((_, draftIndex) => draftIndex !== index))}>
-                <Trash2 className="h-4 w-4" />
-                {t({ ko: '제거', en: 'Remove' })}
-              </Button>
-            </div>
-
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-foreground">{t({ ko: '참조 이미지', en: 'Reference image' })}</span>
-              <ImageAttachmentPickerButton label={draft.image ? t({ ko: '참조 이미지 변경', en: 'Change reference image' }) : t({ ko: '참조 이미지 선택', en: 'Select reference image' })} modalTitle={t({ ko: 'Reference {index} 이미지 선택', en: 'Select image for Reference {index}' }, { index: index + 1 })} allowSaveDialog={false} onSelect={(image) => void handleCharacterReferenceImageChange(index, image)} />
-              {draft.image ? <InlineMediaPreview src={draft.image} alt={`Reference ${index + 1}`} frameClassName="p-3" /> : null}
-            </label>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">{t({ ko: '유형', en: 'Type' })}</span>
-                <Select value={draft.type} onChange={(event) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, type: event.target.value as NaiCharacterReferenceDraft['type'] } : entry))}>
-                  <option value="character">{t({ ko: '캐릭터', en: 'Character' })}</option>
-                  <option value="style">{t({ ko: '스타일', en: 'Style' })}</option>
-                  <option value="character&style">{t({ ko: '캐릭터+스타일', en: 'Character + Style' })}</option>
-                </Select>
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">{t({ ko: '강도', en: 'Strength' })}</span>
-                <NumberStepperInput min={0} max={1} step={0.01} value={draft.strength} onValueCommit={(nextValue) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, strength: nextValue } : entry))} />
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">{t({ ko: '충실도', en: 'Fidelity' })}</span>
-                <NumberStepperInput min={0} max={1} step={0.01} value={draft.fidelity} onValueCommit={(nextValue) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, fidelity: nextValue } : entry))} />
-              </label>
-            </div>
-          </div>
-        ))
-      )}
-
-      <div className="space-y-2 rounded-sm bg-surface-low p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-medium text-foreground">{t({ ko: '저장된 Character References', en: 'Saved Character References' })}</div>
-            <Badge variant="outline">{savedCharacterReferencesQuery.data?.length ?? 0}</Badge>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
-            <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder={t({ ko: '이름 / 타입 검색', en: 'Search name / type' })} />
-            <Select value={savedCharacterReferenceSort} onChange={(event) => setSavedCharacterReferenceSort(event.target.value as SavedAssetSortOption)}>
-              <option value="pinned">{t({ ko: '핀 우선', en: 'Pinned first' })}</option>
-              <option value="recent">{t({ ko: '최근 사용순', en: 'Recently used' })}</option>
-              <option value="latest">{t({ ko: '최신순', en: 'Newest first' })}</option>
-              <option value="oldest">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
-              <option value="name">{t({ ko: '이름순', en: 'By name' })}</option>
-            </Select>
-          </div>
-        </div>
-        {savedCharacterReferencesQuery.isLoading ? (
-          <LoadingState variant="inline" />
-        ) : filteredSavedCharacterReferences.length > 0 ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            {filteredSavedCharacterReferences.map((asset) => {
-              const isPinned = pinnedCharacterReferenceIdSet.has(asset.id)
-
-              return (
-                <div key={asset.id} className="space-y-3 rounded-sm bg-surface-container p-3">
-                  <div className="flex gap-3">
-                    <InlineMediaPreview
-                      src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
-                      fileName={asset.label}
-                      alt={asset.label}
-                      frameClassName="h-20 w-20 shrink-0 p-1"
-                      mediaClassName="h-full w-full object-contain"
-                    />
-                    <div className="min-w-0 space-y-2">
-                      <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {isPinned ? <Badge variant="secondary">{t({ ko: '핀', en: 'Pinned' })}</Badge> : null}
-                        <Badge variant="outline">{asset.type}</Badge>
-                        <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
-                        <Badge variant="outline">{t({ ko: '충실도 {value}', en: 'Fidelity {value}' }, { value: asset.fidelity })}</Badge>
-                      </div>
-                      <div className="text-2xs text-muted-foreground">{formatDateTime(asset.created_date)}</div>
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedCharacterReference(asset.id)}>
-                      {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                      {isPinned ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
-                    </Button>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void appendSavedCharacterReference(asset)}>
-                      <Save className="h-4 w-4" />
-                      {t({ ko: '추가', en: 'Add' })}
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground">{t({ ko: '검색 결과가 없거나 저장된 reference가 없어.', en: 'There are no search results or saved references.' })}</div>
-        )}
-      </div>
-    </div>
+    <NaiCharacterReferencesEditor
+      references={formDrafts}
+      defaultOpen
+      description={t({ ko: 'reference 이미지를 직접 넣거나 saved reference를 추가해.', en: 'Add a reference image directly or append a saved reference.' })}
+      emptyLabel={t({ ko: '아직 reference 입력이 없어.', en: 'There are no reference inputs yet.' })}
+      onAdd={() => updateCharacterReferences([...drafts, { type: 'character&style', strength: '0.6', fidelity: '1' }])}
+      onRemove={(index) => updateCharacterReferences(drafts.filter((_, draftIndex) => draftIndex !== index))}
+      onImageChange={(index, image) => updateCharacterReferences(replaceAt(drafts, index, { image: image?.dataUrl }))}
+      onFieldChange={(index, field, nextValue) => updateCharacterReferences(replaceAt(drafts, index, (
+        field === 'type'
+          ? { type: nextValue as NaiCharacterReferenceDraft['type'] }
+          : { [field]: nextValue }
+      )))}
+      library={{
+        assets: filteredSavedCharacterReferences,
+        searchValue: search,
+        searchPlaceholder: t({ ko: '이름 / 타입 검색', en: 'Search name / type' }),
+        emptyMessage: t({ ko: '검색 결과가 없거나 저장된 reference가 없어.', en: 'There are no search results or saved references.' }),
+        isLoading: savedCharacterReferencesQuery.isLoading,
+        defaultExpanded: true,
+        onSearchChange: setSearch,
+        onSelect: (asset) => void appendSavedCharacterReference(asset),
+        sort: { value: sort, onChange: preferences.setSort },
+        pinnedIds: preferences.pinnedIdSet,
+        onTogglePin: preferences.togglePin,
+      }}
+    />
   )
 }
