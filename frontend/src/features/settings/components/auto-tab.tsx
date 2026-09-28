@@ -171,7 +171,8 @@ export function AutoTab({
 
       <section>
         <AutoTestCard
-          heading={t({ ko: '테스트', en: 'Test' })}
+          heading={t({ ko: '개발자 도구', en: 'Developer tools' })}
+          description={t({ ko: '특정 이미지로 Kaloscope·WD Tagger 결과를 바로 확인하는 점검용 도구야.', en: 'Diagnostic tool for checking Kaloscope and WD Tagger output on a specific image.' })}
           actions={
             <>
               <Button size="sm" variant="outline" onClick={onResolveAutoTestMedia} disabled={!autoTestHashInput.trim() || isResolvingAutoTestMedia}>

@@ -32,6 +32,8 @@ function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope)
 
 interface AutoTestCardProps {
   heading: ReactNode
+  description?: ReactNode
+  /** Rendered next to the hash input so the controls stay hidden while the section is collapsed. */
   actions?: ReactNode
   autoTestHashInput: string
   autoTestMedia: AutoTestMediaRecord | null
@@ -49,6 +51,7 @@ interface AutoTestCardProps {
 
 export function AutoTestCard({
   heading,
+  description,
   actions,
   autoTestHashInput,
   autoTestMedia,
@@ -87,17 +90,20 @@ export function AutoTestCard({
   }, [autoTestHashInput, onResolveAutoTestMedia])
 
   return (
-    <Section variant="settings" heading={heading} actions={actions}>
-      <Field label={t({ ko: 'Composite hash', en: 'Composite hash' })}>
-        <Input
-          variant="settings"
-          className="font-mono"
-          value={autoTestHashInput}
-          onChange={handleHashInputChange}
-          onKeyDown={handleHashInputKeyDown}
-          placeholder={t({ ko: 'image hash', en: 'image hash' })}
-        />
-      </Field>
+    <Section variant="settings" heading={heading} description={description} collapsible defaultOpen={false}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <Field label={t({ ko: '이미지 해시', en: 'Image hash' })} className="min-w-0 flex-1">
+          <Input
+            variant="settings"
+            className="font-mono"
+            value={autoTestHashInput}
+            onChange={handleHashInputChange}
+            onKeyDown={handleHashInputKeyDown}
+            placeholder={t({ ko: '이미지 상세의 해시 값', en: 'Hash from image details' })}
+          />
+        </Field>
+        {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
+      </div>
 
       {autoTestMedia ? (
         <div className="pt-2">
