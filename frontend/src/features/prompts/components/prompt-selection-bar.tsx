@@ -1,6 +1,7 @@
 import { FolderInput, Trash2 } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 
 interface PromptSelectionBarProps {
@@ -21,10 +22,9 @@ export function PromptSelectionBar({ selectedCount, isSubmitting = false, isDele
       onClear={onClear}
       actions={(
         <>
-          <Button size="sm" variant="secondary" onClick={onDeleteSelected} disabled={!onDeleteSelected || isDeleting} data-no-select-drag="true">
-            <Trash2 className="h-4 w-4" />
-            {isDeleting ? t('prompts.components.prompt.selection.bar.deleting') : t('prompts.components.prompt.selection.bar.delete')}
-          </Button>
+          <IconButton size="icon-sm" variant="secondary" onClick={onDeleteSelected} disabled={!onDeleteSelected || isDeleting} data-no-select-drag="true" label={isDeleting ? t('prompts.components.prompt.selection.bar.deleting') : t('prompts.components.prompt.selection.bar.delete')}>
+            <Trash2 />
+          </IconButton>
 
           <Button size="sm" onClick={onAssignGroup} disabled={isSubmitting} data-no-select-drag="true">
             <FolderInput className="h-4 w-4" />

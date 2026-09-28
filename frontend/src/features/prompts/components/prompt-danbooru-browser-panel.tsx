@@ -5,8 +5,7 @@ import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { Heading } from '@/components/ui/heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -19,7 +18,6 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { DanbooruBrowserDatabaseInfo, DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
-import { resolveDanbooruBrowserProgress } from '../danbooru-browser-progress'
 import { useCanSeeServerDetails } from '../use-can-see-server-details'
 import {
   CHARACTER_PAGE_SIZE,
@@ -66,7 +64,6 @@ function DanbooruDatabaseMissingNotice({ database }: { database: DanbooruBrowser
       <AlertTitle>{t({ ko: 'Danbooru DB 파일 없음', en: 'Danbooru DB file missing' })}</AlertTitle>
       <AlertDescription>
         <div className="space-y-2">
-          <p>{t({ ko: '태그, 작가, 캐릭터 목록은 DB 파일을 배치하면 활성화돼.', en: 'Tags, artists, and characters become available after placing the DB file.' })}</p>
           <div className="grid gap-1 text-xs sm:grid-cols-[120px_minmax(0,1fr)]">
             <span className="font-medium text-muted-foreground">{t({ ko: '기본 경로', en: 'Default path' })}</span>
             <span className="min-w-0 break-all font-mono text-foreground">{database.expectedPath}</span>
@@ -180,23 +177,6 @@ export function PromptDanbooruBrowserPanel() {
     : activeSection === 'artists'
       ? (artistsQuery.data?.items.length ?? 0)
       : (charactersQuery.data?.items.length ?? 0)
-  const currentCount = pagination?.total ?? selectedNode.count
-  const pageProgress = resolveDanbooruBrowserProgress({
-    page: pagination?.page ?? page,
-    pageSize: pagination?.limit ?? currentLimit,
-    visibleCount: activeItemCount,
-    totalCount: currentCount,
-  })
-  const progressLabel = pageProgress.visibleCount > 0
-    ? t(
-      { ko: '표시 {start}-{end} / 전체 {total}', en: 'Showing {start}-{end} / {total}' },
-      {
-        start: formatNumber(pageProgress.start),
-        end: formatNumber(pageProgress.end),
-        total: formatCompactCount(pageProgress.totalCount, formatNumber),
-      },
-    )
-    : t({ ko: '{count}개 표시 가능', en: '{count} available' }, { count: formatCompactCount(currentCount, formatNumber) })
 
   const tagItems = useMemo(() => tagsQuery.data?.items ?? [], [tagsQuery.data?.items])
   const artistItems = useMemo(() => artistsQuery.data?.items ?? [], [artistsQuery.data?.items])
@@ -292,7 +272,6 @@ export function PromptDanbooruBrowserPanel() {
     <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
       <ExplorerSidebar
         title="Danbooru DB"
-        badge={<Badge variant="outline">{formatCompactCount(summaryQuery.data?.counts.tags ?? 0, formatNumber)}</Badge>}
         floatingFrame
         floatingLockStorageKey="conai:prompts:danbooru-sidebar-locked"
         className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
@@ -334,10 +313,6 @@ export function PromptDanbooruBrowserPanel() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <Heading level={2}>{getSectionTitle(selectedNode, language)}</Heading>
-            <div className="mt-1 text-sm text-muted-foreground">
-              {progressLabel}
-              {activeSection === 'characters' ? <span> · {t({ ko: '페이지당 30개', en: '30 per page' })}</span> : null}
-            </div>
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px]">
@@ -348,25 +323,26 @@ export function PromptDanbooruBrowserPanel() {
                 onKeyDown={handleSearchInputKeyDown}
                 placeholder={t({ ko: '검색', en: 'Search' })}
               />
-              <Button size="sm" variant="secondary" onClick={handleApplySearch}>
+              <IconButton variant="secondary" onClick={handleApplySearch} label={t({ ko: '검색', en: 'Search' })}>
                 <Search className="h-4 w-4" />
-              </Button>
+              </IconButton>
               {activeSection === 'characters' ? (
                 <div ref={relatedTagOptionsAnchorRef}>
-                  <Button
-                    size="sm"
+                  <IconButton
                     variant={relatedTagFilterActive ? 'default' : 'secondary'}
                     onClick={handleToggleRelatedTagOptionsOpen}
-                    title={t({ ko: 'Related tags 표시 옵션', en: 'Related tags display options' })}
+                    label={t({ ko: 'Related tags 표시 옵션', en: 'Related tags display options' })}
+                    aria-haspopup="dialog"
+                    aria-expanded={isRelatedTagOptionsOpen}
                   >
                     <SlidersHorizontal className="h-4 w-4" />
-                  </Button>
+                  </IconButton>
                 </div>
               ) : null}
               {searchQuery ? (
-                <Button size="sm" variant="ghost" onClick={handleClearSearch}>
+                <IconButton variant="ghost" onClick={handleClearSearch} label={t('prompts.components.prompt.toolbar.search.reset')}>
                   <X className="h-4 w-4" />
-                </Button>
+                </IconButton>
               ) : null}
             </div>
           </div>

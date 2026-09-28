@@ -126,7 +126,6 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
                 <AlertTitle>{t({ ko: 'Danbooru DB 파일 없음', en: 'Danbooru DB file missing' })}</AlertTitle>
                 <AlertDescription>
                   <div className="space-y-1">
-                    <p>{t({ ko: '자동 그룹 구성은 DB 파일이 있어야 실행돼.', en: 'Auto grouping requires the DB file.' })}</p>
                     {canSeeServerDetails ? (
                       <>
                         <p className="break-all font-mono text-xs text-foreground">{preview.database.expectedPath}</p>

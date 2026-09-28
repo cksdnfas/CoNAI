@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Folder, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Copy, Folder, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { SectionHeading } from '@/components/common/section-heading'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -179,9 +179,9 @@ function PromptPresetEditorModal({
               t('prompts.components.prompt.preset.panel.delete'),
             ]}
             actions={(
-              <Button type="button" size="icon-sm" variant="secondary" onClick={handleAddDraft} aria-label={t('prompts.components.prompt.preset.panel.add.preset.value')} title={t('prompts.components.prompt.preset.panel.add.value')}>
+              <IconButton size="icon-sm" variant="secondary" onClick={handleAddDraft} label={t('prompts.components.prompt.preset.panel.add.preset.value')}>
                 <Plus className="h-4 w-4" />
-              </Button>
+              </IconButton>
             )}
             minWidthClassName="min-w-[720px]"
           >
@@ -191,9 +191,9 @@ function PromptPresetEditorModal({
                 <Input variant="settings" className="self-start" value={draft.description} onChange={(event) => handleChangeDraft(draft.id, 'description', event.target.value)} placeholder={t('prompts.components.prompt.preset.panel.hair.style')} />
                 <Textarea className="self-start" value={draft.value} onChange={(event) => handleChangeDraft(draft.id, 'value', event.target.value)} rows={2} placeholder={t('prompts.components.prompt.preset.panel.hair.token.example')} />
                 <div className="flex justify-center pt-0.5">
-                  <Button type="button" size="icon-sm" variant="ghost" onClick={() => handleRemoveDraft(draft.id)} aria-label={t('prompts.components.prompt.preset.panel.delete.preset.value.index', { index: index + 1 })} title={t('prompts.components.prompt.preset.panel.delete')}>
+                  <IconButton size="icon-sm" variant="ghost" onClick={() => handleRemoveDraft(draft.id)} label={t('prompts.components.prompt.preset.panel.delete.preset.value.index', { index: index + 1 })}>
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </IconButton>
                 </div>
               </div>
             ))}
@@ -213,7 +213,7 @@ function PromptPresetEditorModal({
 export function PromptPresetPanel() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
   const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const isWideLayout = useDesktopPageLayout()
@@ -230,8 +230,7 @@ export function PromptPresetPanel() {
   })
 
   const entries = useMemo(() => flattenPromptPresetTree(presetsQuery.data ?? []), [presetsQuery.data])
-  const selectedEntry = entries.find((entry) => entry.preset.id === selectedPresetId) ?? null
-  const selectedPreset = selectedEntry?.preset ?? null
+  const selectedPreset = entries.find((entry) => entry.preset.id === selectedPresetId)?.preset ?? null
   const insertionPreview = selectedPreset ? buildPromptPresetInsertionText(selectedPreset) : ''
 
   const createMutation = useMutation({
@@ -306,9 +305,9 @@ export function PromptPresetPanel() {
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold text-foreground">{t('prompts.components.prompt.preset.panel.presets')}</div>
           {canCreatePresets ? (
-            <Button type="button" size="icon-sm" variant="secondary" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} aria-label={t('prompts.components.prompt.preset.panel.add.preset')} title={t('prompts.components.prompt.preset.panel.add.preset')}>
+            <IconButton size="icon-sm" variant="secondary" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} label={t('prompts.components.prompt.preset.panel.add.preset')}>
               <Plus className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : null}
         </div>
 
@@ -340,14 +339,14 @@ export function PromptPresetPanel() {
           actions={selectedPreset ? (
             <div className="flex items-center gap-2">
               {canUpdatePresets ? (
-                <Button type="button" size="icon-sm" variant="secondary" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} aria-label={t('prompts.components.prompt.preset.panel.edit.preset')} title={t('prompts.components.prompt.preset.panel.edit')}>
+                <IconButton size="icon-sm" variant="secondary" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} label={t('prompts.components.prompt.preset.panel.edit.preset')}>
                   <Pencil className="h-4 w-4" />
-                </Button>
+                </IconButton>
               ) : null}
               {canDeletePresets ? (
-                <Button type="button" size="icon-sm" variant="secondary" onClick={() => void handleDeleteSelected()} aria-label={t('prompts.components.prompt.preset.panel.delete.preset')} title={t('prompts.components.prompt.preset.panel.delete')}>
+                <IconButton size="icon-sm" variant="secondary" onClick={() => void handleDeleteSelected()} label={t('prompts.components.prompt.preset.panel.delete.preset')}>
                   <Trash2 className="h-4 w-4" />
-                </Button>
+                </IconButton>
               ) : null}
             </div>
           ) : undefined}
@@ -355,13 +354,7 @@ export function PromptPresetPanel() {
 
         {selectedPreset ? (
           <div className="space-y-4">
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{t('prompts.components.prompt.preset.panel.value.count', { count: formatNumber(selectedPreset.items?.length ?? 0) })}</Badge>
-                <Badge variant="outline">{selectedEntry?.path.join(' / ') ?? selectedPreset.name}</Badge>
-              </div>
-              {selectedPreset.description ? <div>{selectedPreset.description}</div> : null}
-            </div>
+            {selectedPreset.description ? <div className="text-sm text-muted-foreground">{selectedPreset.description}</div> : null}
 
             <SettingsSegmentedTable
               value="items"
@@ -373,7 +366,6 @@ export function PromptPresetPanel() {
                 t('prompts.components.prompt.preset.panel.description'),
                 t('prompts.components.prompt.preset.panel.value'),
               ]}
-              count={<Badge variant="outline">{formatNumber(selectedPreset.items?.length ?? 0)}</Badge>}
               minWidthClassName="min-w-[620px]"
             >
               {(selectedPreset.items ?? []).map((item, index) => (
@@ -388,14 +380,14 @@ export function PromptPresetPanel() {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-medium text-foreground">{t('prompts.components.prompt.preset.panel.insertion.preview')}</div>
-                <Button type="button" size="sm" variant="secondary" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview}>{t('prompts.components.prompt.preset.panel.copy')}</Button>
+                <IconButton size="icon-sm" variant="secondary" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview} label={t('prompts.components.prompt.preset.panel.copy')}>
+                  <Copy className="h-4 w-4" />
+                </IconButton>
               </div>
               <pre className="max-h-64 overflow-auto rounded-sm bg-surface-lowest px-3 py-3 text-xs leading-5 text-foreground/90 whitespace-pre-wrap">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</pre>
             </div>
           </div>
-        ) : (
-          <div className="rounded-sm bg-surface-lowest px-4 py-6 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.select.a.preset.to.view.details')}</div>
-        )}
+        ) : null}
       </section>
 
       <PromptPresetEditorModal

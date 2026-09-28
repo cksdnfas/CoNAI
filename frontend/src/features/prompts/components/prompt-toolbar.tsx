@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, Search, X } from 'lucide-react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { cn } from '@/lib/utils'
 import type { PromptSortBy, PromptSortOrder } from '@/types/prompt'
 import { useI18n } from '@/i18n'
@@ -116,27 +117,25 @@ export function PromptToolbar({
           className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
         {searchInput.length > 0 ? (
-          <Button type="button" size="icon-xs" variant="ghost" onClick={onClearSearch} aria-label={t('prompts.components.prompt.toolbar.search.reset')} title={t('prompts.components.prompt.toolbar.search.reset')}>
+          <IconButton size="icon-xs" variant="ghost" onClick={onClearSearch} label={t('prompts.components.prompt.toolbar.search.reset')}>
             <X className="h-3.5 w-3.5" />
-          </Button>
+          </IconButton>
         ) : null}
-        <Button type="button" size="icon-xs" variant="secondary" onClick={onApplySearch} aria-label={t('prompts.components.prompt.toolbar.search')} title={t('prompts.components.prompt.toolbar.search')}>
+        <IconButton size="icon-xs" variant="secondary" onClick={onApplySearch} label={t('prompts.components.prompt.toolbar.search')}>
           <Search className="h-3.5 w-3.5" />
-        </Button>
+        </IconButton>
       </div>
 
       <PromptSortSelect value={sortBy} onChange={onChangeSortBy} />
 
-      <Button
-        type="button"
+      <IconButton
         size="icon-xs"
         variant="secondary"
         onClick={() => onChangeSortOrder(sortOrder === 'DESC' ? 'ASC' : 'DESC')}
-        aria-label={sortOrderLabel}
-        title={sortOrderLabel}
+        label={sortOrderLabel}
       >
         <SortOrderIcon className="h-3.5 w-3.5" />
-      </Button>
+      </IconButton>
     </div>
   )
 }

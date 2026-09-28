@@ -1,6 +1,5 @@
 import { BarChart3, ChevronDown, ChevronUp, Download, FolderPlus, Pencil, Tags, Trash2, Upload, Wrench } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
@@ -52,13 +51,11 @@ export function PromptSidebar({
   canMoveGroupUp = false,
   canMoveGroupDown = false,
 }: PromptSidebarProps) {
-  const { t, formatNumber } = useI18n()
-  const visibleGroupCount = groups.filter((group) => group.id === 0 || Boolean(group.is_visible)).length
+  const { t } = useI18n()
 
   return (
     <ExplorerSidebar
       title={t({ ko: '그룹', en: 'Groups' })}
-      badge={<Badge variant="outline">{formatNumber(visibleGroupCount)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:prompts:sidebar-locked"
       className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}

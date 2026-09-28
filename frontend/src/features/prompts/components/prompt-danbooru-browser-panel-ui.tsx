@@ -1,9 +1,9 @@
 import { type MouseEvent, type RefObject, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ExternalLink, Languages } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ExternalLink, Languages, RotateCcw } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { ToggleChip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Inset } from '@/components/ui/inset'
@@ -174,12 +174,12 @@ export function PaginationControls({ pagination, visibleCount, onPageChange }: {
         })}
       </span>
       <div className="flex gap-2">
-        <Button size="sm" variant="secondary" disabled={pagination.page <= 1} onClick={() => onPageChange(Math.max(1, pagination.page - 1))}>
-          {t({ ko: '이전', en: 'Previous' })}
-        </Button>
-        <Button size="sm" variant="secondary" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange(pagination.page + 1)}>
-          {t({ ko: '다음', en: 'Next' })}
-        </Button>
+        <IconButton size="icon-sm" variant="secondary" disabled={pagination.page <= 1} onClick={() => onPageChange(Math.max(1, pagination.page - 1))} label={t({ ko: '이전', en: 'Previous' })}>
+          <ChevronLeft />
+        </IconButton>
+        <IconButton size="icon-sm" variant="secondary" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange(pagination.page + 1)} label={t({ ko: '다음', en: 'Next' })}>
+          <ChevronRight />
+        </IconButton>
       </div>
     </div>
   )
@@ -187,11 +187,11 @@ export function PaginationControls({ pagination, visibleCount, onPageChange }: {
 
 export function DanbooruLinkButton({ href, label }: { href: string; label: string }) {
   return (
-    <Button asChild variant="ghost" size="icon-sm">
-      <a href={href} target="_blank" rel="noreferrer" title={label} aria-label={label}>
+    <IconButton asChild variant="ghost" size="icon-sm" label={label}>
+      <a href={href} target="_blank" rel="noreferrer">
         <ExternalLink className="h-4 w-4" />
       </a>
-    </Button>
+    </IconButton>
   )
 }
 
@@ -334,11 +334,12 @@ export function CharacterRelatedTagOptionsPopup({
               placeholder="max"
             />
           </div>
-          <div className="text-2xs text-muted-foreground">{t({ ko: '기본값은 general만, 최소 0.05, 최대 100개야.', en: 'Default is general only, min 0.05, up to 100 items.' })}</div>
         </div>
 
         <div className="flex justify-end">
-          <Button size="sm" variant="ghost" onClick={onReset}>{t({ ko: '초기화', en: 'Reset' })}</Button>
+          <IconButton size="icon-sm" variant="ghost" onClick={onReset} label={t({ ko: '초기화', en: 'Reset' })}>
+            <RotateCcw />
+          </IconButton>
         </div>
       </div>
     </AnchoredPopup>
@@ -460,9 +461,9 @@ export function CharactersTable({ items, language }: { items: DanbooruBrowserCha
             </div>
             <div className="flex justify-center gap-1">
               {showTranslationActions && item.relatedTags.length > 0 ? (
-                <Button type="button" size="icon-sm" variant="secondary" onClick={() => setTranslationTarget(item)} title={t({ ko: 'Related tags 번역', en: 'Translate related tags' })} aria-label={t({ ko: 'Related tags 번역', en: 'Translate related tags' })}>
+                <IconButton size="icon-sm" variant="secondary" onClick={() => setTranslationTarget(item)} label={t({ ko: 'Related tags 번역', en: 'Translate related tags' })}>
                   <Languages className="h-4 w-4" />
-                </Button>
+                </IconButton>
               ) : null}
               <DanbooruLinkButton href={item.danbooruUrl} label={t({ ko: 'Danbooru에서 {name} 열기', en: 'Open {name} on Danbooru' }, { name: item.name })} />
             </div>
