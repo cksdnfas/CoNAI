@@ -77,9 +77,12 @@ export function ImageViewModalActions({
           <ExternalLink className="h-4 w-4" />
         </Button>
       ) : null}
-      <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={controls.refresh} disabled={controls.isRefreshing} aria-label={t('images.components.detail.image.view.modal.actions.refresh')} title={t('images.components.detail.image.view.modal.actions.refresh')}>
-        <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-      </Button>
+      {/* The record is refetched every time the viewer opens (staleTime 0); a manual refresh only helps while it is still processing. */}
+      {controls.image?.is_processing ? (
+        <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={controls.refresh} disabled={controls.isRefreshing} aria-label={t('images.components.detail.image.view.modal.actions.refresh')} title={t('images.components.detail.image.view.modal.actions.refresh')}>
+          <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+        </Button>
+      ) : null}
     </>
   )
 

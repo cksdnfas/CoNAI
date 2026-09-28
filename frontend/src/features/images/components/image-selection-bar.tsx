@@ -42,12 +42,17 @@ export function ImageSelectionBar({
       ? t('images.components.image.selection.bar.zip.download')
       : t('images.components.image.selection.bar.download')
 
+  // Only mention downloadability when it differs from the selection; "3 selected / 3 downloadable" is noise.
+  const downloadStatusText = !showDownloadAction || downloadableCount === selectedCount
+    ? undefined
+    : downloadableCount > 0
+      ? t('images.components.image.selection.bar.value.downloadable', { count: formatNumber(downloadableCount) })
+      : t('images.components.image.selection.bar.no.downloadable.items')
+
   return (
     <SelectionActionBar
       selectedCount={selectedCount}
-      description={statusText ?? (downloadableCount > 0
-        ? t('images.components.image.selection.bar.value.downloadable', { count: formatNumber(downloadableCount) })
-        : t('images.components.image.selection.bar.no.downloadable.items'))}
+      description={statusText ?? downloadStatusText}
       onClear={onClear}
       compactActions
       actions={(
