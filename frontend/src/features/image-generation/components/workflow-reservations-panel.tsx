@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
@@ -27,6 +26,8 @@ import type { GraphWorkflowNameRecord } from '@/lib/api-module-graph'
 import { getErrorMessage } from '../image-generation-shared'
 import { ModuleWorkflowEmptyRunsTab } from '@/features/module-graph/components/module-workflow-empty-runs-tab'
 import { getActiveWorkflowReservationScheduleCount, isActiveReservationExecution, mergeVisibleReservationExecutions, sortWorkflowReservationSchedules } from './workflow-reservations-ui'
+import { LoadingState } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 
 type ReservationView = 'schedules' | 'executions'
 
@@ -274,13 +275,13 @@ export function WorkflowReservationsPanel() {
         )}
       >
         {reservationsQuery.isError ? (
-          <Alert variant="destructive">
-            <AlertTitle>{t({ ko: '예약작업을 불러오지 못했어', en: 'Could not load reservation jobs' })}</AlertTitle>
-            <AlertDescription>{getErrorMessage(reservationsQuery.error, t({ ko: '예약작업 조회 실패', en: 'Failed to load reservation jobs' }))}</AlertDescription>
-          </Alert>
+          <ErrorState
+            title={t({ ko: '예약작업을 불러오지 못했어', en: 'Could not load reservation jobs' })}
+            description={getErrorMessage(reservationsQuery.error, t({ ko: '예약작업 조회 실패', en: 'Failed to load reservation jobs' }))}
+          />
         ) : null}
 
-        {!reservationsQuery.isError && reservationsQuery.isPending ? <div className="text-sm text-muted-foreground">{t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })}</div> : null}
+        {!reservationsQuery.isError && reservationsQuery.isPending ? <LoadingState variant="inline" label={t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })} /> : null}
 
         {!reservationsQuery.isPending && !reservationsQuery.isError && reservationContent ? (
           <div className="grid gap-3 sm:grid-cols-3">

@@ -39,6 +39,7 @@ import {
   summarizeLlmPresetContent,
 } from './node-inspector-panel-helpers'
 import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { EmptyState } from '@/components/ui/empty-state'
 
 const MODULE_ENGINE_LABELS: Record<ModuleEngineType, TranslationInput> = {
   nai: 'NovelAI',
@@ -666,13 +667,9 @@ export function NodeInspectorPanel({
               </div>
 
               {!selectedExecutionArtifacts ? (
-                <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                  {t({ ko: '실행 결과를 선택하면 이 노드의 출력 값을 포트별로 여기서 바로 확인할 수 있어.', en: 'Select an execution result to inspect this node\'s output values by port here.' })}
-                </div>
+                <EmptyState size="compact" title={t({ ko: '실행 결과를 선택하면 이 노드의 출력 값을 포트별로 여기서 바로 확인할 수 있어.', en: 'Select an execution result to inspect this node\'s output values by port here.' })} />
               ) : selectedNodeOutputGroups.length === 0 ? (
-                <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                  {t({ ko: '선택한 실행에서 이 노드가 남긴 출력이 없어.', en: 'This node has no outputs in the selected run.' })}
-                </div>
+                <EmptyState size="compact" title={t({ ko: '선택한 실행에서 이 노드가 남긴 출력이 없어.', en: 'This node has no outputs in the selected run.' })} />
               ) : (
                 <div className="space-y-2">
                   {selectedNodeOutputGroups.map((group) => {

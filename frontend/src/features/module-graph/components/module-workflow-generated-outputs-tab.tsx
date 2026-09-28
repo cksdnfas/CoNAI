@@ -10,6 +10,7 @@ import type { WatchedFolder } from '@/types/folder'
 import type { ImageRecord } from '@/types/image'
 import { resolveModuleWorkflowOutputProgress } from '../module-workflow-output-progress'
 import type { ModuleWorkflowGeneratedOutputItem } from './module-workflow-output-management-panel-helpers'
+import { EmptyState } from '@/components/ui/empty-state'
 
 /** Render the generated-output tab using the shared CoNAI image list surface. */
 export function ModuleWorkflowGeneratedOutputsTab({
@@ -183,9 +184,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
         ) : null}
 
         {outputItems.length === 0 ? (
-          <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
-            {t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })}
-          </div>
+          <EmptyState title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })} />
         ) : (
           <div className="space-y-3">
             <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />

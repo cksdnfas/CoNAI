@@ -41,6 +41,9 @@ import {
 } from './generation-queue-ui'
 import { GenerationQueueReservationsTab } from './generation-queue-reservations-tab'
 import { sortWorkflowReservationSchedules } from './workflow-reservations-ui'
+import { EmptyState } from '@/components/ui/empty-state'
+import { LoadingState } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 
 const POPUP_LIST_CLASS_NAME = 'max-h-[min(24rem,calc(100vh-var(--theme-shell-header-height)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100vh-var(--theme-shell-header-height)-2rem))] sm:px-4'
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
@@ -535,17 +538,13 @@ export function GenerationQueueHeaderWidget() {
 
             <div className={POPUP_LIST_CLASS_NAME}>
               {activeQueueQuery.isError ? (
-                <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-3 text-sm text-danger">
-                  {getErrorMessage(activeQueueQuery.error, t('image-generation.components.generation.queue.header.widget.could.not.load.the.queue'))}
-                </div>
+                <ErrorState size="compact" title={getErrorMessage(activeQueueQuery.error, t('image-generation.components.generation.queue.header.widget.could.not.load.the.queue'))} />
               ) : null}
 
-              {!activeQueueQuery.isError && activeQueueQuery.isPending ? <div className="text-sm text-muted-foreground">{t('image-generation.components.generation.queue.header.widget.loading.queue')}</div> : null}
+              {!activeQueueQuery.isError && activeQueueQuery.isPending ? <LoadingState variant="inline" label={t('image-generation.components.generation.queue.header.widget.loading.queue')} /> : null}
 
               {!activeQueueQuery.isPending && !activeQueueQuery.isError && records.length === 0 ? (
-                <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
-                  {t({ ko: '지금 진행 중인 큐 작업이 없어.', en: 'No queue jobs are currently running.' })}
-                </div>
+                <EmptyState size="compact" title={t({ ko: '지금 진행 중인 큐 작업이 없어.', en: 'No queue jobs are currently running.' })} />
               ) : null}
 
               {records.length > 0 ? (

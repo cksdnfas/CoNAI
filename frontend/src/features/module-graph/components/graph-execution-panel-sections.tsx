@@ -16,6 +16,7 @@ import {
   type ExecutionComparisonSummary,
   type ExecutionPathDiagnosticRow,
 } from './graph-execution-panel-helpers'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export function ExecutionOutputGroupCard({
   group,
@@ -131,9 +132,7 @@ export function ExecutionComparisonContextBlock({
       </div>
 
       {visibleRows.length === 0 ? (
-        <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-          {t({ ko: '압축 입출력 원장 없음', en: 'No compact input/output ledger yet' })}
-        </div>
+        <EmptyState size="compact" title={t({ ko: '압축 입출력 원장 없음', en: 'No compact input/output ledger yet' })} />
       ) : (
         <div className="space-y-1.5">
           {visibleRows.map((row) => (

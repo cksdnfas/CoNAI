@@ -10,6 +10,7 @@ import {
   NAI_CHARACTER_GRID_Y_OPTIONS,
   normalizeNaiCharacterPromptDrafts,
 } from '@/features/image-generation/image-generation-shared'
+import { EmptyState } from '@/components/ui/empty-state'
 
 type NaiCharacterPromptDraft = {
   prompt: string
@@ -175,9 +176,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
       ) : null}
 
       {drafts.length === 0 ? (
-        <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
-          {t({ ko: '캐릭터 없음', en: 'No characters' })}
-        </div>
+        <EmptyState size="compact" title={t({ ko: '캐릭터 없음', en: 'No characters' })} />
       ) : (
         drafts.map((draft, index) => (
           <div

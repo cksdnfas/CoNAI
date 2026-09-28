@@ -23,6 +23,8 @@ import {
   type CustomNodeTestResult,
 } from '@/lib/api-custom-nodes'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { LoadingState } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 
 type CustomNodeManagementPanelProps = {
   onModulesChanged?: () => Promise<unknown> | void
@@ -249,17 +251,14 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
       </div>
 
       {customNodesQuery.isLoading ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '불러오는 중', en: 'Loading' })}</AlertTitle>
-          <AlertDescription>{t({ ko: '커스텀 노드 폴더를 읽고 있어.', en: 'Reading the custom node folders.' })}</AlertDescription>
-        </Alert>
+        <LoadingState variant="inline" label={t({ ko: '커스텀 노드 폴더를 읽고 있어.', en: 'Reading the custom node folders.' })} />
       ) : null}
 
       {customNodesQuery.isError ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t({ ko: '목록 로드 실패', en: 'Failed to load list' })}</AlertTitle>
-          <AlertDescription>{customNodesQuery.error instanceof Error ? customNodesQuery.error.message : t({ ko: '커스텀 노드 목록을 불러오지 못했어.', en: 'Failed to load the custom node list.' })}</AlertDescription>
-        </Alert>
+        <ErrorState
+          title={t({ ko: '목록 로드 실패', en: 'Failed to load list' })}
+          description={customNodesQuery.error instanceof Error ? customNodesQuery.error.message : t({ ko: '커스텀 노드 목록을 불러오지 못했어.', en: 'Failed to load the custom node list.' })}
+        />
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">

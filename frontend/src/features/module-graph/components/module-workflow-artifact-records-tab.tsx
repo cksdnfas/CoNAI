@@ -10,6 +10,7 @@ import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord, GraphExecutionRecord } from '@/lib/api-module-graph'
 import { resolveModuleWorkflowOutputProgress } from '../module-workflow-output-progress'
 import { buildArtifactTextPreview } from '../module-graph-shared'
+import { EmptyState } from '@/components/ui/empty-state'
 
 /** Render non-media and intermediate workflow artifacts for cleanup-oriented management. */
 export function ModuleWorkflowArtifactRecordsTab({
@@ -138,9 +139,7 @@ export function ModuleWorkflowArtifactRecordsTab({
       </CardHeader>
       <CardContent>
         {artifacts.length === 0 ? (
-          <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
-            {t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.', en: 'No text or intermediate artifacts match the search/filter.' })}
-          </div>
+          <EmptyState title={t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.', en: 'No text or intermediate artifacts match the search/filter.' })} />
         ) : (
           <div ref={setArtifactSelectionContainer} className="space-y-3">
             <WorkflowArtifactPagination page={page} totalPages={totalPages} visibleCount={artifacts.length} totalCount={totalArtifactCount} onPageChange={onPageChange} />

@@ -18,6 +18,8 @@ import {
 } from '@/lib/api-image-generation-nai'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { EmptyState } from '@/components/ui/empty-state'
+import { LoadingState } from '@/components/ui/loading-state'
 
 type NaiReusableAssetKind = 'vibes' | 'character_refs'
 
@@ -430,7 +432,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         </div>
 
         {vibeDrafts.length === 0 ? (
-          <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">{t({ ko: '아직 vibe 입력이 없어.', en: 'There are no vibe inputs yet.' })}</div>
+          <EmptyState size="compact" title={t({ ko: '아직 vibe 입력이 없어.', en: 'There are no vibe inputs yet.' })} />
         ) : (
           vibeDrafts.map((draft, index) => (
             <div key={`nai-vibe-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
@@ -485,7 +487,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             </div>
           </div>
           {savedVibesQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>
+            <LoadingState variant="inline" />
           ) : filteredSavedVibes.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
               {filteredSavedVibes.map((asset) => {
@@ -554,7 +556,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       </div>
 
       {characterReferenceDrafts.length === 0 ? (
-        <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">{t({ ko: '아직 reference 입력이 없어.', en: 'There are no reference inputs yet.' })}</div>
+        <EmptyState size="compact" title={t({ ko: '아직 reference 입력이 없어.', en: 'There are no reference inputs yet.' })} />
       ) : (
         characterReferenceDrafts.map((draft, index) => (
           <div key={`nai-character-reference-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
@@ -612,7 +614,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           </div>
         </div>
         {savedCharacterReferencesQuery.isLoading ? (
-          <div className="text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>
+          <LoadingState variant="inline" />
         ) : filteredSavedCharacterReferences.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2">
             {filteredSavedCharacterReferences.map((asset) => {

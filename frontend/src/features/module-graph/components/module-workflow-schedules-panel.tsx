@@ -27,6 +27,7 @@ import {
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
 import { WorkflowInputFields } from './workflow-input-fields'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { EmptyState } from '@/components/ui/empty-state'
 
 type ScheduleMutationPayload = {
   name: string
@@ -280,9 +281,7 @@ export function ModuleWorkflowSchedulesPanel({
         )}
       >
         {schedules.length === 0 ? (
-          <Inset className="border-dashed py-8 text-sm text-muted-foreground">
-            {t({ ko: '자동 실행 없음', en: 'No autoruns' })}
-          </Inset>
+          <EmptyState title={t({ ko: '자동 실행 없음', en: 'No autoruns' })} />
         ) : (
           <div className="space-y-3">
             {schedules.map((schedule) => {

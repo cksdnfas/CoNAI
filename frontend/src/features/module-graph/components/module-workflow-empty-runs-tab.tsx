@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n'
 import type { GraphExecutionRecord, GraphWorkflowNameRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import { ModuleWorkflowSchedulesPanel } from './module-workflow-schedules-panel'
+import { EmptyState } from '@/components/ui/empty-state'
 
 /** Render workflow reservations plus empty-run management content. */
 export function ModuleWorkflowEmptyRunsTab({
@@ -108,9 +109,7 @@ export function ModuleWorkflowEmptyRunsTab({
         )}
       >
         {queueExecutions.length === 0 ? (
-          <Inset className="border-dashed py-10 text-sm text-muted-foreground">
-            {t({ ko: '이 범위에는 빈 실행이나 출력 없는 실행이 없어.', en: 'No empty or outputless runs in this scope.' })}
-          </Inset>
+          <EmptyState title={t({ ko: '이 범위에는 빈 실행이나 출력 없는 실행이 없어.', en: 'No empty or outputless runs in this scope.' })} />
         ) : (
           <div className="space-y-3">
             {queueExecutions.map((execution) => {

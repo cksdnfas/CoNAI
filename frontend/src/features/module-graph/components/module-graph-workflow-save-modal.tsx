@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface ModuleGraphWorkflowSaveModalProps {
   open: boolean
@@ -102,9 +103,7 @@ export function ModuleGraphWorkflowSaveModal({
         {folderPanel}
 
         {!hasNodes ? (
-          <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-            {t({ ko: '저장하려면 먼저 노드를 하나 이상 배치해줘.', en: 'Place at least one node before saving.' })}
-          </div>
+          <EmptyState size="compact" title={t({ ko: '저장하려면 먼저 노드를 하나 이상 배치해줘.', en: 'Place at least one node before saving.' })} />
         ) : null}
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">

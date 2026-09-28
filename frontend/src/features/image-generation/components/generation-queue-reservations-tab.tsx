@@ -12,6 +12,9 @@ import {
   getReservationStatusVariant,
   getReservationTypeLabel,
 } from './workflow-reservations-ui'
+import { EmptyState } from '@/components/ui/empty-state'
+import { LoadingState } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 
 type GenerationQueueReservationsTabProps = {
   /** Already sorted with `sortWorkflowReservationSchedules`. */
@@ -50,17 +53,13 @@ export function GenerationQueueReservationsTab({
 
       <div className={listClassName}>
         {isError ? (
-          <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-3 text-sm text-danger">
-            {getErrorMessage(error, t('image-generation.components.generation.queue.header.widget.could.not.load.reservations'))}
-          </div>
+          <ErrorState size="compact" title={getErrorMessage(error, t('image-generation.components.generation.queue.header.widget.could.not.load.reservations'))} />
         ) : null}
 
-        {!isError && isPending ? <div className="text-sm text-muted-foreground">{t('image-generation.components.generation.queue.header.widget.loading.reservations')}</div> : null}
+        {!isError && isPending ? <LoadingState variant="inline" label={t('image-generation.components.generation.queue.header.widget.loading.reservations')} /> : null}
 
         {!isPending && !isError && schedules.length === 0 ? (
-          <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
-            {t({ ko: '등록된 예약작업이 아직 없어.', en: 'No reservations have been registered yet.' })}
-          </div>
+          <EmptyState size="compact" title={t({ ko: '등록된 예약작업이 아직 없어.', en: 'No reservations have been registered yet.' })} />
         ) : null}
 
         {schedules.length > 0 ? (

@@ -12,6 +12,7 @@ import {
 } from '../module-graph-shared'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { buildNodeDisplayLabelMap, getNodeDisplayLabelFromMap } from './graph-execution-panel-helpers'
+import { EmptyState } from '@/components/ui/empty-state'
 
 function getFinalResultOverlayLabel(nodeLabel: string) {
   const normalizedLabel = nodeLabel.trim().toLowerCase()
@@ -239,10 +240,11 @@ export function WorkflowFinalResultsSection({
       </div>
 
       {resolvedEntries.length === 0 ? (
-        <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-          <div>{resolvedEmptyLabel}</div>
-          {selectedGraph ? <div className="mt-1 text-xs text-muted-foreground/90">{t({ ko: '시스템 모듈의 최종 결과를 추가한 뒤, 최종으로 확정할 출력 포트에 연결해줘.', en: 'Add a final result from a system module, then connect it to the output port you want to finalize.' })}</div> : null}
-        </div>
+        <EmptyState
+          size="compact"
+          title={resolvedEmptyLabel}
+          description={selectedGraph ? t({ ko: '시스템 모듈의 최종 결과를 추가한 뒤, 최종으로 확정할 출력 포트에 연결해줘.', en: 'Add a final result from a system module, then connect it to the output port you want to finalize.' }) : undefined}
+        />
       ) : (
         <div className="space-y-3">
           {registeredVisualEntries.length > 0 ? (

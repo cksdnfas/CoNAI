@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ListX, Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowLeft, ListX, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { Inset } from '@/components/ui/inset'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -65,6 +64,9 @@ import {
   readCachedHistoryPage,
   writeAcknowledgedRecoveryIds,
 } from './generation-history-panel-helpers'
+import { EmptyState } from '@/components/ui/empty-state'
+import { LoadingState, Spinner } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 
 type GenerationHistoryPanelProps = {
   refreshNonce: number
@@ -672,7 +674,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                 ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' })
                 : t({ ko: '히스토리 비우기', en: 'Clear history' })}
           >
-            {isClearingHistory ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListX className="h-4 w-4" />}
+            {isClearingHistory ? <Spinner /> : <ListX className="h-4 w-4" />}
           </Button>
           <Button
             type="button"
@@ -692,13 +694,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       </div>
 
       {historyQuery.isError ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t('image-generation.components.generation.history.panel.could.not.load.history')}</AlertTitle>
-          <AlertDescription>{getErrorMessage(historyQuery.error, t('image-generation.components.generation.history.panel.failed.to.fetch.generation.history'))}</AlertDescription>
-        </Alert>
+        <ErrorState
+          title={t('image-generation.components.generation.history.panel.could.not.load.history')}
+          description={getErrorMessage(historyQuery.error, t('image-generation.components.generation.history.panel.failed.to.fetch.generation.history'))}
+        />
       ) : null}
 
-      {isHistoryLoading ? <div className="text-sm text-muted-foreground">{t('image-generation.components.generation.history.panel.loading.history')}</div> : null}
+      {isHistoryLoading ? <LoadingState variant="inline" label={t('image-generation.components.generation.history.panel.loading.history')} /> : null}
 
       {!isHistoryLoading && visibleRetryableHistoryRecords.length > 0 ? (
         <Inset className="space-y-3">
@@ -772,7 +774,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
       <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
         {!isHistoryLoading && historyImages.length === 0 ? (
-          <div className="py-4 text-sm text-muted-foreground">{t('image-generation.components.generation.history.panel.no.generation.results.to.display.yet')}</div>
+          <EmptyState title={t('image-generation.components.generation.history.panel.no.generation.results.to.display.yet')} />
         ) : null}
 
         {!isHistoryLoading && historyImages.length > 0 ? (
@@ -807,17 +809,12 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             ) : null}
 
             {hasOnlyHiddenItems && !historyQuery.hasNextPage && !historyQuery.isFetchingNextPage ? (
-              <div className="py-4 text-sm text-muted-foreground">
-                {t({ ko: '현재 등급 표시 설정으로 모든 생성 기록이 숨겨졌어.', en: 'All generation history is hidden by the current rating visibility settings.' })}
-              </div>
+              <EmptyState size="compact" title={t({ ko: '현재 등급 표시 설정으로 모든 생성 기록이 숨겨졌어.', en: 'All generation history is hidden by the current rating visibility settings.' })} />
             ) : null}
 
             <div className="flex shrink-0 flex-col items-center gap-3 pb-2">
               {historyQuery.isFetchingNextPage ? (
-                <Inset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>{t({ ko: '기록 더 불러오는 중…', en: 'Loading more history…' })}</span>
-                </Inset>
+                <LoadingState variant="inline" className="text-xs" label={t({ ko: '기록 더 불러오는 중…', en: 'Loading more history…' })} />
               ) : null}
 
               {Boolean(historyQuery.hasNextPage) && !historyQuery.isFetchingNextPage && !historyQuery.isFetchNextPageError ? (

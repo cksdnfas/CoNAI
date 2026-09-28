@@ -7,6 +7,8 @@ import { GraphExecutionPanel, type GraphExecutionListPaging } from './graph-exec
 import { ModuleWorkflowBrowseView } from './module-workflow-browse-view'
 import { ModuleWorkflowEditorView } from './module-workflow-editor-view'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
+import { LoadingState } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 
 const ModuleWorkflowOutputManagementPanelLazy = lazy(async () => {
   const module = await import('./module-workflow-output-management-panel')
@@ -102,9 +104,7 @@ export function ModuleGraphWorkflowBrowseContent({
         />
       ) : null}
       browseContentPanel={selectedGraphRecord ? null : browseContentIsError ? (
-        <div className="rounded-sm border border-dashed border-destructive/40 px-4 py-10 text-sm text-muted-foreground">
-          {browseContentError}
-        </div>
+        <ErrorState title={browseContentError} />
       ) : browseContent ? (
         <Suspense fallback={<WorkflowContentFallback />}>
           <ModuleWorkflowOutputManagementPanelLazy
@@ -114,9 +114,7 @@ export function ModuleGraphWorkflowBrowseContent({
           />
         </Suspense>
       ) : (
-        <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
-          {t({ ko: '생성물 관리 콘텐츠를 불러오는 중이야…', en: 'Loading artifact management content…' })}
-        </div>
+        <LoadingState label={t({ ko: '생성물 관리 콘텐츠를 불러오는 중이야…', en: 'Loading artifact management content…' })} />
       )}
     />
   )

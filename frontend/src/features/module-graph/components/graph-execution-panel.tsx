@@ -47,6 +47,9 @@ import { ExecutionComparisonContextBlock, ExecutionOutputGroupCard, ExecutionPat
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 import { buildFinalResultLifecycleWarningSourceLabel, findLlmResponseDiagnostic, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
+import { EmptyState } from '@/components/ui/empty-state'
+import { LoadingState } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
 
 type GraphExecutionDetail = {
   execution: GraphExecutionRecord
@@ -232,9 +235,7 @@ function SelectedExecutionSummary({
         </div>
 
         {compactArtifactGroups.length === 0 ? (
-          <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-            {t({ ko: '표시할 출력 없음', en: 'No outputs to display' })}
-          </div>
+          <EmptyState size="compact" title={t({ ko: '표시할 출력 없음', en: 'No outputs to display' })} />
         ) : (
           <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(12rem,1fr))]">
             {compactArtifactGroups.map((group) => (
@@ -419,24 +420,23 @@ export function GraphExecutionPanel({
           {!showHeader ? <div className="flex justify-end">{actionButtons}</div> : null}
 
           {!selectedGraphId ? (
-            <Alert>
-              <AlertTitle>{t({ ko: '그래프를 먼저 골라줘', en: 'Choose a graph first' })}</AlertTitle>
-              <AlertDescription>{t({ ko: '워크플로우를 먼저 선택해.', en: 'Select a workflow first.' })}</AlertDescription>
-            </Alert>
+            <EmptyState
+              size="compact"
+              title={t({ ko: '그래프를 먼저 골라줘', en: 'Choose a graph first' })}
+              description={t({ ko: '워크플로우를 먼저 선택해.', en: 'Select a workflow first.' })}
+            />
           ) : null}
 
           {selectedGraphId && executionListIsError ? (
-            <Alert variant="destructive">
-              <AlertTitle>{t({ ko: '실행 목록 오류', en: 'Run list error' })}</AlertTitle>
-              <AlertDescription>{executionListError}</AlertDescription>
-            </Alert>
+            <ErrorState size="compact" title={t({ ko: '실행 목록 오류', en: 'Run list error' })} description={executionListError} />
           ) : null}
 
           {selectedGraphId && executionList.length === 0 ? (
-            <Alert>
-              <AlertTitle>{t({ ko: '실행 기록이 없어', en: 'There is no run history' })}</AlertTitle>
-              <AlertDescription>{t({ ko: '먼저 실행해줘.', en: 'Run it first.' })}</AlertDescription>
-            </Alert>
+            <EmptyState
+              size="compact"
+              title={t({ ko: '실행 기록이 없어', en: 'There is no run history' })}
+              description={t({ ko: '먼저 실행해줘.', en: 'Run it first.' })}
+            />
           ) : null}
 
           {selectedGraphId && (queuedCount > 0 || runningCount > 0) ? (
@@ -484,16 +484,11 @@ export function GraphExecutionPanel({
                   </button>
 
                   {isSelected && executionDetailIsError ? (
-                    <Alert variant="destructive">
-                      <AlertTitle>{t({ ko: '실행 상세 오류', en: 'Run detail error' })}</AlertTitle>
-                      <AlertDescription>{executionDetailError}</AlertDescription>
-                    </Alert>
+                    <ErrorState size="compact" title={t({ ko: '실행 상세 오류', en: 'Run detail error' })} description={executionDetailError} />
                   ) : null}
 
                   {isSelected && !executionDetailIsError && !selectedDetailMatches ? (
-                    <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                      {t({ ko: '실행 결과 불러오는 중…', en: 'Loading run results…' })}
-                    </div>
+                    <LoadingState variant="inline" label={t({ ko: '실행 결과 불러오는 중…', en: 'Loading run results…' })} />
                   ) : null}
 
                   {selectedDetailMatches && executionDetail ? (
@@ -659,9 +654,7 @@ export function GraphExecutionPanel({
                 <Badge variant="outline">{executionDetail.logs.length}</Badge>
               </div>
               {executionDetail.logs.length === 0 ? (
-                <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                  {t({ ko: '로그 없음', en: 'No logs' })}
-                </div>
+                <EmptyState size="compact" title={t({ ko: '로그 없음', en: 'No logs' })} />
               ) : (
                 executionDetail.logs.map((log) => {
                   const parsedDetails = parseMetadataValue(log.details)

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { getModuleBaseDisplayName } from '../module-graph-shared'
 import { CUSTOM_NODE_GROUP_ORDER_INDEX, SAVED_MODULE_GROUP_ORDER_INDEX, SYSTEM_GROUP_ORDER_INDEX, getCustomNodeGroup, getModuleGroupSortIndex, getSavedModuleGroup, getSystemModuleGroup, isCustomNodeModule, isGenerationModule, localizeModuleGroupLabel, shouldHideFromModuleLibrary } from './module-library-groups'
 import type { RecommendedModuleMatch } from './module-graph-canvas'
+import { EmptyState } from '@/components/ui/empty-state'
 
 type QuickCreateTab = 'recommended' | 'system' | 'generation' | 'custom-nodes'
 
@@ -242,9 +243,7 @@ export function ModuleGraphQuickCreateMenu({
 
           <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
             {groupedModules.length === 0 ? (
-              <div className="rounded-sm border border-dashed border-border px-3 py-6 text-sm text-muted-foreground">
-                {emptyMessage}
-              </div>
+              <EmptyState size="compact" title={emptyMessage} />
             ) : groupedModules.map((group) => (
               <div key={group.key} className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
