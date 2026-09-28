@@ -56,6 +56,23 @@ function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope)
 }
 
 /** Render a compact summary tile for upload or extraction metadata. */
+/** Turn a MIME type such as "image/png" into a friendly label like "PNG image". */
+function describeFileType(file: File, t: ReturnType<typeof useI18n>['t']): string {
+  const [kind = '', subtype = ''] = file.type.split('/')
+  const extension = file.name.includes('.') ? file.name.split('.').pop() ?? '' : ''
+  const format = (subtype.replace(/^x-/, '').replace(/\+.*$/, '') || extension).toUpperCase()
+  if (!format) {
+    return '—'
+  }
+  if (kind === 'image') {
+    return t({ ko: '{format} 이미지', en: '{format} image' }, { format })
+  }
+  if (kind === 'video') {
+    return t({ ko: '{format} 동영상', en: '{format} video' }, { format })
+  }
+  return t({ ko: '{format} 파일', en: '{format} file' }, { format })
+}
+
 function SummaryTile({
   label,
   value,
@@ -516,9 +533,9 @@ export function UploadPageExtractSection({
           <div className="space-y-4">
             <Inset className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-3">
-                <SummaryTile label="file" value={extractFile.name} />
-                <SummaryTile label="size" value={formatBytes(extractFile.size)} />
-                <SummaryTile label="type" value={extractFile.type || '—'} />
+                <SummaryTile label={t({ ko: '파일', en: 'File' })} value={extractFile.name} />
+                <SummaryTile label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractFile.size)} />
+                <SummaryTile label={t({ ko: '형식', en: 'Type' })} value={describeFileType(extractFile, t)} />
               </div>
             </Inset>
           </div>
@@ -542,10 +559,10 @@ export function UploadPageExtractSection({
             {extractResult ? (
               <Inset className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                  <SummaryTile label="dimensions" value={formatDimensions(extractResult.width, extractResult.height)} />
-                  <SummaryTile label="size" value={formatBytes(extractResult.file_size)} />
-                  <SummaryTile label="tool" value={extractResult.ai_metadata?.ai_tool || '—'} />
-                  <SummaryTile label="model" value={extractResult.ai_metadata?.model_name || '—'} />
+                  <SummaryTile label={t({ ko: '해상도', en: 'Dimensions' })} value={formatDimensions(extractResult.width, extractResult.height)} />
+                  <SummaryTile label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractResult.file_size)} />
+                  <SummaryTile label={t({ ko: '생성 도구', en: 'Tool' })} value={extractResult.ai_metadata?.ai_tool || '—'} />
+                  <SummaryTile label={t({ ko: '모델', en: 'Model' })} value={extractResult.ai_metadata?.model_name || '—'} />
                   {extractedGenerationParamItems.map((item) => (
                     <SummaryTile key={item.id} label={item.label} value={item.value} copyValue={item.value} />
                   ))}
