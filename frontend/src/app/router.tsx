@@ -1,4 +1,4 @@
-import { Navigate, createHashRouter } from 'react-router-dom'
+import { Navigate, createHashRouter, type RouteObject } from 'react-router-dom'
 import { RouteErrorBoundary } from '@/app/route-error-boundary'
 import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
 import { RequireAuthPermission } from '@/features/auth/require-auth-permission'
@@ -35,7 +35,25 @@ function normalizeLegacyWallpaperRuntimeLocation() {
 
 normalizeLegacyWallpaperRuntimeLocation()
 
+/**
+ * Dev-only routes. `import.meta.env.DEV` is replaced with `false` in production builds, so the branch (and the
+ * dynamic import inside it) is dropped and the catalog chunk is never emitted.
+ */
+const devRoutes: RouteObject[] = import.meta.env.DEV
+  ? [
+      {
+        path: '/dev/ui',
+        lazy: async () => {
+          const module = await import('@/features/dev-ui-catalog/ui-catalog-page')
+          return { Component: module.UiCatalogPage }
+        },
+        errorElement: <RouteErrorBoundary />,
+      },
+    ]
+  : []
+
 export const appRouter = createHashRouter([
+  ...devRoutes,
   {
     path: '/login',
     element: <LoginRoute />,
