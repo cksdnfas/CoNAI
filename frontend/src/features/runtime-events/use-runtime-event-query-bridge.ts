@@ -281,7 +281,7 @@ export function useRuntimeEventQueryBridge() {
       default:
         return
     }
-  }, [queryClient, scheduleInvalidate])
+  }, [flushPendingProgress, queryClient, scheduleInvalidate])
 
   /** 스트림 공백 구간(재연결/reset) 보정: 이 채널이 다루는 모든 표면을 1회 무효화한다. */
   const resyncAll = useCallback(() => {

@@ -91,6 +91,7 @@
   --z-index-sticky: 40;
   --z-index-header: 50;
   --z-index-drawer: 84;
+  --z-index-drawer-panel: 85;
   --z-index-popover: 140;
   --z-index-popover-nested: 150;
   --z-index-modal: 6000;

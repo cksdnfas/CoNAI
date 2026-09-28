@@ -87,7 +87,7 @@ export function BottomDrawerSheet({
   return createPortal(
     <>
       <div
-        className={open ? 'fixed inset-0 z-[84] bg-black/56 transition-opacity duration-200' : 'pointer-events-none fixed inset-0 z-[84] bg-black/0 transition-opacity duration-200'}
+        className={open ? 'fixed inset-0 z-drawer bg-backdrop/70 transition-opacity duration-200' : 'pointer-events-none fixed inset-0 z-drawer bg-transparent transition-opacity duration-200'}
         onClick={onClose}
       />
 
@@ -98,8 +98,8 @@ export function BottomDrawerSheet({
         data-surface={useControllerSurface ? undefined : 'raised'}
         className={cn(
           open
-            ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col overflow-hidden transition-transform duration-300'
-            : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col overflow-hidden transition-transform duration-300',
+            ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-drawer-panel flex h-[min(82vh,calc(100vh-1rem))] flex-col overflow-hidden transition-transform duration-300'
+            : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-drawer-panel flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col overflow-hidden transition-transform duration-300',
           useControllerSurface && 'border-x-0 border-b-0 bg-background/96 shadow-[0_-24px_64px_rgba(0,0,0,0.42)] backdrop-blur-md',
           className,
         )}

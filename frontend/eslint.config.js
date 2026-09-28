@@ -30,6 +30,10 @@ const DESIGN_SYSTEM_GUARDS = [
     message: '[ds/button] Raw <button>: use Button or IconButton from components/ui (rich clickable cards: <Panel asChild interactive><button/></Panel>).',
   },
   ...classNameString('/fixed inset-0/', '[ds/overlay] Hand-rolled "fixed inset-0" overlay: use Modal or Popover from components/ui.'),
+]
+
+// Token guards also apply inside components/ui, where the primitives themselves legitimately render <button> and overlays.
+const TOKEN_GUARDS = [
   ...classNameString('/#[0-9a-fA-F]{3,8}/', '[ds/hex-colour] Hex colour in className: use theme tokens (bg-primary, text-muted-foreground, status colours…).'),
   ...classNameString('/text-\\[\\d+(\\.\\d+)?px\\]/', '[ds/text-px] Arbitrary text-[Npx] size: use the type scale (text-2xs, text-xs, text-sm…).'),
   ...classNameString('/bg-black\\x2f/', '[ds/backdrop] bg-black/N scrim: use the bg-backdrop token (or Modal, which already applies it).'),
@@ -73,7 +77,7 @@ export default defineConfig([
       ],
     },
   },
-  // Design-system guards: warn (burn-down) on hand-rolled UI that has a shared replacement.
+  // Design-system guards: hand-rolled UI that has a shared replacement. The burn-down reached zero, so these are errors.
   {
     files: [
       'src/features/**/*.{ts,tsx}',
@@ -82,7 +86,13 @@ export default defineConfig([
       'src/components/media/**/*.{ts,tsx}',
     ],
     rules: {
-      'no-restricted-syntax': ['warn', ...DESIGN_SYSTEM_GUARDS],
+      'no-restricted-syntax': ['error', ...DESIGN_SYSTEM_GUARDS, ...TOKEN_GUARDS],
+    },
+  },
+  {
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': ['error', ...TOKEN_GUARDS],
     },
   },
 ])

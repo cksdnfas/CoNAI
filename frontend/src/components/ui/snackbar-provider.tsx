@@ -62,7 +62,7 @@ export function SnackbarProvider({ children }: PropsWithChildren) {
     <SnackbarContext.Provider value={value}>
       {children}
       {/* Bottom-right stack: newest card sits at the bottom, closest to the corner. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[7000] flex flex-col items-end gap-2 p-4 sm:p-6">
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-toast flex flex-col items-end gap-2 p-4 sm:p-6">
         {items.map((item) => (
           <SnackbarStackItem key={item.id} item={item} onDismiss={dismissSnackbar} />
         ))}
