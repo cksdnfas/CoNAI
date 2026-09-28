@@ -80,11 +80,6 @@ export function useSecurityTabData() {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
-  const databaseInfoQuery = useQuery({
-    queryKey: ['auth-database-info'],
-    queryFn: getAuthDatabaseInfo,
-    staleTime: 60_000,
-  })
 
   const [setupDraft, setSetupDraft] = useState<SetupDraft>({ username: '', password: '' })
   const [updateDraft, setUpdateDraft] = useState<UpdateDraft>({
@@ -102,6 +97,14 @@ export function useSecurityTabData() {
   const isAdmin = authStatus?.isAdmin === true
   const currentUsername = authStatus?.username ?? null
   const canManageAccess = hasCredentials && isAdmin
+  // The auth DB path is admin-only (or trusted local bootstrap before any account exists).
+  const canViewDatabaseInfo = !hasCredentials || isAdmin
+  const databaseInfoQuery = useQuery({
+    queryKey: ['auth-database-info'],
+    queryFn: getAuthDatabaseInfo,
+    enabled: canViewDatabaseInfo,
+    staleTime: 60_000,
+  })
 
   const accountsQuery = useQuery({
     queryKey: AUTH_ACCOUNTS_QUERY_KEY,
@@ -500,6 +503,7 @@ export function useSecurityTabData() {
     currentUsername,
     canManageCredentials: !hasCredentials || isAdmin,
     canManageAccess,
+    canViewDatabaseInfo,
     databaseInfo: databaseInfoQuery.data ?? null,
     setupDraft,
     updateDraft,

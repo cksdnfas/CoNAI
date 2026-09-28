@@ -136,7 +136,7 @@ const handleMe: RequestHandler = async (req, res) => {
   });
 };
 
-/** Handle auth database info reads for recovery guidance. */
+/** Handle admin-only auth database info reads; the server path is never exposed pre-login. */
 const handleDatabaseInfo: RequestHandler = async (_req, res) => {
   const authDbPath = getAuthDbPath();
   const exists = fs.existsSync(authDbPath);
@@ -145,8 +145,8 @@ const handleDatabaseInfo: RequestHandler = async (_req, res) => {
     authDbPath,
     exists,
     recoveryInstructions: {
-      ko: '계정을 복구하려면: 1) 서버 중지, 2) auth.db 파일 삭제, 3) 서버 재시작',
-      en: 'To recover account: 1) Stop server, 2) Delete auth.db file, 3) Restart server',
+      ko: '인증 초기화: 1) 서버 중지, 2) auth.db 파일 삭제, 3) 서버 재시작. 모든 계정과 권한 설정이 초기화되고 되돌릴 수 없어.',
+      en: 'Auth reset: 1) Stop server, 2) Delete auth.db file, 3) Restart server. This erases ALL accounts and permission settings and cannot be undone.',
     },
   });
 };
@@ -698,7 +698,7 @@ const handleAccountDelete: RequestHandler = async (req, res) => {
 
 router.get('/status', asyncHandler(handleStatus));
 router.get('/me', requireAuth, asyncHandler(handleMe));
-router.get('/database-info', asyncHandler(handleDatabaseInfo));
+router.get('/database-info', requireAdmin, asyncHandler(handleDatabaseInfo));
 router.post('/login', loginLimiter, asyncHandler(handleLogin));
 router.post('/logout', asyncHandler(handleLogout));
 router.post('/setup', requireInitialSetupAccess, asyncHandler(handleSetup));

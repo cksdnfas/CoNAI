@@ -137,9 +137,11 @@ export function SecurityTab() {
         </>
       ) : null}
 
-      <section>
-        <SecurityRecoveryCard databaseInfo={securityTabData.databaseInfo} />
-      </section>
+      {securityTabData.canViewDatabaseInfo ? (
+        <section>
+          <SecurityRecoveryCard databaseInfo={securityTabData.databaseInfo} />
+        </section>
+      ) : null}
 
       <SecurityPermissionGroupEditorModal
         open={securityTabData.isPermissionGroupEditorOpen}

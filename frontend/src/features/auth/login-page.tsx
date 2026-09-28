@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleHelp, ShieldCheck, UserPlus } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -11,7 +11,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
-import { createGuestAccount, getAuthDatabaseInfo, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
+import { createGuestAccount, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
 /** Sanitize one post-login redirect target to local app paths only. */
@@ -28,13 +28,8 @@ export function LoginPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const { language, t } = useI18n()
+  const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
-  const databaseInfoQuery = useQuery({
-    queryKey: ['auth-database-info'],
-    queryFn: getAuthDatabaseInfo,
-    staleTime: 60_000,
-  })
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [guestUsername, setGuestUsername] = useState('')
@@ -110,8 +105,6 @@ export function LoginPage() {
     return <Navigate to={nextPath} replace />
   }
 
-  const databaseInfo = databaseInfoQuery.data ?? null
-
   return (
     <>
       <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-10">
@@ -184,14 +177,11 @@ export function LoginPage() {
             <div className="rounded-2xl bg-primary/12 p-3 text-primary">
               <ShieldCheck className="h-6 w-6" />
             </div>
-            <div className="space-y-1">
-              <div className="text-sm font-semibold text-foreground">auth.db</div>
-              <div className="break-all text-sm text-muted-foreground">{databaseInfo?.authDbPath ?? t('loginPage.loading')}</div>
-            </div>
+            <div className="text-sm text-muted-foreground">{t('loginPage.recoveryForgotPassword')}</div>
           </div>
 
           <SettingsInsetBlock className="text-sm text-muted-foreground">
-            {(language === 'en' ? databaseInfo?.recoveryInstructions.en : databaseInfo?.recoveryInstructions.ko) ?? databaseInfo?.recoveryInstructions.ko ?? t('loginPage.loadingRecoveryGuide')}
+            {t('loginPage.recoveryAdminLost')}
           </SettingsInsetBlock>
         </SettingsModalBody>
       </SettingsModal>
