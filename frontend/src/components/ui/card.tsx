@@ -8,7 +8,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card"
       data-surface="raised"
       className={cn(
-        "theme-card theme-card-shadow theme-surface-card flex flex-col rounded-sm text-foreground transition-colors in-data-[surface=raised]:bg-surface-lowest",
+        "theme-card theme-card-shadow ui-tone-card flex flex-col rounded-sm text-foreground transition-colors",
         className
       )}
       {...props}

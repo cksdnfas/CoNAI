@@ -9,14 +9,17 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        /** Primary CTA: one per view. Primary fill with a faint secondary sheen; text uses the contrast-picked primary-foreground. */
+        /**
+         * Primary CTA: one per view. Solid primary (text uses the contrast-picked primary-foreground) with a secondary
+         * top highlight standing in for the preset's gradient; kept in box-shadow so a bg-* override still replaces the fill.
+         */
         default:
-          "bg-primary bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_22%,var(--primary)),var(--primary)_65%)] text-primary-foreground shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_14%,transparent)] hover:brightness-108 hover:shadow-[0_0_28px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
+          "bg-primary text-primary-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_45%,transparent),0_0_20px_color-mix(in_srgb,var(--primary)_14%,transparent)] hover:brightness-108 hover:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_55%,transparent),0_0_28px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
         destructive:
           "bg-destructive-soft text-destructive-soft-foreground hover:brightness-110 focus-visible:ring-destructive/25",
         /** Default non-primary action: tonal fill, no border. Steps up one tone on a surface-high parent (popover, Panel tone=high). */
         secondary:
-          "bg-surface-high text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest in-data-[surface=high]:bg-surface-highest in-data-[surface=high]:hover:bg-surface-bright",
+          "ui-tone-secondary text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest in-data-[surface=high]:hover:bg-surface-bright",
         /** Lowest-emphasis filled action for dense toolbars and sidebars. Translucent, so it reads on any surface tone. */
         subtle:
           "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground aria-expanded:bg-foreground/10 aria-expanded:text-foreground",

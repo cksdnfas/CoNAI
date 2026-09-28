@@ -7,7 +7,7 @@ import { Button } from './button'
 
 // Tonal plinth, no outline (DESIGN_PRESET D1): surface-low on the page, recessed to surface-lowest when nested
 // inside another raised surface (Section, Card, Panel, drawer). Variants differ only in their header typography.
-const sectionVariants = cva('overflow-hidden rounded-sm bg-surface-low in-data-[surface=raised]:bg-surface-lowest', {
+const sectionVariants = cva('ui-tone-plinth overflow-hidden rounded-sm', {
   variants: {
     variant: {
       page: '',

@@ -349,6 +349,31 @@
     box-shadow: var(--theme-floating-shadow);
   }
 
+  /*
+   * Tone roles for components/ui (DESIGN_PRESET D1). They live in the components layer so a bg-* utility passed via
+   * className always wins. Nested inside a raised surface (data-surface="raised": Section, Card, Panel, drawer),
+   * plinths and cards recess to surface-lowest; on a surface-high parent the secondary Button steps up one tone.
+   */
+  .ui-tone-plinth {
+    background-color: var(--surface-low);
+  }
+
+  .ui-tone-card {
+    background-color: var(--surface-container);
+  }
+
+  :where([data-surface='raised']) :is(.ui-tone-plinth, .ui-tone-card) {
+    background-color: var(--surface-lowest);
+  }
+
+  .ui-tone-secondary {
+    background-color: var(--surface-high);
+  }
+
+  :where([data-surface='high']) .ui-tone-secondary {
+    background-color: var(--surface-highest);
+  }
+
   .theme-card-shadow {
     box-shadow: var(--theme-card-shadow);
   }

@@ -112,12 +112,13 @@ ad-hoc classes. Lint guards (`eslint.config.js`, `[ds/*]`) warn on raw `<button>
 | Input / Select / Textarea | `surface-lowest` tray + `outline-input` border | focus: tone shift to `surface-low`, `border-primary/55`, `ring-primary/15` |
 
 Automatic nesting uses `data-surface` on the container: `raised` (Section, Card, Panel low/container, drawer),
-`high` (Panel high, Popover), `recessed` (Panel lowest). Children read it with `in-data-[surface=…]:` classes.
+`high` (Panel high, Popover), `recessed` (Panel lowest). The nested tones live in the `ui-tone-*` classes in
+`index.css` (components layer), so a `bg-*` className on a component still overrides them.
 
 ### Button variants
 | Variant | Use | Look |
 |---|---|---|
-| `default` | the one primary CTA of a view | primary fill with a faint secondary sheen, `primary-foreground` text |
+| `default` | the one primary CTA of a view | solid primary + secondary top highlight (gradient stand-in that survives `bg-*` overrides), `primary-foreground` text |
 | `secondary` | every other action (was `outline`) | `surface-high` fill, no border; `surface-highest` on a `high` parent |
 | `subtle` | dense toolbars, sidebars, low-emphasis actions | `foreground/5` wash, muted text; works on any tone |
 | `ghost` | icon toolbars, inline actions | transparent until hover |
