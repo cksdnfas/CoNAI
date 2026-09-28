@@ -17,9 +17,9 @@ export function AuthStatusErrorState({ error, isRetrying, onRetry }: { error: un
 
   return (
     <div role="alert" className="flex min-h-[40vh] items-center justify-center">
-      <div className="w-full max-w-md space-y-3 rounded-sm border border-border bg-surface-container/72 px-5 py-4">
+      <div className="w-full max-w-md space-y-3 rounded-sm bg-surface-low px-5 py-4">
         <div className="flex items-start gap-3">
-          <div className="rounded-sm bg-destructive/10 p-2 text-destructive">
+          <div className="rounded-sm bg-destructive-soft p-2 text-destructive-soft-foreground">
             <AlertTriangle className="h-4 w-4" />
           </div>
           <div className="min-w-0 space-y-1">

@@ -4,6 +4,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Heading } from '@/components/ui/heading'
+import { IconButton } from '@/components/ui/icon-button'
+import { LoadingState } from '@/components/ui/loading-state'
+import { Text } from '@/components/ui/text'
+import { PageHeader } from '@/components/common/page-header'
 import { useI18n } from '@/i18n'
 import { getPublicGenerationWorkflows } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
@@ -25,8 +31,8 @@ function AccessEntryCard({ label, description, href, icon: Icon, badge }: Access
     <Link
       to={href}
       className={cn(
-        'group flex items-center gap-3 rounded-sm border border-border bg-surface-container/72 px-4 py-3 transition-colors',
-        'hover:bg-surface-high focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35',
+        'group flex items-center gap-3 rounded-sm bg-surface-low px-4 py-3 transition-colors',
+        'hover:bg-surface-high focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
       )}
     >
       <div className="rounded-sm bg-primary/10 p-2 text-primary transition-colors group-hover:bg-primary/14">
@@ -35,10 +41,10 @@ function AccessEntryCard({ label, description, href, icon: Icon, badge }: Access
 
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex items-center gap-2">
-          <div className="truncate text-sm font-semibold text-foreground">{label}</div>
+          <Text as="div" variant="title" className="truncate">{label}</Text>
           {badge ? <Badge variant="outline">{badge}</Badge> : null}
         </div>
-        <div className="truncate text-xs text-muted-foreground">{description}</div>
+        <Text as="div" variant="caption" className="truncate">{description}</Text>
       </div>
 
       <div className="shrink-0 text-muted-foreground transition-colors group-hover:text-foreground">
@@ -78,7 +84,7 @@ function BlockedRouteNotice({ path, permissionKey, isAnonymous, onDismiss }: { p
   const pageLabel = matchedPage ? t(matchedPage.labelKey) : path
 
   return (
-    <Alert variant="destructive" className="rounded-sm border-destructive/40 pr-12">
+    <Alert variant="destructive" className="pr-12">
       <ShieldAlert />
       <AlertTitle className="line-clamp-none">
         {t('accessOverviewPage.blockedTitle', { pageLabel })}
@@ -94,15 +100,15 @@ function BlockedRouteNotice({ path, permissionKey, isAnonymous, onDismiss }: { p
           </Button>
         ) : null}
       </AlertDescription>
-      <button
-        type="button"
+      <IconButton
+        variant="ghost"
+        size="icon-sm"
         onClick={onDismiss}
-        className="absolute right-3 top-3 rounded-sm p-0.5 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-        aria-label={t({ ko: '닫기', en: 'Close' })}
-        title={t({ ko: '닫기', en: 'Close' })}
+        className="absolute right-2 top-2"
+        label={t({ ko: '닫기', en: 'Close' })}
       >
         <X className="h-4 w-4" />
-      </button>
+      </IconButton>
     </Alert>
   )
 }
@@ -141,16 +147,15 @@ export function AccessOverviewPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-base font-semibold text-foreground">{t('appShell.availablePages')}</h1>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {authStatus?.username ? <Badge variant="secondary">{authStatus.username}</Badge> : null}
-          <Badge variant="outline">{accountTypeLabel}</Badge>
-        </div>
-      </div>
+      <PageHeader
+        title={t('appShell.availablePages')}
+        actions={(
+          <>
+            {authStatus?.username ? <Badge variant="secondary">{authStatus.username}</Badge> : null}
+            <Badge variant="outline">{accountTypeLabel}</Badge>
+          </>
+        )}
+      />
 
       {blockedRoute ? (
         <BlockedRouteNotice
@@ -162,18 +167,13 @@ export function AccessOverviewPage() {
       ) : null}
 
       {accessibleItems.length === 0 && publicWorkflows.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-sm border border-border bg-surface-container/72 px-4 py-3 text-foreground">
-          <div className="rounded-sm bg-primary/10 p-2 text-primary">
-            <ShieldCheck className="h-4 w-4" />
-          </div>
-          <div className="text-sm font-semibold">{t({ ko: '지금 열 수 있는 페이지가 없어.', en: 'There are no pages available right now.' })}</div>
-        </div>
+        <EmptyState icon={ShieldCheck} title={t({ ko: '지금 열 수 있는 페이지가 없어.', en: 'There are no pages available right now.' })} />
       ) : (
         <div className="space-y-5">
           {pageItems.length > 0 ? (
             <section className="space-y-2.5">
               {publicWorkflows.length > 0 ? (
-                <div className="text-sm font-semibold text-foreground">{t({ ko: '페이지', en: 'Pages' })}</div>
+                <Heading level={3}>{t({ ko: '페이지', en: 'Pages' })}</Heading>
               ) : null}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {pageItems.map(({ path, labelKey, descriptionKey, icon }) => (
@@ -190,14 +190,12 @@ export function AccessOverviewPage() {
           ) : null}
 
           {publicWorkflowsQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">{t({ ko: '공용 워크플로우 불러오는 중…', en: 'Loading public workflows…' })}</div>
+            <LoadingState variant="inline" label={t({ ko: '공용 워크플로우 불러오는 중…', en: 'Loading public workflows…' })} />
           ) : null}
 
           {publicWorkflows.length > 0 ? (
             <section className="space-y-2.5">
-              <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-foreground">{t({ ko: '공용 워크플로우', en: 'Public workflows' })}</div>
-              </div>
+              <Heading level={3}>{t({ ko: '공용 워크플로우', en: 'Public workflows' })}</Heading>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {publicWorkflows.map((workflow) => (
                   <AccessEntryCard

@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleHelp, ShieldCheck, UserPlus } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { PageHeader } from '@/components/common/page-header'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { Section } from '@/components/ui/section'
+import { Heading } from '@/components/ui/heading'
+import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
+import { Text } from '@/components/ui/text'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -137,99 +139,88 @@ export function LoginPage() {
 
   return (
     <>
-      <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-10">
-        <div className="w-full space-y-8">
-          <div className="flex justify-end">
-            <LanguageSwitch className="w-full max-w-[260px]" />
-          </div>
-          <PageHeader
-            eyebrow="CoNAI"
-            title={t('loginPage.signIn')}
-            description=""
-          />
-
-          <div className="grid gap-6">
-            <Section
-              heading={t('loginPage.accountSignIn')}
-              className="border-primary/15 bg-card"
-              bodyClassName="space-y-4"
-              actions={
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{t('loginPage.localAccount')}</Badge>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => setIsRecoveryModalOpen(true)}
-                    aria-label={t('loginPage.recoveryGuide')}
-                    title={t('loginPage.recoveryGuide')}
-                  >
-                    <CircleHelp className="h-4 w-4" />
-                  </Button>
-                </div>
-              }
-            >
-              <form
-                className="space-y-4"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  setLoginFormNotice(null)
-                  loginMutation.mutate({ nextUsername: username.trim(), nextPassword: password })
-                }}
-              >
-                <Field label={t({ ko: '아이디', en: 'Username' })}>
-                  <Input
-                    value={username}
-                    onChange={(event) => {
-                      setUsername(event.target.value)
-                      if (loginFormNotice?.tone === 'error') setLoginFormNotice(null)
-                    }}
-                    autoComplete="username"
-                    aria-invalid={loginFormNotice?.tone === 'error' || undefined}
-                    aria-describedby={loginFormNotice ? 'login-form-notice' : undefined}
-                  />
-                </Field>
-                <Field label={t({ ko: '비밀번호', en: 'Password' })}>
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={(event) => {
-                      setPassword(event.target.value)
-                      if (loginFormNotice?.tone === 'error') setLoginFormNotice(null)
-                    }}
-                    autoComplete="current-password"
-                    aria-invalid={loginFormNotice?.tone === 'error' || undefined}
-                    aria-describedby={loginFormNotice ? 'login-form-notice' : undefined}
-                  />
-                </Field>
-                {loginFormNotice ? (
-                  <div
-                    id="login-form-notice"
-                    role={loginFormNotice.tone === 'error' ? 'alert' : 'status'}
-                    className={
-                      loginFormNotice.tone === 'error'
-                        ? 'rounded-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive'
-                        : 'rounded-sm border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-foreground'
-                    }
-                  >
-                    {loginFormNotice.message}
-                  </div>
-                ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  {canCreateGuestAccount ? (
-                    <Button type="button" variant="secondary" onClick={() => setIsGuestModalOpen(true)}>
-                      <UserPlus className="h-4 w-4" />
-                      {t('loginPage.createGuestAccount')}
-                    </Button>
-                  ) : null}
-                  <Button className="ml-auto" type="submit" disabled={loginMutation.isPending || username.trim().length === 0 || password.length === 0}>
-                    {loginMutation.isPending ? t('loginPage.signingIn') : t('loginPage.signIn')}
-                  </Button>
-                </div>
-              </form>
-            </Section>
-          </div>
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <Text variant="overline" className="font-semibold">CoNAI</Text>
+          <LanguageSwitch className="w-full max-w-[240px]" />
         </div>
+
+        <Panel tone="low" padding="lg" className="space-y-6">
+          <div className="flex items-start justify-between gap-3">
+            <Heading level={1}>{t('loginPage.signIn')}</Heading>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge variant="secondary">{t('loginPage.localAccount')}</Badge>
+              <IconButton
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => setIsRecoveryModalOpen(true)}
+                label={t('loginPage.recoveryGuide')}
+              >
+                <CircleHelp className="h-4 w-4" />
+              </IconButton>
+            </div>
+          </div>
+
+          <form
+            aria-label={t('loginPage.accountSignIn')}
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              setLoginFormNotice(null)
+              loginMutation.mutate({ nextUsername: username.trim(), nextPassword: password })
+            }}
+          >
+            <Field label={t({ ko: '아이디', en: 'Username' })}>
+              <Input
+                value={username}
+                onChange={(event) => {
+                  setUsername(event.target.value)
+                  if (loginFormNotice?.tone === 'error') setLoginFormNotice(null)
+                }}
+                autoComplete="username"
+                aria-invalid={loginFormNotice?.tone === 'error' || undefined}
+                aria-describedby={loginFormNotice ? 'login-form-notice' : undefined}
+              />
+            </Field>
+            <Field label={t({ ko: '비밀번호', en: 'Password' })}>
+              <Input
+                type="password"
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                  if (loginFormNotice?.tone === 'error') setLoginFormNotice(null)
+                }}
+                autoComplete="current-password"
+                aria-invalid={loginFormNotice?.tone === 'error' || undefined}
+                aria-describedby={loginFormNotice ? 'login-form-notice' : undefined}
+              />
+            </Field>
+            {loginFormNotice ? (
+              <div
+                id="login-form-notice"
+                role={loginFormNotice.tone === 'error' ? 'alert' : 'status'}
+                className={
+                  loginFormNotice.tone === 'error'
+                    ? 'rounded-sm bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground'
+                    : 'rounded-sm bg-info-soft px-3 py-2 text-sm text-info-soft-foreground'
+                }
+              >
+                {loginFormNotice.message}
+              </div>
+            ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {canCreateGuestAccount ? (
+                <Button type="button" variant="secondary" onClick={() => setIsGuestModalOpen(true)}>
+                  <UserPlus className="h-4 w-4" />
+                  {t('loginPage.createGuestAccount')}
+                </Button>
+              ) : null}
+              <Button className="ml-auto" type="submit" disabled={loginMutation.isPending || username.trim().length === 0 || password.length === 0}>
+                {loginMutation.isPending ? t('loginPage.signingIn') : t('loginPage.signIn')}
+              </Button>
+            </div>
+          </form>
+        </Panel>
       </div>
 
       <Modal
@@ -240,7 +231,7 @@ export function LoginPage() {
       >
         <ModalBody>
           <div className="flex items-start gap-3">
-            <div className="rounded-2xl bg-primary/12 p-3 text-primary">
+            <div className="rounded-sm bg-primary/12 p-3 text-primary">
               <ShieldCheck className="h-6 w-6" />
             </div>
             <div className="text-sm text-muted-foreground">{t('loginPage.recoveryForgotPassword')}</div>

@@ -72,6 +72,7 @@ export function HeaderAccountMenu() {
 
   return (
     <div ref={containerRef} className="relative">
+      {/* eslint-disable-next-line no-restricted-syntax -- header icon chrome comes from .theme-shell-icon-button (shared with home search and the queue widget); Button has no shell variant yet */}
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
