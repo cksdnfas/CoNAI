@@ -33,9 +33,15 @@ export function KaloscopeSettingsCard({
   onPatchKaloscope,
 }: KaloscopeSettingsCardProps) {
   const { t } = useI18n()
+  const isEnabled = kaloscopeDraft?.enabled === true
 
   return (
-    <Section variant="settings" heading={heading} actions={actions}>
+    <Section
+      variant="settings"
+      heading={heading}
+      description={t({ ko: '이미지 화풍을 보고 비슷한 작가를 추정해 작가 태그로 붙여.', en: 'Estimates similar artists from an image’s style and adds them as artist tags.' })}
+      actions={actions}
+    >
       <div className="grid gap-4 md:grid-cols-2">
         {kaloscopeDraft ? (
           <>
@@ -48,27 +54,29 @@ export function KaloscopeSettingsCard({
               <input
                 type="checkbox"
                 checked={kaloscopeDraft.autoTagOnUpload}
+                disabled={!isEnabled}
                 onChange={(event) => onPatchKaloscope({ autoTagOnUpload: event.target.checked })}
               />
-              {t({ ko: '업로드/스케줄러 자동 처리', en: 'Auto process uploads / scheduler' })}
+              {t({ ko: '새 이미지 자동 처리', en: 'Process new images automatically' })}
             </ToggleRow>
 
-            <Field label={t({ ko: '디바이스', en: 'Device' })}>
-              <Select variant="settings" value={kaloscopeDraft.device} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
-                <option value="auto">auto</option>
-                <option value="cpu">cpu</option>
-                <option value="cuda">cuda</option>
+            <Field label={t({ ko: '실행 장치', en: 'Device' })}>
+              <Select variant="settings" value={kaloscopeDraft.device} disabled={!isEnabled} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
+                <option value="auto">{t({ ko: '자동 (GPU 우선)', en: 'Auto (GPU if available)' })}</option>
+                <option value="cpu">{t({ ko: 'CPU (느림, GPU 불필요)', en: 'CPU (slower, no GPU needed)' })}</option>
+                <option value="cuda">{t({ ko: 'GPU (NVIDIA CUDA)', en: 'GPU (NVIDIA CUDA)' })}</option>
               </Select>
             </Field>
 
-            <Field label={t({ ko: 'Top K', en: 'Top K' })}>
-              <NumberStepperInput min={1} max={200} variant="settings" value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
+            <Field label={t({ ko: '작가 후보 수', en: 'Artist candidates' })} hint={t({ ko: '점수 높은 순으로 저장', en: 'Top matches kept' })}>
+              <NumberStepperInput min={1} max={200} variant="settings" disabled={!isEnabled} value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
             </Field>
 
             <ToggleRow>
               <input
                 type="checkbox"
                 checked={kaloscopeDraft.keepModelLoaded}
+                disabled={!isEnabled}
                 onChange={(event) => onPatchKaloscope({ keepModelLoaded: event.target.checked })}
               />
               {t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
@@ -76,9 +84,9 @@ export function KaloscopeSettingsCard({
 
             <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <NumberStepperInput
-
                 min={1}
                 variant="settings"
+                disabled={!isEnabled}
                 value={kaloscopeDraft.autoUnloadMinutes}
                 onValueCommit={(nextValue) => onPatchKaloscope({ autoUnloadMinutes: Number(nextValue) || 1 })}
               />
@@ -108,9 +116,9 @@ export function KaloscopeSettingsCard({
 
         <div className="flex flex-wrap gap-2 text-xs md:col-span-2">
           <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-foreground">{t({ ko: '의존성', en: 'Dependencies' })} {formatKaloscopeDependencyLabel(kaloscopeStatus, t)}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: 'daemon', en: 'daemon' })} {kaloscopeStatus?.isRunning ? t({ ko: '실행 중', en: 'running' }) : t({ ko: '중지', en: 'stopped' })}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: 'loaded', en: 'loaded' })} {kaloscopeStatus?.modelLoaded ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '캐시', en: 'Cache' })} {kaloscopeStatus?.modelCached ? t({ ko: '준비됨', en: 'ready' }) : t({ ko: '없음', en: 'none' })}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '분석 프로세스', en: 'Analyzer process' })} {kaloscopeStatus?.isRunning ? t({ ko: '실행 중', en: 'running' }) : t({ ko: '꺼짐', en: 'stopped' })}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '모델 메모리 적재', en: 'Model in memory' })} {kaloscopeStatus?.modelLoaded ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '모델 파일', en: 'Model files' })} {kaloscopeStatus?.modelCached ? t({ ko: '받아 둠', en: 'downloaded' }) : t({ ko: '없음 (첫 실행 때 받음)', en: 'not yet (downloaded on first run)' })}</span>
           <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '모델', en: 'Model' })} {kaloscopeStatus?.currentModel ?? '—'}</span>
           <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '디바이스', en: 'Device' })} {kaloscopeStatus?.currentDevice ?? '—'}</span>
         </div>
