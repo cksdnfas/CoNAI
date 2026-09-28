@@ -23,11 +23,11 @@ const DESIGN_SYSTEM_GUARDS = [
     message: '[ds/checkbox] Raw <input type="checkbox">: use Checkbox or Switch from components/ui.',
   },
   {
-    // A <button> that is the direct child of <Panel asChild …> is allowed: Panel supplies tone, hover and focus
-    // (`interactive`) for rich clickable cards that Button's single-line sizing does not fit.
+    // A <button> that is the direct child of <Panel asChild …> or <ListRow asChild …> is allowed: they supply hover
+    // and focus (`interactive`) for rich clickable cards / rows that Button's single-line sizing does not fit.
     selector:
-      "JSXElement:not(JSXElement[openingElement.name.name='Panel']:has(JSXOpeningElement[name.name='Panel'] > JSXAttribute[name.name='asChild']) > JSXElement) > JSXOpeningElement[name.name='button']",
-    message: '[ds/button] Raw <button>: use Button or IconButton from components/ui (rich clickable cards: <Panel asChild interactive><button/></Panel>).',
+      "JSXElement:not(JSXElement[openingElement.name.name=/^(Panel|ListRow)$/]:has(JSXOpeningElement[name.name=/^(Panel|ListRow)$/] > JSXAttribute[name.name='asChild']) > JSXElement) > JSXOpeningElement[name.name='button']",
+    message: '[ds/button] Raw <button>: use Button or IconButton from components/ui (rich clickable cards / rows: <Panel asChild interactive><button/></Panel>, <ListRow asChild interactive><button/></ListRow>).',
   },
   ...classNameString('/fixed inset-0/', '[ds/overlay] Hand-rolled "fixed inset-0" overlay: use Modal or Popover from components/ui.'),
 ]
