@@ -1,6 +1,6 @@
 # CoNAI Design Preset — The Silent Curator
 
-작성일: 2026-03-21
+작성일: 2026-03-21 · 구현 규칙 갱신: 2026-09-28
 기준 레퍼런스: 사용자 제공 홈페이지 시안 + Design System Strategy `The Silent Curator`
 
 ## Creative North Star
@@ -14,6 +14,8 @@ AI 결과물을 조용히 전면에 세우는 **하이엔드 다크 갤러리**�
 ---
 
 ## Fixed Palette
+
+기본값이다. 설정 > 외관(appearance system)이 런타임에 같은 토큰 이름으로 덮어쓰므로 코드에서는 hex 대신 토큰만 쓴다.
 
 - primary: `#F95E14`
 - secondary: `#FFB59A`
@@ -79,38 +81,63 @@ AI 결과물을 조용히 전면에 세우는 **하이엔드 다크 갤러리**�
 
 ---
 
-## Component Rules
+## Implementation (D1, as built)
 
-### Button
-- Primary:
-  - gradient fill (`secondary -> primary`)
-  - dark text
-  - strongest emphasis
-- Secondary:
-  - ghost border 느낌
-  - 배경 최소화
-- Tertiary:
-  - text only / underline on hover
+The rules below are what `src/components/ui` actually does. Use those components; do not re-create their look with
+ad-hoc classes. Lint guards (`eslint.config.js`, `[ds/*]`) warn on raw `<button>`, raw checkboxes, hand-rolled
+`fixed inset-0` overlays, hex colours, `text-[Npx]` and `bg-black/N` scrims. The live reference is `/#/dev/ui`
+(dev builds only).
 
-### Card
-- border 중심 금지
-- `surface-low` / `surface-container` 기반
-- 카드가 아니라 “전시 받침대(plinth)”처럼 느껴져야 한다
+### D1: tone, not lines
+- Sections, cards, panels, modals and drawers separate by **surface tone and spacing**. No border, no header `border-b`.
+- Outlines are allowed only for **inputs** (`border-outline-input`), **tables** and **focus rings**.
+  The rare divider that spacing cannot replace uses `<Separator />` (`bg-outline-subtle`).
+- Do not use `border-border/NN`. Tokens: `--outline-input` (= `--border`, 15–22% outline-variant, set by the
+  appearance system) and `--outline-subtle` (55% of that).
 
-### Inputs
-- recessed tray 느낌
-- `surface-lowest` 사용
-- 포커스는 두꺼운 border 대신 tone shift + subtle accent
+### Component → tone
+| Component | Tone | Notes |
+|---|---|---|
+| Page | `background` | appearance system sets it at runtime |
+| `Section` (all variants) | `surface-low` | nested in a raised surface → `surface-lowest`; variants only change header type |
+| `Card` | `surface-container` | nested → `surface-lowest`; ambient `theme-card-shadow` |
+| `Panel` | `tone` prop: `lowest` / `low` (default) / `container` / `high` | explicit; pick one step away from the parent |
+| `Inset`, `StatTile`, `EmptyState` | `surface-low` | inside a raised surface → `surface-lowest` |
+| `Alert` | `surface-high/70`; destructive = `destructive-soft` | |
+| `ErrorState` | `destructive-soft` | |
+| `Modal` | `background` over `backdrop`, `shadow-elevation-3` | header/footer separated by spacing only |
+| `ConfirmDialog` | `surface-container` | |
+| `BottomDrawerSheet` | floating glass (`theme-floating-panel`) | `controller` variant = `background/96`; notice = `surface-lowest/70` |
+| Popover / DropdownMenu | `surface-high`, `shadow-elevation-2` | |
+| Input / Select / Textarea | `surface-lowest` tray + `outline-input` border | focus: tone shift to `surface-low`, `border-primary/55`, `ring-primary/15` |
 
-### Chips
-- 작은 메타데이터 조각처럼 보이게
-- `surface-highest` 배경 + muted text
-- 너무 pill스럽게 둥글지 않게
+Automatic nesting uses `data-surface` on the container: `raised` (Section, Card, Panel low/container, drawer),
+`high` (Panel high, Popover), `recessed` (Panel lowest). Children read it with `in-data-[surface=…]:` classes.
 
-### Navigation
-- floating glass bar 느낌
-- background 70% opacity + blur
-- active는 주황 포인트로만 처리
+### Button variants
+| Variant | Use | Look |
+|---|---|---|
+| `default` | the one primary CTA of a view | primary fill with a faint secondary sheen, `primary-foreground` text |
+| `secondary` | every other action (was `outline`) | `surface-high` fill, no border; `surface-highest` on a `high` parent |
+| `subtle` | dense toolbars, sidebars, low-emphasis actions | `foreground/5` wash, muted text; works on any tone |
+| `ghost` | icon toolbars, inline actions | transparent until hover |
+| `nav` | sidebar / list navigation rows | full width, left aligned; current row via `data-active="true"` or `aria-current` → `primary/12` tint |
+| `destructive` | delete / irreversible | `destructive-soft` pair |
+| `link` | inline text links | `secondary` text, underline on hover |
+
+`outline` no longer exists. Icon-only buttons use `IconButton` (label = aria-label + tooltip).
+Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` overrides; pick a variant.
+
+### Other tokens
+- Text: `Text` variants `overline / label / body / muted / caption / title`, `Heading level`; type scale
+  `text-2xs … text-5xl` (scaled by `--theme-text-scale`). Body text is `foreground`, metadata `muted-foreground`.
+- Status colours: `destructive / success / warning / info`, each with `-foreground`, `-soft`, `-soft-foreground`.
+- Elevation: `shadow-elevation-1` (raised controls), `-2` (menus, popovers), `-3` (modals).
+- Stacking: `z-raised / sticky / header / drawer / popover / modal / floating / toast` (see `index.css`).
+- Density: `--theme-panel-padding-x/y`, `--theme-field-gap`, `--theme-control-height` (Panel `padding`/`stack` use them).
+- Radius: `rounded-sm` default; `rounded-md` for floating menus.
+- Chips (`Badge`): small metadata pieces, muted text, not pill-round.
+- Top navigation: floating glass (`theme-shell-header`, translucent + blur); active state is the only orange.
 
 ---
 
