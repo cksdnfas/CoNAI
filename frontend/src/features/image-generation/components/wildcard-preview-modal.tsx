@@ -3,6 +3,8 @@ import { Modal } from '@/components/ui/modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Inset } from '@/components/ui/inset'
+import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -118,16 +120,16 @@ export function WildcardPreviewModal({
 
             <div className="space-y-2">
               {parseResult.results.map((result, index) => (
-                <div key={`${index}:${result}`} className="rounded-sm border border-border bg-surface-low p-3 text-sm text-muted-foreground">
+                <Inset key={`${index}:${result}`} className="p-3 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs uppercase tracking-overline">{t({ ko: '샘플 {count}', en: 'Sample {count}' }, { count: index + 1 })}</div>
+                    <Text as="div" variant="overline" className="font-semibold">{t({ ko: '샘플 {count}', en: 'Sample {count}' }, { count: index + 1 })}</Text>
                     <Button type="button" size="sm" variant="ghost" onClick={() => onCopyResult(result, t({ ko: '프리뷰 결과 {count}', en: 'Preview result {count}' }, { count: index + 1 }))}>
                       <Copy className="h-4 w-4" />
                       {t({ ko: '복사', en: 'Copy' })}
                     </Button>
                   </div>
                   <div className="mt-2 break-words whitespace-pre-wrap text-foreground">{result}</div>
-                </div>
+                </Inset>
               ))}
             </div>
           </div>

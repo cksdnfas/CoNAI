@@ -1,8 +1,10 @@
 import { ArrowDown, ArrowUp, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Panel } from '@/components/ui/panel'
+import { Switch } from '@/components/ui/switch'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import {
   DEFAULT_PROMPT_INLINE_SYNTAX_SETTINGS,
   PROMPT_INLINE_SYNTAX_SOURCE_LABELS,
@@ -51,9 +53,9 @@ export function WildcardSyntaxSettingsPanel() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
-      <section className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
+      <Panel asChild stack><section>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm font-semibold text-foreground">{t({ ko: '문법 우선순위', en: 'Syntax Priority' })}</div>
+          <Text as="div" variant="title">{t({ ko: '문법 우선순위', en: 'Syntax Priority' })}</Text>
           <Button type="button" variant="secondary" size="sm" onClick={() => setSettings(DEFAULT_PROMPT_INLINE_SYNTAX_SETTINGS)}>
             <RotateCcw className="h-4 w-4" />
             {t({ ko: '기본값', en: 'Reset' })}
@@ -64,7 +66,7 @@ export function WildcardSyntaxSettingsPanel() {
           {settings.priority.map((source, index) => {
             const label = PROMPT_INLINE_SYNTAX_SOURCE_LABELS[source]
             return (
-              <div key={source} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-sm border border-border bg-surface-container px-3 py-2">
+              <div key={source} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 ui-tone-plinth rounded-sm px-3 py-2">
                 <Badge variant="secondary">{index + 1}</Badge>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-foreground">{t({ ko: label.ko, en: label.en })}</div>
@@ -82,57 +84,53 @@ export function WildcardSyntaxSettingsPanel() {
             )
           })}
         </div>
-      </section>
+      </section></Panel>
 
-      <section className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
-        <div className="text-sm font-semibold text-foreground">{t({ ko: '팝업 동작', en: 'Popup Behavior' })}</div>
+      <Panel asChild stack><section>
+        <Text as="div" variant="title">{t({ ko: '팝업 동작', en: 'Popup Behavior' })}</Text>
         <div className="space-y-2">
           {settings.priority.map((source) => {
             const label = PROMPT_INLINE_SYNTAX_SOURCE_LABELS[source]
             return (
-              <label key={source} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface-container px-3 py-2">
+              <label key={source} className="flex items-center justify-between gap-3 ui-tone-plinth rounded-sm px-3 py-2">
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-foreground">{t({ ko: label.ko, en: label.en })}</span>
                   <span className="block truncate font-mono text-xs text-muted-foreground">{label.syntax}</span>
                 </span>
-                <input
-                  type="checkbox"
+                <Switch
                   checked={settings.triggers[source]}
-                  onChange={(event) => setTrigger(source, event.target.checked)}
-                  className="h-4 w-4 accent-primary"
+                  onCheckedChange={(checked) => setTrigger(source, checked)}
                 />
               </label>
             )
           })}
-          <label className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface-container px-3 py-2">
+          <label className="flex items-center justify-between gap-3 ui-tone-plinth rounded-sm px-3 py-2">
             <span className="min-w-0">
               <span className="block truncate text-sm text-foreground">{t({ ko: '캐릭터 관련 태그', en: 'Character Related Tags' })}</span>
               <span className="block truncate text-xs text-muted-foreground">{t({ ko: '감지된 캐릭터 칩에서 관련 태그 팝업 열기', en: 'Open related tags from detected character chips' })}</span>
             </span>
-            <input
-              type="checkbox"
+            <Switch
               checked={settings.characterRelatedTags}
-              onChange={(event) => setSettings({ ...settings, characterRelatedTags: event.target.checked })}
-              className="h-4 w-4 accent-primary"
+              onCheckedChange={(checked) => setSettings({ ...settings, characterRelatedTags: checked })}
             />
           </label>
         </div>
-        <div className="rounded-sm border border-border bg-surface-container px-3 py-2 text-xs text-muted-foreground">
+        <div className="ui-tone-plinth rounded-sm px-3 py-2 text-xs text-muted-foreground">
           {t({ ko: '완결된 __...__, ++...++, 쉼표 뒤 빈 구간에서는 추천 팝업을 띄우지 않아.', en: 'Suggestion popups stay hidden on completed __...__, ++...++, and empty comma-separated segments.' })}
         </div>
-      </section>
+      </section></Panel>
 
-      <section className="space-y-3 rounded-sm border border-border bg-surface-low p-4 lg:col-span-2">
-        <div className="text-sm font-semibold text-foreground">{t({ ko: '문법 안내', en: 'Syntax Guide' })}</div>
+      <Panel asChild stack className="lg:col-span-2"><section>
+        <Text as="div" variant="title">{t({ ko: '문법 안내', en: 'Syntax Guide' })}</Text>
         <div className="grid gap-2 md:grid-cols-2">
           {HELP_ITEMS.map((item) => (
-            <div key={item.syntax} className={cn('rounded-sm border border-border bg-surface-container px-3 py-2')}>
+            <div key={item.syntax} className="ui-tone-plinth rounded-sm px-3 py-2">
               <div className="font-mono text-xs text-foreground">{item.syntax}</div>
               <div className="mt-1 text-xs text-muted-foreground">{t({ ko: item.ko, en: item.en })}</div>
             </div>
           ))}
         </div>
-      </section>
+      </section></Panel>
     </div>
   )
 }

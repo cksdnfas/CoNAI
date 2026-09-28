@@ -250,7 +250,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
 
         <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => void handleFileChange(event)} />
 
-        <div className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
+        <Inset className="space-y-3 p-4">
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={handlePickFolder} disabled={isSubmitting || isPreparingFiles}>
               <FolderOpen className="h-4 w-4" />
@@ -260,21 +260,21 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           </div>
 
           {selectedFiles.length > 0 ? (
-            <div className="rounded-sm border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-muted-foreground">
-              <div className="font-medium text-foreground">{t({ ko: 'LoRA 파일 {count}개를 찾았어.', en: 'Found {count} LoRA files.' }, { count: formatNumber(selectedFiles.length) })}</div>
+            <div className="rounded-sm bg-success-soft p-3 text-sm text-success-soft-foreground">
+              <div className="font-medium">{t({ ko: 'LoRA 파일 {count}개를 찾았어.', en: 'Found {count} LoRA files.' }, { count: formatNumber(selectedFiles.length) })}</div>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 {previewSummary.map((file) => (
                   <li key={`${file.folderName}/${file.loraName}`}>
-                    <span className="font-medium text-foreground">{file.loraName}</span>
-                    <span className="text-muted-foreground"> · {file.folderName || 'root'}</span>
-                    {file.promptLines.length > 0 ? <span className="text-muted-foreground"> · {t({ ko: '프롬프트 {count}줄', en: '{count} prompt lines' }, { count: formatNumber(file.promptLines.length) })}</span> : null}
+                    <span className="font-medium">{file.loraName}</span>
+                    <span className="opacity-80"> · {file.folderName || 'root'}</span>
+                    {file.promptLines.length > 0 ? <span className="opacity-80"> · {t({ ko: '프롬프트 {count}줄', en: '{count} prompt lines' }, { count: formatNumber(file.promptLines.length) })}</span> : null}
                   </li>
                 ))}
                 {selectedFiles.length > previewSummary.length ? <li>{t({ ko: '외 {count}개 더 있어.', en: '{count} more.' }, { count: formatNumber(selectedFiles.length - previewSummary.length) })}</li> : null}
               </ul>
             </div>
           ) : null}
-        </div>
+        </Inset>
 
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t({ ko: '기본 LoRA weight', en: 'Default LoRA weight' })}>

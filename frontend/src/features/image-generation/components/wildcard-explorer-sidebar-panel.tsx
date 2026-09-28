@@ -3,8 +3,10 @@ import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { WildcardRecord } from '@/lib/api-wildcards'
 import { cn } from '@/lib/utils'
@@ -82,79 +84,64 @@ export function WildcardExplorerSidebarPanel({
       className={cn(isWideLayout && 'sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
       bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 space-y-4 overflow-y-auto pr-1')}
       headerExtra={(
-        <div className="space-y-3 border-b border-white/5 pb-3">
+        <div className="space-y-3 pb-1">
           <div className="flex flex-wrap items-center justify-end gap-2">
             {activeWorkspaceTab === 'lora' ? (
               <>
                 {canScanLora ? (
-                  <Button
-                    type="button"
+                  <IconButton
                     size="icon-sm"
                     variant="secondary"
-                    className="bg-surface-low"
                     onClick={onOpenLoraCollect}
-                    aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.auto.collect')}
-                    title={t('image-generation.components.wildcard.explorer.sidebar.panel.auto.collect')}
+                    label={t('image-generation.components.wildcard.explorer.sidebar.panel.auto.collect')}
                   >
                     <Upload className="h-4 w-4" />
-                  </Button>
+                  </IconButton>
                 ) : null}
-                <Button
-                  type="button"
+                <IconButton
                   size="icon-sm"
                   variant="secondary"
-                  className="bg-surface-low"
                   onClick={onRefreshLoraLog}
                   disabled={isRefreshingLog}
-                  aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh.logs')}
-                  title={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh.logs')}
+                  label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh.logs')}
                 >
                   <History className="h-4 w-4" />
-                </Button>
+                </IconButton>
               </>
             ) : (
               <>
                 {canEditInActiveTab ? (
                   <>
-                    <Button
-                      type="button"
+                    <IconButton
                       size="icon-sm"
                       variant="secondary"
-                      className="bg-surface-low"
                       onClick={() => onOpenCreate(selectedWildcard?.id ?? null)}
                       disabled={!canCreateInActiveTab}
-                      aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.add.item')}
-                      title={t('image-generation.components.wildcard.explorer.sidebar.panel.add.item')}
+                      label={t('image-generation.components.wildcard.explorer.sidebar.panel.add.item')}
                     >
                       <FolderPlus className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
+                    </IconButton>
+                    <IconButton
                       size="icon-sm"
                       variant="secondary"
-                      className="bg-surface-low"
                       onClick={onOpenEdit}
                       disabled={!selectedWildcard}
-                      aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.edit')}
-                      title={t('image-generation.components.wildcard.explorer.sidebar.panel.edit')}
+                      label={t('image-generation.components.wildcard.explorer.sidebar.panel.edit')}
                     >
                       <Pencil className="h-4 w-4" />
-                    </Button>
+                    </IconButton>
                   </>
                 ) : null}
                 {canDeleteInActiveTab ? (
-                  <Button
-                    type="button"
+                  <IconButton
                     size="icon-sm"
-                    variant="secondary"
-                    className="border-rose-500/30 bg-surface-low text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
+                    variant="destructive"
                     onClick={onDeleteSelected}
                     disabled={!selectedWildcard || isDeleting}
-                    aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.delete')}
-                    title={t('image-generation.components.wildcard.explorer.sidebar.panel.delete')}
+                    label={t('image-generation.components.wildcard.explorer.sidebar.panel.delete')}
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </IconButton>
                 ) : null}
               </>
             )}
@@ -162,17 +149,15 @@ export function WildcardExplorerSidebarPanel({
 
           <div className="flex items-center gap-2">
             <Input value={searchInput} onChange={(event) => onSearchChange(event.target.value)} placeholder={t('image-generation.components.wildcard.explorer.sidebar.panel.search.name.or.path')} />
-            <Button
-              type="button"
-              variant="secondary"
+            <IconButton
               size="icon-sm"
-              className="shrink-0 bg-surface-low"
+              variant="secondary"
+              className="shrink-0"
               onClick={onRefresh}
-              aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
-              title={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
+              label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
             >
               <RefreshCw className="h-4 w-4" />
-            </Button>
+            </IconButton>
           </div>
         </div>
       )}
@@ -195,38 +180,35 @@ export function WildcardExplorerSidebarPanel({
       {!isLoading && !isError ? (
         searchInput.trim().length > 0 ? (
           filteredEntries.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {filteredEntries.map((entry) => {
                 const wildcard = entry.wildcard
                 const isSelected = wildcard.id === selectedWildcardId
                 return (
-                  <button
+                  <Button
                     key={wildcard.id}
                     type="button"
+                    variant="nav"
+                    data-active={isSelected || undefined}
                     onClick={() => onSelectWildcard(wildcard.id)}
-                    className={cn(
-                      'w-full rounded-sm border px-3 py-2 text-left transition-colors',
-                      isSelected
-                        ? 'border-primary bg-surface-high'
-                        : 'border-border bg-surface-lowest hover:border-primary/35',
-                    )}
+                    className="h-auto flex-col items-stretch gap-1 px-3 py-2"
                   >
-                    <div className="flex items-center gap-2">
-                      <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Folder className="shrink-0 text-muted-foreground" />
                       <span className="truncate text-sm font-medium text-foreground">{wildcard.name}</span>
-                    </div>
-                    <div className="mt-1 truncate text-xs text-muted-foreground">{entry.path.join(' / ')}</div>
-                  </button>
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">{entry.path.join(' / ')}</span>
+                  </Button>
                 )
               })}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">{t('image-generation.components.wildcard.explorer.sidebar.panel.no.search.results')}</div>
+            <Text variant="muted">{t('image-generation.components.wildcard.explorer.sidebar.panel.no.search.results')}</Text>
           )
         ) : browserTreeNodes.length > 0 ? (
           <WildcardTree entries={browserEntries} selectedId={selectedWildcardId} onSelect={onSelectWildcard} />
         ) : (
-          <div className="text-sm text-muted-foreground">{t('image-generation.components.wildcard.explorer.sidebar.panel.no.items.to.display.yet')}</div>
+          <Text variant="muted">{t('image-generation.components.wildcard.explorer.sidebar.panel.no.items.to.display.yet')}</Text>
         )
       ) : null}
     </ExplorerSidebar>

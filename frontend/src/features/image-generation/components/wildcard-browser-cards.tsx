@@ -3,6 +3,10 @@ import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Inset } from '@/components/ui/inset'
+import { StatTile } from '@/components/ui/stat-tile'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n } from '@/i18n'
 import {
@@ -128,16 +132,17 @@ export function WildcardDetailCard({
     <section className="space-y-4">
       <SectionHeading
         variant="inside"
-        className="border-b border-border/70 pb-4"
         heading={selectedWildcard ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => void onCopySyntax(selectedWildcardSyntax, selectedWildcardSyntaxLabel)}
-            className="inline-flex max-w-full items-center rounded-sm text-left transition-colors hover:text-foreground"
+            className="-ml-2 max-w-full"
             title={t({ ko: '클릭해서 복사', en: 'Click to copy' })}
           >
             <code className="truncate text-sm font-medium text-primary">{selectedWildcardSyntax}</code>
-          </button>
+          </Button>
         ) : t({ ko: '항목 선택', en: 'Select an item' })}
         actions={selectedWildcard ? extraActions : undefined}
       />
@@ -165,7 +170,7 @@ export function WildcardDetailCard({
           />
         </div>
       ) : (
-        <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">{t({ ko: '항목을 선택하면 세부 정보를 보여줄게.', en: 'Select an item to see its details.' })}</div>
+        <EmptyState size="compact" title={t({ ko: '항목을 선택하면 세부 정보를 보여줄게.', en: 'Select an item to see its details.' })} />
       )}
     </section>
   )
@@ -179,7 +184,6 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
     <section className="space-y-4">
       <SectionHeading
         variant="inside"
-        className="border-b border-border/70 pb-4"
         heading={t({ ko: '최근 자동 수집 로그', en: 'Recent auto-collection log' })}
         actions={log ? <Badge variant="outline">{formatNumber(log.totalWildcards)}</Badge> : undefined}
       />
@@ -187,40 +191,28 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
       {log ? (
         <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: '시간', en: 'Time' })}</div>
-              <div className="mt-1 text-sm text-foreground">{formatWildcardDateTime(log.timestamp, formatDateTime)}</div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: 'LoRA 가중치', en: 'LoRA weight' })}</div>
-              <div className="mt-1 text-sm text-foreground">{log.loraWeight}</div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: '중복 처리', en: 'Duplicate handling' })}</div>
-              <div className="mt-1 text-sm text-foreground">{log.duplicateHandling}</div>
-            </div>
-            <div className="rounded-sm border border-border bg-surface-container px-3 py-3">
-              <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t({ ko: '생성 항목', en: 'Created items' })}</div>
-              <div className="mt-1 text-sm text-foreground">{formatNumber(log.totalItems)}</div>
-            </div>
+            <StatTile label={t({ ko: '시간', en: 'Time' })} value={formatWildcardDateTime(log.timestamp, formatDateTime)} valueClassName="font-normal" />
+            <StatTile label={t({ ko: 'LoRA 가중치', en: 'LoRA weight' })} value={log.loraWeight} valueClassName="font-normal" />
+            <StatTile label={t({ ko: '중복 처리', en: 'Duplicate handling' })} value={log.duplicateHandling} valueClassName="font-normal" />
+            <StatTile label={t({ ko: '생성 항목', en: 'Created items' })} value={formatNumber(log.totalItems)} valueClassName="font-normal" />
           </div>
 
           <div className="space-y-2">
             {log.wildcards.slice(0, 8).map((entry) => (
-              <div key={entry.id} className="rounded-sm border border-border bg-surface-container px-3 py-2 text-xs text-muted-foreground">
+              <Inset key={entry.id} className="px-3 py-2 text-xs text-muted-foreground">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-foreground">{getWildcardPromptSyntax(entry.name)}</span>
                   <Badge variant="outline">{t({ ko: '항목 {count}', en: 'Items {count}' }, { count: formatNumber(entry.itemCount) })}</Badge>
                   <Badge variant="outline">{t({ ko: '레벨 {level}', en: 'Level {level}' }, { level: formatNumber(entry.level) })}</Badge>
                 </div>
                 <div className="mt-1 break-all">{entry.folderName}</div>
-              </div>
+              </Inset>
             ))}
             {log.wildcards.length > 8 ? <div className="text-xs text-muted-foreground">{t({ ko: '외 {count}개 더 있어.', en: '{count} more.' }, { count: formatNumber(log.wildcards.length - 8) })}</div> : null}
           </div>
         </div>
       ) : (
-        <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">{t({ ko: '아직 기록된 자동 수집 로그가 없어.', en: 'No auto-collection logs recorded yet.' })}</div>
+        <EmptyState size="compact" title={t({ ko: '아직 기록된 자동 수집 로그가 없어.', en: 'No auto-collection logs recorded yet.' })} />
       )}
     </section>
   )

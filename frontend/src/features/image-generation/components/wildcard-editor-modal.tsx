@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Switch } from '@/components/ui/switch'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n, type TranslationParams } from '@/i18n'
@@ -412,11 +413,11 @@ function WildcardItemDraftEditor({
             <Plus className="h-4 w-4" />
           </Button>
 
-          <AnchoredPopup open={templateMenuOpen} anchorRef={templateMenuAnchorRef} onClose={() => setTemplateMenuOpen(false)} align="end" side="bottom" className="z-[7000]" closeOnBack>
+          <AnchoredPopup open={templateMenuOpen} anchorRef={templateMenuAnchorRef} onClose={() => setTemplateMenuOpen(false)} align="end" side="bottom" className="z-floating" closeOnBack>
             <WildcardJsonFormatMenu simpleLabel={t(wildcardEditorKey('simple.format'))} fullLabel={t(wildcardEditorKey('full.format'))} onSelect={handleDownloadTemplate} />
           </AnchoredPopup>
 
-          <AnchoredPopup open={exportMenuOpen} anchorRef={exportMenuAnchorRef} onClose={() => setExportMenuOpen(false)} align="end" side="bottom" className="z-[7000]" closeOnBack>
+          <AnchoredPopup open={exportMenuOpen} anchorRef={exportMenuAnchorRef} onClose={() => setExportMenuOpen(false)} align="end" side="bottom" className="z-floating" closeOnBack>
             <WildcardJsonFormatMenu
               simpleLabel={t(wildcardEditorKey('export.tool'), { tool: activeToolLabel })}
               fullLabel={t(wildcardEditorKey('export.all'))}
@@ -714,11 +715,11 @@ export function WildcardEditorModal({
           <div className="grid gap-3 md:grid-cols-2">
             <ToggleRow className="justify-between">
               <span className="font-medium text-foreground">{t(wildcardEditorKey('auto.include.children'))}</span>
-              <input type="checkbox" checked={includeChildren} onChange={(event) => setIncludeChildren(event.target.checked)} />
+              <Switch checked={includeChildren} onCheckedChange={setIncludeChildren} />
             </ToggleRow>
             <ToggleRow className="justify-between">
               <span className="font-medium text-foreground">{t(wildcardEditorKey('children.only'))}</span>
-              <input type="checkbox" checked={onlyChildren} onChange={(event) => setOnlyChildren(event.target.checked)} />
+              <Switch checked={onlyChildren} onCheckedChange={setOnlyChildren} />
             </ToggleRow>
           </div>
 
