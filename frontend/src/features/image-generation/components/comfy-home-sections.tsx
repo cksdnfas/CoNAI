@@ -7,12 +7,16 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { ToggleRow } from '@/components/ui/toggle-row'
+import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
+import { Switch } from '@/components/ui/switch'
+import { Text } from '@/components/ui/text'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS } from '@/lib/api-image-generation-workflows'
 import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
 import type { ComfyUIServerTestState } from '../image-generation-shared'
+import { STATUS_BADGE_CLASS } from './generation-status-tone'
 
 type WorkflowListSectionProps = {
   workflows: GenerationWorkflow[]
@@ -61,29 +65,34 @@ export function ComfyWorkflowListSection({
           {workflows.map((workflow) => {
             const isSelected = String(workflow.id) === selectedWorkflowId
             return (
-              <div
+              <Panel
                 key={workflow.id}
-                className="rounded-sm border border-border bg-surface-low px-3 py-3 transition-colors hover:border-primary/35"
-                style={isSelected ? { borderColor: workflow.color || 'var(--color-primary)' } : undefined}
+                tone="lowest"
+                padding="sm"
+                data-selected={isSelected || undefined}
+                className="transition-colors data-[selected=true]:bg-primary/8"
+                // The workflow's own colour marks the selected row as a left accent (tone, not an outline).
+                style={isSelected ? { boxShadow: `inset 3px 0 0 ${workflow.color || 'var(--color-primary)'}` } : undefined}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <button
+                  <Button
                     type="button"
+                    variant="nav"
                     onClick={() => onSelectWorkflow(workflow.id)}
-                    className="min-w-0 flex-1 text-left"
+                    aria-current={isSelected || undefined}
+                    className="-mx-2 -my-1 h-auto min-w-0 flex-1 flex-col items-start gap-1 px-2 py-1 whitespace-normal"
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="truncate text-sm font-medium text-foreground">{workflow.name}</div>
-                      {isSelected ? <Badge variant="secondary">{t({ ko: '선택됨', en: 'Selected' })}</Badge> : null}
-                    </div>
-                    {workflow.description ? <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{workflow.description}</div> : null}
-                  </button>
+                    <span className="flex w-full min-w-0 flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-medium text-foreground">{workflow.name}</span>
+                      {isSelected ? <Badge variant="default">{t({ ko: '선택됨', en: 'Selected' })}</Badge> : null}
+                    </span>
+                    {workflow.description ? <span className="line-clamp-2 text-xs text-muted-foreground">{workflow.description}</span> : null}
+                  </Button>
 
                   <div className="flex shrink-0 items-start gap-2">
                     <Badge variant="outline">{t({ ko: '필드 {count}', en: '{count} fields' }, { count: formatNumber((workflow.marked_fields ?? []).length) })}</Badge>
                     <div className="flex gap-1">
-                      <Button
-                        type="button"
+                      <IconButton
                         size="icon-xs"
                         variant="ghost"
                         onClick={(event) => {
@@ -91,12 +100,11 @@ export function ComfyWorkflowListSection({
                           event.stopPropagation()
                           onSaveModule(workflow.id)
                         }}
-                        aria-label={t({ ko: '{name} 모듈 저장', en: 'Save module for {name}' }, { name: workflow.name })}
+                        label={t({ ko: '{name} 모듈 저장', en: 'Save module for {name}' }, { name: workflow.name })}
                       >
                         <Save className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
+                      </IconButton>
+                      <IconButton
                         size="icon-xs"
                         variant="ghost"
                         onClick={(event) => {
@@ -104,12 +112,11 @@ export function ComfyWorkflowListSection({
                           event.stopPropagation()
                           onEditWorkflow(workflow.id)
                         }}
-                        aria-label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}
+                        label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
+                      </IconButton>
+                      <IconButton
                         size="icon-xs"
                         variant="ghost"
                         onClick={(event) => {
@@ -117,12 +124,11 @@ export function ComfyWorkflowListSection({
                           event.stopPropagation()
                           onCopyWorkflow(workflow.id)
                         }}
-                        aria-label={t({ ko: '{name} 복사', en: 'Copy {name}' }, { name: workflow.name })}
+                        label={t({ ko: '{name} 복사', en: 'Copy {name}' }, { name: workflow.name })}
                       >
                         <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
+                      </IconButton>
+                      <IconButton
                         size="icon-xs"
                         variant="ghost"
                         onClick={(event) => {
@@ -130,19 +136,19 @@ export function ComfyWorkflowListSection({
                           event.stopPropagation()
                           onDeleteWorkflow(workflow.id)
                         }}
-                        aria-label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: workflow.name })}
+                        label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: workflow.name })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      </IconButton>
                     </div>
                   </div>
                 </div>
-              </div>
+              </Panel>
             )
           })}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">{t({ ko: '등록된 워크플로우가 없어.', en: 'No workflows registered.' })}</div>
+        <Text variant="muted">{t({ ko: '등록된 워크플로우가 없어.', en: 'No workflows registered.' })}</Text>
       )}
     </Section>
   )
@@ -193,29 +199,29 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
             const isActive = server.is_active !== false
 
             return (
-              <div key={server.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
+              <Panel key={server.id} tone="lowest" padding="sm" className="text-sm text-muted-foreground">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-foreground">{server.name}</span>
-                      <Badge variant={isActive ? 'secondary' : 'outline'}>{isActive ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
+                      <Badge variant={isActive ? 'secondary' : 'outline'} className={isActive ? STATUS_BADGE_CLASS.success : undefined}>{isActive ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
                       {!isModalServer && server.is_default ? <Badge variant="secondary">{t({ ko: '대표', en: 'Default' })}</Badge> : null}
                       {isModalServer ? <Badge variant="outline">Modal</Badge> : null}
                       {isModalServer ? (
                         <Badge variant="outline">{t('image-generation.components.comfy.home.sections.modal.server.auto.check.skipped')}</Badge>
                       ) : connectionStatus ? (
-                        <Badge variant={connectionStatus.is_connected ? 'secondary' : 'outline'}>
+                        <Badge variant="secondary" className={connectionStatus.is_connected ? STATUS_BADGE_CLASS.success : STATUS_BADGE_CLASS.destructive}>
                           {connectionStatus.is_connected ? t({ ko: '연결됨', en: 'Connected' }) : t({ ko: '실패', en: 'Failed' })}
                         </Badge>
                       ) : null}
                       {connectionStatus?.is_connected && !isModalServer ? (
-                        <Badge variant={connectionStatus.is_idle ? 'outline' : 'secondary'}>
+                        <Badge variant={connectionStatus.is_idle ? 'outline' : 'secondary'} className={connectionStatus.is_idle ? undefined : STATUS_BADGE_CLASS.warning}>
                           {connectionStatus.is_idle ? 'idle' : t({ ko: '사용 중', en: 'Busy' })}
                         </Badge>
                       ) : null}
                     </div>
-                    <div className="mt-1 break-all text-[11px]">{server.endpoint}</div>
-                    {server.description ? <div className="mt-1 text-[11px]">{server.description}</div> : null}
+                    <div className="mt-1 break-all text-2xs">{server.endpoint}</div>
+                    {server.description ? <div className="mt-1 text-2xs">{server.description}</div> : null}
                     {server.routing_tags && server.routing_tags.length > 0 ? (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {server.routing_tags.map((tag) => (
@@ -223,25 +229,25 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                         ))}
                       </div>
                     ) : null}
-                    {connectionStatus?.response_time !== undefined ? <div className="mt-1 text-[11px]">{connectionStatus.response_time}ms</div> : null}
+                    {connectionStatus?.response_time !== undefined ? <div className="mt-1 text-2xs">{connectionStatus.response_time}ms</div> : null}
                     {connectionStatus?.is_connected && !isModalServer ? (
-                      <div className="mt-1 text-[11px]">
+                      <div className="mt-1 text-2xs">
                         {t({ ko: '실행 {running} · 대기 {pending}', en: 'Running {running} · Pending {pending}' }, { running: formatNumber(connectionStatus.running_count ?? 0), pending: formatNumber(connectionStatus.pending_count ?? 0) })}
                       </div>
                     ) : null}
-                    {connectionStatus?.error_message && !isModalServer ? <div className="mt-1 text-[11px] text-[#ffb4ab]">{connectionStatus.error_message}</div> : null}
-                    {testState?.error ? <div className="mt-1 text-[11px] text-[#ffb4ab]">{testState.error}</div> : null}
+                    {connectionStatus?.error_message && !isModalServer ? <div className="mt-1 text-2xs text-destructive">{connectionStatus.error_message}</div> : null}
+                    {testState?.error ? <div className="mt-1 text-2xs text-destructive">{testState.error}</div> : null}
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-2">
-                    <ToggleRow className="min-w-[8rem] px-2 py-1 text-xs">
-                      <input
-                        type="checkbox"
+                    <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                      {t({ ko: '활성', en: 'Active' })}
+                      <Switch
+                        size="sm"
                         checked={isActive}
-                        onChange={(event) => onToggleServerActive(server.id, event.target.checked)}
+                        onCheckedChange={(checked) => onToggleServerActive(server.id, checked)}
                       />
-                      <span className="flex-1">{t({ ko: '활성', en: 'Active' })}</span>
-                    </ToggleRow>
+                    </label>
                     <Button
                       type="button"
                       size="sm"
@@ -253,21 +259,21 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                       {testState?.isLoading ? t({ ko: '확인 중…', en: 'Checking…' }) : t({ ko: '테스트', en: 'Test' })}
                     </Button>
                     <div className="flex gap-1">
-                      <Button type="button" size="icon-xs" variant="ghost" onClick={() => onEditServer(server.id)} aria-label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: server.name })}>
+                      <IconButton size="icon-xs" variant="ghost" onClick={() => onEditServer(server.id)} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: server.name })}>
                         <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button type="button" size="icon-xs" variant="ghost" onClick={() => onDeleteServer(server.id)} aria-label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: server.name })}>
+                      </IconButton>
+                      <IconButton size="icon-xs" variant="ghost" onClick={() => onDeleteServer(server.id)} label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: server.name })}>
                         <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      </IconButton>
                     </div>
                   </div>
                 </div>
-              </div>
+              </Panel>
             )
           })}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">{t({ ko: '연결된 서버가 없어.', en: 'No connected servers.' })}</div>
+        <Text variant="muted">{t({ ko: '연결된 서버가 없어.', en: 'No connected servers.' })}</Text>
       )}
     </Section>
   )
@@ -480,26 +486,19 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
         {visibleLists.length > 0 ? (
           <div className="space-y-2">
             {visibleLists.map((list) => (
-              <div key={list.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
+              <Panel key={list.id} tone="lowest" padding="sm" className="text-sm text-muted-foreground">
                 <div className="flex items-start justify-between gap-3">
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left"
-                    onClick={() => {
-                      if (list.is_auto_collected) {
-                        setViewingAutoList(list)
-                      }
-                    }}
-                  >
+                  {/* Auto lists also open read-only from the explicit View button; manual lists use Edit. */}
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-foreground">{list.name}</span>
                       <Badge variant={list.is_auto_collected ? 'secondary' : 'outline'}>{list.is_auto_collected ? 'auto' : 'manual'}</Badge>
                       <Badge variant="outline">{t({ ko: '항목 {count}', en: '{count} items' }, { count: formatNumber(list.items.length) })}</Badge>
                     </div>
-                    {list.description ? <div className="mt-1 line-clamp-2 text-[11px]">{list.description}</div> : null}
-                    {list.source_path ? <div className="mt-1 line-clamp-1 text-[11px]">{t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path })}</div> : null}
-                    {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-[11px]">{dropdownListPreviewTextById.get(list.id)}</div> : null}
-                  </button>
+                    {list.description ? <div className="mt-1 line-clamp-2 text-2xs">{list.description}</div> : null}
+                    {list.source_path ? <div className="mt-1 line-clamp-1 text-2xs">{t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path })}</div> : null}
+                    {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-2xs">{dropdownListPreviewTextById.get(list.id)}</div> : null}
+                  </div>
                   {!list.is_auto_collected ? (
                     <div className="flex shrink-0 gap-2">
                       <Button type="button" size="sm" variant="secondary" onClick={() => setEditingCustomList(list)} disabled={isSubmitting}>
@@ -517,11 +516,11 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
                     </Button>
                   )}
                 </div>
-              </div>
+              </Panel>
             ))}
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? t({ ko: '등록된 커스텀 목록이 없어.', en: 'No custom lists registered.' }) : t({ ko: '자동수집된 목록이 없어.', en: 'No auto-collected lists.' })}</div>
+          <Text variant="muted">{activeTab === 'custom' ? t({ ko: '등록된 커스텀 목록이 없어.', en: 'No custom lists registered.' }) : t({ ko: '자동수집된 목록이 없어.', en: 'No auto-collected lists.' })}</Text>
         )}
       </Section>
 
