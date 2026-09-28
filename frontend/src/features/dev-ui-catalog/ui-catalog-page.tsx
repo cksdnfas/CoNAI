@@ -56,7 +56,7 @@ import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-se
 
 type ThemeChoice = 'app' | 'light' | 'dark'
 
-const BUTTON_VARIANTS = ['default', 'destructive', 'outline', 'secondary', 'ghost', 'link'] as const
+const BUTTON_VARIANTS = ['default', 'secondary', 'subtle', 'ghost', 'destructive', 'link'] as const
 const BUTTON_SIZES = ['xs', 'sm', 'default', 'lg'] as const
 const ICON_SIZES = ['icon-xs', 'icon-sm', 'icon', 'icon-lg'] as const
 const BADGE_VARIANTS = ['default', 'secondary', 'destructive', 'outline', 'ghost', 'link'] as const

@@ -27,9 +27,6 @@ const buttonVariants = cva(
         nav:
           "w-full justify-start text-left font-normal text-muted-foreground hover:bg-surface-high hover:text-foreground data-[active=true]:bg-primary/12 data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:[&_svg]:text-primary aria-[current=page]:bg-primary/12 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=true]:bg-primary/12 aria-[current=true]:font-medium aria-[current=true]:text-foreground",
         link: "text-secondary underline-offset-4 hover:underline",
-        /** @deprecated Renders as `secondary`; kept only until the call-site rename lands. */
-        outline:
-          "bg-surface-high text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
