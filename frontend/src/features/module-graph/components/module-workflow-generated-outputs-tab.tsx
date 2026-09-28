@@ -1,17 +1,15 @@
 import { useCallback, useMemo } from 'react'
-import { Download, ImageOff, Square, SquareCheckBig, Trash2 } from 'lucide-react'
+import { Download, ImageOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Inset } from '@/components/ui/inset'
 import { Panel } from '@/components/ui/panel'
-import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { WatchedFolder } from '@/types/folder'
 import type { ImageRecord } from '@/types/image'
-import { resolveModuleWorkflowOutputProgress } from '../module-workflow-output-progress'
+import { ModuleWorkflowPagedResultsSection } from './module-workflow-paged-results-section'
 import type { ModuleWorkflowGeneratedOutputItem } from './module-workflow-output-management-panel-helpers'
 import { EmptyState } from '@/components/ui/empty-state'
 
@@ -65,23 +63,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
   onCopySelected: () => void
   onDownloadItems: (items: ModuleWorkflowGeneratedOutputItem[]) => void
 }) {
-  const { t, formatNumber } = useI18n()
-  const outputProgress = resolveModuleWorkflowOutputProgress({
-    page,
-    pageSize: 50,
-    visibleCount: outputItems.length,
-    totalCount: totalOutputCount,
-  })
-  const outputProgressLabel = outputProgress.visibleCount > 0
-    ? t(
-      { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / total {total}' },
-      {
-        start: formatNumber(outputProgress.start),
-        end: formatNumber(outputProgress.end),
-        total: formatNumber(outputProgress.totalCount),
-      },
-    )
-    : formatNumber(outputProgress.totalCount)
+  const { t } = useI18n()
   const outputItemById = useMemo(
     () => new Map(outputItems.map((item) => [item.id, item])),
     [outputItems],
@@ -119,38 +101,21 @@ export function ModuleWorkflowGeneratedOutputsTab({
   }, [isDownloading, onDownloadItems, outputItemById, t])
 
   return (
-    <Section
+    <ModuleWorkflowPagedResultsSection
       heading={t('module-graph.components.module.workflow.generated.outputs.tab.generated.outputs')}
-      headingAs="h3"
-      actions={(
-        <>
-          <Badge variant="outline">{outputProgressLabel}</Badge>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={onToggleVisibleSelection}
-            disabled={outputItems.length === 0}
-          >
-            {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            {allVisibleSelected ? t('module-graph.components.module.workflow.generated.outputs.tab.clear.page') : t('module-graph.components.module.workflow.generated.outputs.tab.select.page')}
-          </Button>
-          {canDeleteOutputs ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              onClick={onClearAll}
-              disabled={isDeletingOutputs || totalOutputCount === 0}
-            >
-              <Trash2 className="h-4 w-4" />
-              {t({ ko: '전체 비우기', en: 'Clear all' })}
-            </Button>
-          ) : null}
-        </>
-      )}
-    >
-      {isCopyPanelOpen ? (
+      page={page}
+      totalPages={totalPages}
+      visibleCount={outputItems.length}
+      totalCount={totalOutputCount}
+      allVisibleSelected={allVisibleSelected}
+      selectPageLabel={t('module-graph.components.module.workflow.generated.outputs.tab.select.page')}
+      clearPageLabel={t('module-graph.components.module.workflow.generated.outputs.tab.clear.page')}
+      canClearAll={canDeleteOutputs}
+      isClearing={isDeletingOutputs}
+      onPageChange={onPageChange}
+      onToggleVisibleSelection={onToggleVisibleSelection}
+      onClearAll={onClearAll}
+      toolbar={isCopyPanelOpen ? (
         <Panel tone="lowest">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Text variant="label">{t({ ko: '선택한 생성 결과를 감시 폴더로 복사', en: 'Copy selected outputs to watched folder' })}</Text>
@@ -184,74 +149,23 @@ export function ModuleWorkflowGeneratedOutputsTab({
           </div>
         </Panel>
       ) : null}
-
-      {outputItems.length === 0 ? (
-        <EmptyState icon={ImageOff} title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })} />
-      ) : (
-        <div className="space-y-3">
-          <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
-          <ImageList
-            items={imageItems}
-            layout="grid"
-            selectable
-            forceSelectionMode
-            selectedIds={selectedOutputIds}
-            onSelectedIdsChange={onSelectedOutputIdsChange}
-            getItemId={getGeneratedOutputImageId}
-            minColumnWidth={260}
-            gridItemHeight={320}
-            columnGap={20}
-            rowGap={20}
-            renderItemOverlay={renderGeneratedOutputOverlay}
-          />
-          <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
-        </div>
-      )}
-    </Section>
-  )
-}
-
-function WorkflowOutputPagination({
-  page,
-  totalPages,
-  visibleCount,
-  totalCount,
-  onPageChange,
-}: {
-  page: number
-  totalPages: number
-  visibleCount: number
-  totalCount: number
-  onPageChange: (page: number) => void
-}) {
-  const { t, formatNumber } = useI18n()
-  const progress = resolveModuleWorkflowOutputProgress({ page, pageSize: 50, visibleCount, totalCount })
-  const progressLabel = progress.visibleCount > 0
-    ? t(
-      { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / total {total}' },
-      {
-        start: formatNumber(progress.start),
-        end: formatNumber(progress.end),
-        total: formatNumber(progress.totalCount),
-      },
-    )
-    : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatNumber(progress.totalCount) })
-
-  if (totalPages <= 1) {
-    return null
-  }
-
-  return (
-    <Inset className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-muted-foreground">
-      <span>{t({ ko: '페이지 {page} / {totalPages} · {progress} · 페이지당 50개', en: 'page {page} / {totalPages} · {progress} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel })}</span>
-      <div className="flex items-center gap-2">
-        <Button type="button" size="sm" variant="secondary" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
-          {t({ ko: '이전', en: 'Previous' })}
-        </Button>
-        <Button type="button" size="sm" variant="secondary" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
-          {t({ ko: '다음', en: 'Next' })}
-        </Button>
-      </div>
-    </Inset>
+      isEmpty={outputItems.length === 0}
+      empty={<EmptyState icon={ImageOff} title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })} />}
+    >
+      <ImageList
+        items={imageItems}
+        layout="grid"
+        selectable
+        forceSelectionMode
+        selectedIds={selectedOutputIds}
+        onSelectedIdsChange={onSelectedOutputIdsChange}
+        getItemId={getGeneratedOutputImageId}
+        minColumnWidth={260}
+        gridItemHeight={320}
+        columnGap={20}
+        rowGap={20}
+        renderItemOverlay={renderGeneratedOutputOverlay}
+      />
+    </ModuleWorkflowPagedResultsSection>
   )
 }
