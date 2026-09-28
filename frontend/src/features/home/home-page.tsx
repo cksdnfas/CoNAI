@@ -186,7 +186,7 @@ export function HomePage() {
             items={visibleImages}
             resetKey={imageListResetKey}
             layout="masonry"
-            activationMode={isAnonymousSession ? 'navigate' : 'modal'}
+            activationMode={isAnonymousSession ? 'none' : 'modal'}
             getItemHref={isAnonymousSession ? undefined : getHomeImageHref}
             selectable={!isAnonymousSession}
             selectedIds={selectedIds}

@@ -77,8 +77,8 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
       }}
       data-state={isDrawerOpen ? 'open' : appliedChips.length > 0 ? 'active' : 'closed'}
       className="theme-shell-icon-button relative inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-      aria-label={isDrawerOpen ? t({ ko: '검색 닫기', en: 'Close search' }) : t({ ko: '검색 열기', en: 'Open search' })}
-      title={isDrawerOpen ? t({ ko: '검색 닫기', en: 'Close search' }) : t({ ko: '검색', en: 'Search' })}
+      aria-label={isDrawerOpen ? t({ ko: '라이브러리 검색 닫기', en: 'Close library search' }) : t({ ko: '라이브러리 검색', en: 'Search library' })}
+      title={isDrawerOpen ? t({ ko: '라이브러리 검색 닫기', en: 'Close library search' }) : t({ ko: '라이브러리 검색', en: 'Search library' })}
     >
       <Search className="h-4 w-4" />
       {appliedChips.length > 0 ? (

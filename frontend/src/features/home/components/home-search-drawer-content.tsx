@@ -184,7 +184,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
 
   const activeCountLabel = appliedChips.length > 0
     ? t({ ko: '{count}개 필터', en: '{count} filters' }, { count: formatNumber(appliedChips.length) })
-    : t({ ko: '갤러리 검색…', en: 'Search gallery…' })
+    : t({ ko: '라이브러리 검색…', en: 'Search library…' })
 
   const handleOpenSuggestionPanel = () => {
     setIsSuggestionPanelOpen(true)
@@ -245,7 +245,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
         style={{ width: 'min(calc(100vw - 0.75rem), 420px)' }}
       >
         <div className="theme-drawer-header flex items-center justify-between border-b border-border/80 bg-background/40">
-          <div className="text-2xl font-semibold tracking-tight text-foreground">{t({ ko: '검색', en: 'Search' })}</div>
+          <div className="text-2xl font-semibold tracking-tight text-foreground">{t({ ko: '라이브러리 검색', en: 'Search library' })}</div>
           <button type="button" onClick={closeDrawer} className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground" aria-label={t('homeSearchDrawerContent.closeSearchDrawer')}>
             <X className="h-5 w-5" />
           </button>
