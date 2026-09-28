@@ -64,14 +64,18 @@ export function PageToolbar({ title, start, children, actions, className }: Page
   return (
     <div data-slot="page-toolbar" className={cn('flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 py-2', className)}>
       {showSidebarToggle || title || start ? (
-        <div className="flex min-w-0 items-center gap-2">
-          {showSidebarToggle ? <SidebarToggle className="-ml-1.5" /> : null}
-          {title ? <h1 className="min-w-0 truncate text-base font-bold tracking-tight text-foreground">{title}</h1> : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          {showSidebarToggle || title ? (
+            <div className="flex min-w-0 items-center gap-2">
+              {showSidebarToggle ? <SidebarToggle className="-ml-1.5" /> : null}
+              {title ? <h1 className="min-w-0 truncate text-base font-bold tracking-tight text-foreground">{title}</h1> : null}
+            </div>
+          ) : null}
           {start}
         </div>
       ) : null}
-      <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
-      {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
+      {children ? <div className="flex min-w-0 flex-1 basis-60 items-center gap-2">{children}</div> : <div className="flex-1" />}
+      {actions ? <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div> : null}
     </div>
   )
 }
