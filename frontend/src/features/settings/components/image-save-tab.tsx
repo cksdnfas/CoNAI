@@ -315,10 +315,10 @@ export function ImageSaveTab({
 
                 <Field label={t({ ko: '최대 가로', en: 'Max width' })}>
                   <NumberStepperInput
-
                     min={64}
                     max={16384}
                     variant="settings"
+                    disabled={!imageSaveDraft.resizeEnabled}
                     value={imageSaveDraft.maxWidth}
                     onValueCommit={(nextValue) => onPatchImageSave({ maxWidth: Number(nextValue) || 64 })}
                   />
@@ -326,10 +326,10 @@ export function ImageSaveTab({
 
                 <Field label={t({ ko: '최대 세로', en: 'Max height' })}>
                   <NumberStepperInput
-
                     min={64}
                     max={16384}
                     variant="settings"
+                    disabled={!imageSaveDraft.resizeEnabled}
                     value={imageSaveDraft.maxHeight}
                     onValueCommit={(nextValue) => onPatchImageSave({ maxHeight: Number(nextValue) || 64 })}
                   />
