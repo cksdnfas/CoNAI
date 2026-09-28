@@ -14,7 +14,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { createGuestAccount, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
+import { AuthRequestError, createGuestAccount, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
+import { hasAuthPermission } from './auth-permissions'
 import { LanguageSwitch } from './language-switch'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
@@ -42,7 +43,7 @@ export function LoginPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { showSnackbar } = useSnackbar()
+  const { showSnackbar, closeSnackbar } = useSnackbar()
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const [username, setUsername] = useState('')
@@ -57,7 +58,19 @@ export function LoginPage() {
     const params = new URLSearchParams(location.search)
     return resolveNextPath(params.get('next'))
   }, [location.search])
-  const defaultPostLoginPath = nextPath === '/' ? '/access' : nextPath
+  // 홈을 열 수 있는 계정은 홈으로, 아니면 이용 가능한 페이지 목록으로 보낸다.
+  const resolvePostLoginPath = (result: { isAdmin?: boolean; permissionKeys?: string[] }) => {
+    if (nextPath !== '/') return nextPath
+    return result.isAdmin || hasAuthPermission(result.permissionKeys ?? [], 'page.home.view') ? '/' : '/access'
+  }
+
+  const describeLoginError = (error: unknown) => {
+    if (error instanceof AuthRequestError) {
+      if (error.status === 401) return t({ ko: '아이디나 비밀번호가 맞지 않아.', en: 'The username or password is incorrect.' })
+      if (error.status === 429) return t({ ko: '로그인 시도가 너무 많아. 잠시 뒤에 다시 해 줘.', en: 'Too many sign-in attempts. Try again in a moment.' })
+    }
+    return t('loginPage.signInFailed')
+  }
 
   const applyAuthenticatedSession = (result: AuthMutationRecord, fallbackUsername: string) => {
     queryClient.setQueryData(AUTH_STATUS_QUERY_KEY, {
@@ -78,14 +91,15 @@ export function LoginPage() {
     onSuccess: async (result) => {
       applyAuthenticatedSession(result, username.trim())
       setPassword('')
+      setLoginFormNotice(null)
+      closeSnackbar()
       showSnackbar({ message: t('loginPage.signedIn'), tone: 'info' })
-      navigate(defaultPostLoginPath, { replace: true })
+      navigate(resolvePostLoginPath(result), { replace: true })
     },
     onError: (error) => {
       // Keep the password so a typo in the username (or a transient error) doesn't force retyping it.
-      const message = error instanceof Error ? error.message : t('loginPage.signInFailed')
-      setLoginFormNotice({ tone: 'error', message })
-      showSnackbar({ message, tone: 'error' })
+      // The reason stays next to the form; a snackbar would outlive the page after a later successful sign-in.
+      setLoginFormNotice({ tone: 'error', message: describeLoginError(error) })
     },
   })
 
@@ -105,7 +119,7 @@ export function LoginPage() {
       setGuestPassword('')
       setIsGuestModalOpen(false)
       showSnackbar({ message: t('loginPage.guestAccountCreatedAndSigned'), tone: 'info' })
-      navigate(defaultPostLoginPath, { replace: true })
+      navigate(resolvePostLoginPath(result), { replace: true })
     },
     onError: (error) => {
       setGuestPassword('')
@@ -115,7 +129,6 @@ export function LoginPage() {
         setUsername(error.username)
         setPassword('')
         setLoginFormNotice({ tone: 'info', message: t('loginPage.guestAccountCreatedSignIn') })
-        showSnackbar({ message: t('loginPage.guestAccountCreatedSignIn'), tone: 'error' })
         return
       }
       showSnackbar({ message: error instanceof Error ? error.message : t('loginPage.failedToCreateGuestAccount'), tone: 'error' })
@@ -127,7 +140,7 @@ export function LoginPage() {
   }
 
   if (authStatusQuery.data?.authenticated) {
-    return <Navigate to={defaultPostLoginPath} replace />
+    return <Navigate to={resolvePostLoginPath(authStatusQuery.data)} replace />
   }
 
   const hasCredentials = authStatusQuery.data?.hasCredentials === true

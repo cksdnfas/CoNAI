@@ -105,6 +105,17 @@ export interface PageAccessMatrixRecord {
 }
 
 /** Call one auth endpoint and surface backend error messages when available. */
+/** Auth API failure that keeps the HTTP status so screens can show a translated reason. */
+export class AuthRequestError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'AuthRequestError'
+    this.status = status
+  }
+}
+
 async function requestAuthJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(buildApiUrl(path), {
     ...init,
@@ -117,7 +128,7 @@ async function requestAuthJson<T>(path: string, init?: RequestInit): Promise<T> 
 
   const payload = (await response.json().catch(() => null)) as (T & { error?: string }) | null
   if (!response.ok) {
-    throw new Error(payload?.error || `Request failed: ${response.status}`)
+    throw new AuthRequestError(payload?.error || `Request failed: ${response.status}`, response.status)
   }
 
   if (!payload) {

@@ -273,7 +273,7 @@ export function UploadPageUploadSection({
               />
             ))}
           </div>
-          {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs text-muted-foreground">{t({ ko: '…{count}개 더 있음', en: '…{count} more' }, { count: formatNumber(uploadFiles.length - MAX_VISIBLE_FILES) })}</div> : null}
+          {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs text-muted-foreground">{t({ ko: '{count}개 더 있어', en: '…{count} more' }, { count: formatNumber(uploadFiles.length - MAX_VISIBLE_FILES) })}</div> : null}
         </Inset>
       ) : null}
 
@@ -346,7 +346,7 @@ export function UploadPageUploadSection({
                 )
               })}
               {uploadResultItems && uploadResultItems.uploaded.hiddenCount > 0 ? (
-                <div className="text-xs">{t({ ko: '…저장 {count}개 더 있음', en: '…{count} more saved' }, { count: formatNumber(uploadResultItems.uploaded.hiddenCount) })}</div>
+                <div className="text-xs">{t({ ko: '저장된 파일 {count}개 더 있어', en: '…{count} more saved' }, { count: formatNumber(uploadResultItems.uploaded.hiddenCount) })}</div>
               ) : null}
             </div>
           ) : null}
@@ -360,7 +360,7 @@ export function UploadPageUploadSection({
                 </Panel>
               ))}
               {uploadResultItems && uploadResultItems.failed.hiddenCount > 0 ? (
-                <div className="text-xs">{t({ ko: '…실패 {count}개 더 있음', en: '…{count} more failed' }, { count: formatNumber(uploadResultItems.failed.hiddenCount) })}</div>
+                <div className="text-xs">{t({ ko: '실패한 파일 {count}개 더 있어', en: '…{count} more failed' }, { count: formatNumber(uploadResultItems.failed.hiddenCount) })}</div>
               ) : null}
             </div>
           ) : null}
