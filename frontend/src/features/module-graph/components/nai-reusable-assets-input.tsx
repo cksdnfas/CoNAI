@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSerializedDrafts } from './use-serialized-drafts'
 import { useQuery } from '@tanstack/react-query'
 import { NaiCharacterReferencesEditor } from '@/features/image-generation/components/nai-assets/nai-character-references-editor'
 import { sortNaiSavedAssets, useNaiSavedAssetPreferences } from '@/features/image-generation/components/nai-assets/nai-saved-asset-preferences'
@@ -184,7 +185,7 @@ function NaiVibeNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 
   const { t, locale } = useI18n()
   const [search, setSearch] = useState('')
   const preferences = useNaiSavedAssetPreferences('conai.nai.vibes')
-  const drafts = useMemo(() => parseNaiVibeDrafts(value), [value])
+  const [drafts, updateVibes] = useSerializedDrafts(value, parseNaiVibeDrafts, buildNaiVibeValue, onChange)
   const formDrafts = useMemo<NAIVibeDraft[]>(() => drafts.map((draft) => ({ ...draft, image: toImageDraft(draft.image) })), [drafts])
 
   const savedVibesQuery = useQuery({
@@ -203,9 +204,6 @@ function NaiVibeNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 
     return sortNaiSavedAssets(filteredItems, sort, recentIds, pinnedIds, locale)
   }, [locale, pinnedIds, recentIds, sort, search, savedVibesQuery.data])
 
-  const updateVibes = (nextDrafts: NaiVibeDraft[]) => {
-    onChange(buildNaiVibeValue(nextDrafts))
-  }
 
   const appendSavedVibe = async (asset: StoredNaiVibeAsset) => {
     const detailedAsset = asset.encoded ? asset : await getNaiVibeAsset(asset.id)
@@ -269,7 +267,7 @@ function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAss
   const { t, locale } = useI18n()
   const [search, setSearch] = useState('')
   const preferences = useNaiSavedAssetPreferences('conai.nai.character_refs')
-  const drafts = useMemo(() => parseNaiCharacterReferenceDrafts(value), [value])
+  const [drafts, updateCharacterReferences] = useSerializedDrafts(value, parseNaiCharacterReferenceDrafts, buildNaiCharacterReferenceValue, onChange)
   const formDrafts = useMemo<NAICharacterReferenceDraft[]>(() => drafts.map((draft) => ({ ...draft, image: toImageDraft(draft.image) })), [drafts])
 
   const savedCharacterReferencesQuery = useQuery({
@@ -287,10 +285,6 @@ function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAss
 
     return sortNaiSavedAssets(filteredItems, sort, recentIds, pinnedIds, locale)
   }, [locale, pinnedIds, recentIds, sort, search, savedCharacterReferencesQuery.data])
-
-  const updateCharacterReferences = (nextDrafts: NaiCharacterReferenceDraft[]) => {
-    onChange(buildNaiCharacterReferenceValue(nextDrafts))
-  }
 
   const appendSavedCharacterReference = async (asset: StoredNaiCharacterReferenceAsset) => {
     let image = asset.image_data_url

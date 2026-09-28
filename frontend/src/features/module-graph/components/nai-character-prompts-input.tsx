@@ -11,6 +11,7 @@ import {
   normalizeNaiCharacterPromptDrafts,
 } from '@/features/image-generation/image-generation-shared'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useSerializedDrafts } from './use-serialized-drafts'
 
 type NaiCharacterPromptDraft = {
   prompt: string
@@ -113,11 +114,12 @@ function buildNaiCharacterPromptValue(drafts: NaiCharacterPromptDraft[]) {
 export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPromptsInputProps) {
   const { t } = useI18n()
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const drafts = parseNaiCharacterPromptDrafts(value)
-
-  const updateDrafts = (nextDrafts: NaiCharacterPromptDraft[]) => {
-    onChange(buildNaiCharacterPromptValue(normalizeNaiCharacterPromptDrafts(nextDrafts)))
-  }
+  const [drafts, updateDrafts] = useSerializedDrafts(
+    value,
+    parseNaiCharacterPromptDrafts,
+    (nextDrafts: NaiCharacterPromptDraft[]) => buildNaiCharacterPromptValue(normalizeNaiCharacterPromptDrafts(nextDrafts)),
+    onChange,
+  )
 
   const handleAdd = () => {
     const nextDrafts = [...drafts, createEmptyCharacterDraft()]
