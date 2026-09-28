@@ -45,7 +45,7 @@ export function ComfyWorkflowListSection({
     <Section
       variant="settings"
       heading={(
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 whitespace-nowrap">
           <ListTree className="h-4 w-4 text-muted-foreground" />
           {t({ ko: '워크플로우', en: 'Workflows' })}
         </span>
@@ -173,16 +173,17 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
     <Section
       variant="settings"
       heading={(
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 whitespace-nowrap">
           <Server className="h-4 w-4 text-muted-foreground" />
           {t({ ko: '서버', en: 'Servers' })}
         </span>
       )}
       actions={(
         <>
-          <Badge variant="outline">{t({ ko: '전체 {count}', en: '{count} total' }, { count: formatNumber(servers.length) })}</Badge>
-          <Badge variant="secondary">{t({ ko: '활성 {count}', en: '{count} active' }, { count: formatNumber(activeServerCount) })}</Badge>
-          {inactiveServerCount > 0 ? <Badge variant="outline">{t({ ko: '비활성 {count}', en: '{count} inactive' }, { count: formatNumber(inactiveServerCount) })}</Badge> : null}
+          {/* Counts are secondary: hidden on phones so the heading and the add action keep their room. */}
+          <Badge variant="outline" className="hidden sm:inline-flex">{t({ ko: '전체 {count}', en: '{count} total' }, { count: formatNumber(servers.length) })}</Badge>
+          <Badge variant="secondary" className="hidden sm:inline-flex">{t({ ko: '활성 {count}', en: '{count} active' }, { count: formatNumber(activeServerCount) })}</Badge>
+          {inactiveServerCount > 0 ? <Badge variant="outline" className="hidden sm:inline-flex">{t({ ko: '비활성 {count}', en: '{count} inactive' }, { count: formatNumber(inactiveServerCount) })}</Badge> : null}
           <Button type="button" size="sm" variant="secondary" onClick={onOpenCreateServer}>
             <Plus className="h-4 w-4" />
             {t({ ko: '서버 등록', en: 'Add server' })}
