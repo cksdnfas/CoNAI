@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -82,6 +83,7 @@ export function NaiGenerationPanel({
     handleRemoveCharacterReference,
   } = useNaiFormController({ showSnackbar })
 
+  const confirm = useConfirm()
   const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
   const handledHistorySettingsLoadNonceRef = useRef(0)
   useEffect(() => {
@@ -93,14 +95,16 @@ export function NaiGenerationPanel({
     handledHistorySettingsLoadNonceRef.current = request.nonce
     consumeHistorySettingsLoad(request.nonce)
     const { form: nextForm, hasImageInputs } = buildNaiFormFromHistoryPayload(request.payload, naiForm)
-    if (hasNaiPromptContent(naiForm) && hasNaiPromptDifference(naiForm, nextForm) && !confirmHistorySettingsOverwrite(t)) {
-      return
-    }
+    void (async () => {
+      if (hasNaiPromptContent(naiForm) && hasNaiPromptDifference(naiForm, nextForm) && !(await confirmHistorySettingsOverwrite(confirm, t))) {
+        return
+      }
 
-    setNaiForm(nextForm)
-    setSelectedCharacterIndex(null)
-    showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, hasImageInputs), tone: 'info' })
-  }, [naiForm, pendingHistorySettingsLoad, setNaiForm, setSelectedCharacterIndex, showSnackbar, t])
+      setNaiForm(nextForm)
+      setSelectedCharacterIndex(null)
+      showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, hasImageInputs), tone: 'info' })
+    })()
+  }, [confirm, naiForm, pendingHistorySettingsLoad, setNaiForm, setSelectedCharacterIndex, showSnackbar, t])
 
   const naiUserQuery = useQuery({
     queryKey: ['image-generation-nai-user'],

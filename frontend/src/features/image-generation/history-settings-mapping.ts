@@ -1,3 +1,4 @@
+import type { ConfirmFn } from '@/components/ui/confirm-dialog'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { buildWorkflowDraft } from './image-generation-drafts'
@@ -13,11 +14,15 @@ import {
 type Translate = (input: TranslationInput, params?: TranslationParams) => string
 
 /** Ask before replacing form content the user typed with settings from a history record. */
-export function confirmHistorySettingsOverwrite(t: Translate) {
-  return window.confirm(t({
-    ko: '지금 입력한 내용을 이 기록의 설정으로 덮어쓸까?',
-    en: 'Replace the current input with the settings from this record?',
-  }))
+export function confirmHistorySettingsOverwrite(confirm: ConfirmFn, t: Translate) {
+  return confirm({
+    title: t({ ko: '기록 설정 불러오기', en: 'Load record settings' }),
+    description: t({
+      ko: '지금 입력한 내용을 이 기록의 설정으로 덮어쓸까?',
+      en: 'Replace the current input with the settings from this record?',
+    }),
+    confirmLabel: t({ ko: '덮어쓰기', en: 'Replace' }),
+  })
 }
 
 /** Snackbar text after a history record's settings were applied to a provider form. */

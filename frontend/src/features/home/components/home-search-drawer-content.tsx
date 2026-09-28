@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -161,6 +162,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
   const [isSuggestionPanelOpen, setIsSuggestionPanelOpen] = useState(false)
   const searchSectionRef = useRef<HTMLElement | null>(null)
   const { t, formatNumber } = useI18n()
+  const confirm = useConfirm()
 
   useEffect(() => {
     if (!isDrawerOpen) {
@@ -299,8 +301,14 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm(t({ ko: '최근 검색 기록을 모두 지울까요?', en: 'Clear all recent searches?' }))) {
+                  onClick={async () => {
+                    const confirmed = await confirm({
+                      title: t({ ko: '최근 검색 비우기', en: 'Clear recent searches' }),
+                      description: t({ ko: '최근 검색 기록을 모두 지울까?', en: 'Clear all recent searches?' }),
+                      confirmLabel: t({ ko: '비우기', en: 'Clear' }),
+                      tone: 'destructive',
+                    })
+                    if (confirmed) {
                       void clearHistoryEntries()
                     }
                   }}

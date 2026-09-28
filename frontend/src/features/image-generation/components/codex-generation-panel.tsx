@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -212,6 +213,7 @@ export function CodexGenerationPanel({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [, setPortalRevision] = useState(0)
 
+  const confirm = useConfirm()
   const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
   const handledHistorySettingsLoadNonceRef = useRef(0)
   useEffect(() => {
@@ -225,13 +227,15 @@ export function CodexGenerationPanel({
     const { form: nextForm, hasImageInputs } = buildCodexFormFromHistoryPayload(request.payload, codexForm)
     const hasPromptContent = codexForm.prompt.trim().length > 0 || codexForm.negativePrompt.trim().length > 0
     const changesPrompt = codexForm.prompt !== nextForm.prompt || codexForm.negativePrompt !== nextForm.negativePrompt
-    if (hasPromptContent && changesPrompt && !confirmHistorySettingsOverwrite(t)) {
-      return
-    }
+    void (async () => {
+      if (hasPromptContent && changesPrompt && !(await confirmHistorySettingsOverwrite(confirm, t))) {
+        return
+      }
 
-    setCodexForm(nextForm)
-    showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, hasImageInputs), tone: 'info' })
-  }, [codexForm, pendingHistorySettingsLoad, showSnackbar, t])
+      setCodexForm(nextForm)
+      showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, hasImageInputs), tone: 'info' })
+    })()
+  }, [codexForm, confirm, pendingHistorySettingsLoad, showSnackbar, t])
 
   const appSettingsQuery = useQuery({
     queryKey: ['app-settings'],

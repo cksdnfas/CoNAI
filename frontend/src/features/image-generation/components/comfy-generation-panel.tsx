@@ -337,17 +337,20 @@ export function ComfyGenerationPanel({
     }
 
     const hasDraftContent = hasWorkflowDraftDifference(selectedWorkflowFields, workflowDraft, buildWorkflowDraft(selectedWorkflowFields))
-    if (hasDraftContent && hasWorkflowDraftDifference(selectedWorkflowFields, workflowDraft, result.draft) && !confirmHistorySettingsOverwrite(t)) {
-      return
-    }
+    void (async () => {
+      if (hasDraftContent && hasWorkflowDraftDifference(selectedWorkflowFields, workflowDraft, result.draft) && !(await confirmHistorySettingsOverwrite(confirm, t))) {
+        return
+      }
 
-    setWorkflowDraft(result.draft)
-    // 드롭다운 목록 갱신 등으로 초안이 저장본에서 다시 초기화돼도 불러온 값이 남도록 바로 저장한다.
-    persistComfyWorkflowDraft(targetWorkflowId, result.draft)
-    clearWorkflowFieldIssues()
-    showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, result.hasImageInputs), tone: 'info' })
+      setWorkflowDraft(result.draft)
+      // 드롭다운 목록 갱신 등으로 초안이 저장본에서 다시 초기화돼도 불러온 값이 남도록 바로 저장한다.
+      persistComfyWorkflowDraft(targetWorkflowId, result.draft)
+      clearWorkflowFieldIssues()
+      showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, result.hasImageInputs), tone: 'info' })
+    })()
   }, [
     clearWorkflowFieldIssues,
+    confirm,
     pendingHistorySettingsLoad,
     selectedWorkflow?.id,
     selectedWorkflowFields,
