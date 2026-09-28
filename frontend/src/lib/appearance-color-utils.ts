@@ -69,3 +69,42 @@ export function getContrastTextColor(background: string) {
 
   return luminance > 0.45 ? '#241814' : '#ffffff'
 }
+
+/** CIE L* (0 = black, 100 = white) of a #rrggbb colour; null for anything else. */
+export function getPerceivedLightness(color: string) {
+  const value = normalizeHexPair(color)
+  if (!value) return null
+
+  const luminance =
+    0.2126 * getRelativeLuminance(value.r) +
+    0.7152 * getRelativeLuminance(value.g) +
+    0.0722 * getRelativeLuminance(value.b)
+
+  return luminance > 216 / 24389 ? 116 * Math.cbrt(luminance) - 16 : (24389 / 27) * luminance
+}
+
+/**
+ * Keep `color` at least `minStep` L* darker than `base`. If it is not, return `base` mixed toward `toward` just far
+ * enough to reach the step, so light-theme plinths never blend into the page background.
+ */
+export function ensureDarkerTone(base: string, color: string, minStep: number, toward = '#000000') {
+  const baseLightness = getPerceivedLightness(base)
+  const colorLightness = getPerceivedLightness(color)
+  if (baseLightness === null || colorLightness === null || baseLightness - colorLightness >= minStep) {
+    return color
+  }
+
+  let low = 0
+  let high = 1
+  for (let step = 0; step < 24; step += 1) {
+    const middle = (low + high) / 2
+    const lightness = getPerceivedLightness(mixColors(base, toward, middle)) ?? 0
+    if (baseLightness - lightness >= minStep) {
+      high = middle
+    } else {
+      low = middle
+    }
+  }
+
+  return mixColors(base, toward, high)
+}

@@ -10,6 +10,7 @@ import {
   type SurfacePalette,
 } from './appearance-presets'
 import {
+  ensureDarkerTone,
   getContrastTextColor,
   getRelativeLuminance,
   mixColors,
@@ -17,6 +18,9 @@ import {
   resolveThemeMode,
   toAlphaColor,
 } from './appearance-color-utils'
+
+/** Minimum CIE L* step between the page background and surface-low for derived light palettes. */
+const LIGHT_PLINTH_STEP = 3.5
 
 const CUSTOM_SANS_FONT_ALIAS = 'CoNAI Uploaded Sans'
 const CUSTOM_MONO_FONT_ALIAS = 'CoNAI Uploaded Mono'
@@ -72,11 +76,16 @@ export function resolveCustomSurfaceToneColors(appearance: Pick<AppearanceThemeS
   'customSurfaceContainerColor'
 >) {
   const mode = resolveThemeMode(appearance.themeMode)
+  const background = appearance.customSurfaceBackgroundColor
   const tintBase = mode === 'light' ? '#ffffff' : '#050505'
+  const derivedLow = mixColors(background, appearance.customSurfaceContainerColor, 0.62)
 
   return {
-    surfaceLowest: appearance.customSurfaceLowestColor ?? mixColors(appearance.customSurfaceBackgroundColor, tintBase, mode === 'light' ? 0.04 : 0.08),
-    surfaceLow: appearance.customSurfaceLowColor ?? mixColors(appearance.customSurfaceBackgroundColor, appearance.customSurfaceContainerColor, 0.62),
+    surfaceLowest: appearance.customSurfaceLowestColor ?? mixColors(background, tintBase, mode === 'light' ? 0.04 : 0.08),
+    // Light plinths step down from the page (see the .light ramp in index.css); a derived low that lands within
+    // LIGHT_PLINTH_STEP of the background is pushed down so Section / EmptyState / tiles stay visible.
+    surfaceLow: appearance.customSurfaceLowColor
+      ?? (mode === 'light' ? ensureDarkerTone(background, derivedLow, LIGHT_PLINTH_STEP, getContrastTextColor(background)) : derivedLow),
   }
 }
 

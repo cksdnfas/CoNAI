@@ -229,11 +229,16 @@
   --border: rgb(90 65 56 / 0.12);
   --input: #ede3df;
   --ring: #f95e14;
+  /*
+   * Light tonal ramp: plinths step DOWN from the page (CIE L* 95.7 → low 92.2 → container 90.2 → high 86.2 →
+   * highest 82.2) and recessed trays (lowest) go white, so Section / EmptyState / tiles stay visible on the page.
+   * Keep the ~3.5 L* page→low step when editing (appearance-presets.ts mirrors these values).
+   */
   --surface-lowest: #ffffff;
-  --surface-low: #f8f3f1;
-  --surface-container: #f2ebe8;
-  --surface-high: #e9dfdb;
-  --surface-highest: #e1d3ce;
+  --surface-low: #efe7e4;
+  --surface-container: #ebe1dd;
+  --surface-high: #e2d5d0;
+  --surface-highest: #dac9c3;
   --surface-bright: #faf6f4;
   --destructive: #ba1a1a;
   --destructive-foreground: #ffffff;
@@ -252,7 +257,7 @@
   --info-soft: #d3e4ff;
   --info-soft-foreground: #001c38;
   --theme-shell-surface: rgb(245 242 241 / 0.72);
-  --theme-floating-surface: rgb(242 235 232 / 0.88);
+  --theme-floating-surface: rgb(235 225 221 / 0.88);
   --theme-shell-border: rgb(249 94 20 / 0.18);
   --theme-floating-border: rgb(249 94 20 / 0.22);
   --theme-header-blur: 24px;
