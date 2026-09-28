@@ -11,9 +11,9 @@ interface FieldProps extends ComponentProps<'label'> {
 function Field({ label, hint, children, className, ...props }: FieldProps) {
   return (
     <label data-slot="field" className={cn('theme-settings-field flex flex-col text-sm', className)} {...props}>
-      <span className="flex items-center justify-between gap-3 text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+      <span className="flex items-center justify-between gap-3 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
         <span className="min-w-0 truncate">{label}</span>
-        {hint ? <span className="shrink-0 text-[11px] font-medium tracking-normal text-muted-foreground normal-case">{hint}</span> : null}
+        {hint ? <span className="shrink-0 text-2xs font-medium tracking-normal text-muted-foreground normal-case">{hint}</span> : null}
       </span>
       {children}
     </label>

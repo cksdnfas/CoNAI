@@ -160,7 +160,6 @@ export function WildcardInlinePickerExplorer({
           onChange={(value) => onChangeActiveTab(value as WildcardWorkspaceTab)}
           fullWidth
           size="xs"
-          className="border-b-0 pb-0"
         />
       </div>
 

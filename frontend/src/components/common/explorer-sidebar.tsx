@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react'
 import { Pin, PinOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Text } from '@/components/ui/text'
+import { textVariants } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -120,7 +120,7 @@ export function ExplorerSidebar({
       {floatingFrame ? <div className="explorer-sidebar-floating-frame pointer-events-none absolute inset-0 z-10 rounded-sm" /> : null}
 
       <div className="mb-4 flex items-center justify-between gap-3">
-        <Text as="div" variant="overline" className="font-semibold"><h2>{title}</h2></Text>
+        <h2 className={cn(textVariants({ variant: 'overline' }), 'font-semibold')}>{title}</h2>
         {badge}
       </div>
 

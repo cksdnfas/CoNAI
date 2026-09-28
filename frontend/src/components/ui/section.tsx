@@ -53,7 +53,7 @@ const sectionSlots: Record<SectionVariant, {
   drawer: {
     header: 'flex items-center justify-between gap-3 px-4 py-3',
     titleBlock: 'min-w-0 flex-1',
-    heading: 'text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground',
+    heading: 'text-2xs font-semibold uppercase tracking-overline text-muted-foreground',
     headingAs: 'div',
     actions: 'flex shrink-0 items-center gap-2',
     body: 'px-4 py-4',

@@ -12,7 +12,7 @@ interface StatTileProps extends ComponentProps<'div'> {
 function StatTile({ label, value, className, valueClassName, ...props }: StatTileProps) {
   return (
     <div data-slot="stat-tile" className={cn('ui-tone-plinth min-w-0 rounded-sm px-3 py-3', className)} {...props}>
-      <Text as="div" variant="overline" className="text-[11px] tracking-[0.14em]">{label}</Text>
+      <Text as="div" variant="overline">{label}</Text>
       <Text as="div" variant="title" className={cn('mt-2', valueClassName)}>{value}</Text>
     </div>
   )
