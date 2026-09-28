@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -41,6 +42,7 @@ import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
 import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
+import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
 import { findAutoCollectedPowerLoraOptions } from './power-lora-loader-utils'
 import { useComfyDropdownListActions } from './use-comfy-dropdown-list-actions'
 import { useComfyGenerationActions } from './use-comfy-generation-actions'
@@ -54,6 +56,8 @@ type ComfyGenerationPanelProps = {
   splitPaneScroll?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
+  /** Page toolbar slot for the server connection summary. */
+  statusPortalTargetId?: string
 }
 
 type ComfyWorkflowEditorState = {
@@ -80,6 +84,7 @@ export function ComfyGenerationPanel({
   splitPaneScroll = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
+  statusPortalTargetId,
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
@@ -479,8 +484,19 @@ export function ComfyGenerationPanel({
   }, [handleGenerateSelected])
 
 
+  const statusPortalTarget = usePortalTargetById(statusPortalTargetId)
+  const toolbarStatusContent = (
+    <GenerationToolbarStatus
+      tone={serversQuery.isPending ? 'pending' : connectedServers.length > 0 ? 'ready' : activeServers.length > 0 ? 'warning' : 'off'}
+      label={activeServers.length === 0
+        ? t({ ko: '서버 없음', en: 'No servers' })
+        : t({ ko: '서버 {connected}/{total}', en: 'Servers {connected}/{total}' }, { connected: connectedServers.length, total: activeServers.length })}
+    />
+  )
+
   return (
     <>
+      {statusPortalTarget ? createPortal(toolbarStatusContent, statusPortalTarget) : null}
       <div className={cn(splitPaneScroll && selectedWorkflowId !== null ? 'flex min-h-0 flex-1 flex-col gap-5' : 'space-y-5')}>
         {workflowsQuery.isError ? (
           <Alert variant="destructive">

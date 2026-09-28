@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react'
-import { ArrowUp, ExternalLink } from 'lucide-react'
+import { ArrowUp, ExternalLink, LogIn } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { GenerateActionBar, GenerateActionBarIconButton, type GenerateActionBarVariant } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
+import { GenerationToolbarStatus } from './generation-toolbar-status'
 import { PromptToggleField } from './prompt-toggle-field'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
@@ -48,6 +50,31 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenA
         </div>
       </div>
     </section>
+  )
+}
+
+/** NovelAI connection state for the page toolbar: dot + tier, Anlas chip, and login/home icon actions. */
+export function NaiToolbarStatus({ connected, tierName, anlasBalance, onOpenAuth }: Omit<NaiConnectionHeaderProps, 'compact'>) {
+  const { t, formatNumber } = useI18n()
+  const novelAiHomeLabel = t('image-generation.components.nai.generation.panel.sections.open.novelai.homepage')
+  const statusLabel = connected
+    ? tierName || t('image-generation.components.nai.generation.panel.sections.connected')
+    : t('image-generation.components.nai.generation.panel.sections.disconnected')
+
+  return (
+    <GenerationToolbarStatus tone={connected ? 'ready' : 'off'} label={statusLabel}>
+      {connected && anlasBalance !== undefined ? <Badge variant="outline" className="shrink-0 tabular-nums">Anlas {formatNumber(anlasBalance)}</Badge> : null}
+      {!connected ? (
+        <IconButton size="icon-sm" variant="ghost" onClick={onOpenAuth} label={t('image-generation.components.nai.auth.modal.log.in')}>
+          <LogIn />
+        </IconButton>
+      ) : null}
+      <Button type="button" variant="ghost" size="icon-sm" className="hidden sm:inline-flex" asChild>
+        <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label={novelAiHomeLabel} title={novelAiHomeLabel}>
+          <ExternalLink className="h-4 w-4" />
+        </a>
+      </Button>
+    </GenerationToolbarStatus>
   )
 }
 

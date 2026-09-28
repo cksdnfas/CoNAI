@@ -1,19 +1,21 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { PageHeader } from '@/components/common/page-header'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
+import { CalendarClock, Workflow } from 'lucide-react'
+import { SegmentedControl } from '@/components/common/segmented-control'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
-import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
+import { formatCountDisplay, countStateFromQuery } from '@/lib/count-display'
+import type { GenerationResultView } from './components/generation-result-area'
+import { GENERATION_TOOLBAR_STATUS_SLOT_ID } from './components/generation-toolbar-status'
+import { useGenerationHistoryFeed } from './components/use-generation-history-feed'
 import { usePendingHistorySettingsLoad } from './history-settings-load-store'
 import {
   IMAGE_GENERATION_WORKFLOW_PARAM,
   getImageGenerationTabLabel,
-  getImageGenerationTabs,
   parseImageGenerationTab,
   parseImageGenerationWorkflowId,
   type ImageGenerationTab,
@@ -34,9 +36,9 @@ const CodexGenerationPanelLazy = lazy(async () => {
   return { default: module.CodexGenerationPanel }
 })
 
-const GenerationHistoryPanelLazy = lazy(async () => {
-  const module = await import('./components/generation-history-panel')
-  return { default: module.GenerationHistoryPanel }
+const GenerationResultAreaLazy = lazy(async () => {
+  const module = await import('./components/generation-result-area')
+  return { default: module.GenerationResultArea }
 })
 
 const WorkflowArtifactExplorerPanelLazy = lazy(async () => {
@@ -54,23 +56,31 @@ const WorkflowReservationsPanelLazy = lazy(async () => {
   return { default: module.WorkflowReservationsPanel }
 })
 
+const PROVIDER_TABS: ImageGenerationTab[] = ['nai', 'codex', 'comfyui']
+/** Fixed bottom slot the provider panels portal their sticky Generate bar into on narrow screens. */
+const STICKY_ACTION_BAR_SLOT_ID = 'generation-sticky-action-bar'
+
+type NarrowView = 'edit' | 'result'
+
 function PanelFallback() {
   return <div className="ui-tone-plinth min-h-[16rem] animate-pulse rounded-sm" />
 }
 
 export function ImageGenerationPage() {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
-  const [isControllerOpen, setIsControllerOpen] = useState(false)
+  const [resultView, setResultView] = useState<GenerationResultView>('stage')
+  const [narrowView, setNarrowView] = useState<NarrowView>('edit')
   const isWideLayout = useDesktopPageLayout()
-  const imageGenerationTabs = useMemo(() => getImageGenerationTabs(t), [t])
-  const visibleTabs = imageGenerationTabs
-  const visibleTabValues = useMemo(() => new Set(visibleTabs.map((tab) => tab.value)), [visibleTabs])
-  const requestedTab = parseImageGenerationTab(searchParams.get('tab'))
-  const activeTab = visibleTabValues.has(requestedTab)
-    ? requestedTab
-    : (visibleTabs[0]?.value ?? 'nai')
+  const rawTab = searchParams.get('tab')
+  const activeTab = parseImageGenerationTab(rawTab)
+  const isProviderTab = PROVIDER_TABS.includes(activeTab)
+  // 워크플로우/예약작업 아이콘을 다시 누르면 마지막으로 보던 제공자로 돌아간다.
+  const lastProviderTabRef = useRef<ImageGenerationTab>('nai')
+  if (isProviderTab) {
+    lastProviderTabRef.current = activeTab
+  }
   // 선택한 ComfyUI 워크플로우는 URL 에 둔다. 새로고침/뒤로가기에도 같은 워크플로우로 돌아온다.
   const requestedComfyWorkflowId = parseImageGenerationWorkflowId(searchParams.get(IMAGE_GENERATION_WORKFLOW_PARAM))
   const selectedComfyWorkflowId = activeTab === 'comfyui' ? requestedComfyWorkflowId : null
@@ -101,9 +111,18 @@ export function ImageGenerationPage() {
     : activeTab === 'codex'
       ? 'codex'
       : 'comfyui'
+  const historyWorkflowId = activeTab === 'comfyui' ? selectedComfyWorkflowId : null
   const useWideSplitPaneScroll = isWideLayout && shouldShowResultPanel
+  // 좁은 화면은 편집 먼저: 편집 | 결과 전환, 생성 바는 화면 아래에 고정.
+  const useNarrowTabs = !isWideLayout && shouldShowResultPanel
+  const historyFeed = useGenerationHistoryFeed({
+    refreshNonce: historyRefreshNonce,
+    serviceType: historyServiceType,
+    workflowId: historyWorkflowId,
+    enabled: shouldShowHistory,
+  })
 
-  // "이 설정 불러오기": 기록의 제공자 탭/워크플로우로 옮기고, 좁은 화면에서는 컨트롤 서랍을 연다.
+  // "이 설정 불러오기": 기록의 제공자 탭/워크플로우로 옮기고, 좁은 화면에서는 편집 보기로 돌린다.
   // 실제 폼 적용과 덮어쓰기 확인은 해당 제공자 패널이 맡는다.
   const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
   const handledHistorySettingsLoadNonceRef = useRef(0)
@@ -131,13 +150,16 @@ export function ImageGenerationPage() {
         return next
       })
     }
-    if (!isWideLayout) {
-      setIsControllerOpen(true)
-    }
-  }, [activeTab, isWideLayout, pendingHistorySettingsLoad, selectedComfyWorkflowId, setSearchParams])
+    setNarrowView('edit')
+  }, [activeTab, pendingHistorySettingsLoad, selectedComfyWorkflowId, setSearchParams])
 
+  // 생성 요청이 큐에 들어가면 좁은 화면은 결과 보기로 넘겨 진행 상황을 바로 보여 준다.
   const handleHistoryRefresh = () => {
     setHistoryRefreshNonce((current) => current + 1)
+    setResultView('stage')
+    if (!isWideLayout) {
+      setNarrowView('result')
+    }
   }
 
   const handleChangeTab = (nextTab: ImageGenerationTab) => {
@@ -146,8 +168,13 @@ export function ImageGenerationPage() {
     if (nextTab !== 'comfyui') {
       nextSearchParams.delete(IMAGE_GENERATION_WORKFLOW_PARAM)
     }
-    setIsControllerOpen(false)
+    setNarrowView('edit')
+    setResultView('stage')
     setSearchParams(nextSearchParams)
+  }
+
+  const handleToggleSecondaryView = (view: ImageGenerationTab) => {
+    handleChangeTab(activeTab === view ? lastProviderTabRef.current : view)
   }
 
   useEffect(() => {
@@ -156,46 +183,27 @@ export function ImageGenerationPage() {
     }
   }, [activeTab, requestedComfyWorkflowId, setSelectedComfyWorkflowId])
 
+  // 알 수 없는 tab 값은 기본 제공자로 바로잡는다(`workflow` 같은 별칭은 그대로 둔다).
   useEffect(() => {
-    if (visibleTabValues.has(requestedTab)) {
+    if (rawTab === null || rawTab === 'workflow' || rawTab === activeTab) {
       return
     }
 
-    if (visibleTabs[0]) {
-      const nextSearchParams = new URLSearchParams(searchParams)
-      nextSearchParams.set('tab', visibleTabs[0].value)
-      setSearchParams(nextSearchParams, { replace: true })
-    }
-  }, [requestedTab, searchParams, setSearchParams, visibleTabValues, visibleTabs])
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.set('tab', activeTab)
+    setSearchParams(nextSearchParams, { replace: true })
+  }, [activeTab, rawTab, searchParams, setSearchParams])
 
-  const controllerLabel = getImageGenerationTabLabel(activeTab, t)
-  const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
-  const useCompactNaiActionBar = activeTab === 'nai' && (useWideSplitPaneScroll || shouldUseControllerDrawer)
-  const naiDrawerHeaderContentId = activeTab === 'nai' && shouldUseControllerDrawer ? 'nai-controller-drawer-header-content' : undefined
-  const codexDrawerHeaderContentId = activeTab === 'codex' && shouldUseControllerDrawer ? 'codex-controller-drawer-header-content' : undefined
-  const comfyDrawerHeaderContentId = activeTab === 'comfyui' && shouldUseControllerDrawer && selectedComfyWorkflowId !== null
-    ? 'comfy-controller-drawer-header-content'
-    : undefined
-  const drawerHeaderContentId = naiDrawerHeaderContentId ?? codexDrawerHeaderContentId ?? comfyDrawerHeaderContentId
-  const compactActionBarContentId = shouldUseControllerDrawer
-    ? activeTab === 'nai'
-      ? 'nai-controller-compact-action-bar-content'
-      : activeTab === 'codex'
-        ? 'codex-controller-compact-action-bar-content'
-        : activeTab === 'comfyui' && selectedComfyWorkflowId !== null
-          ? 'comfy-controller-compact-action-bar-content'
-          : undefined
-    : undefined
-  const useCompactControllerDrawer = Boolean(drawerHeaderContentId)
+  const stickyActionBarTargetId = useNarrowTabs ? STICKY_ACTION_BAR_SLOT_ID : undefined
 
   const controllerPanel = activeTab === 'nai'
     ? (
       <NaiGenerationPanelLazy
         onHistoryRefresh={handleHistoryRefresh}
         splitPaneScroll={useWideSplitPaneScroll}
-        compactActionBar={useCompactNaiActionBar}
-        headerPortalTargetId={naiDrawerHeaderContentId}
-        compactActionBarContentTargetId={activeTab === 'nai' ? compactActionBarContentId : undefined}
+        compactActionBar={useWideSplitPaneScroll || useNarrowTabs}
+        compactActionBarContentTargetId={stickyActionBarTargetId}
+        statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
       />
     )
     : activeTab === 'codex'
@@ -203,8 +211,8 @@ export function ImageGenerationPage() {
         <CodexGenerationPanelLazy
           onHistoryRefresh={handleHistoryRefresh}
           splitPaneScroll={useWideSplitPaneScroll}
-          headerPortalTargetId={codexDrawerHeaderContentId}
-          compactActionBarContentTargetId={activeTab === 'codex' ? compactActionBarContentId : undefined}
+          compactActionBarContentTargetId={stickyActionBarTargetId}
+          statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
         />
       )
       : activeTab === 'comfyui'
@@ -214,30 +222,84 @@ export function ImageGenerationPage() {
             selectedWorkflowId={selectedComfyWorkflowId}
             onSelectedWorkflowChange={setSelectedComfyWorkflowId}
             splitPaneScroll={useWideSplitPaneScroll}
-            headerPortalTargetId={comfyDrawerHeaderContentId}
-            compactActionBarContentTargetId={activeTab === 'comfyui' ? compactActionBarContentId : undefined}
+            compactActionBarContentTargetId={stickyActionBarTargetId}
+            statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
           />
         )
         : null
 
-  const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
+  const resultPanel = shouldShowArtifactExplorer && selectedComfyWorkflowId !== null ? (
+    <WorkflowArtifactExplorerPanelLazy
+      refreshNonce={historyRefreshNonce}
+      workflowId={selectedComfyWorkflowId}
+      splitPaneScroll={useWideSplitPaneScroll}
+    />
+  ) : shouldShowHistory ? (
+    <GenerationResultAreaLazy
+      key={`${historyServiceType}:${historyWorkflowId ?? ''}`}
+      feed={historyFeed}
+      serviceType={historyServiceType}
+      workflowId={historyWorkflowId}
+      splitPaneScroll={useWideSplitPaneScroll}
+      compact={!isWideLayout}
+      view={resultView}
+      onViewChange={setResultView}
+    />
+  ) : null
+
+  const providerItems = PROVIDER_TABS.map((value) => ({ value, label: getImageGenerationTabLabel(value, t) }))
+  const workflowLabel = getImageGenerationTabLabel('workflows', t)
+  const reservationsLabel = getImageGenerationTabLabel('reservations', t)
+  const historyTotal = historyFeed.historyQuery.data?.pages[0]?.total
+  const resultCountLabel = shouldShowHistory && historyTotal !== undefined
+    ? formatCountDisplay(countStateFromQuery({ total: historyTotal, isError: historyFeed.historyQuery.isError }), { t, formatNumber }).text
+    : null
+
+  const toolbar = (
+    <div className="flex min-h-12 shrink-0 items-center gap-2 sm:gap-3">
+      <SegmentedControl
+        value={isProviderTab ? activeTab : ''}
+        items={providerItems}
+        onChange={(next) => handleChangeTab(next as ImageGenerationTab)}
+        size={isWideLayout ? 'sm' : 'xs'}
+        semantics="tabs"
+        ariaLabel={t({ ko: '생성 제공자', en: 'Generation provider' })}
+        className="shrink-0"
+      />
+      <div id={GENERATION_TOOLBAR_STATUS_SLOT_ID} className={cn('flex min-w-0 flex-1 items-center overflow-hidden', !isProviderTab && 'invisible')} />
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <IconButton
+          size="icon-sm"
+          variant="ghost"
+          active={activeTab === 'workflows'}
+          onClick={() => handleToggleSecondaryView('workflows')}
+          label={workflowLabel}
+        >
+          <Workflow />
+        </IconButton>
+        <IconButton
+          size="icon-sm"
+          variant="ghost"
+          active={activeTab === 'reservations'}
+          onClick={() => handleToggleSecondaryView('reservations')}
+          label={reservationsLabel}
+        >
+          <CalendarClock />
+        </IconButton>
+      </div>
+    </div>
+  )
 
   return (
     <div
       className={cn(
-        'space-y-6',
-        isWideLayout ? 'pb-0' : 'pb-24',
+        'space-y-4',
+        useNarrowTabs && narrowView === 'edit' ? 'pb-28' : isWideLayout ? 'pb-0' : 'pb-6',
         useWideSplitPaneScroll && 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
       )}
     >
-      <div className={cn('space-y-6', useWideSplitPaneScroll && 'shrink-0 pb-6')}>
-        <PageHeader title={t({ ko: '이미지 생성', en: 'Image Generation' })} />
-
-        <SegmentedTabBar
-          value={activeTab}
-          items={visibleTabs}
-          onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
-        />
+      <div className={cn(useWideSplitPaneScroll && 'shrink-0 pb-4')}>
+        {toolbar}
       </div>
 
       {activeTab === 'workflows' ? (
@@ -252,7 +314,7 @@ export function ImageGenerationPage() {
         </Suspense>
       ) : null}
 
-      {activeTab !== 'workflows' && activeTab !== 'reservations' && controllerPanel ? (
+      {isProviderTab && controllerPanel ? (
         isWideLayout ? (
           <div
             className={cn(
@@ -267,95 +329,48 @@ export function ImageGenerationPage() {
               </Suspense>
             </div>
             {shouldShowResultPanel ? (
-              <div className={cn('min-w-0', useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
+              <div className={cn('min-w-0', useWideSplitPaneScroll && 'flex min-h-0 flex-col overflow-hidden')}>
                 <Suspense fallback={<PanelFallback />}>
-                  {shouldShowArtifactExplorer && selectedComfyWorkflowId !== null ? (
-                    <WorkflowArtifactExplorerPanelLazy
-                      refreshNonce={historyRefreshNonce}
-                      workflowId={selectedComfyWorkflowId}
-                      splitPaneScroll={useWideSplitPaneScroll}
-                    />
-                  ) : (
-                    <GenerationHistoryPanelLazy
-                      refreshNonce={historyRefreshNonce}
-                      serviceType={historyServiceType}
-                      workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-                      splitPaneScroll={useWideSplitPaneScroll}
-                    />
-                  )}
+                  {resultPanel}
                 </Suspense>
               </div>
             ) : null}
           </div>
-        ) : shouldUseControllerDrawer && shouldShowResultPanel ? (
-          <>
-            <div className="space-y-6">
-              <Suspense fallback={<PanelFallback />}>
-                {shouldShowArtifactExplorer && selectedComfyWorkflowId !== null ? (
-                  <WorkflowArtifactExplorerPanelLazy
-                    refreshNonce={historyRefreshNonce}
-                    workflowId={selectedComfyWorkflowId}
-                    onBack={() => setSelectedComfyWorkflowId(null)}
-                  />
-                ) : (
-                  <GenerationHistoryPanelLazy
-                    refreshNonce={historyRefreshNonce}
-                    serviceType={historyServiceType}
-                    workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-                    onBack={activeTab === 'comfyui' ? () => setSelectedComfyWorkflowId(null) : undefined}
-                  />
-                )}
-              </Suspense>
-            </div>
-
-            <CompactGenerationControllerActionBar
-              isExpanded={isDrawerOpen}
-              onToggle={() => setIsControllerOpen((current) => !current)}
-              expandedLabel={t({ ko: `${controllerLabel} 컨트롤 접기`, en: `Collapse ${controllerLabel} controls` })}
-              collapsedLabel={t({ ko: `${controllerLabel} 컨트롤 열기`, en: `Open ${controllerLabel} controls` })}
-              expandedContent={compactActionBarContentId ? <div id={compactActionBarContentId} className="flex items-center justify-end" /> : null}
+        ) : useNarrowTabs ? (
+          <div className="space-y-4">
+            <SegmentedControl
+              value={narrowView}
+              items={[
+                { value: 'edit', label: t({ ko: '편집', en: 'Edit' }) },
+                { value: 'result', label: resultCountLabel ? `${t({ ko: '결과', en: 'Result' })} (${resultCountLabel})` : t({ ko: '결과', en: 'Result' }) },
+              ]}
+              onChange={(next) => setNarrowView(next as NarrowView)}
+              size="sm"
+              semantics="tabs"
+              fullWidth
+              ariaLabel={t({ ko: '편집 또는 결과', en: 'Edit or result' })}
             />
 
-            <BottomDrawerSheet
-              open={isDrawerOpen}
-              title={useCompactControllerDrawer ? null : controllerLabel}
-              ariaLabel={t({ ko: `${controllerLabel} 컨트롤 패널`, en: `${controllerLabel} control panel` })}
-              onClose={() => setIsControllerOpen(false)}
-              headerContentId={drawerHeaderContentId}
-              surfaceVariant={useCompactControllerDrawer ? 'controller' : 'default'}
-              bodyClassName={useCompactControllerDrawer ? 'p-0 pb-24' : undefined}
-              headerPortalClassName={useCompactControllerDrawer ? 'mt-0 border-t-0 pt-0' : undefined}
-              footer={useCompactControllerDrawer ? null : undefined}
-              hideHandle={useCompactControllerDrawer}
-            >
-              <Suspense fallback={<PanelFallback />}>
-                {controllerPanel}
-              </Suspense>
-            </BottomDrawerSheet>
-          </>
-        ) : activeTab === 'comfyui' ? (
-          <div className="space-y-6">
-            <div className="min-w-0">
+            {/* 결과를 보는 동안에도 컨트롤러는 마운트해 둬서 입력 중인 폼 상태가 사라지지 않게 한다. */}
+            <div className={cn('min-w-0', narrowView !== 'edit' && 'hidden')}>
               <Suspense fallback={<PanelFallback />}>
                 {controllerPanel}
               </Suspense>
             </div>
-            {shouldShowResultPanel ? (
+            {narrowView === 'result' ? (
               <Suspense fallback={<PanelFallback />}>
-                {shouldShowArtifactExplorer && selectedComfyWorkflowId !== null ? (
-                  <WorkflowArtifactExplorerPanelLazy
-                    refreshNonce={historyRefreshNonce}
-                    workflowId={selectedComfyWorkflowId}
-                  />
-                ) : (
-                  <GenerationHistoryPanelLazy
-                    refreshNonce={historyRefreshNonce}
-                    serviceType="comfyui"
-                    workflowId={selectedComfyWorkflowId}
-                  />
-                )}
+                {resultPanel}
               </Suspense>
             ) : null}
+
+            <div
+              className={cn(
+                'pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-end px-3',
+                narrowView !== 'edit' && 'hidden',
+              )}
+            >
+              <div id={STICKY_ACTION_BAR_SLOT_ID} className="pointer-events-auto flex max-w-full justify-end" />
+            </div>
           </div>
         ) : (
           <div className="min-w-0">

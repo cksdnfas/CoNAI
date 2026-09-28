@@ -27,7 +27,8 @@ import {
 import { NaiAuthModal } from './nai-auth-modal'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiGenerationEditorSections } from './nai-generation-editor-sections'
-import { NaiActionSection, NaiConnectionHeader } from './nai-generation-panel-sections'
+import { NaiActionSection, NaiConnectionHeader, NaiToolbarStatus } from './nai-generation-panel-sections'
+import { usePortalTargetById } from './generation-toolbar-status'
 import { GenerateActionDock } from './generate-action-bar'
 import { useNaiAssetLibrary } from './use-nai-asset-library'
 import { useNaiAuthController } from './use-nai-auth-controller'
@@ -43,6 +44,8 @@ type NaiGenerationPanelProps = {
   compactActionBar?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
+  /** Page toolbar slot for the connection status; replaces the inline NovelAI header row. */
+  statusPortalTargetId?: string
 }
 
 /** Render the NAI login, generation, and image-editing workflow. */
@@ -52,6 +55,7 @@ export function NaiGenerationPanel({
   compactActionBar = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
+  statusPortalTargetId,
 }: NaiGenerationPanelProps) {
   const { t, formatNumber } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -319,6 +323,8 @@ export function NaiGenerationPanel({
     return () => window.cancelAnimationFrame(frame)
   }, [compactActionBarContentTargetId, headerPortalTargetId, useDrawerCompactChrome])
 
+  const statusPortalTarget = usePortalTargetById(statusPortalTargetId)
+
   const sharedActionSectionProps = {
     canUpscale: naiForm.action !== 'generate' && Boolean(naiForm.sourceImage),
     isUpscaling,
@@ -410,7 +416,17 @@ export function NaiGenerationPanel({
   return (
     <>
       <div className={splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6'}>
-        {useInlineActionBar
+        {statusPortalTargetId
+          ? (statusPortalTarget ? createPortal(
+            <NaiToolbarStatus
+              connected={connected}
+              tierName={naiUserQuery.data?.subscription.tierName}
+              anlasBalance={naiUserQuery.data?.anlasBalance}
+              onOpenAuth={handleOpenNaiAuthModal}
+            />,
+            statusPortalTarget,
+          ) : null)
+          : useInlineActionBar
           ? useDrawerCompactChrome
             ? (headerPortalTarget ? createPortal(compactHeaderContent, headerPortalTarget) : null)
             : (
@@ -430,7 +446,7 @@ export function NaiGenerationPanel({
         <div className={cn(
           'space-y-6',
           splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
-          useDrawerCompactChrome && 'px-5 pb-5',
+          useDrawerCompactChrome && headerPortalTargetId && 'px-5 pb-5',
         )}>
           {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionSection, compactActionBarPortalTarget) : null}
           {editorSections}

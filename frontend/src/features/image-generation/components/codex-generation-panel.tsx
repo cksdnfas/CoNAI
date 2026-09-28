@@ -24,6 +24,7 @@ import { NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import { GenerateActionBar, GenerateActionDock } from './generate-action-bar'
+import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
 import { ResolutionPicker } from './resolution-picker'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 
@@ -32,6 +33,8 @@ type CodexGenerationPanelProps = {
   splitPaneScroll?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
+  /** Page toolbar slot for the Codex status; replaces the inline Codex header row. */
+  statusPortalTargetId?: string
 }
 
 type CodexFormDraft = {
@@ -204,6 +207,7 @@ export function CodexGenerationPanel({
   splitPaneScroll = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
+  statusPortalTargetId,
 }: CodexGenerationPanelProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
@@ -285,6 +289,8 @@ export function CodexGenerationPanel({
   const outputSize = useMemo(() => resolveCodexSize(codexForm.aspectRatio, codexForm.resolution), [codexForm.aspectRatio, codexForm.resolution])
   const outputSizeHint = codexForm.aspectRatio === 'random' ? t({ ko: '랜덤 비율', en: 'Random ratio' }) : outputSize
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
+  const useStickyActionBar = Boolean(compactActionBarContentTargetId) && !splitPaneScroll
+  const statusPortalTarget = usePortalTargetById(statusPortalTargetId)
   const headerPortalTarget = headerPortalTargetId && typeof document !== 'undefined'
     ? document.getElementById(headerPortalTargetId)
     : null
@@ -476,8 +482,38 @@ export function CodexGenerationPanel({
       generateDisabled={codexGenerateDisabled}
       isGenerating={isSubmitting}
       repeat={codexRepeat}
+      onReset={useDrawerCompactChrome ? undefined : () => void handleReset()}
       targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
     />
+  )
+
+  const statusRecheckButton = showStatusRecovery ? (
+    <IconButton
+      variant="ghost"
+      size="icon-sm"
+      onClick={handleRefreshStatus}
+      disabled={codexStatusQuery.isPending}
+      label={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
+    >
+      <RefreshCw className={cn(codexStatusQuery.isPending && 'animate-spin')} />
+    </IconButton>
+  ) : null
+
+  const toolbarStatusContent = (
+    <GenerationToolbarStatus
+      tone={codexStatusQuery.isPending ? 'pending' : codexStatus?.available ? 'ready' : 'warning'}
+      label={codexStatusQuery.isPending
+        ? t({ ko: '상태 확인 중…', en: 'Checking status…' })
+        : codexStatusQuery.isError
+          ? t({ ko: '확인 실패', en: 'Check failed' })
+          : codexStatus?.available
+            ? t({ ko: '사용 가능', en: 'Ready' })
+            : codexStatus?.installed
+              ? t({ ko: '로그인 필요', en: 'Sign-in needed' })
+              : t({ ko: 'Codex 없음', en: 'Codex missing' })}
+    >
+      {statusRecheckButton}
+    </GenerationToolbarStatus>
   )
 
   const inlineHeaderContent = (
@@ -489,7 +525,9 @@ export function CodexGenerationPanel({
   return (
     <>
       <div className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
-        {useDrawerCompactChrome
+        {statusPortalTargetId
+          ? (statusPortalTarget ? createPortal(toolbarStatusContent, statusPortalTarget) : null)
+          : useDrawerCompactChrome
           ? (headerPortalTarget ? createPortal(headerToolbarContent, headerPortalTarget) : null)
           : (
             <div className="shrink-0 space-y-3">
@@ -532,10 +570,7 @@ export function CodexGenerationPanel({
           <div className="grid gap-4 @2xl:grid-cols-2">
             <Inset className="space-y-3 px-3">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <Text variant="label">{t({ ko: '참조 이미지', en: 'Reference Image' })}</Text>
-                  <Text variant="caption">{t({ ko: '편집용 입력 이미지', en: 'Input image for editing' })}</Text>
-                </div>
+                <Text variant="label">{t({ ko: '참조 이미지', en: 'Reference Image' })}</Text>
                 <ImageAttachmentPickerButton
                   label={codexForm.referenceImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
                   modalTitle={t({ ko: 'Codex 참조 이미지 선택', en: 'Select Codex reference image' })}
@@ -562,10 +597,7 @@ export function CodexGenerationPanel({
 
             <Inset className="space-y-3 px-3">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <Text variant="label">{t({ ko: '마스크 이미지', en: 'Mask Image' })}</Text>
-                  <Text variant="caption">{t({ ko: '인페인트 영역 지정', en: 'Inpaint area mask' })}</Text>
-                </div>
+                <Text variant="label">{t({ ko: '마스크 이미지', en: 'Mask Image' })}</Text>
                 <ImageAttachmentPickerButton
                   label={codexForm.maskImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
                   modalTitle={t({ ko: 'Codex 마스크 이미지 선택', en: 'Select Codex mask image' })}
@@ -582,15 +614,13 @@ export function CodexGenerationPanel({
                     {t({ ko: '마스크 제거', en: 'Remove mask' })}
                   </Button>
                 </div>
-              ) : (
-                <Text variant="caption">{t({ ko: '참조 이미지를 먼저 선택해.', en: 'Choose a reference image first.' })}</Text>
-              )}
+              ) : null}
             </Inset>
           </div>
         </Section>
 
-          {!useInlineActionBar && !useDrawerCompactChrome ? actionSection : null}
-          {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
+          {!useInlineActionBar && !useStickyActionBar ? actionSection : null}
+          {useStickyActionBar && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
         </div>
 
         {/* 생성 버튼·결과 그룹은 편집 영역 아래에 고정해 스크롤 위치와 상관없이 바로 누를 수 있게 한다. */}

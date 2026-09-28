@@ -5,7 +5,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
-import { Text } from '@/components/ui/text'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api-image-generation-types'
@@ -236,6 +235,7 @@ export function ComfyWorkflowControllerPanel({
     : null
   const [, setPortalRevision] = useState(0)
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
+  const useStickyActionBar = Boolean(compactActionBarContentTargetId) && !splitPaneScroll
 
   useEffect(() => {
     if ((!headerPortalTargetId && !compactActionBarContentTargetId) || typeof document === 'undefined') {
@@ -405,8 +405,8 @@ export function ComfyWorkflowControllerPanel({
   )
 
   const desktopHeaderContent = (
-    <div className="space-y-4">
-      <div className="flex items-start gap-3">
+    <div>
+      <div className="flex items-center gap-3">
         <IconButton
           variant="ghost"
           size="icon-sm"
@@ -416,9 +416,8 @@ export function ComfyWorkflowControllerPanel({
           <ArrowLeft />
         </IconButton>
 
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <Heading level={3} as="div">{workflowName}</Heading>
-          {workflowDescription ? <Text variant="muted">{workflowDescription}</Text> : null}
+        <div className="min-w-0 flex-1">
+          <Heading level={3} as="div" className="truncate" title={workflowDescription || undefined}>{workflowName}</Heading>
         </div>
       </div>
     </div>
@@ -459,6 +458,9 @@ export function ComfyWorkflowControllerPanel({
       generateDisabled={generateDisabled}
       isGenerating={isGenerating}
       repeat={queueRepeat}
+      secondaryActions={useDrawerCompactChrome ? undefined : saveModuleAction}
+      onReset={useDrawerCompactChrome || workflowFields.length === 0 ? undefined : onResetDraft}
+      resetLabel={resetLabel}
       leading={servers.length > 0 ? (
         <div className="w-[120px] shrink-0">
           <WorkflowTargetSelect
@@ -537,11 +539,11 @@ export function ComfyWorkflowControllerPanel({
           )}
         </section>
 
-        {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
+        {useStickyActionBar && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
       </div>
 
       {/* 생성 버튼·서버·결과 그룹은 필드 아래에 고정해 스크롤 위치와 상관없이 바로 누를 수 있게 한다. */}
-      {useDrawerCompactChrome ? null : <GenerateActionDock>{inlineActionBar}</GenerateActionDock>}
+      {useStickyActionBar ? null : <GenerateActionDock>{inlineActionBar}</GenerateActionDock>}
     </section>
   )
 }
