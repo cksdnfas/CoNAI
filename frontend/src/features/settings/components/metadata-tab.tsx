@@ -22,6 +22,7 @@ interface MetadataTabProps {
 
 export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, hasChanges, onReextractAll, isReextracting }: MetadataTabProps) {
   const { t } = useI18n()
+  const isStealthEnabled = metadataDraft?.enableSecondaryExtraction === true
   const handleReextractAll = () => {
     if (!window.confirm(t('metadataTab.reExtractAiMetadataFor'))) {
       return
@@ -70,42 +71,44 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                     checked={metadataDraft.enableSecondaryExtraction}
                     onChange={(event) => onPatchMetadata({ enableSecondaryExtraction: event.target.checked })}
                   />
-                  {t({ ko: 'PNG secondary extraction 활성화', en: 'Enable PNG secondary extraction' })}
+                  {t({ ko: 'PNG 숨은 생성 정보 찾기', en: 'Look for hidden generation info in PNGs' })}
                 </ToggleRow>
 
-                <Field label={t({ ko: 'Stealth 스캔 모드', en: 'Stealth scan mode' })}>
-                  <Select variant="settings" value={metadataDraft.stealthScanMode} onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}>
-                    <option value="fast">{t({ ko: '빠르게', en: 'Fast' })}</option>
-                    <option value="full">{t({ ko: '전체', en: 'Full' })}</option>
-                    <option value="skip">{t({ ko: '건너뛰기', en: 'Skip' })}</option>
+                <Field label={t({ ko: '숨은 정보 탐색 방식', en: 'Hidden info scan' })}>
+                  <Select variant="settings" value={metadataDraft.stealthScanMode} disabled={!isStealthEnabled} onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}>
+                    <option value="fast">{t({ ko: '빠르게 (못 찾으면 전체 검사)', en: 'Fast (falls back to full)' })}</option>
+                    <option value="full">{t({ ko: '전체 검사 (느림)', en: 'Full (slower)' })}</option>
+                    <option value="skip">{t({ ko: '찾지 않음', en: 'Off' })}</option>
                   </Select>
-                  <span className="mt-2 text-xs text-muted-foreground">{t({ ko: 'stealth 스캔 범위를 조절해.', en: 'Adjust the stealth scan range.' })}</span>
+                  <span className="mt-2 text-xs text-muted-foreground">{t({ ko: '일부 생성기는 프롬프트를 픽셀 안에 숨겨 저장해. 빠르게는 앞부분만 먼저 확인해.', en: 'Some generators hide the prompt inside the pixels. Fast checks the start of the image first.' })}</span>
                 </Field>
 
-                <Field label={t('metadataTab.maximumFileSizeMb')}>
-                  <NumberStepperInput min={1} variant="settings" value={metadataDraft.stealthMaxFileSizeMB} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxFileSizeMB: Number(nextValue) || 1 })} />
+                <Field label={t('metadataTab.maximumFileSizeMb')} hint={t({ ko: '넘으면 건너뜀', en: 'Larger files are skipped' })}>
+                  <NumberStepperInput min={1} variant="settings" disabled={!isStealthEnabled} value={metadataDraft.stealthMaxFileSizeMB} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxFileSizeMB: Number(nextValue) || 1 })} />
                 </Field>
 
-                <Field label={t('metadataTab.maximumResolutionMp')}>
-                  <NumberStepperInput min={1} variant="settings" value={metadataDraft.stealthMaxResolutionMP} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxResolutionMP: Number(nextValue) || 1 })} />
+                <Field label={t('metadataTab.maximumResolutionMp')} hint={t({ ko: '넘으면 건너뜀', en: 'Larger images are skipped' })}>
+                  <NumberStepperInput min={1} variant="settings" disabled={!isStealthEnabled} value={metadataDraft.stealthMaxResolutionMP} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxResolutionMP: Number(nextValue) || 1 })} />
                 </Field>
 
                 <ToggleRow>
                   <input
                     type="checkbox"
                     checked={metadataDraft.skipStealthForComfyUI}
+                    disabled={!isStealthEnabled}
                     onChange={(event) => onPatchMetadata({ skipStealthForComfyUI: event.target.checked })}
                   />
-                  {t({ ko: 'ComfyUI로 이미 판단되면 PNG stealth fallback 스킵', en: 'Skip PNG stealth fallback if already identified as ComfyUI' })}
+                  {t({ ko: 'ComfyUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as ComfyUI' })}
                 </ToggleRow>
 
                 <ToggleRow>
                   <input
                     type="checkbox"
                     checked={metadataDraft.skipStealthForWebUI}
+                    disabled={!isStealthEnabled}
                     onChange={(event) => onPatchMetadata({ skipStealthForWebUI: event.target.checked })}
                   />
-                  {t({ ko: 'WebUI로 이미 판단되면 PNG stealth fallback 스킵', en: 'Skip PNG stealth fallback if already identified as WebUI' })}
+                  {t({ ko: 'WebUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as WebUI' })}
                 </ToggleRow>
               </>
             ) : (
