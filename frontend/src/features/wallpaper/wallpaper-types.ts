@@ -1,3 +1,4 @@
+import type { TranslationDictionary } from '@/i18n'
 import {
   WALLPAPER_WIDGET_TYPES,
   type WallpaperWidgetType,
@@ -149,8 +150,8 @@ export interface WallpaperWidgetSettingsMap {
 
 interface WallpaperWidgetDefinitionBase<T extends WallpaperWidgetType> {
   type: T
-  title: string
-  description: string
+  title: TranslationDictionary
+  description: TranslationDictionary
   searchKeywords?: readonly string[]
   defaultSize: WallpaperWidgetSize
   minSize: WallpaperWidgetSize

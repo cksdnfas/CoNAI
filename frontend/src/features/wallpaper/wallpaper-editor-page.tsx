@@ -44,6 +44,7 @@ import {
 } from './wallpaper-types'
 import { WallpaperWidgetInspector } from './wallpaper-widget-inspector'
 import { WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
+import { getWallpaperWidgetDefinition, getWallpaperWidgetDisplayTitle } from './wallpaper-widget-registry'
 import { WallpaperLivelyHelpModal } from './wallpaper-lively-help-modal'
 import { WallpaperTemplateModal } from './wallpaper-template-modal'
 import { buildWallpaperTemplateLayout, type WallpaperTemplateDefinition } from './wallpaper-templates'
@@ -142,6 +143,18 @@ export function WallpaperEditorPage() {
     () => (effectiveActivePresetId ? (savedPresetById.get(effectiveActivePresetId) ?? null) : null),
     [effectiveActivePresetId, savedPresetById],
   )
+  // Compare only what saving persists; both sides are normalized so clamping or defaults never read as edits.
+  const hasUnsavedPresetChanges = useMemo(() => {
+    if (!activePreset) {
+      return false
+    }
+    const toSignature = (preset: WallpaperLayoutPreset) => {
+      const normalized = normalizeWallpaperLayoutPreset(preset)
+      return JSON.stringify([normalized.canvasPresetId, normalized.widgets, normalized.unsupportedWidgets ?? []])
+    }
+    const draftName = layoutPreset.name.trim() || activePreset.name
+    return draftName !== activePreset.name || toSignature(layoutPreset) !== toSignature(activePreset)
+  }, [activePreset, layoutPreset])
   const effectiveSelectedWidgetId = useMemo(
     () => (selectedWidgetId && widgetById.has(selectedWidgetId) ? selectedWidgetId : (layoutPreset.widgets[0]?.id ?? null)),
     [layoutPreset.widgets, selectedWidgetId, widgetById],
@@ -355,8 +368,12 @@ export function WallpaperEditorPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-semibold tracking-tight text-foreground">{t({ ko: '월페이퍼 스튜디오', en: 'Wallpaper Studio' })}</h1>
               <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background/60 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {activePreset ? <Check className="h-3 w-3 text-secondary" /> : null}
-                {activePreset ? t({ ko: '저장됨', en: 'Saved' }) : t({ ko: '초안', en: 'Draft' })}
+                {activePreset && !hasUnsavedPresetChanges ? <Check className="h-3 w-3 text-secondary" /> : null}
+                {!activePreset
+                  ? t({ ko: '초안', en: 'Draft' })
+                  : hasUnsavedPresetChanges
+                    ? t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
+                    : t({ ko: '저장됨', en: 'Saved' })}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">{t({ ko: '캔버스를 편집하고 Lively용 URL로 바로 실행해.', en: 'Compose the canvas and run it directly in Lively.' })}</p>
@@ -651,8 +668,8 @@ export function WallpaperEditorPage() {
                           <span className="w-5 text-center text-xs font-semibold">{index + 1}</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-foreground">{String(widget.settings.title ?? widget.type)}</div>
-                          <div className="truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{widget.type}</div>
+                          <div className="truncate text-sm font-medium text-foreground">{getWallpaperWidgetDisplayTitle(widget, t)}</div>
+                          <div className="truncate text-[11px] text-muted-foreground">{t(getWallpaperWidgetDefinition(widget.type).title)}</div>
                         </div>
                       </button>
                       <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
@@ -700,7 +717,7 @@ export function WallpaperEditorPage() {
         <section className="self-start space-y-4 overflow-y-auto rounded-xl border border-border/80 bg-surface-container/75 p-4 xl:sticky xl:top-24 xl:max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]">
           <div className="border-b border-border/70 pb-3">
             <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '위젯 설정', en: 'Widget settings' })}</h2>
-            <div className="mt-1 truncate text-xs text-muted-foreground">{selectedWidget?.settings.title ?? t({ ko: '선택된 위젯 없음', en: 'No widget selected' })}</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">{selectedWidget ? getWallpaperWidgetDisplayTitle(selectedWidget, t) : t({ ko: '선택된 위젯 없음', en: 'No widget selected' })}</div>
           </div>
 
           <WallpaperWidgetInspector

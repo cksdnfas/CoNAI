@@ -1,16 +1,18 @@
+import type { TranslationInput } from '@/i18n'
 import type { WallpaperCanvasPreset, WallpaperWidgetDefinition, WallpaperWidgetInstance, WallpaperWidgetType } from './wallpaper-types'
 
 export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   {
     type: 'clock',
-    title: '시계',
-    description: '현재 시간을 크게 표시해 주는 위젯이야.',
+    title: { ko: '시계', en: 'Clock' },
+    description: { ko: '현재 시간을 크게 표시해 주는 위젯이야.', en: 'Shows the current time in large type.' },
     searchKeywords: ['time', 'timer', 'watch'],
     defaultSize: { w: 6, h: 4 },
     minSize: { w: 4, h: 3 },
     maxSize: { w: 12, h: 6 },
     defaultSettings: {
-      title: '시계',
+      // Empty = show the localized widget name; the user can still type their own title.
+      title: '',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -22,14 +24,14 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'queue-status',
-    title: '워크플로 상태',
-    description: '그래프 실행의 대기, 실행, 실패 상태를 보여줘.',
+    title: { ko: '워크플로 상태', en: 'Workflow status' },
+    description: { ko: '그래프 실행의 대기, 실행, 실패 상태를 보여줘.', en: 'Shows queued, running and failed graph runs.' },
     searchKeywords: ['queue', 'status', 'workflow', 'run', 'progress'],
     defaultSize: { w: 8, h: 5 },
     minSize: { w: 6, h: 4 },
     maxSize: { w: 12, h: 8 },
     defaultSettings: {
-      title: '워크플로 상태',
+      title: '',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -39,14 +41,14 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'recent-results',
-    title: '최근 결과',
-    description: '최근 생성 이미지를 빠르게 보여줘.',
+    title: { ko: '최근 결과', en: 'Recent results' },
+    description: { ko: '최근 생성 이미지를 빠르게 보여줘.', en: 'Shows your latest generated images.' },
     searchKeywords: ['recent', 'results', 'latest', 'generated', 'history'],
     defaultSize: { w: 10, h: 7 },
     minSize: { w: 6, h: 5 },
     maxSize: { w: 16, h: 10 },
     defaultSettings: {
-      title: '최근 결과',
+      title: '',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -70,14 +72,14 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'activity-pulse',
-    title: '실행 펄스',
-    description: '그래프 실행과 최근 결과 흐름을 잔잔하게 시각화해.',
+    title: { ko: '실행 펄스', en: 'Activity pulse' },
+    description: { ko: '그래프 실행과 최근 결과 흐름을 잔잔하게 시각화해.', en: 'A calm visualization of graph runs and recent results.' },
     searchKeywords: ['activity', 'pulse', 'workflow', 'status', 'visualizer'],
     defaultSize: { w: 10, h: 5 },
     minSize: { w: 7, h: 4 },
     maxSize: { w: 16, h: 8 },
     defaultSettings: {
-      title: '실행 펄스',
+      title: '',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -88,14 +90,14 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'group-image-view',
-    title: '그룹 이미지',
-    description: '선택한 그룹 이미지를 그리드로 보여줘.',
+    title: { ko: '그룹 이미지', en: 'Group images' },
+    description: { ko: '선택한 그룹 이미지를 그리드로 보여줘.', en: 'Shows images from a chosen group in a grid.' },
     searchKeywords: ['group', 'gallery', 'grid', 'album'],
     defaultSize: { w: 10, h: 7 },
     minSize: { w: 8, h: 5 },
     maxSize: { w: 16, h: 12 },
     defaultSettings: {
-      title: '그룹 이미지',
+      title: '',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -125,14 +127,14 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'image-showcase',
-    title: '이미지 쇼케이스',
-    description: '대표 이미지나 슬라이드쇼 영역으로 써.',
+    title: { ko: '이미지 쇼케이스', en: 'Image showcase' },
+    description: { ko: '대표 이미지나 슬라이드쇼 영역으로 써.', en: 'A featured image or slideshow area.' },
     searchKeywords: ['showcase', 'slideshow', 'carousel', 'hero'],
     defaultSize: { w: 12, h: 8 },
     minSize: { w: 8, h: 5 },
     maxSize: { w: 18, h: 12 },
     defaultSettings: {
-      title: '이미지 쇼케이스',
+      title: '',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -159,14 +161,14 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'floating-collage',
-    title: '플로팅 콜라주',
-    description: '선택한 그룹 이미지로 떠다니는 콜라주를 만들어.',
+    title: { ko: '플로팅 콜라주', en: 'Floating collage' },
+    description: { ko: '선택한 그룹 이미지로 떠다니는 콜라주를 만들어.', en: 'A drifting collage built from a chosen group.' },
     searchKeywords: ['floating', 'collage', 'motion', 'ambient'],
     defaultSize: { w: 12, h: 8 },
     minSize: { w: 8, h: 6 },
     maxSize: { w: 18, h: 12 },
     defaultSettings: {
-      title: '플로팅 콜라주',
+      title: '',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -198,14 +200,14 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'text-note',
-    title: '텍스트 노트',
-    description: '짧은 메모나 라벨을 배치해 둘 수 있어.',
+    title: { ko: '텍스트 노트', en: 'Text note' },
+    description: { ko: '짧은 메모나 라벨을 배치해 둘 수 있어.', en: 'Place a short note or label.' },
     searchKeywords: ['text', 'note', 'memo', 'label'],
     defaultSize: { w: 7, h: 4 },
     minSize: { w: 4, h: 3 },
     maxSize: { w: 12, h: 8 },
     defaultSettings: {
-      title: '텍스트 노트',
+      title: '',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -222,6 +224,12 @@ export function listWallpaperWidgetDefinitions() {
 /** Find one wallpaper widget definition by type. */
 export function getWallpaperWidgetDefinition<T extends WallpaperWidgetType>(widgetType: T): Extract<WallpaperWidgetDefinition, { type: T }> {
   return (WALLPAPER_WIDGET_DEFINITIONS.find((widget) => widget.type === widgetType) ?? WALLPAPER_WIDGET_DEFINITIONS[0]) as Extract<WallpaperWidgetDefinition, { type: T }>
+}
+
+/** Return the title to show for a placed widget: the user's own title, else the localized widget name. */
+export function getWallpaperWidgetDisplayTitle(widget: WallpaperWidgetInstance, t: (input: TranslationInput) => string): string {
+  const customTitle = typeof widget.settings.title === 'string' ? widget.settings.title.trim() : ''
+  return customTitle || t(getWallpaperWidgetDefinition(widget.type).title)
 }
 
 /** Create one placed widget instance using the widget defaults and a simple grid slot. */

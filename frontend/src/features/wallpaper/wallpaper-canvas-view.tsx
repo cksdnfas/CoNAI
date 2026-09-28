@@ -12,6 +12,7 @@ import type {
 } from './wallpaper-types'
 import { WallpaperWidgetBody, type WallpaperWidgetPreviewImage } from './wallpaper-widget-bodies'
 import { clampWallpaperWidgetInstance } from './wallpaper-layout-utils'
+import { getWallpaperWidgetDisplayTitle } from './wallpaper-widget-registry'
 
 interface WallpaperCanvasViewProps {
   canvasPreset: WallpaperCanvasPreset
@@ -98,7 +99,7 @@ interface WallpaperWidgetCardProps {
 /** Render one widget card inside the wallpaper canvas grid. */
 function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, onSelectWidget, onStartMove, onStartResize, onOpenImage }: WallpaperWidgetCardProps) {
   const { t } = useI18n()
-  const title = String(widget.settings.title ?? widget.type)
+  const title = getWallpaperWidgetDisplayTitle(widget, t)
   const showTitle = widget.settings.showTitle === true
   const showBackground = widget.settings.showBackground === true
   const showBorder = mode === 'runtime' && widget.settings.showBorder === true

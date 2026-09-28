@@ -66,8 +66,8 @@ function getWallpaperWidgetIcon(widgetType: WallpaperWidgetType) {
   return Type
 }
 
-function sortWallpaperWidgetDefinitions(left: WallpaperWidgetDefinition, right: WallpaperWidgetDefinition, locale: string) {
-  return left.title.localeCompare(right.title, locale, { numeric: true, sensitivity: 'base' })
+function sortWallpaperWidgetDefinitions(left: WallpaperWidgetDefinition, right: WallpaperWidgetDefinition, locale: string, t: ReturnType<typeof useI18n>['t']) {
+  return t(left.title).localeCompare(t(right.title), locale, { numeric: true, sensitivity: 'base' })
 }
 
 const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder({
@@ -116,7 +116,7 @@ const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder(
               >
                 <Icon className={cn('h-4 w-4 shrink-0', isSelected ? 'text-primary' : 'text-muted-foreground')} />
                 <div className={cn('min-w-0 flex-1 truncate text-sm font-medium', isSelected ? 'text-primary' : 'text-foreground')}>
-                  {widget.title}
+                  {t(widget.title)}
                 </div>
                 <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
               </button>
@@ -135,8 +135,8 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<WallpaperWidgetLibraryFolderId[]>([])
 
   const widgetDefinitions = useMemo(
-    () => [...listWallpaperWidgetDefinitions()].sort((left, right) => sortWallpaperWidgetDefinitions(left, right, locale)),
-    [locale],
+    () => [...listWallpaperWidgetDefinitions()].sort((left, right) => sortWallpaperWidgetDefinitions(left, right, locale, t)),
+    [locale, t],
   )
   const searchSummary = useMemo(
     () => getWallpaperWidgetLibrarySearchSummary(widgetDefinitions, searchQuery, t),
