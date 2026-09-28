@@ -43,7 +43,7 @@ export function usePromptPageMutations({
   onAfterDeletePrompt,
 }: UsePromptPageMutationsParams) {
   const queryClient = useQueryClient()
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
 
   const refreshPromptQueries = async () => {
     await Promise.all([
@@ -151,6 +151,33 @@ export function usePromptPageMutations({
     },
   })
 
+  // Bulk delete keeps going past failures and reports once, instead of one snackbar per prompt.
+  const deletePromptsMutation = useMutation({
+    mutationFn: async (promptIds: number[]) => {
+      const deletedIds: number[] = []
+      let failedCount = 0
+      for (const promptId of promptIds) {
+        try {
+          await deletePrompt(promptId, promptType)
+          deletedIds.push(promptId)
+        } catch {
+          failedCount += 1
+        }
+      }
+      return { deletedIds, failedCount }
+    },
+    onSuccess: async ({ deletedIds, failedCount }) => {
+      deletedIds.forEach((promptId) => onAfterDeletePrompt?.(promptId))
+      const summaryParams = { deleted: formatNumber(deletedIds.length), failed: formatNumber(failedCount) }
+      if (failedCount > 0) {
+        onError(t({ ko: '{deleted}개 삭제, {failed}개 실패', en: '{deleted} deleted, {failed} failed' }, summaryParams))
+      } else {
+        onInfo(t({ ko: '{deleted}개 삭제했어.', en: '{deleted} deleted.' }, summaryParams))
+      }
+      await refreshPromptQueries()
+    },
+  })
+
   const collectPromptsMutation = useMutation({
     mutationFn: collectPrompts,
     onSuccess: async (result) => {
@@ -172,6 +199,7 @@ export function usePromptPageMutations({
     reorderPromptGroupsMutation,
     importPromptGroupsMutation,
     deletePromptMutation,
+    deletePromptsMutation,
     collectPromptsMutation,
     refreshPromptQueries,
   }

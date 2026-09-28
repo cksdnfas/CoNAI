@@ -167,6 +167,7 @@ export function PromptPage() {
     reorderPromptGroupsMutation,
     importPromptGroupsMutation,
     deletePromptMutation,
+    deletePromptsMutation,
     collectPromptsMutation,
   } = usePromptPageMutations({
     promptType,
@@ -398,9 +399,7 @@ export function PromptPage() {
       return
     }
 
-    for (const item of selectedPromptItems) {
-      await deletePromptMutation.mutateAsync(item.id)
-    }
+    await deletePromptsMutation.mutateAsync(selectedPromptItems.map((item) => item.id))
     setSelectedPromptIds([])
   }
 
@@ -511,7 +510,7 @@ export function PromptPage() {
           <PromptSelectionBar
             selectedCount={selectedPromptItems.length}
             isSubmitting={batchAssignPromptsMutation.isPending}
-            isDeleting={deletePromptMutation.isPending}
+            isDeleting={deletePromptMutation.isPending || deletePromptsMutation.isPending}
             onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 변경할 수 없어.', en: 'Protected auto-group items cannot be changed manually.' }), tone: 'error' }) : handleOpenMultiAssignModal}
             onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 삭제할 수 없어.', en: 'Protected auto-group items cannot be deleted manually.' }), tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
             onClear={() => setSelectedPromptIds([])}
