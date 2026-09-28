@@ -1,10 +1,12 @@
 import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { toggleSelectionItem, type ModuleFieldOption } from '../image-generation-shared'
@@ -72,7 +74,7 @@ export function ComfyModuleSaveModal({
           </Field>
 
           {selectedOverwriteModule ? (
-            <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning md:col-span-2">
+            <div role="status" className="rounded-sm bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground md:col-span-2">
               {t(
                 { ko: '#{id} 모듈을 같은 ID로 덮어써. 기존 그래프 연결은 포트 key가 유지되는 항목만 그대로 살아남아.', en: 'This will overwrite module #{id} with the same ID. Existing graph links only survive for items that keep the same port key.' },
                 { id: selectedOverwriteModule.id },
@@ -82,19 +84,18 @@ export function ComfyModuleSaveModal({
         </div>
 
         <div className="space-y-3">
-          <div className="text-sm font-medium text-foreground">{t({ ko: '노출 입력', en: 'Exposed inputs' })}</div>
+          <Text variant="label">{t({ ko: '노출 입력', en: 'Exposed inputs' })}</Text>
           {fieldOptions.length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {fieldOptions.map((field) => {
                 const checked = exposedFieldIdSet.has(field.key)
                 return (
-                  <label key={field.key} className="flex items-center gap-2 rounded-sm border border-border/70 bg-surface-low/45 px-3 py-2 text-sm text-foreground">
-                    <input
-                      type="checkbox"
+                  <label key={field.key} className="ui-tone-plinth flex cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-high">
+                    <Checkbox
                       checked={checked}
-                      onChange={() => onExposedFieldIdsChange(toggleSelectionItem(exposedFieldIds, field.key))}
+                      onCheckedChange={() => onExposedFieldIdsChange(toggleSelectionItem(exposedFieldIds, field.key))}
                     />
-                    <span>{field.label}</span>
+                    <span className="min-w-0">{field.label}</span>
                   </label>
                 )
               })}

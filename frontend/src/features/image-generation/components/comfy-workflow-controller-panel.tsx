@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom'
 import { ArrowLeft, ChevronDown, RotateCcw, Save } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
+import { Text } from '@/components/ui/text'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api-image-generation-types'
@@ -14,7 +16,7 @@ import { GenerationControllerFieldStack } from './shared-generation-controller'
 import { GenerateActionBar, GenerateActionBarIconButton } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
-import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownItemClassName, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
+import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 import {
   buildComfyWorkflowServerRoutingSummary,
   isComfyWorkflowModalServer,
@@ -32,6 +34,7 @@ function WorkflowTargetSelect({
   value,
   options,
   disabled = false,
+  triggerVariant = 'ghost',
   buttonClassName,
   menuMinWidth = 220,
   onChange,
@@ -39,6 +42,8 @@ function WorkflowTargetSelect({
   value: string
   options: WorkflowTargetOption[]
   disabled?: boolean
+  /** Tonal `secondary` beside other controls, `ghost` inside the sticky bar surface. */
+  triggerVariant?: 'ghost' | 'secondary'
   buttonClassName?: string
   menuMinWidth?: number
   onChange: (value: string) => void
@@ -104,11 +109,11 @@ function WorkflowTargetSelect({
       <div ref={triggerRef} className="min-w-0">
         <Button
           type="button"
-          variant="ghost"
+          variant={triggerVariant}
           size="sm"
           disabled={disabled || options.length === 0}
           onClick={() => setIsOpen((current) => !current)}
-          className={cn('w-full justify-between rounded-none border-0 bg-transparent px-2 text-xs text-foreground shadow-none', buttonClassName)}
+          className={cn('w-full justify-between px-2 text-xs text-foreground', buttonClassName)}
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           title={selectedOption?.description ? `${selectedOption.label} · ${selectedOption.description}` : selectedOption?.label}
@@ -135,10 +140,15 @@ function WorkflowTargetSelect({
               {options.map((option) => {
                 const isSelected = option.value === value
                 return (
-                  <button
+                  <Button
                     key={option.value}
                     type="button"
-                    className={getFloatingDropdownItemClassName({ selected: isSelected })}
+                    variant="nav"
+                    size="sm"
+                    role="option"
+                    aria-selected={isSelected}
+                    data-active={isSelected || undefined}
+                    className="h-auto justify-between gap-3 py-2"
                     onClick={() => {
                       onChange(option.value)
                       setIsOpen(false)
@@ -146,7 +156,7 @@ function WorkflowTargetSelect({
                   >
                     <span className="min-w-0 truncate">{option.label}</span>
                     {option.description ? <span className="shrink-0 text-2xs text-muted-foreground">{option.description}</span> : null}
-                  </button>
+                  </Button>
                 )
               })}
             </div>,
@@ -383,7 +393,8 @@ export function ComfyWorkflowControllerPanel({
             value={selectedTarget}
             options={targetOptions}
             disabled={isGenerating}
-            buttonClassName="h-9 w-full min-w-0 rounded-sm bg-surface-high/50 hover:bg-surface-high"
+            triggerVariant="secondary"
+            buttonClassName="h-9 w-full min-w-0"
             onChange={onSelectTarget}
           />
         </div>
@@ -405,8 +416,8 @@ export function ComfyWorkflowControllerPanel({
         </IconButton>
 
         <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="text-base font-semibold text-foreground">{workflowName}</div>
-          {workflowDescription ? <div className="text-sm text-muted-foreground">{workflowDescription}</div> : null}
+          <Heading level={3} as="div">{workflowName}</Heading>
+          {workflowDescription ? <Text variant="muted">{workflowDescription}</Text> : null}
         </div>
       </div>
 
@@ -424,7 +435,7 @@ export function ComfyWorkflowControllerPanel({
       >
         <ArrowLeft />
       </IconButton>
-      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflowName}</div>
+      <Heading level={3} as="div" className="min-w-0 flex-1 truncate">{workflowName}</Heading>
       <IconButton variant="ghost" size="icon-sm" onClick={onOpenModuleSave} disabled={isGenerating} label={saveModuleLabel}>
         <Save />
       </IconButton>
@@ -455,7 +466,7 @@ export function ComfyWorkflowControllerPanel({
             value={selectedTarget}
             options={targetOptions}
             disabled={isGenerating}
-            buttonClassName="h-11 w-full min-w-0 rounded-sm sm:h-9"
+            buttonClassName="h-11 w-full min-w-0 sm:h-9"
             menuMinWidth={180}
             onChange={onSelectTarget}
           />
@@ -470,7 +481,7 @@ export function ComfyWorkflowControllerPanel({
       {useDrawerCompactChrome
         ? (headerPortalTarget ? createPortal(drawerHeaderContent, headerPortalTarget) : null)
         : (
-          <div className="space-y-3 border-b border-border/70 pb-4">
+          <div className="shrink-0 space-y-3">
             {desktopHeaderContent}
           </div>
         )}
@@ -478,7 +489,7 @@ export function ComfyWorkflowControllerPanel({
       <div className={cn(
         'space-y-6',
         splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
-        useDrawerCompactChrome ? 'px-0 pt-0 pb-5' : undefined,
+        useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
       )}>
         {servers.length === 0 ? (
           <Alert>
@@ -505,7 +516,7 @@ export function ComfyWorkflowControllerPanel({
           </Alert>
         ) : null}
 
-        <section className="space-y-3 px-4">
+        <section className="space-y-3">
           {workflowFields.length > 0 ? (
             <GenerationControllerFieldStack>
               <WorkflowFieldGroupList

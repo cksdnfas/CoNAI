@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Switch } from '@/components/ui/switch'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServerFormDraft } from '../image-generation-shared'
@@ -71,24 +72,20 @@ export function ComfyServerRegistrationModal({
         </Field>
 
         <ToggleRow>
-          <input
-            type="checkbox"
-            checked={form.isActive}
-            onChange={(event) => onFieldChange('isActive', event.target.checked)}
-          />
-          <span className="flex-1">{t({ ko: '활성 서버', en: 'Active server' })}</span>
-          <span className="text-2xs text-muted-foreground">{t({ ko: '생성 후보 포함', en: 'Include in routing' })}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">{t({ ko: '활성 서버', en: 'Active server' })}</span>
+            <span className="block text-xs text-muted-foreground">{t({ ko: '생성 후보 포함', en: 'Include in routing' })}</span>
+          </span>
+          <Switch checked={form.isActive} onCheckedChange={(checked) => onFieldChange('isActive', checked)} />
         </ToggleRow>
 
         {canSelectRepresentative ? (
           <ToggleRow>
-            <input
-              type="checkbox"
-              checked={form.isDefault}
-              onChange={(event) => onFieldChange('isDefault', event.target.checked)}
-            />
-            <span className="flex-1">{t({ ko: '대표 서버', en: 'Representative server' })}</span>
-            <span className="text-2xs text-muted-foreground">{t({ ko: 'API 기본 대상', en: 'Default API target' })}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">{t({ ko: '대표 서버', en: 'Representative server' })}</span>
+              <span className="block text-xs text-muted-foreground">{t({ ko: 'API 기본 대상', en: 'Default API target' })}</span>
+            </span>
+            <Switch checked={form.isDefault} onCheckedChange={(checked) => onFieldChange('isDefault', checked)} />
           </ToggleRow>
         ) : null}
 

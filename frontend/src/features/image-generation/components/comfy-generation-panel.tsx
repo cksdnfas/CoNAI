@@ -5,7 +5,9 @@ import { ChevronDown, Wrench } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Panel } from '@/components/ui/panel'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Text } from '@/components/ui/text'
 import type { CustomDropdownList, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
   DEFAULT_COMFY_MODEL_API_PATHS,
@@ -653,7 +655,7 @@ export function ComfyGenerationPanel({
         ) : null}
 
         {selectedWorkflowId === null ? (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <ComfyWorkflowListSection
               workflows={workflowsQuery.data ?? []}
               selectedWorkflowId={activeWorkflowId}
@@ -665,10 +667,10 @@ export function ComfyGenerationPanel({
               onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
             />
 
-            <div className="rounded-sm border border-border/85 bg-surface-container/30 p-3">
+            <Panel padding="sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-sm font-medium text-foreground">{t({ ko: 'ComfyUI 관리', en: 'ComfyUI management' })}</div>
+                  <Text as="div" variant="label">{t({ ko: 'ComfyUI 관리', en: 'ComfyUI management' })}</Text>
                   <Badge variant="outline">{t({ ko: '서버 {count}', en: '{count} servers' }, { count: servers.length })}</Badge>
                   <Badge variant="outline">{t({ ko: '목록 {count}', en: '{count} lists' }, { count: dropdownListsQuery.data?.length ?? 0 })}</Badge>
                 </div>
@@ -678,7 +680,7 @@ export function ComfyGenerationPanel({
                   <ChevronDown className={cn('h-4 w-4 transition-transform', isManagementOpen && 'rotate-180')} />
                 </Button>
               </div>
-            </div>
+            </Panel>
 
             {servers.length === 0 || isManagementOpen ? (
               <>

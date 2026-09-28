@@ -14,6 +14,10 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { IconButton } from '@/components/ui/icon-button'
+import { Inset } from '@/components/ui/inset'
+import { Switch } from '@/components/ui/switch'
+import { Text } from '@/components/ui/text'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { getPermissionGroupDisplayName } from '@/features/settings/components/security-ui-text'
@@ -140,15 +144,9 @@ export function ComfyWorkflowAuthoringModal({
               />
             </Field>
 
-            <ToggleRow>
-              <input
-                type="checkbox"
-                checked={isPublicPage}
-                onChange={(event) => setIsPublicPage(event.target.checked)}
-              />
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-foreground">{t({ ko: '공용 페이지 사용', en: 'Use public page' })}</div>
-              </div>
+            <ToggleRow className="justify-between">
+              <Text as="span" variant="label" className="min-w-0">{t({ ko: '공용 페이지 사용', en: 'Use public page' })}</Text>
+              <Switch checked={isPublicPage} onCheckedChange={setIsPublicPage} />
             </ToggleRow>
 
             {isPublicPage ? (
@@ -174,16 +172,16 @@ export function ComfyWorkflowAuthoringModal({
                   />
                 </Field>
 
-                <div className="grid gap-2.5 rounded-sm border border-border/70 px-3 py-3">
-                  <div className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
+                <Inset className="grid gap-2.5 px-3">
+                  <Text as="div" variant="overline" className="font-semibold">
                     {t({ ko: '등급별 동시 대기열 제한', en: 'Per-role active queue limit' })}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
+                  </Text>
+                  <Text as="div" variant="caption">
                     {t({
                       ko: '각 등급의 회원 한 명이 이 워크플로우에서 동시에 유지할 수 있는 대기열 개수야. 등급 전체 합산이 아니라 회원별 제한이고, 비워두면 무제한이야. 0은 등록 금지야.',
                       en: 'How many active queue jobs a single member of each role can keep on this workflow. The limit applies per member, not to the whole role. Leave empty for unlimited; 0 blocks the role.',
                     })}
-                  </div>
+                  </Text>
                   {roleLimitGroups.map((group) => (
                     <div key={group.groupKey} className="flex items-center justify-between gap-3">
                       <span className="min-w-0 truncate text-sm text-foreground">
@@ -205,7 +203,7 @@ export function ComfyWorkflowAuthoringModal({
                       />
                     </div>
                   ))}
-                </div>
+                </Inset>
               </>
             ) : null}
 
@@ -276,8 +274,7 @@ export function ComfyWorkflowAuthoringModal({
               <div className="text-xs text-muted-foreground">
                 {graphSearchQuery.trim().length > 0 ? t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(activeSearchCount) }) : t({ ko: '검색 없음', en: 'No search' })}
               </div>
-              <Button
-                type="button"
+              <IconButton
                 size="icon-sm"
                 variant="secondary"
                 disabled={activeSearchCount === 0}
@@ -286,13 +283,11 @@ export function ComfyWorkflowAuthoringModal({
                     ? 0
                     : (current - 1 + activeSearchCount) % activeSearchCount
                 ))}
-                title={t({ ko: '이전 검색 결과', en: 'Previous search result' })}
-                aria-label={t({ ko: '이전 검색 결과', en: 'Previous search result' })}
+                label={t({ ko: '이전 검색 결과', en: 'Previous search result' })}
               >
-                <ChevronUp className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
+                <ChevronUp />
+              </IconButton>
+              <IconButton
                 size="icon-sm"
                 variant="secondary"
                 disabled={activeSearchCount === 0}
@@ -301,11 +296,10 @@ export function ComfyWorkflowAuthoringModal({
                     ? 0
                     : (current + 1) % activeSearchCount
                 ))}
-                title={t({ ko: '다음 검색 결과', en: 'Next search result' })}
-                aria-label={t({ ko: '다음 검색 결과', en: 'Next search result' })}
+                label={t({ ko: '다음 검색 결과', en: 'Next search result' })}
               >
-                <ChevronDown className="h-4 w-4" />
-              </Button>
+                <ChevronDown />
+              </IconButton>
               <Button type="button" size="sm" variant="secondary" asChild>
                 <label className="cursor-pointer">
                   <Upload className="h-4 w-4" />
@@ -328,12 +322,12 @@ export function ComfyWorkflowAuthoringModal({
                 className="min-h-[520px] rounded-none border-0 bg-transparent px-4 py-4 font-mono text-xs focus:ring-0"
               />
 
-              {jsonError ? <div className="border-t border-border/70 px-4 py-3 text-xs text-destructive">{jsonError}</div> : null}
+              {jsonError ? <div role="alert" className="bg-destructive-soft/40 px-4 py-3 text-xs text-destructive-soft-foreground">{jsonError}</div> : null}
             </div>
           ) : (
             <div className="px-4 py-4">
               <div className="mx-auto w-full max-w-[980px]">
-                <div className="h-[620px] overflow-hidden rounded-sm border border-border/85 bg-surface-lowest">
+                <div className="h-[620px] overflow-hidden rounded-sm bg-surface-lowest">
                   {parsedGraph ? (
                     <ReactFlowProvider>
                       <ReactFlow<AuthoringNode, AuthoringEdge>

@@ -1,17 +1,21 @@
-import { useMemo, useState, type DragEvent } from 'react'
+import { useMemo, useState, type DragEvent, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { IconButton } from '@/components/ui/icon-button'
+import { Inset } from '@/components/ui/inset'
+import { Panel } from '@/components/ui/panel'
+import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import type { WorkflowMarkedField, WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
+import { ChevronDown, GripVertical, Trash2 } from 'lucide-react'
 import { groupWorkflowMarkedFieldsByNode } from '../workflow-marked-field-groups'
 import {
   MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS,
@@ -111,6 +115,16 @@ function formatMarkedFieldTypeLabel(field: WorkflowMarkedField) {
   }
 
   return field.type
+}
+
+/** One labelled checkbox row; tonal hover instead of an outlined box. */
+function CheckboxRow({ checked, onCheckedChange, children }: { checked: boolean, onCheckedChange: (checked: boolean) => void, children: ReactNode }) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2.5 rounded-sm px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-surface-high">
+      <Checkbox checked={checked} onCheckedChange={(next) => onCheckedChange(next === true)} />
+      <span className="min-w-0">{children}</span>
+    </label>
+  )
 }
 
 /** Render the marked-field list and the strongly bounded field editing controls. */
@@ -219,36 +233,39 @@ export function ComfyWorkflowMarkedFieldsEditor({
             const isMultiFieldGroup = group.fields.length > 1
 
             return (
-              <div
+              <Panel
                 key={group.key}
+                tone="lowest"
+                padding="none"
                 onDragOver={handleGroupDragOver(group.key)}
                 onDrop={handleGroupDrop(group.key)}
-                className={dragOverGroupKey === group.key && draggedGroupKey !== group.key
-                  ? 'overflow-hidden rounded-sm border border-primary bg-surface-low/55 ring-1 ring-primary/35'
-                  : 'overflow-hidden rounded-sm border border-border/70 bg-surface-low/35'}
+                className={cn(
+                  'overflow-hidden transition-colors',
+                  dragOverGroupKey === group.key && draggedGroupKey !== group.key && 'bg-primary/8 ring-1 ring-inset ring-primary/45',
+                )}
               >
                 {isMultiFieldGroup ? (
                   <div className="flex items-start gap-3 px-3 py-3">
-                    <button
-                      type="button"
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
                       draggable
                       onDragStart={handleGroupDragStart(group.key)}
                       onDragEnd={handleDragEnd}
-                      className="mt-0.5 inline-flex shrink-0 cursor-grab items-center justify-center rounded-sm border border-border/70 bg-background/60 p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
-                      aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.group.to.reorder')}
-                      title={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.group.to.reorder')}
+                      className="shrink-0 cursor-grab active:cursor-grabbing"
+                      label={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.group.to.reorder')}
                     >
-                      <GripVertical className="h-4 w-4" />
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-foreground">{group.nodeTitle}</div>
+                      <GripVertical />
+                    </IconButton>
+                    <div className="min-w-0 flex-1 pt-1">
+                      <Text as="div" variant="title" className="truncate">{group.nodeTitle}</Text>
                       {group.nodeId ? <div className="mt-0.5 text-2xs text-muted-foreground">{t('image-generation.components.workflow.field.group.node.id', { id: group.nodeId })}</div> : null}
                     </div>
                     <Badge variant="outline">{t('image-generation.components.workflow.field.group.field.count', { count: group.fields.length })}</Badge>
                   </div>
                 ) : null}
 
-                <div className={isMultiFieldGroup ? 'divide-y divide-border/70 border-t border-border/70' : undefined}>
+                <div className={isMultiFieldGroup ? 'divide-y divide-outline-subtle' : undefined}>
                   {group.fields.map((field) => {
                     const index = markedFieldIndexById.get(field.id) ?? 0
                     const isExpanded = expandedFieldIdSet.has(field.id)
@@ -259,50 +276,55 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         onDragOver={isMultiFieldGroup ? handleFieldDragOver(group.key, field.id) : undefined}
                         onDrop={isMultiFieldGroup ? handleFieldDrop(group.key, field.id) : undefined}
                         className={isMultiFieldGroup && dragOverFieldId === field.id && draggedFieldId !== field.id
-                          ? 'bg-primary/5 ring-1 ring-inset ring-primary/35'
+                          ? 'bg-primary/8 ring-1 ring-inset ring-primary/45'
                           : undefined}
                       >
                 <div className="flex items-start gap-2 px-3 py-3">
-                  <button
-                    type="button"
+                  <IconButton
+                    variant="ghost"
+                    size="icon-sm"
                     draggable
                     onDragStart={isMultiFieldGroup ? handleFieldDragStart(group.key, field.id) : handleGroupDragStart(group.key)}
                     onDragEnd={handleDragEnd}
-                    className="mt-0.5 inline-flex shrink-0 cursor-grab items-center justify-center rounded-sm border border-border/70 bg-background/60 p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
-                    aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.to.reorder')}
-                    title={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.to.reorder')}
+                    className="shrink-0 cursor-grab active:cursor-grabbing"
+                    label={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.to.reorder')}
                   >
-                    <GripVertical className="h-4 w-4" />
-                  </button>
+                    <GripVertical />
+                  </IconButton>
 
-                  <button
+                  <Button
                     type="button"
-                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                    variant="nav"
+                    className="h-auto min-w-0 flex-1 items-start gap-3 px-2 py-1.5 whitespace-normal text-foreground"
                     onClick={() => onFieldExpandToggle(field.id)}
                     aria-expanded={isExpanded}
                   >
-                    {isExpanded ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <ChevronDown className={cn('mt-0.5 text-muted-foreground transition-transform', !isExpanded && '-rotate-90')} aria-hidden />
+                    <span className="min-w-0 space-y-1.5">
+                      <span className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-xs text-muted-foreground">#{index + 1}</span>
                         <span className="truncate text-sm font-medium text-foreground">{field.label || field.id}</span>
                         <Badge variant="outline">{formatMarkedFieldTypeLabel(field)}</Badge>
                         {field.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
                         {field.default_collapsed ? <Badge variant="secondary">{t('image-generation.components.comfy.workflow.marked.fields.editor.collapsed.by.default')}</Badge> : null}
-                      </div>
-                      <div className="truncate text-2xs text-muted-foreground">{field.jsonPath}</div>
-                    </div>
-                  </button>
+                      </span>
+                      <span className="block truncate font-mono text-2xs text-muted-foreground">{field.jsonPath}</span>
+                    </span>
+                  </Button>
 
-                  <div className="flex items-center gap-2">
-                    <Button type="button" size="icon-sm" variant="secondary" onClick={() => onFieldRemove(field.id)} aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')} title={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <IconButton
+                    size="icon-sm"
+                    variant="ghost"
+                    className="shrink-0 hover:text-destructive"
+                    onClick={() => onFieldRemove(field.id)}
+                    label={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')}
+                  >
+                    <Trash2 />
+                  </IconButton>
                 </div>
 
                 {isExpanded ? (
-                  <div className="space-y-4 border-t border-border/70 bg-background/35 px-3 py-3">
+                  <div className="space-y-4 px-3 pt-1 pb-4">
                     <div className="grid gap-3 md:grid-cols-2">
                       <Field label={t('image-generation.components.comfy.workflow.marked.fields.editor.label')}>
                         <Input variant="settings" value={field.label} onChange={(event) => onFieldPatch(field.id, { label: event.target.value })} />
@@ -374,13 +396,12 @@ export function ComfyWorkflowMarkedFieldsEditor({
                               const visibleFields = field.node_visible_fields ?? [...MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS]
                               const isVisible = visibleFields.includes(option.key)
                               return (
-                                <ToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={isVisible}
-                                    onChange={(event) => {
+                                <CheckboxRow
+                                  key={option.key}
+                                  checked={isVisible}
+                                  onCheckedChange={(checked) => {
                                       const nextVisibleFieldSet = new Set(visibleFields)
-                                      if (event.target.checked) nextVisibleFieldSet.add(option.key)
+                                      if (checked) nextVisibleFieldSet.add(option.key)
                                       else nextVisibleFieldSet.delete(option.key)
                                       const nextVisibleFields = MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS.filter((key) => nextVisibleFieldSet.has(key))
                                       onFieldPatch(field.id, {
@@ -389,9 +410,9 @@ export function ComfyWorkflowMarkedFieldsEditor({
                                           : [...nextVisibleFields],
                                       })
                                     }}
-                                  />
+                                >
                                   {t({ ko: option.ko, en: option.en })}
-                                </ToggleRow>
+                                </CheckboxRow>
                               )
                             })}
                           </div>
@@ -400,19 +421,18 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         <Field label={t({ ko: '출력·업스케일 표시', en: 'Output and upscale controls' })}>
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             {MINIMAX_H3_DIRECTOR_CONTROL_OPTIONS.map((option) => (
-                              <ToggleRow key={option.key} className="rounded-sm border border-border/70 bg-background px-3 py-2">
-                                <input
-                                  type="checkbox"
-                                  checked={!field.node_hidden_controls?.includes(option.key)}
-                                  onChange={(event) => {
-                                    const hiddenControls = new Set(field.node_hidden_controls ?? [])
-                                    if (event.target.checked) hiddenControls.delete(option.key)
-                                    else hiddenControls.add(option.key)
-                                    onFieldPatch(field.id, { node_hidden_controls: hiddenControls.size ? [...hiddenControls] : undefined })
-                                  }}
-                                />
+                              <CheckboxRow
+                                key={option.key}
+                                checked={!field.node_hidden_controls?.includes(option.key)}
+                                onCheckedChange={(checked) => {
+                                  const hiddenControls = new Set(field.node_hidden_controls ?? [])
+                                  if (checked) hiddenControls.delete(option.key)
+                                  else hiddenControls.add(option.key)
+                                  onFieldPatch(field.id, { node_hidden_controls: hiddenControls.size ? [...hiddenControls] : undefined })
+                                }}
+                              >
                                 {t({ ko: option.ko, en: option.en })}
-                              </ToggleRow>
+                              </CheckboxRow>
                             ))}
                           </div>
                         </Field>
@@ -420,8 +440,8 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         <Field label={t({ ko: 'Director 입력 범위', en: 'Director input ranges' })}>
                           <div className="grid gap-3 lg:grid-cols-3">
                             {MINIMAX_H3_DIRECTOR_NUMERIC_BOUND_OPTIONS.map((option) => (
-                              <div key={option.key} className="space-y-2 rounded-sm border border-border/70 bg-background p-3">
-                                <div className="text-xs font-medium text-foreground">{t({ ko: option.ko, en: option.en })}</div>
+                              <Inset key={option.key} className="space-y-2 px-3">
+                                <Text variant="label" className="text-xs">{t({ ko: option.ko, en: option.en })}</Text>
                                 <div className="grid grid-cols-2 gap-2">
                                   <label className="space-y-1 text-xs text-muted-foreground">
                                     <span>{t({ ko: '최소', en: 'Min' })}</span>
@@ -456,41 +476,26 @@ export function ComfyWorkflowMarkedFieldsEditor({
                                     />
                                   </label>
                                 </div>
-                              </div>
+                              </Inset>
                             ))}
                           </div>
                         </Field>
                       </div>
                     ) : null}
 
-                    <div className="flex flex-wrap items-center gap-3">
-                      <ToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={field.required === true}
-                          onChange={(event) => onFieldPatch(field.id, { required: event.target.checked })}
-                        />
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <CheckboxRow checked={field.required === true} onCheckedChange={(checked) => onFieldPatch(field.id, { required: checked })}>
                         required
-                      </ToggleRow>
+                      </CheckboxRow>
 
-                      <ToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={field.default_collapsed === true}
-                          onChange={(event) => onFieldPatch(field.id, { default_collapsed: event.target.checked })}
-                        />
+                      <CheckboxRow checked={field.default_collapsed === true} onCheckedChange={(checked) => onFieldPatch(field.id, { default_collapsed: checked })}>
                         {t('image-generation.components.comfy.workflow.marked.fields.editor.collapsed.on.generation.screen')}
-                      </ToggleRow>
+                      </CheckboxRow>
 
                       {field.type === 'image' ? (
-                        <ToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
-                          <input
-                            type="checkbox"
-                            checked={field.simple_upload_only === true}
-                            onChange={(event) => onFieldPatch(field.id, { simple_upload_only: event.target.checked })}
-                          />
+                        <CheckboxRow checked={field.simple_upload_only === true} onCheckedChange={(checked) => onFieldPatch(field.id, { simple_upload_only: checked })}>
                           {t('image-generation.components.comfy.workflow.marked.fields.editor.simple.upload.mode')}
-                        </ToggleRow>
+                        </CheckboxRow>
                       ) : null}
                     </div>
 
@@ -566,12 +571,12 @@ export function ComfyWorkflowMarkedFieldsEditor({
                     )
                   })}
                 </div>
-              </div>
+              </Panel>
             )
           })}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">{t('image-generation.components.comfy.workflow.marked.fields.editor.no.marked.fields.have.been.added.yet')}</div>
+        <Text variant="muted">{t('image-generation.components.comfy.workflow.marked.fields.editor.no.marked.fields.have.been.added.yet')}</Text>
       )}
     </Section>
   )

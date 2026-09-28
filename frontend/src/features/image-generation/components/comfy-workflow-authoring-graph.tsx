@@ -2,7 +2,9 @@ import { useMemo } from 'react'
 import { Check, GripVertical, Plus } from 'lucide-react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { buildPowerLoraNodeItemsFromInputs } from './power-lora-loader-input'
 import {
   MINIMAX_H3_DIRECTOR_CLASS_TYPE,
@@ -423,14 +425,14 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
 
   return (
     <div
-      className={data.searchCurrent
-        ? 'min-w-[240px] rounded-sm border border-primary bg-surface-container p-3 shadow-sm ring-2 ring-primary/35'
-        : data.searchMatched
-          ? 'min-w-[240px] rounded-sm border border-primary/45 bg-surface-container p-3 shadow-sm'
-          : 'min-w-[240px] rounded-sm border border-border bg-surface-container p-3 shadow-sm'}
+      // Floating card on the graph canvas: tone + elevation, search hits marked with a primary ring.
+      className={cn(
+        'min-w-[240px] rounded-sm bg-surface-container p-3 shadow-elevation-1',
+        data.searchCurrent ? 'ring-2 ring-primary/60' : data.searchMatched ? 'ring-1 ring-primary/40' : undefined,
+      )}
     >
       <div className="flex items-start gap-2">
-        <div className="comfy-authoring-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm border border-border/70 bg-background/50 text-muted-foreground active:cursor-grabbing">
+        <div className="comfy-authoring-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm bg-foreground/5 text-muted-foreground hover:text-foreground active:cursor-grabbing">
           <GripVertical className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
@@ -444,22 +446,24 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
       </div>
 
       {data.editableInputs.length > 0 ? (
-        <div className="mt-3 space-y-1.5">
+        <div className="mt-3 space-y-0.5">
           {data.editableInputs.map((input) => {
             const path = input.jsonPath ?? `${id}.inputs.${input.key}`
             const selected = markedJsonPathSet.has(path)
             return (
-              <button
+              <Button
                 key={path}
                 type="button"
+                variant="nav"
+                size="xs"
+                data-active={selected || undefined}
+                aria-pressed={selected}
                 onClick={() => data.onAddField(id, data.title, data.classType, input)}
-                className={selected
-                  ? 'nodrag nopan flex w-full items-center justify-between rounded-sm border border-primary/40 bg-primary/10 px-2 py-1.5 text-left text-xs text-foreground'
-                  : 'nodrag nopan flex w-full items-center justify-between rounded-sm border border-border bg-surface-low px-2 py-1.5 text-left text-xs text-foreground hover:bg-surface-high'}
+                className="nodrag nopan h-7 justify-between"
               >
                 <span className="truncate">{input.label}</span>
-                <span className="ml-2 shrink-0">{selected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}</span>
-              </button>
+                {selected ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+              </Button>
             )
           })}
         </div>
