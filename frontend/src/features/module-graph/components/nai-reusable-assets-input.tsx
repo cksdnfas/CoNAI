@@ -425,7 +425,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             <div className="text-sm font-medium text-foreground">{t({ ko: 'Vibe Transfer', en: 'Vibe Transfer' })}</div>
             <div className="text-xs text-muted-foreground">{t({ ko: 'encoded vibe를 직접 넣거나 saved vibe를 바로 추가해.', en: 'Enter an encoded vibe directly or quickly add a saved vibe.' })}</div>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={() => updateVibes([...vibeDrafts, { encoded: '', strength: '0.6', informationExtracted: '1' }])}>
+          <Button type="button" size="sm" variant="secondary" onClick={() => updateVibes([...vibeDrafts, { encoded: '', strength: '0.6', informationExtracted: '1' }])}>
             <Plus className="h-4 w-4" />
             {t({ ko: '추가', en: 'Add' })}
           </Button>
@@ -525,7 +525,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                         {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                         {isPinned ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
                       </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedVibe(asset)}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => void appendSavedVibe(asset)}>
                         <Save className="h-4 w-4" />
                         {t({ ko: '추가', en: 'Add' })}
                       </Button>
@@ -549,7 +549,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           <div className="text-sm font-medium text-foreground">{t({ ko: 'Character Reference', en: 'Character Reference' })}</div>
           <div className="text-xs text-muted-foreground">{t({ ko: 'reference 이미지를 직접 넣거나 saved reference를 추가해.', en: 'Add a reference image directly or append a saved reference.' })}</div>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => updateCharacterReferences([...characterReferenceDrafts, { type: 'character&style', strength: '0.6', fidelity: '1' }])}>
+        <Button type="button" size="sm" variant="secondary" onClick={() => updateCharacterReferences([...characterReferenceDrafts, { type: 'character&style', strength: '0.6', fidelity: '1' }])}>
           <Plus className="h-4 w-4" />
           {t({ ko: '추가', en: 'Add' })}
         </Button>
@@ -646,7 +646,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                       {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                       {isPinned ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
                     </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedCharacterReference(asset)}>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void appendSavedCharacterReference(asset)}>
                       <Save className="h-4 w-4" />
                       {t({ ko: '추가', en: 'Add' })}
                     </Button>

@@ -639,7 +639,7 @@ export function NodeInspectorPanel({
                       {resolvedExecuteSelectedNodeLabel}
                     </Button>
                     {onForceExecuteSelectedNode ? (
-                      <Button type="button" size="sm" variant="outline" onClick={onForceExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
+                      <Button type="button" size="sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
                         {resolvedForceExecuteSelectedNodeLabel}
                       </Button>
                     ) : null}

@@ -520,7 +520,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
 
   return (
     <>
-      <Button type="button" variant="outline" disabled={disabled} onClick={() => setIsOpen(true)}>
+      <Button type="button" variant="secondary" disabled={disabled} onClick={() => setIsOpen(true)}>
         <ImagePlus className="h-4 w-4" />
         {label}
       </Button>

@@ -78,7 +78,7 @@ export function WorkflowInputFields({
         <Button
           type="button"
           size="icon-sm"
-          variant="outline"
+          variant="secondary"
           onClick={() => restoreDefaultValue(inputDefinition)}
           disabled={!defaultAvailable || usingDefault}
           aria-label={t({ ko: '기본값 가져오기', en: 'Restore default value' })}
@@ -89,7 +89,7 @@ export function WorkflowInputFields({
         <Button
           type="button"
           size="icon-sm"
-          variant="outline"
+          variant="secondary"
           onClick={() => onInputValueClear(inputDefinition.id)}
           disabled={!explicitValue}
           aria-label={t({ ko: '값 지우기', en: 'Clear value' })}

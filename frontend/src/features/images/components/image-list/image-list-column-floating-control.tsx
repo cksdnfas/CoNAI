@@ -66,7 +66,7 @@ export function ImageListColumnFloatingControl({
                   key={option}
                   type="button"
                   size="sm"
-                  variant={isActive ? 'default' : 'outline'}
+                  variant={isActive ? 'default' : 'secondary'}
                   className="h-8 px-0"
                   onClick={() => {
                     onChange(option)

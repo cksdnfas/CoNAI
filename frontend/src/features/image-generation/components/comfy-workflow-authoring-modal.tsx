@@ -279,7 +279,7 @@ export function ComfyWorkflowAuthoringModal({
               <Button
                 type="button"
                 size="icon-sm"
-                variant="outline"
+                variant="secondary"
                 disabled={activeSearchCount === 0}
                 onClick={() => setGraphSearchIndex((current) => (
                   activeSearchCount === 0
@@ -294,7 +294,7 @@ export function ComfyWorkflowAuthoringModal({
               <Button
                 type="button"
                 size="icon-sm"
-                variant="outline"
+                variant="secondary"
                 disabled={activeSearchCount === 0}
                 onClick={() => setGraphSearchIndex((current) => (
                   activeSearchCount === 0
@@ -306,7 +306,7 @@ export function ComfyWorkflowAuthoringModal({
               >
                 <ChevronDown className="h-4 w-4" />
               </Button>
-              <Button type="button" size="sm" variant="outline" asChild>
+              <Button type="button" size="sm" variant="secondary" asChild>
                 <label className="cursor-pointer">
                   <Upload className="h-4 w-4" />
                   {t({ ko: '업로드', en: 'Upload' })}

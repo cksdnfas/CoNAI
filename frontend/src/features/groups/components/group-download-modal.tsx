@@ -82,7 +82,7 @@ export function GroupDownloadModal({
               <Button
                 key={card.type}
                 type="button"
-                variant="outline"
+                variant="secondary"
                 className="h-auto w-full justify-between px-3 py-3 text-left"
                 onClick={() => void onDownload(card.type)}
                 disabled={isLoading || isDownloading || availableCount <= 0}

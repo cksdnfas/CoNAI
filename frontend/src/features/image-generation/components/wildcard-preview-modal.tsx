@@ -90,7 +90,7 @@ export function WildcardPreviewModal({
         />
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={onFillSelectedSyntax} disabled={!selectedWildcardSyntax}>
+          <Button type="button" variant="secondary" onClick={onFillSelectedSyntax} disabled={!selectedWildcardSyntax}>
             <Braces className="h-4 w-4" />
             {t({ ko: '선택 항목 넣기', en: 'Insert selection' })}
           </Button>

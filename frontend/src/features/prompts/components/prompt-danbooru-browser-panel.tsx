@@ -347,14 +347,14 @@ export function PromptDanbooruBrowserPanel() {
                 onKeyDown={handleSearchInputKeyDown}
                 placeholder={t({ ko: '검색', en: 'Search' })}
               />
-              <Button size="sm" variant="outline" onClick={handleApplySearch}>
+              <Button size="sm" variant="secondary" onClick={handleApplySearch}>
                 <Search className="h-4 w-4" />
               </Button>
               {activeSection === 'characters' ? (
                 <div ref={relatedTagOptionsAnchorRef}>
                   <Button
                     size="sm"
-                    variant={relatedTagFilterActive ? 'default' : 'outline'}
+                    variant={relatedTagFilterActive ? 'default' : 'secondary'}
                     onClick={handleToggleRelatedTagOptionsOpen}
                     title={t({ ko: 'Related tags 표시 옵션', en: 'Related tags display options' })}
                   >

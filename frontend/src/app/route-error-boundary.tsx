@@ -54,7 +54,7 @@ export function RouteErrorBoundary() {
                 {isChunkError ? t({ ko: '새로고침', en: 'Refresh' }) : t({ ko: '다시 시도', en: 'Try again' })}
               </Button>
               {/* A full navigation also recovers when the router itself is in a broken state. */}
-              <Button asChild variant="outline">
+              <Button asChild variant="secondary">
                 <a href="/">
                   <Home className="h-4 w-4" />
                   {t({ ko: '홈으로 이동', en: 'Go to Home' })}

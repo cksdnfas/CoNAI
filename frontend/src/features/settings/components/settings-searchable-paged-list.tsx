@@ -124,10 +124,10 @@ export function SettingsSearchablePagedList<T>({
             )}
           </span>
           <div className="flex gap-2">
-            <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+            <Button type="button" size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
               {t({ ko: '이전', en: 'Previous' })}
             </Button>
-            <Button type="button" size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>
+            <Button type="button" size="sm" variant="secondary" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>
               {t({ ko: '다음', en: 'Next' })}
             </Button>
           </div>

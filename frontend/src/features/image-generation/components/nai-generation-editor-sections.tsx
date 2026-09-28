@@ -149,7 +149,7 @@ export function NaiGenerationEditorSections({
             <Badge variant="outline">{naiForm.characters.length}</Badge>
             <IconButton
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               onClick={handleAddCharacterPrompt}
               disabled={!supportsCharacterPrompts}
               label={t('image-generation.components.nai.generation.editor.sections.add.character')}
@@ -435,7 +435,7 @@ function NaiSeedField({ seed, onSeedChange }: { seed: string, onSeedChange: (val
           onValueCommit={onSeedChange}
         />
         <IconButton
-          variant="outline"
+          variant="secondary"
           className="h-auto min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
           label={t({ ko: '새 시드 굴리기', en: 'Roll a new seed' })}
           onClick={() => onSeedChange(rollNaiSeed())}

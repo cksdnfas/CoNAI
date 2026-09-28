@@ -169,10 +169,10 @@ export function PaginationControls({ pagination, visibleCount, onPageChange }: {
         })}
       </span>
       <div className="flex gap-2">
-        <Button size="sm" variant="outline" disabled={pagination.page <= 1} onClick={() => onPageChange(Math.max(1, pagination.page - 1))}>
+        <Button size="sm" variant="secondary" disabled={pagination.page <= 1} onClick={() => onPageChange(Math.max(1, pagination.page - 1))}>
           {t({ ko: '이전', en: 'Previous' })}
         </Button>
-        <Button size="sm" variant="outline" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange(pagination.page + 1)}>
+        <Button size="sm" variant="secondary" disabled={pagination.page >= pagination.totalPages} onClick={() => onPageChange(pagination.page + 1)}>
           {t({ ko: '다음', en: 'Next' })}
         </Button>
       </div>
@@ -473,7 +473,7 @@ export function CharactersTable({ items, language }: { items: DanbooruBrowserCha
             </div>
             <div className="flex justify-center gap-1">
               {showTranslationActions && item.relatedTags.length > 0 ? (
-                <Button type="button" size="icon-sm" variant="outline" onClick={() => setTranslationTarget(item)} title={t({ ko: 'Related tags 번역', en: 'Translate related tags' })} aria-label={t({ ko: 'Related tags 번역', en: 'Translate related tags' })}>
+                <Button type="button" size="icon-sm" variant="secondary" onClick={() => setTranslationTarget(item)} title={t({ ko: 'Related tags 번역', en: 'Translate related tags' })} aria-label={t({ ko: 'Related tags 번역', en: 'Translate related tags' })}>
                   <Languages className="h-4 w-4" />
                 </Button>
               ) : null}

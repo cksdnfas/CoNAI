@@ -316,7 +316,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               className="h-7 w-7"
               disabled={data.executeNodeDisabled}
               onMouseDown={stopNodeActionEvent}

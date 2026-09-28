@@ -343,7 +343,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             onClick={() => setIsPreviewModalOpen(true)}
             aria-label={t('image-generation.components.wildcard.generation.panel.parsing.test')}
             title={t('image-generation.components.wildcard.generation.panel.parsing.test')}
@@ -398,12 +398,12 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
             extraActions={selectedWildcard && !isReadonlyActiveTab && (canEditWildcardEntries || canDeleteWildcardEntries) ? (
               <>
                 {canEditWildcardEntries ? (
-                  <Button type="button" variant="outline" size="icon-sm" className="bg-surface-low" onClick={handleOpenEditModal} aria-label={t('image-generation.components.wildcard.generation.panel.edit')} title={t('image-generation.components.wildcard.generation.panel.edit')}>
+                  <Button type="button" variant="secondary" size="icon-sm" className="bg-surface-low" onClick={handleOpenEditModal} aria-label={t('image-generation.components.wildcard.generation.panel.edit')} title={t('image-generation.components.wildcard.generation.panel.edit')}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                 ) : null}
                 {canDeleteWildcardEntries ? (
-                  <Button type="button" variant="outline" size="icon-sm" className="bg-surface-low" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending} aria-label={t('image-generation.components.wildcard.generation.panel.delete')} title={t('image-generation.components.wildcard.generation.panel.delete')}>
+                  <Button type="button" variant="secondary" size="icon-sm" className="bg-surface-low" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending} aria-label={t('image-generation.components.wildcard.generation.panel.delete')} title={t('image-generation.components.wildcard.generation.panel.delete')}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 ) : null}

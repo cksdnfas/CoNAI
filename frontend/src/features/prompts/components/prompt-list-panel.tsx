@@ -125,10 +125,10 @@ export function PromptListPanel({
             )}
           </span>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
+            <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
               {t({ ko: '이전', en: 'Previous' })}
             </Button>
-            <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+            <Button size="sm" variant="secondary" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
               {t({ ko: '다음', en: 'Next' })}
             </Button>
           </div>

@@ -80,15 +80,15 @@ export function MiniMaxH3DirectorPromptBuilder({
           <div className="mt-1 text-[11px] text-muted-foreground">{state.mode}</div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => setShotNumberDraft('1')}>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setShotNumberDraft('1')}>
             <Plus className="h-3.5 w-3.5" />[Shot N]
           </Button>
           {state.mode === 'REF2VA' ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => onChange(prefillMiniMaxH3DirectorRefBuilder(state, items))}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onChange(prefillMiniMaxH3DirectorRefBuilder(state, items))}>
               <Sparkles className="h-3.5 w-3.5" />{t({ ko: '라벨·요약 채우기', en: 'Prefill labels & summary' })}
             </Button>
           ) : null}
-          <Button type="button" size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setPreviewOpen(true)}>
             <Eye className="h-3.5 w-3.5" />{t({ ko: '프롬프트 미리보기', en: 'Preview prompt' })}
           </Button>
         </div>
@@ -168,7 +168,7 @@ export function MiniMaxH3DirectorPromptBuilder({
       <div className="space-y-3">
         <Textarea rows={18} readOnly value={preview} className="font-mono text-xs" />
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={() => void navigator.clipboard.writeText(preview).then(
+          <Button type="button" variant="secondary" onClick={() => void navigator.clipboard.writeText(preview).then(
             () => onStatus(t({ ko: '프롬프트를 복사했어.', en: 'Prompt copied.' })),
             () => onStatus(t({ ko: '프롬프트 복사에 실패했어.', en: 'Failed to copy prompt.' })),
           )}>

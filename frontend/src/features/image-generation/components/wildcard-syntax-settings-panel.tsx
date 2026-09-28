@@ -54,7 +54,7 @@ export function WildcardSyntaxSettingsPanel() {
       <section className="space-y-3 rounded-sm border border-border bg-surface-low p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm font-semibold text-foreground">{t({ ko: '문법 우선순위', en: 'Syntax Priority' })}</div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setSettings(DEFAULT_PROMPT_INLINE_SYNTAX_SETTINGS)}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setSettings(DEFAULT_PROMPT_INLINE_SYNTAX_SETTINGS)}>
             <RotateCcw className="h-4 w-4" />
             {t({ ko: '기본값', en: 'Reset' })}
           </Button>

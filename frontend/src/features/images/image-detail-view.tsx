@@ -575,7 +575,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               <Button
                 type="button"
                 size="icon-sm"
-                variant="outline"
+                variant="secondary"
                 className="image-detail-modal-info-reopen-desktop"
                 onClick={() => setIsModalInfoViewerOpen(true)}
                 aria-label={modalInfoToggleLabel}
@@ -632,7 +632,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               <Button
                 type="button"
                 size="icon-sm"
-                variant="outline"
+                variant="secondary"
                 className="image-detail-modal-info-toggle-desktop"
                 onClick={() => setIsModalInfoViewerOpen(false)}
                 aria-label={modalInfoToggleLabel}

@@ -60,7 +60,7 @@ export function NaiVibesSection({
         actions={(
           <>
             <Badge variant="outline">{vibes.length}</Badge>
-            <Button type="button" size="icon-sm" variant="outline" onClick={onAddVibe} aria-label={t('image-generation.components.nai.vibes.section.add.vibe')} title={t('image-generation.components.nai.vibes.section.add.vibe')}>
+            <Button type="button" size="icon-sm" variant="secondary" onClick={onAddVibe} aria-label={t('image-generation.components.nai.vibes.section.add.vibe')} title={t('image-generation.components.nai.vibes.section.add.vibe')}>
               <Plus className="h-4 w-4" />
             </Button>
           </>
@@ -109,7 +109,7 @@ export function NaiVibesSection({
                 </div>
 
                 <div className="flex justify-end border-t border-border/70 pt-3">
-                  <Button type="button" variant="outline" onClick={() => onOpenVibeSaveModal(index)} disabled={!vibe.image || encodingVibeIndex === index || !naiConnected} title={!naiConnected ? t('image-generation.components.nai.vibes.section.saving.vibes.requires.novelai.login') : undefined}>
+                  <Button type="button" variant="secondary" onClick={() => onOpenVibeSaveModal(index)} disabled={!vibe.image || encodingVibeIndex === index || !naiConnected} title={!naiConnected ? t('image-generation.components.nai.vibes.section.saving.vibes.requires.novelai.login') : undefined}>
                     <Save className="h-4 w-4" />
                     {encodingVibeIndex === index ? t('image-generation.components.nai.vibes.section.encoding') : t('image-generation.components.nai.vibes.section.save')}
                   </Button>

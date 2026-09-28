@@ -262,7 +262,7 @@ export function ImageSaveTab({
                         key={preset.label}
                         type="button"
                         size="sm"
-                        variant={imageSaveDraft.maxWidth === preset.width && imageSaveDraft.maxHeight === preset.height ? 'secondary' : 'outline'}
+                        variant={imageSaveDraft.maxWidth === preset.width && imageSaveDraft.maxHeight === preset.height ? 'secondary' : 'secondary'}
                         onClick={() => onPatchImageSave({ maxWidth: preset.width, maxHeight: preset.height, resizeEnabled: true })}
                       >
                         {preset.label}

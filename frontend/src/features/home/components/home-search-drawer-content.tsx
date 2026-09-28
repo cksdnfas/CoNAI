@@ -289,7 +289,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
               <Button type="button" className="flex-1" onClick={handleApplySearch}>
                 {t({ ko: '검색', en: 'Search' })}
               </Button>
-              <Button type="button" variant="outline" className="flex-1" onClick={handleClearSearch}>
+              <Button type="button" variant="secondary" className="flex-1" onClick={handleClearSearch}>
                 {t({ ko: '초기화', en: 'Reset' })}
               </Button>
             </div>

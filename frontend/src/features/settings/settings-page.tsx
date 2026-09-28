@@ -435,7 +435,7 @@ export function SettingsPage() {
               })}
             </div>
             <div className="pt-2">
-              <Button asChild size="sm" variant="outline">
+              <Button asChild size="sm" variant="secondary">
                 <Link to="/access">{t('appShell.availablePages')}</Link>
               </Button>
             </div>

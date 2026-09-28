@@ -244,7 +244,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
 
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{t({ ko: '로컬 파일 기반', en: 'Local file-based' })}</Badge>
-          <Button type="button" variant="outline" onClick={() => void rescanMutation.mutateAsync()} disabled={rescanMutation.isPending}>
+          <Button type="button" variant="secondary" onClick={() => void rescanMutation.mutateAsync()} disabled={rescanMutation.isPending}>
             {rescanMutation.isPending ? t({ ko: '재스캔 중...', en: 'Rescanning...' }) : t({ ko: '재스캔', en: 'Rescan' })}
           </Button>
         </div>
@@ -302,7 +302,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                             <Button
                               type="button"
                               size="sm"
-                              variant={isSelected ? 'default' : 'outline'}
+                              variant={isSelected ? 'default' : 'secondary'}
                               onClick={() => {
                                 setSelectedTestKey(node.manifest.key)
                                 setTestResultData(null)
@@ -315,7 +315,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                             <Button
                               type="button"
                               size="sm"
-                              variant="outline"
+                              variant="secondary"
                               onClick={() => void openFolderMutation.mutateAsync(node.manifest.key)}
                               disabled={openFolderMutation.isPending}
                             >
@@ -324,7 +324,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                             <Button
                               type="button"
                               size="sm"
-                              variant="outline"
+                              variant="secondary"
                               onClick={async () => {
                                 try {
                                   await copyTextToClipboard(node.folderPath)
@@ -447,13 +447,13 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <StatTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? t({ ko: '없음', en: 'None' })} className="md:col-span-2" valueClassName="break-all text-xs font-medium" />
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
                       {t({ ko: '폴더 열기', en: 'Open folder' })}
                     </Button>
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={async () => {
                         try {
                           await copyTextToClipboard(selectedNodeSourceQuery.data.entryPath)
@@ -468,7 +468,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => void installDependenciesMutation.mutateAsync(selectedNodeSourceQuery.data.key)}
                       disabled={installDependenciesMutation.isPending || !selectedNodeSourceQuery.data.packageJsonPath}
                     >
@@ -491,7 +491,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                   placeholder={"{\n  \"input\": \"value\"\n}"}
                 />
               </Field>
-              <Button type="button" variant="outline" onClick={() => void testMutation.mutateAsync()} disabled={testMutation.isPending || !selectedTestKey}>
+              <Button type="button" variant="secondary" onClick={() => void testMutation.mutateAsync()} disabled={testMutation.isPending || !selectedTestKey}>
                 {testMutation.isPending ? t({ ko: '테스트 실행 중...', en: 'Running test...' }) : t({ ko: '테스트 실행', en: 'Run test' })}
               </Button>
 

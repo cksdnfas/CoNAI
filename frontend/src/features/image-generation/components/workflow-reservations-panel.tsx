@@ -269,7 +269,7 @@ export function WorkflowReservationsPanel() {
         variant="settings"
         heading={t({ ko: '예약작업', en: 'Reservation jobs' })}
         actions={(
-          <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })} aria-label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
+          <Button type="button" size="icon-sm" variant="secondary" onClick={() => void handleRefresh()} title={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })} aria-label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
             <RefreshCw className="h-4 w-4" />
           </Button>
         )}
@@ -349,7 +349,7 @@ export function WorkflowReservationsPanel() {
           <>
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               onClick={() => void handleCancelSelectedReservationExecutions()}
               disabled={isCleaningReservations || cancelableReservationExecutions.length === 0}
               data-no-select-drag="true"

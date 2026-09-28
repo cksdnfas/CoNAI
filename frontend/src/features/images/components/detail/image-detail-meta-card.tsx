@@ -336,7 +336,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           {canEditMetadata ? (
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               onClick={() => {
                 const sourceState = prepareImageSourceState(location)
                 imageViewModal?.closeImageView()
@@ -463,7 +463,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               <Button
                 type="button"
                 size="icon-sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => setIsArtistPromptSettingsOpen(true)}
                 aria-label={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}
                 title={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}

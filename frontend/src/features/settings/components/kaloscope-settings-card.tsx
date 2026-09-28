@@ -99,7 +99,7 @@ export function KaloscopeSettingsCard({
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">{t({ ko: '{key} 자리에 아티스트 배지 텍스트가 들어가.', en: 'Artist badge text is inserted at {key}.' })}</p>
-                  <Button type="button" size="sm" variant="outline" onClick={() => onPatchKaloscope({ artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE })}>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => onPatchKaloscope({ artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE })}>
                     <RotateCcw className="h-4 w-4" />
                     {t({ ko: '기본값', en: 'Default' })}
                   </Button>

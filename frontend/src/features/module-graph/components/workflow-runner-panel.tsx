@@ -193,7 +193,7 @@ export function WorkflowRunnerPanel({
             variant="inside"
             heading={t({ ko: '워크플로우 실행기', en: 'Workflow Runner' })}
             actions={
-              <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
+              <Button type="button" size="sm" variant="secondary" onClick={onEdit} disabled={!selectedGraph}>
                 {t({ ko: '구조 수정', en: 'Edit graph' })}
               </Button>
             }
@@ -217,15 +217,15 @@ export function WorkflowRunnerPanel({
 
                 <div className="flex shrink-0 items-center gap-2">
                   {onOpenFolderSettings ? (
-                    <Button type="button" size="icon-sm" variant="outline" onClick={onOpenFolderSettings} disabled={!selectedGraph} aria-label={t({ ko: '폴더 설정', en: 'Folder settings' })} title={t({ ko: '폴더 설정', en: 'Folder settings' })}>
+                    <Button type="button" size="icon-sm" variant="secondary" onClick={onOpenFolderSettings} disabled={!selectedGraph} aria-label={t({ ko: '폴더 설정', en: 'Folder settings' })} title={t({ ko: '폴더 설정', en: 'Folder settings' })}>
                       <Folder className="h-4 w-4" />
                     </Button>
                   ) : null}
-                  <Button type="button" size="icon-sm" variant="outline" onClick={onEdit} disabled={!selectedGraph} aria-label={t({ ko: '구조 수정', en: 'Edit graph' })} title={t({ ko: '구조 수정', en: 'Edit graph' })}>
+                  <Button type="button" size="icon-sm" variant="secondary" onClick={onEdit} disabled={!selectedGraph} aria-label={t({ ko: '구조 수정', en: 'Edit graph' })} title={t({ ko: '구조 수정', en: 'Edit graph' })}>
                     <PenSquare className="h-4 w-4" />
                   </Button>
                   {onDeleteWorkflow ? (
-                    <Button type="button" size="icon-sm" variant="outline" onClick={onDeleteWorkflow} disabled={!selectedGraph} aria-label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })} title={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
+                    <Button type="button" size="icon-sm" variant="secondary" onClick={onDeleteWorkflow} disabled={!selectedGraph} aria-label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })} title={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   ) : null}

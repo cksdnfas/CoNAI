@@ -51,7 +51,7 @@ export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving 
         </Inset>
 
         <ModalFooter className="justify-between">
-          <Button type="button" variant="outline" onClick={() => setDraft(DEFAULT_ARTIST_LINK_URL_TEMPLATE)}>
+          <Button type="button" variant="secondary" onClick={() => setDraft(DEFAULT_ARTIST_LINK_URL_TEMPLATE)}>
             <RotateCcw className="h-4 w-4" />
             {t('images.components.image.list.image.list.column.floating.control.reset.to.default')}
           </Button>

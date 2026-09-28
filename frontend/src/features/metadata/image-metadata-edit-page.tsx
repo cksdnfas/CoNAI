@@ -180,7 +180,7 @@ export function ImageMetadataEditPage() {
               <ArrowLeft className="h-4 w-4" />
               {t({ ko: '돌아가기', en: 'Back' })}
             </Button>
-            <Button variant="outline" onClick={handleDownload} disabled={!draft || busy || !isEditableImage || Boolean(draftValidationError)}>
+            <Button variant="secondary" onClick={handleDownload} disabled={!draft || busy || !isEditableImage || Boolean(draftValidationError)}>
               <Download className="h-4 w-4" />
               {t({ ko: '다운로드', en: 'Download' })}
             </Button>

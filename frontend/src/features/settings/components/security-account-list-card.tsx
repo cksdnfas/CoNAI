@@ -45,7 +45,7 @@ export function SecurityAccountListCard({
         actions={(
           <IconButton
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             onClick={onOpenGroupColors}
             label={t('securityGroupColorEditorModal.permissionGroupColors')}
           >

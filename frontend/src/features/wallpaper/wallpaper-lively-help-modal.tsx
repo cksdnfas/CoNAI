@@ -85,7 +85,7 @@ export function WallpaperLivelyHelpModal({ open, runtimeUrl, onClose, onCopyRunt
           {runtimeUrl ? (
             <div className="flex min-w-0 gap-2">
               <Input value={runtimeUrl} readOnly onFocus={(event) => event.currentTarget.select()} />
-              <Button type="button" variant="outline" size="icon-sm" onClick={onCopyRuntimeUrl} aria-label={t({ ko: 'URL 복사', en: 'Copy URL' })}>
+              <Button type="button" variant="secondary" size="icon-sm" onClick={onCopyRuntimeUrl} aria-label={t({ ko: 'URL 복사', en: 'Copy URL' })}>
                 <ClipboardCopy className="h-4 w-4" />
               </Button>
             </div>

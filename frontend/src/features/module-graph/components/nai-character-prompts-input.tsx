@@ -153,7 +153,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
         <div className="text-sm font-medium text-foreground">{t({ ko: 'Character Prompt', en: 'Character Prompt' })}</div>
-        <Button type="button" size="sm" variant="outline" onClick={handleAdd}>
+        <Button type="button" size="sm" variant="secondary" onClick={handleAdd}>
           <Plus className="h-4 w-4" />
           {t({ ko: '추가', en: 'Add' })}
         </Button>

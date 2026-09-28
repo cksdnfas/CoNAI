@@ -27,7 +27,7 @@ export function NotFoundPage() {
             </p>
             <div className="flex flex-wrap items-center gap-2">
               {canGoBack ? (
-                <Button type="button" variant="outline" onClick={() => navigate(-1)}>
+                <Button type="button" variant="secondary" onClick={() => navigate(-1)}>
                   <ArrowLeft className="h-4 w-4" />
                   {t({ ko: '뒤로 가기', en: 'Go back' })}
                 </Button>

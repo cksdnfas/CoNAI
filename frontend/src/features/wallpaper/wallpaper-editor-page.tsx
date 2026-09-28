@@ -466,11 +466,11 @@ export function WallpaperEditorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setIsTemplateModalOpen(true)}>
+            <Button variant="secondary" size="sm" onClick={() => setIsTemplateModalOpen(true)}>
               <LayoutTemplate className="h-4 w-4" />
               <span className="hidden sm:inline">{t({ ko: '템플릿', en: 'Templates' })}</span>
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="secondary" size="sm">
               <a href={draftRuntimePath} target="_blank" rel="noreferrer">
                 <Eye className="h-4 w-4" />
                 <span className="hidden sm:inline">{t({ ko: '미리보기', en: 'Preview' })}</span>
@@ -490,7 +490,7 @@ export function WallpaperEditorPage() {
             </Button>
             <Button
               ref={workspaceMenuAnchorRef}
-              variant="outline"
+              variant="secondary"
               size="icon-sm"
               aria-label={t({ ko: '더 많은 작업', en: 'More actions' })}
               title={t({ ko: '더 많은 작업', en: 'More actions' })}
@@ -623,7 +623,7 @@ export function WallpaperEditorPage() {
 
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="icon-sm"
                     onClick={() => setIsCanvasFocusMode((current) => !current)}
                     aria-label={isCanvasFocusMode
@@ -676,7 +676,7 @@ export function WallpaperEditorPage() {
                   ].map(({ label, patch }) => (
                     <Button
                       key={label}
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       disabled={selectedWidget.locked}
                       onClick={() => {

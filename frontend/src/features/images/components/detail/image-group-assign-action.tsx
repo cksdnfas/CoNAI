@@ -83,7 +83,7 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
 
   return (
     <>
-      <Button size="icon-sm" variant="outline" onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} aria-label={t('images.components.detail.image.group.assign.action.add.to.group')} title={t('images.components.detail.image.group.assign.action.add.to.group')}>
+      <Button size="icon-sm" variant="secondary" onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} aria-label={t('images.components.detail.image.group.assign.action.add.to.group')} title={t('images.components.detail.image.group.assign.action.add.to.group')}>
         <FolderPlus className="h-4 w-4" />
       </Button>
 

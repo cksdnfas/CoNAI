@@ -265,7 +265,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
             </div>
           </div>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => void artifactsQuery.refetch()}>
+        <Button type="button" size="sm" variant="secondary" onClick={() => void artifactsQuery.refetch()}>
           <RefreshCw className="mr-2 h-4 w-4" />
           {t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
         </Button>

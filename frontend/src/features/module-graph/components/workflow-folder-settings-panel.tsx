@@ -138,7 +138,7 @@ export function WorkflowFolderSettingsPanel({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>
+            <Button type="button" variant="secondary" onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>
               <Save className="h-4 w-4" />
               {t({ ko: '할당 저장', en: 'Save assignment' })}
             </Button>
@@ -160,7 +160,7 @@ export function WorkflowFolderSettingsPanel({
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()}>
+              <Button type="button" variant="secondary" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()}>
                 <Plus className="h-4 w-4" />
                 {t({ ko: '폴더 생성', en: 'Create folder' })}
               </Button>

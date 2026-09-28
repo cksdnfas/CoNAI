@@ -153,7 +153,7 @@ export function ModuleGraphKeyValueListInput({
           </div>
         )
       })}
-      <Button type="button" size="sm" variant="outline" className={compact ? 'h-7 text-[11px]' : undefined} onClick={() => onChange([...visibleEntries, { key: '', value: '' }])}>
+      <Button type="button" size="sm" variant="secondary" className={compact ? 'h-7 text-[11px]' : undefined} onClick={() => onChange([...visibleEntries, { key: '', value: '' }])}>
         {t({ ko: '항목 추가', en: 'Add item' })}
       </Button>
     </div>

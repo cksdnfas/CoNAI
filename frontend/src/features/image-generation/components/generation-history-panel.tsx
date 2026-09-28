@@ -660,7 +660,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             onClick={() => void handleClearHistory()}
             disabled={isClearingHistory || historyRecords.length === 0}
             title={isClearingHistory
@@ -679,7 +679,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             onClick={handleCleanupFailed}
             disabled={isCleaningFailed || cleanupFailedHistoryCount === 0}
             title={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
@@ -687,7 +687,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" onClick={() => void refreshHistory({ watchForNewRows: true })} title={t('image-generation.components.generation.history.panel.refresh.history')} aria-label={t('image-generation.components.generation.history.panel.refresh.history')}>
+          <Button type="button" size="icon-sm" variant="secondary" onClick={() => void refreshHistory({ watchForNewRows: true })} title={t('image-generation.components.generation.history.panel.refresh.history')} aria-label={t('image-generation.components.generation.history.panel.refresh.history')}>
             <RefreshCw className={cn('h-4 w-4', historyQuery.isFetching && 'animate-spin')} />
           </Button>
         </div>
@@ -716,7 +716,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => void handleRetryVisibleRecoveryRecords()}
                 disabled={isRetryingRunRecovery}
               >
@@ -725,7 +725,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                   ? t({ ko: '등록 중', en: 'Queueing' })
                   : t({ ko: '모두 재실행', en: 'Rerun all' })}
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={handleAcknowledgeRunRecovery}>
+              <Button type="button" size="sm" variant="secondary" onClick={handleAcknowledgeRunRecovery}>
                 {t({ ko: '확인', en: 'Dismiss' })}
               </Button>
             </div>
@@ -756,7 +756,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     className="shrink-0"
                     onClick={() => void handleRetryHistoryRecord(record)}
                     disabled={isRetryingRunRecovery}
@@ -818,13 +818,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               ) : null}
 
               {Boolean(historyQuery.hasNextPage) && !historyQuery.isFetchingNextPage && !historyQuery.isFetchNextPageError ? (
-                <Button size="sm" variant="outline" onClick={handleLoadMoreHistory}>
+                <Button size="sm" variant="secondary" onClick={handleLoadMoreHistory}>
                   {t({ ko: '더 보기', en: 'Load more' })}
                 </Button>
               ) : null}
 
               {historyQuery.isFetchNextPageError ? (
-                <Button size="sm" variant="outline" onClick={handleLoadMoreHistory}>
+                <Button size="sm" variant="secondary" onClick={handleLoadMoreHistory}>
                   {t({ ko: '다음 기록 다시 시도', en: 'Retry next history batch' })}
                 </Button>
               ) : null}

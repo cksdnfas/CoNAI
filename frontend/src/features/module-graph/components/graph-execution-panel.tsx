@@ -136,7 +136,7 @@ function SelectedExecutionSummary({
           {selectedExecutionPlan?.reusedFromExecutionId ? <Badge variant="outline">{t({ ko: '재사용 #{id}', en: 'Reused #{id}' }, { id: selectedExecutionPlan.reusedFromExecutionId })}</Badge> : null}
           <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={onOpenDetail}>
+        <Button type="button" size="sm" variant="secondary" onClick={onOpenDetail}>
           <Eye className="h-4 w-4" />
           {t({ ko: '상세', en: 'Details' })}
         </Button>
@@ -156,7 +156,7 @@ function SelectedExecutionSummary({
               {llmResponseDiagnostic.failedLog ? <Badge variant="destructive" title={llmResponseDiagnostic.failedLog.event_type}>{getGraphExecutionLogEventLabel(llmResponseDiagnostic.failedLog.event_type, t)}</Badge> : null}
               {llmResponseDiagnostic.providerLog ? <Badge variant="outline" title={llmResponseDiagnostic.providerLog.event_type}>{getGraphExecutionLogEventLabel(llmResponseDiagnostic.providerLog.event_type, t)}</Badge> : null}
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={onOpenDetail}>
+            <Button type="button" size="sm" variant="secondary" onClick={onOpenDetail}>
               <Eye className="h-4 w-4" />
               {t({ ko: '로그', en: 'Logs' })}
             </Button>
@@ -361,7 +361,7 @@ export function GraphExecutionPanel({
       <Button
         type="button"
         size="icon-sm"
-        variant="outline"
+        variant="secondary"
         onClick={onCancelExecution}
         disabled={isCancellingExecution || (selectedExecutionStatus !== 'queued' && selectedExecutionStatus !== 'running')}
         title={isCancellingExecution ? t({ ko: '취소 요청 중', en: 'Requesting cancel' }) : t({ ko: '실행 취소', en: 'Cancel run' })}
@@ -372,7 +372,7 @@ export function GraphExecutionPanel({
       <Button
         type="button"
         size="icon-sm"
-        variant="outline"
+        variant="secondary"
         onClick={onRetryExecution}
         disabled={!retryable || isExecutingGraph}
         title={t({ ko: '다시 시도', en: 'Retry' })}
@@ -383,7 +383,7 @@ export function GraphExecutionPanel({
       <Button
         type="button"
         size="icon-sm"
-        variant="outline"
+        variant="secondary"
         onClick={onRerunGraph}
         disabled={!selectedGraphId || isExecutingGraph}
         title={isExecutingGraph ? t({ ko: '실행 중', en: 'Running' }) : t({ ko: '재실행', en: 'Rerun' })}
@@ -396,11 +396,11 @@ export function GraphExecutionPanel({
 
   const detailSectionButtons = executionDetail ? (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('summary')}>{t({ ko: '요약', en: 'Summary' })}</Button>
-      {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('inputs')}>{t({ ko: '입력', en: 'Inputs' })}</Button> : null}
-      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('compare')}>{t({ ko: '비교', en: 'Compare' })}</Button>
-      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('artifacts')}>{t({ ko: '아티팩트', en: 'Artifacts' })}</Button>
-      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('logs')}>{t({ ko: '로그', en: 'Logs' })}</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('summary')}>{t({ ko: '요약', en: 'Summary' })}</Button>
+      {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('inputs')}>{t({ ko: '입력', en: 'Inputs' })}</Button> : null}
+      <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('compare')}>{t({ ko: '비교', en: 'Compare' })}</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('artifacts')}>{t({ ko: '아티팩트', en: 'Artifacts' })}</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => scrollToDetailSection('logs')}>{t({ ko: '로그', en: 'Logs' })}</Button>
     </div>
   ) : null
 
@@ -512,7 +512,7 @@ export function GraphExecutionPanel({
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>{t({ ko: '최근 {shown}개 표시 · 전체 {total}개', en: 'Showing latest {shown} of {total}' }, { shown: formatNumber(executionList.length), total: formatNumber(totalExecutionCount) })}</span>
               {hasMoreExecutions && executionListPaging ? (
-                <Button type="button" size="sm" variant="outline" onClick={executionListPaging.onLoadMore} disabled={executionListPaging.isLoadingMore}>
+                <Button type="button" size="sm" variant="secondary" onClick={executionListPaging.onLoadMore} disabled={executionListPaging.isLoadingMore}>
                   {executionListPaging.isLoadingMore ? t({ ko: '불러오는 중…', en: 'Loading…' }) : t({ ko: '더 보기', en: 'Load more' })}
                 </Button>
               ) : null}

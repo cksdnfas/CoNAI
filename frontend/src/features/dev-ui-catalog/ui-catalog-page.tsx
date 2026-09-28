@@ -214,7 +214,7 @@ export function UiCatalogPage() {
           ))}
           <Row label="IconButton sizes (tooltip = label)">
             {ICON_SIZES.map((size) => (
-              <IconButton key={size} size={size} variant="outline" label={`Edit (${size})`}><Pencil /></IconButton>
+              <IconButton key={size} size={size} variant="secondary" label={`Edit (${size})`}><Pencil /></IconButton>
             ))}
             <IconButton variant="ghost" label="Settings"><Settings /></IconButton>
             <IconButton variant="destructive" label="Delete"><Trash2 /></IconButton>
@@ -317,8 +317,8 @@ export function UiCatalogPage() {
 
         <CatalogSection id="overlays" title="Modal / Confirm / Tooltip / Dropdown / Popover">
           <Row label="Modal + ConfirmDialog (useConfirm)">
-            <Button variant="outline" onClick={() => setModalOpen(true)}>Open modal</Button>
-            <Button variant="outline" onClick={() => setWideModalOpen(true)}>Open wide modal + header</Button>
+            <Button variant="secondary" onClick={() => setModalOpen(true)}>Open modal</Button>
+            <Button variant="secondary" onClick={() => setWideModalOpen(true)}>Open wide modal + header</Button>
             <Button onClick={() => void askConfirm('default')}>Confirm (default)</Button>
             <Button variant="destructive" onClick={() => void askConfirm('destructive')}>Confirm (destructive)</Button>
             <Text variant="caption">Last result: {confirmResult}</Text>
@@ -333,7 +333,7 @@ export function UiCatalogPage() {
           <Row label="DropdownMenu / Popover">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline"><MoreHorizontal />Menu</Button>
+                <Button variant="secondary"><MoreHorizontal />Menu</Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
@@ -362,7 +362,7 @@ export function UiCatalogPage() {
             </DropdownMenu>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline">Popover</Button>
+                <Button variant="secondary">Popover</Button>
               </PopoverTrigger>
               <PopoverContent className="space-y-3">
                 <Text variant="title">Popover title</Text>
@@ -411,7 +411,7 @@ export function UiCatalogPage() {
               { value: 'appearance', label: 'Appearance' },
               { value: 'advanced', label: 'Advanced' },
             ]}
-            actions={<Button size="sm" variant="outline">Action</Button>}
+            actions={<Button size="sm" variant="secondary">Action</Button>}
           />
         </CatalogSection>
 
@@ -455,7 +455,7 @@ export function UiCatalogPage() {
                 variant={variant}
                 heading={`variant=${variant}`}
                 description="Section description"
-                actions={<Button size="sm" variant="outline">Action</Button>}
+                actions={<Button size="sm" variant="secondary">Action</Button>}
               >
                 <Text variant="muted">Body content.</Text>
               </Section>
@@ -473,7 +473,7 @@ export function UiCatalogPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <EmptyState icon={ImageOff} title="이미지가 아직 없어" description="폴더를 추가하면 여기에 보여." action={<Button size="sm"><Plus />폴더 추가</Button>} />
             <EmptyState icon={Inbox} title="Default without action" />
-            <EmptyState size="compact" icon={Inbox} title="Compact empty state" description="With a caption" action={<Button size="xs" variant="outline">Action</Button>} />
+            <EmptyState size="compact" icon={Inbox} title="Compact empty state" description="With a caption" action={<Button size="xs" variant="secondary">Action</Button>} />
             <EmptyState size="compact" title="Compact, no icon" />
             <LoadingState />
             <div className="space-y-3">
@@ -571,7 +571,7 @@ export function UiCatalogPage() {
         <ModalBody>
           <Text>Default max-w-4xl width, with header content.</Text>
           <Popover>
-            <PopoverTrigger asChild><Button variant="outline" size="sm">Popover inside modal</Button></PopoverTrigger>
+            <PopoverTrigger asChild><Button variant="secondary" size="sm">Popover inside modal</Button></PopoverTrigger>
             <PopoverContent>Popover above the modal.</PopoverContent>
           </Popover>
         </ModalBody>

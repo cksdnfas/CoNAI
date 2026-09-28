@@ -362,7 +362,7 @@ export function SettingsResourceCreateActionRow({
       {validationMessage ? <p className="text-sm text-primary">{validationMessage}</p> : null}
 
       <div className="flex flex-wrap justify-between gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={!canValidate || isValidating} onClick={onValidate}>
+        <Button type="button" size="sm" variant="secondary" disabled={!canValidate || isValidating} onClick={onValidate}>
           {isValidating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
           {validateLabel}
         </Button>

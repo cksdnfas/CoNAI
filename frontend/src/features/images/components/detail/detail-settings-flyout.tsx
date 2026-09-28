@@ -31,7 +31,7 @@ export function DetailSettingsFlyout({
 
   return (
     <>
-      <Button ref={triggerRef} size="icon-sm" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onToggle} aria-label={triggerLabel} title={triggerTitle}>
+      <Button ref={triggerRef} size="icon-sm" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onToggle} aria-label={triggerLabel} title={triggerTitle}>
         {icon}
       </Button>
       <AnchoredPopup open={isOpen} anchorRef={triggerRef} onClose={onToggle} align="end" side="bottom" className={panelWidthClassName} closeOnBack>

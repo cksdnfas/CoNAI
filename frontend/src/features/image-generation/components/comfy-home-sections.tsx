@@ -49,7 +49,7 @@ export function ComfyWorkflowListSection({
       actions={(
         <>
           <Badge variant="outline">{workflows.length}</Badge>
-          <Button type="button" size="sm" variant="outline" onClick={onCreateWorkflow}>
+          <Button type="button" size="sm" variant="secondary" onClick={onCreateWorkflow}>
             <Plus className="h-4 w-4" />
             {t({ ko: '등록', en: 'Add' })}
           </Button>
@@ -177,7 +177,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
           <Badge variant="outline">{t({ ko: '전체 {count}', en: '{count} total' }, { count: formatNumber(servers.length) })}</Badge>
           <Badge variant="secondary">{t({ ko: '활성 {count}', en: '{count} active' }, { count: formatNumber(activeServerCount) })}</Badge>
           {inactiveServerCount > 0 ? <Badge variant="outline">{t({ ko: '비활성 {count}', en: '{count} inactive' }, { count: formatNumber(inactiveServerCount) })}</Badge> : null}
-          <Button type="button" size="sm" variant="outline" onClick={onOpenCreateServer}>
+          <Button type="button" size="sm" variant="secondary" onClick={onOpenCreateServer}>
             <Plus className="h-4 w-4" />
             {t({ ko: '서버 등록', en: 'Add server' })}
           </Button>
@@ -245,7 +245,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => onTestServer(server.id)}
                       disabled={testState?.isLoading === true}
                       title={isModalServer ? t({ ko: 'Modal 서버 테스트는 원격 endpoint를 호출해서 비용이 발생할 수 있어.', en: 'Testing a Modal server may call the remote endpoint and incur costs.' }) : undefined}
@@ -357,7 +357,7 @@ function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList
         <ModalFooter className="justify-between">
           <div className="text-xs text-muted-foreground">{t({ ko: '{count}개 항목', en: '{count} items' }, { count: formatNumber(items.length) })}</div>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{readOnly ? t({ ko: '닫기', en: 'Close' }) : t({ ko: '취소', en: 'Cancel' })}</Button>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>{readOnly ? t({ ko: '닫기', en: 'Close' }) : t({ ko: '취소', en: 'Cancel' })}</Button>
             {!readOnly ? (
               <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !name.trim() || items.length === 0}>
                 <Save className="h-4 w-4" />
@@ -411,7 +411,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
           <div className="text-sm text-muted-foreground">
             {t({ ko: '{count}개 경로', en: '{count} paths' }, { count: formatNumber(apiPaths.length) })}
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setApiPathText(defaultPathText)} disabled={isSubmitting}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setApiPathText(defaultPathText)} disabled={isSubmitting}>
             <RotateCcw className="h-4 w-4" />
             {t({ ko: '기본값 초기화', en: 'Reset defaults' })}
           </Button>
@@ -423,7 +423,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
         </div>
 
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>{t({ ko: '취소', en: 'Cancel' })}</Button>
           <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting}>
             <Upload className="h-4 w-4" />
             {t({ ko: '자동수집 실행', en: 'Run auto collect' })}
@@ -465,12 +465,12 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? t({ ko: '{count}개 목록', en: '{count} lists' }, { count: formatNumber(customLists.length) }) : t({ ko: '{count}개 목록', en: '{count} lists' }, { count: formatNumber(autoLists.length) })}</div>
           {activeTab === 'custom' ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => setIsCustomModalOpen(true)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setIsCustomModalOpen(true)}>
               <Plus className="h-4 w-4" />
               {t({ ko: '목록 추가', en: 'Add list' })}
             </Button>
           ) : (
-            <Button type="button" size="sm" variant="outline" onClick={() => setIsAutoModalOpen(true)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setIsAutoModalOpen(true)}>
               <Upload className="h-4 w-4" />
               {t({ ko: '자동수집', en: 'Auto collect' })}
             </Button>
@@ -502,17 +502,17 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
                   </button>
                   {!list.is_auto_collected ? (
                     <div className="flex shrink-0 gap-2">
-                      <Button type="button" size="sm" variant="outline" onClick={() => setEditingCustomList(list)} disabled={isSubmitting}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => setEditingCustomList(list)} disabled={isSubmitting}>
                         <Pencil className="h-4 w-4" />
                         {t({ ko: '수정', en: 'Edit' })}
                       </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => void onDeleteList(list.id)} disabled={isSubmitting}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => void onDeleteList(list.id)} disabled={isSubmitting}>
                         <Trash2 className="h-4 w-4" />
                         {t({ ko: '삭제', en: 'Delete' })}
                       </Button>
                     </div>
                   ) : (
-                    <Button type="button" size="sm" variant="outline" onClick={() => setViewingAutoList(list)}>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => setViewingAutoList(list)}>
                       {t({ ko: '보기', en: 'View' })}
                     </Button>
                   )}

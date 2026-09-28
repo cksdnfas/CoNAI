@@ -167,7 +167,7 @@ export function AutoTestCard({
         <Button size="sm" onClick={onRunTaggerAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningTaggerAutoTest}>
           {isRunningTaggerAutoTest ? t({ ko: '태거 테스트 중…', en: 'Running tagger test…' }) : t({ ko: '태거 테스트', en: 'Tagger test' })}
         </Button>
-        <Button size="sm" variant="outline" onClick={onRunKaloscopeAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningKaloscopeAutoTest}>
+        <Button size="sm" variant="secondary" onClick={onRunKaloscopeAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningKaloscopeAutoTest}>
           {isRunningKaloscopeAutoTest ? t({ ko: 'Kaloscope 테스트 중…', en: 'Running Kaloscope test…' }) : t({ ko: 'Kaloscope 테스트', en: 'Kaloscope test' })}
         </Button>
       </div>

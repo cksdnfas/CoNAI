@@ -453,11 +453,11 @@ export function UploadPageExtractSection({
           <Button type="button" variant="ghost" onClick={onResetExtract} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
             {t({ ko: '초기화', en: 'Reset' })}
           </Button>
-          <Button type="button" variant="outline" onClick={onConvertWebP} disabled={!extractFile || extractBusy}>
+          <Button type="button" variant="secondary" onClick={onConvertWebP} disabled={!extractFile || extractBusy}>
             <Download className="h-4 w-4" />
             {isConvertingWebP ? t('uploadPageSections.convertingWebp') : t('uploadPageSections.convertWebp')}
           </Button>
-          <Button type="button" variant="outline" onClick={onRewriteMetadata} disabled={!extractFile || extractBusy}>
+          <Button type="button" variant="secondary" onClick={onRewriteMetadata} disabled={!extractFile || extractBusy}>
             <Download className="h-4 w-4" />
             {isRewritingMetadata ? t('uploadPageSections.editingMetadata') : t('uploadPageSections.editMetadata')}
           </Button>

@@ -62,7 +62,7 @@ export function ModuleGraphWorkflowSetupFolderPanel({
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <Input value={draftChildFolderName} onChange={(event) => onDraftChildFolderNameChange(event.target.value)} placeholder={t({ ko: '새 자식 폴더 이름', en: 'New child folder name' })} />
         <Input value={draftChildFolderDescription} onChange={(event) => onDraftChildFolderDescriptionChange(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
-        <Button type="button" variant="outline" onClick={onCreateChildFolder} disabled={!draftChildFolderName.trim()}>
+        <Button type="button" variant="secondary" onClick={onCreateChildFolder} disabled={!draftChildFolderName.trim()}>
           <Plus className="h-4 w-4" />
           {t({ ko: '폴더 생성', en: 'Create folder' })}
         </Button>

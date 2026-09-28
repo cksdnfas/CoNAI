@@ -31,7 +31,7 @@ export function AuthStatusErrorState({ error, isRetrying, onRetry }: { error: un
           </div>
         </div>
         <div className="flex justify-end">
-          <Button type="button" size="sm" variant="outline" onClick={onRetry} disabled={isRetrying}>
+          <Button type="button" size="sm" variant="secondary" onClick={onRetry} disabled={isRetrying}>
             <RotateCw className={isRetrying ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
             {isRetrying ? t('requireAuthPermission.retrying') : t('requireAuthPermission.retry')}
           </Button>

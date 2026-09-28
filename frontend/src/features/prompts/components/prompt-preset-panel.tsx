@@ -179,7 +179,7 @@ function PromptPresetEditorModal({
               t('prompts.components.prompt.preset.panel.delete'),
             ]}
             actions={(
-              <Button type="button" size="icon-sm" variant="outline" onClick={handleAddDraft} aria-label={t('prompts.components.prompt.preset.panel.add.preset.value')} title={t('prompts.components.prompt.preset.panel.add.value')}>
+              <Button type="button" size="icon-sm" variant="secondary" onClick={handleAddDraft} aria-label={t('prompts.components.prompt.preset.panel.add.preset.value')} title={t('prompts.components.prompt.preset.panel.add.value')}>
                 <Plus className="h-4 w-4" />
               </Button>
             )}
@@ -201,7 +201,7 @@ function PromptPresetEditorModal({
         </ModalBody>
 
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{t('prompts.components.prompt.preset.panel.cancel')}</Button>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>{t('prompts.components.prompt.preset.panel.cancel')}</Button>
           <Button type="submit" disabled={isSubmitting}>{isSubmitting ? t('prompts.components.prompt.preset.panel.saving') : t('prompts.components.prompt.preset.panel.save')}</Button>
         </ModalFooter>
       </form>
@@ -306,7 +306,7 @@ export function PromptPresetPanel() {
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold text-foreground">{t('prompts.components.prompt.preset.panel.presets')}</div>
           {canCreatePresets ? (
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} aria-label={t('prompts.components.prompt.preset.panel.add.preset')} title={t('prompts.components.prompt.preset.panel.add.preset')}>
+            <Button type="button" size="icon-sm" variant="secondary" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} aria-label={t('prompts.components.prompt.preset.panel.add.preset')} title={t('prompts.components.prompt.preset.panel.add.preset')}>
               <Plus className="h-4 w-4" />
             </Button>
           ) : null}
@@ -341,12 +341,12 @@ export function PromptPresetPanel() {
           actions={selectedPreset ? (
             <div className="flex items-center gap-2">
               {canUpdatePresets ? (
-                <Button type="button" size="icon-sm" variant="outline" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} aria-label={t('prompts.components.prompt.preset.panel.edit.preset')} title={t('prompts.components.prompt.preset.panel.edit')}>
+                <Button type="button" size="icon-sm" variant="secondary" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} aria-label={t('prompts.components.prompt.preset.panel.edit.preset')} title={t('prompts.components.prompt.preset.panel.edit')}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               ) : null}
               {canDeletePresets ? (
-                <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleDeleteSelected()} aria-label={t('prompts.components.prompt.preset.panel.delete.preset')} title={t('prompts.components.prompt.preset.panel.delete')}>
+                <Button type="button" size="icon-sm" variant="secondary" onClick={() => void handleDeleteSelected()} aria-label={t('prompts.components.prompt.preset.panel.delete.preset')} title={t('prompts.components.prompt.preset.panel.delete')}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               ) : null}
@@ -389,7 +389,7 @@ export function PromptPresetPanel() {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-medium text-foreground">{t('prompts.components.prompt.preset.panel.insertion.preview')}</div>
-                <Button type="button" size="sm" variant="outline" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview}>{t('prompts.components.prompt.preset.panel.copy')}</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview}>{t('prompts.components.prompt.preset.panel.copy')}</Button>
               </div>
               <pre className="max-h-64 overflow-auto rounded-sm border border-border bg-surface-container px-3 py-3 text-xs leading-5 text-foreground/90 whitespace-pre-wrap">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</pre>
             </div>

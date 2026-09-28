@@ -343,7 +343,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
       <div ref={triggerRef} className="flex min-w-0 gap-2">
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           className="theme-input-surface h-auto min-h-10 min-w-0 flex-1 justify-between gap-3 rounded-sm border-border/80 px-3 py-2 text-left font-normal text-foreground hover:bg-surface-high"
           onClick={() => setIsOpen((current) => !current)}
           aria-haspopup="tree"
@@ -359,7 +359,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
         {onRefresh ? (
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="icon-sm"
             className="theme-input-surface h-auto min-h-10 shrink-0 border-border/80"
             disabled={refreshing}

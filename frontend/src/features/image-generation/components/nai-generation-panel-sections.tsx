@@ -35,11 +35,11 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenA
         </div>
         <div className="flex items-center gap-2">
           {!connected ? (
-            <Button type="button" variant="outline" size="sm" onClick={onOpenAuth}>
+            <Button type="button" variant="secondary" size="sm" onClick={onOpenAuth}>
               {t('image-generation.components.nai.auth.modal.log.in')}
             </Button>
           ) : null}
-          <Button type="button" variant="outline" size="icon-sm" asChild>
+          <Button type="button" variant="secondary" size="icon-sm" asChild>
             <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label={novelAiHomeLabel} title={novelAiHomeLabel}>
               <ExternalLink className="h-4 w-4" />
             </a>

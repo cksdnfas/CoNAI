@@ -76,7 +76,7 @@ export function ImageDetailAuxiliaryControls({
           <Button
             size="icon-sm"
             type="button"
-            variant="outline"
+            variant="secondary"
             className={cn('relative bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', pixelPreviewMode !== 'off' && 'border-primary/45 text-primary')}
             onClick={onTogglePixelPreviewPanel}
             title={t({ ko: '필터: {mode}', en: 'Filter: {mode}' }, { mode: pixelPreviewModeLabels[pixelPreviewMode] })}
@@ -110,7 +110,7 @@ export function ImageDetailAuxiliaryControls({
               </div>
               <div className="mb-3 grid grid-cols-3 gap-1.5">
                 {(['soft', 'medium', 'strong'] as const).map((mode) => (
-                  <Button key={mode} size="sm" type="button" variant={pixelPreviewMode === mode ? 'default' : 'outline'} className="h-7 text-xs" onClick={() => onSetPixelPreviewMode(mode)}>
+                  <Button key={mode} size="sm" type="button" variant={pixelPreviewMode === mode ? 'default' : 'secondary'} className="h-7 text-xs" onClick={() => onSetPixelPreviewMode(mode)}>
                     {pixelPreviewModeLabels[mode]}
                   </Button>
                 ))}
@@ -150,7 +150,7 @@ export function ImageDetailAuxiliaryControls({
         <Button
           size="icon-sm"
           type="button"
-          variant="outline"
+          variant="secondary"
           className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high"
           onClick={onToggleRenderMode}
           title={renderMode === 'original' ? t('images.components.detail.image.detail.media.view.thumbnails') : t('images.components.detail.image.detail.media.view.original')}
@@ -192,7 +192,7 @@ export function ImageDetailTransformControls({
         <Button
           size="icon-sm"
           type="button"
-          variant="outline"
+          variant="secondary"
           className={cn('bg-surface-container hover:bg-surface-high', isWheelZoomEnabled && 'border-primary/40 text-primary')}
           onClick={onToggleWheelZoomEnabled}
           title={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom') : t('images.components.detail.image.detail.media.enable.zoom')}
@@ -200,24 +200,24 @@ export function ImageDetailTransformControls({
         >
           {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
         </Button>
-        <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onZoomOut} title={t('images.components.detail.image.detail.media.zoom.out')} aria-label={t('images.components.detail.image.detail.media.zoom.out')} disabled={!canZoomOut}>
+        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onZoomOut} title={t('images.components.detail.image.detail.media.zoom.out')} aria-label={t('images.components.detail.image.detail.media.zoom.out')} disabled={!canZoomOut}>
           <ZoomOut className="h-4 w-4" />
         </Button>
-        <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onZoomIn} title={t('images.components.detail.image.detail.media.zoom.in')} aria-label={t('images.components.detail.image.detail.media.zoom.in')} disabled={!canZoomIn}>
+        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onZoomIn} title={t('images.components.detail.image.detail.media.zoom.in')} aria-label={t('images.components.detail.image.detail.media.zoom.in')} disabled={!canZoomIn}>
           <ZoomIn className="h-4 w-4" />
         </Button>
-        <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onRotateLeft} title={t('images.components.detail.image.detail.media.rotate.left')} aria-label={t('images.components.detail.image.detail.media.rotate.left')}>
+        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onRotateLeft} title={t('images.components.detail.image.detail.media.rotate.left')} aria-label={t('images.components.detail.image.detail.media.rotate.left')}>
           <RotateCcw className="h-4 w-4" />
         </Button>
-        <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onRotateRight} title={t('images.components.detail.image.detail.media.rotate.right')} aria-label={t('images.components.detail.image.detail.media.rotate.right')}>
+        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onRotateRight} title={t('images.components.detail.image.detail.media.rotate.right')} aria-label={t('images.components.detail.image.detail.media.rotate.right')}>
           <RotateCw className="h-4 w-4" />
         </Button>
         {!isDefaultView ? (
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onResetView} title={t('images.components.detail.image.detail.media.reset')} aria-label={t('images.components.detail.image.detail.media.reset')}>
+          <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onResetView} title={t('images.components.detail.image.detail.media.reset')} aria-label={t('images.components.detail.image.detail.media.reset')}>
             <Undo2 className="h-4 w-4" />
           </Button>
         ) : null}
-        <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onToggleControlsCollapsed} title={t('images.components.detail.image.detail.media.collapse.controls')} aria-label={t('images.components.detail.image.detail.media.collapse.controls')}>
+        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onToggleControlsCollapsed} title={t('images.components.detail.image.detail.media.collapse.controls')} aria-label={t('images.components.detail.image.detail.media.collapse.controls')}>
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -226,7 +226,7 @@ export function ImageDetailTransformControls({
         <Button
           size="icon-sm"
           type="button"
-          variant="outline"
+          variant="secondary"
           className="border-primary/55 bg-primary text-primary-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-primary/92 hover:text-primary-foreground"
           onClick={onToggleControlsCollapsed}
           title={t('images.components.detail.image.detail.media.expand.controls')}

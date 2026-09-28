@@ -278,7 +278,7 @@ export function UploadedFontCard({
         <div className="flex flex-wrap gap-2">
           <IconButton
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             onClick={onUpload}
             disabled={isUploadingFont}
             label={t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
@@ -287,7 +287,7 @@ export function UploadedFontCard({
           </IconButton>
           <IconButton
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             onClick={onClear}
             disabled={!hasUploadedFont}
             label={t({ ko: '{label} 해제', en: 'Clear {label}' }, { label })}

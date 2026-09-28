@@ -98,7 +98,7 @@ export function ModuleWorkflowEmptyRunsTab({
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="secondary"
               onClick={onToggleVisibleSelection}
               disabled={queueExecutions.length === 0}
             >
@@ -137,7 +137,7 @@ export function ModuleWorkflowEmptyRunsTab({
                         {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                       </Button>
                       {isCancelable ? (
-                        <Button type="button" size="sm" variant="outline" onClick={() => onCancelSingle(execution.id)} disabled={isCleaningQueue}>
+                        <Button type="button" size="sm" variant="secondary" onClick={() => onCancelSingle(execution.id)} disabled={isCleaningQueue}>
                           <XCircle className="h-4 w-4" />
                           {t({ ko: '취소', en: 'Cancel' })}
                         </Button>

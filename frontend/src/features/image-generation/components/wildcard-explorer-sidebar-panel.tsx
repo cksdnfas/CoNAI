@@ -90,7 +90,7 @@ export function WildcardExplorerSidebarPanel({
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="secondary"
                     className="bg-surface-low"
                     onClick={onOpenLoraCollect}
                     aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.auto.collect')}
@@ -102,7 +102,7 @@ export function WildcardExplorerSidebarPanel({
                 <Button
                   type="button"
                   size="icon-sm"
-                  variant="outline"
+                  variant="secondary"
                   className="bg-surface-low"
                   onClick={onRefreshLoraLog}
                   disabled={isRefreshingLog}
@@ -119,7 +119,7 @@ export function WildcardExplorerSidebarPanel({
                     <Button
                       type="button"
                       size="icon-sm"
-                      variant="outline"
+                      variant="secondary"
                       className="bg-surface-low"
                       onClick={() => onOpenCreate(selectedWildcard?.id ?? null)}
                       disabled={!canCreateInActiveTab}
@@ -131,7 +131,7 @@ export function WildcardExplorerSidebarPanel({
                     <Button
                       type="button"
                       size="icon-sm"
-                      variant="outline"
+                      variant="secondary"
                       className="bg-surface-low"
                       onClick={onOpenEdit}
                       disabled={!selectedWildcard}
@@ -146,7 +146,7 @@ export function WildcardExplorerSidebarPanel({
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="secondary"
                     className="border-rose-500/30 bg-surface-low text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
                     onClick={onDeleteSelected}
                     disabled={!selectedWildcard || isDeleting}
@@ -164,7 +164,7 @@ export function WildcardExplorerSidebarPanel({
             <Input value={searchInput} onChange={(event) => onSearchChange(event.target.value)} placeholder={t('image-generation.components.wildcard.explorer.sidebar.panel.search.name.or.path')} />
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="icon-sm"
               className="shrink-0 bg-surface-low"
               onClick={onRefresh}

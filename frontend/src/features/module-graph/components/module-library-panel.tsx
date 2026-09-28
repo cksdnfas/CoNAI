@@ -172,7 +172,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
           actions={(
             <>
               {activeTab === 'custom-nodes' && onOpenCustomNodeManager ? (
-                <Button type="button" size="sm" variant="outline" onClick={onOpenCustomNodeManager}>
+                <Button type="button" size="sm" variant="secondary" onClick={onOpenCustomNodeManager}>
                   {t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
                 </Button>
               ) : null}
@@ -185,7 +185,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {activeTab === 'custom-nodes' && onOpenCustomNodeManager ? (
-              <Button type="button" size="sm" variant="outline" onClick={onOpenCustomNodeManager}>
+              <Button type="button" size="sm" variant="secondary" onClick={onOpenCustomNodeManager}>
                 {t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
               </Button>
             ) : null}
@@ -259,7 +259,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
           <AlertTitle>{t({ ko: '권장 출력 노드', en: 'Recommended output node' })}</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
             <span>{t({ ko: '최종 결과를 표시하려면 최종 결과 시스템 노드를 추가해서 원하는 출력에 연결해줘.', en: 'To display a final result, add the final-result system node and connect it to the output you want.' })}</span>
-            <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(finalResultModule)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => onAddModule(finalResultModule)}>
               {t({ ko: '최종 결과 바로 추가', en: 'Add final result now' })}
             </Button>
           </AlertDescription>
@@ -339,7 +339,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                           </div>
                         </div>
 
-                        <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(module)}>
+                        <Button type="button" size="sm" variant="secondary" onClick={() => onAddModule(module)}>
                           {t({ ko: '추가', en: 'Add' })}
                         </Button>
                       </div>

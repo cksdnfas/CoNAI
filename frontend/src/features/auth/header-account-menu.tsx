@@ -119,7 +119,7 @@ export function HeaderAccountMenu() {
           {isSignedIn ? (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               className="w-full justify-start"
               onClick={() => logoutMutation.mutate()}

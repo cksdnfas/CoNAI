@@ -181,7 +181,7 @@ export function RandomTextChoiceNodeLayout({
             </div>
           )
         })}
-        <Button type="button" size="sm" variant="outline" className="nodrag nowheel h-7 text-[11px]" onMouseDown={stopNodeActionEvent} onClick={appendEntry}>
+        <Button type="button" size="sm" variant="secondary" className="nodrag nowheel h-7 text-[11px]" onMouseDown={stopNodeActionEvent} onClick={appendEntry}>
           {t({ ko: '항목 추가', en: 'Add item' })}
         </Button>
       </div>

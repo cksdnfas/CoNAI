@@ -73,7 +73,7 @@ function PromptSortSelect({
       <Button
         type="button"
         size="sm"
-        variant="outline"
+        variant="secondary"
         className="h-8 min-w-[92px] justify-between border-border/70 bg-surface-low/45 px-2 text-xs"
         onClick={() => setIsOpen((current) => !current)}
         aria-haspopup="listbox"
@@ -131,7 +131,7 @@ export function PromptToolbar({
       <Button
         type="button"
         size="icon-xs"
-        variant="outline"
+        variant="secondary"
         className="border-border/70 bg-surface-low/45"
         onClick={() => onChangeSortOrder(sortOrder === 'DESC' ? 'ASC' : 'DESC')}
         aria-label={sortOrderLabel}

@@ -271,7 +271,7 @@ export function ApiRequestNodeLayout({
     return (
       <div className="grid gap-1">
         {entries.map((entry, index) => renderKeyValueEntryRow(portKey, port, entries, entry, index))}
-        <Button type="button" size="sm" variant="outline" className="nodrag nowheel h-7 text-[11px]" onMouseDown={stopNodeActionEvent} onClick={() => appendKeyValueEntry(portKey, entries)}>
+        <Button type="button" size="sm" variant="secondary" className="nodrag nowheel h-7 text-[11px]" onMouseDown={stopNodeActionEvent} onClick={() => appendKeyValueEntry(portKey, entries)}>
           {t({ ko: '항목 추가', en: 'Add item' })}
         </Button>
       </div>

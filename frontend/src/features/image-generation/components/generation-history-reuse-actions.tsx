@@ -107,10 +107,10 @@ export function GenerationHistoryReuseActions({ historyId }: GenerationHistoryRe
 
   return (
     <>
-      <Button size="icon-sm" variant="outline" onClick={() => void handleCopyPrompt()} disabled={busyAction !== null} aria-label={copyLabel} title={copyLabel}>
+      <Button size="icon-sm" variant="secondary" onClick={() => void handleCopyPrompt()} disabled={busyAction !== null} aria-label={copyLabel} title={copyLabel}>
         {busyAction === 'copy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCopy className="h-4 w-4" />}
       </Button>
-      <Button size="icon-sm" variant="outline" onClick={() => void handleLoadSettings()} disabled={busyAction !== null} aria-label={loadLabel} title={loadLabel}>
+      <Button size="icon-sm" variant="secondary" onClick={() => void handleLoadSettings()} disabled={busyAction !== null} aria-label={loadLabel} title={loadLabel}>
         {busyAction === 'load' ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
       </Button>
     </>

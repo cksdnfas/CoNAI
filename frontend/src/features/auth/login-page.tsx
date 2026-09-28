@@ -217,7 +217,7 @@ export function LoginPage() {
                 ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   {canCreateGuestAccount ? (
-                    <Button type="button" variant="outline" onClick={() => setIsGuestModalOpen(true)}>
+                    <Button type="button" variant="secondary" onClick={() => setIsGuestModalOpen(true)}>
                       <UserPlus className="h-4 w-4" />
                       {t('loginPage.createGuestAccount')}
                     </Button>

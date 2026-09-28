@@ -26,7 +26,7 @@ export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, o
       <Button size="icon-sm" variant="secondary" onClick={onBack} aria-label={t('images.components.detail.image.detail.actions.back.to.feed')} title={t('images.components.detail.image.detail.actions.back.to.feed')}>
         <ArrowLeft className="h-4 w-4" />
       </Button>
-      <Button size="icon-sm" variant="outline" onClick={onRefresh} disabled={isRefreshing} aria-label={t('images.components.detail.image.detail.actions.refresh')} title={t('images.components.detail.image.detail.actions.refresh')}>
+      <Button size="icon-sm" variant="secondary" onClick={onRefresh} disabled={isRefreshing} aria-label={t('images.components.detail.image.detail.actions.refresh')} title={t('images.components.detail.image.detail.actions.refresh')}>
         <RefreshCcw className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
       </Button>
       <ImageEditAction image={image} />

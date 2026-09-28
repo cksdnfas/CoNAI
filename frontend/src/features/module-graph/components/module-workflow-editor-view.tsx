@@ -188,7 +188,7 @@ export function ModuleWorkflowEditorView({
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={onOpenSaveModal}
                     aria-label={t({ ko: '워크플로우 저장', en: 'Save workflow' })}
                     title={t({ ko: '워크플로우 저장', en: 'Save workflow' })}
@@ -199,7 +199,7 @@ export function ModuleWorkflowEditorView({
                   <Button
                     type="button"
                     size="sm"
-                    variant={workflowDebugMode ? 'default' : 'outline'}
+                    variant={workflowDebugMode ? 'default' : 'secondary'}
                     onClick={onWorkflowDebugModeToggle}
                     aria-pressed={workflowDebugMode}
                     aria-label={workflowDebugMode ? t({ ko: '워크플로우 디버그 모드 끄기', en: 'Turn off workflow debug mode' }) : t({ ko: '워크플로우 디버그 모드 켜기', en: 'Turn on workflow debug mode' })}
@@ -211,7 +211,7 @@ export function ModuleWorkflowEditorView({
                     <Button
                       type="button"
                       size="icon-sm"
-                      variant="outline"
+                      variant="secondary"
                       className={cn(
                         validationStatus.tone === 'ready' ? 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 hover:text-emerald-200' : undefined,
                         validationStatus.tone === 'warning' ? 'border-amber-500/30 text-amber-200 hover:bg-amber-500/10 hover:text-amber-100' : undefined,
@@ -239,7 +239,7 @@ export function ModuleWorkflowEditorView({
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={onOpenModuleLibrary}
                     aria-label={t({ ko: '모듈 추가', en: 'Add module' })}
                     title={t({ ko: '모듈 추가', en: 'Add module' })}
@@ -249,7 +249,7 @@ export function ModuleWorkflowEditorView({
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={onAutoLayout}
                     disabled={nodesCount === 0}
                     aria-label={t({ ko: '자동 정렬', en: 'Auto layout' })}
@@ -260,7 +260,7 @@ export function ModuleWorkflowEditorView({
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="secondary"
                     onClick={onDuplicateSelectedNode}
                     disabled={!hasSelectedNode}
                     aria-label={t({ ko: '노드 복제', en: 'Duplicate node' })}
@@ -271,7 +271,7 @@ export function ModuleWorkflowEditorView({
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="secondary"
                     className="ml-1 border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
                     onClick={onRemoveSelectedNode}
                     disabled={!hasSelectedNode}
@@ -283,7 +283,7 @@ export function ModuleWorkflowEditorView({
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="secondary"
                     className="border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
                     onClick={onRemoveSelectedEdge}
                     disabled={!hasSelectedEdge}
@@ -295,7 +295,7 @@ export function ModuleWorkflowEditorView({
                   <Button
                     type="button"
                     size="icon-sm"
-                    variant="outline"
+                    variant="secondary"
                     className="ml-2 border-amber-500/30 text-amber-200 hover:bg-amber-500/10 hover:text-amber-100"
                     onClick={onResetCanvas}
                     aria-label={t({ ko: '초기화', en: 'Reset' })}

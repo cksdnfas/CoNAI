@@ -64,7 +64,7 @@ export function SecurityGroupColorEditorModal({
 
                 <IconButton
                   size="icon-sm"
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => onResetColor(group.groupKey)}
                   label={t('securityGroupColorEditorModal.restoreDefaultColor')}
                 >

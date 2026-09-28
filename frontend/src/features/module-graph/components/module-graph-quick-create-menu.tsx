@@ -225,7 +225,7 @@ export function ModuleGraphQuickCreateMenu({
                 key={tabOption.key}
                 type="button"
                 size="sm"
-                variant={activeTab === tabOption.key ? 'default' : 'outline'}
+                variant={activeTab === tabOption.key ? 'default' : 'secondary'}
                 onClick={() => setActiveTab(tabOption.key)}
               >
                 {tabOption.key === 'recommended' ? <Sparkles className="h-4 w-4" /> : null}

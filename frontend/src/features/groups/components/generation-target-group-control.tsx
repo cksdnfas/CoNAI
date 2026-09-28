@@ -98,7 +98,7 @@ export function GenerationTargetGroupControl({
           <span className="shrink-0 text-xs text-muted-foreground">{fieldLabel}</span>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => setOpen(true)}
             disabled={disabled}

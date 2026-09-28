@@ -62,7 +62,7 @@ export function NaiReferencesSection({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               onClick={onAddReference}
               disabled={!supportsCharacterReference}
               aria-label={t('image-generation.components.nai.references.section.add.reference')}
@@ -116,7 +116,7 @@ export function NaiReferencesSection({
                 </div>
 
                 <div className="flex justify-end border-t border-border/70 pt-3">
-                  <Button type="button" variant="outline" onClick={() => onOpenReferenceSaveModal(index)} disabled={!reference.image}>
+                  <Button type="button" variant="secondary" onClick={() => onOpenReferenceSaveModal(index)} disabled={!reference.image}>
                     <Save className="h-4 w-4" />
                     {t('image-generation.components.nai.common.save')}
                   </Button>

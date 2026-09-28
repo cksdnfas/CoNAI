@@ -204,7 +204,7 @@ export function GroupPage() {
       />
 
       {!isWideLayout ? (
-        <Button type="button" variant="outline" className="w-full justify-between" onClick={() => setIsExplorerOpen(true)}>
+        <Button type="button" variant="secondary" className="w-full justify-between" onClick={() => setIsExplorerOpen(true)}>
           <span className="inline-flex min-w-0 items-center gap-2">
             <FolderTree className="h-4 w-4 shrink-0" />
             <span className="truncate">{t({ ko: '폴더 탐색', en: 'Browse folders' })}</span>

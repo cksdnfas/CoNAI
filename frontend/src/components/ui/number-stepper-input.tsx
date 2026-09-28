@@ -140,7 +140,7 @@ export function NumberStepperInput({
     >
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         size="icon"
         className="h-auto min-h-11 min-w-11 rounded-r-none border-r-0 p-0 sm:min-h-9 sm:min-w-9"
         aria-label={t({ ko: `${fieldLabel} 감소`, en: `Decrease ${fieldLabel}` })}
@@ -197,7 +197,7 @@ export function NumberStepperInput({
       />
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         size="icon"
         className="h-auto min-h-11 min-w-11 rounded-l-none border-l-0 p-0 sm:min-h-9 sm:min-w-9"
         aria-label={t({ ko: `${fieldLabel} 증가`, en: `Increase ${fieldLabel}` })}

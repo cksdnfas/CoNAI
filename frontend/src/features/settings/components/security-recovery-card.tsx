@@ -26,7 +26,7 @@ export function SecurityRecoveryCard({ databaseInfo, isError, isRetrying, onRetr
         <Alert variant="destructive">
           <AlertTitle>{t({ ko: '복구 정보를 불러오지 못했어', en: 'Could not load recovery info' })}</AlertTitle>
           <AlertDescription>
-            <Button type="button" size="sm" variant="outline" className="mt-2" onClick={onRetry} disabled={isRetrying}>
+            <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={onRetry} disabled={isRetrying}>
               <RefreshCcw className={isRetrying ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
               {t({ ko: '다시 시도', en: 'Try again' })}
             </Button>

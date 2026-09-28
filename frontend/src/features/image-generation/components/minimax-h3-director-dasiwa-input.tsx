@@ -631,7 +631,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         {item.type === 'video' ? (
           <div className="flex flex-wrap gap-1">
             {([['video', 'V'], ['audio', 'A'], ['video_audio', 'V+A']] as Array<[MiniMaxH3DirectorVideoMode, string]>).map(([videoMode, videoLabel]) => (
-              <Button key={videoMode} type="button" size="sm" variant={(item.media_mode ?? 'video') === videoMode ? 'default' : 'outline'} className="h-7 px-2 text-[11px]" onClick={() => changeVideoMode(item, videoMode)}>
+              <Button key={videoMode} type="button" size="sm" variant={(item.media_mode ?? 'video') === videoMode ? 'default' : 'secondary'} className="h-7 px-2 text-[11px]" onClick={() => changeVideoMode(item, videoMode)}>
                 {videoLabel}
               </Button>
             ))}
@@ -796,7 +796,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         <div className="flex flex-wrap gap-1">
           {isFieldVisible('mode')
             ? MINIMAX_H3_DIRECTOR_MODES.map((nextMode) => (
-                <Button key={nextMode} type="button" size="sm" variant={mode === nextMode ? 'default' : 'outline'} onClick={() => changeMode(nextMode)}>
+                <Button key={nextMode} type="button" size="sm" variant={mode === nextMode ? 'default' : 'secondary'} onClick={() => changeMode(nextMode)}>
                   {nextMode}
                 </Button>
               ))
@@ -940,7 +940,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                 <RotateCcw className="h-4 w-4" />
               </Button>
             ) : null}
-            <Button type="button" size="icon-sm" variant="outline" disabled={isUploading || baseFrameCapacityReached} onClick={() => visualInputRef.current?.click()} aria-label={t({ ko: '이미지 추가', en: 'Add image' })} title={t({ ko: '추가', en: 'Add' })}>
+            <Button type="button" size="icon-sm" variant="secondary" disabled={isUploading || baseFrameCapacityReached} onClick={() => visualInputRef.current?.click()} aria-label={t({ ko: '이미지 추가', en: 'Add image' })} title={t({ ko: '추가', en: 'Add' })}>
               <Plus className="h-4 w-4" />
             </Button>
           </div>
@@ -983,7 +983,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
             <div className="flex items-center gap-2 text-xs font-medium"><Film className="h-4 w-4" />{t({ ko: '영상', en: 'Video' })}</div>
             <div className="flex items-center gap-1">
               {videoItems.length > 0 ? <Button type="button" size="icon-sm" variant="ghost" disabled={isUploading} onClick={() => clearLane('video')} aria-label={t({ ko: '영상 초기화', en: 'Clear video lane' })}><RotateCcw className="h-4 w-4" /></Button> : null}
-              <Button type="button" size="icon-sm" variant="outline" disabled={isUploading} onClick={() => videoInputRef.current?.click()} aria-label={t({ ko: '영상 추가', en: 'Add video' })}><Plus className="h-4 w-4" /></Button>
+              <Button type="button" size="icon-sm" variant="secondary" disabled={isUploading} onClick={() => videoInputRef.current?.click()} aria-label={t({ ko: '영상 추가', en: 'Add video' })}><Plus className="h-4 w-4" /></Button>
             </div>
             <input ref={videoInputRef} type="file" accept="video/*" multiple hidden onChange={(event) => { void handleFiles(Array.from(event.target.files ?? []), 'video'); event.target.value = '' }} />
           </div>
@@ -1002,7 +1002,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                 <RotateCcw className="h-4 w-4" />
               </Button>
             ) : null}
-            <Button type="button" size="icon-sm" variant="outline" disabled={!isReferenceMediaMode || isUploading} onClick={() => audioInputRef.current?.click()} aria-label={t({ ko: '오디오 추가', en: 'Add audio' })} title={t({ ko: '추가', en: 'Add' })}>
+            <Button type="button" size="icon-sm" variant="secondary" disabled={!isReferenceMediaMode || isUploading} onClick={() => audioInputRef.current?.click()} aria-label={t({ ko: '오디오 추가', en: 'Add audio' })} title={t({ ko: '추가', en: 'Add' })}>
               <Plus className="h-4 w-4" />
             </Button>
           </div>

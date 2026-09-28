@@ -65,22 +65,22 @@ export function PromptSidebar({
       bodyClassName="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
       headerExtra={
         <div className="flex flex-wrap justify-end gap-2 border-b border-white/5 pb-3">
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label={t('prompts.components.prompt.sidebar.status')} title={t('prompts.components.prompt.sidebar.status')}>
+          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label={t('prompts.components.prompt.sidebar.status')} title={t('prompts.components.prompt.sidebar.status')}>
             <BarChart3 className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} aria-label={t('prompts.components.prompt.sidebar.manual.collect')} title={canCollect ? t('prompts.components.prompt.sidebar.manual.collect') : t('prompts.components.prompt.sidebar.manual.collect.is.not.available.for.auto')}>
+          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} aria-label={t('prompts.components.prompt.sidebar.manual.collect')} title={canCollect ? t('prompts.components.prompt.sidebar.manual.collect') : t('prompts.components.prompt.sidebar.manual.collect.is.not.available.for.auto')}>
             <Wrench className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label={t('prompts.components.prompt.sidebar.add.group')} title={t('prompts.components.prompt.sidebar.add.group')}>
+          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label={t('prompts.components.prompt.sidebar.add.group')} title={t('prompts.components.prompt.sidebar.add.group')}>
             <FolderPlus className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenDanbooruGrouping?.()} disabled={!onOpenDanbooruGrouping} aria-label={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })} title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })}>
+          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onOpenDanbooruGrouping?.()} disabled={!onOpenDanbooruGrouping} aria-label={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })} title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })}>
             <Tags className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label={t('prompts.components.prompt.sidebar.export')} title={t('prompts.components.prompt.sidebar.export')}>
+          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label={t('prompts.components.prompt.sidebar.export')} title={t('prompts.components.prompt.sidebar.export')}>
             <Download className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onImportGroups?.()} disabled={!onImportGroups} aria-label={t('prompts.components.prompt.sidebar.import')} title={t('prompts.components.prompt.sidebar.import')}>
+          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onImportGroups?.()} disabled={!onImportGroups} aria-label={t('prompts.components.prompt.sidebar.import')} title={t('prompts.components.prompt.sidebar.import')}>
             <Upload className="h-4 w-4" />
           </Button>
         </div>
@@ -107,16 +107,16 @@ export function PromptSidebar({
 
           <div className="border-t border-white/5 pt-3">
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label={t('prompts.components.prompt.sidebar.move.up')} title={t('prompts.components.prompt.sidebar.move.up')}>
+              <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label={t('prompts.components.prompt.sidebar.move.up')} title={t('prompts.components.prompt.sidebar.move.up')}>
                 <ChevronUp className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} aria-label={t('prompts.components.prompt.sidebar.move.down')} title={t('prompts.components.prompt.sidebar.move.down')}>
+              <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} aria-label={t('prompts.components.prompt.sidebar.move.down')} title={t('prompts.components.prompt.sidebar.move.down')}>
                 <ChevronDown className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} aria-label={t('prompts.components.prompt.sidebar.edit')} title={t('prompts.components.prompt.sidebar.edit')}>
+              <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} aria-label={t('prompts.components.prompt.sidebar.edit')} title={t('prompts.components.prompt.sidebar.edit')}>
                 <Pencil className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} aria-label={t('prompts.components.prompt.sidebar.delete')} title={t('prompts.components.prompt.sidebar.delete')}>
+              <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} aria-label={t('prompts.components.prompt.sidebar.delete')} title={t('prompts.components.prompt.sidebar.delete')}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>

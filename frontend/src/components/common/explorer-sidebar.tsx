@@ -130,7 +130,7 @@ export function ExplorerSidebar({
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="secondary"
             className="w-full bg-surface-low"
             onClick={() => setIsFloatingLocked((current) => !current)}
           >

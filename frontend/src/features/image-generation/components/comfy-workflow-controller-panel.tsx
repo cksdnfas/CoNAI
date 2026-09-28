@@ -497,7 +497,7 @@ export function ComfyWorkflowControllerPanel({
                 ))}
               </ul>
               {onRevealFieldIssues && (missingRequiredFields.length > 0 || workflowNodeIssues.length > 0) ? (
-                <Button type="button" size="sm" variant="outline" className="mt-2" onClick={onRevealFieldIssues}>
+                <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={onRevealFieldIssues}>
                   {t({ ko: '문제 필드로 이동', en: 'Go to invalid field' })}
                 </Button>
               ) : null}

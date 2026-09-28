@@ -295,7 +295,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                   </button>
 
                   <div className="flex items-center gap-2">
-                    <Button type="button" size="icon-sm" variant="outline" onClick={() => onFieldRemove(field.id)} aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')} title={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')}>
+                    <Button type="button" size="icon-sm" variant="secondary" onClick={() => onFieldRemove(field.id)} aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')} title={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

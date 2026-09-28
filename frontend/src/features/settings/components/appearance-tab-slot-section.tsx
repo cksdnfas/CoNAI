@@ -146,7 +146,7 @@ export function AppearanceTabSlotSection({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   className="flex-1 min-w-[9rem]"
                   disabled={!slotTheme || isSaving}
                   onClick={() => {

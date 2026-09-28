@@ -109,7 +109,7 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
 
   return (
     <>
-      <Button size="icon-sm" variant="outline" onClick={() => setIsEditorOpen(true)} disabled={saveMutation.isPending} aria-label={t('images.components.detail.image.edit.action.images.edit')} title={t('images.components.detail.image.edit.action.images.edit')}>
+      <Button size="icon-sm" variant="secondary" onClick={() => setIsEditorOpen(true)} disabled={saveMutation.isPending} aria-label={t('images.components.detail.image.edit.action.images.edit')} title={t('images.components.detail.image.edit.action.images.edit')}>
         <FilePenLine className="h-4 w-4" />
       </Button>
 

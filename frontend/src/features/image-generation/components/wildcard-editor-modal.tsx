@@ -366,7 +366,7 @@ function WildcardItemDraftEditor({
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             onClick={() => fileInputRef.current?.click()}
             aria-label={t(wildcardEditorKey('import.json.file'))}
             title={t(wildcardEditorKey('import.json.file'))}
@@ -378,7 +378,7 @@ function WildcardItemDraftEditor({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               onClick={() => setTemplateMenuOpen((current) => !current)}
               aria-label={t(wildcardEditorKey('download.json.template'))}
               title={t(wildcardEditorKey('download.json.template'))}
@@ -391,7 +391,7 @@ function WildcardItemDraftEditor({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               onClick={() => setExportMenuOpen((current) => !current)}
               disabled={exportDisabled}
               aria-label={t(wildcardEditorKey('export.json'))}
@@ -404,7 +404,7 @@ function WildcardItemDraftEditor({
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             onClick={handleAddDraft}
             aria-label={t(wildcardEditorKey('add.tool.item'), { tool: activeToolLabel })}
             title={t(wildcardEditorKey('add.item'))}

@@ -143,7 +143,7 @@ export function RatingTierSettingsCard({
                   <div className="flex items-center gap-1">
                     <IconButton
                       size="icon-sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => onMoveRatingTierUp(tier.id)}
                       disabled={isFirst}
                       label={t({ ko: '위로 이동', en: 'Move up' })}
@@ -152,7 +152,7 @@ export function RatingTierSettingsCard({
                     </IconButton>
                     <IconButton
                       size="icon-sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => onMoveRatingTierDown(tier.id)}
                       disabled={isLast}
                       label={t({ ko: '아래로 이동', en: 'Move down' })}
@@ -161,7 +161,7 @@ export function RatingTierSettingsCard({
                     </IconButton>
                     <IconButton
                       size="icon-sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => onDeleteRatingTier(tier.id)}
                       disabled={ratingTiersDraft.length <= 1}
                       label={t({ ko: '등급 삭제', en: 'Delete tier' })}

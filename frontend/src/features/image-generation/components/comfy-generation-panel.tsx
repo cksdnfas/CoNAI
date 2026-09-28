@@ -672,7 +672,7 @@ export function ComfyGenerationPanel({
                   <Badge variant="outline">{t({ ko: '서버 {count}', en: '{count} servers' }, { count: servers.length })}</Badge>
                   <Badge variant="outline">{t({ ko: '목록 {count}', en: '{count} lists' }, { count: dropdownListsQuery.data?.length ?? 0 })}</Badge>
                 </div>
-                <Button type="button" size="sm" variant="outline" onClick={() => setIsManagementOpen((current) => !current)} aria-expanded={isManagementOpen}>
+                <Button type="button" size="sm" variant="secondary" onClick={() => setIsManagementOpen((current) => !current)} aria-expanded={isManagementOpen}>
                   <Wrench className="h-4 w-4" />
                   {isManagementOpen ? t({ ko: '관리 닫기', en: 'Close management' }) : t({ ko: '관리 열기', en: 'Open management' })}
                   <ChevronDown className={cn('h-4 w-4 transition-transform', isManagementOpen && 'rotate-180')} />

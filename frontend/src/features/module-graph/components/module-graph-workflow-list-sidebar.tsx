@@ -65,7 +65,7 @@ export function ModuleGraphWorkflowListSidebar({
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             className="bg-surface-low"
             onClick={onLeaveEditor}
             aria-label={t({ ko: '목록으로', en: 'Back to list' })}
@@ -80,7 +80,7 @@ export function ModuleGraphWorkflowListSidebar({
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             className="bg-surface-low"
             onClick={onRefreshWorkspace}
             aria-label={t({ ko: '새로고침', en: 'Refresh' })}
@@ -92,7 +92,7 @@ export function ModuleGraphWorkflowListSidebar({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               className="bg-surface-low"
               onClick={onOpenBrowseManage}
               aria-label={browseManageModalTitle}
@@ -104,7 +104,7 @@ export function ModuleGraphWorkflowListSidebar({
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
+            variant="secondary"
             className="bg-surface-low"
             onClick={onCreateWorkflow}
             aria-label={t({ ko: '새 워크플로우', en: 'New workflow' })}
@@ -130,7 +130,7 @@ export function ModuleGraphWorkflowListSidebar({
               <Button
                 type="button"
                 size="icon-sm"
-                variant="outline"
+                variant="secondary"
                 className="bg-surface-low"
                 onClick={() => importInputRef.current?.click()}
                 aria-label={t({ ko: '워크플로우 가져오기', en: 'Import workflow' })}
@@ -144,7 +144,7 @@ export function ModuleGraphWorkflowListSidebar({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               className="bg-surface-low"
               onClick={onDuplicateWorkflow}
               aria-label={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
@@ -157,7 +157,7 @@ export function ModuleGraphWorkflowListSidebar({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               className="bg-surface-low"
               onClick={onExportWorkflow}
               aria-label={t({ ko: '워크플로우 내보내기', en: 'Export workflow' })}
@@ -170,7 +170,7 @@ export function ModuleGraphWorkflowListSidebar({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               className="bg-surface-low"
               onClick={onEditWorkflow}
               aria-label={t({ ko: '워크플로우 편집', en: 'Edit workflow' })}
@@ -183,7 +183,7 @@ export function ModuleGraphWorkflowListSidebar({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               className="bg-surface-low"
               onClick={onDeleteWorkflow}
               aria-label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
@@ -196,7 +196,7 @@ export function ModuleGraphWorkflowListSidebar({
             <Button
               type="button"
               size="icon-sm"
-              variant="outline"
+              variant="secondary"
               className="bg-surface-low"
               onClick={() => onDeleteFolder(selectedFolderRecord.id)}
               aria-label={t({ ko: '폴더 삭제', en: 'Delete folder' })}
