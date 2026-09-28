@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Check, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, Maximize2, Minimize2, MoreHorizontal, Plus, Save, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, Maximize2, Minimize2, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
@@ -48,6 +49,8 @@ import { WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sideba
 import { getWallpaperWidgetDefinition, getWallpaperWidgetDisplayTitle } from './wallpaper-widget-registry'
 import { WallpaperLivelyHelpModal } from './wallpaper-lively-help-modal'
 import { WallpaperTemplateModal } from './wallpaper-template-modal'
+import { useUndoableState } from './use-undoable-state'
+import { useWallpaperLeaveGuard } from './use-wallpaper-leave-guard'
 import { buildWallpaperTemplateLayout, type WallpaperTemplateDefinition } from './wallpaper-templates'
 
 interface WallpaperWidgetInstancePatch {
@@ -96,7 +99,16 @@ export function WallpaperEditorPage() {
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const hasHydratedServerPresetsRef = useRef(false)
-  const [layoutPreset, setLayoutPreset] = useState(() => loadWallpaperLayoutDraft() ?? buildWallpaperStarterLayout('landscape-1080p'))
+  // Widget edits go through a bounded undo history; loading a preset, a new canvas or a template resets it.
+  const {
+    value: layoutPreset,
+    set: setLayoutPreset,
+    reset: resetLayoutPreset,
+    undo: undoLayoutEdit,
+    redo: redoLayoutEdit,
+    canUndo,
+    canRedo,
+  } = useUndoableState(() => loadWallpaperLayoutDraft() ?? buildWallpaperStarterLayout('landscape-1080p'), { limit: 60 })
   const [savedPresets, setSavedPresets] = useState(() => loadWallpaperLayoutPresets())
   const [activePresetId, setActivePresetId] = useState<string | null>(() => loadWallpaperActivePresetId())
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
@@ -157,6 +169,15 @@ export function WallpaperEditorPage() {
     const draftName = layoutPreset.name.trim() || activePreset.name
     return draftName !== activePreset.name || toSignature(layoutPreset) !== toSignature(activePreset)
   }, [activePreset, layoutPreset])
+  // With a saved preset, only differences from it count. Without one, the draft already lives in this browser,
+  // so leaving only warns about edits made in this visit, while replacing the canvas warns whenever it has widgets.
+  const hasUnsavedEdits = activePreset ? hasUnsavedPresetChanges : canUndo
+  const hasDiscardableEdits = activePreset ? hasUnsavedPresetChanges : layoutPreset.widgets.length > 0
+  useWallpaperLeaveGuard(
+    hasUnsavedEdits,
+    t({ ko: '프리셋에 저장하지 않은 월페이퍼 변경이 있어. 초안은 이 브라우저에 남지만 저장된 월페이퍼에는 반영되지 않아. 나갈까?', en: 'You have wallpaper changes that are not saved to a preset. The draft stays in this browser, but the saved wallpaper does not change. Leave?' }),
+  )
+
   const effectiveSelectedWidgetId = useMemo(
     () => (selectedWidgetId && widgetById.has(selectedWidgetId) ? selectedWidgetId : (layoutPreset.widgets[0]?.id ?? null)),
     [layoutPreset.widgets, selectedWidgetId, widgetById],
@@ -186,6 +207,32 @@ export function WallpaperEditorPage() {
   useEffect(() => {
     saveWallpaperActivePresetId(effectiveActivePresetId)
   }, [effectiveActivePresetId])
+
+  // Ctrl/Cmd+Z undoes widget edits, Ctrl/Cmd+Shift+Z (or Ctrl+Y) redoes; text fields keep their own undo.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+        return
+      }
+
+      const target = event.target as HTMLElement | null
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      if (key === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        undoLayoutEdit()
+      } else if ((key === 'z' && event.shiftKey) || key === 'y') {
+        event.preventDefault()
+        redoLayoutEdit()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [redoLayoutEdit, undoLayoutEdit])
 
   useEffect(() => {
     if (hasHydratedServerPresetsRef.current || !wallpaperSettingsQuery.data) {
@@ -233,7 +280,30 @@ export function WallpaperEditorPage() {
     )
   }
 
-  const handleLoadPreset = (presetId: string | null) => {
+  /** Ask before an action replaces the current canvas while it has unsaved edits. */
+  const confirmDiscardEdits = async (title: string, confirmLabel: string) => {
+    if (!hasDiscardableEdits) {
+      return true
+    }
+
+    return confirm({
+      title,
+      description: activePreset
+        ? t({ ko: "'{name}'에 저장하지 않은 변경이 있어. 계속하면 지금 편집 중인 내용이 사라져.", en: "'{name}' has unsaved changes. Continuing discards what you are editing." }, { name: activePreset.name })
+        : t({ ko: '저장하지 않은 새 캔버스야. 계속하면 지금 편집 중인 위젯이 사라져.', en: 'This new canvas is not saved. Continuing discards the widgets you are editing.' }),
+      confirmLabel,
+      tone: 'destructive',
+    })
+  }
+
+  const handleLoadPreset = async (presetId: string | null) => {
+    if (presetId && presetId !== effectiveActivePresetId && !(await confirmDiscardEdits(
+      t({ ko: '다른 프리셋 불러오기', en: 'Load another preset' }),
+      t({ ko: '불러오기', en: 'Load' }),
+    ))) {
+      return
+    }
+
     if (!presetId) {
       setActivePresetId(null)
       syncWallpaperPresetState(savedPresets, null)
@@ -247,7 +317,7 @@ export function WallpaperEditorPage() {
 
     const nextDraft = cloneWallpaperPresetToDraft(nextPreset)
     setActivePresetId(nextPreset.id)
-    setLayoutPreset(nextDraft)
+    resetLayoutPreset(nextDraft)
     setSelectedWidgetId(nextDraft.widgets[0]?.id ?? null)
     syncWallpaperPresetState(savedPresets, nextPreset.id)
   }
@@ -304,10 +374,14 @@ export function WallpaperEditorPage() {
     }
   }
 
-  const handleCreateBlankCanvas = () => {
+  const handleCreateBlankCanvas = async () => {
+    if (!(await confirmDiscardEdits(t({ ko: '새 캔버스', en: 'New canvas' }), t({ ko: '새로 만들기', en: 'Create' })))) {
+      return
+    }
+
     const nextLayoutPreset = buildWallpaperLayoutDraft(layoutPreset.canvasPresetId)
     setActivePresetId(null)
-    setLayoutPreset(nextLayoutPreset)
+    resetLayoutPreset(nextLayoutPreset)
     setSelectedWidgetId(null)
     setSelectedLibraryWidgetType(null)
     syncWallpaperPresetState(savedPresets, null)
@@ -365,7 +439,7 @@ export function WallpaperEditorPage() {
 
     const nextLayout = buildWallpaperTemplateLayout(template.id, layoutPreset.canvasPresetId, t(template.name))
     setActivePresetId(null)
-    setLayoutPreset(nextLayout)
+    resetLayoutPreset(nextLayout)
     setSelectedWidgetId(nextLayout.widgets[0]?.id ?? null)
     setSelectedLibraryWidgetType(null)
     setIsTemplateModalOpen(false)
@@ -402,6 +476,14 @@ export function WallpaperEditorPage() {
                 <span className="hidden sm:inline">{t({ ko: '미리보기', en: 'Preview' })}</span>
               </a>
             </Button>
+            <div className="flex items-center gap-1">
+              <IconButton variant="ghost" size="icon-sm" disabled={!canUndo} onClick={undoLayoutEdit} label={t({ ko: '실행 취소 (Ctrl+Z)', en: 'Undo (Ctrl+Z)' })}>
+                <Undo2 className="h-4 w-4" />
+              </IconButton>
+              <IconButton variant="ghost" size="icon-sm" disabled={!canRedo} onClick={redoLayoutEdit} label={t({ ko: '다시 실행 (Ctrl+Shift+Z)', en: 'Redo (Ctrl+Shift+Z)' })}>
+                <Redo2 className="h-4 w-4" />
+              </IconButton>
+            </div>
             <Button size="sm" disabled={wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()}>
               <Save className="h-4 w-4" />
               {t({ ko: '저장', en: 'Save' })}
@@ -435,7 +517,7 @@ export function WallpaperEditorPage() {
             <Select
               value={effectiveActivePresetId ?? '__new__'}
               onChange={(event) => {
-                handleLoadPreset(event.target.value === '__new__' ? null : event.target.value)
+                void handleLoadPreset(event.target.value === '__new__' ? null : event.target.value)
               }}
             >
               <option value="__new__" hidden>{t({ ko: '미저장 새 캔버스', en: 'Unsaved new canvas' })}</option>
@@ -451,11 +533,12 @@ export function WallpaperEditorPage() {
               variant="settings"
               value={layoutPreset.name}
               onChange={(event) => {
+                const name = event.target.value
                 setLayoutPreset((current) => ({
                   ...current,
-                  name: event.target.value,
+                  name,
                   updatedAt: new Date().toISOString(),
-                }))
+                }), { coalesceKey: 'name' })
               }}
             />
           </div>
@@ -495,7 +578,7 @@ export function WallpaperEditorPage() {
       >
         <div className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '프리셋 작업', en: 'Preset actions' })}</div>
         {[
-          { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: handleCreateBlankCanvas },
+          { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: () => void handleCreateBlankCanvas() },
           { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
           { icon: ClipboardCopy, label: t({ ko: 'Lively URL 복사', en: 'Copy Lively URL' }), disabled: !activePresetRuntimeUrl, action: () => void handleCopyRuntimeUrl() },
           { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
@@ -611,6 +694,7 @@ export function WallpaperEditorPage() {
                     size="sm"
                     onClick={() => {
                       setLayoutPreset((current) => removeSelectedWidget(current, selectedWidget.id))
+                      notifyInfo(t({ ko: '위젯을 삭제했어. 실행 취소(Ctrl+Z)로 되돌릴 수 있어.', en: 'Widget deleted. Undo (Ctrl+Z) brings it back.' }))
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -736,7 +820,7 @@ export function WallpaperEditorPage() {
             selectedWidget={selectedWidget}
             groups={groupsQuery.data ?? []}
             onPatchWidget={(widgetId, patch) => {
-              setLayoutPreset((current) => patchSelectedWidget(current, widgetId, patch))
+              setLayoutPreset((current) => patchSelectedWidget(current, widgetId, patch), { coalesceKey: `settings:${widgetId}` })
             }}
           />
         </section>
