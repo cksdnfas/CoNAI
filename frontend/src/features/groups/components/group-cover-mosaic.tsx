@@ -25,7 +25,7 @@ export function GroupCoverMosaic({ groupId, sourceKey, imageCount, loadPreviewIm
   const images = (previewQuery.data ?? []).slice(0, COVER_IMAGE_COUNT)
 
   return (
-    <div className={cn('relative overflow-hidden bg-surface-lowest', className)}>
+    <div className={cn('relative overflow-hidden bg-fill', className)}>
       {images.length === 0 ? (
         <div className="flex h-full w-full items-center justify-center text-muted-foreground/60">
           <Folder className="size-1/3 max-h-10 max-w-10" aria-hidden="true" />

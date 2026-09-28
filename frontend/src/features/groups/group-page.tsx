@@ -1,4 +1,4 @@
-import { CheckCheck, FolderMinus, FolderPlus, FolderTree, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { CheckCheck, FolderMinus, FolderPlus, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorState } from '@/components/ui/error-state'
@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Skeleton } from '@/components/ui/skeleton'
-import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
+import { PageToolbar } from '@/components/common/page-toolbar'
+import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { CountState } from '@/lib/count-display'
@@ -47,7 +48,6 @@ export function GroupPage() {
   const [visibleGroupImageIds, setVisibleGroupImageIds] = useState<string[]>([])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [downloadScope, setDownloadScope] = useState<'group' | 'selection' | null>(null)
-  const [isExplorerOpen, setIsExplorerOpen] = useState(false)
   const [groupImageCollectionFilter, setGroupImageCollectionFilter] = useState<GroupCollectionFilter>('all')
   const isWideLayout = useDesktopPageLayout()
   const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
@@ -160,7 +160,6 @@ export function GroupPage() {
     setSelectedGroupImageIds([])
     setIsAssignModalOpen(false)
     setDownloadScope(null)
-    setIsExplorerOpen(false)
     setGroupImageCollectionFilter('all')
   }, [selectedGroupId, selectedSource.key])
 
@@ -187,10 +186,8 @@ export function GroupPage() {
   const allVisibleSelected = visibleGroupImageIds.length > 0 && visibleGroupImageIds.every((id) => selectedGroupImageIds.includes(id))
   const selectAllLabel = allVisibleSelected ? t({ ko: '선택 해제', en: 'Clear selection' }) : t({ ko: '모두 선택', en: 'Select all' })
 
-  const renderSidebar = (embedded: boolean) => (
+  const sidebar = (
     <GroupExplorerSidebarPanel
-      embedded={embedded}
-      isWideLayout={!embedded && isWideLayout}
       sourceKey={selectedSource.key}
       groups={allGroups}
       countMaps={groupCountMaps}
@@ -198,34 +195,20 @@ export function GroupPage() {
       isLoading={groupsQuery.isLoading}
       isError={groupsQuery.isError}
       errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
-      onSelectSource={(nextSourceKey) => {
-        setIsExplorerOpen(false)
-        handleSelectSource(nextSourceKey)
-      }}
-      onSelectGroup={(nextGroupId) => {
-        setIsExplorerOpen(false)
-        handleOpenGroup(nextGroupId)
-      }}
-      onCreateGroup={isCustomSource ? () => {
-        setIsExplorerOpen(false)
-        handleOpenCreateModal()
-      } : undefined}
-      onDropImages={isCustomSource && !embedded ? handleDropImages : undefined}
+      onSelectSource={handleSelectSource}
+      onSelectGroup={handleOpenGroup}
+      onCreateGroup={isCustomSource ? handleOpenCreateModal : undefined}
+      onDropImages={isCustomSource && isWideLayout ? handleDropImages : undefined}
     />
   )
 
   const rootActions = (
     <>
-      {!isWideLayout ? (
-        <IconButton label={t({ ko: '그룹 트리', en: 'Group tree' })} variant="subtle" size="icon-sm" onClick={() => setIsExplorerOpen(true)}>
-          <FolderTree />
-        </IconButton>
-      ) : null}
       {isCustomSource ? (
         <>
           <IconButton
             label={autoCollectAllMutation.isPending ? t('groups.group.page.running.all.auto.collect.jobs') : t('groups.group.page.auto.collect.all')}
-            variant="subtle"
+            variant="ghost"
             size="icon-sm"
             onClick={() => void handleRunAutoCollectAll()}
             disabled={autoCollectAllMutation.isPending}
@@ -240,7 +223,7 @@ export function GroupPage() {
       ) : (
         <IconButton
           label={rebuildAutoFolderGroupsMutation.isPending ? t('groups.group.page.rebuilding.watched.folders') : t('groups.group.page.rebuild.watched.folders')}
-          variant="subtle"
+          variant="ghost"
           size="icon-sm"
           onClick={() => void handleRebuildAutoFolderGroups()}
           disabled={rebuildAutoFolderGroupsMutation.isPending}
@@ -251,21 +234,53 @@ export function GroupPage() {
     </>
   )
 
-  return (
-    // Leave room under the list for the fixed selection bar while it is up.
-    <div className={cn(selectedGroupImageIds.length > 0 && 'pb-24')}>
-      <div className={cn('grid gap-6', isWideLayout ? 'grid-cols-[264px_minmax(0,1fr)]' : 'grid-cols-1')}>
-        {isWideLayout ? renderSidebar(false) : null}
+  const groupHeader = selectedGroupId && selectedGroupQuery.data ? (
+    <GroupViewHeader
+      name={selectedGroupQuery.data.name}
+      color={selectedGroupHierarchy?.color ?? selectedGroupQuery.data.color}
+      pathItems={groupPathItems}
+      rootLabel={rootLabel}
+      countState={headerCountState}
+      isCustomSource={isCustomSource}
+      autoCollect={isCustomSource ? {
+        enabled: Boolean(selectedGroupQuery.data.auto_collect_enabled),
+        conditionCount: countAutoCollectConditions(selectedGroupQuery.data.auto_collect_conditions),
+      } : undefined}
+      compact={!isWideLayout}
+      isAutoCollectPending={autoCollectMutation.isPending}
+      isDownloadPending={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
+      isDeletePending={deleteGroupMutation.isPending}
+      onOpenRoot={handleOpenRoot}
+      onOpenGroup={handleOpenGroup}
+      onRunAutoCollect={() => void handleRunAutoCollect()}
+      onCreateSubgroup={handleOpenCreateModal}
+      onEdit={handleOpenEditModal}
+      onDownload={handleOpenGroupDownloadModal}
+      onDelete={() => void handleDeleteSelectedGroup()}
+    />
+  ) : selectedGroupId ? (
+    <PageToolbar />
+  ) : (
+    <PageToolbar title={rootLabel} actions={rootActions} />
+  )
 
+  return (
+    <PageWithSidebar
+      storageKey="groups"
+      sidebar={sidebar}
+      sidebarLabel={t({ ko: '그룹', en: 'Groups' })}
+      sidebarWidth={248}
+      toolbar={groupHeader}
+      // Leave room under the list for the fixed selection bar while it is up.
+      contentClassName={cn(selectedGroupImageIds.length > 0 && 'pb-24')}
+    >
         <section className="min-w-0 space-y-5">
           {!selectedGroupId ? (
             <GroupRootOverview
-              title={rootLabel}
               groups={rootGroups}
               countMaps={groupCountMaps}
               sourceKey={selectedSource.key}
               loadPreviewImages={selectedSource.getPreviewImages}
-              actions={rootActions}
               onOpenGroup={handleOpenGroup}
               isLoading={groupsQuery.isLoading}
               error={groupsQuery.isError && allGroups.length === 0 ? groupsQuery.error : null}
@@ -286,31 +301,6 @@ export function GroupPage() {
 
           {selectedGroupId && selectedGroupQuery.data ? (
             <>
-              <GroupViewHeader
-                name={selectedGroupQuery.data.name}
-                color={selectedGroupHierarchy?.color ?? selectedGroupQuery.data.color}
-                pathItems={groupPathItems}
-                rootLabel={rootLabel}
-                countState={headerCountState}
-                isCustomSource={isCustomSource}
-                autoCollect={isCustomSource ? {
-                  enabled: Boolean(selectedGroupQuery.data.auto_collect_enabled),
-                  conditionCount: countAutoCollectConditions(selectedGroupQuery.data.auto_collect_conditions),
-                } : undefined}
-                compact={!isWideLayout}
-                isAutoCollectPending={autoCollectMutation.isPending}
-                isDownloadPending={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
-                isDeletePending={deleteGroupMutation.isPending}
-                onOpenRoot={handleOpenRoot}
-                onOpenGroup={handleOpenGroup}
-                onOpenTree={!isWideLayout ? () => setIsExplorerOpen(true) : undefined}
-                onRunAutoCollect={() => void handleRunAutoCollect()}
-                onCreateSubgroup={handleOpenCreateModal}
-                onEdit={handleOpenEditModal}
-                onDownload={handleOpenGroupDownloadModal}
-                onDelete={() => void handleDeleteSelectedGroup()}
-              />
-
               <GroupSubgroupStrip
                 groups={childGroups}
                 countMaps={groupCountMaps}
@@ -362,19 +352,6 @@ export function GroupPage() {
             </>
           ) : null}
         </section>
-      </div>
-
-      {!isWideLayout ? (
-        <BottomDrawerSheet
-          open={isExplorerOpen}
-          title={t({ ko: '그룹', en: 'Groups' })}
-          ariaLabel={t({ ko: '그룹 트리', en: 'Group tree' })}
-          closeLabel={t({ ko: '닫기', en: 'Close' })}
-          onClose={() => setIsExplorerOpen(false)}
-        >
-          {renderSidebar(true)}
-        </BottomDrawerSheet>
-      ) : null}
 
       <ImageSelectionBar
         selectedCount={selectedGroupImageIds.length}
@@ -445,6 +422,6 @@ export function GroupPage() {
           onSubmit={handleSubmitGroup}
         />
       ) : null}
-    </div>
+    </PageWithSidebar>
   )
 }

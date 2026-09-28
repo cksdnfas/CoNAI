@@ -3,10 +3,9 @@ import { Plus, Search } from 'lucide-react'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
+import { usePageSidebar } from '@/components/ui/sidebar'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { GroupCountMaps } from '@/features/groups/group-count-utils'
 import { isGroupImageDrag, readGroupImageDrag } from '@/features/groups/group-image-drag'
@@ -15,7 +14,6 @@ import { GROUP_DROP_ID_ATTRIBUTE, GroupTree } from './group-tree'
 import { useI18n } from '@/i18n'
 
 interface GroupExplorerSidebarPanelProps {
-  isWideLayout: boolean
   sourceKey: GroupSourceKey
   groups: GroupWithHierarchy[]
   countMaps: GroupCountMaps
@@ -23,7 +21,6 @@ interface GroupExplorerSidebarPanelProps {
   isLoading: boolean
   isError: boolean
   errorMessage?: string | null
-  embedded?: boolean
   onSelectSource: (sourceKey: GroupSourceKey) => void
   onSelectGroup: (groupId: number) => void
   /** Custom groups only: open the new-group editor. */
@@ -39,9 +36,11 @@ function getDropGroupId(event: DragEvent<HTMLElement>) {
   return Number.isFinite(groupId) && groupId > 0 ? groupId : null
 }
 
-/** Left explorer: source switch, name search, new-group action, and the group tree (also an image drop target). */
+/**
+ * Page sidebar content: source switch, name search, new-group action, and the group tree (also an image drop target).
+ * Rendered by PageWithSidebar in its column and, on narrow screens, in its drawer (which a pick closes).
+ */
 export function GroupExplorerSidebarPanel({
-  isWideLayout,
   sourceKey,
   groups,
   countMaps,
@@ -49,13 +48,18 @@ export function GroupExplorerSidebarPanel({
   isLoading,
   isError,
   errorMessage,
-  embedded = false,
   onSelectSource,
   onSelectGroup,
   onCreateGroup,
   onDropImages,
 }: GroupExplorerSidebarPanelProps) {
   const { t } = useI18n()
+  const pageSidebar = usePageSidebar()
+  const closeDrawer = () => {
+    if (pageSidebar && !pageSidebar.isDesktop) {
+      pageSidebar.setMobileOpen(false)
+    }
+  }
   const [filterText, setFilterText] = useState('')
   const [dropTargetId, setDropTargetId] = useState<number | null>(null)
   const canDrop = Boolean(onDropImages)
@@ -102,10 +106,21 @@ export function GroupExplorerSidebarPanel({
             { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }) },
             { value: 'folders', label: t({ ko: '감시폴더', en: 'Watched' }) },
           ]}
-          onChange={(value) => onSelectSource(value as GroupSourceKey)}
+          onChange={(value) => {
+            closeDrawer()
+            onSelectSource(value as GroupSourceKey)
+          }}
         />
         {onCreateGroup ? (
-          <IconButton label={t({ ko: '새 그룹', en: 'New group' })} size="icon-sm" variant="subtle" onClick={onCreateGroup}>
+          <IconButton
+            label={t({ ko: '새 그룹', en: 'New group' })}
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => {
+              closeDrawer()
+              onCreateGroup()
+            }}
+          >
             <Plus />
           </IconButton>
         ) : null}
@@ -150,31 +165,20 @@ export function GroupExplorerSidebarPanel({
             selectedGroupId={selectedGroupId}
             filterText={filterText}
             dropTargetId={dropTargetId}
-            onSelectGroup={onSelectGroup}
+            onSelectGroup={(groupId) => {
+              closeDrawer()
+              onSelectGroup(groupId)
+            }}
           />
         </div>
       ) : null}
     </>
   )
 
-  if (embedded) {
-    return (
-      <div className="space-y-3 p-4">
-        {header}
-        {content}
-      </div>
-    )
-  }
-
   return (
-    <ExplorerSidebar
-      floatingFrame
-      floatingLockStorageKey="conai:groups:sidebar-locked"
-      className={cn('z-20 isolate p-3', isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
-      bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
-      headerExtra={header}
-    >
+    <div className="space-y-3">
+      {header}
       {content}
-    </ExplorerSidebar>
+    </div>
   )
 }

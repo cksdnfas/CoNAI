@@ -1,8 +1,6 @@
-import type { ReactNode } from 'react'
 import { Bot, FolderOpen } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Heading } from '@/components/ui/heading'
 import { Panel } from '@/components/ui/panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tip } from '@/components/ui/tooltip'
@@ -14,26 +12,22 @@ import { GroupColorDot } from './group-color-dot'
 import { GroupCoverMosaic } from './group-cover-mosaic'
 
 interface GroupRootOverviewProps {
-  title: string
   groups: GroupWithHierarchy[]
   countMaps: GroupCountMaps
   sourceKey: 'custom' | 'folders'
   loadPreviewImages: (groupId: number, params?: { includeChildren?: boolean; count?: number }) => Promise<ImageRecord[]>
-  actions?: ReactNode
   onOpenGroup: (groupId: number) => void
   isLoading?: boolean
   error?: unknown
   onRetry?: () => void
 }
 
-/** Root view: every top-level group as a cover card. */
+/** Root view: every top-level group as a cover card (image mosaic + caption line, no card surface). */
 export function GroupRootOverview({
-  title,
   groups,
   countMaps,
   sourceKey,
   loadPreviewImages,
-  actions,
   onOpenGroup,
   isLoading = false,
   error = null,
@@ -44,11 +38,6 @@ export function GroupRootOverview({
 
   return (
     <section className="space-y-4">
-      <div className="flex min-h-10 items-center justify-between gap-3">
-        <Heading level={2} as="h1">{title}</Heading>
-        {actions ? <div className="flex items-center gap-1.5">{actions}</div> : null}
-      </div>
-
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="aspect-[4/3] w-full rounded-sm" />)}
@@ -64,20 +53,20 @@ export function GroupRootOverview({
       ) : null}
 
       {!isLoading && !hasError && groups.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {groups.map((group) => {
             const totalCount = getGroupHierarchyTotalCount(group, countMaps)
             return (
-              <Panel key={group.id} asChild tone="container" padding="none" interactive className="group block w-full overflow-hidden text-left">
+              <Panel key={group.id} asChild tone="none" padding="none" interactive className="group block w-full text-left hover:bg-transparent">
                 <button type="button" onClick={() => onOpenGroup(group.id)}>
                   <GroupCoverMosaic
                     groupId={group.id}
                     sourceKey={sourceKey}
                     imageCount={totalCount}
                     loadPreviewImages={loadPreviewImages}
-                    className="aspect-[4/3] w-full"
+                    className="aspect-[4/3] w-full rounded-sm transition-opacity group-hover:opacity-90"
                   />
-                  <div className="flex items-center gap-2 px-3 py-2.5">
+                  <div className="flex items-center gap-2 pt-2">
                     <GroupColorDot color={group.color} size="md" />
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{group.name}</span>
                     {group.auto_collect_enabled ? (

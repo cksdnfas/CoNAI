@@ -27,14 +27,14 @@ export function GroupSubgroupStrip({ groups, countMaps, sourceKey, loadPreviewIm
       {[...groups].sort((left, right) => left.name.localeCompare(right.name)).map((group) => {
         const totalCount = getGroupHierarchyTotalCount(group, countMaps)
         return (
-          <Panel key={group.id} asChild tone="container" padding="none" interactive className="flex shrink-0 items-center gap-2.5 py-1.5 pl-1.5 pr-3 text-left">
+          <Panel key={group.id} asChild tone="none" padding="none" interactive className="flex shrink-0 items-center gap-2.5 py-1 pl-1 pr-2.5 text-left">
             <button type="button" onClick={() => onOpenGroup(group.id)}>
               <GroupCoverMosaic
                 groupId={group.id}
                 sourceKey={sourceKey}
                 imageCount={totalCount}
                 loadPreviewImages={loadPreviewImages}
-                className="size-10 shrink-0 rounded-sm"
+                className="size-9 shrink-0 rounded-sm"
               />
               <GroupColorDot color={group.color} />
               <span className="max-w-40 truncate text-sm font-medium text-foreground">{group.name}</span>
