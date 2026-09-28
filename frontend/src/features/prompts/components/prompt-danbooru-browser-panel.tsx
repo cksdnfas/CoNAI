@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils'
 import type { DanbooruBrowserDatabaseInfo, DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
 import { resolveDanbooruBrowserProgress } from '../danbooru-browser-progress'
+import { useCanSeeServerDetails } from '../use-can-see-server-details'
 import {
   CHARACTER_PAGE_SIZE,
   DEFAULT_PAGE_SIZE,
@@ -45,7 +46,19 @@ import {
 
 function DanbooruDatabaseMissingNotice({ database }: { database: DanbooruBrowserDatabaseInfo }) {
   const { t } = useI18n()
+  const canSeeServerDetails = useCanSeeServerDetails()
   const filePatterns = database.filePatterns.join(', ')
+
+  if (!canSeeServerDetails) {
+    return (
+      <Alert>
+        <AlertTitle>{t({ ko: 'Danbooru 데이터가 아직 없어', en: 'Danbooru data is not installed yet' })}</AlertTitle>
+        <AlertDescription>
+          {t({ ko: '태그, 작가, 캐릭터 목록을 쓰려면 관리자가 Danbooru DB 파일을 설치해야 해.', en: 'An administrator needs to install the Danbooru DB file before tags, artists and characters can be browsed.' })}
+        </AlertDescription>
+      </Alert>
+    )
+  }
 
   return (
     <Alert>

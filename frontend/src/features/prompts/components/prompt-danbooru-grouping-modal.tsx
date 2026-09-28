@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/modal'
 import { applyDanbooruPromptGrouping, getDanbooruPromptGroupingPreview } from '@/lib/api-prompts'
 import type { DanbooruPromptGroupingTypeResult } from '@/types/prompt'
 import { useI18n } from '@/i18n'
+import { useCanSeeServerDetails } from '../use-can-see-server-details'
 
 interface PromptDanbooruGroupingModalProps {
   open: boolean
@@ -62,6 +63,7 @@ function TypeSummaryCard({ item }: { item: DanbooruPromptGroupingTypeResult }) {
 
 export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: PromptDanbooruGroupingModalProps) {
   const { t, formatNumber, language } = useI18n()
+  const canSeeServerDetails = useCanSeeServerDetails()
   const queryClient = useQueryClient()
   const [includeAssignedPrompts, setIncludeAssignedPrompts] = useState(false)
   const groupingMode = includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only'
@@ -125,9 +127,15 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
                 <AlertDescription>
                   <div className="space-y-1">
                     <p>{t({ ko: '자동 그룹 구성은 DB 파일이 있어야 실행돼.', en: 'Auto grouping requires the DB file.' })}</p>
-                    <p className="break-all font-mono text-xs text-foreground">{preview.database.expectedPath}</p>
-                    <a className="block break-all text-xs text-primary underline-offset-4 hover:underline" href={preview.database.downloadUrl} target="_blank" rel="noreferrer">{preview.database.downloadUrl}</a>
-                    <p className="text-xs">{t({ ko: '다른 위치는 DANBOORU_SQLITE_PATH 환경변수로 지정 가능해.', en: 'Set DANBOORU_SQLITE_PATH to use another location.' })}</p>
+                    {canSeeServerDetails ? (
+                      <>
+                        <p className="break-all font-mono text-xs text-foreground">{preview.database.expectedPath}</p>
+                        <a className="block break-all text-xs text-primary underline-offset-4 hover:underline" href={preview.database.downloadUrl} target="_blank" rel="noreferrer">{preview.database.downloadUrl}</a>
+                        <p className="text-xs">{t({ ko: '다른 위치는 DANBOORU_SQLITE_PATH 환경변수로 지정 가능해.', en: 'Set DANBOORU_SQLITE_PATH to use another location.' })}</p>
+                      </>
+                    ) : (
+                      <p className="text-xs">{t({ ko: '관리자에게 Danbooru DB 파일 설치를 요청해.', en: 'Ask an administrator to install the Danbooru DB file.' })}</p>
+                    )}
                   </div>
                 </AlertDescription>
               </Alert>
