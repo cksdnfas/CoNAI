@@ -21,6 +21,13 @@ export const WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS = 'overflow-hidden rounded-
 export const WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS = 'bg-surface-container/45'
 export const WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS = 'border-t border-border/85'
 
+/** Selector for the fields marked by the last failed generate validation (see `data-workflow-field-invalid`). */
+export const WORKFLOW_FIELD_INVALID_SELECTOR = '[data-workflow-field-invalid="true"]'
+
+function buildWorkflowFieldErrorId(fieldId: string) {
+  return `workflow-field-error-${fieldId.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+}
+
 type WorkflowFieldDisclosureCardProps = {
   field: WorkflowMarkedField
   value: WorkflowFieldDraftValue
@@ -28,12 +35,14 @@ type WorkflowFieldDisclosureCardProps = {
   loraOptions?: string[]
   isRefreshingOptions?: boolean
   onRefreshOptions?: () => Promise<void> | void
+  /** Validation message from the last generate attempt; marks the field invalid while set. */
+  issueMessage?: string
   onChange: (value: WorkflowFieldDraftValue) => void
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
 
 /** Render one runtime workflow field inside a collapsible card. */
-export function WorkflowFieldDisclosureCard({ field, value, grouped = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
+export function WorkflowFieldDisclosureCard({ field, value, grouped = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, issueMessage, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
   const { t } = useI18n()
   const [isExpanded, setIsExpanded] = useState(field.default_collapsed !== true)
   const hasValue = hasWorkflowFieldValue(value)
@@ -44,17 +53,29 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
     && value !== null
     && !Array.isArray(value)
     && validateMiniMaxH3DirectorNodeValue(value).length > 0
+  const isInvalid = Boolean(issueMessage)
+  const errorMessageId = buildWorkflowFieldErrorId(field.id)
 
   useEffect(() => {
     setIsExpanded(field.default_collapsed !== true)
   }, [field.default_collapsed, field.id])
 
+  useEffect(() => {
+    // 검증 실패 필드는 접혀 있어도 펼쳐서 바로 고칠 수 있게 한다.
+    if (issueMessage) {
+      setIsExpanded(true)
+    }
+  }, [issueMessage])
+
   return (
-    <div className={cn(
-      grouped ? 'overflow-hidden' : WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
-      hasValue && WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS,
-      hasNodeIssues && (grouped ? 'bg-destructive/5' : 'border-destructive/80 ring-1 ring-destructive/25'),
-    )}>
+    <div
+      className={cn(
+        grouped ? 'overflow-hidden' : WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
+        hasValue && WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS,
+        (hasNodeIssues || isInvalid) && (grouped ? 'bg-destructive/5' : 'border-destructive ring-1 ring-destructive/25'),
+      )}
+      data-workflow-field-invalid={isInvalid ? 'true' : undefined}
+    >
       <div className="px-4 py-3">
         <button
           type="button"
@@ -67,7 +88,7 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-foreground">{fieldLabel}</span>
+                <span className={cn('text-sm font-medium', isInvalid ? 'text-destructive' : 'text-foreground')}>{fieldLabel}</span>
                 {field.required ? <Badge variant="outline">{t('image-generation.components.workflow.field.disclosure.card.required')}</Badge> : null}
                 {field.description ? (
                   <span
@@ -89,6 +110,9 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
             </div>
           </div>
         </button>
+        {issueMessage ? (
+          <p id={errorMessageId} className="mt-1.5 pl-7 text-xs text-destructive">{issueMessage}</p>
+        ) : null}
       </div>
 
       {isExpanded ? (
@@ -103,6 +127,8 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
             loraOptions={loraOptions}
             isRefreshingOptions={isRefreshingOptions}
             onRefreshOptions={onRefreshOptions}
+            invalid={isInvalid}
+            errorMessageId={errorMessageId}
             onChange={onChange}
             onImageChange={onImageChange}
           />
@@ -120,6 +146,7 @@ type WorkflowNodeFieldDisclosureCardProps = {
   loraOptions?: string[]
   isRefreshingOptions?: boolean
   onRefreshOptions?: () => Promise<void> | void
+  fieldIssues?: Record<string, string>
   onChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -133,6 +160,7 @@ export function WorkflowNodeFieldDisclosureCard({
   loraOptions,
   isRefreshingOptions = false,
   onRefreshOptions,
+  fieldIssues,
   onChange,
   onImageChange,
 }: WorkflowNodeFieldDisclosureCardProps) {
@@ -150,12 +178,14 @@ export function WorkflowNodeFieldDisclosureCard({
 
     return count + validateMiniMaxH3DirectorNodeValue(value).length
   }, 0)
+  const hasFieldIssues = fields.some((field) => Boolean(fieldIssues?.[field.id]))
 
   return (
     <div className={cn(
       WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
       hasValue && WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS,
       issueCount > 0 && 'border-destructive/80 ring-1 ring-destructive/25',
+      hasFieldIssues && 'border-destructive ring-1 ring-destructive/25',
     )}>
       <div className="flex items-start justify-between gap-3 px-4 py-3">
         <div className="min-w-0">
@@ -178,6 +208,7 @@ export function WorkflowNodeFieldDisclosureCard({
             loraOptions={loraOptions}
             isRefreshingOptions={isRefreshingOptions}
             onRefreshOptions={onRefreshOptions}
+            issueMessage={fieldIssues?.[field.id]}
             onChange={(value) => onChange(field.id, value)}
             onImageChange={(image) => onImageChange(field.id, image)}
           />

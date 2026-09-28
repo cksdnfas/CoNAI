@@ -51,6 +51,10 @@ type WildcardInlinePickerFieldProps = {
   className?: string
   showDetectedSyntax?: boolean
   autocompletePromptType?: PromptTypeFilter
+  /** Mark the field invalid for assistive tech (aria-invalid). */
+  invalid?: boolean
+  /** Id of the element that describes the current validation error. */
+  errorMessageId?: string
 }
 
 /** Shared prompt-like text field with ++ wildcard autocomplete for NAI and ComfyUI. */
@@ -65,6 +69,8 @@ export function WildcardInlinePickerField({
   className,
   showDetectedSyntax = true,
   autocompletePromptType = 'positive',
+  invalid = false,
+  errorMessageId,
 }: WildcardInlinePickerFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
@@ -472,6 +478,8 @@ export function WildcardInlinePickerField({
     value,
     placeholder,
     disabled,
+    'aria-invalid': invalid || undefined,
+    'aria-describedby': invalid ? errorMessageId : undefined,
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => handleChangeValue(event.target.value, event.target),
     onKeyDown: handleKeyDown,
     onKeyUp: (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {

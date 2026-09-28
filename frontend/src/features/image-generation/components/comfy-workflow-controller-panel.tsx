@@ -169,6 +169,8 @@ type ComfyWorkflowControllerPanelProps = {
   isGenerating: boolean
   loraOptions?: string[]
   isRefreshingDropdownLists?: boolean
+  /** Per-field messages from the last failed generate validation. */
+  fieldIssues?: Record<string, string>
   splitPaneScroll?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
@@ -181,6 +183,8 @@ type ComfyWorkflowControllerPanelProps = {
   onOpenModuleSave: () => void
   onResetDraft: () => void
   onGenerateSelected: () => void
+  /** Mark and focus the fields behind the readiness issues without submitting. */
+  onRevealFieldIssues?: () => void
 }
 
 /** Render the ComfyUI workflow form with compact top actions and simplified server targeting. */
@@ -196,6 +200,7 @@ export function ComfyWorkflowControllerPanel({
   isGenerating,
   loraOptions,
   isRefreshingDropdownLists = false,
+  fieldIssues,
   splitPaneScroll = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
@@ -208,6 +213,7 @@ export function ComfyWorkflowControllerPanel({
   onOpenModuleSave,
   onResetDraft,
   onGenerateSelected,
+  onRevealFieldIssues,
 }: ComfyWorkflowControllerPanelProps) {
   const { t } = useI18n()
   const routingSummary = useMemo(
@@ -550,6 +556,11 @@ export function ComfyWorkflowControllerPanel({
                   <li key={issue}>{issue}</li>
                 ))}
               </ul>
+              {onRevealFieldIssues && (missingRequiredFields.length > 0 || workflowNodeIssues.length > 0) ? (
+                <Button type="button" size="sm" variant="outline" className="mt-2" onClick={onRevealFieldIssues}>
+                  {t({ ko: '문제 필드로 이동', en: 'Go to invalid field' })}
+                </Button>
+              ) : null}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -563,6 +574,7 @@ export function ComfyWorkflowControllerPanel({
                 loraOptions={loraOptions}
                 isRefreshingOptions={isRefreshingDropdownLists}
                 onRefreshOptions={onRefreshDropdownLists}
+                fieldIssues={fieldIssues}
                 onChange={onFieldChange}
                 onImageChange={onImageChange}
               />

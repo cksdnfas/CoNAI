@@ -10,6 +10,8 @@ type WorkflowFieldGroupListProps = {
   loraOptions?: string[]
   isRefreshingOptions?: boolean
   onRefreshOptions?: () => Promise<void> | void
+  /** Per-field validation messages from the last generate attempt. */
+  fieldIssues?: Record<string, string>
   onChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -21,6 +23,7 @@ export function WorkflowFieldGroupList({
   loraOptions,
   isRefreshingOptions = false,
   onRefreshOptions,
+  fieldIssues,
   onChange,
   onImageChange,
 }: WorkflowFieldGroupListProps) {
@@ -37,6 +40,7 @@ export function WorkflowFieldGroupList({
           loraOptions={loraOptions}
           isRefreshingOptions={isRefreshingOptions}
           onRefreshOptions={onRefreshOptions}
+          issueMessage={fieldIssues?.[field.id]}
           onChange={(value) => onChange(field.id, value)}
           onImageChange={(image) => onImageChange(field.id, image)}
         />
@@ -53,6 +57,7 @@ export function WorkflowFieldGroupList({
         loraOptions={loraOptions}
         isRefreshingOptions={isRefreshingOptions}
         onRefreshOptions={onRefreshOptions}
+        fieldIssues={fieldIssues}
         onChange={onChange}
         onImageChange={onImageChange}
       />

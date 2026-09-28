@@ -32,6 +32,10 @@ type WorkflowFieldInputProps = {
   loraOptions?: string[]
   isRefreshingOptions?: boolean
   onRefreshOptions?: () => Promise<void> | void
+  /** Mark the editable control invalid after a failed generate validation. */
+  invalid?: boolean
+  /** Id of the inline validation message rendered next to the field. */
+  errorMessageId?: string
   onChange: (value: WorkflowFieldDraftValue) => void
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -49,7 +53,10 @@ function isWorkflowNodeDraftValue(value: WorkflowFieldDraftValue): value is Reco
 }
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
-export function WorkflowFieldInput({ field, value, hideLabel = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, onChange, onImageChange }: WorkflowFieldInputProps) {
+export function WorkflowFieldInput({ field, value, hideLabel = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, invalid = false, errorMessageId, onChange, onImageChange }: WorkflowFieldInputProps) {
+  const invalidProps = invalid
+    ? { 'aria-invalid': true as const, 'aria-describedby': errorMessageId }
+    : {}
   const fieldLabel = field.required ? `${field.label} *` : field.label
   const labelAccessory = field.description ? (
     <span
@@ -80,6 +87,8 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         value={isWorkflowTextSegmentValue(value) ? value : ''}
         placeholder={field.placeholder || ''}
         className="rounded-none border-x-0 border-y border-border/80"
+        invalid={invalid}
+        errorMessageId={errorMessageId}
         onChange={onChange}
       />,
     )
@@ -104,7 +113,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
     }
 
     return wrapField(
-      <Select value={stringValue} onChange={(event) => onChange(event.target.value)}>
+      <Select value={stringValue} onChange={(event) => onChange(event.target.value)} {...invalidProps}>
         <option value="" disabled hidden>선택</option>
         {options.map((option) => (
           <option key={option} value={option}>
@@ -187,6 +196,8 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         tool="comfyui"
         value={typeof value === 'string' ? value : ''}
         placeholder={field.placeholder || ''}
+        invalid={invalid}
+        errorMessageId={errorMessageId}
         onChange={onChange}
       />,
     )
@@ -202,6 +213,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         value={typeof value === 'string' ? value : ''}
         placeholder={field.placeholder || ''}
         onValueCommit={onChange}
+        {...invalidProps}
       />,
     )
   }
@@ -212,6 +224,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
       value={typeof value === 'string' ? value : ''}
       placeholder={field.placeholder || ''}
       onChange={(event) => onChange(event.target.value)}
+      {...invalidProps}
     />,
   )
 }

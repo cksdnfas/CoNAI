@@ -20,6 +20,8 @@ type TextSegmentSpreadsheetInputProps = {
   showDetectedSyntax?: boolean
   className?: string
   autocompletePromptType?: PromptTypeFilter
+  invalid?: boolean
+  errorMessageId?: string
   onChange: (value: string[]) => void
 }
 
@@ -31,6 +33,8 @@ export function TextSegmentSpreadsheetInput({
   showDetectedSyntax = true,
   className,
   autocompletePromptType = 'positive',
+  invalid = false,
+  errorMessageId,
   onChange,
 }: TextSegmentSpreadsheetInputProps) {
   const { t } = useI18n()
@@ -74,6 +78,8 @@ export function TextSegmentSpreadsheetInput({
               placeholder={placeholder}
               showDetectedSyntax={showDetectedSyntax}
               autocompletePromptType={autocompletePromptType}
+              invalid={invalid}
+              errorMessageId={errorMessageId}
               className="min-h-[8.5rem] !rounded-none !border-0 !bg-transparent px-3 py-2"
               onChange={(nextValue) => handleRowChange(index, nextValue)}
             />

@@ -215,6 +215,10 @@ export function ComfyGenerationPanel({
   )
   const {
     isComfyGenerating,
+    fieldIssues: workflowFieldIssues,
+    clearFieldIssue: clearWorkflowFieldIssue,
+    clearFieldIssues: clearWorkflowFieldIssues,
+    revealComfyFieldIssues,
     handleGenerateSelected,
   } = useComfyGenerationActions({
     selectedWorkflow,
@@ -323,7 +327,8 @@ export function ComfyGenerationPanel({
       ...current,
       [fieldId]: value,
     }))
-  }, [])
+    clearWorkflowFieldIssue(fieldId)
+  }, [clearWorkflowFieldIssue])
 
   useEffect(() => {
     if (!selectedWorkflowId) {
@@ -495,7 +500,8 @@ export function ComfyGenerationPanel({
       clearPersistedComfyWorkflowDraft(selectedWorkflow.id)
     }
     setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
-  }, [selectedWorkflow, selectedWorkflowFields, workflowDraft])
+    clearWorkflowFieldIssues()
+  }, [clearWorkflowFieldIssues, selectedWorkflow, selectedWorkflowFields, workflowDraft])
 
   const handleOpenSelectedModuleSave = useCallback(() => {
     if (selectedWorkflow) {
@@ -633,6 +639,7 @@ export function ComfyGenerationPanel({
             isGenerating={isComfyGenerating}
             loraOptions={loraOptions}
             isRefreshingDropdownLists={isRefreshingDropdownLists}
+            fieldIssues={workflowFieldIssues}
             splitPaneScroll={splitPaneScroll}
             headerPortalTargetId={headerPortalTargetId}
             compactActionBarContentTargetId={compactActionBarContentTargetId}
@@ -645,6 +652,7 @@ export function ComfyGenerationPanel({
             onResetDraft={handleResetWorkflowDraft}
             onOpenModuleSave={handleOpenSelectedModuleSave}
             onGenerateSelected={handleGenerateSelectedWorkflow}
+            onRevealFieldIssues={revealComfyFieldIssues}
           />
         ) : null}
       </div>
