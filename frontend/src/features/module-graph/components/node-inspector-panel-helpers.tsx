@@ -34,10 +34,10 @@ export function getLlmPresetTypeOptions(t: ReturnType<typeof useI18n>['t']): Arr
   ]
 }
 
-// Same tone role as <Inset /> (ui-tone-plinth): surface-low on the page, recessed inside the inspector Section.
-export const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'ui-tone-plinth space-y-2 rounded-sm p-3'
-export const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'ui-tone-plinth space-y-3 rounded-sm p-4'
-export const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'ui-tone-plinth rounded-sm p-4'
+// Flat: inputs are hairline rows, edge / node blocks have no surface.
+export const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 border-b border-line py-3 last:border-b-0'
+export const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3'
+export const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'min-w-0'
 
 export function normalizeLlmPresetType(value: unknown): LlmPresetCollectionKey {
   return value === 'systemPromptPresets' || value === 'structuredOutputJsonPresets'

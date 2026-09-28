@@ -13,8 +13,8 @@ import { formatModuleGraphDefaultOptionLabel } from './module-graph-simple-value
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 
-// Same tone role as <Inset />: surface-low on the page, recessed inside the runner Section.
-const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'ui-tone-plinth space-y-2 rounded-sm p-4'
+// Flat: one hairline row per exposed input (no plinth).
+const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'space-y-2 border-b border-line py-3 last:border-b-0'
 function hasDefaultValue(value: unknown) {
   return value !== undefined
 }
@@ -156,5 +156,5 @@ export function WorkflowInputFields({
     return null
   }
 
-  return <div className="space-y-2.5">{inputDefinitions.map((inputDefinition) => renderInputField(inputDefinition))}</div>
+  return <div>{inputDefinitions.map((inputDefinition) => renderInputField(inputDefinition))}</div>
 }

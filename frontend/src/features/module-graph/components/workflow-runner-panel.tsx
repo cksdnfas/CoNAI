@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
@@ -213,15 +212,15 @@ export function WorkflowRunnerPanel({
 
                 <div className="flex shrink-0 items-center gap-2">
                   {onOpenFolderSettings ? (
-                    <IconButton size="icon-sm" variant="secondary" onClick={onOpenFolderSettings} disabled={!selectedGraph} label={t({ ko: '폴더 설정', en: 'Folder settings' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={onOpenFolderSettings} disabled={!selectedGraph} label={t({ ko: '폴더 설정', en: 'Folder settings' })}>
                       <Folder className="h-4 w-4" />
                     </IconButton>
                   ) : null}
-                  <IconButton size="icon-sm" variant="secondary" onClick={onEdit} disabled={!selectedGraph} label={t({ ko: '구조 수정', en: 'Edit graph' })}>
+                  <IconButton size="icon-sm" variant="ghost" onClick={onEdit} disabled={!selectedGraph} label={t({ ko: '구조 수정', en: 'Edit graph' })}>
                     <PenSquare className="h-4 w-4" />
                   </IconButton>
                   {onDeleteWorkflow ? (
-                    <IconButton size="icon-sm" variant="secondary" onClick={onDeleteWorkflow} disabled={!selectedGraph} label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={onDeleteWorkflow} disabled={!selectedGraph} label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
                       <Trash2 className="h-4 w-4" />
                     </IconButton>
                   ) : null}
@@ -237,7 +236,7 @@ export function WorkflowRunnerPanel({
             )}
 
             {latestExecution ? (
-              <Inset className="px-3 py-2.5">
+              <div className="border-y border-line py-2.5">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-sm font-medium text-foreground">{t({ ko: '최근 결과', en: 'Latest result' })}</span>
                   <span className="text-xs text-muted-foreground">#{latestExecution.id}</span>
@@ -319,7 +318,7 @@ export function WorkflowRunnerPanel({
                     )}
                   </div>
                 ) : null}
-              </Inset>
+              </div>
             ) : null}
 
             <WorkflowValidationPanel
@@ -339,7 +338,7 @@ export function WorkflowRunnerPanel({
 
             <div
               data-slot="workflow-run-action-row"
-              className="sticky bottom-0 z-raised -mx-4 space-y-2 border-t border-outline-subtle bg-surface-low px-4 py-3"
+              className="sticky bottom-0 z-raised space-y-2 border-t border-line bg-background py-3"
             >
               {runReadinessMessage ? (
                 <div

@@ -2,7 +2,6 @@ import { AlertTriangle, Crosshair } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -60,7 +59,7 @@ export function WorkflowValidationPanel({
       ) : null}
 
       {shouldShowSummary ? (
-        <Inset className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <AlertTriangle className={cn('h-4 w-4', errorCount > 0 ? 'text-destructive' : 'text-warning')} aria-hidden />
             <Text variant="label">{errorCount > 0 ? t({ ko: '치명 이슈가 있어 실행이 막혀', en: 'Critical issues are blocking execution' }) : t({ ko: '경고가 있지만 실행 전 보완 가능해', en: 'There are warnings, but you can fix them before execution' })}</Text>
@@ -71,7 +70,7 @@ export function WorkflowValidationPanel({
             {warningCount > 0 ? <Badge className="bg-warning-soft text-warning-soft-foreground">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningCount) })}</Badge> : null}
             {runtimeInputWaitingCount > 0 ? <Badge variant="secondary">{t({ ko: '실행 입력 {count}', en: 'Runtime inputs {count}' }, { count: formatNumber(runtimeInputWaitingCount) })}</Badge> : null}
           </div>
-        </Inset>
+        </div>
       ) : null}
 
       {issues.length > 0 ? (

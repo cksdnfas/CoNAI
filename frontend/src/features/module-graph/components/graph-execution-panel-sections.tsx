@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
 import { Modal } from '@/components/ui/modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
@@ -37,7 +36,7 @@ export function ExecutionOutputGroupCard({
 
   return (
     <>
-      <Inset className="p-2">
+      <div className="border-b border-line py-2.5 last:border-b-0">
         <div className="mb-1.5 flex items-start justify-between gap-2">
           <div className="min-w-0">
             <Text as="div" variant="title" className="truncate">{group.nodeLabel}</Text>
@@ -76,7 +75,7 @@ export function ExecutionOutputGroupCard({
             {t({ ko: '텍스트 컨텐츠', en: 'Text content' })}
           </Button>
         )}
-      </Inset>
+      </div>
 
       <Modal
         open={modalType === 'text'}
@@ -135,9 +134,9 @@ export function ExecutionComparisonContextBlock({
       {visibleRows.length === 0 ? (
         <EmptyState size="compact" title={t({ ko: '압축 입출력 원장 없음', en: 'No compact input/output ledger yet' })} />
       ) : (
-        <div className="space-y-1.5">
+        <div>
           {visibleRows.map((row) => (
-            <Inset key={row.id} className="px-3 py-2">
+            <div key={row.id} className="border-b border-line py-2.5 last:border-b-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant={row.direction === 'output' ? 'secondary' : 'outline'}>{row.direction === 'output' ? t({ ko: '출력', en: 'Output' }) : t({ ko: '입력', en: 'Input' })}</Badge>
                 <span className="min-w-0 truncate text-sm font-medium text-foreground">{row.nodeLabel}</span>
@@ -151,7 +150,7 @@ export function ExecutionComparisonContextBlock({
                   {row.summaryText ? <div className="break-all">{row.summaryText}</div> : null}
                 </div>
               ) : null}
-            </Inset>
+            </div>
           ))}
           {hiddenRowCount > 0 ? (
             <div className="text-xs text-muted-foreground">
@@ -184,9 +183,9 @@ export function ExecutionPathDiagnosticsBlock({
       <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
         <span>{t({ ko: '경로 진단', en: 'Path diagnostics' })}</span>
       </Text>
-      <div className="space-y-1.5">
+      <div>
         {visibleRows.map((row) => (
-          <Inset key={row.id} className="px-3 py-2">
+          <div key={row.id} className="border-b border-line py-2.5 last:border-b-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <Badge variant={row.tone === 'failed' ? 'destructive' : row.tone === 'blocked' ? 'outline' : 'secondary'}>
                 {row.tone === 'failed'
@@ -199,7 +198,7 @@ export function ExecutionPathDiagnosticsBlock({
               <Badge variant="outline">{row.reasonLabel}</Badge>
             </div>
             {row.sourceLabel ? <div className="mt-1.5 break-all text-xs text-muted-foreground">{t({ ko: '원인 {value}', en: 'Cause {value}' }, { value: row.sourceLabel })}</div> : null}
-          </Inset>
+          </div>
         ))}
       </div>
       {hiddenRowCount > 0 ? (

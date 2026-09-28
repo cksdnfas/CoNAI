@@ -21,7 +21,7 @@ const CustomNodeManagementPanelLazy = lazy(async () => {
 })
 
 function WorkspaceModalFallback() {
-  return <div className="min-h-[16rem] animate-pulse rounded-sm bg-surface-low" />
+  return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
 }
 
 /** Render the browse/manage, folder-delete, and module-library modals for the module-graph page. */

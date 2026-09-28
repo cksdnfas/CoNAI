@@ -3,7 +3,6 @@ import { Play, RotateCcw, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import type {
@@ -177,13 +176,13 @@ export function GraphExecutionPanel({
         ) : null}
 
         {selectedGraphId && (queuedCount > 0 || runningCount > 0) ? (
-          <Inset className="flex flex-wrap items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 border-y border-line py-2 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">
               {t({ ko: '대기 {queued} · 실행 중 {running}', en: 'Queued {queued} · Running {running}' }, { queued: formatNumber(queuedCount), running: formatNumber(runningCount) })}
             </span>
             {activeRunningExecution ? <span>{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: activeRunningExecution.id })}</span> : null}
             {nextQueuedExecution ? <span>{t({ ko: '다음 #{id} · {position}', en: 'Next #{id} · {position}' }, { id: nextQueuedExecution.id, position: nextQueuedExecution.queue_position ?? '?' })}</span> : null}
-          </Inset>
+          </div>
         ) : null}
 
         <div className="space-y-1.5">

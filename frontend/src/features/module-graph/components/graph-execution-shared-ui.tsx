@@ -35,7 +35,7 @@ export function getExecutionStatusBadgeVariant(status: GraphExecutionRecord['sta
   return status === 'completed' ? 'secondary' as const : 'outline' as const
 }
 
-export const CODE_BLOCK_CLASS_NAME = 'overflow-auto rounded-sm bg-surface-lowest p-2.5 text-2xs text-foreground'
+export const CODE_BLOCK_CLASS_NAME = 'overflow-auto rounded-sm bg-field p-2.5 text-2xs text-foreground'
 
 /**
  * Run identity shared by the inline summary and the detail modal: id, status, mode, caller extras, date.

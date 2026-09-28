@@ -1,8 +1,6 @@
 import type { ReactNode, Ref } from 'react'
 import { ChevronLeft, ChevronRight, Square, SquareCheckBig, Trash2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { resolveModuleWorkflowOutputProgress } from '../module-workflow-output-progress'
@@ -82,7 +80,7 @@ export function ModuleWorkflowPagedResultsSection({
       headingAs="h3"
       actions={(
         <>
-          <Badge variant="outline">{progressLabel}</Badge>
+          <span className="self-center px-1 text-xs tabular-nums text-muted-foreground">{progressLabel}</span>
           <IconButton
             size="icon-sm"
             variant="ghost"
@@ -96,7 +94,8 @@ export function ModuleWorkflowPagedResultsSection({
           {canClearAll ? (
             <IconButton
               size="icon-sm"
-              variant="destructive"
+              variant="ghost"
+              className="hover:text-destructive"
               onClick={onClearAll}
               disabled={isClearing || totalCount === 0}
               label={t({ ko: '전체 비우기', en: 'Clear all' })}
@@ -151,7 +150,7 @@ function ModuleWorkflowResultsPagination({
   }
 
   return (
-    <Inset className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs text-muted-foreground">
       <span>{t({ ko: '페이지 {page} / {totalPages} · {progress} · 페이지당 50개', en: 'page {page} / {totalPages} · {progress} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel })}</span>
       <div className="flex items-center gap-2">
         <IconButton size="icon-sm" variant="ghost" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))} label={t({ ko: '이전', en: 'Previous' })}>
@@ -161,6 +160,6 @@ function ModuleWorkflowResultsPagination({
           <ChevronRight />
         </IconButton>
       </div>
-    </Inset>
+    </div>
   )
 }

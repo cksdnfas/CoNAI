@@ -8,7 +8,6 @@ import { Select } from '@/components/ui/select'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
 import { Modal } from '@/components/ui/modal'
 import { Section } from '@/components/ui/section'
 import { useI18n, type TranslationInput } from '@/i18n'
@@ -283,7 +282,7 @@ export function ModuleWorkflowSchedulesPanel({
         {schedules.length === 0 ? (
           <EmptyState title={t({ ko: '자동 실행 없음', en: 'No autoruns' })} />
         ) : (
-          <div className="space-y-3">
+          <div>
             {schedules.map((schedule) => {
               const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? t({ ko: '워크플로우 #{id}', en: 'Workflow #{id}' }, { id: schedule.graph_workflow_id })
               const runEnqueueCountLabel = t({ ko: '1회 {count}개', en: '{count} per run' }, { count: formatNumber(schedule.run_enqueue_count ?? 1) })
@@ -293,7 +292,7 @@ export function ModuleWorkflowSchedulesPanel({
               const stopReasonLabel = getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)
 
               return (
-                <Inset key={schedule.id}>
+                <div key={schedule.id} className="border-b border-line py-2.5 last:border-b-0">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -313,22 +312,22 @@ export function ModuleWorkflowSchedulesPanel({
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <IconButton size="icon-sm" variant="secondary" onClick={() => openEditEditor(schedule)} disabled={isMutating} label={t({ ko: '자동 실행 수정', en: 'Edit autorun' })}>
+                      <IconButton size="icon-sm" variant="ghost" onClick={() => openEditEditor(schedule)} disabled={isMutating} label={t({ ko: '자동 실행 수정', en: 'Edit autorun' })}>
                         <SquarePen className="h-4 w-4" />
                       </IconButton>
                       {schedule.status === 'active' ? (
-                        <IconButton size="icon-sm" variant="secondary" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
+                        <IconButton size="icon-sm" variant="ghost" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
                           <Pause className="h-4 w-4" />
                         </IconButton>
                       ) : (
-                        <IconButton size="icon-sm" variant="secondary" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
+                        <IconButton size="icon-sm" variant="ghost" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
                           <Play className="h-4 w-4" />
                         </IconButton>
                       )}
-                      <IconButton size="icon-sm" variant="secondary" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} label={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
+                      <IconButton size="icon-sm" variant="ghost" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} label={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
                         <Rocket className="h-4 w-4" />
                       </IconButton>
-                      <IconButton size="icon-sm" variant="secondary" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
+                      <IconButton size="icon-sm" variant="ghost" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
                         <Trash2 className="h-4 w-4" />
                       </IconButton>
                     </div>
@@ -339,7 +338,7 @@ export function ModuleWorkflowSchedulesPanel({
                       <span className="ml-2">{stopReasonLabel}</span>
                     </div>
                   ) : null}
-                </Inset>
+                </div>
               )
             })}
           </div>

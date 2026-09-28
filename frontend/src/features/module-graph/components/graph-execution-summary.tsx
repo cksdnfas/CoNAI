@@ -2,8 +2,6 @@ import { useMemo } from 'react'
 import { Eye } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
-import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type {
@@ -83,8 +81,8 @@ export function SelectedExecutionSummary({
   }), [executionDetail.execution, executionDetail.logs, nodeLabelOverrides, selectedExecutionPlan, selectedGraph, t])
 
   return (
-    <Panel tone="container" padding="sm" className="space-y-4">
-      <Inset className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <ExecutionHeaderBadges execution={executionDetail.execution} plan={selectedExecutionPlan} idClassName="font-medium text-foreground">
             {selectedExecutionPlan?.targetNodeId ? <Badge variant="outline">{getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId, nodeLabelOverrides)}</Badge> : null}
@@ -95,7 +93,7 @@ export function SelectedExecutionSummary({
         <IconButton size="icon-sm" variant="ghost" label={t({ ko: '상세', en: 'Details' })} onClick={onOpenDetail}>
           <Eye className="h-4 w-4" />
         </IconButton>
-      </Inset>
+      </div>
 
       {executionDetail.execution.error_message ? (
         <div role="alert" className="rounded-sm bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground">
@@ -185,6 +183,6 @@ export function SelectedExecutionSummary({
           </div>
         )}
       </div>
-    </Panel>
+    </div>
   )
 }

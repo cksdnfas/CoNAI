@@ -1,10 +1,10 @@
 import { Square, SquareCheckBig, Trash2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 import type { GraphExecutionRecord, GraphWorkflowNameRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import { ModuleWorkflowSchedulesPanel } from './module-workflow-schedules-panel'
@@ -110,13 +110,13 @@ export function ModuleWorkflowEmptyRunsTab({
         {queueExecutions.length === 0 ? (
           <EmptyState title={t({ ko: '이 범위에는 빈 실행이나 출력 없는 실행이 없어.', en: 'No empty or outputless runs in this scope.' })} />
         ) : (
-          <div className="space-y-3">
+          <div>
             {queueExecutions.map((execution) => {
               const isSelected = selectedQueueExecutionIdSet.has(execution.id)
               const isCancelable = execution.status === 'queued' || execution.status === 'running'
 
               return (
-                <Inset key={execution.id} data-selected={isSelected} className={isSelected ? 'bg-primary/12' : undefined}>
+                <div key={execution.id} data-selected={isSelected} className={cn('border-b border-line py-2.5 last:border-b-0 px-2', isSelected && 'bg-primary/8')}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <Text as="div" variant="label">
@@ -154,7 +154,7 @@ export function ModuleWorkflowEmptyRunsTab({
                       {localizeGraphWorkflowErrorMessage(execution.error_message, t, t({ ko: '예약 실행 중 오류가 발생했어.', en: 'A reservation run failed.' }))}
                     </div>
                   ) : null}
-                </Inset>
+                </div>
               )
             })}
           </div>
