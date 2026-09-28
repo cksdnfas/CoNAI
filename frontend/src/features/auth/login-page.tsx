@@ -15,6 +15,17 @@ import { useI18n } from '@/i18n'
 import { createGuestAccount, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
+/** Marks a guest signup whose account was created but whose follow-up sign-in failed. */
+class GuestSignInAfterCreateError extends Error {
+  readonly username: string
+
+  constructor(username: string, cause: unknown) {
+    super(cause instanceof Error ? cause.message : 'Guest sign-in failed after account creation', { cause })
+    this.name = 'GuestSignInAfterCreateError'
+    this.username = username
+  }
+}
+
 /** Sanitize one post-login redirect target to local app paths only. */
 function resolveNextPath(rawNext: string | null) {
   if (!rawNext || !rawNext.startsWith('/') || rawNext === '/login') {
@@ -75,7 +86,12 @@ export function LoginPage() {
   const guestSignupMutation = useMutation({
     mutationFn: async ({ nextUsername, nextPassword }: { nextUsername: string; nextPassword: string }) => {
       await createGuestAccount(nextUsername, nextPassword)
-      return loginLocalAccount(nextUsername, nextPassword)
+      try {
+        return await loginLocalAccount(nextUsername, nextPassword)
+      } catch (error) {
+        // The account now exists, so retrying signup would only hit "username taken".
+        throw new GuestSignInAfterCreateError(nextUsername, error)
+      }
     },
     onSuccess: (result) => {
       applyAuthenticatedSession(result, guestUsername.trim())
@@ -87,6 +103,14 @@ export function LoginPage() {
     },
     onError: (error) => {
       setGuestPassword('')
+      if (error instanceof GuestSignInAfterCreateError) {
+        setGuestUsername('')
+        setIsGuestModalOpen(false)
+        setUsername(error.username)
+        setPassword('')
+        showSnackbar({ message: t('loginPage.guestAccountCreatedSignIn'), tone: 'error' })
+        return
+      }
       showSnackbar({ message: error instanceof Error ? error.message : t('loginPage.failedToCreateGuestAccount'), tone: 'error' })
     },
   })

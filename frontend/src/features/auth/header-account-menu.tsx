@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CircleUserRound, LogOut } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { CircleUserRound, LogIn, LogOut, Map as MapIcon } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -9,8 +9,9 @@ import { useI18n } from '@/i18n'
 import { logoutLocalAccount } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
-/** Render one compact header account button with a mini popup for logout. */
+/** Render one compact header account button with a mini popup for account actions and the page list. */
 export function HeaderAccountMenu() {
+  const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
@@ -20,7 +21,8 @@ export function HeaderAccountMenu() {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   const authStatus = authStatusQuery.data ?? null
-  const isVisible = authStatus?.hasCredentials === true && authStatus?.authenticated === true && Boolean(authStatus.username)
+  const isSignedIn = authStatus?.hasCredentials === true && authStatus?.authenticated === true && Boolean(authStatus.username)
+  const isAnonymousSession = authStatus?.hasCredentials === true && authStatus?.authenticated !== true
 
   const accountTypeLabel = useMemo(() => {
     if (authStatus?.accountType === 'admin') {
@@ -58,8 +60,13 @@ export function HeaderAccountMenu() {
     },
   })
 
-  if (!isVisible) {
+  if (!authStatus) {
     return null
+  }
+
+  const openPage = (path: string) => {
+    setIsOpen(false)
+    navigate(path)
   }
 
   return (
@@ -79,23 +86,55 @@ export function HeaderAccountMenu() {
 
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
         <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`} role="menu" aria-label={t('headerAccountMenu.accountMenu')}>
-          <div className="space-y-1">
-            <div className={anchoredPopupLabelClassName}>{t({ ko: '현재 계정', en: 'Current account' })}</div>
-            <div className="text-sm font-semibold text-foreground">{authStatus?.username}</div>
-            <div className="text-xs text-muted-foreground">{accountTypeLabel}</div>
-          </div>
+          {isSignedIn ? (
+            <div className="space-y-1">
+              <div className={anchoredPopupLabelClassName}>{t({ ko: '현재 계정', en: 'Current account' })}</div>
+              <div className="text-sm font-semibold text-foreground">{authStatus.username}</div>
+              <div className="text-xs text-muted-foreground">{accountTypeLabel}</div>
+            </div>
+          ) : isAnonymousSession ? (
+            <div className="space-y-1">
+              <div className={anchoredPopupLabelClassName}>{t({ ko: '현재 계정', en: 'Current account' })}</div>
+              <div className="text-sm text-muted-foreground">{t({ ko: '로그인하지 않음', en: 'Not signed in' })}</div>
+            </div>
+          ) : null}
 
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
             className="w-full justify-start"
-            onClick={() => logoutMutation.mutate()}
-            disabled={logoutMutation.isPending}
+            onClick={() => openPage('/access')}
           >
-            <LogOut className="h-4 w-4" />
-            {logoutMutation.isPending ? t('headerAccountMenu.signingOut') : t('headerAccountMenu.signOut')}
+            <MapIcon className="h-4 w-4" />
+            {t('appShell.availablePages')}
           </Button>
+
+          {isSignedIn ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full justify-start"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+            >
+              <LogOut className="h-4 w-4" />
+              {logoutMutation.isPending ? t('headerAccountMenu.signingOut') : t('headerAccountMenu.signOut')}
+            </Button>
+          ) : null}
+
+          {isAnonymousSession ? (
+            <Button
+              type="button"
+              size="sm"
+              className="w-full justify-start"
+              onClick={() => openPage(`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`)}
+            >
+              <LogIn className="h-4 w-4" />
+              {t('loginPage.signIn')}
+            </Button>
+          ) : null}
         </div>
       </AnchoredPopup>
     </div>

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -38,13 +38,11 @@ const PRIMARY_NAV_ITEM_IDS: Record<typeof PRIMARY_NAV_ORDER[number], HeaderNavig
   '/settings': 'settings',
 }
 
-const navItems: Array<{ id: HeaderNavigationItemKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }> = [
-  { id: 'access', to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null },
-  ...PRIMARY_NAV_ORDER.flatMap((path) => {
-    const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
-    return item ? [{ id: PRIMARY_NAV_ITEM_IDS[path], to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
-  }),
-]
+// `/access` is intentionally not a nav item: the logo and the account menu both reach it.
+const navItems: Array<{ id: HeaderNavigationItemKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string }> = PRIMARY_NAV_ORDER.flatMap((path) => {
+  const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
+  return item ? [{ id: PRIMARY_NAV_ITEM_IDS[path], to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
+})
 
 function DeferredGenerationQueueHeaderWidget() {
   const [shouldRender, setShouldRender] = useState(false)
@@ -88,7 +86,9 @@ function AppShellLayout() {
   const headerNavigation = headerNavigationQuery.data ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
+  const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false && hasAuthPermission(permissionKeys, item.permissionKey))
+  // The logo goes home; accounts that cannot open home land on the access overview instead of a blocked-page bounce.
+  const logoTarget = hasAuthPermission(permissionKeys, 'page.home.view') ? '/' : '/access'
   const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
   const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)
   const shouldShowHeaderSearch = headerNavigation.search !== false && !isAnonymousSession
@@ -122,12 +122,12 @@ function AppShellLayout() {
         <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center gap-3 sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-6">
             <NavLink
-              to="/access"
+              to={logoTarget}
               className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
-              aria-label={t('appShell.availablePages')}
+              aria-label={logoTarget === '/' ? t('appShell.goHome') : t('appShell.availablePages')}
               title={APP_BRAND_TOOLTIP}
-              onMouseEnter={() => prefetchAppRoute('/access')}
-              onFocus={() => prefetchAppRoute('/access')}
+              onMouseEnter={() => prefetchAppRoute(logoTarget)}
+              onFocus={() => prefetchAppRoute(logoTarget)}
             >
               <img src={APP_ICON_SRC} alt="" className="size-8 shrink-0 rounded-sm object-cover" draggable={false} />
               <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">{APP_NAME}</span>
@@ -144,7 +144,7 @@ function AppShellLayout() {
                 onPointerLeave={handlePointerLeave}
                 style={{ touchAction: 'pan-y pinch-zoom' }}
               >
-                <nav className="flex min-w-max items-center gap-2 pr-10 sm:pr-2" aria-label={t('appShell.mainPageNavigation')}>
+                <nav className="flex min-w-max items-center gap-2 pr-10 sm:pr-2 xl:gap-1" aria-label={t('appShell.mainPageNavigation')}>
                   {visibleNavItems.map(({ to, labelKey, icon: Icon }) => {
                     const label = t(labelKey)
 
@@ -153,7 +153,6 @@ function AppShellLayout() {
                       key={to}
                       to={to}
                       end={to === '/'}
-                      aria-label={label}
                       title={label}
                       draggable={false}
                       onClick={handleNavItemClick}
@@ -162,14 +161,15 @@ function AppShellLayout() {
                       onDragStart={(event) => event.preventDefault()}
                       className={({ isActive }) =>
                         cn(
-                          'inline-flex size-9 shrink-0 items-center justify-center rounded-sm border border-transparent text-foreground/70 transition-all duration-300 hover:border-border hover:bg-surface-high hover:text-foreground select-none',
+                          // Icon-only below xl; from xl (1280px) the label sits next to the icon.
+                          'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm border border-transparent text-foreground/70 transition-all duration-300 hover:border-border hover:bg-surface-high hover:text-foreground select-none xl:w-auto xl:px-3',
                           isDraggingNav && 'pointer-events-none',
                           isActive && 'border-primary/35 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_10%,transparent)]',
                         )
                       }
                     >
-                      <Icon className="h-4 w-4" />
-                      <span className="sr-only">{label}</span>
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="sr-only xl:not-sr-only xl:whitespace-nowrap xl:text-sm xl:font-medium">{label}</span>
                     </NavLink>
                     )
                   })}
