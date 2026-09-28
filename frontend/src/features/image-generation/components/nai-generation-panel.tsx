@@ -338,7 +338,7 @@ export function NaiGenerationPanel({
     generateButtonSuffix: naiGenerateButtonSuffix,
     costErrorMessage: naiCostErrorMessage,
     onUpscale: handleUpscale,
-    onReset: resetNaiForm,
+    onReset: () => void resetNaiForm(),
     onGenerate: handleNaiGenerate,
   } satisfies Omit<Parameters<typeof NaiActionSection>[0], 'variant'>
 

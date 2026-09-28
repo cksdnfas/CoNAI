@@ -572,14 +572,30 @@ export function ComfyGenerationPanel({
 
   const handleRefreshDropdownLists = useCallback(() => handleScanDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS }), [handleScanDropdownLists])
 
-  const handleResetWorkflowDraft = useCallback(() => {
+  const handleResetWorkflowDraft = useCallback(async () => {
+    const baseDraft = buildWorkflowDraft(selectedWorkflowFields)
+    if (hasWorkflowDraftDifference(selectedWorkflowFields, workflowDraft, baseDraft)) {
+      const confirmed = await confirm({
+        title: t({ ko: '워크플로우 입력을 초기화할까?', en: 'Reset the workflow inputs?' }),
+        description: t({
+          ko: '{name}의 입력값이 기본값으로 돌아가고 저장된 초안도 지워져. 업로드한 입력 이미지는 서버에서도 삭제돼. 되돌릴 수 없어.',
+          en: 'All inputs of {name} go back to their defaults and the saved draft is cleared. Uploaded input images are also deleted from the server. This cannot be undone.',
+        }, { name: selectedWorkflow?.name ?? '' }),
+        confirmLabel: t({ ko: '초기화', en: 'Reset' }),
+        tone: 'destructive',
+      })
+      if (!confirmed) {
+        return
+      }
+    }
+
     void deleteComfyWorkflowDraftInputAssets(workflowDraft)
     if (selectedWorkflow) {
       clearPersistedComfyWorkflowDraft(selectedWorkflow.id)
     }
-    setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
+    setWorkflowDraft(baseDraft)
     clearWorkflowFieldIssues()
-  }, [clearWorkflowFieldIssues, selectedWorkflow, selectedWorkflowFields, workflowDraft])
+  }, [clearWorkflowFieldIssues, confirm, selectedWorkflow, selectedWorkflowFields, t, workflowDraft])
 
   const handleOpenSelectedModuleSave = useCallback(() => {
     if (selectedWorkflow) {
@@ -727,7 +743,7 @@ export function ComfyGenerationPanel({
             onFieldChange={handleWorkflowFieldChange}
             onImageChange={handleWorkflowImageChange}
             onRefreshDropdownLists={handleRefreshDropdownLists}
-            onResetDraft={handleResetWorkflowDraft}
+            onResetDraft={() => void handleResetWorkflowDraft()}
             onOpenModuleSave={handleOpenSelectedModuleSave}
             onGenerateSelected={handleGenerateSelectedWorkflow}
             onRevealFieldIssues={revealComfyFieldIssues}

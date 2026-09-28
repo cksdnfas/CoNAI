@@ -322,9 +322,28 @@ export function CodexGenerationPanel({
     }))
   }, [])
 
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
+    const hasLosableContent = codexForm.prompt.trim().length > 0
+      || codexForm.negativePrompt.trim().length > 0
+      || Boolean(codexForm.referenceImage)
+      || Boolean(codexForm.maskImage)
+    if (hasLosableContent) {
+      const confirmed = await confirm({
+        title: t({ ko: 'Codex 설정을 초기화할까?', en: 'Reset the Codex settings?' }),
+        description: t({
+          ko: '프롬프트, 참조·마스크 이미지와 저장된 초안이 지워져. 되돌릴 수 없어.',
+          en: 'Prompts, reference/mask images and the saved draft will be cleared. This cannot be undone.',
+        }),
+        confirmLabel: t({ ko: '초기화', en: 'Reset' }),
+        tone: 'destructive',
+      })
+      if (!confirmed) {
+        return
+      }
+    }
+
     setCodexForm(DEFAULT_CODEX_FORM)
-  }, [])
+  }, [codexForm.maskImage, codexForm.negativePrompt, codexForm.prompt, codexForm.referenceImage, confirm, t])
 
   const handleRefreshStatus = useCallback(() => {
     void refetchCodexStatus()
@@ -427,7 +446,7 @@ export function CodexGenerationPanel({
           </IconButton>
         ) : null}
         {useDrawerCompactChrome ? (
-          <IconButton variant="ghost" size="icon-sm" onClick={handleReset} disabled={isSubmitting} label={t({ ko: '초기화', en: 'Reset' })}>
+          <IconButton variant="ghost" size="icon-sm" onClick={() => void handleReset()} disabled={isSubmitting} label={t({ ko: '초기화', en: 'Reset' })}>
             <RotateCcw />
           </IconButton>
         ) : null}
@@ -451,7 +470,7 @@ export function CodexGenerationPanel({
       generateDisabled={codexGenerateDisabled}
       isGenerating={isSubmitting}
       repeat={codexRepeat}
-      onReset={handleReset}
+      onReset={() => void handleReset()}
       targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
     />
   )

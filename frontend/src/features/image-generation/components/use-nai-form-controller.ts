@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import {
   canUseNaiCharacterPositions,
@@ -28,6 +29,7 @@ export function useNaiFormController({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [persistedDraft] = useState(() => loadPersistedNaiFormDraft())
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(persistedDraft.selectedCharacterIndex)
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(persistedDraft.form)
@@ -69,10 +71,33 @@ export function useNaiFormController({
     })
   }, [naiForm.characters.length])
 
-  /** Reset the full editable NAI form back to defaults. */
-  const resetNaiForm = () => {
+  /** Reset the full editable NAI form back to defaults after confirming; the saved draft follows via persistence. */
+  const resetNaiForm = async () => {
+    const hasLosableContent = naiForm.prompt.trim().length > 0
+      || naiForm.negativePrompt.trim() !== DEFAULT_NAI_FORM.negativePrompt.trim()
+      || naiForm.characters.length > 0
+      || naiForm.vibes.length > 0
+      || naiForm.characterReferences.length > 0
+      || Boolean(naiForm.sourceImage)
+      || Boolean(naiForm.maskImage)
+    if (hasLosableContent) {
+      const confirmed = await confirm({
+        title: t({ ko: 'NAI 설정을 초기화할까?', en: 'Reset the NAI settings?' }),
+        description: t({
+          ko: '프롬프트, 캐릭터, 바이브, 캐릭터 레퍼런스, 원본·마스크 이미지와 저장된 초안이 모두 지워져. 되돌릴 수 없어.',
+          en: 'Prompts, characters, vibes, character references, source/mask images and the saved draft will all be cleared. This cannot be undone.',
+        }),
+        confirmLabel: t({ ko: '초기화', en: 'Reset' }),
+        tone: 'destructive',
+      })
+      if (!confirmed) {
+        return
+      }
+    }
+
     setNaiForm(DEFAULT_NAI_FORM)
     setSelectedCharacterIndex(null)
+    showSnackbar({ message: t({ ko: 'NAI 설정을 초기화했어.', en: 'Reset the NAI settings.' }), tone: 'info' })
   }
 
   /** Update one top-level NAI field while applying inline normalization rules. */

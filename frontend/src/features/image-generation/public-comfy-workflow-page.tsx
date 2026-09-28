@@ -8,6 +8,7 @@ import { BottomDrawerNotice, BottomDrawerSheet } from '@/components/ui/bottom-dr
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
@@ -41,6 +42,7 @@ import {
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
 } from './image-generation-shared'
+import { hasWorkflowDraftDifference } from './history-settings-mapping'
 
 const PUBLIC_QUEUE_REGISTRATION_MIN = 1
 const PUBLIC_QUEUE_REGISTRATION_MAX_FALLBACK = 32
@@ -66,6 +68,7 @@ export function PublicComfyWorkflowPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
+  const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
@@ -145,14 +148,30 @@ export function PublicComfyWorkflowPage() {
     }))
   }
 
-  const handleResetDraft = () => {
+  const handleResetDraft = async () => {
     if (!workflow) {
       return
     }
 
+    const baseDraft = buildWorkflowDraft(workflowFields)
+    if (hasWorkflowDraftDifference(workflowFields, workflowDraft, baseDraft)) {
+      const confirmed = await confirm({
+        title: t({ ko: '워크플로우 입력을 초기화할까?', en: 'Reset the workflow inputs?' }),
+        description: t({
+          ko: '{name}의 입력값이 기본값으로 돌아가고 저장된 초안도 지워져. 업로드한 입력 이미지는 서버에서도 삭제돼. 되돌릴 수 없어.',
+          en: 'All inputs of {name} go back to their defaults and the saved draft is cleared. Uploaded input images are also deleted from the server. This cannot be undone.',
+        }, { name: workflow.name }),
+        confirmLabel: t({ ko: '초기화', en: 'Reset' }),
+        tone: 'destructive',
+      })
+      if (!confirmed) {
+        return
+      }
+    }
+
     void deleteComfyWorkflowDraftInputAssets(workflowDraft)
     clearPersistedComfyWorkflowDraft(workflow.id)
-    setWorkflowDraft(buildWorkflowDraft(workflowFields))
+    setWorkflowDraft(baseDraft)
   }
 
   const handleRefreshDropdownLists = async () => {
@@ -304,7 +323,7 @@ export function PublicComfyWorkflowPage() {
     <GenerateActionBar
       variant="inline"
       {...publicGenerateProps}
-      onReset={handleResetDraft}
+      onReset={() => void handleResetDraft()}
     />
   )
 
@@ -340,7 +359,7 @@ export function PublicComfyWorkflowPage() {
       <IconButton
         variant="ghost"
         size="icon-sm"
-        onClick={handleResetDraft}
+        onClick={() => void handleResetDraft()}
         disabled={isQueueSubmitting}
         label={t({ ko: '초기화', en: 'Reset' })}
       >

@@ -1,5 +1,6 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import {
   deleteNaiCharacterReferenceAsset,
@@ -52,6 +53,7 @@ export function useNaiAssetLibrary({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [isSavingAsset, setIsSavingAsset] = useState(false)
   const [assetSaveTarget, setAssetSaveTarget] = useState<AssetSaveTarget | null>(null)
   const [assetSaveName, setAssetSaveName] = useState('')
@@ -270,6 +272,20 @@ export function useNaiAssetLibrary({
 
   /** Delete one stored vibe asset from the server library. */
   const handleDeleteVibeFromStore = async (assetId: string) => {
+    const asset = savedVibesQuery.data?.find((entry) => entry.id === assetId)
+    const confirmed = await confirm({
+      title: t({ ko: '저장한 바이브를 삭제할까?', en: 'Delete the saved vibe?' }),
+      description: t({
+        ko: '"{label}" 바이브와 인코딩 데이터가 라이브러리에서 지워져. 지금 폼에 넣어 둔 바이브는 그대로야.',
+        en: 'The "{label}" vibe and its encoding are removed from the library. Vibes already in the form stay.',
+      }, { label: asset?.label ?? assetId }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!confirmed) {
+      return
+    }
+
     try {
       await deleteNaiVibeAsset(assetId)
       await savedVibesQuery.refetch()
@@ -335,6 +351,20 @@ export function useNaiAssetLibrary({
 
   /** Delete one stored character reference asset from the server library. */
   const handleDeleteCharacterReferenceFromStore = async (assetId: string) => {
+    const asset = savedCharacterReferencesQuery.data?.find((entry) => entry.id === assetId)
+    const confirmed = await confirm({
+      title: t({ ko: '저장한 캐릭터 레퍼런스를 삭제할까?', en: 'Delete the saved character reference?' }),
+      description: t({
+        ko: '"{label}" 레퍼런스 이미지와 설정이 라이브러리에서 지워져. 지금 폼에 넣어 둔 레퍼런스는 그대로야.',
+        en: 'The "{label}" reference image and its settings are removed from the library. References already in the form stay.',
+      }, { label: asset?.label ?? assetId }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!confirmed) {
+      return
+    }
+
     try {
       await deleteNaiCharacterReferenceAsset(assetId)
       await savedCharacterReferencesQuery.refetch()
