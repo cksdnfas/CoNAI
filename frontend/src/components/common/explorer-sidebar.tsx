@@ -102,7 +102,7 @@ export function ExplorerSidebar({
       ? {
           position: 'sticky',
           top: 'calc(var(--theme-shell-header-height) + 1.5rem)',
-          maxHeight: '30vh',
+          maxHeight: 'max(30vh, 16rem)',
         }
       : undefined
   const shouldShowFloatingLockAction = floatingFrame && (isFloating || isFloatingLocked)
@@ -119,29 +119,35 @@ export function ExplorerSidebar({
     >
       {floatingFrame ? <div className="explorer-sidebar-floating-frame pointer-events-none absolute inset-0 z-10 rounded-sm" /> : null}
 
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className={cn(textVariants({ variant: 'overline' }), 'font-semibold')}>{title}</h2>
-        {badge}
-      </div>
-
-      {headerExtra ? <div className="mb-4">{headerExtra}</div> : null}
-
-      <div className={cn('min-h-0 flex-1', shouldLimitUnfixedCompactHeight && 'overflow-y-auto pr-1', bodyClassName)}>{children}</div>
-
-      {shouldShowFloatingLockAction ? (
-        <div className="mt-4">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="w-full"
-            onClick={() => setIsFloatingLocked((current) => !current)}
-          >
-            {isFloatingLocked ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-            {isFloatingLocked ? t({ ko: '사이드바 고정 해제', en: 'Unpin sidebar' }) : t({ ko: '사이드바 고정', en: 'Pin sidebar' })}
-          </Button>
+      {/*
+        Compact sticky mode caps the whole sidebar, so header tools + list scroll together in one container. Scrolling
+        only the list left it a sliver (or nothing) under tall header tools on phones.
+      */}
+      <div className={cn('flex min-h-0 flex-1 flex-col', shouldLimitUnfixedCompactHeight && '-mr-2 overflow-y-auto overscroll-contain pr-2')}>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className={cn(textVariants({ variant: 'overline' }), 'font-semibold')}>{title}</h2>
+          {badge}
         </div>
-      ) : null}
+
+        {headerExtra ? <div className="mb-4">{headerExtra}</div> : null}
+
+        <div className={cn('min-h-0 flex-1', bodyClassName, shouldLimitUnfixedCompactHeight && 'flex-none overflow-y-visible')}>{children}</div>
+
+        {shouldShowFloatingLockAction ? (
+          <div className="mt-4">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="w-full"
+              onClick={() => setIsFloatingLocked((current) => !current)}
+            >
+              {isFloatingLocked ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+              {isFloatingLocked ? t({ ko: '사이드바 고정 해제', en: 'Unpin sidebar' }) : t({ ko: '사이드바 고정', en: 'Pin sidebar' })}
+            </Button>
+          </div>
+        ) : null}
+      </div>
     </aside>
   )
 }
