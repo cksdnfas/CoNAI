@@ -100,7 +100,8 @@ export function ImageEditorSessionActions({
             </div>
           </>
         ) : null}
-        <div className="flex gap-2 pt-2">
+        {/* Below xl the modal layout pins these actions in a sticky footer instead. */}
+        <div className="hidden gap-2 pt-2 xl:flex">
           <Button type="button" variant="secondary" className="flex-1" onClick={onClose} disabled={saving}>
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>

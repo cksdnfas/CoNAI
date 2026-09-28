@@ -1,6 +1,7 @@
 import type { RefObject, WheelEvent } from 'react'
 import type Konva from 'konva'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useI18n } from '@/i18n'
 import { Modal } from '@/components/ui/modal'
@@ -186,6 +187,16 @@ export function ImageEditorModalLayout({
             <ImageEditorLayerPanel {...layerPanel} />
             <ImageEditorSessionActions {...sessionActions} />
           </div>
+        </div>
+
+        {/* Below xl the side panel stacks under the tall canvas, so keep the primary actions pinned to the modal bottom. */}
+        <div className="sticky bottom-0 z-10 flex gap-2 border-t border-border/70 bg-background/96 py-3 backdrop-blur xl:hidden">
+          <Button type="button" variant="secondary" className="flex-1" onClick={sessionActions.onClose} disabled={sessionActions.saving}>
+            {t({ ko: '취소', en: 'Cancel' })}
+          </Button>
+          <Button type="button" className="flex-1" onClick={sessionActions.onSave} disabled={!sessionActions.canSave || sessionActions.saving || sessionActions.loading}>
+            {sessionActions.saving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
+          </Button>
         </div>
       </div>
     </Modal>

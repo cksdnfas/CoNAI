@@ -92,6 +92,20 @@ function LoadedPasteImage({ layer, isActive, onMove }: LoadedPasteImageProps) {
   )
 }
 
+/** Keep a pressed pointer's events on the canvas so strokes, selections and crops continue past its edge. */
+function capturePointer(event: PointerEvent) {
+  const target = event.target
+  if (!(target instanceof Element)) {
+    return
+  }
+
+  try {
+    target.setPointerCapture(event.pointerId)
+  } catch {
+    // The pointer may already be gone (e.g. a very short tap); nothing to capture.
+  }
+}
+
 /** Render the editor stage, overlays, and visible layer content. */
 export function ImageEditorCanvas({
   viewportRef,
@@ -136,8 +150,14 @@ export function ImageEditorCanvas({
   return (
     <div
       ref={viewportRef}
-      className={`relative h-[70vh] min-h-[540px] overflow-hidden overscroll-contain rounded-sm border ${isMaskTool ? 'border-red-400/70 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.35)]' : 'border-border'} bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%),linear-gradient(45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(-45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%),linear-gradient(-45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%)] [background-position:0_0,0_0,0_12px,12px_-12px,-12px_0] [background-size:auto,24px_24px,24px_24px,24px_24px,24px_24px] ${canvasCursorClassName}`}
+      className={`relative h-[70vh] min-h-[540px] touch-none overflow-hidden overscroll-contain rounded-sm border ${isMaskTool ? 'border-red-400/70 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.35)]' : 'border-border'} bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%),linear-gradient(45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(-45deg,_rgba(255,255,255,0.03)_25%,_transparent_25%),linear-gradient(45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%),linear-gradient(-45deg,_transparent_75%,_rgba(255,255,255,0.03)_75%)] [background-position:0_0,0_0,0_12px,12px_-12px,-12px_0] [background-size:auto,24px_24px,24px_24px,24px_24px,24px_24px] ${canvasCursorClassName}`}
       onWheelCapture={onWheel}
+      // Konva does not re-emit pointercancel on the stage, so end a cancelled touch/pen interaction here.
+      onPointerCancel={(event) => {
+        if (event.isPrimary) {
+          onStagePointerUp()
+        }
+      }}
     >
       <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-wrap gap-2 rounded-sm border border-white/10 bg-black/55 px-3 py-2 text-[11px] text-white shadow-lg backdrop-blur-sm">
         <span className="font-medium text-white/90">{t(getImageEditorToolLabel(tool))}</span>
@@ -171,7 +191,32 @@ export function ImageEditorCanvas({
         </div>
       ) : null}
       {baseImage ? (
-        <Stage width={viewportSize.width} height={viewportSize.height} onMouseDown={onStagePointerDown} onMouseMove={onStagePointerMove} onMouseUp={onStagePointerUp} onMouseLeave={onStagePointerUp}>
+        <Stage
+          width={viewportSize.width}
+          height={viewportSize.height}
+          onPointerDown={(event) => {
+            if (!event.evt.isPrimary) {
+              return
+            }
+            capturePointer(event.evt)
+            onStagePointerDown()
+          }}
+          onPointerMove={(event) => {
+            if (event.evt.isPrimary) {
+              onStagePointerMove()
+            }
+          }}
+          onPointerUp={(event) => {
+            if (event.evt.isPrimary) {
+              onStagePointerUp()
+            }
+          }}
+          onPointerLeave={(event) => {
+            if (event.evt.isPrimary) {
+              onStagePointerUp()
+            }
+          }}
+        >
           <Layer>
             <Group x={viewportSize.width / 2 + pan.x} y={viewportSize.height / 2 + pan.y} scaleX={zoom} scaleY={zoom}>
               <Group rotation={rotation} scaleX={flippedX ? -1 : 1}>
