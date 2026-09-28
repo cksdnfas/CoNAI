@@ -19,6 +19,7 @@ const ImageListMasonryLazy = lazy(async () => {
 import type { ImageListActivateModifiers, ImageListProps } from './image-list-types'
 import { useImageListColumnCount } from './use-image-list-column-count'
 import { useImageListLoadMore } from './use-image-list-load-more'
+import { useImageListDragOut } from './use-image-list-drag-out'
 import { useImageListSelection } from './use-image-list-selection'
 
 /** Match the id the grid/masonry cells use so selection, ranges, and select-all agree. */
@@ -82,6 +83,7 @@ export function ImageList({
   onPreviewIntent,
   modalAccessOptions,
   sequenceTotal,
+  onItemDragStart,
 }: ImageListProps) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -168,6 +170,8 @@ export function ImageList({
     handleToggleSelect(null, imageId)
   }, [handleToggleSelect])
 
+  const { isDragArmed } = useImageListDragOut({ containerElement, onItemDragStart })
+
   const { shouldSuppressClick } = useImageListSelection({
     containerElement,
     selectable,
@@ -176,6 +180,7 @@ export function ImageList({
     onDragStateChange: setIsDraggingSelection,
     selectionAreaClass,
     onLongPressSelect: handleLongPressSelect,
+    isDragArmed,
   })
 
   // Esc clears the selection; Ctrl/Cmd+A selects every loaded tile. Both yield to text fields and open dialogs.

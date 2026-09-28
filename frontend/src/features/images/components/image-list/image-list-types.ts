@@ -45,4 +45,9 @@ export interface ImageListProps {
   modalAccessOptions?: ImageViewModalAccessOptions
   /** Real total of the source list for the modal counter; omit when the source has none. */
   sequenceTotal?: ImageViewSequenceTotal
+  /**
+   * Desktop drag-out: holding the mouse still on a tile briefly arms a native HTML5 drag; fill `event.dataTransfer`
+   * here. A plain press-and-move keeps starting the rubber-band selection.
+   */
+  onItemDragStart?: (itemId: string, event: DragEvent) => void
 }

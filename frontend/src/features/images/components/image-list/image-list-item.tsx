@@ -43,6 +43,14 @@ function preventNativeDrag(event: DragEvent<HTMLElement>) {
   event.preventDefault()
 }
 
+/** Same, except for a tile the list armed for drag-out (see useImageListDragOut). */
+function preventUnarmedTileDrag(event: DragEvent<HTMLElement>) {
+  if (event.currentTarget.dataset.dragArmed === 'true') {
+    return
+  }
+  event.preventDefault()
+}
+
 /** Render a reusable image list cell that supports image, GIF, and video previews. */
 const ImageListItemComponent = memo(function ImageListItemComponent({
   image,
@@ -195,6 +203,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       tabIndex={interactive ? 0 : undefined}
       className={cn(
         'theme-list-shadow image-list-selectable group relative isolate block w-full select-none rounded-sm bg-surface-low text-left transition-transform duration-300 [-webkit-touch-callout:none] focus:outline-none focus:ring-2 focus:ring-primary/60 hover:z-10 focus-within:z-10',
+        'data-[drag-armed=true]:scale-[0.97] data-[drag-armed=true]:cursor-grabbing',
         selected && 'is-selected',
         selectionMode || !interactive ? 'cursor-default' : 'cursor-pointer',
       )}
@@ -203,7 +212,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       aria-label={interactive ? `${displayName} ${selectionMode ? t({ ko: '선택', en: 'select' }) : t({ ko: '상세', en: 'detail' })}` : displayName}
       aria-pressed={selected}
       draggable={false}
-      onDragStart={preventNativeDrag}
+      onDragStart={preventUnarmedTileDrag}
       onPointerEnter={() => {
         setHasRevealedQuickActions(true)
         if (interactive) {

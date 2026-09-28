@@ -11,6 +11,8 @@ interface UseImageListSelectionParams {
   selectionAreaClass?: string
   /** Touch long-press on a tile: toggle that tile. */
   onLongPressSelect?: (imageId: string) => void
+  /** True while a held tile is armed for drag-out; the rubber band stands down so the native drag wins. */
+  isDragArmed?: () => boolean
 }
 
 const LONG_PRESS_DELAY_MS = 450
@@ -27,6 +29,7 @@ export function useImageListSelection({
   onDragStateChange,
   selectionAreaClass = 'image-list-selection-area',
   onLongPressSelect,
+  isDragArmed,
 }: UseImageListSelectionParams) {
   const selectionRef = useRef<SelectionArea | null>(null)
   const previewElementsRef = useRef<Set<HTMLElement>>(new Set())
@@ -35,10 +38,15 @@ export function useImageListSelection({
   const canStartSelection = useMultiTouchSelectionStartGuard(containerElement, selectable)
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const onLongPressSelectRef = useRef(onLongPressSelect)
+  const isDragArmedRef = useRef(isDragArmed)
 
   useEffect(() => {
     onLongPressSelectRef.current = onLongPressSelect
   }, [onLongPressSelect])
+
+  useEffect(() => {
+    isDragArmedRef.current = isDragArmed
+  }, [isDragArmed])
 
   /**
    * One delegated listener set per list (never per tile): a still, single-finger press held for
@@ -190,6 +198,15 @@ export function useImageListSelection({
         const target = event?.target
         if (!(target instanceof HTMLElement)) return
         if (target.closest('[data-no-select-drag="true"]')) {
+          return false
+        }
+      })
+      .on('beforedrag', ({ event }) => {
+        if (isDragArmedRef.current?.()) {
+          return false
+        }
+        // A native drag swallows the mouseup, so the pending tap can outlive the press; never start without a button down.
+        if (event instanceof MouseEvent && event.buttons === 0) {
           return false
         }
       })
