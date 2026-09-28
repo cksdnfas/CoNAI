@@ -40,7 +40,7 @@ export function ImageDetailMediaFrame({
         src={renderUrl}
         alt={altText}
         className={cn(
-          'col-start-1 row-start-1 block pointer-events-none select-none transition-opacity duration-150',
+          'bg-checker col-start-1 row-start-1 block pointer-events-none select-none transition-opacity duration-150',
           fittedMediaSize ? 'h-full w-full object-contain' : cn('h-auto w-auto', className),
           shouldRenderPixelPreview && isPixelPreviewReady && 'opacity-0',
         )}

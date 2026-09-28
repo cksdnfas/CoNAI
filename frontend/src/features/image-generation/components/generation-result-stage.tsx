@@ -203,7 +203,7 @@ export function GenerationResultStage({
                 key={selectedId}
                 src={selected.image_url ?? selected.thumbnail_url ?? undefined}
                 alt=""
-                className={cn('max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-2xl saturate-[0.55]')}
+                className={cn('bg-checker max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-2xl saturate-[0.55]')}
               />
             )
           ) : activeJob ? null : (

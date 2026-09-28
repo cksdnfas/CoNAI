@@ -180,6 +180,9 @@
   --elevation-2: 0 18px 48px rgb(0 0 0 / 0.36);
   --elevation-3: 0 24px 80px rgb(0 0 0 / 0.48);
   --backdrop: rgb(0 0 0 / 0.78);
+  /* 투명 픽셀을 드러내는 체크무늬 두 톤. */
+  --checker-a: #262626;
+  --checker-b: #333333;
   --theme-shell-header-height: 4rem;
   --theme-shell-inline-padding: 1.5rem;
   --theme-shell-main-padding-bottom: 4rem;
@@ -229,6 +232,8 @@
   --secondary: #ffdbcf;
   --secondary-foreground: #5b1b00;
   --secondary-text: #9a3a12;
+  --checker-a: #ffffff;
+  --checker-b: #e4dfdc;
   --muted: #efe6e2;
   --muted-foreground: #6b5048;
   --accent: #f7ece8;
@@ -352,6 +357,13 @@
 }
 
 @layer components {
+  /* 이미지를 크게 볼 때 투명 영역이 배경색에 묻히지 않게 체크무늬를 깐다. 이미지 요소 자체에 준다. */
+  .bg-checker {
+    background-color: var(--checker-a);
+    background-image: conic-gradient(var(--checker-b) 25%, transparent 0 50%, var(--checker-b) 0 75%, transparent 0);
+    background-size: 16px 16px;
+  }
+
   .theme-shell-header {
     background: var(--theme-shell-surface);
     backdrop-filter: blur(var(--theme-header-blur));
