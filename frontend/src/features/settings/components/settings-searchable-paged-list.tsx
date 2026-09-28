@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -83,7 +83,7 @@ export function SettingsSearchablePagedList<T>({
     : t({ ko: '전체 {total}', en: '{total} total' }, { total: formatNumber(progress.totalCount) })
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -102,11 +102,11 @@ export function SettingsSearchablePagedList<T>({
       {pagedItems.length === 0 ? (
         <EmptyState size="compact" title={emptyMessage} />
       ) : (
-        <div className={cn('space-y-2', listClassName)}>
+        <div className={listClassName}>
           {pagedItems.map((item) => (
-            <div key={getItemKey(item)}>
+            <Fragment key={getItemKey(item)}>
               {renderItem(item)}
-            </div>
+            </Fragment>
           ))}
         </div>
       )}
@@ -120,10 +120,10 @@ export function SettingsSearchablePagedList<T>({
             )}
           </span>
           <div className="flex gap-2">
-            <IconButton size="icon-sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} label={t({ ko: '이전', en: 'Previous' })}>
+            <IconButton size="icon-sm" variant="ghost" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} label={t({ ko: '이전', en: 'Previous' })}>
               <ChevronLeft className="h-4 w-4" />
             </IconButton>
-            <IconButton size="icon-sm" variant="secondary" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} label={t({ ko: '다음', en: 'Next' })}>
+            <IconButton size="icon-sm" variant="ghost" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} label={t({ ko: '다음', en: 'Next' })}>
               <ChevronRight className="h-4 w-4" />
             </IconButton>
           </div>

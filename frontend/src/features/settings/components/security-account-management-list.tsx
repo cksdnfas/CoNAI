@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Clock3, KeyRound, Shield, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
+import { ListRow } from '@/components/ui/list-row'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { cn } from '@/lib/utils'
@@ -86,62 +87,63 @@ export function SecurityAccountManagementList({
             || searchableGroups.includes(normalizedQuery)
         }}
         renderItem={(account) => (
-          <div className="flex flex-col gap-2 rounded-sm bg-surface-lowest px-3 py-2.5 md:flex-row md:items-center md:justify-between">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-0 truncate text-sm font-semibold text-foreground">{account.username}</div>
-                {account.groupKeys.map((groupKey) => (
-                  <Badge
-                    key={groupKey}
-                    className="border-0 normal-case tracking-normal"
-                    style={getSecurityGroupBadgeStyle(getSecurityGroupColor(groupKey, groupColors))}
-                  >
-                    {getPermissionGroupDisplayName(language, groupKey, groupLabels[groupKey] ?? groupKey)}
-                  </Badge>
-                ))}
-                {account.status !== 'active' ? <Badge variant="outline">{getAccountStatusLabel(language, account.status)}</Badge> : null}
-                {account.syncedLegacyAdmin ? <Badge variant="secondary">{t({ ko: '레거시', en: 'Legacy' })}</Badge> : null}
-                <span
-                  className={cn(
-                    'inline-flex items-center text-muted-foreground',
-                    account.lastLoginAt ? 'cursor-help' : 'opacity-50',
-                  )}
-                  title={account.lastLoginAt ? t({ ko: '최근 로그인 {value}', en: 'Last login {value}' }, { value: formatDateTime(account.lastLoginAt) }) : t({ ko: '로그인 기록 없음', en: 'No login history' })}
-                  aria-label={account.lastLoginAt ? t({ ko: '최근 로그인 있음', en: 'Has recent login' }) : t({ ko: '로그인 기록 없음', en: 'No login history' })}
+          <ListRow
+            className="flex-wrap"
+            trailing={(
+              <>
+                <IconButton
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => openAccountEditor(account.id, 'group')}
+                  label={t({ ko: '그룹 설정', en: 'Group settings' })}
                 >
-                  <Clock3 className="h-4 w-4" />
-                </span>
-              </div>
-            </div>
-
-            <div className="flex shrink-0 flex-wrap justify-end gap-1">
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => openAccountEditor(account.id, 'group')}
-                label={t({ ko: '그룹 설정', en: 'Group settings' })}
+                  <Shield className="h-4 w-4" />
+                </IconButton>
+                <IconButton
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => openAccountEditor(account.id, 'password')}
+                  label={t({ ko: '비밀번호 변경', en: 'Change password' })}
+                >
+                  <KeyRound className="h-4 w-4" />
+                </IconButton>
+                <IconButton
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => openAccountEditor(account.id, 'danger')}
+                  label={t({ ko: '계정 삭제', en: 'Delete account' })}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </IconButton>
+                {renderExtraActions?.(account)}
+              </>
+            )}
+          >
+            <span className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="min-w-0 truncate font-medium text-foreground">{account.username}</span>
+              {account.groupKeys.map((groupKey) => (
+                <Badge
+                  key={groupKey}
+                  className="border-0 normal-case tracking-normal"
+                  style={getSecurityGroupBadgeStyle(getSecurityGroupColor(groupKey, groupColors))}
+                >
+                  {getPermissionGroupDisplayName(language, groupKey, groupLabels[groupKey] ?? groupKey)}
+                </Badge>
+              ))}
+              {account.status !== 'active' ? <Badge variant="outline">{getAccountStatusLabel(language, account.status)}</Badge> : null}
+              {account.syncedLegacyAdmin ? <Badge variant="secondary">{t({ ko: '레거시', en: 'Legacy' })}</Badge> : null}
+              <span
+                className={cn(
+                  'inline-flex items-center text-muted-foreground',
+                  account.lastLoginAt ? 'cursor-help' : 'opacity-50',
+                )}
+                title={account.lastLoginAt ? t({ ko: '최근 로그인 {value}', en: 'Last login {value}' }, { value: formatDateTime(account.lastLoginAt) }) : t({ ko: '로그인 기록 없음', en: 'No login history' })}
+                aria-label={account.lastLoginAt ? t({ ko: '최근 로그인 있음', en: 'Has recent login' }) : t({ ko: '로그인 기록 없음', en: 'No login history' })}
               >
-                <Shield className="h-4 w-4" />
-              </IconButton>
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => openAccountEditor(account.id, 'password')}
-                label={t({ ko: '비밀번호 변경', en: 'Change password' })}
-              >
-                <KeyRound className="h-4 w-4" />
-              </IconButton>
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => openAccountEditor(account.id, 'danger')}
-                label={t({ ko: '계정 삭제', en: 'Delete account' })}
-              >
-                <Trash2 className="h-4 w-4" />
-              </IconButton>
-              {renderExtraActions?.(account)}
-            </div>
-          </div>
+                <Clock3 className="h-4 w-4" />
+              </span>
+            </span>
+          </ListRow>
         )}
       />
 

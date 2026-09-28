@@ -3,7 +3,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 import { AppearanceColorControl } from './appearance-tab-editor-shared'
-import { Field } from '@/components/ui/field'
+import { SettingRow } from '@/components/ui/setting-row'
 import { Modal } from '@/components/ui/modal'
 import { InstantApplyHint } from './settings-section-status'
 import { getPermissionGroupDisplayName } from './security-ui-text'
@@ -39,8 +39,8 @@ export function SecurityGroupColorEditorModal({
       title={t('securityGroupColorEditorModal.permissionGroupColors')}
       widthClassName="max-w-3xl"
     >
-      <div className="space-y-3">
-        <div className="flex justify-end">
+      <div>
+        <div className="flex justify-end pb-2">
           <InstantApplyHint />
         </div>
         {groups.map((group) => {
@@ -49,34 +49,31 @@ export function SecurityGroupColorEditorModal({
           const colorValue = /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(colorText) ? colorText : defaultColor
 
           return (
-            <div key={group.groupKey} className="rounded-sm bg-surface-low p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <Badge className="border-0 normal-case tracking-normal" style={getSecurityGroupBadgeStyle(colorValue)}>
-                    {getPermissionGroupDisplayName(language, group.groupKey, group.name)}
-                  </Badge>
-                </div>
-
-                <IconButton
-                  size="icon-sm"
-                  variant="secondary"
-                  onClick={() => onResetColor(group.groupKey)}
-                  label={t('securityGroupColorEditorModal.restoreDefaultColor')}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </IconButton>
-              </div>
-
-              <Field label={t('securityGroupColorEditorModal.color')}>
-                <AppearanceColorControl
-                  colorValue={colorValue}
-                  textValue={colorText}
-                  placeholder={defaultColor}
-                  onChangeColor={(value) => onChangeColor(group.groupKey, value)}
-                  onChangeText={(value) => onChangeColor(group.groupKey, value)}
-                />
-              </Field>
-            </div>
+            <SettingRow
+              key={group.groupKey}
+              label={(
+                <Badge className="border-0 normal-case tracking-normal" style={getSecurityGroupBadgeStyle(colorValue)}>
+                  {getPermissionGroupDisplayName(language, group.groupKey, group.name)}
+                </Badge>
+              )}
+            >
+              <AppearanceColorControl
+                ariaLabel={t('securityGroupColorEditorModal.color')}
+                colorValue={colorValue}
+                textValue={colorText}
+                placeholder={defaultColor}
+                onChangeColor={(value) => onChangeColor(group.groupKey, value)}
+                onChangeText={(value) => onChangeColor(group.groupKey, value)}
+              />
+              <IconButton
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => onResetColor(group.groupKey)}
+                label={t('securityGroupColorEditorModal.restoreDefaultColor')}
+              >
+                <RotateCcw className="h-4 w-4" />
+              </IconButton>
+            </SettingRow>
           )
         })}
       </div>

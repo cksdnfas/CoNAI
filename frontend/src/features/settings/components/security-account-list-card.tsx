@@ -2,7 +2,8 @@ import { Palette } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { SecurityAccountManagementList } from './security-account-management-list'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
+import { SettingsRowsSkeleton } from './settings-rows'
 import { IconButton } from '@/components/ui/icon-button'
 import type { SecurityGroupColorMap } from './security-group-color-utils'
 
@@ -39,13 +40,12 @@ export function SecurityAccountListCard({
   const { t } = useI18n()
 
   return (
-    <Section
-        variant="settings"
+    <RowGroup
         heading={t({ ko: '계정', en: 'Accounts' })}
         actions={(
           <IconButton
             size="icon-sm"
-            variant="secondary"
+            variant="ghost"
             onClick={onOpenGroupColors}
             label={t('securityGroupColorEditorModal.permissionGroupColors')}
           >
@@ -54,7 +54,7 @@ export function SecurityAccountListCard({
         )}
       >
         {isLoading ? (
-          <div className="min-h-[180px] rounded-sm bg-surface-low animate-pulse" />
+          <SettingsRowsSkeleton rows={3} />
         ) : (
           <SecurityAccountManagementList
             accounts={accounts}
@@ -73,6 +73,6 @@ export function SecurityAccountListCard({
             onAccountDelete={onAccountDelete}
           />
         )}
-    </Section>
+    </RowGroup>
   )
 }

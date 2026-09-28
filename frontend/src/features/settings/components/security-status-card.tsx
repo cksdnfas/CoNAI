@@ -1,7 +1,7 @@
 import { useI18n } from '@/i18n'
 import type { AuthStatusRecord } from '@/lib/api-auth'
-import { StatTile } from '@/components/ui/stat-tile'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
+import { SettingsStatLine } from './settings-rows'
 import { getAccountTypeLabel } from './security-ui-text'
 
 interface SecurityStatusCardProps {
@@ -22,18 +22,15 @@ export function SecurityStatusCard({ authStatus, hasCredentials, accountCount, c
       : t({ ko: '설정됨', en: 'Set up' })
 
   return (
-    <Section
-      variant="settings"
-      heading={t({ ko: '보안 상태', en: 'Security status' })}
-    >
-      <div className="grid gap-3 md:grid-cols-3">
-        <StatTile label={t({ ko: '계정', en: 'Accounts' })} value={accountValue} />
-        <StatTile label={t({ ko: '현재 사용자', en: 'Current user' })} value={currentUsername ?? t({ ko: '없음', en: 'None' })} valueClassName="break-all" />
-        <StatTile
-          label={t({ ko: '권한 그룹', en: 'Permission group' })}
-          value={getAccountTypeLabel(language, authStatus?.accountType)}
-        />
-      </div>
-    </Section>
+    <RowGroup heading={t({ ko: '보안 상태', en: 'Security status' })}>
+      <SettingsStatLine
+        className="py-1"
+        items={[
+          { label: t({ ko: '계정', en: 'Accounts' }), value: accountValue },
+          { label: t({ ko: '현재 사용자', en: 'Current user' }), value: currentUsername ?? t({ ko: '없음', en: 'None' }) },
+          { label: t({ ko: '권한 그룹', en: 'Permission group' }), value: getAccountTypeLabel(language, authStatus?.accountType) },
+        ]}
+      />
+    </RowGroup>
   )
 }

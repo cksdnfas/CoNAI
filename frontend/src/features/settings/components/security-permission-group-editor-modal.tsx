@@ -137,7 +137,7 @@ export function SecurityPermissionGroupEditorModal({
       }
     >
       {mode === 'edit' && isLoadingDetail ? (
-        <div className="min-h-[360px] rounded-sm bg-surface-low animate-pulse" />
+        <div className="min-h-[360px] animate-pulse rounded-sm bg-fill" />
       ) : (
         <div className="space-y-6">
           {canEditFields ? (
@@ -171,7 +171,7 @@ export function SecurityPermissionGroupEditorModal({
               {!canEditPermissions ? <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge> : null}
             </div>
 
-            <div className="space-y-2 rounded-sm bg-surface-low p-3">
+            <div>
               {permissionCatalog.length === 0 ? (
                 <div className="text-sm text-muted-foreground">{t({ ko: '표시할 페이지 권한이 아직 없어.', en: 'There are no page permissions to show yet.' })}</div>
               ) : (
@@ -180,15 +180,14 @@ export function SecurityPermissionGroupEditorModal({
                   return (
                     <label
                       key={permission.permissionKey}
-                      className="flex items-start justify-between gap-4 rounded-sm bg-surface-lowest px-3 py-3"
+                      className="flex min-h-11 cursor-pointer items-center justify-between gap-4 border-b border-line py-2 last:border-b-0"
                     >
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-foreground">
+                        <div className="text-sm text-foreground">
                           {getPagePermissionLabel(language, permission.permissionKey, permission.label)}
                         </div>
                       </div>
                       <Checkbox
-                        className="mt-0.5"
                         checked={checked}
                         disabled={!canEditPermissions || isBusy}
                         onCheckedChange={(nextChecked) => onTogglePermission(permission.permissionKey, nextChecked === true)}
@@ -208,7 +207,7 @@ export function SecurityPermissionGroupEditorModal({
               </div>
 
               {canManageMembers ? (
-                <div className="grid gap-3 rounded-sm bg-surface-low p-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                   <Field label={t({ ko: '계정', en: 'Account' })}>
                     <Select
                       variant="settings"
@@ -238,7 +237,7 @@ export function SecurityPermissionGroupEditorModal({
                 </div>
               ) : null}
 
-              <div className="rounded-sm bg-surface-low p-3">
+              <div>
                 <SecurityAccountManagementList
                   accounts={memberAccounts}
                   availableGroups={availableGroups}

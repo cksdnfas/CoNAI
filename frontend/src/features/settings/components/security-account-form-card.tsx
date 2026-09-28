@@ -1,9 +1,10 @@
-import { KeyRound, Save, ShieldCheck } from 'lucide-react'
+import { KeyRound, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
-import { Field } from '@/components/ui/field'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
+import { SettingRow } from '@/components/ui/setting-row'
+import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 
 interface SecurityAccountFormCardProps {
   hasCredentials: boolean
@@ -51,82 +52,84 @@ export function SecurityAccountFormCard({
     (nextUsername.trim().length === 0 && !currentUsername) ||
     nextPassword.length === 0
 
+  const labels = {
+    username: t({ ko: '아이디', en: 'Username' }),
+    password: t({ ko: '비밀번호', en: 'Password' }),
+    currentPassword: t({ ko: '현재 비밀번호', en: 'Current password' }),
+    nextUsername: t({ ko: '새 아이디', en: 'New username' }),
+    nextPassword: t({ ko: '새 비밀번호', en: 'New password' }),
+  }
+
   return (
-    <Section
-      variant="settings"
-      heading={!hasCredentials ? t({ ko: '관리자 계정', en: 'Admin account' }) : t({ ko: '관리자 계정 변경', en: 'Change admin account' })}
-      actions={
-        <div className="rounded-sm bg-primary/10 p-2 text-primary">
-          {hasCredentials ? <KeyRound className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-        </div>
-      }
-    >
+    <RowGroup heading={!hasCredentials ? t({ ko: '관리자 계정', en: 'Admin account' }) : t({ ko: '관리자 계정 변경', en: 'Change admin account' })}>
       {!hasCredentials ? (
-        <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label={t({ ko: '아이디', en: 'Username' })}>
-              <Input
-                variant="settings"
-                value={setupUsername}
-                onChange={(event) => onSetupUsernameChange(event.target.value)}
-                autoComplete="username"
-              />
-            </Field>
-            <Field label={t({ ko: '비밀번호', en: 'Password' })}>
-              <Input
-                type="password"
-                variant="settings"
-                value={setupPassword}
-                onChange={(event) => onSetupPasswordChange(event.target.value)}
-                autoComplete="new-password"
-              />
-            </Field>
-          </div>
-          <div className="flex justify-end">
-            <Button type="button" onClick={onSubmitSetup} disabled={isSetupDisabled}>
+        <>
+          <SettingRow label={labels.username} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <Input
+              variant="settings"
+              aria-label={labels.username}
+              value={setupUsername}
+              onChange={(event) => onSetupUsernameChange(event.target.value)}
+              autoComplete="username"
+            />
+          </SettingRow>
+          <SettingRow label={labels.password} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <Input
+              type="password"
+              variant="settings"
+              aria-label={labels.password}
+              value={setupPassword}
+              onChange={(event) => onSetupPasswordChange(event.target.value)}
+              autoComplete="new-password"
+            />
+          </SettingRow>
+          <div className="flex justify-end pt-3">
+            <Button type="button" size="sm" onClick={onSubmitSetup} disabled={isSetupDisabled}>
+              <ShieldCheck className="h-4 w-4" />
               {isSubmittingSetup ? t({ ko: '생성 중…', en: 'Creating…' }) : t({ ko: '생성', en: 'Create' })}
             </Button>
           </div>
-        </div>
+        </>
       ) : (
-        <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Field label={t({ ko: '현재 비밀번호', en: 'Current password' })}>
-              <Input
-                type="password"
-                variant="settings"
-                value={currentPassword}
-                onChange={(event) => onCurrentPasswordChange(event.target.value)}
-                autoComplete="current-password"
-              />
-            </Field>
-            <Field label={t({ ko: '새 아이디', en: 'New username' })}>
-              <Input
-                variant="settings"
-                value={nextUsername}
-                onChange={(event) => onNextUsernameChange(event.target.value)}
-                autoComplete="username"
-                placeholder={currentUsername ?? t({ ko: '새 아이디', en: 'New username' })}
-              />
-            </Field>
-            <Field label={t({ ko: '새 비밀번호', en: 'New password' })}>
-              <Input
-                type="password"
-                variant="settings"
-                value={nextPassword}
-                onChange={(event) => onNextPasswordChange(event.target.value)}
-                autoComplete="new-password"
-              />
-            </Field>
-          </div>
-          <div className="flex justify-end">
-            <Button type="button" size="sm" onClick={onSubmitUpdate} disabled={isUpdateDisabled}>
-              <Save className="h-4 w-4" />
+        <>
+          <SettingRow label={labels.currentPassword} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <Input
+              type="password"
+              variant="settings"
+              aria-label={labels.currentPassword}
+              value={currentPassword}
+              onChange={(event) => onCurrentPasswordChange(event.target.value)}
+              autoComplete="current-password"
+            />
+          </SettingRow>
+          <SettingRow label={labels.nextUsername} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <Input
+              variant="settings"
+              aria-label={labels.nextUsername}
+              value={nextUsername}
+              onChange={(event) => onNextUsernameChange(event.target.value)}
+              autoComplete="username"
+              placeholder={currentUsername ?? labels.nextUsername}
+            />
+          </SettingRow>
+          <SettingRow label={labels.nextPassword} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <Input
+              type="password"
+              variant="settings"
+              aria-label={labels.nextPassword}
+              value={nextPassword}
+              onChange={(event) => onNextPasswordChange(event.target.value)}
+              autoComplete="new-password"
+            />
+          </SettingRow>
+          <div className="flex justify-end pt-3">
+            <Button type="button" size="sm" variant="secondary" onClick={onSubmitUpdate} disabled={isUpdateDisabled}>
+              <KeyRound className="h-4 w-4" />
               {isSubmittingUpdate ? t({ ko: '관리자 계정 변경 중', en: 'Updating admin account' }) : t({ ko: '관리자 계정 저장', en: 'Save admin account' })}
             </Button>
           </div>
-        </div>
+        </>
       )}
-    </Section>
+    </RowGroup>
   )
 }

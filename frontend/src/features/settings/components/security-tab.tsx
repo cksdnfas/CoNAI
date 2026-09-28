@@ -8,6 +8,7 @@ import { SecurityRecoveryCard } from './security-recovery-card'
 import { SecurityStatusCard } from './security-status-card'
 import { useSecurityTabData } from './security-tab-data'
 import { useSecurityGroupColors } from './use-security-group-colors'
+import { SettingsRowsSkeleton } from './settings-rows'
 
 /** Compose the auth/account-management settings UI from a few focused sections. */
 export function SecurityTab() {
@@ -43,11 +44,11 @@ export function SecurityTab() {
   )
 
   if (securityTabData.isLoading) {
-    return <div className="min-h-[240px] rounded-sm bg-surface-low animate-pulse" />
+    return <SettingsRowsSkeleton rows={5} />
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <section>
         <SecurityStatusCard
           authStatus={securityTabData.authStatus}

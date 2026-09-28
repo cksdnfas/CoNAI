@@ -3,8 +3,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { AuthDatabaseInfoRecord } from '@/lib/api-auth'
-import { StatTile } from '@/components/ui/stat-tile'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
+import { SettingRow } from '@/components/ui/setting-row'
 
 interface SecurityRecoveryCardProps {
   databaseInfo: AuthDatabaseInfoRecord | null
@@ -21,7 +21,7 @@ export function SecurityRecoveryCard({ databaseInfo, isError, isRetrying, onRetr
     : (databaseInfo?.recoveryInstructions.ko ?? databaseInfo?.recoveryInstructions.en)
 
   return (
-    <Section variant="settings" heading={t({ ko: '복구', en: 'Recovery' })}>
+    <RowGroup heading={t({ ko: '복구', en: 'Recovery' })}>
       {isError && !databaseInfo ? (
         <Alert variant="destructive">
           <AlertTitle>{t({ ko: '복구 정보를 불러오지 못했어', en: 'Could not load recovery info' })}</AlertTitle>
@@ -33,19 +33,15 @@ export function SecurityRecoveryCard({ databaseInfo, isError, isRetrying, onRetr
           </AlertDescription>
         </Alert>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          <StatTile
-            label={t({ ko: '인증 DB', en: 'Auth DB' })}
-            value={databaseInfo?.authDbPath ?? t({ ko: '불러오는 중…', en: 'Loading…' })}
-            valueClassName="break-all text-xs font-medium"
-          />
-          <StatTile
-            label={t({ ko: '방법', en: 'Method' })}
-            value={recoveryInstruction ?? t({ ko: '불러오는 중…', en: 'Loading…' })}
-            valueClassName="text-xs font-medium leading-6"
-          />
-        </div>
+        <>
+          <SettingRow label={t({ ko: '인증 DB', en: 'Auth DB' })} controlClassName="min-w-0 sm:max-w-md">
+            <span className="break-all font-mono text-xs text-muted-foreground">{databaseInfo?.authDbPath ?? t({ ko: '불러오는 중…', en: 'Loading…' })}</span>
+          </SettingRow>
+          <SettingRow label={t({ ko: '방법', en: 'Method' })} stacked>
+            <p className="text-xs leading-6 text-muted-foreground">{recoveryInstruction ?? t({ ko: '불러오는 중…', en: 'Loading…' })}</p>
+          </SettingRow>
+        </>
       )}
-    </Section>
+    </RowGroup>
   )
 }

@@ -2,16 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, KeyRound, Shield, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Inset } from '@/components/ui/inset'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { Field } from '@/components/ui/field'
 import { Modal } from '@/components/ui/modal'
-import { StatTile } from '@/components/ui/stat-tile'
 import { getAccountStatusLabel, getPermissionGroupDisplayName } from './security-ui-text'
 import { getSecurityGroupBadgeStyle, type SecurityGroupColorMap, getSecurityGroupColor } from './security-group-color-utils'
+import { SettingsStatLine } from './settings-rows'
 
 export type SecurityAccountEditorSection = 'group' | 'password' | 'danger'
 
@@ -132,11 +131,13 @@ export function SecurityAccountEditorModal({
       )}
     >
       <div className="space-y-5">
-        <div className="grid gap-3 md:grid-cols-3">
-          <StatTile label={t({ ko: '생성일', en: 'Created' })} value={formatDateTime(account.createdAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
-          <StatTile label={t({ ko: '수정일', en: 'Updated' })} value={formatDateTime(account.updatedAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
-          <StatTile label={t({ ko: '최근 로그인', en: 'Last login' })} value={account.lastLoginAt ? formatDateTime(account.lastLoginAt) : '—'} className="px-3 py-3" valueClassName="text-sm font-medium" />
-        </div>
+        <SettingsStatLine
+          items={[
+            { label: t({ ko: '생성일', en: 'Created' }), value: formatDateTime(account.createdAt) },
+            { label: t({ ko: '수정일', en: 'Updated' }), value: formatDateTime(account.updatedAt) },
+            { label: t({ ko: '최근 로그인', en: 'Last login' }), value: account.lastLoginAt ? formatDateTime(account.lastLoginAt) : '—' },
+          ]}
+        />
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant={activeSection === 'group' ? 'default' : 'secondary'} size="sm" onClick={() => setActiveSection('group')}>
@@ -154,7 +155,7 @@ export function SecurityAccountEditorModal({
         </div>
 
         {activeSection === 'group' ? (
-          <div className="space-y-4 rounded-sm bg-surface-low p-4">
+          <div className="space-y-4">
             <Field label={t({ ko: '기본 그룹', en: 'Base group' })}>
               <Select
                 variant="settings"
@@ -196,7 +197,7 @@ export function SecurityAccountEditorModal({
         ) : null}
 
         {activeSection === 'password' ? (
-          <div className="space-y-4 rounded-sm bg-surface-low p-4">
+          <div className="space-y-4">
             {canChangeLegacyAdminPassword ? (
               <>
                 <Field label={t({ ko: '새 비밀번호', en: 'New password' })}>
@@ -218,9 +219,9 @@ export function SecurityAccountEditorModal({
                 </div>
               </>
             ) : (
-              <Inset className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {t({ ko: '이 계정은 레거시 관리자 자격과 동기화돼 있어서 여기서 비밀번호를 직접 바꾸지 않아. 위쪽 관리자 계정 카드에서 변경해.', en: 'This account is synced with legacy admin credentials, so do not change its password here. Use the admin account card above instead.' })}
-              </Inset>
+              </p>
             )}
           </div>
         ) : null}
