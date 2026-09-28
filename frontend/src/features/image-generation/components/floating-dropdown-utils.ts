@@ -54,12 +54,13 @@ export function resolveFloatingDropdownRect(anchor: HTMLElement, options: Resolv
   return resolveFloatingDropdownRectFromRect(anchor.getBoundingClientRect(), options)
 }
 
-export const FLOATING_DROPDOWN_MENU_CLASS = 'fixed z-[140] rounded-sm border border-border/80 bg-background/98 shadow-[0_18px_48px_rgba(0,0,0,0.38)] backdrop-blur-md'
+/** Floating menu surface, same tone and elevation as Popover / DropdownMenu (surface-high, elevation-2). Pair with data-surface="high". */
+export const FLOATING_DROPDOWN_MENU_CLASS = 'fixed z-popover rounded-md bg-surface-high shadow-elevation-2'
 
 export function getFloatingDropdownItemClassName({ selected, className }: { selected?: boolean; className?: string }) {
   return cn(
     'flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm transition-colors',
-    selected ? 'bg-surface-high text-foreground' : 'text-muted-foreground hover:bg-surface-high/70 hover:text-foreground',
+    selected ? 'bg-primary/12 text-foreground' : 'text-muted-foreground hover:bg-surface-highest hover:text-foreground',
     className,
   )
 }
