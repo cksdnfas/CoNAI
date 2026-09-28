@@ -32,6 +32,7 @@ import { NaiCharacterReferencesEditor } from './nai-assets/nai-character-referen
 import { NaiVibesEditor } from './nai-assets/nai-vibes-editor'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { PromptToggleField } from './prompt-toggle-field'
+import { ResolutionPicker, type DimensionBounds } from './resolution-picker'
 
 /** Render the main editable NAI form sections while the parent panel handles data wiring and modals. */
 export function NaiGenerationEditorSections({
@@ -374,6 +375,9 @@ export function NaiGenerationEditorSections({
 
 type NaiFieldName = Parameters<Parameters<typeof NaiGenerationEditorSections>[0]['handleNaiFieldChange']>[0]
 
+/** NAI sizes snap to a 64px grid. */
+const NAI_DIMENSION_BOUNDS: DimensionBounds = { min: 64, step: 64 }
+
 const NAI_ADVANCED_OPEN_STORAGE_KEY = 'conai.nai-settings.advanced-open'
 /** NovelAI accepts seeds up to 2^32 - 8; the backend rolls in the same range when the seed is blank. */
 const NAI_SEED_MAX = 4294967288
@@ -512,22 +516,20 @@ function NaiSettingsSection({
         </div>
 
         <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">
-          <FormField label={t({ ko: '해상도 프리셋', en: 'Preset' })}>
-            <Select value={naiForm.resolutionPreset} onChange={(event) => handleResolutionPresetChange(event.target.value)}>
-              {NAI_RESOLUTION_PRESETS.map((preset) => (
-                <option key={preset.key} value={preset.key}>{preset.label}</option>
-              ))}
-              <option value="custom">{t({ ko: '사용자 지정', en: 'Custom' })}</option>
-            </Select>
-          </FormField>
-
-          <FormField label={t({ ko: '너비', en: 'Width' })}>
-            <NumberStepperInput min={64} step={64} value={naiForm.width} onValueCommit={(nextValue) => handleNaiFieldChange('width', nextValue)} />
-          </FormField>
-
-          <FormField label={t({ ko: '높이', en: 'Height' })}>
-            <NumberStepperInput min={64} step={64} value={naiForm.height} onValueCommit={(nextValue) => handleNaiFieldChange('height', nextValue)} />
-          </FormField>
+          <ResolutionPicker
+            mode="preset"
+            preset={naiForm.resolutionPreset}
+            presets={[
+              ...NAI_RESOLUTION_PRESETS.map((preset) => ({ value: preset.key, label: preset.label })),
+              { value: 'custom', label: t({ ko: '사용자 지정', en: 'Custom' }) },
+            ]}
+            onPresetChange={handleResolutionPresetChange}
+            width={naiForm.width}
+            height={naiForm.height}
+            bounds={NAI_DIMENSION_BOUNDS}
+            onWidthCommit={(nextValue) => handleNaiFieldChange('width', nextValue)}
+            onHeightCommit={(nextValue) => handleNaiFieldChange('height', nextValue)}
+          />
 
           <FormField label={t({ ko: '스텝', en: 'Steps' })}>
             <NumberStepperInput min={1} max={100} value={naiForm.steps} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />

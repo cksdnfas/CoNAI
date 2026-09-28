@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
-import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Text } from '@/components/ui/text'
 import { getAppSettings } from '@/lib/api-settings-general'
@@ -15,7 +14,7 @@ import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-im
 import { useI18n } from '@/i18n'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
-import { FormField, getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
+import { getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
 import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
 import { confirmHistorySettingsOverwrite, getHistorySettingsLoadedMessage } from '../history-settings-mapping'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
@@ -25,6 +24,7 @@ import { NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import { GenerateActionBar } from './generate-action-bar'
+import { ResolutionPicker } from './resolution-picker'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 
 type CodexGenerationPanelProps = {
@@ -513,27 +513,19 @@ export function CodexGenerationPanel({
 
         <Section variant="controller" heading={t({ ko: '출력', en: 'Output' })} className="@container">
           <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
-            <FormField label={t({ ko: '비율', en: 'Aspect Ratio' })}>
-              <Select
-                value={codexForm.aspectRatio}
-                onChange={(event) => handleFieldChange('aspectRatio', event.target.value)}
-              >
-                {CODEX_ASPECT_RATIO_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.value === 'random' ? t({ ko: '랜덤', en: 'Random' }) : option.label}</option>
-                ))}
-              </Select>
-            </FormField>
-
-            <FormField label={t({ ko: '해상도', en: 'Resolution' })} hint={outputSizeHint}>
-              <Select
-                value={codexForm.resolution}
-                onChange={(event) => handleFieldChange('resolution', event.target.value)}
-              >
-                {CODEX_RESOLUTION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
-            </FormField>
+            <ResolutionPicker
+              mode="ratio"
+              ratio={codexForm.aspectRatio}
+              ratios={CODEX_ASPECT_RATIO_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.value === 'random' ? t({ ko: '랜덤', en: 'Random' }) : option.label,
+              }))}
+              onRatioChange={(value) => handleFieldChange('aspectRatio', value)}
+              tier={codexForm.resolution}
+              tiers={CODEX_RESOLUTION_OPTIONS}
+              tierHint={outputSizeHint}
+              onTierChange={(value) => handleFieldChange('resolution', value)}
+            />
           </div>
         </Section>
 
