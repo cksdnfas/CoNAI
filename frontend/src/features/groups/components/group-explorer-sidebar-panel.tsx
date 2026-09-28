@@ -1,42 +1,128 @@
-import type { ReactNode } from 'react'
+import { useState, type DragEvent } from 'react'
+import { Plus, Search } from 'lucide-react'
 import { ErrorState } from '@/components/ui/error-state'
-import { Badge } from '@/components/ui/badge'
-import { Text } from '@/components/ui/text'
+import { IconButton } from '@/components/ui/icon-button'
+import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { GroupCountMaps } from '@/features/groups/group-count-utils'
-import { GroupTree } from './group-tree'
+import { isGroupImageDrag, readGroupImageDrag } from '@/features/groups/group-image-drag'
+import type { GroupSourceKey } from '@/features/groups/group-page-shared'
+import { GROUP_DROP_ID_ATTRIBUTE, GroupTree } from './group-tree'
 import { useI18n } from '@/i18n'
 
 interface GroupExplorerSidebarPanelProps {
   isWideLayout: boolean
+  sourceKey: GroupSourceKey
   groups: GroupWithHierarchy[]
   countMaps: GroupCountMaps
   selectedGroupId?: number
   isLoading: boolean
   isError: boolean
   errorMessage?: string | null
-  headerExtra?: ReactNode
   embedded?: boolean
+  onSelectSource: (sourceKey: GroupSourceKey) => void
   onSelectGroup: (groupId: number) => void
+  /** Custom groups only: open the new-group editor. */
+  onCreateGroup?: () => void
+  /** Custom groups only: images dropped on a tree row. */
+  onDropImages?: (groupId: number, compositeHashes: string[]) => void
 }
 
-/** Render the left explorer sidebar for group browsing with loading and error states. */
+/** Find the tree row under a drag event. */
+function getDropGroupId(event: DragEvent<HTMLElement>) {
+  const target = event.target instanceof Element ? event.target.closest(`[${GROUP_DROP_ID_ATTRIBUTE}]`) : null
+  const groupId = Number(target?.getAttribute(GROUP_DROP_ID_ATTRIBUTE))
+  return Number.isFinite(groupId) && groupId > 0 ? groupId : null
+}
+
+/** Left explorer: source switch, name search, new-group action, and the group tree (also an image drop target). */
 export function GroupExplorerSidebarPanel({
   isWideLayout,
+  sourceKey,
   groups,
   countMaps,
   selectedGroupId,
   isLoading,
   isError,
   errorMessage,
-  headerExtra,
   embedded = false,
+  onSelectSource,
   onSelectGroup,
+  onCreateGroup,
+  onDropImages,
 }: GroupExplorerSidebarPanelProps) {
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
+  const [filterText, setFilterText] = useState('')
+  const [dropTargetId, setDropTargetId] = useState<number | null>(null)
+  const canDrop = Boolean(onDropImages)
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!canDrop || !isGroupImageDrag(event.dataTransfer)) return
+    const groupId = getDropGroupId(event)
+    if (groupId === null) {
+      setDropTargetId(null)
+      return
+    }
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setDropTargetId(groupId)
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+    setDropTargetId(null)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    setDropTargetId(null)
+    const groupId = getDropGroupId(event)
+    if (!canDrop || groupId === null || !isGroupImageDrag(event.dataTransfer)) return
+    event.preventDefault()
+    const compositeHashes = readGroupImageDrag(event.dataTransfer)
+    if (compositeHashes.length > 0) {
+      onDropImages?.(groupId, compositeHashes)
+    }
+  }
+
+  const header = (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <SegmentedControl
+          value={sourceKey}
+          size="xs"
+          fullWidth
+          semantics="tabs"
+          ariaLabel={t({ ko: '그룹 종류', en: 'Group source' })}
+          className="min-w-0 flex-1"
+          items={[
+            { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }) },
+            { value: 'folders', label: t({ ko: '감시폴더', en: 'Watched' }) },
+          ]}
+          onChange={(value) => onSelectSource(value as GroupSourceKey)}
+        />
+        {onCreateGroup ? (
+          <IconButton label={t({ ko: '새 그룹', en: 'New group' })} size="icon-sm" variant="subtle" onClick={onCreateGroup}>
+            <Plus />
+          </IconButton>
+        ) : null}
+      </div>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Input
+          type="search"
+          value={filterText}
+          onChange={(event) => setFilterText(event.target.value)}
+          placeholder={t({ ko: '그룹 검색', en: 'Search groups' })}
+          aria-label={t({ ko: '그룹 이름으로 찾기', en: 'Filter groups by name' })}
+          className="h-8 pl-8 text-xs"
+        />
+      </div>
+    </div>
+  )
 
   const content = (
     <>
@@ -57,19 +143,24 @@ export function GroupExplorerSidebarPanel({
       ) : null}
 
       {!isLoading && !isError ? (
-        <GroupTree groups={groups} countMaps={countMaps} selectedGroupId={selectedGroupId} onSelectGroup={onSelectGroup} />
+        <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+          <GroupTree
+            groups={groups}
+            countMaps={countMaps}
+            selectedGroupId={selectedGroupId}
+            filterText={filterText}
+            dropTargetId={dropTargetId}
+            onSelectGroup={onSelectGroup}
+          />
+        </div>
       ) : null}
     </>
   )
 
   if (embedded) {
     return (
-      <div className="space-y-4 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <Text as="div" variant="overline" className="font-semibold"><h2>{t({ ko: '폴더 탐색', en: 'Folder explorer' })}</h2></Text>
-          <Badge variant="secondary">{formatNumber(groups.length)}</Badge>
-        </div>
-        {headerExtra}
+      <div className="space-y-3 p-4">
+        {header}
         {content}
       </div>
     )
@@ -77,13 +168,11 @@ export function GroupExplorerSidebarPanel({
 
   return (
     <ExplorerSidebar
-      title={t({ ko: '탐색기', en: 'Explorer' })}
-      badge={<Badge variant="secondary">{formatNumber(groups.length)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:groups:sidebar-locked"
-      className={cn('z-20 isolate', isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
+      className={cn('z-20 isolate p-3', isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
       bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
-      headerExtra={headerExtra}
+      headerExtra={header}
     >
       {content}
     </ExplorerSidebar>

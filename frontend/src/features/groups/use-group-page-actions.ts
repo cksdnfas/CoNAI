@@ -203,6 +203,19 @@ export function useGroupPageActions({
     },
   })
 
+  // Drag-and-drop onto a tree row: same bulk add, but the selection and any open modal stay as they are.
+  const dropImagesToGroupMutation = useMutation({
+    mutationFn: ({ groupId: targetGroupId, compositeHashes }: { groupId: number; groupName: string; compositeHashes: string[] }) => addImagesToGroup(targetGroupId, compositeHashes),
+    onSuccess: async (result, variables) => {
+      const notice = formatGroupBulkAddNotice(result, t, formatNumber)
+      showSnackbar({ ...notice, message: `${variables.groupName} · ${notice.message}` })
+      await refreshCustomGroupQueries()
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.add.to.group'), tone: 'error' })
+    },
+  })
+
   const removeGroupImagesMutation = useMutation({
     mutationFn: ({ groupId: targetGroupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => removeImagesFromGroup(targetGroupId, compositeHashes),
     onSuccess: async (result) => {
@@ -407,6 +420,14 @@ export function useGroupPageActions({
     })
   }
 
+  const handleDropImagesToGroup = (targetGroupId: number, groupName: string, compositeHashes: string[]) => {
+    if (compositeHashes.length === 0 || dropImagesToGroupMutation.isPending) {
+      return
+    }
+
+    dropImagesToGroupMutation.mutate({ groupId: targetGroupId, groupName, compositeHashes })
+  }
+
   const handleRemoveSelectedImages = async () => {
     if (!selectedGroupId || !isCustomSource || selectedGroupCompositeHashes.length === 0) {
       return
@@ -437,6 +458,7 @@ export function useGroupPageActions({
     rebuildAutoFolderGroupsMutation,
     downloadGroupArchiveMutation,
     assignToGroupMutation,
+    dropImagesToGroupMutation,
     removeGroupImagesMutation,
     deleteSelectedImagesMutation,
     canDeleteImages,
@@ -456,6 +478,7 @@ export function useGroupPageActions({
     handleDeleteSelectedImages,
     handleOpenAssignModal,
     handleAssignSelectedImages,
+    handleDropImagesToGroup,
     handleRemoveSelectedImages,
   }
 }

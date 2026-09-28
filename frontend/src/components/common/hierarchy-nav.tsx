@@ -27,6 +27,8 @@ interface HierarchyNavProps<T> {
   renderIcon?: (item: T, state: HierarchyNavItemState) => ReactNode
   isItemSelectable?: (item: T, hasChildren: boolean) => boolean
   getItemClassName?: (item: T, state: HierarchyNavItemState) => string | undefined
+  /** Extra `data-*` attributes for a row (e.g. a drop-target id for delegated drag-and-drop). */
+  getItemDataAttributes?: (item: T, state: HierarchyNavItemState) => Record<`data-${string}`, string | undefined>
   onItemPointerEnter?: (item: T, state: HierarchyNavItemState, target: HTMLElement, event: PointerEvent<HTMLElement>) => void
   onItemPointerLeave?: (item: T, state: HierarchyNavItemState, target: HTMLElement, event: PointerEvent<HTMLElement>) => void
   onItemFocus?: (item: T, state: HierarchyNavItemState, target: HTMLElement, event: FocusEvent<HTMLElement>) => void
@@ -93,6 +95,7 @@ export function HierarchyNav<T>({
   renderIcon,
   isItemSelectable,
   getItemClassName,
+  getItemDataAttributes,
   onItemPointerEnter,
   onItemPointerLeave,
   onItemFocus,
@@ -183,6 +186,7 @@ export function HierarchyNav<T>({
             </>
           )
           const itemEventHandlers = {
+            ...getItemDataAttributes?.(item, state),
             onPointerEnter: (event: PointerEvent<HTMLElement>) => onItemPointerEnter?.(item, state, event.currentTarget, event),
             onPointerLeave: (event: PointerEvent<HTMLElement>) => onItemPointerLeave?.(item, state, event.currentTarget, event),
             onFocus: (event: FocusEvent<HTMLElement>) => onItemFocus?.(item, state, event.currentTarget, event),

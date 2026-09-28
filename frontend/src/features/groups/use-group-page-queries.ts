@@ -1,17 +1,17 @@
 import { useMemo } from 'react'
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAutoFolderGroupFileCounts } from '@/lib/api-auto-folder-groups'
 import {
   getGroupFileCounts,
   getGroupImages,
   getGroupsHierarchyAll,
 } from '@/lib/api-groups'
-import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
-import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import type { GroupImagesPayload, GroupWithHierarchy } from '@/types/group'
 import { createEmptyGroupFileCounts, getDownloadCountsFromImages, type GroupSourceDefinition } from './group-page-shared'
 
 const EMPTY_GROUP_HIERARCHY_LIST: GroupWithHierarchy[] = []
+export type GroupCollectionFilter = 'all' | 'manual' | 'auto'
+const COLLECTION_FILTERS: GroupCollectionFilter[] = ['all', 'manual', 'auto']
 type GroupImagesPageParam = {
   cursorOrderIndex?: number | null
   cursorAddedDate?: string | null
@@ -24,7 +24,6 @@ export function useGroupPageQueries({
   selectedSource,
   selectedGroupId,
   isCustomSource,
-  isWideLayout,
   groupImageCollectionFilter,
   selectedGroupImageIds,
   downloadScope,
@@ -32,14 +31,11 @@ export function useGroupPageQueries({
   selectedSource: GroupSourceDefinition
   selectedGroupId: number | undefined
   isCustomSource: boolean
-  isWideLayout: boolean
-  groupImageCollectionFilter: 'all' | 'manual' | 'auto'
+  groupImageCollectionFilter: GroupCollectionFilter
   selectedGroupImageIds: string[]
   downloadScope: 'group' | 'selection' | null
 }) {
   const queryClient = useQueryClient()
-
-  const appearanceQuery = useGlobalAppearanceSettingsQuery()
 
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', selectedSource.key],
@@ -55,12 +51,6 @@ export function useGroupPageQueries({
     queryKey: ['group-detail', selectedSource.key, selectedGroupId],
     queryFn: () => selectedSource.getGroup(selectedGroupId!),
     enabled: Number.isFinite(selectedGroupId),
-  })
-
-  const breadcrumbQuery = useQuery({
-    queryKey: ['group-breadcrumb', selectedSource.key, selectedGroupId],
-    queryFn: () => selectedSource.getBreadcrumb(selectedGroupId!),
-    enabled: Number.isFinite(selectedGroupId) && isWideLayout,
   })
 
   const groupImagesQuery = useInfiniteQuery({
@@ -85,6 +75,26 @@ export function useGroupPageQueries({
     enabled: Number.isFinite(selectedGroupId),
   })
 
+  // Real per-filter totals for the 전체/수동/자동 segments (one-row pages; the server counts the same way as the list).
+  const collectionFilterTotalQueries = useQueries({
+    queries: COLLECTION_FILTERS.map((collectionType) => ({
+      queryKey: ['group-images', 'custom', selectedGroupId, 'filter-total', collectionType],
+      queryFn: () => getGroupImages(selectedGroupId!, { limit: 1, collectionType, includeChildren: true }),
+      enabled: isCustomSource && Number.isFinite(selectedGroupId) && collectionType !== groupImageCollectionFilter,
+      staleTime: 30_000,
+    })),
+  })
+  const activeFilterPagination = groupImagesQuery.data?.pages[0]?.pagination
+  const collectionFilterTotals: Partial<Record<GroupCollectionFilter, number>> = {}
+  COLLECTION_FILTERS.forEach((collectionType, index) => {
+    const pagination = collectionType === groupImageCollectionFilter
+      ? activeFilterPagination
+      : collectionFilterTotalQueries[index]?.data?.pagination
+    if (pagination && pagination.totalKnown !== false) {
+      collectionFilterTotals[collectionType] = pagination.total
+    }
+  })
+
   const groupFileCountsQuery = useQuery({
     queryKey: ['group-file-counts', selectedSource.key, selectedGroupId],
     queryFn: () => (isCustomSource
@@ -102,6 +112,7 @@ export function useGroupPageQueries({
       queryClient.invalidateQueries({ queryKey: ['group-breadcrumb', 'custom'] }),
       queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
       queryClient.invalidateQueries({ queryKey: ['group-file-counts', 'custom'] }),
+      queryClient.invalidateQueries({ queryKey: ['group-cover-images', 'custom'] }),
     ])
   }
 
@@ -112,10 +123,10 @@ export function useGroupPageQueries({
       queryClient.invalidateQueries({ queryKey: ['group-breadcrumb', 'folders'] }),
       queryClient.invalidateQueries({ queryKey: ['group-images', 'folders'] }),
       queryClient.invalidateQueries({ queryKey: ['group-file-counts', 'folders'] }),
+      queryClient.invalidateQueries({ queryKey: ['group-cover-images', 'folders'] }),
     ])
   }
 
-  const groupExplorerCardStyle = appearanceQuery.data?.groupExplorerCardStyle ?? DEFAULT_APPEARANCE_SETTINGS.groupExplorerCardStyle
   const allGroups = groupsQuery.data ?? EMPTY_GROUP_HIERARCHY_LIST
   const groupHierarchyLookups = useMemo(() => {
     const groupById = new Map<number, GroupWithHierarchy>()
@@ -138,16 +149,6 @@ export function useGroupPageQueries({
   const rootGroups = groupHierarchyLookups.childrenByParentId.get(null) ?? EMPTY_GROUP_HIERARCHY_LIST
   const childGroups = selectedGroupId == null ? EMPTY_GROUP_HIERARCHY_LIST : groupHierarchyLookups.childrenByParentId.get(selectedGroupId) ?? EMPTY_GROUP_HIERARCHY_LIST
   const parentGroupHierarchy = selectedGroupHierarchy?.parent_id == null ? null : groupHierarchyLookups.groupById.get(selectedGroupHierarchy.parent_id) ?? null
-  const backNavigationGroup = selectedGroupHierarchy
-    ? parentGroupHierarchy ?? {
-        ...selectedGroupHierarchy,
-        id: 0,
-        name: selectedSource.rootTitle,
-        image_count: rootGroups.length,
-        child_count: rootGroups.length,
-        has_children: true,
-      }
-    : null
   const groupImages = useMemo(
     () => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images),
     [groupImagesQuery.data?.pages],
@@ -176,22 +177,19 @@ export function useGroupPageQueries({
   )
 
   return {
-    appearanceQuery,
     groupsQuery,
     assignableCustomGroupsQuery,
     selectedGroupQuery,
-    breadcrumbQuery,
     groupImagesQuery,
+    collectionFilterTotals,
     groupFileCountsQuery,
     refreshCustomGroupQueries,
     refreshFolderGroupQueries,
-    groupExplorerCardStyle,
     allGroups,
     selectedGroupHierarchy,
     rootGroups,
     childGroups,
     parentGroupHierarchy,
-    backNavigationGroup,
     groupImages,
     selectedGroupImages,
     selectedGroupCompositeHashes,

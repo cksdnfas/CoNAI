@@ -170,9 +170,9 @@ export async function rebuildAutoFolderGroups() {
   return resolveGroupRematchJobResponse(response.data)
 }
 
-export async function getAutoFolderGroupPreviewImage(groupId: number, params?: { includeChildren?: boolean }) {
+export async function getAutoFolderGroupPreviewImages(groupId: number, params?: { includeChildren?: boolean; count?: number }) {
   const searchParams = new URLSearchParams()
-  searchParams.set('count', '1')
+  searchParams.set('count', String(params?.count ?? 1))
   searchParams.set('includeChildren', String(params?.includeChildren ?? true))
 
   const response = await fetchJson<ApiResponse<ImageRecord[]>>(`/api/auto-folder-groups/${groupId}/preview-images?${searchParams.toString()}`)
@@ -181,7 +181,12 @@ export async function getAutoFolderGroupPreviewImage(groupId: number, params?: {
     throw createApiFallbackError(response.error, 'autoFolderGroups.preview.load')
   }
 
-  return response.data[0] ?? null
+  return response.data
+}
+
+export async function getAutoFolderGroupPreviewImage(groupId: number, params?: { includeChildren?: boolean }) {
+  const images = await getAutoFolderGroupPreviewImages(groupId, { includeChildren: params?.includeChildren, count: 1 })
+  return images[0] ?? null
 }
 
 export async function downloadAutoFolderGroupArchive(

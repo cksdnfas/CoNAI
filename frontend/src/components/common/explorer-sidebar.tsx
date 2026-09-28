@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 
 interface ExplorerSidebarProps extends PropsWithChildren {
-  title: ReactNode
+  /** Overline title row; omit (with `badge`) when `headerExtra` carries the header. */
+  title?: ReactNode
   badge?: ReactNode
   headerExtra?: ReactNode
   className?: string
@@ -124,10 +125,12 @@ export function ExplorerSidebar({
         only the list left it a sliver (or nothing) under tall header tools on phones.
       */}
       <div className={cn('flex min-h-0 flex-1 flex-col', shouldLimitUnfixedCompactHeight && '-mr-2 overflow-y-auto overscroll-contain pr-2')}>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className={cn(textVariants({ variant: 'overline' }), 'font-semibold')}>{title}</h2>
-          {badge}
-        </div>
+        {title || badge ? (
+          <div className="mb-4 flex items-center justify-between gap-3">
+            {title ? <h2 className={cn(textVariants({ variant: 'overline' }), 'font-semibold')}>{title}</h2> : null}
+            {badge}
+          </div>
+        ) : null}
 
         {headerExtra ? <div className="mb-4">{headerExtra}</div> : null}
 

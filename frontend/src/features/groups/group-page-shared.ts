@@ -2,42 +2,35 @@ import {
   getAutoFolderGroup,
   getAutoFolderGroupBreadcrumb,
   getAutoFolderGroupImages,
-  getAutoFolderGroupPreviewImage,
+  getAutoFolderGroupPreviewImages,
   getAutoFolderGroupsHierarchyAll,
 } from '@/lib/api-auto-folder-groups'
 import {
   getGroup,
   getGroupBreadcrumb,
   getGroupImages,
-  getGroupPreviewImage,
+  getGroupPreviewImages,
   getGroupsHierarchyAll,
 } from '@/lib/api-groups'
 import type { GroupBreadcrumbItem, GroupFileCounts, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
-import type { GroupExplorerCardStyle } from '@conai/shared'
 
 export const groupSources = {
   custom: {
     key: 'custom',
-    tabLabel: '커스텀 그룹',
-    rootTitle: '사용자 커스텀 그룹',
-    rootSectionTitle: '루트 그룹',
     getAllGroups: getGroupsHierarchyAll,
     getGroup,
     getBreadcrumb: getGroupBreadcrumb,
     getImages: getGroupImages,
-    getPreviewImage: getGroupPreviewImage,
+    getPreviewImages: getGroupPreviewImages,
   },
   folders: {
     key: 'folders',
-    tabLabel: '감시폴더 그룹',
-    rootTitle: '감시폴더 그룹',
-    rootSectionTitle: '감시폴더 루트',
     getAllGroups: getAutoFolderGroupsHierarchyAll,
     getGroup: getAutoFolderGroup,
     getBreadcrumb: getAutoFolderGroupBreadcrumb,
     getImages: getAutoFolderGroupImages,
-    getPreviewImage: getAutoFolderGroupPreviewImage,
+    getPreviewImages: getAutoFolderGroupPreviewImages,
   },
 } as const
 
@@ -66,13 +59,6 @@ export function createEmptyGroupFileCounts(): GroupFileCounts {
     original: 0,
     video: 0,
   }
-}
-
-/** Resolve the group-navigation grid layout for the selected card style. */
-export function getGroupCardGridClassName(cardStyle: GroupExplorerCardStyle) {
-  return cardStyle === 'media-tile'
-    ? 'grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
-    : 'grid gap-4 md:grid-cols-2 xl:grid-cols-3'
 }
 
 /** Build the selected group path from the already-loaded hierarchy. */
@@ -116,4 +102,29 @@ export function getDownloadCountsFromImages(images: ImageRecord[]): GroupFileCou
   }
 
   return counts
+}
+
+/** Number of auto-collect conditions stored on a group (flat list or and/or/exclude groups). */
+export function countAutoCollectConditions(rawConditions: string | null | undefined): number {
+  if (!rawConditions?.trim()) {
+    return 0
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(rawConditions)
+    if (Array.isArray(parsed)) {
+      return parsed.length
+    }
+    if (parsed && typeof parsed === 'object') {
+      const groups = parsed as Record<string, unknown>
+      return ['and_group', 'or_group', 'exclude_group'].reduce(
+        (sum, key) => sum + (Array.isArray(groups[key]) ? (groups[key] as unknown[]).length : 0),
+        0,
+      )
+    }
+  } catch {
+    return 0
+  }
+
+  return 0
 }
