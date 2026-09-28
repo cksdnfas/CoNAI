@@ -1,6 +1,6 @@
 # CoNAI Design Preset — The Silent Curator
 
-작성일: 2026-03-21 · 구현 규칙 갱신: 2026-09-28 (shared follow-up)
+작성일: 2026-03-21 · 구현 규칙 갱신: 2026-09-28 (Flat 재설계, V1 A: 앱 전체)
 기준 레퍼런스: 사용자 제공 홈페이지 시안 + Design System Strategy `The Silent Curator`
 
 ## Creative North Star
@@ -45,16 +45,16 @@ Midnight / Paper light 프리셋도 같은 L* 단계를 따른다. custom 팔레
 
 ## Core Aesthetic Rules
 
-### 1. No-Line Rule
-- 1px 실선 border로 섹션을 나누지 않는다.
-- 구분은 **배경 톤 차이**, **레이어**, **여백**으로 만든다.
-- 접근성 때문에 선이 꼭 필요할 때만 `outline-variant` 15% opacity를 사용한다.
+### 1. Flat Rule
+- 페이지 배경은 **한 톤**이다. 영역을 나눌 때마다 톤을 올리지 않는다 (box-inside-box 금지).
+- 섹션은 **제목 + 여백**이다. 상자(plinth)를 씌우지 않는다.
+- 설정 항목과 목록은 **hairline 행**(`border-line`, 마지막 행은 선 없음)으로 나눈다.
+- 사이드바와 본문은 **세로 hairline 하나**로 나눈다.
+- 입력 필드는 **옅은 fill 하나**(`bg-field`), 테두리 상자 없음.
 
-### 2. Atmospheric Layering
-- 카드는 선이 아니라 **톤 차이**로 떠 있어야 한다.
-- recessed 영역은 `surface-lowest`
-- 기본 카드/플린스는 `surface-low` 또는 `surface-container`
-- hover/active는 `surface-high` 또는 `surface-bright`
+### 2. Floating Only
+- 배경 + 그림자는 **떠 있는 것**에만 쓴다: 저장 바, 생성 도크, popover / menu / dialog, 떠 있는 열 조절, toast.
+- 떠 있는 것의 가장자리는 중립 hairline(`--line`)이다. 주황 테두리 금지.
 
 ### 3. Orange Discipline
 - primary orange는 CTA와 active state에만 쓴다.
@@ -89,42 +89,66 @@ Midnight / Paper light 프리셋도 같은 L* 단계를 따른다. custom 팔레
 
 ---
 
-## Implementation (D1, as built)
+## Implementation (Flat, as built)
 
 The rules below are what `src/components/ui` actually does. Use those components; do not re-create their look with
-ad-hoc classes. Lint guards (`eslint.config.js`, `[ds/*]`) warn on raw `<button>`, raw checkboxes, hand-rolled
+ad-hoc classes. Lint guards (`eslint.config.js`, `[ds/*]`) error on raw `<button>`, raw checkboxes, hand-rolled
 `fixed inset-0` overlays, hex colours, `text-[Npx]` and `bg-black/N` scrims. The live reference is `/#/dev/ui`
-(dev builds only). The guards cover `src/features/**` and `src/components/{common,layout,media}/**`.
+(dev builds only, section `flat`). The guards cover `src/features/**` and `src/components/{common,layout,media}/**`.
 
-### D1: tone, not lines
-- Sections, cards, panels, modals and drawers separate by **surface tone and spacing**. No border, no header `border-b`.
-- Outlines are allowed only for **inputs** (`border-outline-input`), **tables** and **focus rings**.
-  The rare divider that spacing cannot replace uses `<Separator />` (`bg-outline-subtle`).
-- Do not use `border-border/NN`. Tokens: `--outline-input` (= `--border`, 15–22% outline-variant, set by the
-  appearance system) and `--outline-subtle` (55% of that).
-
-### Component → tone
-| Component | Tone | Notes |
+### Flat tokens
+| Token | Tailwind | Use |
 |---|---|---|
-| Page | `background` | appearance system sets it at runtime |
-| `Section` (all variants) | `surface-low` | nested in a raised surface → `surface-lowest`; variants only change header type |
-| `Card` | `surface-container` | nested → `surface-lowest`; ambient `theme-card-shadow` |
-| `Panel` | `tone` prop: `lowest` / `low` (default) / `container` / `high` | explicit; pick one step away from the parent |
-| `Inset`, `StatTile`, `EmptyState` | `surface-low` | inside a raised surface → `surface-lowest` |
-| `Alert` | `surface-high/70`; destructive = `destructive-soft` | |
-| `ErrorState` | `destructive-soft` | |
-| `Modal` | `background` over `backdrop`, `shadow-elevation-3` | header/footer separated by spacing only |
-| `ConfirmDialog` | `surface-container` | |
-| `BottomDrawerSheet` | floating glass (`theme-floating-panel`) | `controller` variant = `background/96`; notice = `surface-lowest/70` |
+| `--line` | `border-line` | hairline: rows, sidebar \| content, header bottom, floating edges (7% foreground dark, 9% light) |
+| `--field` | `bg-field` | the one input fill (Input / Select / Textarea / ToggleRow); translucent, reads on any surface |
+| `--fill` | `bg-fill` | hover / current-row wash, segmented and tab trays, ghost hover |
+| `--elevation-key` | `shadow-key` | the raised key in a segmented tray / tab list, switch thumb |
+
+The `surface-*` ramp and `ui-tone-*` classes still exist (Panel, Inset, popovers use them) but **nesting no longer
+recesses anything**: `data-surface="raised"` has no effect on children. `data-surface="high"` still steps secondary
+buttons up one tone.
+
+### Page layout
+- `PageWithSidebar` (`components/common/page-with-sidebar`): render it as the page root.
+  `storageKey`, `sidebar`, `sidebarLabel`, `sidebarFooter?`, `sidebarWidth?` (232), `toolbar?`, `defaultCollapsed?`.
+  Desktop (`useDesktopPageLayout`, 1280px default): sticky column under the header, own scroll, right hairline,
+  collapse toggle in its footer, state persisted per key. Narrow: no column; the toolbar button opens a
+  `BottomDrawerSheet`. No floating frame, no pin.
+- `SidebarNav` / `SidebarGroupLabel` (`actions?`) / `SidebarItem` (`icon`, `label`, `count?`, `trailing?`, `active`,
+  `depth?`, `asChild?`) / `SidebarFooter` (`components/ui/sidebar`). Current row = `bg-fill` + 2px primary bar.
+  In the mobile drawer an item click closes the drawer.
+- `PageToolbar` (`components/common/page-toolbar`): one 56px row, no surface. `title?` · `start?` (segmented…) ·
+  `children` (flexible middle, e.g. search) · `actions?` (ghost IconButtons, at most one primary). Adds the sidebar
+  toggle itself inside PageWithSidebar. `PageHeader` is deprecated.
+- `ExplorerSidebar` is legacy: flat, hairline, floating / pin props are inert. Migrate callers to PageWithSidebar.
+
+### Rows
+- `SettingRow` (`label`, `description?`, `htmlFor?`, `align?` center|start, `stacked?`, `controlClassName?`, children =
+  control): label left, control right, 52px min, hairline below, control wraps under the label on phones.
+- `ListRow` (`leading?`, `trailing?`, `selected?`, `interactive?`, `size?` sm|md|lg, `asChild?`): hairline row; with
+  `asChild` a `<button>` / `<a>` / `<li>` child becomes the row (lint allows `<ListRow asChild><button/></ListRow>`).
+- `RowGroup` (`heading?`, `actions?`, `bodyClassName?`): optional heading over rows.
+- Rows must be direct siblings: never put `space-y-*` / `gap-*` between them.
+
+### Component → look
+| Component | Default | Escape hatch |
+|---|---|---|
+| Page | `background`, no glow | appearance system sets it at runtime |
+| `Section` (all variants) | flat: heading row + body, no padding / surface | `tone="raised"` = old plinth |
+| `Card` | flat | `tone="raised"` = tonal card + ambient shadow |
+| `Panel` | `tone` `low` (a real box) | `tone="none"` (no surface, hover wash when `interactive`) |
+| `Inset` | `surface-low` subtle block | only box in its area; prefer rows / text |
+| `StatTile` | flat overline label + value | `tone="fill"` |
+| `EmptyState` | no box | |
+| `Alert` / `ErrorState` | status soft fills | |
+| `Modal` | `background` over `backdrop`, `shadow-elevation-3` | |
+| `BottomDrawerSheet` | floating glass, neutral hairline edge | |
 | Popover / DropdownMenu | `surface-high`, `shadow-elevation-2` | |
-| Input / Select / Textarea | `surface-lowest` tray + `outline-input` border | focus: tone shift to `surface-low`, `border-primary/55`, `ring-primary/15` |
+| Input / Select / Textarea / ToggleRow | `bg-field`, transparent border | focus: `border-primary/55` + ring |
+| `SegmentedControl` / `TabsList` | `bg-fill` tray, selected = `bg-background` key + `shadow-key`, foreground text | |
 
-Automatic nesting uses `data-surface` on the container: `raised` (Section, Card, Panel low/container, drawer),
-`high` (Panel high, Popover), `recessed` (Panel lowest). The nested tones live in the `ui-tone-*` classes in
-`index.css` (components layer), so a `bg-*` className on a component still overrides them.
-
-Rich clickable cards (preview art + copy, list cards, media tiles) are `<Panel asChild interactive><button …/></Panel>`:
-Panel supplies tone, hover and focus ring; the lint rule allows a `<button>` that is the direct child of `Panel asChild`.
+Rich clickable cards (preview art + copy, media tiles) are `<Panel asChild interactive><button …/></Panel>`; clickable
+rows are `<ListRow asChild interactive><button …/></ListRow>`.
 
 ### Button variants
 | Variant | Use | Look |
@@ -132,11 +156,11 @@ Panel supplies tone, hover and focus ring; the lint rule allows a `<button>` tha
 | `default` | the one primary CTA of a view | solid primary + secondary top highlight (gradient stand-in that survives `bg-*` overrides), `primary-foreground` text |
 | `secondary` | every other action (was `outline`) | `surface-high` fill, no border; `surface-highest` on a `high` parent |
 | `subtle` | dense toolbars, sidebars, low-emphasis actions | `foreground/5` wash, muted text; works on any tone |
-| `ghost` | icon toolbars, inline actions | transparent until hover |
-| `nav` | sidebar / list navigation rows | full width, left aligned; current row via `data-active="true"` or `aria-current` → `primary/12` tint |
+| `ghost` | icon toolbars, inline actions | transparent until hover (`bg-fill` wash) |
+| `nav` | sidebar / list navigation rows | full width, left aligned; current row via `data-active="true"` or `aria-current` → `bg-fill` + 2px primary bar (same as SidebarItem) |
 | `destructive` | delete / irreversible | `destructive-soft` pair |
 | `link` | inline text links | `secondary` text, underline on hover |
-| `shell` | icon keys in the floating app header (search, queue, account) | translucent glass key (`.theme-shell-icon-button`); open / `aria-expanded` / pressed → primary tint |
+| `shell` | icon keys in the app header (search, queue, account) | flat like ghost (`.theme-shell-icon-button`); open / `aria-expanded` / pressed → primary tint |
 | `overlay` | controls sitting on photos (viewer toolbar, media tiles) | `backdrop/50` scrim + blur, white foreground; readable on any image in both themes |
 
 `outline` no longer exists. Icon-only buttons use `IconButton` (label = aria-label + tooltip).
@@ -160,8 +184,8 @@ eyebrow, ExplorerSidebar title) are `text-2xs` + `tracking-overline`. `--overlin
 is a muted overline (no accent colour, no rule line).
 
 ### Navigation rows
-Current row = `primary/12` tint + `foreground` text + primary icon (Button `nav`, `HierarchyNav`,
-`getNavigationItemClassName`). Hover = `surface-high`. Only the top app nav uses primary text for the active item.
+Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (SidebarItem, Button `nav`, `HierarchyNav`,
+`getNavigationItemClassName`). Hover = `bg-fill`. Only the top app nav uses primary text for the active item.
 
 ### Other tokens
 - Text: `Text` variants `overline / label / body / muted / caption / title`, `Heading level`; type scale
@@ -173,7 +197,7 @@ Current row = `primary/12` tint + `foreground` text + primary icon (Button `nav`
 - Density: `--theme-panel-padding-x/y`, `--theme-field-gap`, `--theme-control-height` (Panel `padding`/`stack` use them).
 - Radius: `rounded-sm` default; `rounded-md` for floating menus.
 - Chips (`Badge` / `Chip`): small metadata pieces, not pill-round.
-- Top navigation: floating glass (`theme-shell-header`, translucent + blur); active state is the only orange.
+- Top navigation: `theme-shell-header` (translucent + blur, `--line` bottom hairline); active state is the only orange.
 
 ---
 
@@ -198,14 +222,14 @@ Current row = `primary/12` tint + `foreground` text + primary icon (Button `nav`
 ## Do / Don't
 
 ### Do
-- 레이어 차이로 깊이 만든다
+- 여백과 hairline으로 나눈다; 면과 그림자는 떠 있는 것에만
 - negative space를 아끼지 않는다
 - active / CTA만 강하게 강조한다
 - UI보다 이미지가 먼저 보이게 한다
 
 ### Don’t
 - 밝은 SaaS형 대시보드 톤으로 가지 않는다
-- 섹션마다 border 박스 쳐두지 않는다
+- 섹션마다 상자(border든 톤이든) 씌우지 않는다, 상자 안에 상자 금지
 - orange를 장식처럼 남발하지 않는다
 - 모든 화면을 동일 밀도의 폼 UI처럼 만들지 않는다
 
@@ -232,8 +256,8 @@ Style reference:
 
 Constraints:
 - shadcn-compatible component structure
-- no heavy divider lines
-- use tonal layering instead of borders
+- one page tone; sections = heading + spacing; rows separated by a very subtle hairline
+- surface + shadow only for floating elements (menus, dialogs, save bar)
 - primary orange only for CTA and active states
 - quiet editorial spacing and typography
 - image-first composition

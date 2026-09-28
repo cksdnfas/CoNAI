@@ -3,9 +3,10 @@
  * Registered in router.tsx behind `import.meta.env.DEV`, so it never reaches production bundles.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { CircleCheck, Copy, Download, Folder, Image as ImageIcon, ImageOff, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, TriangleAlert, X } from 'lucide-react'
+import { ArrowDownWideNarrow, Bookmark, CircleCheck, Copy, Download, Folder, Image as ImageIcon, ImageOff, Inbox, Layers, Library, Lock, MoreHorizontal, Pencil, Plus, Search, Server, Settings, SlidersHorizontal, Trash2, TriangleAlert, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { PageToolbar } from '@/components/common/page-toolbar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Chip, ToggleChip } from '@/components/ui/chip'
@@ -35,15 +36,19 @@ import { Field } from '@/components/ui/field'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { ListRow } from '@/components/ui/list-row'
 import { Inset } from '@/components/ui/inset'
 import { LoadingState, Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Panel } from '@/components/ui/panel'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
+import { RowGroup } from '@/components/ui/row-group'
 import { Section } from '@/components/ui/section'
 import { Select } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { SettingRow } from '@/components/ui/setting-row'
+import { SidebarFooter, SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { StatTile } from '@/components/ui/stat-tile'
@@ -67,7 +72,7 @@ const CHIP_TONES = ['default', 'muted', 'primary', 'success', 'warning', 'info',
 const CHIP_FILTERS = ['태그', 'Prompt', '모델', 'LoRA'] as const
 const INPUT_VARIANTS = ['default', 'settings', 'detail', 'detailNested'] as const
 const SECTION_VARIANTS = ['page', 'settings', 'drawer', 'controller'] as const
-const PANEL_TONES = ['lowest', 'low', 'container', 'high'] as const
+const PANEL_TONES = ['none', 'lowest', 'low', 'container', 'high'] as const
 const PANEL_PADDINGS = ['none', 'sm', 'md', 'lg'] as const
 const PROGRESS_TONES = ['default', 'success', 'warning', 'destructive', 'info'] as const
 const TEXT_VARIANTS = ['overline', 'label', 'body', 'muted', 'caption', 'title'] as const
@@ -104,6 +109,8 @@ const SURFACE_SWATCHES = [
   ['primary', 'bg-primary text-primary-foreground'],
   ['secondary', 'bg-secondary text-secondary-foreground'],
   ['backdrop', 'bg-backdrop text-white'],
+  ['field', 'bg-field text-foreground'],
+  ['fill', 'bg-fill text-foreground'],
 ] as const
 
 const ELEVATIONS = ['shadow-elevation-1', 'shadow-elevation-2', 'shadow-elevation-3'] as const
@@ -170,6 +177,10 @@ export function UiCatalogPage() {
   const [selectedPanel, setSelectedPanel] = useState<string>('low')
   const [zoomLocked, setZoomLocked] = useState(true)
   const [chipFilters, setChipFilters] = useState<string[]>(['태그'])
+  const [flatNav, setFlatNav] = useState('general')
+  const [flatMode, setFlatMode] = useState('dark')
+  const [flatSwitch, setFlatSwitch] = useState(true)
+  const [flatRow, setFlatRow] = useState('1girl')
 
   useCatalogTheme(theme)
 
@@ -181,12 +192,12 @@ export function UiCatalogPage() {
   }
 
   const nav = [
-    'buttons', 'badges', 'inputs', 'selection', 'progress', 'overlays', 'navigation', 'panels', 'surfaces', 'sections', 'states', 'counts', 'typography', 'colours', 'z-layers',
+    'flat', 'buttons', 'badges', 'inputs', 'selection', 'progress', 'overlays', 'navigation', 'panels', 'surfaces', 'sections', 'states', 'counts', 'typography', 'colours', 'z-layers',
   ]
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-header border-b border-border/70 bg-background/95 backdrop-blur">
+      <header className="sticky top-0 z-header border-b border-line bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div>
             <Heading level={1} className="text-xl">UI catalog</Heading>
@@ -214,6 +225,81 @@ export function UiCatalogPage() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-10 px-4 py-6">
+        <CatalogSection id="flat" title="Flat layout: PageToolbar / Sidebar / SettingRow / ListRow / RowGroup">
+          <Text variant="muted">
+            One page tone. Sections are a heading + spacing, lists and settings are hairline rows, fields have one subtle fill. Only floating
+            things (save bar, popovers, dialogs, toasts) get a surface and a shadow. Pages with a sidebar use PageWithSidebar (sticky column,
+            one hairline, collapse persisted per storageKey, drawer on phones); its column is mocked below.
+          </Text>
+          <div className="flex min-h-[26rem] overflow-hidden rounded-sm border border-line">
+            <div className="hidden w-58 shrink-0 flex-col border-r border-line sm:flex">
+              <div className="flex-1 px-2.5 pt-3.5 pb-2">
+                <SidebarNav aria-label="Catalog sidebar">
+                  <SidebarGroupLabel>기본</SidebarGroupLabel>
+                  <SidebarItem icon={SlidersHorizontal} label="일반 및 화면" active={flatNav === 'general'} onClick={() => setFlatNav('general')} />
+                  <SidebarGroupLabel actions={<IconButton variant="ghost" size="icon-xs" label="그룹 추가"><Plus /></IconButton>}>콘텐츠</SidebarGroupLabel>
+                  <SidebarItem icon={Layers} label="전체" count="1,204" active={flatNav === 'all'} onClick={() => setFlatNav('all')} />
+                  <SidebarItem icon={Folder} label="캐릭터" count={96} active={flatNav === 'chars'} onClick={() => setFlatNav('chars')} />
+                  <SidebarItem icon={Folder} label="리나" count={41} depth={1} active={flatNav === 'rina'} onClick={() => setFlatNav('rina')} />
+                  <SidebarItem icon={Library} label="라이브러리" active={flatNav === 'library'} onClick={() => setFlatNav('library')} />
+                  <SidebarGroupLabel>관리</SidebarGroupLabel>
+                  <SidebarItem icon={Server} label="시스템" active={flatNav === 'system'} onClick={() => setFlatNav('system')} />
+                </SidebarNav>
+              </div>
+              <SidebarFooter>v26.8.9</SidebarFooter>
+            </div>
+            <div className="min-w-0 flex-1 px-4 pb-6 sm:px-8">
+              <PageToolbar
+                title="일반 및 화면"
+                actions={(
+                  <>
+                    <IconButton variant="ghost" size="icon-sm" label="정렬"><ArrowDownWideNarrow /></IconButton>
+                    <IconButton variant="ghost" size="icon-sm" label="프리셋"><Bookmark /></IconButton>
+                  </>
+                )}
+              />
+              <div className="space-y-8">
+                <RowGroup heading="기본">
+                  <SettingRow label="언어">
+                    <Select className="w-48" defaultValue="ko"><option value="ko">한국어</option><option value="en">English</option></Select>
+                  </SettingRow>
+                  <SettingRow label="다운로드할 때 파일명과 위치 확인" htmlFor="catalog-flat-switch">
+                    <Switch id="catalog-flat-switch" checked={flatSwitch} onCheckedChange={setFlatSwitch} />
+                  </SettingRow>
+                  <SettingRow label="모드">
+                    <SegmentedControl
+                      size="sm"
+                      value={flatMode}
+                      onChange={setFlatMode}
+                      items={[{ value: 'light', label: '라이트' }, { value: 'dark', label: '다크' }, { value: 'system', label: '시스템' }]}
+                    />
+                  </SettingRow>
+                  <SettingRow label="상단 메뉴" align="start" controlClassName="max-w-md">
+                    {CHIP_FILTERS.map((chip) => (
+                      <ToggleChip
+                        key={chip}
+                        pressed={chipFilters.includes(chip)}
+                        onClick={() => setChipFilters((current) => current.includes(chip) ? current.filter((item) => item !== chip) : [...current, chip])}
+                      >
+                        {chip}
+                      </ToggleChip>
+                    ))}
+                  </SettingRow>
+                  <SettingRow label="저장 경로" stacked><Input defaultValue="D:/images/{date}" /></SettingRow>
+                </RowGroup>
+                <RowGroup heading="프롬프트" actions={<IconButton variant="ghost" size="icon-xs" label="검색"><Search /></IconButton>}>
+                  {[['masterpiece', '812'], ['1girl', '640'], ['silver hair', '233']].map(([term, count]) => (
+                    <ListRow key={term} asChild interactive selected={flatRow === term} trailing={count}>
+                      <button type="button" onClick={() => setFlatRow(term)}>{term}</button>
+                    </ListRow>
+                  ))}
+                  <ListRow leading={<Checkbox aria-label="soft focus" />} trailing="64">soft focus <Text as="span" variant="caption">static row</Text></ListRow>
+                </RowGroup>
+              </div>
+            </div>
+          </div>
+        </CatalogSection>
+
         <CatalogSection id="buttons" title="Button / IconButton">
           {BUTTON_VARIANTS.map((variant) => (
             <Row key={variant} label={`variant=${variant}`}>
@@ -497,7 +583,7 @@ export function UiCatalogPage() {
         </CatalogSection>
 
         <CatalogSection id="panels" title="Panel / Separator">
-          <Text variant="muted">Tonal box for ad-hoc surfaces. No outline: pick a tone one step away from the parent (lowest inside a Section).</Text>
+          <Text variant="muted">A real box, for things meant to be a surface (drop zone, media card, floating control cluster). tone=none keeps padding and hover with no surface. Never nest boxes.</Text>
           <Row label="asChild + interactive: a rich clickable card is a real <button> (lint allows it inside Panel asChild)">
             {(['low', 'container'] as const).map((tone) => (
               <Panel key={tone} asChild tone={tone} interactive padding="none" className="w-56 overflow-hidden text-left">
@@ -535,8 +621,8 @@ export function UiCatalogPage() {
             ))}
           </Row>
           <div className="grid gap-4 md:grid-cols-2">
-            <Section heading="Nested tones" description="Section is surface-low; children recess to surface-lowest.">
-              <Inset><Text variant="muted">Inset inside a Section → surface-lowest</Text></Inset>
+            <Section heading="Flat Section" description="No surface; an Inset or Panel inside is the only box.">
+              <Inset><Text variant="muted">Inset: one subtle fill, same tone wherever it lands</Text></Inset>
               <Panel tone="lowest" stack>
                 <Text variant="label">Panel tone=lowest, stack</Text>
                 <Input placeholder="Recessed input tray" />
@@ -577,6 +663,7 @@ export function UiCatalogPage() {
               <StatTile label="Images" value="12,345" />
               <StatTile label="Groups" value="87" />
               <StatTile label="Size" value="4.2 GB" />
+              <StatTile label="tone=fill" value="87" tone="fill" className="col-span-3" />
             </div>
             <div className="space-y-2">
               <Skeleton className="h-4 w-2/3" />
@@ -609,6 +696,9 @@ export function UiCatalogPage() {
             </Section>
             <Section variant="settings" heading="Collapsible settings" collapsible>
               <Text variant="muted">Expanded by default.</Text>
+            </Section>
+            <Section tone="raised" heading="tone=raised" description="Escape hatch for a block that truly floats.">
+              <Text variant="muted">Old tonal plinth.</Text>
             </Section>
           </div>
         </CatalogSection>
