@@ -11,10 +11,12 @@ import type { ImageRecord } from '@/types/image'
 
 interface ImageGroupAssignActionProps {
   image?: ImageRecord
+  /** `ghost` in page toolbars, `overlay` on the viewer's photo stage. */
+  variant?: 'ghost' | 'secondary' | 'overlay'
 }
 
 /** Render a reusable single-image group assignment action for detail views. */
-export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
+export function ImageGroupAssignAction({ image, variant = 'secondary' }: ImageGroupAssignActionProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
@@ -83,7 +85,7 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
 
   return (
     <>
-      <IconButton size="icon-sm" variant="secondary" onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} label={t('images.components.detail.image.group.assign.action.add.to.group')}>
+      <IconButton size="icon-sm" variant={variant} onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} label={t('images.components.detail.image.group.assign.action.add.to.group')}>
         <FolderPlus className="h-4 w-4" />
       </IconButton>
 

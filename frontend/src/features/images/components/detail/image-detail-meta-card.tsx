@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, FilePenLine, Search, Settings2, SlidersHorizontal } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { ChevronRight, Copy, Search, Settings2, SlidersHorizontal } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import {
@@ -12,9 +11,9 @@ import {
 } from '@/components/common/prompt-result-sections'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
-import { Panel } from '@/components/ui/panel'
+import { Chip } from '@/components/ui/chip'
+import { SettingRow } from '@/components/ui/setting-row'
 import { Switch } from '@/components/ui/switch'
-import { Text } from '@/components/ui/text'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
@@ -27,9 +26,8 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
 import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTermItems, type ExtractedPromptActionScope, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
-import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
-import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
+import { DetailSettingsFlyout } from './detail-settings-flyout'
 import { formatBytes, getDownloadName, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems, parseImageTimestamp } from './image-detail-utils'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
@@ -118,9 +116,8 @@ function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: Pr
       panelWidthClassName="w-[min(22rem,calc(100vw-2rem))]"
       icon={<SlidersHorizontal className="h-4 w-4" />}
     >
-      <div className="space-y-2">
-        <Panel tone="container" padding="sm" className="flex items-center justify-between gap-4">
-          <label className={detailSettingsLabelClassName} htmlFor="prompt-grouping-depth-input">{t({ ko: '분류 깊이', en: 'Classification depth' })}</label>
+      <div>
+        <SettingRow label={t({ ko: '분류 깊이', en: 'Classification depth' })} htmlFor="prompt-grouping-depth-input" className="min-h-11">
           <NumberStepperInput
             id="prompt-grouping-depth-input"
 
@@ -129,19 +126,17 @@ function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: Pr
             step={1}
             value={options.classificationDepth}
             onValueCommit={(nextValue) => onChange({ classificationDepth: clampPromptGroupingDepth(Number(nextValue)) })}
-            className="h-8 w-16 rounded-sm border border-outline-input bg-surface-lowest px-2 text-center font-mono text-sm font-semibold text-foreground outline-none transition-colors focus:border-primary/55"
+            className="h-8 w-16 rounded-sm border border-transparent bg-field px-2 text-center font-mono text-sm font-semibold text-foreground outline-none transition-colors focus:border-primary/55"
           />
-        </Panel>
+        </SettingRow>
 
-        <Panel asChild tone="container" padding="sm" interactive>
-          <label className="flex items-center justify-between gap-4 text-sm text-foreground">
-            <span className="font-medium">{t({ ko: 'Danbooru를 루트 그룹으로 취급', en: 'Treat Danbooru as the root group' })}</span>
-            <Switch
-              checked={options.treatDanbooruAsRoot}
-              onCheckedChange={(checked) => onChange({ treatDanbooruAsRoot: checked })}
-            />
-          </label>
-        </Panel>
+        <SettingRow label={t({ ko: 'Danbooru를 루트 그룹으로 취급', en: 'Treat Danbooru as the root group' })} htmlFor="prompt-grouping-danbooru-root" className="min-h-11">
+          <Switch
+            id="prompt-grouping-danbooru-root"
+            checked={options.treatDanbooruAsRoot}
+            onCheckedChange={(checked) => onChange({ treatDanbooruAsRoot: checked })}
+          />
+        </SettingRow>
       </div>
     </DetailSettingsFlyout>
   )
@@ -164,9 +159,24 @@ function getImageModelSearchValue(image: ImageRecord) {
   return typeof modelName === 'string' ? modelName.trim() : ''
 }
 
+/** Titled block of the metadata column: a small heading row (optional actions) over flat content. */
+function MetaSection({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        <h3 className="text-xs font-bold text-foreground">{title}</h3>
+        {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+/**
+ * Flat metadata column shared by the image page and the viewer: file name, key-value lines, prompt blocks behind a
+ * left accent line, groups as chips and a collapsed "기술 정보". No cards; sections are spacing plus small headings.
+ */
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
-  const navigate = useNavigate()
-  const location = useLocation()
   const queryClient = useQueryClient()
   const imageViewModal = useImageViewModal()
   const { addScopedTextChip } = useHomeSearch()
@@ -206,7 +216,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     image.composite_hash ? { id: 'hash', label: t({ ko: '복합 해시', en: 'Composite hash' }), value: image.composite_hash } : null,
   ].filter((item): item is { id: string; label: string; value: string } => item !== null)
   const modelSearchValue = getImageModelSearchValue(image)
-  const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
+  const groups = image.groups ?? []
   const canTogglePromptGrouping = positivePromptTermItems.length > 0 || negativePromptTermItems.length > 0
 
   const settingsQuery = useQuery({
@@ -329,183 +339,174 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     addScopedTextChip('model', modelName, { apply: true })
   }
 
+  const sizeLabel = [image.width && image.height ? `${image.width} × ${image.height}` : null, image.file_size ? formatBytes(image.file_size) : null]
+    .filter(Boolean)
+    .join(' · ')
+
   return (
-    <div className="space-y-3 text-sm text-muted-foreground">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-base font-semibold tracking-tight text-foreground">{t('images.components.detail.image.detail.meta.card.metadata')}</div>
-        <div className="flex items-center gap-2">
+    <div className="space-y-7 text-sm text-muted-foreground">
+      <div>
+        <div className="flex min-h-8 items-start gap-2">
+          <h2 className="min-w-0 flex-1 pt-1 text-sm font-bold break-all text-foreground">
+            {fileName ?? t('images.components.detail.image.detail.meta.card.metadata')}
+          </h2>
           {image.is_processing ? <Badge variant="secondary">{t({ ko: '처리 중', en: 'Processing' })}</Badge> : null}
-          {canEditMetadata ? (
+        </div>
+
+        <dl className="mt-3 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+          {firstSeenLabel ? (
+            <>
+              <dt>{t({ ko: '추가', en: 'Added' })}</dt>
+              <dd className="text-foreground">{firstSeenLabel}</dd>
+            </>
+          ) : null}
+          <dt>{t({ ko: '크기', en: 'Size' })}</dt>
+          <dd className="text-foreground tabular-nums">{sizeLabel || '—'}</dd>
+          {modelSearchValue ? (
+            <>
+              <dt>{t({ ko: '모델', en: 'Model' })}</dt>
+              <dd className="flex min-w-0 items-start gap-1 text-foreground">
+                <span className="min-w-0 break-words">{modelSearchValue}</span>
+                <IconButton
+                  size="icon-xs"
+                  variant="ghost"
+                  className="-my-0.5 shrink-0"
+                  onClick={() => handleAddModelSearchFilter(modelSearchValue)}
+                  label={t({ ko: '이 모델로 검색', en: 'Search this model' })}
+                >
+                  <Search />
+                </IconButton>
+              </dd>
+            </>
+          ) : null}
+          {generationParamItems.map((item) => (
+            <div key={item.id} className="contents">
+              <dt>{item.label}</dt>
+              <dd className="break-words text-foreground">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {extractedPromptCards.length > 0 ? (
+        <MetaSection
+          title={t({ ko: '프롬프트', en: 'Prompt' })}
+          actions={canTogglePromptGrouping ? (
+            <>
+              <SegmentedControl
+                value={promptDisplayMode}
+                items={[
+                  { value: 'plain', label: t('images.components.detail.image.detail.meta.card.plain') },
+                  { value: 'grouped', label: t('images.components.detail.image.detail.meta.card.group') },
+                ]}
+                onChange={(nextMode) => handlePromptDisplayModeChange(nextMode as PromptDisplayMode)}
+                size="xs"
+              />
+              <PromptGroupingOptionsFlyout
+                isOpen={isPromptGroupingOptionsOpen}
+                options={promptGroupingOptions}
+                onToggle={() => setIsPromptGroupingOptionsOpen((current) => !current)}
+                onChange={handlePromptGroupingOptionsChange}
+              />
+            </>
+          ) : undefined}
+        >
+          <ExtractedPromptSections items={displayedPromptCards} variant="accent" onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
+        </MetaSection>
+      ) : null}
+
+      {autoPromptContent ? (
+        <MetaSection title={t({ ko: '자동 프롬프트', en: 'Auto prompt' })}>
+          <div className="space-y-3">
+            <RatingPromptSection entries={autoPromptContent.ratingEntries} />
+            <CharacterPromptSection entries={autoPromptContent.characterEntries} />
+            <GeneralPromptSection
+              tags={autoPromptContent.generalTags}
+              entries={autoPromptContent.generalEntries}
+              collapsibleScores
+              getTagHref={buildDanbooruTagUrl}
+              onAddSearchFilter={handleAddAutoPromptSearchFilter}
+              tagsHeaderAction={(
+                <IconButton
+                  size="icon-xs"
+                  variant="ghost"
+                  onClick={() => void handleCopyAutoPrompt()}
+                  disabled={!autoPromptCopyText}
+                  label={t('images.components.detail.image.detail.meta.card.auto.prompt.copy')}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </IconButton>
+              )}
+            />
+          </div>
+        </MetaSection>
+      ) : null}
+
+      {artistPromptSection ? (
+        <MetaSection
+          title={t({ ko: '작가 프롬프트', en: 'Artist prompt' })}
+          actions={(
             <IconButton
               size="icon-sm"
               variant="ghost"
-              label={t({ ko: '메타 수정', en: 'Edit metadata' })}
-              onClick={() => {
-                const sourceState = prepareImageSourceState(location)
-                imageViewModal?.closeImageView()
-                navigate(`/images/${image.composite_hash}/metadata`, { state: sourceState })
-              }}
+              onClick={() => setIsArtistPromptSettingsOpen(true)}
+              label={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}
             >
-              <FilePenLine className="h-4 w-4" />
+              <Settings2 className="h-4 w-4" />
             </IconButton>
-          ) : null}
-        </div>
-      </div>
+          )}
+        >
+          <ArtistPromptSection
+            label={artistPromptSection.label}
+            tags={artistPromptSection.tags}
+            entries={artistPromptSection.entries}
+            collapsibleScores
+            getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
+            onAddSearchFilter={handleAddAutoPromptSearchFilter}
+          />
+        </MetaSection>
+      ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {fileName ? (
-          <Panel tone="container" className={firstSeenLabel ? undefined : 'sm:col-span-2'}>
-            <Text variant="overline">{t({ ko: '파일 이름', en: 'File name' })}</Text>
-            <p className="mt-2 break-all text-foreground">{fileName}</p>
-          </Panel>
-        ) : null}
-        {firstSeenLabel ? (
-          <Panel tone="container" className={fileName ? undefined : 'sm:col-span-2'}>
-            <Text variant="overline">{t({ ko: '추가된 날짜', en: 'Added' })}</Text>
-            <p className="mt-2 text-foreground">{firstSeenLabel}</p>
-          </Panel>
-        ) : null}
-        <Panel tone="container">
-          <Text variant="overline">{t({ ko: '크기', en: 'Dimensions' })}</Text>
-          <p className="mt-2 text-foreground">{image.width && image.height ? `${image.width} × ${image.height}` : '—'}</p>
-        </Panel>
-        <Panel tone="container">
-          <Text variant="overline">{t({ ko: '파일 크기', en: 'File size' })}</Text>
-          <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
-        </Panel>
-        {modelSearchValue ? (
-          <Panel tone="container" className="sm:col-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <Text variant="overline">{t({ ko: '모델', en: 'Model' })}</Text>
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => handleAddModelSearchFilter(modelSearchValue)}
-                label={t({ ko: '이 모델로 검색', en: 'Search this model' })}
-              >
-                <Search className="h-4 w-4" />
-              </IconButton>
-            </div>
-            <p className="mt-2 break-words text-foreground">{modelSearchValue}</p>
-          </Panel>
-        ) : null}
-        {generationParamItems.map((item) => (
-          <Panel tone="container" key={item.id}>
-            <Text variant="overline">{item.label}</Text>
-            <p className="mt-2 break-words text-foreground">{item.value}</p>
-          </Panel>
-        ))}
-        {extractedPromptCards.length > 0 ? (
-          <Panel tone="container" className="sm:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Text variant="overline">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</Text>
-              {canTogglePromptGrouping ? (
-                <div className="flex items-center gap-2">
-                  <SegmentedControl
-                    value={promptDisplayMode}
-                    items={[
-                      { value: 'plain', label: t('images.components.detail.image.detail.meta.card.plain') },
-                      { value: 'grouped', label: t('images.components.detail.image.detail.meta.card.group') },
-                    ]}
-                    onChange={(nextMode) => handlePromptDisplayModeChange(nextMode as PromptDisplayMode)}
-                    size="xs"
-                  />
-                  <PromptGroupingOptionsFlyout
-                    isOpen={isPromptGroupingOptionsOpen}
-                    options={promptGroupingOptions}
-                    onToggle={() => setIsPromptGroupingOptionsOpen((current) => !current)}
-                    onChange={handlePromptGroupingOptionsChange}
-                  />
-                </div>
-              ) : null}
-            </div>
-            <div className="mt-3">
-              <ExtractedPromptSections items={displayedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
-            </div>
-          </Panel>
-        ) : null}
-        {autoPromptContent ? (
-          <Panel tone="container" className="sm:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Text variant="overline">{t({ ko: '자동 프롬프트', en: 'Auto prompt' })}</Text>
-            </div>
-            <div className="mt-3 space-y-3">
-              <RatingPromptSection entries={autoPromptContent.ratingEntries} />
-              <CharacterPromptSection entries={autoPromptContent.characterEntries} />
-              <GeneralPromptSection
-                tags={autoPromptContent.generalTags}
-                entries={autoPromptContent.generalEntries}
-                collapsibleScores
-                getTagHref={buildDanbooruTagUrl}
-                onAddSearchFilter={handleAddAutoPromptSearchFilter}
-                tagsHeaderAction={(
+      {groups.length > 0 ? (
+        <MetaSection title={t({ ko: '그룹', en: 'Groups' })}>
+          <ul className="flex flex-wrap gap-1.5">
+            {groups.map((group) => (
+              <li key={group.id}>
+                <Chip tone="muted" className="text-foreground">
+                  <span className="size-2 shrink-0 rounded-full bg-primary" style={group.color ? { backgroundColor: group.color } : undefined} aria-hidden />
+                  {group.name}
+                </Chip>
+              </li>
+            ))}
+          </ul>
+        </MetaSection>
+      ) : null}
+
+      {technicalItems.length > 0 ? (
+        <details className="group/tech border-t border-line pt-3">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-bold text-foreground select-none [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="size-3.5 text-muted-foreground transition-transform group-open/tech:rotate-90" />
+            {t({ ko: '기술 정보', en: 'Technical details' })}
+          </summary>
+          <dl className="mt-2">
+            {technicalItems.map((item) => (
+              <div key={item.id} className="border-b border-line py-2 last:border-b-0">
+                <div className="flex items-center justify-between gap-3">
+                  <dt>{item.label}</dt>
                   <IconButton
                     size="icon-xs"
                     variant="ghost"
-                    onClick={() => void handleCopyAutoPrompt()}
-                    disabled={!autoPromptCopyText}
-                    label={t('images.components.detail.image.detail.meta.card.auto.prompt.copy')}
+                    onClick={() => void handleCopyTechnicalValue(item.value)}
+                    label={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label: item.label })}
                   >
-                    <Copy className="h-3.5 w-3.5" />
+                    <Copy />
                   </IconButton>
-                )}
-              />
-            </div>
-          </Panel>
-        ) : null}
-        {artistPromptSection ? (
-          <Panel tone="container" className="sm:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Text variant="overline">{t({ ko: '작가 프롬프트', en: 'Artist prompt' })}</Text>
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setIsArtistPromptSettingsOpen(true)}
-                label={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}
-              >
-                <Settings2 className="h-4 w-4" />
-              </IconButton>
-            </div>
-            <div className="mt-3">
-              <ArtistPromptSection
-                label={artistPromptSection.label}
-                tags={artistPromptSection.tags}
-                entries={artistPromptSection.entries}
-                collapsibleScores
-                getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
-                onAddSearchFilter={handleAddAutoPromptSearchFilter}
-              />
-            </div>
-          </Panel>
-        ) : null}
-      </div>
-
-      {technicalItems.length > 0 ? (
-        <Panel tone="container" asChild>
-          <details>
-            <summary className="cursor-pointer select-none text-2xs uppercase tracking-overline marker:text-muted-foreground">
-              {t({ ko: '기술 정보', en: 'Technical details' })}
-            </summary>
-            <div className="mt-3 space-y-3">
-              {technicalItems.map((item) => (
-                <div key={item.id}>
-                  <div className="flex items-center justify-between gap-3">
-                    <Text variant="overline">{item.label}</Text>
-                    <IconButton
-                      size="icon-sm"
-                      variant="ghost"
-                      onClick={() => void handleCopyTechnicalValue(item.value)}
-                      label={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label: item.label })}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                  <p className="mt-1 break-all font-mono text-xs text-foreground/88">{item.value}</p>
                 </div>
-              ))}
-            </div>
-          </details>
-        </Panel>
+                <dd className="mt-0.5 font-mono text-xs break-all text-foreground/88">{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       ) : null}
 
       <ArtistPromptLinkSettingsModal

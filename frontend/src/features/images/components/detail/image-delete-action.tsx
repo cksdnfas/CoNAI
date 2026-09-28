@@ -14,8 +14,8 @@ import type { ImageRecord } from '@/types/image'
 interface ImageDeleteActionProps {
   image?: ImageRecord
   className?: string
-  /** `overlay` when the button sits on the photo stage (viewer toolbar). */
-  variant?: 'secondary' | 'overlay'
+  /** `ghost` in page toolbars, `overlay` when the button sits on the photo stage (viewer toolbar). */
+  variant?: 'ghost' | 'secondary' | 'overlay'
   /** Called after the image is in the Recycle Bin, e.g. to step the viewer or leave the detail page. */
   onDeleted?: (compositeHash: string) => void
 }
@@ -86,7 +86,7 @@ export function ImageDeleteAction({ image, className, variant = 'secondary', onD
       label={label}
       size="icon-sm"
       variant={variant}
-      className={cn(variant === 'secondary' && 'text-destructive hover:text-destructive', className)}
+      className={cn(variant !== 'overlay' && 'text-destructive hover:text-destructive', className)}
       onClick={() => void handleDelete()}
       disabled={isDeleting}
     >

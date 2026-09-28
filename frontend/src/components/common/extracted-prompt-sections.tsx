@@ -51,9 +51,26 @@ function getGroupedSectionTooltip(section: ExtractedPromptGroupedSection) {
   return section.hierarchyPath.join(' > ')
 }
 
+/** `card`: tinted block (default). `accent`: flat text block behind a 2px left accent line (image detail column). */
+type ExtractedPromptSectionsVariant = 'card' | 'accent'
+
 interface ExtractedPromptCardProps {
   item: ExtractedPromptCardItem
+  variant?: ExtractedPromptSectionsVariant
   onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void
+}
+
+function getPromptAccentClassName(tone: ExtractedPromptCardItem['tone']) {
+  switch (tone) {
+    case 'positive':
+      return 'border-primary/70 text-foreground'
+    case 'character':
+      return 'border-primary/40 text-foreground'
+    case 'negative':
+      return 'border-foreground/20 text-muted-foreground'
+    default:
+      return 'border-foreground/20 text-foreground'
+  }
 }
 
 interface ExtractedPromptTermListProps {
@@ -121,7 +138,7 @@ function ExtractedPromptGroupedBody({ sections, actionScope, onAddSearchFilter }
   )
 }
 
-function ExtractedPromptCard({ item, onAddSearchFilter }: ExtractedPromptCardProps) {
+function ExtractedPromptCard({ item, variant = 'card', onAddSearchFilter }: ExtractedPromptCardProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(true)
@@ -135,9 +152,18 @@ function ExtractedPromptCard({ item, onAddSearchFilter }: ExtractedPromptCardPro
     }
   }
 
+  const isAccent = variant === 'accent'
+  const content = item.groupedSections?.length ? (
+    <ExtractedPromptGroupedBody sections={item.groupedSections} actionScope={item.actionScope} onAddSearchFilter={onAddSearchFilter} />
+  ) : item.actionScope && item.actionTerms?.length ? (
+    <ExtractedPromptTermList terms={item.actionTerms} scope={item.actionScope} onAddSearchFilter={onAddSearchFilter} />
+  ) : (
+    <div className={isAccent ? 'leading-relaxed' : 'leading-8'}>{item.text}</div>
+  )
+
   return (
-    <section className="overflow-hidden rounded-sm bg-surface-lowest">
-      <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+    <section className={isAccent ? 'space-y-1.5' : 'overflow-hidden rounded-sm bg-surface-lowest'}>
+      <div className={cn('flex items-center gap-2', isAccent ? '-ml-1' : 'px-4 pt-3 pb-1')}>
         <IconButton
           size="icon-xs"
           variant="ghost"
@@ -149,7 +175,7 @@ function ExtractedPromptCard({ item, onAddSearchFilter }: ExtractedPromptCardPro
           <ChevronDown className={cn('h-4 w-4 transition-transform', expanded ? 'rotate-0' : '-rotate-90')} />
         </IconButton>
 
-        <div className={cn('min-w-0 text-sm font-semibold')} style={getPromptToneStyle(item.tone)}>{item.title}</div>
+        <div className={cn('min-w-0 font-semibold', isAccent ? 'text-xs' : 'text-sm')} style={getPromptToneStyle(item.tone)}>{item.title}</div>
 
         <div className="ml-auto flex items-center gap-2">
           {(item.badges ?? []).map((badge) => (
@@ -169,15 +195,11 @@ function ExtractedPromptCard({ item, onAddSearchFilter }: ExtractedPromptCardPro
       </div>
 
       {expanded ? (
-        <div className="px-4 pt-2 pb-4 text-base text-foreground whitespace-pre-wrap break-words">
-          {item.groupedSections?.length ? (
-            <ExtractedPromptGroupedBody sections={item.groupedSections} actionScope={item.actionScope} onAddSearchFilter={onAddSearchFilter} />
-          ) : item.actionScope && item.actionTerms?.length ? (
-            <ExtractedPromptTermList terms={item.actionTerms} scope={item.actionScope} onAddSearchFilter={onAddSearchFilter} />
-          ) : (
-            <div className="leading-8">{item.text}</div>
-          )}
-        </div>
+        isAccent ? (
+          <div className={cn('border-l-2 pl-3 text-sm whitespace-pre-wrap break-words', getPromptAccentClassName(item.tone))}>{content}</div>
+        ) : (
+          <div className="px-4 pt-2 pb-4 text-base text-foreground whitespace-pre-wrap break-words">{content}</div>
+        )
       ) : null}
     </section>
   )
@@ -186,9 +208,11 @@ function ExtractedPromptCard({ item, onAddSearchFilter }: ExtractedPromptCardPro
 /** Render reusable extracted prompt cards for image-derived prompt text. */
 export function ExtractedPromptSections({
   items,
+  variant = 'card',
   onAddSearchFilter,
 }: {
   items: ExtractedPromptCardItem[]
+  variant?: ExtractedPromptSectionsVariant
   onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void
 }) {
   if (items.length === 0) {
@@ -196,9 +220,9 @@ export function ExtractedPromptSections({
   }
 
   return (
-    <div className="space-y-3">
+    <div className={variant === 'accent' ? 'space-y-5' : 'space-y-3'}>
       {items.map((item) => (
-        <ExtractedPromptCard key={item.id} item={item} onAddSearchFilter={onAddSearchFilter} />
+        <ExtractedPromptCard key={item.id} item={item} variant={variant} onAddSearchFilter={onAddSearchFilter} />
       ))}
     </div>
   )

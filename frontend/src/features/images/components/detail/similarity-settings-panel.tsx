@@ -2,7 +2,6 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { Panel } from '@/components/ui/panel'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type SimilaritySettingsDraft } from './image-detail-utils'
@@ -97,7 +96,7 @@ export function SimilaritySettingsPanel({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Panel tone="container" padding="none" className="space-y-3 p-3">
+              <div className="space-y-3 border-t border-line pt-3">
                 <SectionTitle title={t('images.components.detail.similarity.settings.panel.score.weights')} />
 
                 <SimilarityNumberField
@@ -134,9 +133,9 @@ export function SimilaritySettingsPanel({
                     detailSimilarWeights: { ...draft.detailSimilarWeights, color: value },
                   })}
                 />
-              </Panel>
+              </div>
 
-              <Panel tone="container" padding="none" className="space-y-3 p-3">
+              <div className="space-y-3 border-t border-line pt-3">
                 <SectionTitle title={t('images.components.detail.similarity.settings.panel.per.item.thresholds')} />
 
                 <SimilarityNumberField
@@ -181,7 +180,7 @@ export function SimilaritySettingsPanel({
                     })}
                   />
                 </div>
-              </Panel>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">

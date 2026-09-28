@@ -2,7 +2,6 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { Panel } from '@/components/ui/panel'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type PromptSimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
@@ -54,7 +53,7 @@ export function PromptSimilaritySettingsPanel({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Panel tone="container" padding="none" className="space-y-3 p-3">
+              <div className="space-y-3 border-t border-line pt-3">
                 <SectionTitle title={t('images.components.detail.prompt.similarity.settings.panel.score.weights')} />
 
                 <div className="space-y-2">
@@ -71,9 +70,9 @@ export function PromptSimilaritySettingsPanel({
                   <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
                   <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.auto} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
                 </div>
-              </Panel>
+              </div>
 
-              <Panel tone="container" padding="none" className="space-y-3 p-3">
+              <div className="space-y-3 border-t border-line pt-3">
                 <SectionTitle title={t('images.components.detail.prompt.similarity.settings.panel.minimum.field.thresholds')} />
 
                 <div className="space-y-2">
@@ -90,7 +89,7 @@ export function PromptSimilaritySettingsPanel({
                   <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
                   <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.auto} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(value) } })} />
                 </div>
-              </Panel>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">

@@ -31,7 +31,7 @@ export function DetailSettingsFlyout({
 
   return (
     <>
-      <IconButton ref={triggerRef} size="icon-sm" variant="secondary" onClick={onToggle} label={triggerLabel} aria-expanded={isOpen}>
+      <IconButton ref={triggerRef} size="icon-sm" variant="ghost" onClick={onToggle} label={triggerLabel} aria-expanded={isOpen}>
         {icon}
       </IconButton>
       <AnchoredPopup open={isOpen} anchorRef={triggerRef} onClose={onToggle} align="end" side="bottom" className={panelWidthClassName} closeOnBack>

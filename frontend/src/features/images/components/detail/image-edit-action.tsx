@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FilePenLine } from 'lucide-react'
+import { Paintbrush } from 'lucide-react'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -20,10 +20,12 @@ const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor
 
 interface ImageEditActionProps {
   image?: ImageRecord
+  /** `ghost` in page toolbars, `overlay` on the viewer's photo stage. */
+  variant?: 'ghost' | 'secondary' | 'overlay'
 }
 
 /** Render a reusable image edit action that saves the edited result into save/canvas. */
-export function ImageEditAction({ image }: ImageEditActionProps) {
+export function ImageEditAction({ image, variant = 'secondary' }: ImageEditActionProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
@@ -109,8 +111,8 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
 
   return (
     <>
-      <IconButton size="icon-sm" variant="secondary" onClick={() => setIsEditorOpen(true)} disabled={saveMutation.isPending} label={t('images.components.detail.image.edit.action.images.edit')}>
-        <FilePenLine className="h-4 w-4" />
+      <IconButton size="icon-sm" variant={variant} onClick={() => setIsEditorOpen(true)} disabled={saveMutation.isPending} label={t('images.components.detail.image.edit.action.images.edit')}>
+        <Paintbrush className="h-4 w-4" />
       </IconButton>
 
       {isEditorOpen ? (

@@ -9,6 +9,7 @@ import { GenerationHistoryReuseActions } from '@/features/image-generation/compo
 import { ImageDeleteAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
+import { ImageMetadataEditAction } from './image-metadata-edit-action'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
 import { useImageViewModal, type ImageViewModalAccessOptions, type ImageViewSequenceTotal } from './image-view-modal-context'
 
@@ -90,8 +91,9 @@ export function ImageViewModalActions({
   )
 
   const historyReuseButtons = historyReuseId !== null ? <GenerationHistoryReuseActions key={historyReuseId} historyId={historyReuseId} /> : null
-  const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} /> : null
-  const editButton = allowEditAction ? <ImageEditAction image={controls.image} /> : null
+  const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} variant="overlay" /> : null
+  const metadataEditButton = allowEditAction ? <ImageMetadataEditAction image={controls.image} variant="overlay" /> : null
+  const editButton = allowEditAction ? <ImageEditAction image={controls.image} variant="overlay" /> : null
   const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="overlay" /> : null
   const deleteButton = allowDeleteAction ? (
     <ImageDeleteAction
@@ -108,8 +110,9 @@ export function ImageViewModalActions({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {historyReuseButtons}
-        {editButton}
         {groupAssignButton}
+        {metadataEditButton}
+        {editButton}
         {downloadButton}
         {deleteButton}
       </div>

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info, ScanSearch } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -44,6 +44,8 @@ export interface ImageDetailViewHeaderControls {
   image: ImageRecord | undefined
   isRefreshing: boolean
   refresh: () => void
+  /** Similar / duplicate scan trigger for the page top bar. */
+  similarity: { available: boolean; active: boolean; onRequest: () => void }
 }
 
 interface ImageDetailViewModalNavigation {
@@ -147,7 +149,6 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const { t } = useI18n()
   const canUseSplitPaneScroll = useMinWidth(1280)
   const canUseDesktopModalLayout = useMinWidth(920)
-  const useSplitPaneScroll = presentation === 'modal' && canUseSplitPaneScroll
   const usesDesktopRelatedImageColumns = useMinWidth(768)
   const [activeImageAreaTab, setActiveImageAreaTab] = useState<ImageDetailImageAreaTab>('current')
   const [isModalInfoViewerOpen, setIsModalInfoViewerOpen] = useState(canUseDesktopModalLayout)
@@ -271,10 +272,14 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     setIsPrimaryMediaReady(true)
   }, [])
 
+  const relatedImagesRef = useRef<HTMLDivElement | null>(null)
+  const shouldScrollToRelatedRef = useRef(false)
+
   const handleRequestSimilarityInspection = useCallback(() => {
     setIsSimilarityInspectionRequested(true)
     setIsImageSimilarityInspectionRequested(true)
     setIsPromptSimilarityInspectionRequested(true)
+    shouldScrollToRelatedRef.current = true
   }, [])
 
   const handleRequestImageSimilarityInspection = useCallback(() => {
@@ -473,7 +478,25 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     image,
     isRefreshing: imageQuery.isFetching,
     refresh: refreshImage,
-  }), [downloadName, downloadUrl, image, imageQuery.isFetching, refreshImage])
+    similarity: {
+      available: canLoadRelatedImages,
+      active: isSimilarityInspectionRequested,
+      onRequest: handleRequestSimilarityInspection,
+    },
+  }), [canLoadRelatedImages, downloadName, downloadUrl, handleRequestSimilarityInspection, image, imageQuery.isFetching, isSimilarityInspectionRequested, refreshImage])
+
+  // The page's scan trigger sits in the top bar; bring the results into view once they render below the image.
+  useEffect(() => {
+    if (presentation !== 'page' || !shouldScrollToRelatedRef.current || !isSimilarityInspectionRequested || !isSecondaryContentReady) {
+      return
+    }
+
+    shouldScrollToRelatedRef.current = false
+    const frameId = window.requestAnimationFrame(() => {
+      relatedImagesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isSecondaryContentReady, isSimilarityInspectionRequested, presentation])
 
   const duplicateImagesLoading = isSimilarityInspectionSettling || duplicatesQuery.isLoading
   const duplicateImagesErrorMessage = duplicatesQuery.isError
@@ -626,7 +649,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
             </div>
           </section>
 
-          <aside className="image-detail-modal-info-pane">
+          {/* Flat column: one hairline against the stage, page background, no shadow (the phone sheet keeps its lift). */}
+          <aside className="image-detail-modal-info-pane border-line bg-background min-[920px]:shadow-none">
             {canUseDesktopModalLayout ? (
               <Button
                 type="button"
@@ -656,12 +680,13 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               {isModalInfoViewerOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             </button>
 
-            <div className="image-detail-modal-info-content image-detail-scroll-pane">
+            <div className="image-detail-modal-info-content image-detail-scroll-pane min-[920px]:px-6 min-[920px]:pt-5">
               {imageQuery.isLoading ? (
-                <div className="space-y-3 p-4">
-                  <Skeleton className="h-16 w-full rounded-sm" />
-                  <Skeleton className="h-16 w-full rounded-sm" />
-                  <Skeleton className="h-16 w-full rounded-sm" />
+                <div className="space-y-3">
+                  <Skeleton className="h-6 w-2/3 rounded-sm" />
+                  <Skeleton className="h-4 w-full rounded-sm" />
+                  <Skeleton className="h-4 w-5/6 rounded-sm" />
+                  <Skeleton className="h-4 w-3/4 rounded-sm" />
                 </div>
               ) : null}
 
@@ -673,79 +698,58 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     )
   }
 
-  const detailViewportHeightClassName = 'xl:min-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))]'
-  const detailShellClassName = detailViewportHeightClassName
-
-  const detailGridClassName = cn(
-    'grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]',
-    'bg-background xl:items-start',
-    detailViewportHeightClassName,
-  )
+  // Page: top bar (hairline below) · stage on the checkerboard | metadata column behind one vertical hairline.
+  // Below xl the metadata follows the image. Similar / duplicate results open under the image from the top-bar scan icon.
+  const stageHeightClassName = 'h-[max(420px,calc(100svh-var(--theme-shell-header-height)-7rem))]'
+  const metaColumnClassName = 'min-w-0 border-t border-line pt-6 xl:border-t-0 xl:border-l xl:pt-6 xl:pl-6'
 
   return (
-    <div className={cn('space-y-8', detailShellClassName)}>
-      {renderHeader ? <div>{renderHeader(headerControls)}</div> : null}
+    <div>
+      {renderHeader ? renderHeader(headerControls) : null}
 
       {imageQuery.isLoading ? (
-        <div className={detailGridClassName}>
-          <div className="space-y-8">
-            <Skeleton className="min-h-[540px] w-full rounded-sm" />
-            <div className="grid gap-4 md:grid-cols-2">
-              <Skeleton className="h-[220px] w-full rounded-sm" />
-              <Skeleton className="h-[220px] w-full rounded-sm" />
-            </div>
+        <div className="grid xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="py-6 xl:pr-6">
+            <Skeleton className={cn('w-full rounded-sm', stageHeightClassName)} />
           </div>
-          <div className="space-y-3">
-            <Skeleton className="h-16 w-full rounded-sm" />
-            <Skeleton className="h-16 w-full rounded-sm" />
-            <Skeleton className="h-16 w-full rounded-sm" />
+          <div className={cn(metaColumnClassName, 'space-y-3')}>
+            <Skeleton className="h-6 w-2/3 rounded-sm" />
+            <Skeleton className="h-4 w-full rounded-sm" />
+            <Skeleton className="h-4 w-5/6 rounded-sm" />
+            <Skeleton className="h-4 w-3/4 rounded-sm" />
           </div>
         </div>
       ) : null}
 
       {imageQuery.isError ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mt-6">
           <AlertTitle>{t('images.image.detail.view.images.details.failed.to.load')}</AlertTitle>
           <AlertDescription>{getErrorMessage(imageQuery.error, t('images.image.detail.view.an.unknown.error.occurred'))}</AlertDescription>
         </Alert>
       ) : null}
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
-        <div className={detailGridClassName}>
-          <div
-            className={cn(
-              'space-y-8',
-              useSplitPaneScroll && 'xl:min-h-0 xl:overflow-y-auto xl:pr-2 image-detail-scroll-pane',
-            )}
-          >
-            <div className="overflow-hidden rounded-sm bg-surface-container shadow-[0_0_40px_rgba(14,14,14,0.22)]">
-              <div className="flex h-[max(540px,72vh)] items-center justify-center bg-surface-lowest">
-                <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} onPrimaryLoad={handlePrimaryMediaReady} />
-              </div>
+        <div className="grid xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="min-w-0 space-y-10 py-6 xl:pr-6">
+            <div className={cn('flex items-center justify-center', stageHeightClassName)}>
+              <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} onPrimaryLoad={handlePrimaryMediaReady} />
             </div>
 
-            {!canUseSplitPaneScroll ? <ImageDetailMetaCard image={image as ImageRecord} /> : null}
+            {!canUseSplitPaneScroll ? (
+              <div className={metaColumnClassName}>
+                <ImageDetailMetaCard image={image as ImageRecord} />
+              </div>
+            ) : null}
 
-            {isSecondaryContentReady ? (
-              isSimilarityInspectionRequested ? (
-                relatedImagesContent
-              ) : (
-                <div className="flex justify-start">
-                  <Button type="button" variant="secondary" size="sm" onClick={handleRequestSimilarityInspection}>
-                    <ScanSearch className="h-4 w-4" />
-                    {t({ ko: '유사/중복 검사', en: 'Check similar/duplicates' })}
-                  </Button>
-                </div>
-              )
+            {isSecondaryContentReady && isRelatedImageAreaActive ? (
+              <div ref={relatedImagesRef} className="scroll-mt-[calc(var(--theme-shell-header-height)+1rem)]">
+                {relatedImagesContent}
+              </div>
             ) : null}
           </div>
 
           {canUseSplitPaneScroll ? (
-            <div
-              className={cn(
-                useSplitPaneScroll && 'xl:min-h-0 xl:overflow-y-auto xl:pr-2 image-detail-scroll-pane',
-              )}
-            >
+            <div className={cn(metaColumnClassName, 'pb-6')}>
               <ImageDetailMetaCard image={image as ImageRecord} />
             </div>
           ) : null}
