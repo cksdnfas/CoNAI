@@ -403,39 +403,162 @@ function readRetryAfterSeconds(xhr: XMLHttpRequest) {
   return Number.isFinite(value) && value > 0 ? value : null
 }
 
-function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgress?: (progress: UploadTransferProgress) => void) {
-  return new Promise<T>((resolve, reject) => {
+/** Server-side outcome of one streamed upload request, keyed by the order files were sent in. */
+export interface UploadStreamBatchOutcome {
+  uploaded: UploadBatchResultItem[]
+  failed: UploadBatchFailure[]
+  /** Request indexes the server saved. */
+  succeededIndexes: number[]
+  /** Request indexes the stream ended without reporting (e.g. the connection dropped mid-processing). */
+  unreportedIndexes: number[]
+}
+
+export interface UploadStreamCallbacks {
+  /** Request-body transfer progress. */
+  onTransferProgress?: (progress: UploadTransferProgress) => void
+  /** The whole request body has been sent; the server is now processing. */
+  onTransferComplete?: () => void
+  /** The server finished (saved or rejected) another file of this request. */
+  onFileProcessed?: (processedCount: number, totalCount: number) => void
+}
+
+type UploadStreamEvent = {
+  type?: string
+  index?: number
+  filename?: string
+  error?: string
+  data?: UploadBatchResultItem
+}
+
+/** Split complete SSE frames off a text buffer and return their `data:` payloads plus the unconsumed tail. */
+function takeUploadStreamEvents(buffer: string) {
+  const frames = buffer.replace(/\r\n?/g, '\n').split('\n\n')
+  const rest = frames.pop() ?? ''
+  const events: UploadStreamEvent[] = []
+
+  for (const frame of frames) {
+    const data = frame
+      .split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).replace(/^ /, ''))
+      .join('\n')
+
+    if (!data) {
+      continue
+    }
+
+    try {
+      events.push(JSON.parse(data) as UploadStreamEvent)
+    } catch {
+      // Ignore a malformed frame; the file it described is reported as unconfirmed.
+    }
+  }
+
+  return { events, rest }
+}
+
+/** POST a multipart upload to an SSE endpoint, reporting transfer bytes and then per-file server processing. */
+function uploadFormDataWithProcessingStream(path: string, formData: FormData, fileCount: number, callbacks: UploadStreamCallbacks) {
+  return new Promise<UploadStreamBatchOutcome>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', buildApiUrl(path))
     xhr.withCredentials = true
-    xhr.setRequestHeader('Accept', 'application/json')
+    xhr.setRequestHeader('Accept', 'text/event-stream')
 
-    xhr.upload.onprogress = (event) => {
-      if (!onProgress) {
+    const uploaded: UploadBatchResultItem[] = []
+    const failed: UploadBatchFailure[] = []
+    const succeededIndexes: number[] = []
+    const reported = new Set<number>()
+    let consumedLength = 0
+    let pending = ''
+    let streamStarted = false
+
+    const isEventStreamResponse = () =>
+      xhr.status >= 200 && xhr.status < 300 && (xhr.getResponseHeader('Content-Type') ?? '').includes('text/event-stream')
+
+    const handleEvent = (event: UploadStreamEvent) => {
+      const index = event.index
+      if ((event.type !== 'complete' && event.type !== 'error') || typeof index !== 'number' || index < 0 || index >= fileCount || reported.has(index)) {
         return
       }
 
-      onProgress({
+      reported.add(index)
+      if (event.type === 'complete') {
+        succeededIndexes.push(index)
+        if (event.data) {
+          uploaded.push(event.data)
+        }
+      } else {
+        failed.push({ filename: event.filename ?? '', error: event.error || 'Processing failed' })
+      }
+      callbacks.onFileProcessed?.(reported.size, fileCount)
+    }
+
+    const drainResponse = (final: boolean) => {
+      if (!isEventStreamResponse()) {
+        return
+      }
+
+      streamStarted = true
+      const text = xhr.responseText
+      pending += text.slice(consumedLength)
+      consumedLength = text.length
+
+      const { events, rest } = takeUploadStreamEvents(final ? `${pending}\n\n` : pending)
+      pending = final ? '' : rest
+      events.forEach(handleEvent)
+    }
+
+    const settleStream = () => {
+      const unreportedIndexes: number[] = []
+      for (let index = 0; index < fileCount; index += 1) {
+        if (!reported.has(index)) {
+          unreportedIndexes.push(index)
+        }
+      }
+      resolve({ uploaded, failed, succeededIndexes, unreportedIndexes })
+    }
+
+    xhr.upload.onprogress = (event) => {
+      callbacks.onTransferProgress?.({
         loaded: event.loaded,
         total: event.lengthComputable ? event.total : null,
         percent: event.lengthComputable && event.total > 0 ? Math.min(100, Math.round((event.loaded / event.total) * 100)) : null,
       })
     }
 
+    xhr.upload.onload = () => {
+      callbacks.onTransferComplete?.()
+    }
+
+    xhr.onprogress = () => {
+      drainResponse(false)
+    }
+
     xhr.onerror = () => {
+      // Once the server started streaming, some files may already be saved; report what was confirmed.
+      if (streamStarted) {
+        settleStream()
+        return
+      }
       reject(new UploadRequestError('Network request failed', 0))
     }
 
     xhr.onload = () => {
+      if (isEventStreamResponse()) {
+        drainResponse(true)
+        settleStream()
+        return
+      }
+
       try {
-        const payload = JSON.parse(xhr.responseText || '{}') as ApiResponse<T>
-
-        if (xhr.status < 200 || xhr.status >= 300 || !payload.success) {
-          reject(new UploadRequestError(payload.error || `Request failed: ${xhr.status}`, xhr.status, readRetryAfterSeconds(xhr)))
-          return
-        }
-
-        resolve(payload.data)
+        const payload = JSON.parse(xhr.responseText || '{}') as ApiResponse<unknown>
+        const isSuccessStatus = xhr.status >= 200 && xhr.status < 300
+        reject(new UploadRequestError(
+          payload.error || (isSuccessStatus ? 'Invalid server response' : `Request failed: ${xhr.status}`),
+          isSuccessStatus ? null : xhr.status,
+          readRetryAfterSeconds(xhr),
+        ))
       } catch {
         reject(new UploadRequestError('Invalid server response', xhr.status >= 200 && xhr.status < 300 ? null : xhr.status, readRetryAfterSeconds(xhr)))
       }
@@ -447,7 +570,7 @@ function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgr
 
 export async function uploadMultipleImages(
   files: File[],
-  onProgress?: (progress: UploadTransferProgress) => void,
+  callbacks: UploadStreamCallbacks = {},
   imageSaveOptions?: {
     enabled?: boolean
     format?: 'original' | 'png' | 'jpeg' | 'webp'
@@ -477,7 +600,7 @@ export async function uploadMultipleImages(
     }
   }
 
-  return uploadFormDataWithProgress<UploadBatchResult>('/api/images/upload-multiple', formData, onProgress)
+  return uploadFormDataWithProcessingStream('/api/images/upload-multiple-stream', formData, files.length, callbacks)
 }
 
 async function uploadImagePreviewFile<T>(endpoint: string, file: File) {

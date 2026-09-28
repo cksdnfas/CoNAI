@@ -2,7 +2,13 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState, type ChangeEvent } from 'react'
 import { useI18n } from '@/i18n'
 import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
-import { UploadRequestError, uploadMultipleImages, type UploadBatchResult, type UploadTransferProgress } from '@/lib/api-images'
+import {
+  UploadRequestError,
+  uploadMultipleImages,
+  type UploadBatchResult,
+  type UploadStreamCallbacks,
+  type UploadTransferProgress,
+} from '@/lib/api-images'
 import { getAppSettings } from '@/lib/api-settings-general'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
@@ -13,7 +19,7 @@ import {
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import type { ImageSaveSettings } from '@conai/shared'
 import { planUploadBatches } from './upload-batches'
-import { getUploadFileTotalSize } from './upload-file-summary'
+import { getUploadFileTotalSize, mergeUploadQueueFiles } from './upload-file-summary'
 
 const RATE_LIMIT_MAX_RETRIES = 2
 const RATE_LIMIT_DEFAULT_WAIT_SECONDS = 10
@@ -22,12 +28,12 @@ const RATE_LIMIT_MAX_WAIT_SECONDS = 60
 /** Send one batch, waiting out upload rate limiting (429) a couple of times before giving up. */
 async function uploadBatchWithRateLimitRetry(
   files: File[],
-  onProgress: (progress: UploadTransferProgress) => void,
+  callbacks: UploadStreamCallbacks,
   imageSaveOptions: Parameters<typeof uploadMultipleImages>[2],
 ) {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await uploadMultipleImages(files, onProgress, imageSaveOptions)
+      return await uploadMultipleImages(files, callbacks, imageSaveOptions)
     } catch (error) {
       if (!(error instanceof UploadRequestError) || error.status !== 429 || attempt >= RATE_LIMIT_MAX_RETRIES) {
         throw error
@@ -37,6 +43,13 @@ async function uploadBatchWithRateLimitRetry(
       await new Promise((resolve) => window.setTimeout(resolve, waitSeconds * 1000))
     }
   }
+}
+
+/** Upload progress across all batches: file bytes sent, then files the server has finished processing. */
+export type UploadFlowProgress = UploadTransferProgress & {
+  phase: 'uploading' | 'processing' | 'done'
+  processedFiles: number
+  totalFiles: number
 }
 
 export type PendingUploadSaveState = {
@@ -54,7 +67,7 @@ export function useUploadPageUploadFlow({
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
   const [uploadResult, setUploadResult] = useState<UploadBatchResult | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploadProgress, setUploadProgress] = useState<UploadTransferProgress | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<UploadFlowProgress | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadImageSaveOptions, setUploadImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingUploadSave, setPendingUploadSave] = useState<PendingUploadSaveState | null>(null)
@@ -68,6 +81,9 @@ export function useUploadPageUploadFlow({
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
   const uploadTotalSize = useMemo(() => getUploadFileTotalSize(uploadFiles), [uploadFiles])
   const uploadPercent = uploadProgress?.percent ?? (uploadResult ? 100 : 0)
+  const processPercent = uploadProgress && uploadProgress.totalFiles > 0
+    ? Math.min(100, Math.round((uploadProgress.processedFiles / uploadProgress.totalFiles) * 100))
+    : (uploadResult ? 100 : 0)
 
   const resetUploadState = () => {
     setUploadResult(null)
@@ -75,9 +91,12 @@ export function useUploadPageUploadFlow({
     setUploadProgress(null)
   }
 
+  /** Add picked or dropped files to the queue, skipping ones already queued. */
   const applyUploadFiles = (files: File[]) => {
-    setUploadFiles(files)
-    resetUploadState()
+    setUploadFiles((current) => mergeUploadQueueFiles(current, files))
+    if (!isUploading) {
+      resetUploadState()
+    }
   }
 
   const handleUploadFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -137,42 +156,88 @@ export function useUploadPageUploadFlow({
         { limit: formatBytes(UPLOAD_LIMITS.maxFileBytes) },
       ),
     }))
+    const sendableFileCount = batches.reduce((sum, batch) => sum + batch.length, 0)
+    const succeededFiles = new Set<File>()
     let firstRequestError: string | null = null
     let completedBytes = 0
+    let completedFiles = 0
+    let progress: UploadFlowProgress = {
+      phase: 'uploading',
+      loaded: 0,
+      total: sendableBytes || null,
+      percent: 0,
+      processedFiles: 0,
+      totalFiles: sendableFileCount,
+    }
+    const updateProgress = (patch: Partial<UploadFlowProgress>) => {
+      progress = { ...progress, ...patch }
+      setUploadProgress(progress)
+    }
+    const reportLoadedBytes = (loaded: number) => {
+      const clamped = Math.min(sendableBytes, loaded)
+      updateProgress({
+        loaded: clamped,
+        percent: sendableBytes > 0 ? Math.min(100, Math.round((clamped / sendableBytes) * 100)) : null,
+      })
+    }
 
     setIsUploading(true)
     setUploadError(null)
     setUploadResult(null)
-    setUploadProgress({ loaded: 0, total: sendableBytes || null, percent: 0 })
+    setUploadProgress(progress)
 
     try {
       for (const batch of batches) {
         const batchBytes = getUploadFileTotalSize(batch)
-        const reportBatchProgress = (progress: UploadTransferProgress) => {
-          // Request bytes include multipart overhead; scale them onto this batch's file bytes.
-          const batchLoaded = progress.total && progress.total > 0
-            ? (progress.loaded / progress.total) * batchBytes
-            : Math.min(progress.loaded, batchBytes)
-          const loaded = Math.min(sendableBytes, completedBytes + batchLoaded)
-          setUploadProgress({
-            loaded,
-            total: sendableBytes || null,
-            percent: sendableBytes > 0 ? Math.min(100, Math.round((loaded / sendableBytes) * 100)) : null,
-          })
-        }
+        updateProgress({ phase: 'uploading' })
 
         try {
-          const result = await uploadBatchWithRateLimitRetry(batch, reportBatchProgress, imageSaveOptions)
+          const result = await uploadBatchWithRateLimitRetry(batch, {
+            onTransferProgress: (transfer) => {
+              // Request bytes include multipart overhead; scale them onto this batch's file bytes.
+              const batchLoaded = transfer.total && transfer.total > 0
+                ? (transfer.loaded / transfer.total) * batchBytes
+                : Math.min(transfer.loaded, batchBytes)
+              reportLoadedBytes(completedBytes + batchLoaded)
+            },
+            onTransferComplete: () => {
+              reportLoadedBytes(completedBytes + batchBytes)
+              updateProgress({ phase: 'processing' })
+            },
+            onFileProcessed: (processedCount) => {
+              updateProgress({ phase: 'processing', processedFiles: completedFiles + processedCount })
+            },
+          }, imageSaveOptions)
           uploaded.push(...result.uploaded)
           failed.push(...result.failed)
+          result.succeededIndexes.forEach((index) => {
+            const file = batch[index]
+            if (file) {
+              succeededFiles.add(file)
+            }
+          })
+          if (result.unreportedIndexes.length > 0) {
+            const message = t({
+              ko: '서버가 처리 결과를 알리기 전에 연결이 끊겼어. 다시 올리기 전에 라이브러리를 확인해줘.',
+              en: 'The connection closed before the server confirmed this file. Check the library before retrying.',
+            })
+            failed.push(...result.unreportedIndexes.map((index) => ({ filename: batch[index]?.name ?? '', error: message })))
+          }
         } catch (error) {
           const message = describeUploadRequestError(error)
           firstRequestError ??= message
           failed.push(...batch.map((file) => ({ filename: file.name, error: message })))
         }
 
-        reportBatchProgress({ loaded: 1, total: 1, percent: 100 })
         completedBytes += batchBytes
+        completedFiles += batch.length
+        reportLoadedBytes(completedBytes)
+        updateProgress({ processedFiles: completedFiles })
+      }
+
+      // Drop saved files from the queue so pressing Upload again only retries what failed.
+      if (succeededFiles.size > 0) {
+        setUploadFiles((current) => current.filter((file) => !succeededFiles.has(file)))
       }
 
       const result: UploadBatchResult = {
@@ -183,7 +248,7 @@ export function useUploadPageUploadFlow({
         failed_count: failed.length,
       }
       setUploadResult(result)
-      setUploadProgress({ loaded: sendableBytes, total: sendableBytes || null, percent: 100 })
+      updateProgress({ phase: 'done', processedFiles: sendableFileCount, percent: 100 })
 
       if (result.successful === 0 && firstRequestError) {
         setUploadError(firstRequestError)
@@ -268,6 +333,7 @@ export function useUploadPageUploadFlow({
     setPendingUploadSaveInfo,
     uploadTotalSize,
     uploadPercent,
+    processPercent,
     applyUploadFiles,
     resetUploadState,
     handleUploadFileChange,

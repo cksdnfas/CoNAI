@@ -92,6 +92,7 @@ export function UploadPage() {
     setPendingUploadSaveInfo,
     uploadTotalSize,
     uploadPercent,
+    processPercent,
     applyUploadFiles,
     resetUploadState,
     handleUploadFileChange,
@@ -333,6 +334,7 @@ export function UploadPage() {
           uploadError={uploadError}
           uploadProgress={uploadProgress}
           uploadPercent={uploadPercent}
+          processPercent={processPercent}
           uploadTotalSize={uploadTotalSize}
           isUploading={isUploading}
           uploadDropZone={uploadDropZone}

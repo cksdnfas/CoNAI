@@ -216,8 +216,9 @@ router.post('/upload-multiple', auditUploadRequest('library.multiple'), requireP
 }));
 
 /**
- * 다중 파일 업로드 (스트리밍) - 단순화 버전
- * SSE로 진행 상황만 전송
+ * 다중 파일 업로드 (스트리밍)
+ * 파일마다 서버 처리 결과를 SSE로 보낸다. `complete` 이벤트는 /upload-multiple 의 uploaded 항목과
+ * 같은 `data` 를 싣고, 마지막에 `done` 요약을 보낸다. `index` 는 요청 안의 0-based 파일 순서.
  */
 router.post('/upload-multiple-stream', auditUploadRequest('library.multiple-stream'), requirePermission('upload.create'), rejectOversizedMultipleUploadRequest, uploadMultiple, enforceMultipleUploadLimits, async (req: Request, res: Response) => {
   const files = listRequestUploadFiles(req);
@@ -229,64 +230,95 @@ router.post('/upload-multiple-stream', auditUploadRequest('library.multiple-stre
     });
   }
 
-  // SSE 헤더 설정
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-
-  const sendProgress = (event: any) => {
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-
-  console.log(`📤 Stream upload request: ${files.length} files`);
   const imageSaveOptions = parseUploadImageSaveOptions(req.body);
 
-  // 파일 처리 루프
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const currentFile = i + 1;
+  // SSE 헤더 설정. compression 은 event-stream 을 건너뛴다(configureAppMiddleware filter).
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
 
-    try {
-      sendProgress({
-        type: 'start',
-        currentFile,
-        totalFiles: files.length,
-        filename: file.originalname,
-        message: `업로드 시작: ${file.originalname}`,
-        timestamp: new Date().toISOString()
-      });
-
-      const uploadResult = await buildUploadResult(file, imageSaveOptions);
-
-      // 완료 이벤트
-      sendProgress({
-        type: 'complete',
-        currentFile,
-        totalFiles: files.length,
-        filename: file.originalname,
-        message: '파일 저장 및 즉시 처리 완료',
-        path: uploadResult.originalPath,
-        compositeHash: uploadResult.compositeHash,
-        timestamp: new Date().toISOString()
-      });
-
-      console.log(`✅ Stream: ${file.originalname} saved`);
-    } catch (error) {
-      setUploadAuditReason(res, 'partial_failure');
-      sendProgress({
-        type: 'error',
-        currentFile,
-        totalFiles: files.length,
-        filename: file.originalname,
-        error: error instanceof Error ? error.message : 'Processing failed',
-        timestamp: new Date().toISOString()
-      });
-      console.error(`❌ Stream: ${file.originalname} failed:`, error);
+  const canWrite = () => !res.writableEnded && !res.destroyed;
+  const sendProgress = (event: Record<string, unknown>) => {
+    if (canWrite()) {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
     }
+  };
+
+  // index.ts 의 server.setTimeout(60000) 은 유휴 소켓을 끊는다. 동영상처럼 한 파일 처리가 길어도
+  // 연결이 유지되도록 주석 프레임을 주기적으로 보낸다.
+  const heartbeat = setInterval(() => {
+    if (canWrite()) {
+      res.write(': keep-alive\n\n');
+    }
+  }, 15000);
+
+  console.log(`📤 Stream upload request: ${files.length} files`);
+  let successful = 0;
+
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const currentFile = i + 1;
+
+      try {
+        sendProgress({
+          type: 'start',
+          index: i,
+          currentFile,
+          totalFiles: files.length,
+          filename: file.originalname,
+          timestamp: new Date().toISOString()
+        });
+
+        const uploadResult = await buildUploadResult(file, imageSaveOptions);
+        successful += 1;
+
+        sendProgress({
+          type: 'complete',
+          index: i,
+          currentFile,
+          totalFiles: files.length,
+          filename: file.originalname,
+          path: uploadResult.originalPath,
+          compositeHash: uploadResult.compositeHash,
+          data: uploadResult.data,
+          timestamp: new Date().toISOString()
+        });
+
+        console.log(`✅ Stream: ${file.originalname} saved`);
+      } catch (error) {
+        sendProgress({
+          type: 'error',
+          index: i,
+          currentFile,
+          totalFiles: files.length,
+          filename: file.originalname,
+          error: error instanceof Error ? error.message : 'Processing failed',
+          timestamp: new Date().toISOString()
+        });
+        console.error(`❌ Stream: ${file.originalname} failed:`, error);
+      }
+    }
+  } finally {
+    clearInterval(heartbeat);
   }
 
-  console.log('📨 Stream upload complete');
+  const failedCount = files.length - successful;
+  if (failedCount > 0) {
+    setUploadAuditReason(res, successful > 0 ? 'partial_failure' : 'all_files_failed');
+  }
+
+  sendProgress({
+    type: 'done',
+    total: files.length,
+    successful,
+    failed_count: failedCount,
+    timestamp: new Date().toISOString()
+  });
+
+  console.log(`📨 Stream upload complete: ${successful}/${files.length} successful`);
   res.end();
   return;
 });

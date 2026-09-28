@@ -26,7 +26,8 @@ import { cn } from '@/lib/utils'
 import { getUploadResultDetailPath } from '../upload-result-links'
 import { getVisibleUploadResultLists } from '../upload-result-list'
 import { useLocalFilePreviews, type LocalFilePreview } from '../use-local-file-previews'
-import type { UploadBatchResult, UploadTransferProgress } from '@/lib/api-images'
+import type { UploadBatchResult } from '@/lib/api-images'
+import type { UploadFlowProgress } from '../use-upload-page-upload-flow'
 import type { AutoTestTaggerResult } from '@/lib/api-settings-tagger'
 import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import type { ExtractedPromptActionScope, ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
@@ -171,6 +172,7 @@ export function UploadPageUploadSection({
   uploadError,
   uploadProgress,
   uploadPercent,
+  processPercent,
   uploadTotalSize,
   isUploading,
   uploadDropZone,
@@ -184,8 +186,9 @@ export function UploadPageUploadSection({
   uploadFiles: File[]
   uploadResult: UploadBatchResult | null
   uploadError: string | null
-  uploadProgress: UploadTransferProgress | null
+  uploadProgress: UploadFlowProgress | null
   uploadPercent: number
+  processPercent: number
   uploadTotalSize: number
   isUploading: boolean
   uploadDropZone: {
@@ -260,14 +263,32 @@ export function UploadPageUploadSection({
       {(isUploading || uploadProgress || uploadResult) ? (
         <Inset className="space-y-3">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <div className="font-medium text-foreground">{t({ ko: '진행률', en: 'Progress' })}</div>
-            <div className="text-muted-foreground">{uploadPercent}%</div>
+            <div className="font-medium text-foreground">
+              {uploadProgress?.phase === 'processing'
+                ? t({ ko: '처리 중', en: 'Processing' })
+                : uploadProgress?.phase === 'uploading'
+                  ? t({ ko: '전송 중', en: 'Uploading' })
+                  : t({ ko: '완료', en: 'Done' })}
+            </div>
           </div>
-          <ProgressBar percent={uploadPercent} />
-          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span>{formatBytes(uploadProgress?.loaded ?? 0)}</span>
-            <span>/</span>
-            <span>{formatBytes(uploadProgress?.total ?? uploadTotalSize)}</span>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>{t({ ko: '전송', en: 'Transfer' })} · {formatBytes(uploadProgress?.loaded ?? 0)} / {formatBytes(uploadProgress?.total ?? uploadTotalSize)}</span>
+              <span>{uploadPercent}%</span>
+            </div>
+            <ProgressBar percent={uploadPercent} />
+          </div>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>
+                {t({ ko: '서버 처리', en: 'Server processing' })} · {t({ ko: '{processed}/{total}개', en: '{processed}/{total} files' }, {
+                  processed: formatNumber(uploadProgress?.processedFiles ?? 0),
+                  total: formatNumber(uploadProgress?.totalFiles ?? 0),
+                })}
+              </span>
+              <span>{processPercent}%</span>
+            </div>
+            <ProgressBar percent={processPercent} />
           </div>
         </Inset>
       ) : null}
