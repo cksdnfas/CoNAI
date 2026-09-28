@@ -2,7 +2,6 @@ import { useEffect, type ReactNode } from 'react'
 import { Bot, ImageOff, Images, Pencil } from 'lucide-react'
 import { Inset } from '@/components/ui/inset'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
-import { Button } from '@/components/ui/button'
 import { CountSummary } from '@/components/ui/count-summary'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -14,6 +13,8 @@ import { useImageFeedSafety } from '@/features/images/components/image-list/use-
 import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
+import { SegmentedControl } from '@/components/common/segmented-control'
+import { Heading } from '@/components/ui/heading'
 import { useI18n } from '@/i18n'
 import { COUNT_UNITS, type CountState } from '@/lib/count-display'
 import { getGroupImageFeedProgressSummary } from '../group-image-feed-progress'
@@ -137,30 +138,26 @@ export function GroupImageSection({
       {!hideHeader ? (
         <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            <h2 className="text-base font-semibold tracking-tight text-foreground">{t('groups.components.group.image.section.images')}</h2>
+            <Heading level={3} as="h2">{t('groups.components.group.image.section.images')}</Heading>
             <CountSummary {...countState} unit={COUNT_UNITS.images} className="text-sm text-muted-foreground" />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {typeof onCollectionFilterChange === 'function' ? (
-              <div className="flex flex-wrap items-center gap-2">
-                {COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, labelKey }) => {
-                  const translatedLabel = t(labelKey)
-                  return (
-                  <Button
-                    key={value}
-                    type="button"
-                    size="sm"
-                    variant={collectionFilter === value ? 'default' : 'secondary'}
-                    onClick={() => onCollectionFilterChange(value)}
-                    aria-label={translatedLabel}
-                    title={translatedLabel}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {translatedLabel}
-                  </Button>
-                  )
-                })}
-              </div>
+              <SegmentedControl
+                value={collectionFilter ?? 'all'}
+                size="sm"
+                ariaLabel={t({ ko: '이미지 출처 필터', en: 'Image source filter' })}
+                items={COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, labelKey }) => ({
+                  value,
+                  label: (
+                    <>
+                      <Icon className="h-4 w-4" />
+                      {t(labelKey)}
+                    </>
+                  ),
+                }))}
+                onChange={(value) => onCollectionFilterChange(value as typeof COLLECTION_FILTER_OPTIONS[number]['value'])}
+              />
             ) : null}
             {preferredColumnCount !== undefined && onColumnCountChange ? (
               <ImageListColumnControl

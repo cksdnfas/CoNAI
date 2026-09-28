@@ -355,27 +355,27 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         {fileName ? (
-          <Panel className={firstSeenLabel ? undefined : 'sm:col-span-2'}>
+          <Panel tone="container" className={firstSeenLabel ? undefined : 'sm:col-span-2'}>
             <Text variant="overline">{t({ ko: '파일 이름', en: 'File name' })}</Text>
             <p className="mt-2 break-all text-foreground">{fileName}</p>
           </Panel>
         ) : null}
         {firstSeenLabel ? (
-          <Panel className={fileName ? undefined : 'sm:col-span-2'}>
+          <Panel tone="container" className={fileName ? undefined : 'sm:col-span-2'}>
             <Text variant="overline">{t({ ko: '추가된 날짜', en: 'Added' })}</Text>
             <p className="mt-2 text-foreground">{firstSeenLabel}</p>
           </Panel>
         ) : null}
-        <Panel>
+        <Panel tone="container">
           <Text variant="overline">{t({ ko: '크기', en: 'Dimensions' })}</Text>
           <p className="mt-2 text-foreground">{image.width && image.height ? `${image.width} × ${image.height}` : '—'}</p>
         </Panel>
-        <Panel>
+        <Panel tone="container">
           <Text variant="overline">{t({ ko: '파일 크기', en: 'File size' })}</Text>
           <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
         </Panel>
         {modelSearchValue ? (
-          <Panel className="sm:col-span-2">
+          <Panel tone="container" className="sm:col-span-2">
             <div className="flex items-center justify-between gap-3">
               <Text variant="overline">{t({ ko: '모델', en: 'Model' })}</Text>
               <IconButton
@@ -391,13 +391,13 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           </Panel>
         ) : null}
         {generationParamItems.map((item) => (
-          <Panel key={item.id}>
+          <Panel tone="container" key={item.id}>
             <Text variant="overline">{item.label}</Text>
             <p className="mt-2 break-words text-foreground">{item.value}</p>
           </Panel>
         ))}
         {extractedPromptCards.length > 0 ? (
-          <Panel className="sm:col-span-2">
+          <Panel tone="container" className="sm:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Text variant="overline">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</Text>
               {canTogglePromptGrouping ? (
@@ -426,7 +426,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           </Panel>
         ) : null}
         {autoPromptContent ? (
-          <Panel className="sm:col-span-2">
+          <Panel tone="container" className="sm:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Text variant="overline">{t({ ko: '자동 프롬프트', en: 'Auto prompt' })}</Text>
             </div>
@@ -458,7 +458,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           </Panel>
         ) : null}
         {artistPromptSection ? (
-          <Panel className="sm:col-span-2">
+          <Panel tone="container" className="sm:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Text variant="overline">{t({ ko: '작가 프롬프트', en: 'Artist prompt' })}</Text>
               <IconButton
@@ -485,7 +485,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
       </div>
 
       {technicalItems.length > 0 ? (
-        <Panel asChild>
+        <Panel tone="container" asChild>
           <details>
             <summary className="cursor-pointer select-none text-2xs uppercase tracking-overline marker:text-muted-foreground">
               {t({ ko: '기술 정보', en: 'Technical details' })}
