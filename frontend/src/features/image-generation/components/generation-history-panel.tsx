@@ -4,7 +4,10 @@ import { ArrowLeft, ListX, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { Inset } from '@/components/ui/inset'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Text } from '@/components/ui/text'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
@@ -33,6 +36,7 @@ import {
 import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
 import { countStateFromQuery, formatCountDisplay } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
+import { STATUS_BADGE_CLASS } from './generation-status-tone'
 import {
   getErrorMessage,
   getRetryableHistoryQueueJobId,
@@ -629,22 +633,20 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>
-      <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             {onBack ? (
-              <Button
-                type="button"
+              <IconButton
                 size="icon-sm"
                 variant="ghost"
                 onClick={onBack}
-                aria-label={t('image-generation.components.generation.history.panel.back.to.workflow.list')}
-                title={t('image-generation.components.generation.history.panel.home')}
+                label={t('image-generation.components.generation.history.panel.back.to.workflow.list')}
               >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+                <ArrowLeft />
+              </IconButton>
             ) : null}
-            <div className="text-xl font-semibold tracking-tight text-foreground">{t('image-generation.components.generation.history.panel.generation.history')}</div>
+            <Heading level={2}>{t('image-generation.components.generation.history.panel.generation.history')}</Heading>
           </div>
           <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
             <span>{historyLabel}</span>
@@ -656,40 +658,32 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {inFlightHistoryCount > 0 ? <Badge variant="secondary">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
-          <Button
-            type="button"
+          {inFlightHistoryCount > 0 ? <Badge variant="secondary" className={STATUS_BADGE_CLASS.info}>{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
+          <IconButton
             size="icon-sm"
             variant="secondary"
             onClick={() => void handleClearHistory()}
             disabled={isClearingHistory || historyRecords.length === 0}
-            title={isClearingHistory
-              ? t({ ko: '히스토리 비우는 중', en: 'Clearing history' })
-              : isPublicView
-                ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' })
-                : t({ ko: '히스토리 비우기', en: 'Clear history' })}
-            aria-label={isClearingHistory
+            label={isClearingHistory
               ? t({ ko: '히스토리 비우는 중', en: 'Clearing history' })
               : isPublicView
                 ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' })
                 : t({ ko: '히스토리 비우기', en: 'Clear history' })}
           >
-            {isClearingHistory ? <Spinner /> : <ListX className="h-4 w-4" />}
-          </Button>
-          <Button
-            type="button"
+            {isClearingHistory ? <Spinner /> : <ListX />}
+          </IconButton>
+          <IconButton
             size="icon-sm"
             variant="secondary"
             onClick={handleCleanupFailed}
             disabled={isCleaningFailed || cleanupFailedHistoryCount === 0}
-            title={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
-            aria-label={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
+            label={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
           >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="secondary" onClick={() => void refreshHistory({ watchForNewRows: true })} title={t('image-generation.components.generation.history.panel.refresh.history')} aria-label={t('image-generation.components.generation.history.panel.refresh.history')}>
-            <RefreshCw className={cn('h-4 w-4', historyQuery.isFetching && 'animate-spin')} />
-          </Button>
+            <Trash2 />
+          </IconButton>
+          <IconButton size="icon-sm" variant="secondary" onClick={() => void refreshHistory({ watchForNewRows: true })} label={t('image-generation.components.generation.history.panel.refresh.history')}>
+            <RefreshCw className={cn(historyQuery.isFetching && 'animate-spin')} />
+          </IconButton>
         </div>
       </div>
 
@@ -706,13 +700,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         <Inset className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-foreground">{t({ ko: '실행 복구', en: 'Run recovery' })}</div>
+              <Text variant="title">{t({ ko: '실행 복구', en: 'Run recovery' })}</Text>
               <div className="mt-1 text-xs text-muted-foreground">
                 {t({ ko: '재실행 가능한 실패/취소 큐 {count}개', en: '{count} failed or canceled queue records are rerun-ready' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Badge variant="secondary">{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}</Badge>
+              <Badge variant="secondary" className={STATUS_BADGE_CLASS.warning}>{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}</Badge>
               <Button
                 type="button"
                 size="sm"
@@ -731,7 +725,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             </div>
           </div>
 
-          <div className="divide-y divide-border/70">
+          <div className="divide-y divide-outline-subtle">
             {visibleRetryableHistoryRecords.map((record) => {
               const queueJobId = getRetryableHistoryQueueJobId(record)
               const isRetrying = queueJobId !== null && retryingQueueJobIds.has(queueJobId)
@@ -853,29 +847,29 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         trailingActions={(
           <>
             {selectedRetryableHistoryRecords.length > 0 ? (
-              <Button
+              <IconButton
                 size="icon-sm"
+                variant="secondary"
                 onClick={() => void handleRetrySelectedHistoryRecords()}
                 disabled={isRetryingRunRecovery}
-                title={isRetryingRunRecovery ? t({ ko: '재실행 등록 중', en: 'Queueing rerun' }) : t({ ko: '선택 재실행', en: 'Rerun selected' })}
-                aria-label={isRetryingRunRecovery ? t({ ko: '재실행 등록 중', en: 'Queueing rerun' }) : t({ ko: '선택 재실행', en: 'Rerun selected' })}
+                label={isRetryingRunRecovery ? t({ ko: '재실행 등록 중', en: 'Queueing rerun' }) : t({ ko: '선택 재실행', en: 'Rerun selected' })}
                 data-no-select-drag="true"
               >
-                <RotateCcw className={cn('h-4 w-4', isRetryingRunRecovery && 'animate-spin')} />
-              </Button>
+                <RotateCcw className={cn(isRetryingRunRecovery && 'animate-spin')} />
+              </IconButton>
             ) : null}
 
             {!isPublicView && isAdmin ? (
-              <Button
+              <IconButton
                 size="icon-sm"
+                variant="destructive"
                 onClick={handleDeleteSelected}
                 disabled={selectedHistoryRecords.length === 0 || isDeletingSelection}
-                title={isDeletingSelection ? t('image-generation.components.generation.history.panel.deleting') : t('image-generation.components.generation.history.panel.delete.selection')}
-                aria-label={isDeletingSelection ? t('image-generation.components.generation.history.panel.deleting') : t('image-generation.components.generation.history.panel.delete.selection')}
+                label={isDeletingSelection ? t('image-generation.components.generation.history.panel.deleting') : t('image-generation.components.generation.history.panel.delete.selection')}
                 data-no-select-drag="true"
               >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                <Trash2 />
+              </IconButton>
             ) : null}
           </>
         )}

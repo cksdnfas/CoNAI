@@ -3,12 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { ListTodo, RefreshCw, Square, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Text } from '@/components/ui/text'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
@@ -21,6 +21,7 @@ import { getGraphWorkflowNames, getGraphWorkflowSchedules } from '@/lib/api-modu
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
+import { STATUS_BADGE_CLASS } from './generation-status-tone'
 import {
   canRetryGenerationQueueCancellation,
   getGenerationQueueDurationLabel,
@@ -183,11 +184,16 @@ const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCance
   const detailTitle = [detailLabel, durationLabel].filter(Boolean).join(' · ')
 
   return (
-    <div className="rounded-sm border border-border bg-surface-low px-3 py-3">
+    <div className="ui-tone-plinth rounded-sm px-3 py-3">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 text-2xs">
           <div className="flex min-w-0 items-center gap-2">
-            <Badge variant={isCancelRequested ? 'outline' : 'secondary'} className={cn(isCancelRequested ? 'border-amber-500/40 text-amber-700 dark:text-amber-300' : '')}>{statusLabel}</Badge>
+            <Badge
+              variant="secondary"
+              className={isCancelRequested ? STATUS_BADGE_CLASS.warning : isRunning ? STATUS_BADGE_CLASS.info : undefined}
+            >
+              {statusLabel}
+            </Badge>
             <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
           </div>
           {isRunning ? (
@@ -470,6 +476,8 @@ export function GenerationQueueHeaderWidget() {
 
   return (
     <div ref={containerRef} className="relative">
+      {/* Shell header icon: shares theme-shell-icon-button with the search and account triggers (no Button variant for the glass header). */}
+      {/* eslint-disable-next-line no-restricted-syntax -- header shell icon style, see comment above */}
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
@@ -481,16 +489,16 @@ export function GenerationQueueHeaderWidget() {
       >
         <ListTodo className="h-4 w-4" />
         {globalActiveCount > 0 ? (
-          <span className="absolute -right-1 -bottom-1 inline-flex min-w-[1rem] items-center justify-center rounded-sm border border-primary/25 bg-primary/16 px-1 text-2xs font-semibold leading-4 text-primary shadow-[0_0_0_2px_var(--background)]">
+          <span className="absolute -right-1 -bottom-1 inline-flex min-w-4 items-center justify-center rounded-sm bg-primary px-1 text-2xs font-semibold leading-4 text-primary-foreground ring-2 ring-background">
             {formatNumber(globalActiveCount)}
           </span>
         ) : null}
-        {hasUnreadQueueUpdate ? <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-rose-500 shadow-[0_0_0_2px_var(--background)]" aria-hidden="true" /> : null}
+        {hasUnreadQueueUpdate ? <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-destructive ring-2 ring-background" aria-hidden="true" /> : null}
       </button>
 
       <div
         className={cn(
-          'theme-floating-panel fixed left-2 right-2 top-[calc(var(--theme-shell-header-height)+0.5rem)] z-[70] overflow-hidden rounded-sm border border-border/80 bg-background/95 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur transition-opacity sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+0.5rem)] sm:w-[min(33rem,calc(100vw-1rem))]',
+          'theme-floating-panel fixed left-2 right-2 top-[calc(var(--theme-shell-header-height)+0.5rem)] z-popover overflow-hidden rounded-md transition-opacity sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+0.5rem)] sm:w-[min(33rem,calc(100vw-1rem))]',
           isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
       >
@@ -510,18 +518,18 @@ export function GenerationQueueHeaderWidget() {
             fullWidth
             className="border-b-0 pb-0"
             actions={(
-              <Button type="button" size="icon-xs" variant="ghost" onClick={() => void handleRefresh()} title={t('image-generation.components.generation.queue.header.widget.refresh.popup')} aria-label={t('image-generation.components.generation.queue.header.widget.refresh.popup')}>
-                <RefreshCw className="h-3.5 w-3.5" />
-              </Button>
+              <IconButton size="icon-xs" variant="ghost" onClick={() => void handleRefresh()} label={t('image-generation.components.generation.queue.header.widget.refresh.popup')}>
+                <RefreshCw />
+              </IconButton>
             )}
           />
         </div>
 
         {effectiveTab === 'jobs' ? (
           <>
-            <div className="space-y-3 border-y border-border/70 px-3 py-3 sm:px-4">
+            <div className="space-y-2 px-3 pb-1 sm:px-4">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '범위', en: 'Scope' })}</div>
+                <Text as="div" variant="overline" className="font-semibold">{t({ ko: '범위', en: 'Scope' })}</Text>
                 <Badge variant={filteredActiveCount > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">{t({ ko: '작업 큐 · {count}', en: 'Job Queue · {count}' }, { count: formatNumber(filteredActiveCount) })}</Badge>
               </div>
               <Select value={selectedFilter} onChange={(event) => setSelectedFilter(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">
@@ -533,7 +541,7 @@ export function GenerationQueueHeaderWidget() {
                   <option key={workflow.id} value={`workflow:${workflow.id}`}>{workflow.name}</option>
                 ))}
               </Select>
-              {hasGenerationPermission && workflowsQuery.isError ? <div className="text-2xs text-amber-700 dark:text-amber-300">{t('image-generation.components.generation.queue.header.widget.could.not.load.the.workflow.list.so')}</div> : null}
+              {hasGenerationPermission && workflowsQuery.isError ? <div className="text-2xs text-warning">{t('image-generation.components.generation.queue.header.widget.could.not.load.the.workflow.list.so')}</div> : null}
             </div>
 
             <div className={POPUP_LIST_CLASS_NAME}>
