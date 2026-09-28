@@ -70,9 +70,14 @@ CMD ["node", "dist/backend/src/index.js"]
 # CPU is the default and keeps the normal image free of CUDA libraries.
 FROM runtime-base AS runtime-cpu
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir \
+# torch comes from the CPU wheel index; everything else resolves from PyPI only, so the PyTorch index's
+# older mirrored copies (numpy, pandas, onnxruntime) are never picked. Long timeouts/retries ride out
+# slow index responses instead of failing the build.
+RUN python3 -m pip install --break-system-packages --no-cache-dir --timeout 60 --retries 8 \
     --index-url https://download.pytorch.org/whl/cpu \
     --extra-index-url https://pypi.org/simple \
+    torch torchvision \
+  && python3 -m pip install --break-system-packages --no-cache-dir --timeout 60 --retries 8 \
     -r /app/backend/python/requirements.txt
 
 # GPU users opt into this target explicitly. PyTorch wheels provide the CUDA
@@ -81,10 +86,10 @@ FROM runtime-base AS runtime-gpu
 
 ARG PYTORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu121
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir \
+RUN python3 -m pip install --break-system-packages --no-cache-dir --timeout 60 --retries 8 \
     --index-url "${PYTORCH_CUDA_INDEX_URL}" \
     torch torchvision \
-  && python3 -m pip install --break-system-packages --no-cache-dir \
+  && python3 -m pip install --break-system-packages --no-cache-dir --timeout 60 --retries 8 \
     -r /app/backend/python/requirements-gpu.txt
 
 ENV NVIDIA_VISIBLE_DEVICES=all \
