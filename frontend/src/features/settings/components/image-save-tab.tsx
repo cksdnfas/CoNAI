@@ -1,17 +1,19 @@
+import type { ReactNode } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { CodexIcon, NovelAIIcon } from '@/components/common/provider-icons'
+import { ToggleChip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
+import { RowGroup } from '@/components/ui/row-group'
 import { Select } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
+import { SettingRow } from '@/components/ui/setting-row'
 import type { GenerationThrottleSettings, ImageSaveSettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
-import { Field } from '@/components/ui/field'
-import { Section } from '@/components/ui/section'
 import { VideoOptimizationTab } from './video-optimization-tab'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from './settings-switch-row'
 import { SettingsLabelTip } from './settings-label-tip'
+import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
   { label: '720p', width: 1280, height: 720 },
@@ -64,6 +66,66 @@ interface ImageSaveTabProps {
   hasVideoOptimizationChanges: boolean
 }
 
+type Translate = ReturnType<typeof useI18n>['t']
+
+/** Rows of one provider's pacing (concurrency, window, count, distribution, min gap). */
+function ProviderPacingRows({
+  value,
+  maxConcurrent,
+  onPatch,
+  t,
+}: {
+  value: GenerationThrottleSettings['novelai']
+  maxConcurrent: number
+  onPatch: (patch: Partial<GenerationThrottleSettings['novelai']>) => void
+  t: Translate
+}) {
+  const labels = {
+    concurrent: t({ ko: '동시 실행 수', en: 'Concurrent jobs' }),
+    window: t({ ko: '기간(분)', en: 'Window (minutes)' }),
+    count: t({ ko: '생성횟수', en: 'Job count' }),
+    mode: t({ ko: '분배', en: 'Distribution' }),
+    gap: t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' }),
+  }
+
+  return (
+    <>
+      <SettingRow label={labels.concurrent} controlClassName={SETTINGS_CONTROL_CLASS}>
+        <NumberStepperInput min={1} max={maxConcurrent} variant="settings" aria-label={labels.concurrent} value={value.maxConcurrentJobs} onValueCommit={(nextValue) => onPatch({ maxConcurrentJobs: Number(nextValue) || 1 })} />
+      </SettingRow>
+      <SettingRow label={labels.window} controlClassName={SETTINGS_CONTROL_CLASS}>
+        <NumberStepperInput min={1} max={1440} variant="settings" aria-label={labels.window} value={value.scheduleWindowMinutes} onValueCommit={(nextValue) => onPatch({ scheduleWindowMinutes: Number(nextValue) || 1 })} />
+      </SettingRow>
+      <SettingRow label={labels.count} controlClassName={SETTINGS_CONTROL_CLASS}>
+        <NumberStepperInput min={1} max={10000} variant="settings" aria-label={labels.count} value={value.scheduleJobCount} onValueCommit={(nextValue) => onPatch({ scheduleJobCount: Number(nextValue) || 1 })} />
+      </SettingRow>
+      <SettingRow label={labels.mode} controlClassName={SETTINGS_CONTROL_CLASS}>
+        <Select
+          variant="settings"
+          aria-label={labels.mode}
+          value={value.scheduleMode}
+          onChange={(event) => onPatch({ scheduleMode: event.target.value as GenerationThrottleSettings['novelai']['scheduleMode'] })}
+        >
+          <option value="even">{t({ ko: '균등', en: 'Even' })}</option>
+          <option value="random">{t({ ko: '비균등', en: 'Random' })}</option>
+        </Select>
+      </SettingRow>
+      <SettingRow label={labels.gap} controlClassName={SETTINGS_CONTROL_CLASS}>
+        <NumberStepperInput min={0} max={3600} variant="settings" aria-label={labels.gap} value={value.minStartIntervalSeconds} onValueCommit={(nextValue) => onPatch({ minStartIntervalSeconds: Number(nextValue) || 0 })} />
+      </SettingRow>
+    </>
+  )
+}
+
+function ProviderHeading({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      {icon}
+      {children}
+    </span>
+  )
+}
+
 /** Render generation pacing and media-processing sections for settings composition. */
 export function ImageSaveTab({
   showGenerationThrottle = true,
@@ -82,152 +144,103 @@ export function ImageSaveTab({
   hasVideoOptimizationChanges,
 }: ImageSaveTabProps) {
   const { t } = useI18n()
+  const labels = {
+    reservationConcurrency: t({ ko: '예약 동시 실행 수', en: 'Reservation concurrency' }),
+    userQueuePolicy: t({ ko: '사용자 대기열이 있을 때', en: 'When a user queue exists' }),
+    format: t({ ko: '기본 포맷', en: 'Default format' }),
+    quality: t({ ko: '품질', en: 'Quality' }),
+    maxWidth: t({ ko: '최대 가로', en: 'Max width' }),
+    maxHeight: t({ ko: '최대 세로', en: 'Max height' }),
+    applyMode: t({ ko: '적용 방식', en: 'Apply mode' }),
+    thumbnailSize: t({ ko: '썸네일 크기', en: 'Thumbnail size' }),
+    thumbnailQuality: t({ ko: '썸네일 품질', en: 'Thumbnail quality' }),
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {showGenerationThrottle ? (
-      <section>
-        <Section
-          variant="settings"
-          heading={t({ ko: '생성 텀 / 쓰로틀', en: 'Generation pacing / throttle' })}
-          actions={<SectionDirtyBadge dirty={hasGenerationThrottleChanges} />}
-        >
-          {generationThrottleDraft ? (
-            <div className="space-y-5">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-base font-semibold text-foreground">{t({ ko: '예약작업', en: 'Reservations' })}</div>
+        generationThrottleDraft ? (
+          <>
+            <RowGroup
+              heading={t({ ko: '예약 작업', en: 'Reservations' })}
+              actions={(
+                <>
+                  <SectionDirtyBadge dirty={hasGenerationThrottleChanges} />
                   <IconButton
-                    size="icon-xs"
+                    size="icon-sm"
                     variant="ghost"
                     onClick={() => onPatchGenerationThrottle({ reservations: DEFAULT_GENERATION_THROTTLE_SETTINGS.reservations })}
                     label={t({ ko: '예약작업 실행 정책 초기값으로 되돌리기', en: 'Restore reservation policy defaults' })}
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
+                    <RefreshCw className="h-4 w-4" />
                   </IconButton>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label={t({ ko: '예약 동시 실행 수', en: 'Reservation concurrency' })}>
-                    <NumberStepperInput min={1} max={12} variant="settings" value={generationThrottleDraft.reservations.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ reservations: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
-                  </Field>
-                  <Field label={t({ ko: '사용자 대기열이 있을 때', en: 'When a user queue exists' })}>
-                    <Select
-                      variant="settings"
-                      value={generationThrottleDraft.reservations.userQueuePolicy}
-                      onChange={(event) => onPatchGenerationThrottle({ reservations: { userQueuePolicy: event.target.value as GenerationThrottleSettings['reservations']['userQueuePolicy'] } })}
-                    >
-                      <option value="continue_limited">{t({ ko: '예약은 1개만 계속', en: 'Keep only 1 reservation running' })}</option>
-                      <option value="hold_until_empty">{t({ ko: '새 예약 시작 보류', en: 'Hold new reservations until empty' })}</option>
-                    </Select>
-                  </Field>
-                </div>
-              </div>
+                </>
+              )}
+            >
+              <SettingRow label={labels.reservationConcurrency} controlClassName={SETTINGS_CONTROL_CLASS}>
+                <NumberStepperInput min={1} max={12} variant="settings" aria-label={labels.reservationConcurrency} value={generationThrottleDraft.reservations.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ reservations: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
+              </SettingRow>
+              <SettingRow label={labels.userQueuePolicy} controlClassName={SETTINGS_CONTROL_CLASS}>
+                <Select
+                  variant="settings"
+                  aria-label={labels.userQueuePolicy}
+                  value={generationThrottleDraft.reservations.userQueuePolicy}
+                  onChange={(event) => onPatchGenerationThrottle({ reservations: { userQueuePolicy: event.target.value as GenerationThrottleSettings['reservations']['userQueuePolicy'] } })}
+                >
+                  <option value="continue_limited">{t({ ko: '예약은 1개만 계속', en: 'Keep only 1 reservation running' })}</option>
+                  <option value="hold_until_empty">{t({ ko: '새 예약 시작 보류', en: 'Hold new reservations until empty' })}</option>
+                </Select>
+              </SettingRow>
+            </RowGroup>
 
-              <div className="px-3 py-1">
-                <div className="h-px bg-border/70" />
-              </div>
+            <RowGroup
+              heading={<ProviderHeading icon={<NovelAIIcon className="size-4" />}>{t({ ko: 'NovelAI 생성 텀', en: 'NovelAI pacing' })}</ProviderHeading>}
+              actions={(
+                <IconButton
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => onPatchGenerationThrottle({ novelai: DEFAULT_GENERATION_THROTTLE_SETTINGS.novelai })}
+                  label={t({ ko: 'NovelAI 생성 텀 초기값으로 되돌리기', en: 'Restore NovelAI pacing defaults' })}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </IconButton>
+              )}
+            >
+              <ProviderPacingRows value={generationThrottleDraft.novelai} maxConcurrent={8} onPatch={(patch) => onPatchGenerationThrottle({ novelai: patch })} t={t} />
+            </RowGroup>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-base font-semibold text-foreground">NovelAI</div>
-                  <IconButton
-                    size="icon-xs"
-                    variant="ghost"
-                    onClick={() => onPatchGenerationThrottle({ novelai: DEFAULT_GENERATION_THROTTLE_SETTINGS.novelai })}
-                    label={t({ ko: 'NovelAI 생성 텀 초기값으로 되돌리기', en: 'Restore NovelAI pacing defaults' })}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  </IconButton>
-                </div>
-                <div className="grid gap-4 md:grid-cols-5">
-                  <Field label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
-                    <NumberStepperInput min={1} max={8} variant="settings" value={generationThrottleDraft.novelai.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
-                  </Field>
-                  <Field label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
-                    <NumberStepperInput min={1} max={1440} variant="settings" value={generationThrottleDraft.novelai.scheduleWindowMinutes} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { scheduleWindowMinutes: Number(nextValue) || 1 } })} />
-                  </Field>
-                  <Field label={t({ ko: '생성횟수', en: 'Job count' })}>
-                    <NumberStepperInput min={1} max={10000} variant="settings" value={generationThrottleDraft.novelai.scheduleJobCount} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { scheduleJobCount: Number(nextValue) || 1 } })} />
-                  </Field>
-                  <Field label={t({ ko: '분배', en: 'Distribution' })}>
-                    <Select
-                      variant="settings"
-                      value={generationThrottleDraft.novelai.scheduleMode}
-                      onChange={(event) => onPatchGenerationThrottle({ novelai: { scheduleMode: event.target.value as GenerationThrottleSettings['novelai']['scheduleMode'] } })}
-                    >
-                      <option value="even">{t({ ko: '균등', en: 'Even' })}</option>
-                      <option value="random">{t({ ko: '비균등', en: 'Random' })}</option>
-                    </Select>
-                  </Field>
-                  <Field label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
-                    <NumberStepperInput min={0} max={3600} variant="settings" value={generationThrottleDraft.novelai.minStartIntervalSeconds} onValueCommit={(nextValue) => onPatchGenerationThrottle({ novelai: { minStartIntervalSeconds: Number(nextValue) || 0 } })} />
-                  </Field>
-                </div>
-              </div>
-
-              <div className="px-3 py-1">
-                <div className="h-px bg-border/70" />
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-base font-semibold text-foreground">Codex</div>
-                  <IconButton
-                    size="icon-xs"
-                    variant="ghost"
-                    onClick={() => onPatchGenerationThrottle({ codex: DEFAULT_GENERATION_THROTTLE_SETTINGS.codex })}
-                    label={t({ ko: 'Codex 생성 텀 초기값으로 되돌리기', en: 'Restore Codex pacing defaults' })}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  </IconButton>
-                </div>
-                <div className="grid gap-4 md:grid-cols-5">
-                  <Field label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
-                    <NumberStepperInput min={1} max={8} variant="settings" value={generationThrottleDraft.codex.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
-                  </Field>
-                  <Field label={t({ ko: '기간(분)', en: 'Window (minutes)' })}>
-                    <NumberStepperInput min={1} max={1440} variant="settings" value={generationThrottleDraft.codex.scheduleWindowMinutes} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { scheduleWindowMinutes: Number(nextValue) || 1 } })} />
-                  </Field>
-                  <Field label={t({ ko: '생성횟수', en: 'Job count' })}>
-                    <NumberStepperInput min={1} max={10000} variant="settings" value={generationThrottleDraft.codex.scheduleJobCount} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { scheduleJobCount: Number(nextValue) || 1 } })} />
-                  </Field>
-                  <Field label={t({ ko: '분배', en: 'Distribution' })}>
-                    <Select
-                      variant="settings"
-                      value={generationThrottleDraft.codex.scheduleMode}
-                      onChange={(event) => onPatchGenerationThrottle({ codex: { scheduleMode: event.target.value as GenerationThrottleSettings['codex']['scheduleMode'] } })}
-                    >
-                      <option value="even">{t({ ko: '균등', en: 'Even' })}</option>
-                      <option value="random">{t({ ko: '비균등', en: 'Random' })}</option>
-                    </Select>
-                  </Field>
-                  <Field label={t({ ko: '최소 간격(초)', en: 'Min gap (seconds)' })}>
-                    <NumberStepperInput min={0} max={3600} variant="settings" value={generationThrottleDraft.codex.minStartIntervalSeconds} onValueCommit={(nextValue) => onPatchGenerationThrottle({ codex: { minStartIntervalSeconds: Number(nextValue) || 0 } })} />
-                  </Field>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <Skeleton className="h-72 w-full rounded-sm" />
-          )}
-        </Section>
-      </section>
+            <RowGroup
+              heading={<ProviderHeading icon={<CodexIcon className="size-4" />}>{t({ ko: 'Codex 생성 텀', en: 'Codex pacing' })}</ProviderHeading>}
+              actions={(
+                <IconButton
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => onPatchGenerationThrottle({ codex: DEFAULT_GENERATION_THROTTLE_SETTINGS.codex })}
+                  label={t({ ko: 'Codex 생성 텀 초기값으로 되돌리기', en: 'Restore Codex pacing defaults' })}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </IconButton>
+              )}
+            >
+              <ProviderPacingRows value={generationThrottleDraft.codex} maxConcurrent={8} onPatch={(patch) => onPatchGenerationThrottle({ codex: patch })} t={t} />
+            </RowGroup>
+          </>
+        ) : (
+          <RowGroup heading={t({ ko: '예약 작업', en: 'Reservations' })}>
+            <SettingsRowsSkeleton rows={4} />
+          </RowGroup>
+        )
       ) : null}
 
       {showMediaSettings ? (
-      <>
-      <section>
-        <Section
-          variant="settings"
-          heading={t({ ko: '이미지 저장', en: 'Image saving' })}
-          actions={<SectionDirtyBadge dirty={hasImageSaveChanges} />}
-        >
-          <div className="grid gap-4 md:grid-cols-2">
+        <>
+          <RowGroup heading={t({ ko: '이미지 저장', en: 'Image saving' })} actions={<SectionDirtyBadge dirty={hasImageSaveChanges} />}>
             {imageSaveDraft ? (
               <>
-                <Field label={t({ ko: '기본 포맷', en: 'Default format' })}>
+                <SettingRow label={labels.format} controlClassName={SETTINGS_CONTROL_CLASS}>
                   <Select
                     variant="settings"
+                    aria-label={labels.format}
                     value={imageSaveDraft.defaultFormat}
                     onChange={(event) => onPatchImageSave({ defaultFormat: event.target.value as ImageSaveSettings['defaultFormat'] })}
                   >
@@ -236,99 +249,70 @@ export function ImageSaveTab({
                     <option value="jpeg">JPEG</option>
                     <option value="webp">WebP</option>
                   </Select>
-                </Field>
+                </SettingRow>
 
-                <Field label={t({ ko: '품질', en: 'Quality' })}>
-                  <NumberStepperInput
-
-                    min={1}
-                    max={100}
-                    variant="settings"
-                    value={imageSaveDraft.quality}
-                    onValueCommit={(nextValue) => onPatchImageSave({ quality: Number(nextValue) || 1 })}
-                  />
-                </Field>
+                <SettingRow label={labels.quality} controlClassName={SETTINGS_CONTROL_CLASS}>
+                  <NumberStepperInput min={1} max={100} variant="settings" aria-label={labels.quality} value={imageSaveDraft.quality} onValueCommit={(nextValue) => onPatchImageSave({ quality: Number(nextValue) || 1 })} />
+                </SettingRow>
 
                 <SettingsSwitchRow
                   checked={imageSaveDraft.resizeEnabled}
                   onCheckedChange={(checked) => onPatchImageSave({ resizeEnabled: checked })}
                   label={t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}
-                  className="md:col-span-2"
                 />
 
-                <Field label={t({ ko: '크기 프리셋', en: 'Size presets' })}>
-                  <div className="flex flex-wrap gap-2">
-                    {IMAGE_SAVE_SIZE_PRESETS.map((preset) => (
-                      <Button
-                        key={preset.label}
-                        type="button"
-                        size="sm"
-                        variant={imageSaveDraft.maxWidth === preset.width && imageSaveDraft.maxHeight === preset.height ? 'secondary' : 'secondary'}
-                        onClick={() => onPatchImageSave({ maxWidth: preset.width, maxHeight: preset.height, resizeEnabled: true })}
-                      >
-                        {preset.label}
-                      </Button>
-                    ))}
-                  </div>
-                </Field>
+                <SettingRow label={t({ ko: '크기 프리셋', en: 'Size presets' })} controlClassName="justify-start sm:justify-end">
+                  {IMAGE_SAVE_SIZE_PRESETS.map((preset) => (
+                    <ToggleChip
+                      key={preset.label}
+                      pressed={imageSaveDraft.resizeEnabled && imageSaveDraft.maxWidth === preset.width && imageSaveDraft.maxHeight === preset.height}
+                      onClick={() => onPatchImageSave({ maxWidth: preset.width, maxHeight: preset.height, resizeEnabled: true })}
+                    >
+                      {preset.label}
+                    </ToggleChip>
+                  ))}
+                </SettingRow>
 
-                <Field label={t({ ko: '최대 가로', en: 'Max width' })}>
-                  <NumberStepperInput
-                    min={64}
-                    max={16384}
-                    variant="settings"
-                    disabled={!imageSaveDraft.resizeEnabled}
-                    value={imageSaveDraft.maxWidth}
-                    onValueCommit={(nextValue) => onPatchImageSave({ maxWidth: Number(nextValue) || 64 })}
-                  />
-                </Field>
+                <SettingRow label={labels.maxWidth} controlClassName={SETTINGS_CONTROL_CLASS}>
+                  <NumberStepperInput min={64} max={16384} variant="settings" aria-label={labels.maxWidth} disabled={!imageSaveDraft.resizeEnabled} value={imageSaveDraft.maxWidth} onValueCommit={(nextValue) => onPatchImageSave({ maxWidth: Number(nextValue) || 64 })} />
+                </SettingRow>
 
-                <Field label={t({ ko: '최대 세로', en: 'Max height' })}>
-                  <NumberStepperInput
-                    min={64}
-                    max={16384}
-                    variant="settings"
-                    disabled={!imageSaveDraft.resizeEnabled}
-                    value={imageSaveDraft.maxHeight}
-                    onValueCommit={(nextValue) => onPatchImageSave({ maxHeight: Number(nextValue) || 64 })}
-                  />
-                </Field>
+                <SettingRow label={labels.maxHeight} controlClassName={SETTINGS_CONTROL_CLASS}>
+                  <NumberStepperInput min={64} max={16384} variant="settings" aria-label={labels.maxHeight} disabled={!imageSaveDraft.resizeEnabled} value={imageSaveDraft.maxHeight} onValueCommit={(nextValue) => onPatchImageSave({ maxHeight: Number(nextValue) || 64 })} />
+                </SettingRow>
 
-                <Field label={t({ ko: '적용 방식', en: 'Apply mode' })}>
+                <SettingRow label={labels.applyMode} controlClassName={SETTINGS_CONTROL_CLASS}>
                   <Select
                     variant="settings"
+                    aria-label={labels.applyMode}
                     value={imageSaveDraft.alwaysShowDialog ? 'dialog' : 'auto'}
                     onChange={(event) => onPatchImageSave({ alwaysShowDialog: event.target.value === 'dialog' })}
                   >
                     <option value="auto">{t({ ko: '설정값 자동 적용', en: 'Apply settings automatically' })}</option>
                     <option value="dialog">{t({ ko: '매번 팝업으로 확인', en: 'Confirm with a dialog every time' })}</option>
                   </Select>
-                </Field>
+                </SettingRow>
 
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToGenerationAttachments}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToGenerationAttachments: checked })}
                   label={t({ ko: '생성 첨부에 적용', en: 'Apply to generation attachments' })}
                 />
-
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToEditorSave}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToEditorSave: checked })}
                   label={t({ ko: '에디터 저장에 적용', en: 'Apply to editor saves' })}
                 />
-
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToCanvasSave}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToCanvasSave: checked })}
                   label={t({ ko: '캔버스 저장에 적용', en: 'Apply to canvas saves' })}
                 />
-
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToUpload}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToUpload: checked })}
                   label={t({ ko: '업로드에 적용', en: 'Apply to uploads' })}
                 />
-
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToWorkflowOutputs}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToWorkflowOutputs: checked })}
@@ -336,58 +320,46 @@ export function ImageSaveTab({
                 />
               </>
             ) : (
-              <Skeleton className="h-64 w-full rounded-sm md:col-span-2" />
+              <SettingsRowsSkeleton rows={5} />
             )}
-          </div>
-        </Section>
-      </section>
+          </RowGroup>
 
-      <section>
-        <Section
-          variant="settings"
-          heading={t({ ko: '썸네일', en: 'Thumbnail' })}
-          actions={<SectionDirtyBadge dirty={hasThumbnailChanges} />}
-        >
-          {thumbnailDraft ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t({ ko: '썸네일 크기', en: 'Thumbnail size' })}>
-                <Select
-                  variant="settings"
-                  value={thumbnailDraft.size}
-                  onChange={(event) => onPatchThumbnail({ size: event.target.value as ThumbnailSettings['size'] })}
+          <RowGroup heading={t({ ko: '썸네일', en: 'Thumbnail' })} actions={<SectionDirtyBadge dirty={hasThumbnailChanges} />}>
+            {thumbnailDraft ? (
+              <>
+                <SettingRow label={labels.thumbnailSize} controlClassName={SETTINGS_CONTROL_CLASS}>
+                  <Select
+                    variant="settings"
+                    aria-label={labels.thumbnailSize}
+                    value={thumbnailDraft.size}
+                    onChange={(event) => onPatchThumbnail({ size: event.target.value as ThumbnailSettings['size'] })}
+                  >
+                    <option value="original">{t({ ko: '원본', en: 'Original' })}</option>
+                    <option value="2048">2048px</option>
+                    <option value="1080">1080px</option>
+                    <option value="720">720px</option>
+                    <option value="512">512px</option>
+                  </Select>
+                </SettingRow>
+
+                <SettingRow
+                  label={<SettingsLabelTip label={labels.thumbnailQuality} tip={t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })} />}
+                  controlClassName={SETTINGS_CONTROL_CLASS}
                 >
-                  <option value="original">{t({ ko: '원본', en: 'Original' })}</option>
-                  <option value="2048">2048px</option>
-                  <option value="1080">1080px</option>
-                  <option value="720">720px</option>
-                  <option value="512">512px</option>
-                </Select>
-              </Field>
+                  <NumberStepperInput min={60} max={100} variant="settings" aria-label={labels.thumbnailQuality} value={thumbnailDraft.quality} onValueCommit={(nextValue) => onPatchThumbnail({ quality: Number(nextValue) || 60 })} />
+                </SettingRow>
+              </>
+            ) : (
+              <SettingsRowsSkeleton rows={2} />
+            )}
+          </RowGroup>
 
-              <Field label={<SettingsLabelTip label={t({ ko: '썸네일 품질', en: 'Thumbnail quality' })} tip={t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })} />}>
-                <NumberStepperInput
-
-                  min={60}
-                  max={100}
-                  variant="settings"
-                  value={thumbnailDraft.quality}
-                  onValueCommit={(nextValue) => onPatchThumbnail({ quality: Number(nextValue) || 60 })}
-                />
-              </Field>
-
-            </div>
-          ) : (
-            <Skeleton className="h-36 w-full rounded-sm" />
-          )}
-        </Section>
-      </section>
-
-      <VideoOptimizationTab
-        videoOptimizationDraft={videoOptimizationDraft}
-        onPatchVideoOptimization={onPatchVideoOptimization}
-        hasChanges={hasVideoOptimizationChanges}
-      />
-      </>
+          <VideoOptimizationTab
+            videoOptimizationDraft={videoOptimizationDraft}
+            onPatchVideoOptimization={onPatchVideoOptimization}
+            hasChanges={hasVideoOptimizationChanges}
+          />
+        </>
       ) : null}
     </div>
   )
