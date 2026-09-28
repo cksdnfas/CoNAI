@@ -5,7 +5,8 @@ import { Copy, Eye, EyeOff, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { Skeleton } from '@/components/ui/skeleton'
+import { RowGroup } from '@/components/ui/row-group'
+import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -18,13 +19,12 @@ import {
   updateMcpHttpApiKey,
   updateMcpHttpEnabled,
 } from '@/lib/api-settings-mcp'
-import { Inset } from '@/components/ui/inset'
-import { Checkbox } from '@/components/ui/checkbox'
+import { ToggleChip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { SettingsSwitchRow } from './settings-switch-row'
-import { Section } from '@/components/ui/section'
 import { InstantApplyHint } from './settings-section-status'
+import { SETTINGS_WIDE_CONTROL_CLASS, SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 
 const QUERY_KEY = ['mcp-http-settings'] as const
 const SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore']
@@ -77,84 +77,97 @@ export function McpHttpSettingsCard() {
     }
   }
 
+  const endpointLabel = t({ ko: 'MCP 주소', en: 'MCP URL' })
+
   return (
-    <Section
-      variant="settings"
-      heading="MCP"
-      actions={<InstantApplyHint />}
-    >
-      {query.isLoading ? <Skeleton className="h-40 w-full rounded-sm" /> : null}
-      {query.isError ? <Inset className="text-sm text-destructive">{query.error instanceof Error ? query.error.message : t({ ko: 'MCP 설정을 불러오지 못했어.', en: 'Could not load MCP settings.' })}</Inset> : null}
+    <div className="space-y-8">
+      <RowGroup heading="MCP" actions={<InstantApplyHint />}>
+        {query.isLoading ? <SettingsRowsSkeleton rows={2} /> : null}
+        {query.isError ? <p className="py-3 text-sm text-destructive">{query.error instanceof Error ? query.error.message : t({ ko: 'MCP 설정을 불러오지 못했어.', en: 'Could not load MCP settings.' })}</p> : null}
+        {query.data ? (
+          <>
+            <SettingsSwitchRow
+              checked={query.data.enabled}
+              disabled={busy}
+              onCheckedChange={(checked) => enabled.mutate(checked)}
+              label={t({ ko: 'HTTP MCP 사용', en: 'Enable HTTP MCP' })}
+            />
+            <SettingRow label={endpointLabel} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
+              <Input variant="settings" readOnly value={endpoint} className="min-w-0 flex-1 font-mono" aria-label={endpointLabel} />
+              <IconButton size="icon-sm" variant="ghost" onClick={() => void copy(endpoint)} label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></IconButton>
+            </SettingRow>
+          </>
+        ) : null}
+      </RowGroup>
+
       {query.data ? (
-        <div className="space-y-4">
-          <SettingsSwitchRow
-            checked={query.data.enabled}
-            disabled={busy}
-            onCheckedChange={(checked) => enabled.mutate(checked)}
-            label={t({ ko: 'HTTP MCP 사용', en: 'Enable HTTP MCP' })}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Input variant="settings" readOnly value={endpoint} className="min-w-0 flex-1 basis-56 font-mono" aria-label={t({ ko: 'MCP 주소', en: 'MCP URL' })} />
-            <IconButton size="icon-sm" variant="secondary" onClick={() => void copy(endpoint)} label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></IconButton>
-            <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))} label={t({ ko: '키 추가', en: 'Add key' })}><Plus /></IconButton>
-          </div>
-          <div className="space-y-3">
-            {query.data.keys.map((key) => {
-              const visible = visibleKeys.has(key.id)
-              return (
-                <Inset key={key.id} className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input variant="settings" readOnly value={key.name} className="w-full sm:w-44" aria-label={t({ ko: '키 이름', en: 'Key name' })} />
-                    <Input variant="settings" type={visible ? 'text' : 'password'} readOnly value={key.apiKey} className="min-w-0 flex-1 basis-48 font-mono" aria-label={t({ ko: 'API 키', en: 'API key' })} />
-                    <div className="flex shrink-0 items-center gap-1">
-                      <IconButton size="icon-sm" variant="secondary" onClick={() => setVisibleKeys((current) => {
-                        const next = new Set(current)
-                        if (next.has(key.id)) next.delete(key.id)
-                        else next.add(key.id)
-                        return next
-                      })} label={visible ? t({ ko: '키 숨기기', en: 'Hide key' }) : t({ ko: '키 보기', en: 'Show key' })}>{visible ? <EyeOff /> : <Eye />}</IconButton>
-                      <IconButton size="icon-sm" variant="secondary" onClick={() => void copy(key.apiKey)} label={t({ ko: '키 복사', en: 'Copy key' })}><Copy /></IconButton>
-                      <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={async () => {
-                        const confirmed = await confirm({
-                          title: t({ ko: '키 새로 발급', en: 'Regenerate key' }),
-                          description: t({ ko: '지금 키를 쓰는 에이전트는 새 키로 바꿔야 다시 연결돼. 새로 발급할까?', en: 'Agents using the current key must switch to the new one to reconnect. Regenerate?' }),
-                          confirmLabel: t({ ko: '새로 발급', en: 'Regenerate' }),
-                          tone: 'destructive',
-                        })
-                        if (confirmed) rotateKey.mutate(key.id)
-                      }} label={t({ ko: '키 새로 발급', en: 'Regenerate key' })}><RefreshCw /></IconButton>
-                      <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={async () => {
-                        const confirmed = await confirm({
-                          title: t({ ko: '키 폐기', en: 'Revoke key' }),
-                          description: t({ ko: '이 키를 폐기할까?', en: 'Revoke this key?' }),
-                          confirmLabel: t({ ko: '폐기', en: 'Revoke' }),
-                          tone: 'destructive',
-                        })
-                        if (confirmed) revokeKey.mutate(key.id)
-                      }} label={t({ ko: '키 폐기', en: 'Revoke key' })}><Trash2 /></IconButton>
-                    </div>
+        <RowGroup
+          heading={t({ ko: 'API 키', en: 'API keys' })}
+          actions={(
+            <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))} label={t({ ko: '키 추가', en: 'Add key' })}><Plus /></IconButton>
+          )}
+        >
+          {query.data.keys.length === 0 ? <SettingsEmptyRow>{t({ ko: '발급한 키가 없어.', en: 'No keys yet.' })}</SettingsEmptyRow> : null}
+          {query.data.keys.map((key) => {
+            const visible = visibleKeys.has(key.id)
+            return (
+              <div key={key.id} className="space-y-2 border-b border-line py-3 last:border-b-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground sm:w-40">{key.name}</span>
+                  <Input variant="settings" type={visible ? 'text' : 'password'} readOnly value={key.apiKey} className="min-w-0 flex-1 basis-48 font-mono" aria-label={t({ ko: 'API 키', en: 'API key' })} />
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => setVisibleKeys((current) => {
+                      const next = new Set(current)
+                      if (next.has(key.id)) next.delete(key.id)
+                      else next.add(key.id)
+                      return next
+                    })} label={visible ? t({ ko: '키 숨기기', en: 'Hide key' }) : t({ ko: '키 보기', en: 'Show key' })}>{visible ? <EyeOff /> : <Eye />}</IconButton>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => void copy(key.apiKey)} label={t({ ko: '키 복사', en: 'Copy key' })}><Copy /></IconButton>
+                    <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={async () => {
+                      const confirmed = await confirm({
+                        title: t({ ko: '키 새로 발급', en: 'Regenerate key' }),
+                        description: t({ ko: '지금 키를 쓰는 에이전트는 새 키로 바꿔야 다시 연결돼. 새로 발급할까?', en: 'Agents using the current key must switch to the new one to reconnect. Regenerate?' }),
+                        confirmLabel: t({ ko: '새로 발급', en: 'Regenerate' }),
+                        tone: 'destructive',
+                      })
+                      if (confirmed) rotateKey.mutate(key.id)
+                    }} label={t({ ko: '키 새로 발급', en: 'Regenerate key' })}><RefreshCw /></IconButton>
+                    <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={async () => {
+                      const confirmed = await confirm({
+                        title: t({ ko: '키 폐기', en: 'Revoke key' }),
+                        description: t({ ko: '이 키를 폐기할까?', en: 'Revoke this key?' }),
+                        confirmLabel: t({ ko: '폐기', en: 'Revoke' }),
+                        tone: 'destructive',
+                      })
+                      if (confirmed) revokeKey.mutate(key.id)
+                    }} label={t({ ko: '키 폐기', en: 'Revoke key' })}><Trash2 /></IconButton>
                   </div>
-                  <div className="flex flex-wrap gap-x-5 gap-y-2">
-                    {SCOPES.map((scope) => {
-                      const scopeCopy = getScopeCopy(scope, t)
-                      return (
+                </div>
+                <div className="flex flex-wrap gap-1.5 sm:pl-42">
+                  {SCOPES.map((scope) => {
+                    const scopeCopy = getScopeCopy(scope, t)
+                    const pressed = key.scopes.includes(scope)
+                    return (
                       <Tip key={scope} content={scopeCopy.description} side="bottom" align="start">
-                      <label className="flex cursor-pointer items-center gap-2 text-xs has-[:disabled]:cursor-not-allowed">
-                        <Checkbox checked={key.scopes.includes(scope)} disabled={busy || (key.scopes.length === 1 && key.scopes[0] === scope)} onCheckedChange={(checked) => {
-                          const scopes = checked === true ? [...key.scopes, scope] : key.scopes.filter((item) => item !== scope)
-                          updateKey.mutate({ keyId: key.id, name: key.name, scopes })
-                        }} />
-                        <span className="min-w-0 font-medium text-foreground">{scopeCopy.label}</span>
-                      </label>
+                        <ToggleChip
+                          size="sm"
+                          pressed={pressed}
+                          disabled={busy || (key.scopes.length === 1 && key.scopes[0] === scope)}
+                          onClick={() => {
+                            const scopes = pressed ? key.scopes.filter((item) => item !== scope) : [...key.scopes, scope]
+                            updateKey.mutate({ keyId: key.id, name: key.name, scopes })
+                          }}
+                        >
+                          {scopeCopy.label}
+                        </ToggleChip>
                       </Tip>
-                      )
-                    })}
-                  </div>
-                </Inset>
-              )
-            })}
-          </div>
-        </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </RowGroup>
       ) : null}
 
       <Modal open={newKeyName !== null} onClose={() => setNewKeyName(null)} title={t({ ko: 'MCP 키 추가', en: 'Add MCP key' })} widthClassName="max-w-md">
@@ -182,6 +195,6 @@ export function McpHttpSettingsCard() {
           </ModalBody>
         </form>
       </Modal>
-    </Section>
+    </div>
   )
 }

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import { AlertTriangle, FileSearch, RefreshCcw, ScanSearch, Search, ShieldCheck, Shuffle } from 'lucide-react'
+import { FileSearch, RefreshCcw, ScanSearch, Search, ShieldCheck, Shuffle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Heading } from '@/components/ui/heading'
+import { RowGroup } from '@/components/ui/row-group'
 import { useConfirm, type ConfirmOptions } from '@/components/ui/confirm-dialog'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
@@ -29,11 +29,11 @@ function MaintenanceActionRow({ icon, title, actionLabel, busyLabel, isBusy, con
   const confirm = useConfirm()
 
   return (
-    <div className="space-y-3 rounded-sm bg-surface-lowest px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className="border-b border-line py-2.5 last:border-b-0">
+      <div className="flex min-h-8 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="shrink-0 text-muted-foreground">{icon}</span>
-          <div className="min-w-0 text-sm font-semibold text-foreground">{title}</div>
+          <div className="min-w-0 text-sm text-foreground">{title}</div>
         </div>
         <Button
           type="button"
@@ -51,7 +51,7 @@ function MaintenanceActionRow({ icon, title, actionLabel, busyLabel, isBusy, con
           {isBusy ? busyLabel : actionLabel}
         </Button>
       </div>
-      {children}
+      {children ? <div className="pt-2 pl-7">{children}</div> : null}
     </div>
   )
 }
@@ -85,14 +85,8 @@ export function MaintenanceTab({
   const { t } = useI18n()
 
   return (
-    <div className="space-y-6">
-      <section data-surface="raised" className="space-y-3 rounded-sm bg-surface-low p-4">
-        <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-destructive-soft text-destructive-soft-foreground">
-            <AlertTriangle className="h-4 w-4" />
-          </span>
-          <Heading level={2}>{t({ ko: '유지보수', en: 'Maintenance' })}</Heading>
-        </div>
+    <div className="space-y-8">
+      <RowGroup heading={t({ ko: '라이브러리 작업', en: 'Library jobs' })}>
 
         <MaintenanceActionRow
           icon={<ScanSearch className="h-4 w-4" />}
@@ -138,7 +132,7 @@ export function MaintenanceTab({
           }}
           onRun={onReextractAll}
         />
-      </section>
+      </RowGroup>
 
       <DataRematchSection />
 
@@ -146,10 +140,10 @@ export function MaintenanceTab({
         heading={t({ ko: '개발자 도구', en: 'Developer tools' })}
         actions={(
           <>
-            <IconButton variant="secondary" label={t({ ko: '해시 확인', en: 'Check hash' })} onClick={autoTabProps.onResolveAutoTestMedia} disabled={!autoTabProps.autoTestHashInput.trim() || autoTabProps.isResolvingAutoTestMedia}>
+            <IconButton variant="ghost" label={t({ ko: '해시 확인', en: 'Check hash' })} onClick={autoTabProps.onResolveAutoTestMedia} disabled={!autoTabProps.autoTestHashInput.trim() || autoTabProps.isResolvingAutoTestMedia}>
               <Search className="h-4 w-4" />
             </IconButton>
-            <IconButton variant="secondary" label={t({ ko: '랜덤 선택', en: 'Random pick' })} onClick={autoTabProps.onRandomAutoTestMedia} disabled={autoTabProps.isPickingRandomAutoTestMedia}>
+            <IconButton variant="ghost" label={t({ ko: '랜덤 선택', en: 'Random pick' })} onClick={autoTabProps.onRandomAutoTestMedia} disabled={autoTabProps.isPickingRandomAutoTestMedia}>
               <Shuffle className="h-4 w-4" />
             </IconButton>
           </>

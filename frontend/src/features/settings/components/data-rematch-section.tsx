@@ -8,9 +8,9 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getDataRematchStatus, startDataRematchJob, type DataRematchJobSnapshot, type DataRematchOptions } from '@/lib/api-settings'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { Inset } from '@/components/ui/inset'
-import { StatTile } from '@/components/ui/stat-tile'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
+import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsStatLine } from './settings-rows'
 
 const DEFAULT_DATA_REMATCH_OPTIONS: DataRematchOptions = {
   thumbnail: false,
@@ -121,20 +121,14 @@ export function DataRematchSection() {
     dataRematchMutation.mutate()
   }
 
-  const renderOption = (key: keyof DataRematchOptions, label: string, disabled: boolean) => (
-    <label className="flex cursor-pointer items-center gap-3 rounded-sm bg-surface-low/60 px-3 py-2.5 text-sm has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
-      <Checkbox
-        checked={dataRematchOptions[key]}
-        disabled={disabled}
-        onCheckedChange={(checked) => updateDataRematchOption(key, checked === true)}
-      />
-      <span className="min-w-0 font-medium text-foreground">{label}</span>
-    </label>
-  )
+  const optionRows: Array<{ key: keyof DataRematchOptions; label: string; disabled: boolean }> = [
+    { key: 'thumbnail', label: t({ ko: '썸네일 재생성', en: 'Regenerate thumbnails' }), disabled: isDataRematchBusy || dataRematchOptions.hash },
+    { key: 'metadata', label: t({ ko: '메타데이터 재추출', en: 'Re-extract metadata' }), disabled: isDataRematchBusy || dataRematchOptions.hash },
+    { key: 'hash', label: t({ ko: '해시 재생성', en: 'Regenerate hashes' }), disabled: isDataRematchBusy },
+  ]
 
   return (
-    <Section
-      variant="settings"
+    <RowGroup
       heading={t({ ko: '데이터 재매칭', en: 'Data rematch' })}
       actions={(
         <Button
@@ -148,74 +142,72 @@ export function DataRematchSection() {
         </Button>
       )}
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.82fr)]">
-        <div className="space-y-2">
-          {renderOption('thumbnail', t({ ko: '썸네일 재생성', en: 'Regenerate thumbnails' }), isDataRematchBusy || dataRematchOptions.hash)}
-          {renderOption('metadata', t({ ko: '메타데이터 재추출', en: 'Re-extract metadata' }), isDataRematchBusy || dataRematchOptions.hash)}
-          {renderOption('hash', t({ ko: '해시 재생성', en: 'Regenerate hashes' }), isDataRematchBusy)}
+      {optionRows.map((option) => (
+        <SettingsSwitchRow
+          key={option.key}
+          checked={dataRematchOptions[option.key]}
+          disabled={option.disabled}
+          onCheckedChange={(checked) => updateDataRematchOption(option.key, checked)}
+          label={option.label}
+        />
+      ))}
 
-          {dataRematchOptions.hash ? (
-            <div className="rounded-sm bg-destructive-soft px-4 py-3 text-sm text-destructive-soft-foreground">
-              <div className="flex gap-3">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div className="space-y-2">
-                  <p>{t({ ko: '그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어져. 필요하면 다시 지정해야 해.', en: 'Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over — they are removed and must be set again if needed.' })}</p>
-                  <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
-                    <Checkbox
-                      checked={hashConfirmed}
-                      disabled={isDataRematchBusy}
-                      onCheckedChange={(checked) => setHashConfirmed(checked === true)}
-                    />
-                    {t({ ko: '위 내용을 확인했어', en: 'I understand the above' })}
-                  </label>
-                </div>
+      {dataRematchOptions.hash ? (
+        <div className="my-2 rounded-sm bg-destructive-soft px-4 py-3 text-sm text-destructive-soft-foreground">
+          <div className="flex gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="space-y-2">
+              <p>{t({ ko: '그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어져. 필요하면 다시 지정해야 해.', en: 'Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over — they are removed and must be set again if needed.' })}</p>
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
+                <Checkbox
+                  checked={hashConfirmed}
+                  disabled={isDataRematchBusy}
+                  onCheckedChange={(checked) => setHashConfirmed(checked === true)}
+                />
+                {t({ ko: '위 내용을 확인했어', en: 'I understand the above' })}
+              </label>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-2 pt-3">
+        <SettingsStatLine
+          items={[
+            { label: t({ ko: '상태', en: 'Status' }), value: getPhaseLabel(status, language), tone: status?.status === 'failed' ? 'danger' : 'default' },
+            { label: t({ ko: '진행', en: 'Progress' }), value: status ? `${formatCount(status.processed)} / ${formatCount(status.total)}` : '-' },
+            { label: t({ ko: '큐', en: 'Queued' }), value: formatCount(status?.queued ?? 0) },
+            { label: t({ ko: '오류/제외', en: 'Errors/skipped' }), value: `${formatCount(status?.failed ?? 0)} / ${formatCount(status?.skipped ?? 0)}`, tone: (status?.failed ?? 0) > 0 ? 'danger' : 'default' },
+          ]}
+        />
+
+        <div className="h-1.5 overflow-hidden rounded-full bg-fill">
+          <div
+            className={cn('h-full rounded-full transition-all', status?.status === 'failed' ? 'bg-destructive' : 'bg-primary')}
+            style={{ width: `${Math.min(100, Math.max(0, dataRematchProgress))}%` }}
+          />
+        </div>
+
+        {status?.currentFile ? (
+          <div className="truncate text-xs text-muted-foreground" title={status.currentFile}>{status.currentFile}</div>
+        ) : null}
+
+        {status?.maintenanceLock.active ? (
+          <p className="text-xs text-muted-foreground">
+            {status.maintenanceLock.message ?? t({ ko: '시스템 유지보수 잠금 활성', en: 'System maintenance lock active' })}
+          </p>
+        ) : null}
+
+        {latestErrors.length > 0 ? (
+          <div className="space-y-1 rounded-sm bg-destructive-soft px-4 py-3 text-xs text-destructive-soft-foreground">
+            {latestErrors.map((error) => (
+              <div key={`${error.target}-${error.error}`} className="truncate" title={`${error.target}: ${error.error}`}>
+                {error.target}: {error.error}
               </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <StatTile label={t({ ko: '상태', en: 'Status' })} value={getPhaseLabel(status, language)} />
-            <StatTile
-              label={t({ ko: '진행', en: 'Progress' })}
-              value={status ? `${formatCount(status.processed)} / ${formatCount(status.total)}` : '-'}
-            />
-            <StatTile label={t({ ko: '큐', en: 'Queued' })} value={formatCount(status?.queued ?? 0)} />
-            <StatTile
-              label={t({ ko: '오류/제외', en: 'Errors/skipped' })}
-              value={`${formatCount(status?.failed ?? 0)} / ${formatCount(status?.skipped ?? 0)}`}
-            />
+            ))}
           </div>
-
-          <div className="h-2 overflow-hidden rounded-full bg-surface-low">
-            <div
-              className={cn('h-full rounded-full transition-all', status?.status === 'failed' ? 'bg-destructive' : 'bg-primary')}
-              style={{ width: `${Math.min(100, Math.max(0, dataRematchProgress))}%` }}
-            />
-          </div>
-
-          {status?.currentFile ? (
-            <div className="truncate text-xs text-muted-foreground" title={status.currentFile}>{status.currentFile}</div>
-          ) : null}
-
-          {status?.maintenanceLock.active ? (
-            <Inset className="text-xs text-muted-foreground">
-              {status.maintenanceLock.message ?? t({ ko: '시스템 유지보수 잠금 활성', en: 'System maintenance lock active' })}
-            </Inset>
-          ) : null}
-
-          {latestErrors.length > 0 ? (
-            <div className="space-y-1 rounded-sm bg-destructive-soft px-4 py-3 text-xs text-destructive-soft-foreground">
-              {latestErrors.map((error) => (
-                <div key={`${error.target}-${error.error}`} className="truncate" title={`${error.target}: ${error.error}`}>
-                  {error.target}: {error.error}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        ) : null}
       </div>
-    </Section>
+    </RowGroup>
   )
 }

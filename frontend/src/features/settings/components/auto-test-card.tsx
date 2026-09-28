@@ -12,9 +12,8 @@ import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import type { ImageRecord } from '@/types/image'
 import { formatFileSize } from '../settings-utils'
 import { EnhancedVideoPlayer } from '@/features/images/components/detail/enhanced-video-player'
-import { Field } from '@/components/ui/field'
-import { Inset } from '@/components/ui/inset'
-import { StatTile } from '@/components/ui/stat-tile'
+import { SettingRow } from '@/components/ui/setting-row'
+import { SETTINGS_WIDE_CONTROL_CLASS } from './settings-rows'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 
@@ -89,24 +88,23 @@ export function AutoTestCard({
 
   return (
     <Section variant="settings" heading={heading} collapsible defaultOpen={false}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <Field label={t({ ko: '이미지 해시', en: 'Image hash' })} className="min-w-0 flex-1">
-          <Input
-            variant="settings"
-            className="font-mono"
-            value={autoTestHashInput}
-            onChange={handleHashInputChange}
-            onKeyDown={handleHashInputKeyDown}
-            placeholder={t({ ko: '이미지 상세의 해시 값', en: 'Hash from image details' })}
-          />
-        </Field>
-        {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
-      </div>
+      <SettingRow label={t({ ko: '이미지 해시', en: 'Image hash' })} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
+        <Input
+          variant="settings"
+          className="min-w-0 flex-1 font-mono"
+          aria-label={t({ ko: '이미지 해시', en: 'Image hash' })}
+          value={autoTestHashInput}
+          onChange={handleHashInputChange}
+          onKeyDown={handleHashInputKeyDown}
+          placeholder={t({ ko: '이미지 상세의 해시 값', en: 'Hash from image details' })}
+        />
+        {actions}
+      </SettingRow>
 
       {autoTestMedia ? (
         <div className="pt-2">
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="overflow-hidden rounded-sm bg-surface-lowest">
+            <div className="overflow-hidden rounded-sm bg-fill">
               {autoTestMedia.fileType === 'video' && autoTestMedia.imageUrl ? (
                 <EnhancedVideoPlayer renderUrl={autoTestMedia.imageUrl} preload="metadata" className="aspect-square w-full" />
               ) : autoTestMedia.thumbnailUrl || autoTestMedia.imageUrl ? (
@@ -120,41 +118,38 @@ export function AutoTestCard({
               )}
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <StatTile label={t({ ko: '타입', en: 'Type' })} value={autoTestMedia.fileType ?? '—'} />
-              <StatTile label={t({ ko: '파일', en: 'File' })} value={autoTestMedia.fileName ?? '—'} valueClassName="break-all" />
-              <StatTile label={t({ ko: '존재 여부', en: 'Exists' })} value={autoTestMedia.existsOnDisk ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })} />
-              <StatTile label={t({ ko: '크기', en: 'Size' })} value={formatFileSize(autoTestMedia.fileSize)} />
-              <StatTile
-                label={t({ ko: '해시', en: 'Hash' })}
-                value={autoTestMedia.compositeHash}
-                className="md:col-span-2"
-                valueClassName="break-all font-mono text-xs"
-              />
-              <StatTile
-                label={t({ ko: '경로', en: 'Path' })}
-                value={autoTestMedia.originalFilePath ?? '—'}
-                className="md:col-span-2"
-                valueClassName="break-all font-mono text-xs"
-              />
+            <div className="min-w-0">
+              {[
+                { label: t({ ko: '타입', en: 'Type' }), value: autoTestMedia.fileType ?? '—' },
+                { label: t({ ko: '파일', en: 'File' }), value: autoTestMedia.fileName ?? '—' },
+                { label: t({ ko: '존재 여부', en: 'Exists' }), value: autoTestMedia.existsOnDisk ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' }) },
+                { label: t({ ko: '크기', en: 'Size' }), value: formatFileSize(autoTestMedia.fileSize) },
+                { label: t({ ko: '해시', en: 'Hash' }), value: autoTestMedia.compositeHash, mono: true },
+                { label: t({ ko: '경로', en: 'Path' }), value: autoTestMedia.originalFilePath ?? '—', mono: true },
+              ].map((item) => (
+                <div key={item.label} className="flex min-h-10 items-baseline gap-4 border-b border-line py-2 text-sm last:border-b-0">
+                  <span className="w-20 shrink-0 text-muted-foreground">{item.label}</span>
+                  <span className={item.mono ? 'min-w-0 break-all font-mono text-xs text-foreground' : 'min-w-0 break-all text-foreground'}>{item.value}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       ) : null}
 
       {isLoadingAutoTestImage ? (
-        <Inset className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {t({ ko: '추출 프롬프트를 불러오는 중이야…', en: 'Loading extracted prompts…' })}
-        </Inset>
+        </p>
       ) : null}
 
       {extractedPromptCards.length > 0 ? (
-        <Inset>
+        <div>
           <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</div>
           <div className="mt-3">
             <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
           </div>
-        </Inset>
+        </div>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
