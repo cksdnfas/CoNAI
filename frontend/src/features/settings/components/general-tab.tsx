@@ -157,10 +157,10 @@ export function GeneralTab() {
                 <div className="flex gap-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="space-y-2">
-                    <p>{t({ ko: '해시 재생성은 composite_hash를 다시 계산하고 DB 참조를 리매칭해.', en: 'Hash regeneration recalculates composite_hash and rematches DB references.' })}</p>
-                    <p>{t({ ko: '기존 그룹, 자동 폴더 그룹, 모델, 임시 URL, 생성 히스토리 연결은 새 해시에 복사하지 않고 해제해.', en: 'Existing group, auto-folder group, model, temp URL, and generation-history links are detached instead of copied to the new hash.' })}</p>
-                    <p>{t({ ko: '이미지/GIF만 처리하고 비디오는 제외. 작업 중 자동 스캔, 백그라운드 해시 생성, 자동 태그/작가 추출은 대기해.', en: 'Only images/GIFs are processed; videos are excluded. Auto scan, background hashing, auto tag/artist extraction wait during the job.' })}</p>
-                    <p>{t({ ko: '자동 태그/작가 추출은 여기서 실행하지 않음. 완료 후 시스템이 DB를 확인해 순차 처리해.', en: 'Auto tag/artist extraction is not run here. After completion, the system checks DB state and processes it sequentially.' })}</p>
+                    <p>{t({ ko: '해시 재생성은 모든 이미지의 식별값을 새로 계산하고, 라이브러리의 기록을 새 값에 다시 연결해.', en: 'Regenerating hashes recalculates every image’s identifier and reconnects library records to the new values.' })}</p>
+                    <p>{t({ ko: '그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어져. 필요하면 다시 지정해야 해.', en: 'Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over — they are removed and must be set again if needed.' })}</p>
+                    <p>{t({ ko: '이미지와 GIF만 처리하고 동영상은 건너뛰어. 작업 중에는 자동 스캔과 자동 태그·작가 추출이 잠시 멈춰.', en: 'Only images and GIFs are processed; videos are skipped. Auto scan and automatic tag/artist extraction pause while the job runs.' })}</p>
+                    <p>{t({ ko: '자동 태그·작가 추출은 작업이 끝난 뒤 순서대로 다시 진행돼.', en: 'Automatic tag/artist extraction resumes on its own after the job finishes.' })}</p>
                     <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]">
                       <input
                         type="checkbox"
