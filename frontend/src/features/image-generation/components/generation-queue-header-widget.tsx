@@ -302,20 +302,23 @@ export function GenerationQueueHeaderWidget() {
     isFilteredQueueView,
     globalQueue: {
       records: globalQueueQuery.data?.records,
+      total: globalQueueQuery.data?.total,
       isPending: globalQueueQuery.isPending,
       isError: globalQueueQuery.isError,
       error: globalQueueQuery.error,
     },
     filteredQueue: {
       records: filteredQueueQuery.data?.records,
+      total: filteredQueueQuery.data?.total,
       isPending: filteredQueueQuery.isPending,
       isError: filteredQueueQuery.isError,
       error: filteredQueueQuery.error,
     },
   })
   const records = useMemo(() => activeQueueQuery.records ?? [], [activeQueueQuery.records])
-  const globalActiveCount = globalRecords.length
-  const filteredActiveCount = records.length
+  // 목록은 서버에서 200건으로 잘리므로 배지는 서버 total 을 쓴다(목록 길이는 폴백).
+  const globalActiveCount = globalQueueQuery.data?.total ?? globalRecords.length
+  const filteredActiveCount = activeQueueQuery.total ?? records.length
   const latestQueueJobId = useMemo(() => globalRecords.reduce((maxId, record) => Math.max(maxId, record.id), 0), [globalRecords])
   const reservationWorkflowNameById = useMemo(
     () => new Map((reservationWorkflowQuery.data ?? []).map((workflow) => [workflow.id, workflow.name] as const)),
@@ -430,7 +433,7 @@ export function GenerationQueueHeaderWidget() {
         <ListTodo className="h-4 w-4" />
         {globalActiveCount > 0 ? (
           <span className="absolute -right-1 -bottom-1 inline-flex min-w-[1rem] items-center justify-center rounded-sm border border-primary/25 bg-primary/16 px-1 text-[10px] font-semibold leading-4 text-primary shadow-[0_0_0_2px_var(--background)]">
-            {globalActiveCount}
+            {formatNumber(globalActiveCount)}
           </span>
         ) : null}
         {hasUnreadQueueUpdate ? <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-rose-500 shadow-[0_0_0_2px_var(--background)]" aria-hidden="true" /> : null}

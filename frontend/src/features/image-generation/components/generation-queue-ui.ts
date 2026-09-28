@@ -6,6 +6,8 @@ type FormatNumber = (value: number) => string
 
 type GenerationQueueHeaderQuerySnapshot<TRecord = GenerationQueueJobRecord> = {
   records?: readonly TRecord[] | null
+  /** Server-side total; the list itself is capped, so badges must not use `records.length`. */
+  total?: number
   isPending: boolean
   isError: boolean
   error?: unknown
@@ -228,6 +230,10 @@ export function getGenerationQueueProgressStageLabel(record: GenerationQueueJobR
 
   const progress = hasGenerationQueueLiveProgress(record) ? record.live_progress : null
   if (!progress) {
+    if (isGenerationQueueOverrunningEstimate(record)) {
+      return t({ ko: '예상 시간 초과 · 진행 중', en: 'Past estimate · still running' })
+    }
+
     return getGenerationQueueProgressPercent(record) != null
       ? t({ ko: '예상 진행률', en: 'Estimated progress' })
       : t({ ko: '진행 중', en: 'In progress' })
@@ -367,16 +373,33 @@ export function getGenerationQueueProgressPercent(record: GenerationQueueJobReco
       : null
   }
 
+  // 쓸 만한 예상치가 없거나 예상 시간을 넘긴 작업은 가짜 퍼센트 대신 indeterminate 로 둔다.
   const durationSeconds = record.estimated_duration_seconds
-  if (durationSeconds == null || durationSeconds <= 0) {
-    return record.estimated_total_seconds === 0 ? 100 : null
+  if (durationSeconds == null || durationSeconds <= 0 || isGenerationQueueOverrunningEstimate(record, nowMs)) {
+    return null
   }
 
   const startedAtMs = parseQueueTimestampMs(record.started_at)
   const elapsedSeconds = startedAtMs == null ? 0 : Math.max(0, (nowMs - startedAtMs) / 1000)
   const percent = Math.round((elapsedSeconds / durationSeconds) * 100)
-  if ((record.estimated_total_seconds ?? 0) <= 0) {
-    return 100
-  }
   return Math.max(0, Math.min(percent, 99))
+}
+
+/** Estimated (non-live) running jobs that already passed their duration estimate. */
+export function isGenerationQueueOverrunningEstimate(record: GenerationQueueJobRecord, nowMs = Date.now()) {
+  if (record.status !== 'running' || hasGenerationQueueLiveProgress(record)) {
+    return false
+  }
+
+  const durationSeconds = record.estimated_duration_seconds
+  if (durationSeconds == null || durationSeconds <= 0) {
+    return false
+  }
+
+  if (record.estimated_total_seconds != null && record.estimated_total_seconds <= 0) {
+    return true
+  }
+
+  const startedAtMs = parseQueueTimestampMs(record.started_at)
+  return startedAtMs != null && (nowMs - startedAtMs) / 1000 >= durationSeconds
 }

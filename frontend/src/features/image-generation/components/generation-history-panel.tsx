@@ -36,7 +36,6 @@ import {
   getErrorMessage,
   getRetryableHistoryQueueJobId,
 } from '../image-generation-shared'
-import { getGenerationHistoryFeedProgressSummary } from '../generation-history-feed-progress'
 import {
   getUniqueRetryableHistoryQueueJobIds,
   retryGenerationHistoryRecords,
@@ -243,9 +242,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   )
   const {
     inFlight: inFlightHistoryCount,
-    completed: completedHistoryCount,
     cleanupFailed: cleanupFailedHistoryCount,
-    cancellation: cancellationHistoryCount,
   } = useMemo(() => getHistoryRecordStatusSummary(historyRecords), [historyRecords])
   const retryableHistoryRecords = useMemo(() => {
     return collectRetryableHistoryRecords(historyRecords)
@@ -276,11 +273,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     onLoadMore: applyHistoryRatingSafety ? handleLoadMoreHistory : undefined,
     visibilityMode: applyHistoryRatingSafety ? 'feed' : 'badge-only',
   })
-  const feedProgress = useMemo(() => getGenerationHistoryFeedProgressSummary({
-    loadedCount: historyRecords.length,
-    visibleCount: visibleHistoryImages.length,
-    totalCount: historyTotalCount,
-  }), [historyRecords.length, historyTotalCount, visibleHistoryImages.length])
+  // 사용자에게 보이는 숫자는 서버 total 만 쓴다. 로드된 페이지 기준 집계는 합계처럼 보여 주지 않는다.
+  const historyTotalLabel = historyTotalCount !== undefined
+    ? formatNumber(historyTotalCount)
+    : historyQuery.isError
+      ? '—'
+      : t({ ko: '계산 중', en: 'Counting…' })
+  const hasHiddenHistoryItems = visibleHistoryImages.length < historyImages.length
   const visibleHistoryRecordIds = useMemo(
     () => new Set(visibleHistoryImages.map((image) => String(image.id))),
     [visibleHistoryImages],
@@ -593,14 +592,14 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
             <span>{historyLabel}</span>
             {!isPublicView ? <span>· {isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</span> : null}
-            <span>· {t('image-generation.components.generation.history.panel.records.historyrecords.length', { historyRecords: formatNumber(historyRecords.length) })}</span>
-            {completedHistoryCount > 0 ? <span>· {t('image-generation.components.generation.history.panel.completed.value', { completedHistoryCount: formatNumber(completedHistoryCount) })}</span> : null}
-            {cancellationHistoryCount > 0 ? <span>· {t('image-generation.components.generation.history.panel.cancellation.related.value', { cancellationHistoryCount: formatNumber(cancellationHistoryCount) })}</span> : null}
+            <span>· {t({ ko: '전체 기록 {count}', en: 'Total records: {count}' }, { count: historyTotalLabel })}</span>
+            {hasHiddenHistoryItems ? <span>· {t({ ko: '일부는 등급 설정으로 숨김', en: 'Some hidden by rating settings' })}</span> : null}
+            {historyQuery.isRefetching && !historyQuery.isFetchingNextPage ? <span>· {t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span> : null}
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {inFlightHistoryCount > 0 ? <Badge variant="secondary">{t('image-generation.components.generation.history.panel.processing.value', { inFlightHistoryCount: formatNumber(inFlightHistoryCount) })}</Badge> : null}
+          {inFlightHistoryCount > 0 ? <Badge variant="secondary">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
           <Button
             type="button"
             size="icon-sm"
@@ -723,34 +722,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
         {!isHistoryLoading && historyImages.length > 0 ? (
           <>
-            <PageInset className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>
-                  {t(
-                    { ko: '표시 {visible} / 로드 {loaded}', en: 'Showing {visible} / loaded {loaded}' },
-                    { visible: formatNumber(feedProgress.visibleCount), loaded: formatNumber(feedProgress.loadedCount) },
-                  )}
-                </span>
-                <span>
-                  {t(
-                    { ko: '전체 {total}', en: '{total} total' },
-                    { total: formatNumber(feedProgress.totalCount) },
-                  )}
-                </span>
-                {feedProgress.hiddenCount > 0 ? (
-                  <span>
-                    {t(
-                      { ko: '숨김 {count}', en: '{count} hidden' },
-                      { count: formatNumber(feedProgress.hiddenCount) },
-                    )}
-                  </span>
-                ) : null}
-              </div>
-              {historyQuery.isRefetching && !historyQuery.isFetchingNextPage ? (
-                <span>{t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span>
-              ) : null}
-            </PageInset>
-
             {visibleHistoryImages.length > 0 ? (
               <ImageList
                 items={visibleHistoryImages}
