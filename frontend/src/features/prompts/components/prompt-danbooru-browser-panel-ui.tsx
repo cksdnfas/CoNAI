@@ -1,9 +1,13 @@
 import { type MouseEvent, type RefObject, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ExternalLink, Languages, X } from 'lucide-react'
+import { ExternalLink, Languages } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Inset } from '@/components/ui/inset'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { Text } from '@/components/ui/text'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { resolveDanbooruBrowserProgress } from '../danbooru-browser-progress'
@@ -160,7 +164,7 @@ export function PaginationControls({ pagination, visibleCount, onPageChange }: {
     : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatCompactCount(progress.totalCount, formatNumber) })
 
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4 text-sm text-muted-foreground">
+    <div className="flex items-center justify-between gap-3 pt-2 text-sm text-muted-foreground">
       <span>
         {t({ ko: '페이지 {page} / {totalPages} · {progress}', en: 'page {page} / {totalPages} · {progress}' }, {
           page: pagination.page,
@@ -182,22 +186,17 @@ export function PaginationControls({ pagination, visibleCount, onPageChange }: {
 
 export function DanbooruLinkButton({ href, label }: { href: string; label: string }) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      title={label}
-      aria-label={label}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-border/70 text-muted-foreground transition-colors hover:border-primary/45 hover:bg-primary/10 hover:text-primary"
-    >
-      <ExternalLink className="h-4 w-4" />
-    </a>
+    <Button asChild variant="ghost" size="icon-sm">
+      <a href={href} target="_blank" rel="noreferrer" title={label} aria-label={label}>
+        <ExternalLink className="h-4 w-4" />
+      </a>
+    </Button>
   )
 }
 
 export function TableLoading({ columns = 3 }: { columns?: number }) {
   return (
-    <div className="space-y-2 rounded-sm border border-border/70 bg-surface-container/30 p-3">
+    <div className="space-y-2 rounded-sm bg-surface-low p-3">
       {Array.from({ length: 8 }).map((_, index) => (
         <Skeleton key={`${columns}-${index}`} className="h-10 w-full rounded-sm" />
       ))}
@@ -207,7 +206,7 @@ export function TableLoading({ columns = 3 }: { columns?: number }) {
 
 export function EmptyTable() {
   const { t } = useI18n()
-  return <div className="rounded-sm border border-border/70 bg-surface-low px-4 py-8 text-center text-sm text-muted-foreground">{t({ ko: '항목 없음', en: 'No items' })}</div>
+  return <EmptyState title={t({ ko: '항목 없음', en: 'No items' })} />
 }
 
 export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord[]; language: string }) {
@@ -286,19 +285,18 @@ export function CharacterRelatedTagOptionsPopup({
             {RELATED_TAG_CATEGORIES.map((category) => {
               const checked = selectedCategories.includes(category)
               return (
-                <button
+                <Button
                   key={category}
                   type="button"
+                  size="sm"
+                  variant="nav"
+                  data-active={checked}
+                  aria-pressed={checked}
                   onClick={() => onToggleCategory(category)}
-                  className={cn(
-                    'rounded-sm border px-3 py-2 text-left text-xs font-medium transition-colors',
-                    checked
-                      ? 'border-primary/55 bg-primary/12 text-primary'
-                      : 'border-border/70 bg-surface-container/45 text-muted-foreground hover:border-primary/35 hover:text-foreground',
-                  )}
+                  className="bg-foreground/5 text-xs"
                 >
                   {category}
-                </button>
+                </Button>
               )
             })}
           </div>
@@ -339,10 +337,10 @@ export function CharacterRelatedTagOptionsPopup({
               placeholder="max"
             />
           </div>
-          <div className="text-[11px] text-muted-foreground">{t({ ko: '기본값은 general만, 최소 0.05, 최대 100개야.', en: 'Default is general only, min 0.05, up to 100 items.' })}</div>
+          <div className="text-2xs text-muted-foreground">{t({ ko: '기본값은 general만, 최소 0.05, 최대 100개야.', en: 'Default is general only, min 0.05, up to 100 items.' })}</div>
         </div>
 
-        <div className="flex justify-end border-t border-border/70 pt-3">
+        <div className="flex justify-end">
           <Button size="sm" variant="ghost" onClick={onReset}>{t({ ko: '초기화', en: 'Reset' })}</Button>
         </div>
       </div>
@@ -378,9 +376,10 @@ export function CharacterImageCell({ item }: { item: DanbooruBrowserCharacterRec
 
   return (
     <>
+      {/* eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control (cycles images); Button padding/height would crop it */}
       <button
         type="button"
-        className="relative h-24 w-[72px] overflow-hidden rounded-sm bg-transparent"
+        className="relative h-24 w-[72px] cursor-pointer overflow-hidden rounded-sm bg-transparent focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
         onClick={() => setImageIndex((current) => (current + 1) % images.length)}
         onMouseEnter={updateHoverPreview}
         onMouseMove={updateHoverPreview}
@@ -388,14 +387,14 @@ export function CharacterImageCell({ item }: { item: DanbooruBrowserCharacterRec
         title={item.name}
       >
         <img src={activeImage.url} alt="" className="h-full w-full object-cover" loading="lazy" />
-        <span className="pointer-events-none absolute right-1 top-1 rounded-sm bg-black/60 px-1 text-[10px] font-medium leading-4 text-white shadow-sm">
+        <span className="pointer-events-none absolute right-1 top-1 rounded-sm bg-backdrop px-1 text-2xs font-medium leading-4 text-white">
           {activeIndex + 1}/{images.length}
         </span>
       </button>
 
       {hoverPosition && hoverPreviewStyle ? createPortal(
         <div
-          className="pointer-events-none fixed z-[1000] w-80 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-2xl ring-1 ring-black/20"
+          className="pointer-events-none fixed z-popover w-80 rounded-md bg-surface-high p-2 text-foreground shadow-elevation-2"
           style={hoverPreviewStyle}
         >
           <img src={activeImage.url} alt="" className="max-h-80 w-full rounded-sm object-contain" />
@@ -412,28 +411,19 @@ export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruB
   const originalText = item.relatedTags.map((tag) => tag.displayName).join(', ')
   const translatedText = item.relatedTags.map((tag) => tag.translatedName || '—').join(', ')
 
-  return createPortal(
-    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/62 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-[min(560px,92vw)] rounded-md border border-border bg-popover p-4 text-popover-foreground shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="min-w-0 truncate text-sm font-semibold">{item.displayName}</div>
-          <Button type="button" size="icon-sm" variant="ghost" onClick={onClose} aria-label={t({ ko: '닫기', en: 'Close' })}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="space-y-4 text-sm">
-          <section>
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '원문', en: 'Original' })}</div>
-            <div className="whitespace-pre-wrap break-words rounded-sm border border-border/70 bg-surface-container/40 p-3 text-foreground">{originalText || '—'}</div>
-          </section>
-          <section>
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '한국어', en: 'Korean' })}</div>
-            <div className="whitespace-pre-wrap break-words rounded-sm border border-border/70 bg-surface-container/40 p-3 text-foreground">{translatedText || '—'}</div>
-          </section>
-        </div>
-      </div>
-    </div>,
-    document.body,
+  return (
+    <Modal open onClose={onClose} title={item.displayName} widthClassName="max-w-xl">
+      <ModalBody>
+        <section className="space-y-1.5">
+          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '원문', en: 'Original' })}</Text>
+          <Inset className="whitespace-pre-wrap break-words px-3 text-sm text-foreground">{originalText || '—'}</Inset>
+        </section>
+        <section className="space-y-1.5">
+          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '한국어', en: 'Korean' })}</Text>
+          <Inset className="whitespace-pre-wrap break-words px-3 text-sm text-foreground">{translatedText || '—'}</Inset>
+        </section>
+      </ModalBody>
+    </Modal>
   )
 }
 

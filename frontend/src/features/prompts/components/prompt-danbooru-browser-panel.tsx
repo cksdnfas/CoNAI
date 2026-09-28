@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Folder, FolderOpen, Search, SlidersHorizontal, X } from 'lucide-react'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
+import { Heading } from '@/components/ui/heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -330,9 +331,9 @@ export function PromptDanbooruBrowserPanel() {
       </ExplorerSidebar>
 
       <section className="relative z-0 space-y-4">
-        <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">{getSectionTitle(selectedNode, language)}</h2>
+            <Heading level={2}>{getSectionTitle(selectedNode, language)}</Heading>
             <div className="mt-1 text-sm text-muted-foreground">
               {progressLabel}
               {activeSection === 'characters' ? <span> · {t({ ko: '페이지당 30개', en: '30 per page' })}</span> : null}

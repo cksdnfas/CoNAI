@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { ToggleRow } from '@/components/ui/toggle-row'
+import { Switch } from '@/components/ui/switch'
 import type { PromptGroupRecord } from '@/types/prompt'
 import { useI18n } from '@/i18n'
 
@@ -111,7 +112,7 @@ export function PromptGroupEditorModal({
 
           <ToggleRow className="justify-between">
             <span className="font-medium text-foreground">{t('prompts.components.prompt.group.editor.modal.display.status')}</span>
-            <input type="checkbox" checked={isVisible} onChange={(event) => setIsVisible(event.target.checked)} />
+            <Switch checked={isVisible} onCheckedChange={setIsVisible} />
           </ToggleRow>
 
           <ModalFooter>

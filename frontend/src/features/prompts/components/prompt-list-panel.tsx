@@ -1,5 +1,5 @@
 import type { RefObject } from 'react'
-import { Inset } from '@/components/ui/inset'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -74,17 +74,19 @@ export function PromptListPanel({
       ) : null}
 
       {!isLoading && items.length === 0 ? (
-        <Inset className="text-sm text-muted-foreground">{t('prompts.components.prompt.list.panel.no.items')}</Inset>
+        <EmptyState size="compact" title={t('prompts.components.prompt.list.panel.no.items')} />
       ) : null}
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>
         <div className="space-y-1">
-          <div className="hidden grid-cols-[32px_auto_minmax(0,1fr)_auto] border-b border-border/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground sm:grid">
-            <span />
-            <span>{t({ ko: '사용량', en: 'Usage' })}</span>
-            <span>{t({ ko: '프롬프트', en: 'Prompt' })}</span>
-            <span className="text-right">{t({ ko: '작업', en: 'Actions' })}</span>
-          </div>
+          {isLoading || items.length > 0 ? (
+            <div className="hidden grid-cols-[32px_auto_minmax(0,1fr)_auto] gap-x-2 px-3 py-2 text-2xs font-semibold uppercase tracking-overline text-muted-foreground sm:grid">
+              <span />
+              <span className="min-w-[2.5rem] sm:min-w-[3rem]">{t({ ko: '사용량', en: 'Usage' })}</span>
+              <span>{t({ ko: '프롬프트', en: 'Prompt' })}</span>
+              <span className="text-right">{t({ ko: '작업', en: 'Actions' })}</span>
+            </div>
+          ) : null}
 
           {isLoading ? (
             <div className="space-y-2">
@@ -117,7 +119,7 @@ export function PromptListPanel({
       </div>
 
       {totalPages > 0 ? (
-        <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4 text-sm text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 pt-4 text-sm text-muted-foreground">
           <span>
             {t(
               { ko: '페이지 {page} / {totalPages} · {progress}', en: 'page {page} / {totalPages} · {progress}' },

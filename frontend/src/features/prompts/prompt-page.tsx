@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { PageHeader } from '@/components/common/page-header'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { Heading } from '@/components/ui/heading'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -54,7 +55,7 @@ const PromptDanbooruBrowserPanelLazy = lazy(async () => {
 })
 
 function PanelFallback() {
-  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+  return <div className="min-h-[16rem] rounded-sm bg-surface-low animate-pulse" />
 }
 
 export function PromptPage() {
@@ -471,9 +472,9 @@ export function PromptPage() {
             />
 
             <section className="relative z-0 space-y-4">
-              <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
+                  <Heading level={2}>{currentSectionTitle}</Heading>
                   <div className="mt-1 text-sm text-muted-foreground">{promptListProgressLabel}</div>
                 </div>
 

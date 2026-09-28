@@ -49,22 +49,21 @@ function PromptSortSelect({
           {PROMPT_SORT_OPTIONS.map((option) => {
             const isSelected = option.value === value
             return (
-              <button
+              <Button
                 key={option.value}
                 type="button"
+                variant="nav"
+                size="sm"
                 role="option"
                 aria-selected={isSelected}
-                className={cn(
-                  'flex w-full items-center rounded-sm px-3 py-2 text-left text-sm transition-colors',
-                  isSelected ? 'bg-surface-high text-foreground' : 'text-muted-foreground hover:bg-surface-high/70 hover:text-foreground',
-                )}
+                data-active={isSelected}
                 onClick={() => {
                   onChange(option.value)
                   setIsOpen(false)
                 }}
               >
                 {t(option.labelKey)}
-              </button>
+              </Button>
             )
           })}
         </div>
@@ -74,7 +73,7 @@ function PromptSortSelect({
         type="button"
         size="sm"
         variant="secondary"
-        className="h-8 min-w-[92px] justify-between border-border/70 bg-surface-low/45 px-2 text-xs"
+        className="h-8 min-w-[92px] justify-between px-2 text-xs"
         onClick={() => setIsOpen((current) => !current)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -104,7 +103,7 @@ export function PromptToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
-      <div className="flex w-full min-w-0 items-center gap-1 rounded-sm border border-border/70 bg-surface-low/45 px-2 py-1.5 sm:min-w-[300px] sm:flex-1 lg:min-w-[360px]">
+      <div className="flex w-full min-w-0 items-center gap-1 rounded-sm border border-outline-input bg-surface-lowest px-2 py-1.5 transition-colors focus-within:border-primary/55 focus-within:bg-surface-low sm:min-w-[300px] sm:flex-1 lg:min-w-[360px]">
         <input
           value={searchInput}
           onChange={(event) => onSearchInputChange(event.target.value)}
@@ -132,7 +131,6 @@ export function PromptToolbar({
         type="button"
         size="icon-xs"
         variant="secondary"
-        className="border-border/70 bg-surface-low/45"
         onClick={() => onChangeSortOrder(sortOrder === 'DESC' ? 'ASC' : 'DESC')}
         aria-label={sortOrderLabel}
         title={sortOrderLabel}

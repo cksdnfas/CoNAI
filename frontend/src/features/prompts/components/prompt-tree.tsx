@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
-import { getNavigationItemClassName } from '@/components/common/navigation-item'
+import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { PromptGroupRecord } from '@/types/prompt'
 
@@ -57,16 +57,15 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
 
   return (
     <div className="space-y-3">
-      <button
+      <Button
         type="button"
+        variant="nav"
+        data-active={selectedGroupId == null}
+        aria-current={selectedGroupId == null ? 'true' : undefined}
         onClick={() => onSelectGroup(undefined)}
-        className={getNavigationItemClassName({
-          active: selectedGroupId == null,
-          className: 'flex items-center justify-between',
-        })}
       >
-        <span>{t({ ko: '전체 프롬프트 ({count})', en: 'All prompts ({count})' }, { count: formatNumber(totalCount) })}</span>
-      </button>
+        {t({ ko: '전체 프롬프트 ({count})', en: 'All prompts ({count})' }, { count: formatNumber(totalCount) })}
+      </Button>
 
       <HierarchyNav
         items={treeGroups}

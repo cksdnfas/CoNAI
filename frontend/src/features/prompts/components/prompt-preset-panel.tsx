@@ -312,7 +312,7 @@ export function PromptPresetPanel() {
           ) : null}
         </div>
 
-        <div className="rounded-sm border border-border/80 bg-surface-lowest p-2">
+        <div className="rounded-sm bg-surface-low p-2">
           {presetsQuery.isLoading ? (
             <div className="px-3 py-4 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.loading.presets')}</div>
           ) : entries.length > 0 ? (
@@ -333,10 +333,9 @@ export function PromptPresetPanel() {
         </div>
       </aside>
 
-      <section className="space-y-4 rounded-sm border border-border/80 bg-surface-lowest p-4">
+      <section className="space-y-4 rounded-sm bg-surface-low p-4">
         <SectionHeading
           variant="inside"
-          className="border-b border-border/70 pb-4"
           heading={selectedPreset ? selectedPreset.name : t('prompts.components.prompt.preset.panel.select.preset')}
           actions={selectedPreset ? (
             <div className="flex items-center gap-2">
@@ -391,11 +390,11 @@ export function PromptPresetPanel() {
                 <div className="text-sm font-medium text-foreground">{t('prompts.components.prompt.preset.panel.insertion.preview')}</div>
                 <Button type="button" size="sm" variant="secondary" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview}>{t('prompts.components.prompt.preset.panel.copy')}</Button>
               </div>
-              <pre className="max-h-64 overflow-auto rounded-sm border border-border bg-surface-container px-3 py-3 text-xs leading-5 text-foreground/90 whitespace-pre-wrap">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</pre>
+              <pre className="max-h-64 overflow-auto rounded-sm bg-surface-lowest px-3 py-3 text-xs leading-5 text-foreground/90 whitespace-pre-wrap">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</pre>
             </div>
           </div>
         ) : (
-          <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.select.a.preset.to.view.details')}</div>
+          <div className="rounded-sm bg-surface-lowest px-4 py-6 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.select.a.preset.to.view.details')}</div>
         )}
       </section>
 

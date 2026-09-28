@@ -1,7 +1,7 @@
 import { BarChart3, ChevronDown, ChevronUp, Download, FolderPlus, Pencil, Tags, Trash2, Upload, Wrench } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { cn } from '@/lib/utils'
@@ -64,25 +64,25 @@ export function PromptSidebar({
       className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
       bodyClassName="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
       headerExtra={
-        <div className="flex flex-wrap justify-end gap-2 border-b border-white/5 pb-3">
-          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label={t('prompts.components.prompt.sidebar.status')} title={t('prompts.components.prompt.sidebar.status')}>
+        <div className="flex flex-wrap justify-end gap-1.5 pb-1">
+          <IconButton size="icon-sm" variant="subtle" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} label={t('prompts.components.prompt.sidebar.status')}>
             <BarChart3 className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} aria-label={t('prompts.components.prompt.sidebar.manual.collect')} title={canCollect ? t('prompts.components.prompt.sidebar.manual.collect') : t('prompts.components.prompt.sidebar.manual.collect.is.not.available.for.auto')}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="subtle" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} label={canCollect ? t('prompts.components.prompt.sidebar.manual.collect') : t('prompts.components.prompt.sidebar.manual.collect.is.not.available.for.auto')}>
             <Wrench className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label={t('prompts.components.prompt.sidebar.add.group')} title={t('prompts.components.prompt.sidebar.add.group')}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="subtle" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} label={t('prompts.components.prompt.sidebar.add.group')}>
             <FolderPlus className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onOpenDanbooruGrouping?.()} disabled={!onOpenDanbooruGrouping} aria-label={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })} title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="subtle" onClick={() => onOpenDanbooruGrouping?.()} disabled={!onOpenDanbooruGrouping} label={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })}>
             <Tags className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label={t('prompts.components.prompt.sidebar.export')} title={t('prompts.components.prompt.sidebar.export')}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="subtle" onClick={() => onExportGroups?.()} disabled={!onExportGroups} label={t('prompts.components.prompt.sidebar.export')}>
             <Download className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onImportGroups?.()} disabled={!onImportGroups} aria-label={t('prompts.components.prompt.sidebar.import')} title={t('prompts.components.prompt.sidebar.import')}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="subtle" onClick={() => onImportGroups?.()} disabled={!onImportGroups} label={t('prompts.components.prompt.sidebar.import')}>
             <Upload className="h-4 w-4" />
-          </Button>
+          </IconButton>
         </div>
       }
     >
@@ -105,20 +105,20 @@ export function PromptSidebar({
         <>
           <PromptTree groups={groups} selectedGroupId={selectedGroupId} totalCount={totalCount} onSelectGroup={onSelectGroup} />
 
-          <div className="border-t border-white/5 pt-3">
+          <div className="pt-1">
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label={t('prompts.components.prompt.sidebar.move.up')} title={t('prompts.components.prompt.sidebar.move.up')}>
+              <IconButton size="icon-sm" variant="subtle" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} label={t('prompts.components.prompt.sidebar.move.up')}>
                 <ChevronUp className="h-4 w-4" />
-              </Button>
-              <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} aria-label={t('prompts.components.prompt.sidebar.move.down')} title={t('prompts.components.prompt.sidebar.move.down')}>
+              </IconButton>
+              <IconButton size="icon-sm" variant="subtle" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} label={t('prompts.components.prompt.sidebar.move.down')}>
                 <ChevronDown className="h-4 w-4" />
-              </Button>
-              <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} aria-label={t('prompts.components.prompt.sidebar.edit')} title={t('prompts.components.prompt.sidebar.edit')}>
+              </IconButton>
+              <IconButton size="icon-sm" variant="subtle" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} label={t('prompts.components.prompt.sidebar.edit')}>
                 <Pencil className="h-4 w-4" />
-              </Button>
-              <Button type="button" size="icon-sm" variant="secondary" className="bg-surface-low" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} aria-label={t('prompts.components.prompt.sidebar.delete')} title={t('prompts.components.prompt.sidebar.delete')}>
+              </IconButton>
+              <IconButton size="icon-sm" variant="subtle" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} label={t('prompts.components.prompt.sidebar.delete')}>
                 <Trash2 className="h-4 w-4" />
-              </Button>
+              </IconButton>
             </div>
           </div>
         </>
