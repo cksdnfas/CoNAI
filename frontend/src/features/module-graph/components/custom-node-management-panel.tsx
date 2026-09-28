@@ -3,7 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Heading } from '@/components/ui/heading'
+import { cn } from '@/lib/utils'
+import { Inset } from '@/components/ui/inset'
+import { Section } from '@/components/ui/section'
+import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -54,10 +58,10 @@ type PanelCardHeaderProps = {
 
 function PanelCardHeader({ title, description, actions }: PanelCardHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-border/70 pb-3">
+    <div className="flex items-start justify-between gap-3 pb-1">
       <div className="min-w-0">
-        <div className="text-sm font-semibold text-foreground">{title}</div>
-        <div className="mt-1 text-xs text-muted-foreground">{description}</div>
+        <Heading level={3}>{title}</Heading>
+        <Text variant="caption" className="mt-1">{description}</Text>
       </div>
 
       {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
@@ -236,9 +240,9 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-sm border border-border/70 bg-surface-low px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <Inset className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '커스텀 노드 디렉터리', en: 'Custom Nodes Directory' })}</div>
+          <Text as="div" variant="overline">{t({ ko: '커스텀 노드 디렉터리', en: 'Custom Nodes Directory' })}</Text>
           <div className="mt-1 break-all text-sm text-foreground">{customNodesQuery.data?.customNodesDir ?? 'user/custom_nodes'}</div>
         </div>
 
@@ -248,7 +252,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
             {rescanMutation.isPending ? t({ ko: '재스캔 중...', en: 'Rescanning...' }) : t({ ko: '재스캔', en: 'Rescan' })}
           </Button>
         </div>
-      </div>
+      </Inset>
 
       {customNodesQuery.isLoading ? (
         <LoadingState variant="inline" label={t({ ko: '커스텀 노드 폴더를 읽고 있어.', en: 'Reading the custom node folders.' })} />
@@ -263,8 +267,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="space-y-4">
-          <Card>
-            <CardContent className="space-y-3">
+          <Section bodyClassName="space-y-3">
               <PanelCardHeader
                 title={t({ ko: '등록된 커스텀 노드', en: 'Registered custom nodes' })}
                 description={t({ ko: 'user/custom_nodes 아래 폴더를 스캔한 결과야.', en: 'These are the results of scanning folders under user/custom_nodes.' })}
@@ -281,10 +284,10 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                   {loadedNodes.map((node) => {
                     const isSelected = selectedTestKey === node.manifest.key
                     return (
-                      <div
+                      <Inset
                         key={node.manifest.key}
-                        className="rounded-sm border border-border bg-surface-low px-3 py-2.5 transition-colors hover:border-primary/35"
-                        style={isSelected ? { borderColor: 'var(--color-primary)' } : undefined}
+                        data-selected={isSelected}
+                        className={cn('px-3 py-2.5 transition-colors', isSelected && 'bg-primary/12')}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0 space-y-1">
@@ -295,7 +298,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                               <Badge variant="outline">{node.manifest.entry}</Badge>
                             </div>
                             {node.manifest.description ? <div className="text-xs text-muted-foreground">{node.manifest.description}</div> : null}
-                            <div className="text-[11px] text-muted-foreground">{node.folderPath}</div>
+                            <div className="text-2xs text-muted-foreground">{node.folderPath}</div>
                           </div>
 
                           <div className="flex flex-wrap gap-2">
@@ -338,16 +341,14 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                             </Button>
                           </div>
                         </div>
-                      </div>
+                      </Inset>
                     )
                   })}
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </Section>
 
-          <Card>
-            <CardContent className="space-y-3">
+          <Section bodyClassName="space-y-3">
               <PanelCardHeader
                 title={t({ ko: '로드 오류', en: 'Load errors' })}
                 description={t({ ko: 'manifest 또는 entry 파일에 문제가 있으면 여기에 보여줘.', en: 'If there is a problem with the manifest or entry file, it appears here.' })}
@@ -372,13 +373,11 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </Section>
         </div>
 
         <div className="space-y-4">
-          <Card>
-            <CardContent className="space-y-3">
+          <Section bodyClassName="space-y-3">
               <PanelCardHeader title={t({ ko: '새 노드 스캐폴드', en: 'New node scaffold' })} description={t({ ko: '기본 폴더와 starter 파일을 바로 만들어.', en: 'Create the base folder and starter files right away.' })} />
 
               <div className="grid gap-3">
@@ -420,18 +419,16 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                   {scaffoldMutation.isPending ? t({ ko: '생성 중...', en: 'Creating...' }) : t({ ko: '스캐폴드 생성', en: 'Create scaffold' })}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+          </Section>
 
-          <Card>
-            <CardContent className="space-y-3">
+          <Section bodyClassName="space-y-3">
               <PanelCardHeader
                 title={t({ ko: '단건 테스트', en: 'Single test' })}
                 description={selectedTestNode ? t({ ko: '{name} 테스트', en: '{name} test' }, { name: selectedTestNode.manifest.name }) : t({ ko: '먼저 테스트할 노드를 선택해.', en: 'Select a node to test first.' })}
               />
 
               {selectedNodeSourceQuery.data ? (
-                <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low p-3">
+                <Inset className="space-y-3 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <div className="text-sm font-medium text-foreground">{t({ ko: '소스 정보', en: 'Source info' })}</div>
@@ -440,11 +437,11 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <Badge variant="outline">{selectedNodeSourceQuery.data.sourceHash.slice(0, 12)}</Badge>
                   </div>
                   <div className="grid gap-2.5 md:grid-cols-2">
-                    <StatTile label={t({ ko: '폴더', en: 'Folder' })} value={selectedNodeSourceQuery.data.folderPath} valueClassName="break-all text-xs font-medium" />
-                    <StatTile label="manifest" value={selectedNodeSourceQuery.data.manifestPath} valueClassName="break-all text-xs font-medium" />
-                    <StatTile label="entry" value={selectedNodeSourceQuery.data.entryPath} valueClassName="break-all text-xs font-medium" />
-                    <StatTile label="package.json" value={selectedNodeSourceQuery.data.packageJsonPath ?? t({ ko: '없음', en: 'None' })} valueClassName="break-all text-xs font-medium" />
-                    <StatTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? t({ ko: '없음', en: 'None' })} className="md:col-span-2" valueClassName="break-all text-xs font-medium" />
+                    <StatTile label={t({ ko: '폴더', en: 'Folder' })} value={selectedNodeSourceQuery.data.folderPath} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
+                    <StatTile label="manifest" value={selectedNodeSourceQuery.data.manifestPath} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
+                    <StatTile label="entry" value={selectedNodeSourceQuery.data.entryPath} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
+                    <StatTile label="package.json" value={selectedNodeSourceQuery.data.packageJsonPath ?? t({ ko: '없음', en: 'None' })} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
+                    <StatTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? t({ ko: '없음', en: 'None' })} className="bg-surface-container md:col-span-2" valueClassName="break-all text-xs font-medium" />
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="secondary" onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
@@ -479,7 +476,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <Textarea variant="settings" rows={8} value={installResultText} placeholder={t({ ko: 'npm install 결과가 여기에 보여.', en: 'The npm install result appears here.' })} readOnly />
                   ) : null}
                   <Textarea variant="settings" rows={8} value={stringifyPrettyJson(selectedNodeSourceQuery.data.manifest)} readOnly />
-                </div>
+                </Inset>
               ) : null}
 
               <Field label={t({ ko: '테스트 입력 JSON', en: 'Test input JSON' })}>
@@ -496,17 +493,17 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               </Button>
 
               {previewableImageOutputs.length > 0 ? (
-                <div className="space-y-2.5 rounded-sm border border-border/70 bg-surface-low p-3">
+                <Inset className="space-y-2.5 p-3">
                   <div className="text-sm font-medium text-foreground">{t({ ko: '이미지 미리보기', en: 'Image preview' })}</div>
                   <div className="grid gap-3 md:grid-cols-2">
                     {previewableImageOutputs.map((output) => (
                       <div key={output.key} className="space-y-2">
                         <div className="text-xs text-muted-foreground">{output.label}</div>
-                        <img src={output.value} alt={output.label} className="max-h-56 w-full rounded-sm border border-border/70 object-contain bg-black/20" />
+                        <img src={output.value} alt={output.label} className="max-h-56 w-full rounded-sm bg-surface-container object-contain" />
                       </div>
                     ))}
                   </div>
-                </div>
+                </Inset>
               ) : null}
 
               {filePathOutputs.length > 0 ? (
@@ -526,7 +523,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               ) : null}
 
               {testResultData?.logs.length ? (
-                <div className="space-y-2 rounded-sm border border-border/70 bg-surface-low p-3">
+                <Inset className="space-y-2 p-3">
                   <div className="text-sm font-medium text-foreground">{t({ ko: '실행 로그', en: 'Execution logs' })}</div>
                   <div className="space-y-1 text-sm text-muted-foreground">
                     {testResultData.logs.map((logItem, index) => (
@@ -535,14 +532,13 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                       </div>
                     ))}
                   </div>
-                </div>
+                </Inset>
               ) : null}
 
               <Field label={t({ ko: '테스트 결과', en: 'Test result' })}>
                 <Textarea variant="settings" rows={14} value={testResultText} placeholder={t({ ko: '테스트 결과가 여기에 보여.', en: 'The test result appears here.' })} readOnly />
               </Field>
-            </CardContent>
-          </Card>
+          </Section>
         </div>
       </div>
     </div>

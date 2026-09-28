@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight } from 'lucide-react'
-import { SectionHeading } from '@/components/common/section-heading'
+import { ChevronDown, ChevronRight, MousePointerClick } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Inset } from '@/components/ui/inset'
+import { Panel } from '@/components/ui/panel'
+import { Section } from '@/components/ui/section'
+import { Text } from '@/components/ui/text'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
@@ -179,10 +181,11 @@ export function NodeInspectorPanel({
     const missingRequired = Boolean(port.required && !isNodeInputSatisfied(node, port))
     const isHighlightedPort = highlightedPortKey === port.key
     const clearPortValue = () => onNodeValueClear(node.id, port.key)
+    // Status tints over the tonal card (no outline): info for the focused port, warning for a missing required value.
     const cardStyle = isHighlightedPort
-      ? ({ borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.10)', boxShadow: '0 0 0 1px rgba(96, 165, 250, 0.35)' } as CSSProperties)
+      ? ({ backgroundColor: 'color-mix(in srgb, var(--info-soft) 55%, transparent)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--info) 45%, transparent)' } as CSSProperties)
       : missingRequired
-        ? ({ borderColor: '#f59e0b99', backgroundColor: 'rgba(245, 158, 11, 0.08)' } as CSSProperties)
+        ? ({ backgroundColor: 'color-mix(in srgb, var(--warning-soft) 45%, transparent)' } as CSSProperties)
         : undefined
 
     if (isSystemLoadLlmPresetNode && port.key === 'preset_type') {
@@ -226,8 +229,8 @@ export function NodeInspectorPanel({
             emptyLabel={llmPresetsQuery.isLoading ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: '프리셋 선택', en: 'Select preset' })}
           />
           {selectedPreset ? (
-            <div className="mt-2 rounded-sm border border-border/60 bg-surface-lowest/70 px-3 py-2">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '선택 내용', en: 'Selected content' })}</div>
+            <div className="mt-2 rounded-sm bg-surface-container px-3 py-2">
+              <Text as="div" variant="overline" className="mb-1 font-semibold">{t({ ko: '선택 내용', en: 'Selected content' })}</Text>
               <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-foreground">{summarizeLlmPresetContent(selectedPreset.content)}</pre>
             </div>
           ) : null}
@@ -573,153 +576,145 @@ export function NodeInspectorPanel({
   }
 
   return (
-    <Card>
-      <CardContent className="space-y-4">
-        {showHeader ? (
-          <SectionHeading
-            variant="inside"
-            heading={t({ ko: '노드 인스펙터', en: 'Node Inspector' })}
-          />
-        ) : null}
-        {!selectedNode && !selectedEdge ? (
-          <div className="rounded-sm bg-surface-low px-4 py-6 text-sm text-muted-foreground">{t({ ko: '노드나 엣지를 선택해.', en: 'Select a node or edge.' })}</div>
-        ) : null}
+    <Section heading={showHeader ? t({ ko: '노드 인스펙터', en: 'Node Inspector' }) : undefined}>
+      {!selectedNode && !selectedEdge ? (
+        <EmptyState icon={MousePointerClick} title={t({ ko: '노드나 엣지를 선택해.', en: 'Select a node or edge.' })} />
+      ) : null}
 
-        {!selectedNode && selectedEdge && sourceEndpoint && targetEndpoint ? (
-          <div className={NODE_INSPECTOR_EDGE_SURFACE_CLASS}>
-            <div className="flex items-center gap-2">
-              <div className="font-medium text-foreground">{t({ ko: '선택한 엣지', en: 'Selected edge' })}</div>
-              {selectedEdgeType ? <Badge variant="outline">{selectedEdgeType}</Badge> : null}
-              <TechnicalReferenceHint title={`edge ${selectedEdge.id}`} label={t({ ko: '엣지 내부 식별자 보기', en: 'Show internal edge identifier' })} />
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <EdgeEndpointCard heading={t({ ko: '출발', en: 'Source' })} endpoint={sourceEndpoint} role={t({ ko: '출력', en: 'Output' })} />
-              <EdgeEndpointCard heading={t({ ko: '도착', en: 'Target' })} endpoint={targetEndpoint} role={t({ ko: '입력', en: 'Input' })} />
+      {!selectedNode && selectedEdge && sourceEndpoint && targetEndpoint ? (
+        <div className={NODE_INSPECTOR_EDGE_SURFACE_CLASS}>
+          <div className="flex items-center gap-2">
+            <Text as="div" variant="label">{t({ ko: '선택한 엣지', en: 'Selected edge' })}</Text>
+            {selectedEdgeType ? <Badge variant="outline">{selectedEdgeType}</Badge> : null}
+            <TechnicalReferenceHint title={`edge ${selectedEdge.id}`} label={t({ ko: '엣지 내부 식별자 보기', en: 'Show internal edge identifier' })} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <EdgeEndpointCard heading={t({ ko: '출발', en: 'Source' })} endpoint={sourceEndpoint} role={t({ ko: '출력', en: 'Output' })} />
+            <EdgeEndpointCard heading={t({ ko: '도착', en: 'Target' })} endpoint={targetEndpoint} role={t({ ko: '입력', en: 'Input' })} />
+          </div>
+        </div>
+      ) : null}
+
+      {selectedNode ? (
+        <>
+          <div className={NODE_INSPECTOR_NODE_SURFACE_CLASS}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-foreground">{getModuleNodeDisplayLabel(selectedNode)}</span>
+                  <Badge variant="outline">{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
+                  <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div className="space-y-1">
+                    <Text as="div" variant="overline" className="font-medium">{t({ ko: '노드 이름', en: 'Node name' })}</Text>
+                    <Input
+                      value={selectedNode.data.label ?? ''}
+                      onChange={(event) => onNodeLabelChange(selectedNode.id, event.target.value)}
+                      placeholder={getModuleBaseDisplayName(selectedNode.data.module)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Text as="div" variant="overline" className="font-medium">{t({ ko: '기본 타입', en: 'Base type' })}</Text>
+                    <Input value={getModuleBaseDisplayName(selectedNode.data.module)} readOnly aria-readonly className="text-muted-foreground" />
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                  <Badge variant="outline">{t({ ko: '입력 {count}', en: 'Inputs {count}' }, { count: formatNumber(selectedNodeInputPorts.length) })}</Badge>
+                  <Badge variant="outline">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(selectedNodeVisibleOutputPorts.length) })}</Badge>
+                  {missingRequiredInputs.length > 0 ? <Badge variant="outline">{t({ ko: '필수 부족 {count}', en: 'Missing required {count}' }, { count: formatNumber(missingRequiredInputs.length) })}</Badge> : <Badge variant="secondary">{t({ ko: '필수 입력 충족', en: 'Required inputs satisfied' })}</Badge>}
+                  {highlightedPortKey ? <Badge variant="secondary">{t({ ko: '선택 포트 강조', en: 'Selected port highlighted' })}</Badge> : null}
+                  {highlightedPortKey ? <TechnicalReferenceHint title={`focus port ${highlightedPortKey}`} label={t({ ko: '강조 중인 포트 내부 키 보기', en: 'Show highlighted internal port key' })} /> : null}
+                </div>
+              </div>
+              {onExecuteSelectedNode ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" onClick={onExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
+                    {resolvedExecuteSelectedNodeLabel}
+                  </Button>
+                  {onForceExecuteSelectedNode ? (
+                    <Button type="button" size="sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
+                      {resolvedForceExecuteSelectedNodeLabel}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
-        ) : null}
 
-        {selectedNode ? (
-          <>
-            <div className={NODE_INSPECTOR_NODE_SURFACE_CLASS}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-foreground">{getModuleNodeDisplayLabel(selectedNode)}</span>
-                    <Badge variant="outline">{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
-                    <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                    <div className="space-y-1">
-                      <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '노드 이름', en: 'Node name' })}</div>
-                      <Input
-                        value={selectedNode.data.label ?? ''}
-                        onChange={(event) => onNodeLabelChange(selectedNode.id, event.target.value)}
-                        placeholder={getModuleBaseDisplayName(selectedNode.data.module)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '기본 타입', en: 'Base type' })}</div>
-                      <div className="flex h-10 items-center rounded-sm border border-border bg-background/50 px-3 text-sm text-muted-foreground">
-                        {getModuleBaseDisplayName(selectedNode.data.module)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-                    <Badge variant="outline">{t({ ko: '입력 {count}', en: 'Inputs {count}' }, { count: formatNumber(selectedNodeInputPorts.length) })}</Badge>
-                    <Badge variant="outline">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(selectedNodeVisibleOutputPorts.length) })}</Badge>
-                    {missingRequiredInputs.length > 0 ? <Badge variant="outline">{t({ ko: '필수 부족 {count}', en: 'Missing required {count}' }, { count: formatNumber(missingRequiredInputs.length) })}</Badge> : <Badge variant="secondary">{t({ ko: '필수 입력 충족', en: 'Required inputs satisfied' })}</Badge>}
-                    {highlightedPortKey ? <Badge variant="secondary">{t({ ko: '선택 포트 강조', en: 'Selected port highlighted' })}</Badge> : null}
-                    {highlightedPortKey ? <TechnicalReferenceHint title={`focus port ${highlightedPortKey}`} label={t({ ko: '강조 중인 포트 내부 키 보기', en: 'Show highlighted internal port key' })} /> : null}
-                  </div>
-                </div>
-                {onExecuteSelectedNode ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" onClick={onExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
-                      {resolvedExecuteSelectedNodeLabel}
-                    </Button>
-                    {onForceExecuteSelectedNode ? (
-                      <Button type="button" size="sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
-                        {resolvedForceExecuteSelectedNodeLabel}
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
+          {missingRequiredInputs.length > 0 ? (
+            <div role="status" className="rounded-sm bg-warning-soft/45 px-4 py-3">
+              <div className="text-sm font-medium text-foreground">{t({ ko: '아직 채워야 하는 필수 입력', en: 'Required inputs still needed' })}</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {missingRequiredInputs.map((port) => (
+                  <Badge key={port.key} variant="secondary">{port.label}</Badge>
+                ))}
               </div>
             </div>
+          ) : null}
 
-            {missingRequiredInputs.length > 0 ? (
-              <div className="rounded-sm border px-4 py-3" style={{ borderColor: '#f59e0b99', backgroundColor: 'rgba(245, 158, 11, 0.08)' } as CSSProperties}>
-                <div className="text-sm font-medium text-foreground">{t({ ko: '아직 채워야 하는 필수 입력', en: 'Required inputs still needed' })}</div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {missingRequiredInputs.map((port) => (
-                    <Badge key={port.key} variant="secondary">{port.label}</Badge>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="space-y-3 rounded-sm border border-border bg-background/40 p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="text-sm font-medium text-foreground">{t({ ko: '노드 출력', en: 'Node outputs' })}</div>
-                {selectedExecutionId ? <Badge variant="outline">{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: formatNumber(selectedExecutionId) })}</Badge> : <Badge variant="outline">{t({ ko: '실행 선택 필요', en: 'Select a run' })}</Badge>}
-                {selectedNodeOutputGroups.length > 0 ? <Badge variant="outline">{t({ ko: '포트 {count}', en: 'Ports {count}' }, { count: formatNumber(selectedNodeOutputGroups.length) })}</Badge> : null}
-              </div>
-
-              {!selectedExecutionArtifacts ? (
-                <EmptyState size="compact" title={t({ ko: '실행 결과를 선택하면 이 노드의 출력 값을 포트별로 여기서 바로 확인할 수 있어.', en: 'Select an execution result to inspect this node\'s output values by port here.' })} />
-              ) : selectedNodeOutputGroups.length === 0 ? (
-                <EmptyState size="compact" title={t({ ko: '선택한 실행에서 이 노드가 남긴 출력이 없어.', en: 'This node has no outputs in the selected run.' })} />
-              ) : (
-                <div className="space-y-2">
-                  {selectedNodeOutputGroups.map((group) => {
-                    const isCollapsed = collapsedOutputGroupKeySet.has(group.portKey)
-
-                    return (
-                      <div key={group.portKey} className="rounded-sm border border-border bg-surface-low/70">
-                        <button
-                          type="button"
-                          onClick={() => toggleOutputGroup(group.portKey)}
-                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                            <span className="truncate text-sm font-medium text-foreground">{group.portLabel}</span>
-                            <Badge variant="secondary">{group.portKey}</Badge>
-                            {group.portType ? <Badge variant="outline">{getModuleGraphPortTypeLabel(t, group.portType)}</Badge> : null}
-                          </div>
-                          <Badge variant="outline">{group.artifacts.length}</Badge>
-                        </button>
-
-                        {!isCollapsed ? (
-                          <div className="space-y-3 border-t border-border px-3 py-3">
-                            {group.artifacts.map((artifact) => (
-                              <ExecutionArtifactCard key={artifact.id} artifact={artifact} />
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+          <Inset className="space-y-3 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Text as="div" variant="label">{t({ ko: '노드 출력', en: 'Node outputs' })}</Text>
+              {selectedExecutionId ? <Badge variant="outline">{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: formatNumber(selectedExecutionId) })}</Badge> : <Badge variant="outline">{t({ ko: '실행 선택 필요', en: 'Select a run' })}</Badge>}
+              {selectedNodeOutputGroups.length > 0 ? <Badge variant="outline">{t({ ko: '포트 {count}', en: 'Ports {count}' }, { count: formatNumber(selectedNodeOutputGroups.length) })}</Badge> : null}
             </div>
 
-            {selectedNodeInputPorts.length === 0 || selectedNodeWorkflowInputPort ? (
-              selectedNodeStandaloneUiFields.length > 0 ? (
-                <div className="space-y-4">{selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}</div>
-              ) : (
-                <div className="text-sm text-muted-foreground">{t({ ko: '이 노드 입력은 카드에서 바로 편집해.', en: 'Edit this node input directly from the card.' })}</div>
-              )
+            {!selectedExecutionArtifacts ? (
+              <EmptyState size="compact" title={t({ ko: '실행 결과를 선택하면 이 노드의 출력 값을 포트별로 여기서 바로 확인할 수 있어.', en: 'Select an execution result to inspect this node\'s output values by port here.' })} />
+            ) : selectedNodeOutputGroups.length === 0 ? (
+              <EmptyState size="compact" title={t({ ko: '선택한 실행에서 이 노드가 남긴 출력이 없어.', en: 'This node has no outputs in the selected run.' })} />
             ) : (
-              <div className="space-y-4">
-                {sortedSelectedNodeInputs.map((port) => renderPortInput(selectedNode, port))}
-                {selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}
+              <div className="space-y-2">
+                {selectedNodeOutputGroups.map((group) => {
+                  const isCollapsed = collapsedOutputGroupKeySet.has(group.portKey)
+
+                  return (
+                    <Panel key={group.portKey} tone="container" padding="none">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-expanded={!isCollapsed}
+                        onClick={() => toggleOutputGroup(group.portKey)}
+                        className="h-auto w-full justify-between gap-3 px-3 py-2 text-left"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                          <span className="truncate text-sm font-medium text-foreground">{group.portLabel}</span>
+                          <Badge variant="secondary">{group.portKey}</Badge>
+                          {group.portType ? <Badge variant="outline">{getModuleGraphPortTypeLabel(t, group.portType)}</Badge> : null}
+                        </span>
+                        <Badge variant="outline">{group.artifacts.length}</Badge>
+                      </Button>
+
+                      {!isCollapsed ? (
+                        <div className="space-y-3 px-3 pt-1 pb-3">
+                          {group.artifacts.map((artifact) => (
+                            <ExecutionArtifactCard key={artifact.id} artifact={artifact} />
+                          ))}
+                        </div>
+                      ) : null}
+                    </Panel>
+                  )
+                })}
               </div>
             )}
-          </>
-        ) : null}
-      </CardContent>
-    </Card>
+          </Inset>
+
+          {selectedNodeInputPorts.length === 0 || selectedNodeWorkflowInputPort ? (
+            selectedNodeStandaloneUiFields.length > 0 ? (
+              <div className="space-y-4">{selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}</div>
+            ) : (
+              <div className="text-sm text-muted-foreground">{t({ ko: '이 노드 입력은 카드에서 바로 편집해.', en: 'Edit this node input directly from the card.' })}</div>
+            )
+          ) : (
+            <div className="space-y-4">
+              {sortedSelectedNodeInputs.map((port) => renderPortInput(selectedNode, port))}
+              {selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}
+            </div>
+          )}
+        </>
+      ) : null}
+    </Section>
   )
 }

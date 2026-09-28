@@ -420,7 +420,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
   if (kind === 'vibes') {
     return (
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2.5">
           <div>
             <div className="text-sm font-medium text-foreground">{t({ ko: 'Vibe Transfer', en: 'Vibe Transfer' })}</div>
             <div className="text-xs text-muted-foreground">{t({ ko: 'encoded vibe를 직접 넣거나 saved vibe를 바로 추가해.', en: 'Enter an encoded vibe directly or quickly add a saved vibe.' })}</div>
@@ -435,7 +435,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           <EmptyState size="compact" title={t({ ko: '아직 vibe 입력이 없어.', en: 'There are no vibe inputs yet.' })} />
         ) : (
           vibeDrafts.map((draft, index) => (
-            <div key={`nai-vibe-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+            <div key={`nai-vibe-input-${index}`} className="space-y-3 rounded-sm bg-surface-low p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
                 <Button type="button" size="sm" variant="ghost" onClick={() => updateVibes(vibeDrafts.filter((_, draftIndex) => draftIndex !== index))}>
@@ -469,7 +469,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           ))
         )}
 
-        <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+        <div className="space-y-2 rounded-sm bg-surface-low p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="text-sm font-medium text-foreground">{t({ ko: '저장된 Vibes', en: 'Saved Vibes' })}</div>
@@ -494,7 +494,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                 const isPinned = pinnedVibeIdSet.has(asset.id)
 
                 return (
-                  <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                  <div key={asset.id} className="space-y-3 rounded-sm bg-surface-container p-3">
                     <div className="flex gap-3">
                       {asset.thumbnail_url || asset.image_url || asset.image_data_url ? (
                         <InlineMediaPreview
@@ -505,7 +505,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                           mediaClassName="h-full w-full object-contain"
                         />
                       ) : (
-                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
+                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm bg-surface-lowest text-2xs text-muted-foreground">
                           {t({ ko: '미리보기 없음', en: 'No preview' })}
                         </div>
                       )}
@@ -517,7 +517,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                           <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
                           <Badge variant="outline">{t({ ko: '정보 추출 {value}', en: 'Info extracted {value}' }, { value: asset.information_extracted })}</Badge>
                         </div>
-                        <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
+                        <div className="text-2xs text-muted-foreground">{formatDateTime(asset.created_date)}</div>
                       </div>
                     </div>
                     <div className="flex justify-end gap-2">
@@ -544,7 +544,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2.5">
         <div>
           <div className="text-sm font-medium text-foreground">{t({ ko: 'Character Reference', en: 'Character Reference' })}</div>
           <div className="text-xs text-muted-foreground">{t({ ko: 'reference 이미지를 직접 넣거나 saved reference를 추가해.', en: 'Add a reference image directly or append a saved reference.' })}</div>
@@ -559,7 +559,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         <EmptyState size="compact" title={t({ ko: '아직 reference 입력이 없어.', en: 'There are no reference inputs yet.' })} />
       ) : (
         characterReferenceDrafts.map((draft, index) => (
-          <div key={`nai-character-reference-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+          <div key={`nai-character-reference-input-${index}`} className="space-y-3 rounded-sm bg-surface-low p-3">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
               <Button type="button" size="sm" variant="ghost" onClick={() => updateCharacterReferences(characterReferenceDrafts.filter((_, draftIndex) => draftIndex !== index))}>
@@ -596,7 +596,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         ))
       )}
 
-      <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+      <div className="space-y-2 rounded-sm bg-surface-low p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="text-sm font-medium text-foreground">{t({ ko: '저장된 Character References', en: 'Saved Character References' })}</div>
@@ -621,7 +621,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               const isPinned = pinnedCharacterReferenceIdSet.has(asset.id)
 
               return (
-                <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                <div key={asset.id} className="space-y-3 rounded-sm bg-surface-container p-3">
                   <div className="flex gap-3">
                     <InlineMediaPreview
                       src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
@@ -638,7 +638,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                         <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
                         <Badge variant="outline">{t({ ko: '충실도 {value}', en: 'Fidelity {value}' }, { value: asset.fidelity })}</Badge>
                       </div>
-                      <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
+                      <div className="text-2xs text-muted-foreground">{formatDateTime(asset.created_date)}</div>
                     </div>
                   </div>
                   <div className="flex justify-end gap-2">

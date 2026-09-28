@@ -5,8 +5,9 @@ import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Inset } from '@/components/ui/inset'
+import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
@@ -302,31 +303,30 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
 
           return (
             <section key={group.key} className="space-y-2">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                aria-expanded={!isCollapsed}
                 onClick={() => toggleGroup(group.key)}
-                className="flex w-full items-center justify-between gap-3 border-b border-border/70 pb-2 text-left"
+                className="h-auto w-full justify-between gap-3 px-2 py-1.5 text-left"
               >
-                <div className="flex items-center gap-2">
+                <span className="flex items-center gap-2">
                   {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                  <div className="text-sm font-semibold text-foreground">{localizeModuleGroupLabel(group.label, t)}</div>
-                </div>
+                  <span className="text-sm font-semibold text-foreground">{localizeModuleGroupLabel(group.label, t)}</span>
+                </span>
                 <Badge variant="outline">{group.modules.length}</Badge>
-              </button>
+              </Button>
 
               {!isCollapsed ? (
                 <div className="space-y-1">
                   {group.modules.map((module) => {
-                    const isSystemModule = module.engine_type === 'system'
                     const isFinalResult = isFinalResultModule(module)
 
                     return (
-                      <div
+                      <Inset
                         key={module.id}
-                        className={cn(
-                          'flex items-center justify-between gap-3 rounded-sm border px-3 py-2.5',
-                          isSystemModule ? 'border-primary/25 bg-surface-high/70' : 'border-border bg-surface-low',
-                        )}
+                        data-engine={module.engine_type}
+                        className="flex items-center justify-between gap-3 px-3 py-2.5"
                       >
                         <div className={cn('min-w-0 space-y-1', module.description ? 'cursor-help' : undefined)} title={getModuleHoverTitle(module)}>
                           <div className="flex flex-wrap items-center gap-2">
@@ -334,7 +334,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                             <Badge variant="outline">{module.engine_type}</Badge>
                             {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
                           </div>
-                          <div className="text-[11px] text-muted-foreground">
+                          <div className="text-2xs text-muted-foreground">
                             {t({ ko: '입력 {inputs} · 출력 {outputs}', en: 'Inputs {inputs} · Outputs {outputs}' }, { inputs: formatNumber(module.exposed_inputs.length), outputs: formatNumber(module.output_ports.length) })}
                           </div>
                         </div>
@@ -342,7 +342,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                         <Button type="button" size="sm" variant="secondary" onClick={() => onAddModule(module)}>
                           {t({ ko: '추가', en: 'Add' })}
                         </Button>
-                      </div>
+                      </Inset>
                     )
                   })}
                 </div>
@@ -359,8 +359,6 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
   }
 
   return (
-    <Card>
-      <CardContent className="space-y-3">{content}</CardContent>
-    </Card>
+    <Section bodyClassName="space-y-3">{content}</Section>
   )
 }

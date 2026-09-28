@@ -1,5 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Panel } from '@/components/ui/panel'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { LlmPresetOptionCollections, LlmPresetOptionRecord } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModulePortDefinition } from '@/lib/api-module-graph'
@@ -30,9 +32,10 @@ export function getLlmPresetTypeOptions(t: ReturnType<typeof useI18n>['t']): Arr
   ]
 }
 
-export const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-3'
-export const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3 rounded-sm border border-border/70 bg-background/35 p-4'
-export const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'rounded-sm border border-border/70 bg-background/35 p-4'
+// Same tone role as <Inset /> (ui-tone-plinth): surface-low on the page, recessed inside the inspector Section.
+export const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'ui-tone-plinth space-y-2 rounded-sm p-3'
+export const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'ui-tone-plinth space-y-3 rounded-sm p-4'
+export const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'ui-tone-plinth rounded-sm p-4'
 
 export function normalizeLlmPresetType(value: unknown): LlmPresetCollectionKey {
   return value === 'systemPromptPresets' || value === 'structuredOutputJsonPresets'
@@ -160,8 +163,8 @@ export function EdgeEndpointCard({
   const { t } = useI18n()
 
   return (
-    <div className="rounded-sm border border-border/70 bg-background/35 px-3 py-3">
-      <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{heading}</div>
+    <Panel tone="container" padding="none" className="px-3 py-3">
+      <Text as="div" variant="overline">{heading}</Text>
       <div className="mt-2 flex items-center gap-1">
         <div className="text-sm font-medium text-foreground">{endpoint.node ? getModuleNodeDisplayLabel(endpoint.node) : t({ ko: '알 수 없는 노드', en: 'Unknown node' })}</div>
         {endpoint.node?.id ? <TechnicalReferenceHint title={`node ${endpoint.node.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} /> : null}
@@ -182,7 +185,7 @@ export function EdgeEndpointCard({
           {endpoint.portKey ? <TechnicalReferenceHint title={`port ${endpoint.portKey}`} label={t({ ko: '포트 내부 키 보기', en: 'Show internal port key' })} /> : null}
         </div>
       )}
-    </div>
+    </Panel>
   )
 }
 
