@@ -10,6 +10,7 @@ import {
   checkWorkflowRoleQueueLimit,
 } from '../../services/generation-queue/queueRoleLimitPolicy'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
+import { GenerationTargetGroupService } from '../../services/generationTargetGroupService'
 import { publishQueueJobEvent } from '../../services/runtime-events/runtimeEventPublishers'
 import {
   normalizeWorkflowNumericPromptValues,
@@ -55,6 +56,8 @@ export function createGenerationQueueActionRoutes() {
       workflow_name,
 
       requested_group_id,
+
+      requested_group_path,
 
       requested_server_id,
 
@@ -308,6 +311,22 @@ export function createGenerationQueueActionRoutes() {
     }
 
     const requesterAccountId = getRequesterAccountId(req)
+
+    // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.
+    const targetGroup = GenerationTargetGroupService.resolveForAccount(requesterAccountId, {
+      groupId: requestedGroupIdNumber,
+      groupPath: requested_group_path,
+    })
+
+    if (!targetGroup.ok) {
+
+      res.status(targetGroup.status).json({ success: false, error: targetGroup.error })
+
+      return
+
+    }
+
+    requestedGroupIdNumber = targetGroup.groupId
 
     const normalizedRequestSummary = typeof request_summary === 'string' && request_summary.trim().length > 0 ? request_summary.trim() : null
 

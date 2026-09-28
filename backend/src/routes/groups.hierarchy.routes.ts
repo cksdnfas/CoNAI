@@ -4,6 +4,12 @@ import { GroupModel } from '../models/Group';
 import { GroupMoveRequest, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
+import {
+  GROUP_NAME_CONFLICT_MESSAGE,
+  GroupPathError,
+  GroupPathService,
+  isGroupNameConflictError,
+} from '../services/groupPathService';
 
 const router = Router();
 
@@ -63,6 +69,9 @@ router.post('/:id/move', asyncHandler(async (req: Request, res: Response) => {
 
     return res.json(successResponse({ message: 'Group moved successfully' }));
   } catch (error) {
+    if (isGroupNameConflictError(error)) {
+      return res.status(400).json(errorResponse(GROUP_NAME_CONFLICT_MESSAGE));
+    }
     console.error('Error moving group:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to move group';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
@@ -87,7 +96,30 @@ router.post('/:id/validate-hierarchy', asyncHandler(async (req: Request, res: Re
   }
 }));
 
-router.get('/hierarchy/all', asyncHandler(async (req: Request, res: Response) => {
+/** `프로젝트/이펙트` 경로를 그룹으로 해석한다. `create: true` 면 없는 단계를 만든다. */
+router.post('/resolve-path', asyncHandler(async (req: Request, res: Response) => {
+  const { path, create } = (req.body ?? {}) as { path?: unknown; create?: unknown };
+  try {
+    const resolved = GroupPathService.resolve(path, { create: create === true });
+    if (!resolved) {
+      return res.status(404).json(errorResponse('Group path not found'));
+    }
+    return res.json(successResponse({
+      group_id: resolved.groupId,
+      path: resolved.path,
+      segments: resolved.segments,
+      created_group_ids: resolved.createdGroupIds,
+    }));
+  } catch (error) {
+    if (error instanceof GroupPathError) {
+      return res.status(400).json(errorResponse(error.message));
+    }
+    console.error('Error resolving group path:', error);
+    return res.status(500).json(errorResponse('Failed to resolve group path'));
+  }
+}));
+
+router.get('/hierarchy/all',asyncHandler(async (req: Request, res: Response) => {
   try {
     const groups = await GroupModel.findAllWithHierarchy();
     return res.json(successResponse(groups));

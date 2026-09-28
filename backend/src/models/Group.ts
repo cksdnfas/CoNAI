@@ -3,6 +3,7 @@ import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupW
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
+import { GroupPathService } from '../services/groupPathService';
 import {
   findImagesByGroupQuery,
   findImagesByGroupWithFilesQuery,
@@ -26,7 +27,7 @@ export class GroupModel {
         auto_collect_enabled, auto_collect_conditions
       ) VALUES (?, ?, ?, ?, ?, ?)
     `).run(
-      groupData.name,
+      groupData.name.trim(),
       groupData.description || null,
       groupData.color || null,
       groupData.parent_id || null,
@@ -109,6 +110,20 @@ export class GroupModel {
    * @param cascade true면 하위 그룹도 재귀적으로 삭제, false면 부모만 삭제 (하위 그룹은 루트로 이동)
    */
   static delete(id: number, cascade: boolean = false): boolean {
+    return db.transaction(() => this.deleteInTransaction(id, cascade))();
+  }
+
+  private static deleteInTransaction(id: number, cascade: boolean): boolean {
+    if (!cascade) {
+      // 하위 그룹은 루트로 올라간다. 루트 이름도 고유(대소문자 무시)하므로 충돌하면 접미사로 비켜 준다.
+      const children = db.prepare('SELECT id, name FROM groups WHERE parent_id = ?').all(id) as Array<{ id: number; name: string }>;
+      for (const child of children) {
+        const availableName = GroupPathService.findAvailableSiblingName(null, child.name, child.id);
+        db.prepare('UPDATE groups SET parent_id = NULL, name = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(availableName, child.id);
+      }
+    }
+
     if (cascade) {
       // 캐스케이드 삭제: 모든 하위 그룹도 재귀적으로 삭제
       const hierarchyService = getGroupHierarchyService();
@@ -125,7 +140,7 @@ export class GroupModel {
     // 먼저 관련된 image_groups 레코드 삭제
     db.prepare('DELETE FROM image_groups WHERE group_id = ?').run(id);
 
-    // 그룹 삭제 (cascade=false면 자식들의 parent_id는 ON DELETE SET NULL에 의해 자동으로 NULL이 됨)
+    // 그룹 삭제 (cascade=false면 자식들은 위에서 이미 루트로 옮겼다)
     const info = db.prepare('DELETE FROM groups WHERE id = ?').run(id);
     return info.changes > 0;
   }

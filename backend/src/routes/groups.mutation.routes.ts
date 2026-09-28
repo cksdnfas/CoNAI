@@ -7,6 +7,7 @@ import { ComplexFilterService } from '../services/complexFilterService';
 import { GroupCreateData, GroupUpdateData, ComplexFilter, AutoCollectCondition, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
+import { GROUP_NAME_CONFLICT_MESSAGE, isGroupNameConflictError } from '../services/groupPathService';
 
 const router = Router();
 
@@ -75,7 +76,7 @@ function requireCompositeHashes(res: Response, compositeHashes: unknown): compos
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
 
-  if (!name) {
+  if (typeof name !== 'string' || !name.trim()) {
     return sendRouteBadRequest(res, 'Group name is required');
   }
 
@@ -122,11 +123,11 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       })
     );
   } catch (error) {
+    if (isGroupNameConflictError(error)) {
+      return sendRouteBadRequest(res, GROUP_NAME_CONFLICT_MESSAGE);
+    }
     console.error('Error creating group:', error);
-    const errorMessage = (error as Error).message.includes('UNIQUE')
-      ? 'Group name already exists'
-      : 'Failed to create group';
-    return res.status(500).json(errorResponse(errorMessage));
+    return res.status(500).json(errorResponse('Failed to create group'));
   }
 }));
 
@@ -176,11 +177,11 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
     return res.json(successResponse({ message: 'Group updated successfully' }));
   } catch (error) {
+    if (isGroupNameConflictError(error)) {
+      return sendRouteBadRequest(res, GROUP_NAME_CONFLICT_MESSAGE);
+    }
     console.error('Error updating group:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update group';
-    if ((errorMessage as string).includes('UNIQUE')) {
-      return sendRouteBadRequest(res, 'Group name already exists');
-    }
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
   }
