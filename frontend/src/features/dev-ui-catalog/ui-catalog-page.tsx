@@ -3,7 +3,7 @@
  * Registered in router.tsx behind `import.meta.env.DEV`, so it never reaches production bundles.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { Copy, ImageOff, Inbox, MoreHorizontal, Pencil, Plus, Settings, Trash2 } from 'lucide-react'
+import { Copy, Folder, Image as ImageIcon, ImageOff, Inbox, MoreHorizontal, Pencil, Plus, Settings, Trash2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -37,10 +37,12 @@ import { Input } from '@/components/ui/input'
 import { Inset } from '@/components/ui/inset'
 import { LoadingState, Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Panel } from '@/components/ui/panel'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { Section } from '@/components/ui/section'
 import { Select } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { StatTile } from '@/components/ui/stat-tile'
@@ -62,6 +64,8 @@ const ICON_SIZES = ['icon-xs', 'icon-sm', 'icon', 'icon-lg'] as const
 const BADGE_VARIANTS = ['default', 'secondary', 'destructive', 'outline', 'ghost', 'link'] as const
 const INPUT_VARIANTS = ['default', 'settings', 'detail', 'detailNested'] as const
 const SECTION_VARIANTS = ['page', 'settings', 'drawer', 'controller'] as const
+const PANEL_TONES = ['lowest', 'low', 'container', 'high'] as const
+const PANEL_PADDINGS = ['none', 'sm', 'md', 'lg'] as const
 const PROGRESS_TONES = ['default', 'success', 'warning', 'destructive', 'info'] as const
 const TEXT_VARIANTS = ['overline', 'label', 'body', 'muted', 'caption', 'title'] as const
 
@@ -116,7 +120,7 @@ const Z_LAYERS = [
 
 function CatalogSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-20 space-y-4 border-t border-border/70 pt-6">
+    <section id={id} className="scroll-mt-20 space-y-4 pt-6">
       <Heading level={2}>{title}</Heading>
       {children}
     </section>
@@ -158,6 +162,8 @@ export function UiCatalogPage() {
   const [menuChecked, setMenuChecked] = useState(true)
   const [menuRadio, setMenuRadio] = useState('name')
   const [retrying, setRetrying] = useState(false)
+  const [navItem, setNavItem] = useState('images')
+  const [selectedPanel, setSelectedPanel] = useState<string>('low')
 
   useCatalogTheme(theme)
 
@@ -169,7 +175,7 @@ export function UiCatalogPage() {
   }
 
   const nav = [
-    'buttons', 'badges', 'inputs', 'selection', 'progress', 'overlays', 'navigation', 'surfaces', 'sections', 'states', 'counts', 'typography', 'colours', 'z-layers',
+    'buttons', 'badges', 'inputs', 'selection', 'progress', 'overlays', 'navigation', 'panels', 'surfaces', 'sections', 'states', 'counts', 'typography', 'colours', 'z-layers',
   ]
 
   return (
@@ -219,7 +225,34 @@ export function UiCatalogPage() {
             <IconButton variant="ghost" label="Settings"><Settings /></IconButton>
             <IconButton variant="destructive" label="Delete"><Trash2 /></IconButton>
             <IconButton variant="secondary" label="No tooltip" tooltip={false}><Copy /></IconButton>
+            <IconButton variant="subtle" label="Subtle"><Copy /></IconButton>
           </Row>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Text variant="overline" className="font-semibold">variant=nav (data-active on the current row)</Text>
+              <Panel tone="low" padding="sm" stack className="gap-0.5">
+                {([['images', 'Images', ImageIcon], ['groups', 'Groups', Folder], ['settings', 'Settings', Settings]] as const).map(([value, label, Icon]) => (
+                  <Button key={value} variant="nav" data-active={navItem === value} aria-current={navItem === value ? 'page' : undefined} onClick={() => setNavItem(value)}>
+                    <Icon />{label}
+                  </Button>
+                ))}
+              </Panel>
+            </div>
+            <div className="space-y-2">
+              <Text variant="overline" className="font-semibold">Buttons on each surface tone</Text>
+              <div className="grid gap-2">
+                {PANEL_TONES.map((tone) => (
+                  <Panel key={tone} tone={tone} padding="sm" className="flex flex-wrap items-center gap-2">
+                    <Text variant="caption" className="w-20">{tone}</Text>
+                    <Button size="sm">Primary</Button>
+                    <Button size="sm" variant="secondary">Secondary</Button>
+                    <Button size="sm" variant="subtle">Subtle</Button>
+                    <Button size="sm" variant="ghost">Ghost</Button>
+                  </Panel>
+                ))}
+              </div>
+            </div>
+          </div>
         </CatalogSection>
 
         <CatalogSection id="badges" title="Badge">
@@ -413,6 +446,53 @@ export function UiCatalogPage() {
             ]}
             actions={<Button size="sm" variant="secondary">Action</Button>}
           />
+        </CatalogSection>
+
+        <CatalogSection id="panels" title="Panel / Separator">
+          <Text variant="muted">Tonal box for ad-hoc surfaces. No outline: pick a tone one step away from the parent (lowest inside a Section).</Text>
+          <Row label="tone (interactive, click to select)">
+            {PANEL_TONES.map((tone) => (
+              <Panel
+                key={tone}
+                tone={tone}
+                interactive
+                role="button"
+                tabIndex={0}
+                data-selected={selectedPanel === tone}
+                onClick={() => setSelectedPanel(tone)}
+                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedPanel(tone) } }}
+                className="w-40"
+              >
+                <Text variant="label">tone={tone}</Text>
+                <Text variant="caption">{selectedPanel === tone ? 'selected' : 'hover me'}</Text>
+              </Panel>
+            ))}
+          </Row>
+          <Row label="padding (density tokens)">
+            {PANEL_PADDINGS.map((padding) => (
+              <Panel key={padding} tone="high" padding={padding}><Text variant="caption">padding={padding}</Text></Panel>
+            ))}
+          </Row>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Section heading="Nested tones" description="Section is surface-low; children recess to surface-lowest.">
+              <Inset><Text variant="muted">Inset inside a Section → surface-lowest</Text></Inset>
+              <Panel tone="lowest" stack>
+                <Text variant="label">Panel tone=lowest, stack</Text>
+                <Input placeholder="Recessed input tray" />
+                <Button size="sm" variant="secondary" className="self-start">Secondary</Button>
+              </Panel>
+              <Panel tone="high" padding="sm"><Text variant="caption">Panel tone=high: a lifted callout</Text></Panel>
+            </Section>
+            <Panel tone="low" stack>
+              <Text variant="label">Separator (rare divider)</Text>
+              <Text variant="muted">Row one</Text>
+              <Separator />
+              <Text variant="muted">Row two</Text>
+              <div className="flex h-6 items-center gap-3 text-xs text-muted-foreground">
+                <span>Left</span><Separator orientation="vertical" /><span>Right</span>
+              </div>
+            </Panel>
+          </div>
         </CatalogSection>
 
         <CatalogSection id="surfaces" title="Card / Alert / Inset / StatTile / Skeleton">
