@@ -3,11 +3,11 @@ import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { ArrowLeft, Play, RotateCcw } from 'lucide-react'
+import { ArrowLeft, RotateCcw } from 'lucide-react'
 import { BottomDrawerNotice, BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
@@ -20,7 +20,8 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
 import { GenerationHistoryPanel } from './components/generation-history-panel'
-import { CompactGenerationActionSurface, CompactGenerationControllerActionBar, GenerationControllerFieldStack } from './components/shared-generation-controller'
+import { CompactGenerationControllerActionBar, GenerationControllerFieldStack } from './components/shared-generation-controller'
+import { GenerateActionBar } from './components/generate-action-bar'
 import { WorkflowArtifactExplorerPanel } from './components/workflow-artifact-explorer-panel'
 import { WorkflowFieldGroupList } from './components/workflow-field-group-list'
 import {
@@ -284,44 +285,27 @@ export function PublicComfyWorkflowPage() {
     : null
   void drawerHeaderPortalRevision
 
-  const desktopControllerActions = (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        onClick={handleResetDraft}
-        disabled={isQueueSubmitting}
-        aria-label={t({ ko: '초기화', en: 'Reset' })}
-        title={t({ ko: '초기화', en: 'Reset' })}
-      >
-        <RotateCcw className="h-4 w-4" />
-      </Button>
-      <NumberStepperInput
-        min={1}
-        max={publicQueueMaxCount}
-        step={1}
+  const publicRepeat = {
+    value: queueRegistrationCount,
+    min: PUBLIC_QUEUE_REGISTRATION_MIN,
+    max: publicQueueMaxCount,
+    onChange: setQueueRegistrationCount,
+  }
+  const publicGenerateProps = {
+    generateLabel: t({ ko: '생성', en: 'Generate' }),
+    generatingLabel: t({ ko: '큐 등록 중…', en: 'Queueing…' }),
+    onGenerate: () => void handleQueueSubmit(),
+    generateDisabled: workflowFields.length === 0,
+    isGenerating: isQueueSubmitting,
+    repeat: publicRepeat,
+  }
 
-        variant="detail"
-        className="h-9 w-[72px] shrink-0 px-2 text-center text-xs"
-        value={queueRegistrationCount}
-        onValueCommit={setQueueRegistrationCount}
-        disabled={isQueueSubmitting}
-        aria-label={t({ ko: '큐 등록 개수', en: 'Queue registration count' })}
-        inputMode="numeric"
-      />
-      <Button
-        type="button"
-        size="icon-sm"
-        onClick={() => void handleQueueSubmit()}
-        disabled={isQueueSubmitting || workflowFields.length === 0}
-        aria-label={isQueueSubmitting ? t({ ko: '큐 등록 중', en: 'Submitting to queue' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} time(s)' }, { count: queueRegistrationCount })}
-        title={isQueueSubmitting ? t({ ko: '큐 등록 중', en: 'Submitting to queue' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} time(s)' }, { count: queueRegistrationCount })}
-        className="shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
-      >
-        <Play className="h-4 w-4 fill-current" />
-      </Button>
-    </div>
+  const desktopControllerActions = (
+    <GenerateActionBar
+      variant="inline"
+      {...publicGenerateProps}
+      onReset={handleResetDraft}
+    />
   )
 
   const desktopControllerHeaderContent = workflow ? (
@@ -353,17 +337,15 @@ export function PublicComfyWorkflowPage() {
   const drawerControllerHeaderContent = workflow ? (
     <div className="flex items-center gap-3">
       <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflow.name}</div>
-      <Button
-        type="button"
+      <IconButton
         variant="ghost"
         size="icon-sm"
         onClick={handleResetDraft}
         disabled={isQueueSubmitting}
-        aria-label={t({ ko: '초기화', en: 'Reset' })}
-        title={t({ ko: '초기화', en: 'Reset' })}
+        label={t({ ko: '초기화', en: 'Reset' })}
       >
-        <RotateCcw className="h-4 w-4" />
-      </Button>
+        <RotateCcw />
+      </IconButton>
     </div>
   ) : null
 
@@ -442,34 +424,7 @@ export function PublicComfyWorkflowPage() {
     <CompactGenerationControllerActionBar
       isExpanded={isDrawerOpen}
       onToggle={() => setIsControllerOpen((current) => !current)}
-      expandedContent={(
-        <CompactGenerationActionSurface>
-          <NumberStepperInput
-            min={1}
-            max={publicQueueMaxCount}
-            step={1}
-
-            variant="detail"
-            className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
-            value={queueRegistrationCount}
-            onValueCommit={setQueueRegistrationCount}
-            disabled={isQueueSubmitting}
-            aria-label={t({ ko: '큐 등록 개수', en: 'Queue registration count' })}
-            inputMode="numeric"
-          />
-          <Button
-            type="button"
-            size="icon-sm"
-            className="rounded-none border-l border-border/70 shadow-none"
-            onClick={() => void handleQueueSubmit()}
-            disabled={isQueueSubmitting || workflowFields.length === 0}
-            aria-label={isQueueSubmitting ? t({ ko: '큐 등록 중', en: 'Submitting to queue' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} time(s)' }, { count: queueRegistrationCount })}
-            title={isQueueSubmitting ? t({ ko: '큐 등록 중', en: 'Submitting to queue' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} time(s)' }, { count: queueRegistrationCount })}
-          >
-            <Play className="h-4 w-4 fill-current" />
-          </Button>
-        </CompactGenerationActionSurface>
-      )}
+      expandedContent={<GenerateActionBar variant="sticky" {...publicGenerateProps} />}
     />
   ) : null
 

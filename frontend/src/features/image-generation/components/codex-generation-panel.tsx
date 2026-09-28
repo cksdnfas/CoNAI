@@ -2,10 +2,9 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, RotateCcw, Sparkles, X } from 'lucide-react'
+import { RefreshCw, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { IconButton } from '@/components/ui/icon-button'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getAppSettings } from '@/lib/api-settings-general'
@@ -22,8 +21,7 @@ import { Section } from '@/components/ui/section'
 import { NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
-import { CompactGenerationActionSurface } from './shared-generation-controller'
-import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
+import { GenerateActionBar } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 
 type CodexGenerationPanelProps = {
@@ -303,7 +301,6 @@ export function CodexGenerationPanel({
   const codexStatus = codexStatusQuery.data?.data ?? null
   const canGenerateWithCodex = codexStatusQuery.isSuccess ? Boolean(codexStatus?.available) : false
   const showStatusRecovery = codexStatusQuery.isError || (codexStatusQuery.isSuccess && !codexStatus?.available)
-  const showGenerateLabel = !canGenerateWithCodex
   const useInlineActionBar = splitPaneScroll
 
   const generateButtonLabel = isSubmitting
@@ -417,135 +414,58 @@ export function CodexGenerationPanel({
       <div className="min-w-0 flex items-center gap-2">
         <div className="truncate text-base font-semibold text-foreground">Codex</div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {showStatusRecovery ? (
-          <Button
-            type="button"
-            variant="outline"
+          <IconButton
+            variant="ghost"
             size="icon-sm"
             onClick={handleRefreshStatus}
             disabled={codexStatusQuery.isPending}
-            aria-label={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
-            title={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
+            label={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
           >
-            <RefreshCw className={cn('h-4 w-4', codexStatusQuery.isPending && 'animate-spin')} />
-          </Button>
+            <RefreshCw className={cn(codexStatusQuery.isPending && 'animate-spin')} />
+          </IconButton>
         ) : null}
-        <Button type="button" variant="ghost" size="icon-sm" onClick={handleReset} disabled={isSubmitting} aria-label={t({ ko: '초기화', en: 'Reset' })} title={t({ ko: '초기화', en: 'Reset' })}>
-          <RotateCcw className="h-4 w-4" />
-        </Button>
+        {useDrawerCompactChrome ? (
+          <IconButton variant="ghost" size="icon-sm" onClick={handleReset} disabled={isSubmitting} label={t({ ko: '초기화', en: 'Reset' })}>
+            <RotateCcw />
+          </IconButton>
+        ) : null}
       </div>
     </div>
   )
 
-  const generateButton = (
-    <Button
-      type="button"
-      size={showGenerateLabel ? 'sm' : 'icon-sm'}
-      onClick={handleGenerate}
-      disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
-      aria-label={showGenerateLabel ? generateButtonLabel : (isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' }))}
-      title={showGenerateLabel ? generateButtonLabel : (isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' }))}
-    >
-      <Sparkles className="h-4 w-4" />
-      {showGenerateLabel ? generateButtonLabel : null}
-    </Button>
+  const codexGenerateDisabled = codexForm.prompt.trim().length === 0 || !canGenerateWithCodex
+  const codexRepeat = {
+    value: codexForm.count,
+    min: CODEX_COUNT_MIN,
+    max: CODEX_COUNT_MAX,
+    onChange: (value: string) => handleFieldChange('count', value),
+  }
+
+  const actionSection = (
+    <GenerateActionBar
+      variant="inline"
+      generateLabel={generateButtonLabel}
+      onGenerate={() => void handleGenerate()}
+      generateDisabled={codexGenerateDisabled}
+      isGenerating={isSubmitting}
+      repeat={codexRepeat}
+      onReset={handleReset}
+      targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
+    />
   )
 
   const compactActionBarContent = (
-    <CompactGenerationActionSurface className="max-w-full">
-      <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} variant="icon" disabled={isSubmitting} />
-
-      <NumberStepperInput
-        min={CODEX_COUNT_MIN}
-        max={CODEX_COUNT_MAX}
-        step={1}
-
-        variant="detail"
-        className="h-8 w-[58px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
-        value={codexForm.count}
-        onValueCommit={(value) => handleFieldChange('count', value)}
-        disabled={isSubmitting}
-        aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
-        inputMode="numeric"
-      />
-
-      {showStatusRecovery ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleRefreshStatus}
-          disabled={codexStatusQuery.isPending}
-          aria-label={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
-          title={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
-          className="rounded-none border-l border-border/70 shadow-none"
-        >
-          <RefreshCw className={cn('h-4 w-4', codexStatusQuery.isPending && 'animate-spin')} />
-        </Button>
-      ) : null}
-
-      {showGenerateLabel ? (
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleGenerate}
-          disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
-          aria-label={generateButtonLabel}
-          title={generateButtonLabel}
-          className="rounded-none border-l border-border/70 shadow-none"
-        >
-          <Sparkles className="h-4 w-4" />
-          {generateButtonLabel}
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          size="icon-sm"
-          onClick={handleGenerate}
-          disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
-          aria-label={isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' })}
-          title={isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' })}
-          className="rounded-none border-l border-border/70 shadow-none"
-        >
-          <Sparkles className="h-4 w-4" />
-        </Button>
-      )}
-    </CompactGenerationActionSurface>
-  )
-
-  const actionContent = (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} disabled={isSubmitting} />
-      <NumberStepperInput
-        min={CODEX_COUNT_MIN}
-        max={CODEX_COUNT_MAX}
-        step={1}
-
-        variant="detail"
-        className="h-9 w-[72px]"
-        value={codexForm.count}
-        onValueCommit={(value) => handleFieldChange('count', value)}
-        disabled={isSubmitting}
-        aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
-        inputMode="numeric"
-      />
-      {generateButton}
-    </div>
-  )
-
-  const actionSection = useInlineActionBar ? (
-    <section>
-      {actionContent}
-    </section>
-  ) : (
-    <section className="space-y-3">
-      <Card>
-        <CardContent className="space-y-4">
-          {actionContent}
-        </CardContent>
-      </Card>
-    </section>
+    <GenerateActionBar
+      variant="sticky"
+      generateLabel={generateButtonLabel}
+      onGenerate={() => void handleGenerate()}
+      generateDisabled={codexGenerateDisabled}
+      isGenerating={isSubmitting}
+      repeat={codexRepeat}
+      targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
+    />
   )
 
   const inlineHeaderContent = (
@@ -668,7 +588,7 @@ export function CodexGenerationPanel({
           </div>
         </Section>
 
-          {!useInlineActionBar ? actionSection : null}
+          {!useInlineActionBar && !useDrawerCompactChrome ? actionSection : null}
           {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
         </div>
       </div>

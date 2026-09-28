@@ -297,13 +297,16 @@ export function NaiGenerationPanel({
     ? t('image-generation.components.nai.generation.panel.submitting.generation')
     : !connected
       ? t('image-generation.components.nai.generation.panel.log.in.to.generate')
-      : naiCostQuery.isSuccess
-        ? naiCostQuery.data.isOpusFree
-          ? t('image-generation.components.nai.generation.panel.generate.free')
-          : t('image-generation.components.nai.generation.panel.generate.with.cost', { cost: formatNumber(naiCostQuery.data.estimatedCost) })
-        : naiCostQuery.isPending
-          ? t('image-generation.components.nai.generation.panel.generate.calculating')
-          : t('image-generation.components.nai.generation.panel.generate')
+      : t('image-generation.components.nai.generation.panel.generate')
+  const naiGenerateButtonSuffix = !connected || isNaiGenerating
+    ? undefined
+    : naiCostQuery.isSuccess
+      ? naiCostQuery.data.isOpusFree
+        ? t({ ko: '(무료)', en: '(free)' })
+        : t({ ko: '({cost} Anlas)', en: '({cost} Anlas)' }, { cost: formatNumber(naiCostQuery.data.estimatedCost) })
+      : naiCostQuery.isPending
+        ? t({ ko: '(계산 중…)', en: '(calculating…)' })
+        : undefined
   const useInlineActionBar = splitPaneScroll || compactActionBar
   const useDrawerCompactChrome = compactActionBar && !splitPaneScroll
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null)
@@ -332,6 +335,7 @@ export function NaiGenerationPanel({
     isGenerating: isNaiGenerating,
     canGenerate: naiForm.prompt.trim().length > 0,
     generateButtonLabel: naiGenerateButtonLabel,
+    generateButtonSuffix: naiGenerateButtonSuffix,
     costErrorMessage: naiCostErrorMessage,
     onUpscale: handleUpscale,
     onReset: resetNaiForm,
@@ -340,14 +344,14 @@ export function NaiGenerationPanel({
 
   const actionSection = (
     <NaiActionSection
-      variant={useInlineActionBar ? 'inline' : 'card'}
+      variant="inline"
       {...sharedActionSectionProps}
     />
   )
 
   const compactActionSection = (
     <NaiActionSection
-      variant="compact"
+      variant="sticky"
       {...sharedActionSectionProps}
     />
   )

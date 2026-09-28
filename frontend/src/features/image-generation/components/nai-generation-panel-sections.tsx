@@ -1,12 +1,10 @@
 import type { ReactNode } from 'react'
-import { ArrowUp, ExternalLink, RotateCcw, Save, Sparkles } from 'lucide-react'
+import { ArrowUp, ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { CompactGenerationActionSurface } from './shared-generation-controller'
-import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
+import { GenerateActionBar, GenerateActionBarIconButton, type GenerateActionBarVariant } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { PromptToggleField } from './prompt-toggle-field'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
@@ -92,176 +90,55 @@ export function NaiPromptSection({
 }
 
 interface NaiActionSectionProps {
-  variant?: 'card' | 'inline' | 'compact'
+  variant?: GenerateActionBarVariant
   canUpscale: boolean
   isUpscaling: boolean
   isGenerating: boolean
   canGenerate: boolean
   generateButtonLabel: string
+  generateButtonSuffix?: string
   costErrorMessage?: string | null
-  onOpenModuleSave?: () => void
   onUpscale: () => void
   onReset: () => void
   onGenerate: () => void
 }
 
-/** Render the bottom action bar for reset, generate, and upscale flows. */
+/** NAI wiring for the shared GenerateActionBar: upscale + reset secondary actions and the Anlas cost suffix. */
 export function NaiActionSection({
-  variant = 'card',
+  variant = 'inline',
   canUpscale,
   isUpscaling,
   isGenerating,
   canGenerate,
   generateButtonLabel,
+  generateButtonSuffix,
   costErrorMessage,
-  onOpenModuleSave,
   onUpscale,
   onReset,
   onGenerate,
 }: NaiActionSectionProps) {
   const { t } = useI18n()
-  const saveModuleLabel = t('image-generation.components.nai.generation.panel.sections.save.module')
-  const canSaveModule = Boolean(onOpenModuleSave)
   const upscaleLabel = isUpscaling
     ? t('image-generation.components.nai.generation.panel.sections.upscaling')
     : t('image-generation.components.nai.generation.panel.sections.source.2x.upscale')
-  const resetLabel = t('image-generation.components.nai.generation.panel.sections.reset')
-
-  const actionContent = (
-    <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {canSaveModule ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              onClick={onOpenModuleSave}
-              disabled={isGenerating || isUpscaling}
-              aria-label={saveModuleLabel}
-              title={saveModuleLabel}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          ) : null}
-          {canUpscale ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              onClick={onUpscale}
-              disabled={isUpscaling || isGenerating}
-              aria-label={upscaleLabel}
-              title={upscaleLabel}
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onReset}
-            disabled={isGenerating || isUpscaling}
-            aria-label={resetLabel}
-            title={resetLabel}
-          >
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} disabled={isGenerating} />
-          <Button type="button" onClick={onGenerate} disabled={isGenerating || !canGenerate}>
-            <Sparkles className="h-4 w-4" />
-            {generateButtonLabel}
-          </Button>
-        </div>
-      </div>
-      {costErrorMessage ? <div className="text-xs text-[#ffb4ab]">{costErrorMessage}</div> : null}
-    </>
-  )
-
-  if (variant === 'inline') {
-    return (
-      <section className="space-y-3">
-        {actionContent}
-      </section>
-    )
-  }
-
-  if (variant === 'compact') {
-    return (
-      <CompactGenerationActionSurface className="max-w-full">
-        {canSaveModule ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onOpenModuleSave}
-            disabled={isGenerating || isUpscaling}
-            aria-label={saveModuleLabel}
-            title={saveModuleLabel}
-            className="rounded-none border-r border-border/70 shadow-none"
-          >
-            <Save className="h-4 w-4" />
-          </Button>
-        ) : null}
-
-        {canUpscale ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onUpscale}
-            disabled={isUpscaling || isGenerating}
-            aria-label={upscaleLabel}
-            title={upscaleLabel}
-            className="rounded-none border-r border-border/70 shadow-none"
-          >
-            <ArrowUp className="h-4 w-4" />
-          </Button>
-        ) : null}
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onReset}
-          disabled={isGenerating || isUpscaling}
-          aria-label={resetLabel}
-          title={resetLabel}
-          className="rounded-none shadow-none"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
-
-        <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} variant="icon" disabled={isGenerating} className="border-l border-r-0" />
-
-        <Button
-          type="button"
-          size="sm"
-          onClick={onGenerate}
-          disabled={isGenerating || !canGenerate}
-          className="rounded-none border-l border-border/70 shadow-none"
-          aria-label={generateButtonLabel}
-          title={generateButtonLabel}
-        >
-          <Sparkles className="h-4 w-4" />
-          {generateButtonLabel}
-        </Button>
-
-      </CompactGenerationActionSurface>
-    )
-  }
 
   return (
-    <section className="space-y-3">
-      <Card>
-        <CardContent className="space-y-4">
-          {actionContent}
-        </CardContent>
-      </Card>
-    </section>
+    <GenerateActionBar
+      variant={variant}
+      generateLabel={generateButtonLabel}
+      generateSuffix={generateButtonSuffix}
+      onGenerate={onGenerate}
+      generateDisabled={!canGenerate}
+      isGenerating={isGenerating}
+      onReset={onReset}
+      resetLabel={t('image-generation.components.nai.generation.panel.sections.reset')}
+      secondaryActions={canUpscale ? (
+        <GenerateActionBarIconButton label={upscaleLabel} onClick={onUpscale} disabled={isUpscaling || isGenerating}>
+          <ArrowUp />
+        </GenerateActionBarIconButton>
+      ) : null}
+      targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
+      message={costErrorMessage}
+    />
   )
 }

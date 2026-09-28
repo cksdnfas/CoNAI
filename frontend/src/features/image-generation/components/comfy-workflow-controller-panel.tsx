@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ChevronDown, Play, RotateCcw, Save } from 'lucide-react'
+import { ArrowLeft, ChevronDown, RotateCcw, Save } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { IconButton } from '@/components/ui/icon-button'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { collectWorkflowNodeDraftIssues, hasWorkflowFieldValue } from '../image-generation-drafts'
 import type { ComfyUIServerTestState, SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
-import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
-import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
+import { GenerationControllerFieldStack } from './shared-generation-controller'
+import { GenerateActionBar, GenerateActionBarIconButton } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
 import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownItemClassName, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
@@ -347,182 +347,122 @@ export function ComfyWorkflowControllerPanel({
     ]
   }, [routingSummary, serverTests, servers, t])
 
-  const desktopActionButtons = (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="outline"
-        onClick={onOpenModuleSave}
-        disabled={isGenerating}
-        aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
-        title={t({ ko: '모듈 저장', en: 'Save module' })}
-      >
-        <Save className="h-4 w-4" />
-      </Button>
+  const generateLabel = t({ ko: '생성', en: 'Generate' })
+  const generatingLabel = t({ ko: '큐 등록 중…', en: 'Queueing…' })
+  const generateDisabled = workflowFields.length === 0 || !canGenerateSelected
+  const queueRepeat = {
+    value: queueRegistrationCount,
+    min: 1,
+    max: 32,
+    onChange: onQueueRegistrationCountChange,
+    disabled: workflowFields.length === 0,
+  }
+  const saveModuleLabel = t({ ko: '모듈로 저장', en: 'Save as module' })
+  const saveModuleAction = (
+    <GenerateActionBarIconButton label={saveModuleLabel} onClick={onOpenModuleSave} disabled={isGenerating}>
+      <Save />
+    </GenerateActionBarIconButton>
+  )
+  const resetLabel = t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })
 
-      <CompactGenerationActionSurface className="max-w-full">
-        <div className="w-[168px] shrink-0 border-r border-border/70 px-1 sm:w-[220px]">
+  const inlineActionBar = (
+    <GenerateActionBar
+      variant="inline"
+      generateLabel={generateLabel}
+      generatingLabel={generatingLabel}
+      onGenerate={onGenerateSelected}
+      generateDisabled={generateDisabled}
+      isGenerating={isGenerating}
+      repeat={queueRepeat}
+      secondaryActions={saveModuleAction}
+      onReset={workflowFields.length > 0 ? onResetDraft : undefined}
+      resetLabel={resetLabel}
+      leading={servers.length > 0 ? (
+        <div className="w-[168px] shrink-0 sm:w-[200px]">
           <WorkflowTargetSelect
             value={selectedTarget}
             options={targetOptions}
-            disabled={servers.length === 0 || isGenerating}
-            buttonClassName="h-10 w-full min-w-0"
+            disabled={isGenerating}
+            buttonClassName="h-9 w-full min-w-0 rounded-sm bg-surface-high/50 hover:bg-surface-high"
             onChange={onSelectTarget}
           />
         </div>
-
-        <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} variant="icon" disabled={isGenerating} />
-
-        <NumberStepperInput
-          min={1}
-          max={32}
-          step={1}
-
-          variant="detail"
-          className="h-9 w-[72px] shrink-0 !rounded-none !border-0 !bg-transparent px-2 text-center text-xs"
-          value={queueRegistrationCount}
-          onValueCommit={onQueueRegistrationCountChange}
-          disabled={isGenerating || workflowFields.length === 0}
-          aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
-          inputMode="numeric"
-        />
-
-        <Button
-          type="button"
-          size="icon-sm"
-          onClick={onGenerateSelected}
-          disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
-          aria-label={isGenerating ? t({ ko: '큐 등록 중', en: 'Queueing' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} times' }, { count: queueRegistrationCount })}
-          title={isGenerating ? t({ ko: '큐 등록 중', en: 'Queueing' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} times' }, { count: queueRegistrationCount })}
-          className="rounded-none border-l border-border/70 shadow-none"
-        >
-          <Play className="h-4 w-4 fill-current" />
-        </Button>
-      </CompactGenerationActionSurface>
-    </div>
+      ) : null}
+      targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
+    />
   )
 
   const desktopHeaderContent = (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
-        <Button
-          type="button"
+        <IconButton
           variant="ghost"
           size="icon-sm"
           onClick={onBack}
-          aria-label={t({ ko: '워크플로우 목록으로 돌아가기', en: 'Back to workflow list' })}
-          title={t({ ko: '처음으로', en: 'Back' })}
+          label={t({ ko: '워크플로우 목록으로 돌아가기', en: 'Back to workflow list' })}
         >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+          <ArrowLeft />
+        </IconButton>
 
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="text-base font-semibold text-foreground">{workflowName}</div>
           {workflowDescription ? <div className="text-sm text-muted-foreground">{workflowDescription}</div> : null}
         </div>
-
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          onClick={onResetDraft}
-          disabled={isGenerating || workflowFields.length === 0}
-          aria-label={t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })}
-          title={t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })}
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
       </div>
 
-      {desktopActionButtons}
+      {inlineActionBar}
     </div>
   )
 
   const drawerHeaderContent = (
     <div className="flex items-center gap-3">
-      <Button
-        type="button"
+      <IconButton
         variant="ghost"
         size="icon-sm"
         onClick={onBack}
-        aria-label={t({ ko: '워크플로우 목록으로 돌아가기', en: 'Back to workflow list' })}
-        title={t({ ko: '처음으로', en: 'Back' })}
+        label={t({ ko: '워크플로우 목록으로 돌아가기', en: 'Back to workflow list' })}
       >
-        <ArrowLeft className="h-4 w-4" />
-      </Button>
+        <ArrowLeft />
+      </IconButton>
       <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflowName}</div>
-      <Button
-        type="button"
+      <IconButton variant="ghost" size="icon-sm" onClick={onOpenModuleSave} disabled={isGenerating} label={saveModuleLabel}>
+        <Save />
+      </IconButton>
+      <IconButton
         size="icon-sm"
         variant="ghost"
         onClick={onResetDraft}
         disabled={isGenerating || workflowFields.length === 0}
-        aria-label={t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })}
-        title={t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })}
+        label={resetLabel}
       >
-        <RotateCcw className="h-4 w-4" />
-      </Button>
+        <RotateCcw />
+      </IconButton>
     </div>
   )
 
   const compactActionBarContent = (
-    <div className="flex items-center gap-2">
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="outline"
-        onClick={onOpenModuleSave}
-        disabled={isGenerating}
-        aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
-        title={t({ ko: '모듈 저장', en: 'Save module' })}
-      >
-        <Save className="h-4 w-4" />
-      </Button>
-
-      <CompactGenerationActionSurface className="max-w-full">
-        {servers.length > 0 ? (
-          <div className="w-[144px] shrink-0 border-r border-border/70 px-1">
-            <WorkflowTargetSelect
-              value={selectedTarget}
-              options={targetOptions}
-              disabled={isGenerating}
-              buttonClassName="h-8 w-full min-w-0"
-              menuMinWidth={180}
-              onChange={onSelectTarget}
-            />
-          </div>
-        ) : null}
-
-        <GenerationTargetGroupControl storageKey={IMAGE_GENERATION_TARGET_GROUP_KEY} variant="icon" disabled={isGenerating} />
-
-        <NumberStepperInput
-          min={1}
-          max={32}
-          step={1}
-
-          variant="detail"
-          className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
-          value={queueRegistrationCount}
-          onValueCommit={onQueueRegistrationCountChange}
-          disabled={isGenerating || workflowFields.length === 0}
-          aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
-          inputMode="numeric"
-        />
-
-        <Button
-          type="button"
-          size="icon-sm"
-          onClick={onGenerateSelected}
-          disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
-          aria-label={isGenerating ? t({ ko: '큐 등록 중', en: 'Queueing' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} times' }, { count: queueRegistrationCount })}
-          title={isGenerating ? t({ ko: '큐 등록 중', en: 'Queueing' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} times' }, { count: queueRegistrationCount })}
-          className="rounded-none border-l border-border/70 shadow-none"
-        >
-          <Play className="h-4 w-4 fill-current" />
-        </Button>
-      </CompactGenerationActionSurface>
-    </div>
+    <GenerateActionBar
+      variant="sticky"
+      generateLabel={generateLabel}
+      generatingLabel={generatingLabel}
+      onGenerate={onGenerateSelected}
+      generateDisabled={generateDisabled}
+      isGenerating={isGenerating}
+      repeat={queueRepeat}
+      leading={servers.length > 0 ? (
+        <div className="w-[120px] shrink-0">
+          <WorkflowTargetSelect
+            value={selectedTarget}
+            options={targetOptions}
+            disabled={isGenerating}
+            buttonClassName="h-11 w-full min-w-0 rounded-sm sm:h-9"
+            menuMinWidth={180}
+            onChange={onSelectTarget}
+          />
+        </div>
+      ) : null}
+      targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
+    />
   )
 
   return (

@@ -55,7 +55,7 @@ export function CompactGenerationControllerActionBar({
 
         <div
           className={cn(
-            'origin-left ml-auto transition-all duration-200',
+            'ml-auto min-w-0 origin-right transition-all duration-200',
             isExpanded ? 'translate-x-0 scale-100 opacity-100' : 'pointer-events-none translate-x-2 scale-95 opacity-0',
             contentClassName,
           )}
@@ -63,25 +63,6 @@ export function CompactGenerationControllerActionBar({
           {expandedContent}
         </div>
       </div>
-    </div>
-  )
-}
-
-type CompactGenerationActionSurfaceProps = {
-  children: ReactNode
-  className?: string
-}
-
-/** Render the shared compact action surface that keeps controller controls visually grouped. */
-export function CompactGenerationActionSurface({ children, className }: CompactGenerationActionSurfaceProps) {
-  return (
-    <div
-      className={cn(
-        'flex shrink-0 items-center overflow-hidden rounded-sm border border-border/85 bg-background/94 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-sm',
-        className,
-      )}
-    >
-      {children}
     </div>
   )
 }
