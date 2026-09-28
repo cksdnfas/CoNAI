@@ -635,7 +635,7 @@ export function WallpaperEditorPage() {
                   ].map(({ label, patch }) => (
                     <Button
                       key={label}
-                      variant="secondary"
+                      variant="subtle"
                       size="sm"
                       disabled={selectedWidget.locked}
                       onClick={() => {

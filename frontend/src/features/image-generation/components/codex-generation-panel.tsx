@@ -547,7 +547,7 @@ export function CodexGenerationPanel({
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
         />
 
-        <Section variant="controller" heading={t({ ko: '출력', en: 'Output' })} className="@container">
+        <Section variant="settings" heading={t({ ko: '출력', en: 'Output' })} className="@container">
           <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
             <ResolutionPicker
               mode="ratio"
@@ -565,7 +565,7 @@ export function CodexGenerationPanel({
           </div>
         </Section>
 
-        <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
+        <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
           <div className="grid gap-4 @2xl:grid-cols-2">
             <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">

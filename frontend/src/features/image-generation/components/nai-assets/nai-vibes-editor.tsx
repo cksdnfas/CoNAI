@@ -68,7 +68,7 @@ export function NaiVibesEditor({
   return (
     <div className="space-y-0">
       <Section
-        variant="controller"
+        variant="settings"
         heading={t({ ko: '바이브', en: 'Vibes' })}
         description={description}
         collapsible

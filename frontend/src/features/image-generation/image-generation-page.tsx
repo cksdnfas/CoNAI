@@ -3,8 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { CalendarClock, Workflow } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
+import { SidebarToggle } from '@/components/common/page-toolbar'
 import { ProviderIcon } from '@/components/common/provider-icons'
 import { IconButton } from '@/components/ui/icon-button'
+import { usePageSidebar } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
@@ -62,6 +64,17 @@ const PROVIDER_TABS: ImageGenerationTab[] = ['nai', 'codex', 'comfyui']
 const STICKY_ACTION_BAR_SLOT_ID = 'generation-sticky-action-bar'
 
 type NarrowView = 'edit' | 'result'
+
+/** Sidebar toggle for the toolbar when it is hosted by the workflow workspace (PageWithSidebar): shown while the
+ * explorer is hidden (collapsed on desktop, always on narrow screens), like PageToolbar does. */
+function WorkspaceSidebarToggle() {
+  const sidebar = usePageSidebar()
+  if (!sidebar || (sidebar.isDesktop && !sidebar.collapsed)) {
+    return null
+  }
+
+  return <SidebarToggle className="-ml-1.5 shrink-0" />
+}
 
 function PanelFallback() {
   return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
@@ -262,6 +275,7 @@ export function ImageGenerationPage() {
 
   const toolbar = (
     <div data-slot="page-toolbar" className="flex min-h-14 shrink-0 items-center gap-2 py-2 sm:gap-3">
+      <WorkspaceSidebarToggle />
       <SegmentedControl
         value={isProviderTab ? activeTab : ''}
         items={providerItems}

@@ -142,7 +142,7 @@ export function NaiGenerationEditorSections({
       <Section
         // Remount when the list goes empty <-> non-empty so it opens once characters exist (e.g. reused from history).
         key={hasCharacters ? 'nai-characters-present' : 'nai-characters-empty'}
-        variant="controller"
+        variant="settings"
         heading={t({ ko: '캐릭터 프롬프트', en: 'Character Prompt' })}
         collapsible
         defaultOpen={hasCharacters}
@@ -249,7 +249,7 @@ export function NaiGenerationEditorSections({
       />
 
       {naiForm.action !== 'generate' ? (
-        <Section variant="controller" heading={t({ ko: '이미지', en: 'Images' })} collapsible defaultOpen={false} className="@container">
+        <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} collapsible defaultOpen={false} className="@container">
           <div className="space-y-4">
             <FormField label={t({ ko: '원본 이미지', en: 'Source Image' })}>
               <div className="space-y-3">
@@ -492,7 +492,7 @@ function NaiSettingsSection({
     .join(' · ')
 
   return (
-    <Section variant="controller" heading={t({ ko: '설정', en: 'Settings' })} className="@container">
+    <Section variant="settings" heading={t({ ko: '설정', en: 'Settings' })} className="@container">
       <div className="space-y-5">
         <div className="grid gap-4 @md:grid-cols-4">
           <div className="@md:col-span-3">

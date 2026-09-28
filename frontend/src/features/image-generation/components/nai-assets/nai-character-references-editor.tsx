@@ -59,7 +59,7 @@ export function NaiCharacterReferencesEditor({
   return (
     <div className="space-y-0">
       <Section
-        variant="controller"
+        variant="settings"
         heading={t({ ko: '레퍼런스', en: 'References' })}
         description={description}
         collapsible
