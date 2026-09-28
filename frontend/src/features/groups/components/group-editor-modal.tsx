@@ -11,6 +11,7 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import { AutoCollectChipEditor } from './auto-collect-chip-editor'
+import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
 
 interface GroupEditorModalProps {
@@ -178,7 +179,7 @@ export function GroupEditorModal({
             <div className="space-y-3">
               <ToggleRow className="justify-between">
                 <p className="text-sm font-medium text-foreground">{t('groups.components.group.editor.modal.filter.apply')}</p>
-                <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
+                <Switch checked={autoCollectEnabled} onCheckedChange={setAutoCollectEnabled} />
               </ToggleRow>
 
               {autoCollectEnabled ? <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} /> : null}

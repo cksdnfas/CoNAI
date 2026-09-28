@@ -88,7 +88,7 @@ export function GroupDownloadModal({
                 disabled={isLoading || isDownloading || availableCount <= 0}
               >
                 <span className="flex min-w-0 items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-border/70 bg-surface-low/45 text-foreground">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-surface-high text-foreground">
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="min-w-0">

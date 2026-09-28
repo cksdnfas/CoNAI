@@ -18,6 +18,7 @@ import {
   cycleSearchOperator,
 } from '@/features/search/search-utils'
 import { parseAutoCollectChipState } from '@/features/groups/auto-collect-chip-utils'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 
 interface AutoCollectEditorState {
@@ -221,20 +222,19 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
 
             {isSuggestionPanelOpen ? (
               <div className="theme-floating-panel overflow-hidden rounded-sm">
-                <div className="flex items-center gap-2 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
+                <div className="flex items-center gap-2 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
                   <div className="min-w-0 flex-1">
                     <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} />
                   </div>
 
-                  <button
-                    type="button"
+                  <IconButton
+                    size="icon-sm"
+                    variant="ghost"
                     onClick={() => setIsSuggestionPanelOpen(false)}
-                    className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
-                    aria-label={t('groups.components.auto.collect.chip.editor.close.input.filter')}
-                    title={t('groups.components.auto.collect.chip.editor.close.input.filter')}
+                    label={t('groups.components.auto.collect.chip.editor.close.input.filter')}
                   >
                     <X className="h-4 w-4" />
-                  </button>
+                  </IconButton>
                 </div>
 
                 <div className="max-h-[420px] overflow-y-auto py-2">

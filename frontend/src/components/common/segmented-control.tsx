@@ -1,4 +1,5 @@
 import type { KeyboardEvent, ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 export type SegmentedControlItem = {
@@ -39,11 +40,8 @@ export function SegmentedControl({
   ariaLabel,
 }: SegmentedControlProps) {
   const isTabs = semantics === 'tabs'
-  const itemBaseClassName = size === 'xs'
-    ? 'px-3 py-1.5 text-xs font-semibold'
-    : size === 'sm'
-      ? 'px-3 py-2 text-sm font-medium'
-      : 'px-4 py-2 text-sm font-semibold'
+  const buttonSize = size === 'xs' ? 'xs' : size === 'sm' ? 'sm' : 'default'
+  const itemBaseClassName = size === 'xs' ? 'px-3 font-semibold' : size === 'sm' ? 'px-3' : 'px-4 font-semibold'
   // Roving tab stop: the active item, or the first enabled one when nothing matches `value`.
   const tabStopValue = items.some((item) => item.value === value && !item.disabled)
     ? value
@@ -82,7 +80,7 @@ export function SegmentedControl({
       aria-orientation={isTabs ? 'horizontal' : undefined}
       onKeyDown={handleKeyDown}
       className={cn(
-        'inline-flex flex-wrap gap-1 rounded-sm border border-border bg-surface-container p-1',
+        'inline-flex flex-wrap gap-1 rounded-sm bg-surface-container p-1',
         fullWidth && 'flex w-full',
         className,
       )}
@@ -91,9 +89,11 @@ export function SegmentedControl({
         const isActive = value === item.value
 
         return (
-          <button
+          <Button
             key={item.value}
             type="button"
+            variant="ghost"
+            size={buttonSize}
             data-value={item.value}
             disabled={item.disabled}
             role={isTabs ? 'tab' : undefined}
@@ -102,16 +102,15 @@ export function SegmentedControl({
             tabIndex={item.value === tabStopValue ? 0 : -1}
             onClick={() => onChange(item.value)}
             className={cn(
-              'rounded-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50',
+              'transition-colors',
               fullWidth && 'flex-1',
               itemBaseClassName,
-              isActive
-                ? 'bg-background text-primary shadow-sm'
-                : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
+              // The selected segment sits on the page tone above the tray, like a raised key.
+              isActive && 'bg-background text-primary shadow-elevation-1 hover:bg-background hover:text-primary',
             )}
           >
             {item.label}
-          </button>
+          </Button>
         )
       })}
     </div>

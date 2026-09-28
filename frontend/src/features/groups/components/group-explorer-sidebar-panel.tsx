@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ErrorState } from '@/components/ui/error-state'
 import { Badge } from '@/components/ui/badge'
+import { Text } from '@/components/ui/text'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -65,8 +66,8 @@ export function GroupExplorerSidebarPanel({
     return (
       <div className="space-y-4 p-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{t({ ko: '폴더 탐색', en: 'Folder explorer' })}</h2>
-          <Badge variant="outline">{formatNumber(groups.length)}</Badge>
+          <Text as="div" variant="overline" className="font-semibold"><h2>{t({ ko: '폴더 탐색', en: 'Folder explorer' })}</h2></Text>
+          <Badge variant="secondary">{formatNumber(groups.length)}</Badge>
         </div>
         {headerExtra}
         {content}
@@ -77,7 +78,7 @@ export function GroupExplorerSidebarPanel({
   return (
     <ExplorerSidebar
       title={t({ ko: '탐색기', en: 'Explorer' })}
-      badge={<Badge variant="outline">{formatNumber(groups.length)}</Badge>}
+      badge={<Badge variant="secondary">{formatNumber(groups.length)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:groups:sidebar-locked"
       className={cn('z-20 isolate', isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react'
 import { Pin, PinOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 
@@ -27,6 +29,7 @@ export function ExplorerSidebar({
   onFloatingChange,
   children,
 }: ExplorerSidebarProps) {
+  const { t } = useI18n()
   const asideRef = useRef<HTMLElement | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
   const [isFloating, setIsFloating] = useState(false)
@@ -117,7 +120,7 @@ export function ExplorerSidebar({
       {floatingFrame ? <div className="explorer-sidebar-floating-frame pointer-events-none absolute inset-0 z-10 rounded-sm" /> : null}
 
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-[11px] font-semibold tracking-[0.22em] text-muted-foreground uppercase">{title}</h2>
+        <Text as="div" variant="overline" className="font-semibold"><h2>{title}</h2></Text>
         {badge}
       </div>
 
@@ -126,16 +129,16 @@ export function ExplorerSidebar({
       <div className={cn('min-h-0 flex-1', shouldLimitUnfixedCompactHeight && 'overflow-y-auto pr-1', bodyClassName)}>{children}</div>
 
       {shouldShowFloatingLockAction ? (
-        <div className="mt-4 border-t border-white/5 pt-3">
+        <div className="mt-4">
           <Button
             type="button"
             size="sm"
             variant="secondary"
-            className="w-full bg-surface-low"
+            className="w-full"
             onClick={() => setIsFloatingLocked((current) => !current)}
           >
             {isFloatingLocked ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-            {isFloatingLocked ? '사이드바 고정 해제' : '사이드바 고정'}
+            {isFloatingLocked ? t({ ko: '사이드바 고정 해제', en: 'Unpin sidebar' }) : t({ ko: '사이드바 고정', en: 'Pin sidebar' })}
           </Button>
         </div>
       ) : null}

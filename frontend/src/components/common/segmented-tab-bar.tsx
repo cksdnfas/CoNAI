@@ -28,7 +28,7 @@ export function SegmentedTabBar({
   ariaLabel,
 }: SegmentedTabBarProps) {
   return (
-    <div className={cn(actions ? 'flex flex-wrap items-center justify-between gap-3' : undefined, 'border-b border-border/70 pb-2', className)}>
+    <div className={cn(actions ? 'flex flex-wrap items-center justify-between gap-3' : undefined, className)}>
       <div className={cn(actions && 'min-w-0 flex-1')}>
         <SegmentedControl
           value={value}

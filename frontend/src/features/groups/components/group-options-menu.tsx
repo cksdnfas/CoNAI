@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Download, Ellipsis, FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 
 interface GroupOptionsMenuProps {
@@ -44,6 +45,7 @@ export function GroupOptionsMenu({
         size="icon-sm"
         variant="ghost"
         aria-label={t({ ko: '그룹 옵션', en: 'Group options' })}
+        aria-expanded={actionsOpen}
         title={t({ ko: '그룹 옵션', en: 'Group options' })}
         onClick={() => setActionsOpen((open) => !open)}
       >
@@ -51,9 +53,9 @@ export function GroupOptionsMenu({
       </Button>
       <AnchoredPopup open={actionsOpen} anchorRef={moreButtonRef} onClose={() => setActionsOpen(false)} align="end" className="min-w-[220px]">
         <div className={anchoredPopupBodyClassName}>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <Text as="div" variant="overline" className="mb-2 font-semibold">
             {t({ ko: '그룹 옵션', en: 'Group options' })}
-          </div>
+          </Text>
           <div className="space-y-1.5">
             <Button
               type="button"

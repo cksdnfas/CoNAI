@@ -3,6 +3,7 @@ import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@conai/shared'
 import { getGroupHierarchyTotalCount, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import { GroupChildCard } from './group-child-card'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 
 interface GroupNavigationGridSectionProps {
@@ -29,7 +30,7 @@ export function GroupNavigationGridSection({
 
   return (
     <section className="space-y-4">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '하위 폴더 {count}개', en: '{count} child folders' }, { count: formatNumber(childGroups.length) })}</div>
+      <Text as="div" variant="overline" className="font-semibold">{t({ ko: '하위 폴더 {count}개', en: '{count} child folders' }, { count: formatNumber(childGroups.length) })}</Text>
       <div className={gridClassName}>
         {childGroups.map((group) => (
           <GroupChildCard

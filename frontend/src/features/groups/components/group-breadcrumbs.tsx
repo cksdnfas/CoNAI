@@ -1,6 +1,5 @@
 import { ArrowLeft, ChevronRight, Folder } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import type { GroupBreadcrumbItem } from '@/types/group'
 import { useI18n } from '@/i18n'
 
@@ -45,23 +44,23 @@ export function GroupBreadcrumbs({ items, selectedGroupId, rootLabel, compact = 
 
   return (
     <nav className="flex min-h-10 items-center gap-1 overflow-x-auto rounded-sm bg-surface-lowest px-3 py-1.5 text-sm text-muted-foreground" aria-label={t({ ko: '그룹 경로', en: 'Group path' })}>
-      <button type="button" onClick={onOpenRoot} className="inline-flex shrink-0 items-center gap-2 rounded-sm px-1.5 py-1 hover:bg-surface-low hover:text-foreground">
+      <Button type="button" variant="ghost" size="sm" onClick={onOpenRoot} className="px-1.5 font-normal">
         <Folder className="h-4 w-4 text-secondary" />
         <span>{rootLabel}</span>
-      </button>
+      </Button>
       {items.map((item) => (
         <div key={item.id} className="flex shrink-0 items-center gap-1">
           <ChevronRight className="h-3.5 w-3.5" />
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onOpenGroup(item.id)}
-            className={cn(
-              'max-w-48 truncate rounded-sm px-1.5 py-1 hover:bg-surface-low hover:text-foreground',
-              item.id === selectedGroupId && 'font-medium text-foreground',
-            )}
+            aria-current={item.id === selectedGroupId ? 'page' : undefined}
+            className="block max-w-48 truncate px-1.5 font-normal aria-[current=page]:font-medium aria-[current=page]:text-foreground"
           >
             {item.name}
-          </button>
+          </Button>
         </div>
       ))}
     </nav>
