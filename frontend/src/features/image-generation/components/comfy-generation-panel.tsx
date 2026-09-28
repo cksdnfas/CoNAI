@@ -56,7 +56,6 @@ import { useComfyGenerationActions } from './use-comfy-generation-actions'
 import { useComfyServerController } from './use-comfy-server-controller'
 
 type ComfyGenerationPanelProps = {
-  refreshNonce: number
   onHistoryRefresh: () => void
   selectedWorkflowId: number | null
   onSelectedWorkflowChange: (workflowId: number | null, options?: { replace?: boolean }) => void
@@ -83,7 +82,6 @@ function resolveComfyModelPreviewFolder(dropdownList: CustomDropdownList) {
 
 /** Render the ComfyUI home/workflow views and coordinate server-targeted generation. */
 export function ComfyGenerationPanel({
-  refreshNonce,
   onHistoryRefresh,
   selectedWorkflowId,
   onSelectedWorkflowChange,
@@ -271,20 +269,7 @@ export function ComfyGenerationPanel({
     ))
   }, [moduleDefinitionsQuery.data, moduleSaveWorkflow])
 
-  const refetchWorkflows = workflowsQuery.refetch
-  const refetchServers = serversQuery.refetch
   const refetchDropdownLists = dropdownListsQuery.refetch
-  const refetchComfyGenerationSurface = useCallback(async () => {
-    await Promise.all([refetchWorkflows(), refetchServers(), refetchDropdownLists()])
-  }, [refetchDropdownLists, refetchServers, refetchWorkflows])
-
-  useEffect(() => {
-    if (refreshNonce === 0) {
-      return
-    }
-
-    void refetchComfyGenerationSurface()
-  }, [refetchComfyGenerationSurface, refreshNonce])
 
   useEffect(() => {
     if (!selectedWorkflow) {

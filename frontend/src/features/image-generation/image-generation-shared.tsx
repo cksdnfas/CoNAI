@@ -3,7 +3,7 @@ import { normalizeTextSegmentSpreadsheetText } from './components/prompt-text-se
 import type {
   ComfyUIServerConnectionStatus,
 } from '@/lib/api-image-generation-types'
-import type { ModulePortDataType, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
+import type { ModulePortDataType } from '@/lib/api-module-graph'
 
 export { getErrorMessage } from '@/lib/error-message'
 
@@ -123,35 +123,6 @@ export type ModuleFieldOption = {
   dataType: ModulePortDataType
   options?: string[]
 }
-
-type TranslateResource = (input: string) => string
-
-const NAI_MODULE_FIELD_LABEL_KEYS = {
-  prompt: 'image-generation.image.generation.shared.prompt',
-  negativePrompt: 'image-generation.image.generation.shared.negative.prompt',
-  model: 'image-generation.image.generation.shared.model',
-  action: 'image-generation.image.generation.shared.action',
-  sampler: 'image-generation.image.generation.shared.sampler',
-  scheduler: 'image-generation.image.generation.shared.scheduler',
-  width: 'image-generation.image.generation.shared.width',
-  height: 'image-generation.image.generation.shared.height',
-  steps: 'image-generation.image.generation.shared.steps',
-  scale: 'image-generation.image.generation.shared.cfg.scale',
-  samples: 'image-generation.image.generation.shared.sample.count',
-  seed: 'image-generation.image.generation.shared.seed',
-  varietyPlus: 'image-generation.image.generation.shared.variety',
-  transparentBackground: 'image-generation.image.generation.shared.transparent.background',
-  characters: 'image-generation.image.generation.shared.character.prompt',
-  vibes: 'image-generation.image.generation.shared.send.vibe',
-  characterRefs: 'image-generation.image.generation.shared.character.reference',
-  image: 'image-generation.image.generation.shared.original.image',
-  strength: 'image-generation.image.generation.shared.strength',
-  noise: 'image-generation.image.generation.shared.noise',
-  mask: 'image-generation.image.generation.shared.mask.image',
-  addOriginalImage: 'image-generation.image.generation.shared.add.original.image',
-} as const
-
-type NaiModuleFieldLabelKey = keyof typeof NAI_MODULE_FIELD_LABEL_KEYS
 
 export const NAI_MODEL_OPTIONS = [
   { value: 'nai-diffusion-5-curated', label: 'NAI Diffusion V5 Curated' },
@@ -380,110 +351,3 @@ export function buildNaiCharacterReferencePayload(characterReferences: NAICharac
     .filter((reference) => reference.image.length > 0)
 }
 
-/** Build a backend-ready NAI snapshot from the current form draft. */
-export function buildNaiModuleSnapshot(form: NAIFormDraft) {
-  return {
-    prompt: normalizeTextSegmentSpreadsheetText(form.prompt).trim(),
-    negative_prompt: normalizeTextSegmentSpreadsheetText(form.negativePrompt).trim() || '',
-    model: form.model,
-    action: form.action,
-    sampler: form.sampler,
-    noise_schedule: form.scheduler,
-    width: parseNumberInput(form.width, 1024),
-    height: parseNumberInput(form.height, 1024),
-    steps: parseNumberInput(form.steps, 28),
-    scale: parseNumberInput(form.scale, 6),
-    n_samples: clampNaiSampleCount(form.samples),
-    seed: form.seed.trim().length > 0 ? Number(form.seed) : null,
-    use_coords: shouldUseNaiCharacterPositions(form),
-    characters: buildNaiCharacterPromptPayload(form.characters),
-    vibes: buildNaiVibePayload(form.vibes),
-    character_refs: buildNaiCharacterReferencePayload(form.characterReferences),
-    variety_plus: form.varietyPlus,
-    transparent_background: form.transparentBackground && supportsNaiTransparentBackground(form.model),
-    image: form.action !== 'generate' ? form.sourceImage?.dataUrl || null : null,
-    mask: form.action === 'infill' ? form.maskImage?.dataUrl || null : null,
-    strength: form.action !== 'generate' ? parseNumberInput(form.strength, 0.3) : null,
-    noise: form.action !== 'generate' ? parseNumberInput(form.noise, 0) : null,
-    add_original_image: form.action === 'infill' ? form.addOriginalImage : null,
-  }
-}
-
-/** Build candidate module inputs from the current NAI form mode. */
-export function buildNaiModuleFieldOptions(form: NAIFormDraft, t: TranslateResource): ModuleFieldOption[] {
-  const label = (key: NaiModuleFieldLabelKey) => t(NAI_MODULE_FIELD_LABEL_KEYS[key])
-  const options: ModuleFieldOption[] = [
-    { key: 'prompt', label: label('prompt'), dataType: 'prompt' },
-    { key: 'negative_prompt', label: label('negativePrompt'), dataType: 'prompt' },
-    { key: 'model', label: label('model'), dataType: 'text', options: NAI_MODEL_OPTIONS.map((option) => option.value) },
-    { key: 'action', label: label('action'), dataType: 'text', options: NAI_ACTION_OPTIONS.map((option) => option.value) },
-    { key: 'sampler', label: label('sampler'), dataType: 'text', options: NAI_SAMPLER_OPTIONS.map((option) => option.value) },
-    { key: 'noise_schedule', label: label('scheduler'), dataType: 'text', options: NAI_SCHEDULER_OPTIONS.map((option) => option.value) },
-    { key: 'width', label: label('width'), dataType: 'number' },
-    { key: 'height', label: label('height'), dataType: 'number' },
-    { key: 'steps', label: label('steps'), dataType: 'number' },
-    { key: 'scale', label: label('scale'), dataType: 'number' },
-    { key: 'n_samples', label: label('samples'), dataType: 'number' },
-    { key: 'seed', label: label('seed'), dataType: 'number' },
-    { key: 'variety_plus', label: label('varietyPlus'), dataType: 'boolean' },
-  ]
-
-  if (supportsNaiCharacterPrompts(form.model)) {
-    options.push({ key: 'characters', label: label('characters'), dataType: 'json' })
-  }
-
-  if (supportsNaiTransparentBackground(form.model)) {
-    options.push({ key: 'transparent_background', label: label('transparentBackground'), dataType: 'boolean' })
-  }
-
-  options.push({ key: 'vibes', label: label('vibes'), dataType: 'json' })
-
-  if (supportsNaiCharacterReferences(form.model)) {
-    options.push({ key: 'character_refs', label: label('characterRefs'), dataType: 'json' })
-  }
-
-  if (form.action !== 'generate') {
-    options.push(
-      { key: 'image', label: label('image'), dataType: 'image' },
-      { key: 'strength', label: label('strength'), dataType: 'number' },
-      { key: 'noise', label: label('noise'), dataType: 'number' },
-    )
-  }
-
-  if (form.action === 'infill') {
-    options.push(
-      { key: 'mask', label: label('mask'), dataType: 'mask' },
-      { key: 'add_original_image', label: label('addOriginalImage'), dataType: 'boolean' },
-    )
-  }
-
-  return options
-}
-
-/** Build the exposed-field contract for saved generation modules. */
-export function buildModuleExposedFields(fieldOptions: ModuleFieldOption[], exposedFieldKeys: string[]) {
-  const exposedFieldKeySet = new Set(exposedFieldKeys)
-
-  return fieldOptions
-    .filter((field) => exposedFieldKeySet.has(field.key))
-    .map((field) => ({
-      key: field.key,
-      label: field.label,
-      data_type: field.dataType,
-    }))
-}
-
-/** Build module UI schema entries so saved generation modules keep select inputs as dropdowns. */
-export function buildModuleUiSchema(fieldOptions: ModuleFieldOption[], snapshot: Record<string, unknown>, exposedFieldKeys: string[]): ModuleUiFieldDefinition[] {
-  const exposedFieldKeySet = new Set(exposedFieldKeys)
-
-  return fieldOptions
-    .filter((field) => exposedFieldKeySet.has(field.key))
-    .map((field) => ({
-      key: field.key,
-      label: field.label,
-      data_type: field.options && field.options.length > 0 ? 'select' : field.dataType,
-      default_value: snapshot[field.key],
-      options: field.options,
-    }))
-}

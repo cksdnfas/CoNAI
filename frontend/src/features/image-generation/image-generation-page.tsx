@@ -191,7 +191,6 @@ export function ImageGenerationPage() {
   const controllerPanel = activeTab === 'nai'
     ? (
       <NaiGenerationPanelLazy
-        refreshNonce={0}
         onHistoryRefresh={handleHistoryRefresh}
         splitPaneScroll={useWideSplitPaneScroll}
         compactActionBar={useCompactNaiActionBar}
@@ -202,7 +201,6 @@ export function ImageGenerationPage() {
     : activeTab === 'codex'
       ? (
         <CodexGenerationPanelLazy
-          refreshNonce={0}
           onHistoryRefresh={handleHistoryRefresh}
           splitPaneScroll={useWideSplitPaneScroll}
           headerPortalTargetId={codexDrawerHeaderContentId}
@@ -212,7 +210,6 @@ export function ImageGenerationPage() {
       : activeTab === 'comfyui'
         ? (
           <ComfyGenerationPanelLazy
-            refreshNonce={0}
             onHistoryRefresh={handleHistoryRefresh}
             selectedWorkflowId={selectedComfyWorkflowId}
             onSelectedWorkflowChange={setSelectedComfyWorkflowId}

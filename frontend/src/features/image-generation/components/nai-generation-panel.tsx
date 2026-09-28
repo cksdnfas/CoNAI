@@ -37,7 +37,6 @@ import { useNaiFormController } from './use-nai-form-controller'
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 
 type NaiGenerationPanelProps = {
-  refreshNonce: number
   onHistoryRefresh: () => void
   splitPaneScroll?: boolean
   compactActionBar?: boolean
@@ -47,7 +46,6 @@ type NaiGenerationPanelProps = {
 
 /** Render the NAI login, generation, and image-editing workflow. */
 export function NaiGenerationPanel({
-  refreshNonce,
   onHistoryRefresh,
   splitPaneScroll = false,
   compactActionBar = false,
@@ -275,7 +273,6 @@ export function NaiGenerationPanel({
     showSnackbar,
   })
 
-  const refetchNaiUserData = naiUserQuery.refetch
   const handleOpenNaiAuthModal = useCallback(() => setIsNaiAuthModalOpen(true), [setIsNaiAuthModalOpen])
   const handleCloseNaiAuthModal = useCallback(() => setIsNaiAuthModalOpen(false), [setIsNaiAuthModalOpen])
   const handleSubmitNaiAuthModal = useCallback(() => void handleNaiAuthSubmit(), [handleNaiAuthSubmit])
@@ -284,14 +281,6 @@ export function NaiGenerationPanel({
     setImageEditorSaveOptions((current) => ({ ...current, ...patch }))
   }, [setImageEditorSaveOptions])
   const handleConfirmImageEditorSaveModal = useCallback(() => void handleConfirmImageEditorSave(), [handleConfirmImageEditorSave])
-
-  useEffect(() => {
-    if (refreshNonce === 0) {
-      return
-    }
-
-    void refetchNaiUserData()
-  }, [refreshNonce, refetchNaiUserData])
 
   const naiGenerateButtonLabel = isNaiGenerating
     ? t('image-generation.components.nai.generation.panel.submitting.generation')

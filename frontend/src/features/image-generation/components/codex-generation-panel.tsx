@@ -25,7 +25,6 @@ import { GenerateActionBar } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 
 type CodexGenerationPanelProps = {
-  refreshNonce: number
   onHistoryRefresh: () => void
   splitPaneScroll?: boolean
   headerPortalTargetId?: string
@@ -198,7 +197,6 @@ function buildCodexFormFromHistoryPayload(payload: Record<string, unknown>, curr
 
 /** Render the Codex image-generation controller with the same controller chrome used by other generation tabs. */
 export function CodexGenerationPanel({
-  refreshNonce,
   onHistoryRefresh,
   splitPaneScroll = false,
   headerPortalTargetId,
@@ -259,14 +257,6 @@ export function CodexGenerationPanel({
     })
     return () => window.cancelAnimationFrame(frame)
   }, [compactActionBarContentTargetId, headerPortalTargetId])
-
-  useEffect(() => {
-    if (refreshNonce === 0) {
-      return
-    }
-
-    void refetchCodexStatus()
-  }, [refetchCodexStatus, refreshNonce])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
