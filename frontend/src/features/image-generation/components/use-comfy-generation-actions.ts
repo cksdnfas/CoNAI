@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useI18n } from '@/i18n'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-image-generation'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
@@ -73,6 +74,7 @@ export function useComfyGenerationActions({
   onHistoryRefresh: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const [isComfyGenerating, setIsComfyGenerating] = useState(false)
   const { requestPath: targetGroupPath } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
@@ -80,25 +82,25 @@ export function useComfyGenerationActions({
   /** Validate the currently selected workflow fields before any generation request. */
   const validateComfyGeneration = () => {
     if (!selectedWorkflow) {
-      showSnackbar({ message: '먼저 ComfyUI 워크플로우를 선택해줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '먼저 ComfyUI 워크플로우를 선택해줘.', en: 'Select a ComfyUI workflow first.' }), tone: 'error' })
       return false
     }
 
     const missingField = selectedWorkflowFields.find((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id]))
     if (missingField) {
-      showSnackbar({ message: `필수 필드가 비어 있어: ${missingField.label}`, tone: 'error' })
+      showSnackbar({ message: t({ ko: '필수 필드가 비어 있어: {label}', en: 'A required field is empty: {label}' }, { label: missingField.label }), tone: 'error' })
       return false
     }
 
     const invalidNumberField = findInvalidWorkflowNumberField(selectedWorkflowFields, workflowDraft)
     if (invalidNumberField) {
-      showSnackbar({ message: `숫자 필드 값이 올바르지 않아: ${invalidNumberField.label}`, tone: 'error' })
+      showSnackbar({ message: t({ ko: '숫자 필드 값이 올바르지 않아: {label}', en: 'Invalid number field value: {label}' }, { label: invalidNumberField.label }), tone: 'error' })
       return false
     }
 
     const invalidNodeField = collectWorkflowNodeDraftIssues(selectedWorkflowFields, workflowDraft)[0]
     if (invalidNodeField) {
-      showSnackbar({ message: `${invalidNodeField.field.label}: ${invalidNodeField.issue.ko}`, tone: 'error' })
+      showSnackbar({ message: `${invalidNodeField.field.label}: ${t({ ko: invalidNodeField.issue.ko, en: invalidNodeField.issue.en })}`, tone: 'error' })
       return false
     }
 
@@ -180,12 +182,12 @@ export function useComfyGenerationActions({
       if (selectedTarget === 'auto') {
         const connectedComfyServers = connectedServers.filter((server) => !isModalServer(server, comfyServerTests))
         if (connectedComfyServers.length === 0) {
-          showSnackbar({ message: '연결된 ComfyUI 서버가 없어.', tone: 'error' })
+          showSnackbar({ message: t({ ko: '연결된 ComfyUI 서버가 없어.', en: 'No ComfyUI server is connected.' }), tone: 'error' })
           return
         }
 
         enqueueJob = (count) => handleGenerateAuto(count)
-        targetLabel = '자동 분산'
+        targetLabel = t({ ko: '자동 분산', en: 'Auto routing' })
       } else if (selectedTarget.startsWith('tag:')) {
         const selectedTag = normalizeRoutingTag(selectedTarget.slice('tag:'.length))
         const matchingServers = activeServers.filter((server) => {
@@ -196,7 +198,7 @@ export function useComfyGenerationActions({
           return isModalServer(server, comfyServerTests) || comfyServerTests[server.id]?.status?.is_connected === true
         })
         if (matchingServers.length === 0) {
-          showSnackbar({ message: `연결된 #${selectedTag} 서버가 없어.`, tone: 'error' })
+          showSnackbar({ message: t({ ko: '연결된 #{tag} 서버가 없어.', en: 'No connected #{tag} server.' }, { tag: selectedTag }), tone: 'error' })
           return
         }
 
@@ -205,30 +207,30 @@ export function useComfyGenerationActions({
       } else if (selectedTarget.startsWith('server:')) {
         const serverId = Number(selectedTarget.slice('server:'.length))
         if (!Number.isFinite(serverId)) {
-          showSnackbar({ message: '생성할 서버를 먼저 골라줘.', tone: 'error' })
+          showSnackbar({ message: t({ ko: '생성할 서버를 먼저 골라줘.', en: 'Choose a server to generate on first.' }), tone: 'error' })
           return
         }
 
         const server = activeServers.find((item) => item.id === serverId)
         if (!server) {
-          showSnackbar({ message: '선택한 서버를 찾지 못했어.', tone: 'error' })
+          showSnackbar({ message: t({ ko: '선택한 서버를 찾지 못했어.', en: 'Could not find the selected server.' }), tone: 'error' })
           return
         }
 
         if (!isModalServer(server, comfyServerTests) && comfyServerTests[serverId]?.status?.is_connected !== true) {
-          showSnackbar({ message: '선택한 서버가 아직 연결 확인되지 않았어.', tone: 'error' })
+          showSnackbar({ message: t({ ko: '선택한 서버가 아직 연결 확인되지 않았어.', en: 'The selected server has not been confirmed as connected yet.' }), tone: 'error' })
           return
         }
 
         enqueueJob = (count) => handleGenerateOnServer(serverId, count)
         targetLabel = server.name
       } else {
-        showSnackbar({ message: '생성 타겟이 올바르지 않아.', tone: 'error' })
+        showSnackbar({ message: t({ ko: '생성 타겟이 올바르지 않아.', en: 'The generation target is invalid.' }), tone: 'error' })
         return
       }
 
       if (!enqueueJob) {
-        showSnackbar({ message: '생성 타겟이 올바르지 않아.', tone: 'error' })
+        showSnackbar({ message: t({ ko: '생성 타겟이 올바르지 않아.', en: 'The generation target is invalid.' }), tone: 'error' })
         return
       }
 
@@ -240,14 +242,14 @@ export function useComfyGenerationActions({
       void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
 
       if (successCount === 0) {
-        showSnackbar({ message: `${targetLabel} 큐 등록이 전부 실패했어.`, tone: 'error' })
+        showSnackbar({ message: t({ ko: '{target} 큐 등록이 전부 실패했어.', en: 'All {target} queue registrations failed.' }, { target: targetLabel }), tone: 'error' })
       } else if (failedCount <= 0) {
-        showSnackbar({ message: `${targetLabel} 큐에 ${successCount}건 등록했어.`, tone: 'info' })
+        showSnackbar({ message: t({ ko: '{target} 큐에 {count}건 등록했어.', en: 'Added {count} jobs to the {target} queue.' }, { target: targetLabel, count: successCount }), tone: 'info' })
       } else {
-        showSnackbar({ message: `${targetLabel} 큐 등록 ${successCount}건 성공, ${failedCount}건 실패.`, tone: 'error' })
+        showSnackbar({ message: t({ ko: '{target} 큐 등록 {succeeded}건 성공, {failed}건 실패.', en: '{target} queue: {succeeded} added, {failed} failed.' }, { target: targetLabel, succeeded: successCount, failed: failedCount }), tone: 'error' })
       }
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'ComfyUI 생성에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: 'ComfyUI 생성에 실패했어.', en: 'ComfyUI generation failed.' })), tone: 'error' })
     } finally {
       setIsComfyGenerating(false)
     }
