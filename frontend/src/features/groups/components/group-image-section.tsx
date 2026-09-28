@@ -10,7 +10,7 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
-import type { ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
+import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
 import { getGroupImageFeedProgressSummary } from '../group-image-feed-progress'
 
@@ -43,6 +43,9 @@ interface GroupImageSectionProps {
   collectionFilter?: 'all' | 'manual' | 'auto'
   onCollectionFilterChange?: (value: 'all' | 'manual' | 'auto') => void
 }
+
+/** Library images can be deleted from the viewer (still admin-only). Module constant keeps ImageList memoized. */
+const GROUP_VIEWER_ACCESS_OPTIONS: ImageViewModalAccessOptions = { allowDeleteAction: true }
 
 const COLLECTION_FILTER_OPTIONS = [
   { value: 'all', icon: Images, labelKey: 'groups.components.group.image.section.all.images' },
@@ -268,6 +271,7 @@ export function GroupImageSection({
             renderItemPersistentOverlay={renderItemPersistentOverlay}
             shouldBlurItemPreview={shouldBlurItemPreview}
             sequenceTotal={sequenceTotal}
+            modalAccessOptions={GROUP_VIEWER_ACCESS_OPTIONS}
           />
 
           <div className="flex flex-col items-center gap-3 pb-3">

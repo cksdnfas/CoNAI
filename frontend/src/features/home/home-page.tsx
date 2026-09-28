@@ -16,9 +16,13 @@ import { ImageListColumnFloatingControl } from '@/features/images/components/ima
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { useI18n } from '@/i18n'
+import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
 import { useHomeSearch } from './home-search-context'
 import { useHomePageData } from './use-home-page-data'
+
+/** Library images can be deleted from the viewer (still admin-only). Module constant keeps ImageList memoized. */
+const HOME_VIEWER_ACCESS_OPTIONS: ImageViewModalAccessOptions = { allowDeleteAction: true }
 
 /** Keep item href identity stable so memoized image cells skip keystroke re-renders. */
 function getHomeImageHref(image: ImageRecord) {
@@ -219,6 +223,7 @@ export function HomePage() {
             renderItemPersistentOverlay={renderItemPersistentOverlay}
             shouldBlurItemPreview={shouldBlurItemPreview}
             sequenceTotal={feedSequenceTotal}
+            modalAccessOptions={HOME_VIEWER_ACCESS_OPTIONS}
           />
 
           <div className="flex flex-col items-center gap-3 pb-6">

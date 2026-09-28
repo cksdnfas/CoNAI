@@ -6,10 +6,11 @@ import { formatCountDisplay } from '@/lib/count-display'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { GenerationHistoryReuseActions } from '@/features/image-generation/components/generation-history-reuse-actions'
+import { ImageDeleteAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
-import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from './image-view-modal-context'
+import { useImageViewModal, type ImageViewModalAccessOptions, type ImageViewSequenceTotal } from './image-view-modal-context'
 
 interface ImageViewModalActionsProps {
   compositeHash: string
@@ -37,6 +38,7 @@ export function ImageViewModalActions({
   const navigate = useNavigate()
   const location = useLocation()
   const { t, formatNumber } = useI18n()
+  const imageViewModal = useImageViewModal()
   const showCounter = activeIndex >= 0 && (
     totalCount > 1
     || sequenceHasMore
@@ -55,6 +57,7 @@ export function ImageViewModalActions({
   const allowDetailNavigation = accessOptions?.allowDetailNavigation !== false
   const allowEditAction = accessOptions?.allowEditAction !== false
   const allowGroupAssignAction = accessOptions?.allowGroupAssignAction !== false
+  const allowDeleteAction = accessOptions?.allowDeleteAction === true
   const historyReuseId = accessOptions?.allowHistoryReuseActions === true && typeof controls.image?.generation_history_id === 'number'
     ? controls.image.generation_history_id
     : null
@@ -90,6 +93,13 @@ export function ImageViewModalActions({
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} /> : null
   const editButton = allowEditAction ? <ImageEditAction image={controls.image} /> : null
   const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="outline" className={overlayButtonClassName} /> : null
+  const deleteButton = allowDeleteAction ? (
+    <ImageDeleteAction
+      image={controls.image}
+      className={overlayButtonClassName}
+      onDeleted={(deletedCompositeHash) => (imageViewModal ? imageViewModal.removeImageFromView(deletedCompositeHash) : onClose())}
+    />
+  ) : null
 
   return (
     <div className="image-detail-modal-toolbar-actions flex w-full min-w-0 flex-nowrap items-center justify-between gap-2 overflow-x-auto" onMouseDown={(event) => event.stopPropagation()}>
@@ -101,6 +111,7 @@ export function ImageViewModalActions({
         {editButton}
         {groupAssignButton}
         {downloadButton}
+        {deleteButton}
       </div>
     </div>
   )

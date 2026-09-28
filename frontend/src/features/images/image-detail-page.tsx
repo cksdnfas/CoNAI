@@ -23,6 +23,7 @@ export function ImageDetailPage() {
           isRefreshing={isRefreshing}
           onBack={handleBackToSource}
           onRefresh={refresh}
+          onDeleted={handleBackToSource}
         />
       )}
     />

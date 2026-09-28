@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ImageRecord } from '@/types/image'
@@ -89,6 +89,22 @@ function buildUniqueCompositeHashes(compositeHashes: readonly string[] | undefin
   }
 
   return uniqueCompositeHashes
+}
+
+function createClosedModalState(current: ImageViewModalState): ImageViewModalState {
+  return {
+    compositeHash: null,
+    compositeHashes: [],
+    compositeHashIndexByHash: new Map(),
+    sourceId: null,
+    sourceItemsByHash: {},
+    sequenceTotal: null,
+    sequenceHasMore: false,
+    openSessionId: current.openSessionId,
+    stripFocusRequestId: current.stripFocusRequestId,
+    stripFocusBehavior: null,
+    accessOptions: {},
+  }
 }
 
 function getModalActiveIndex(state: ImageViewModalState) {
@@ -208,6 +224,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   })
 
 
+  // Images deleted from the viewer; a source list re-sync that still lists them must not bring them back.
+  const removedCompositeHashesRef = useRef(new Set<string>())
   const activeIndex = useMemo(() => getModalActiveIndex(modalState), [modalState])
 
   const canViewPrevious = activeIndex > 0
@@ -291,7 +309,9 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         return current
       }
 
+      const removedCompositeHashes = removedCompositeHashesRef.current
       const nextCompositeHashes = buildUniqueCompositeHashes(input.compositeHashes)
+        .filter((compositeHash) => !removedCompositeHashes.has(compositeHash))
       const nextCompositeHashIndexByHash = buildCompositeHashIndexByHash(nextCompositeHashes)
       if (!nextCompositeHashIndexByHash.has(current.compositeHash)) {
         return current
@@ -322,19 +342,38 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   }, [])
 
   const closeImageView = useCallback(() => {
-    setModalState((current) => ({
-      compositeHash: null,
-      compositeHashes: [],
-      compositeHashIndexByHash: new Map(),
-      sourceId: null,
-      sourceItemsByHash: {},
-      sequenceTotal: null,
-      sequenceHasMore: false,
-      openSessionId: current.openSessionId,
-      stripFocusRequestId: current.stripFocusRequestId,
-      stripFocusBehavior: null,
-      accessOptions: {},
-    }))
+    removedCompositeHashesRef.current.clear()
+    setModalState(createClosedModalState)
+  }, [])
+
+  const removeImageFromView = useCallback((compositeHash: string) => {
+    removedCompositeHashesRef.current.add(compositeHash)
+    setModalState((current) => {
+      const removedIndex = current.compositeHashIndexByHash.get(compositeHash)
+      if (removedIndex === undefined) {
+        return current.compositeHash === compositeHash ? createClosedModalState(current) : current
+      }
+
+      const nextCompositeHashes = current.compositeHashes.filter((candidate) => candidate !== compositeHash)
+      const nextActiveCompositeHash = current.compositeHash === compositeHash
+        ? nextCompositeHashes[removedIndex] ?? null
+        : current.compositeHash
+      if (!nextActiveCompositeHash) {
+        return createClosedModalState(current)
+      }
+
+      const nextSequenceTotal = current.sequenceTotal?.status === 'known'
+        ? { status: 'known' as const, count: Math.max(0, current.sequenceTotal.count - 1) }
+        : current.sequenceTotal
+
+      return {
+        ...current,
+        compositeHash: nextActiveCompositeHash,
+        compositeHashes: nextCompositeHashes,
+        compositeHashIndexByHash: buildCompositeHashIndexByHash(nextCompositeHashes),
+        sequenceTotal: nextSequenceTotal,
+      }
+    })
   }, [])
 
   useOverlayBackClose({ open: isModalOpen, onClose: closeImageView })
@@ -460,8 +499,9 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       closeImageView,
       viewPreviousImage,
       viewNextImage,
+      removeImageFromView,
     }),
-    [activeIndex, canViewNext, canViewPrevious, closeImageView, modalState.compositeHash, modalState.compositeHashes, openImageView, syncImageViewSequence, viewNextImage, viewPreviousImage],
+    [activeIndex, canViewNext, canViewPrevious, closeImageView, modalState.compositeHash, modalState.compositeHashes, openImageView, removeImageFromView, syncImageViewSequence, viewNextImage, viewPreviousImage],
   )
 
   return (

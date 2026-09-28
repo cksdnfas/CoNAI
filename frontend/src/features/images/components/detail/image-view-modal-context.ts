@@ -7,6 +7,8 @@ export interface ImageViewModalAccessOptions {
   allowGroupAssignAction?: boolean
   /** Show "copy prompt" / "load these settings" for generation-history images. Off unless set. */
   allowHistoryReuseActions?: boolean
+  /** Show "move to Recycle Bin" (still admin-only). Off unless set, since not every source is the library. */
+  allowDeleteAction?: boolean
 }
 
 /**
@@ -50,6 +52,8 @@ export interface ImageViewModalApi {
   closeImageView: () => void
   viewPreviousImage: () => void
   viewNextImage: () => void
+  /** Drop a deleted image from the sequence: show the next one, or close when none is left after it. */
+  removeImageFromView: (compositeHash: string) => void
 }
 
 export const ImageViewModalContext = createContext<ImageViewModalApi | null>(null)

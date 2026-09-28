@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
+import { ImageDeleteAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 
@@ -13,9 +14,11 @@ interface ImageDetailActionsProps {
   isRefreshing: boolean
   onBack: () => void
   onRefresh: () => void
+  /** Leave the page once the image is in the Recycle Bin. */
+  onDeleted?: () => void
 }
 
-export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, onRefresh }: ImageDetailActionsProps) {
+export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, onRefresh, onDeleted }: ImageDetailActionsProps) {
   const { t } = useI18n()
 
   return (
@@ -29,6 +32,7 @@ export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, o
       <ImageEditAction image={image} />
       <ImageGroupAssignAction image={image} />
       {downloadUrl ? <ImageDownloadTriggerButton image={image} /> : null}
+      <ImageDeleteAction image={image} onDeleted={onDeleted} />
     </div>
   )
 }
