@@ -93,17 +93,13 @@ interface SettingsStatusIconProps {
   title?: string
 }
 
-/** Render a dense boolean/status cell for settings tables. */
+/** Render a dense boolean/status cell for settings tables: a tinted check or a muted dash, no box. */
 export function SettingsStatusIcon({ checked = false, tone = 'muted', title }: SettingsStatusIconProps) {
   return (
     <span
       className={cn(
-        'inline-flex h-7 w-7 items-center justify-center rounded-sm',
-        tone === 'danger'
-          ? 'bg-destructive-soft text-destructive-soft-foreground'
-          : checked
-            ? 'bg-primary/12 text-primary'
-            : 'bg-foreground/5 text-muted-foreground',
+        'inline-flex h-7 w-7 items-center justify-center',
+        tone === 'danger' ? 'text-destructive' : checked ? 'text-primary' : 'text-muted-foreground/60',
       )}
       title={title}
       aria-label={title}
@@ -127,6 +123,10 @@ interface ResourceTableLayout {
   stackBelow: SettingsResourceStackBreakpoint
 }
 
+/** Flat hairline table (settings only): header row and rows share the same small inline padding for the hover wash. */
+const STACK_HEADER_CLASS = 'gap-3 border-b border-line px-2 py-2 text-2xs font-semibold tracking-overline text-muted-foreground uppercase'
+const STACK_ROW_CLASS = 'flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-2 py-2.5 last:border-b-0'
+
 const ResourceTableLayoutContext = createContext<ResourceTableLayout | null>(null)
 
 interface SettingsResourceTableProps {
@@ -139,6 +139,8 @@ interface SettingsResourceTableProps {
    * `gridClassName` must then carry the same container prefix (e.g. `@3xl:grid-cols-[…]`).
    */
   stackBelow?: SettingsResourceStackBreakpoint
+  /** Stacked tables only: headers from this index on are centred (short value columns). Default: the last three. */
+  centerFrom?: number
 }
 
 interface SettingsSegmentedTableProps {
@@ -162,26 +164,22 @@ export function SettingsResourceTable({
   headers,
   children,
   stackBelow,
+  centerFrom,
 }: SettingsResourceTableProps) {
   if (stackBelow) {
     const stack = STACK_CLASSES[stackBelow]
+    const firstCentered = centerFrom ?? headers.length - 3
     return (
       <ResourceTableLayoutContext.Provider value={{ headers, stackBelow }}>
         <div className="@container">
-          <div
-            className={cn(
-              stack.header,
-              'gap-3 border-b border-outline-subtle px-4 py-2.5 text-2xs font-semibold uppercase tracking-overline text-muted-foreground',
-              gridClassName,
-            )}
-          >
+          <div className={cn(stack.header, STACK_HEADER_CLASS, gridClassName)}>
             {headers.map((header, index) => (
-              <div key={index} className={cn(index >= headers.length - 3 ? 'text-center' : 'min-w-0')}>
+              <div key={index} className={cn(index >= firstCentered ? 'text-center' : 'min-w-0')}>
                 {header}
               </div>
             ))}
           </div>
-          <div className="divide-y divide-outline-subtle">{children}</div>
+          <div>{children}</div>
         </div>
       </ResourceTableLayoutContext.Provider>
     )
@@ -272,7 +270,7 @@ export function SettingsResourceStackedCells({ gridClassName, cells, labelledFro
 
   const stack = STACK_CLASSES[layout.stackBelow]
   return (
-    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3', stack.row, 'items-center', gridClassName, className)}>
+    <div className={cn(STACK_ROW_CLASS, stack.row, gridClassName, className)}>
       {cells.map((cell, index) => (
         index >= labelledFrom ? (
           <div key={index} className={cn('flex items-center gap-2', stack.centerWide)}>
@@ -295,6 +293,8 @@ interface SettingsResourceTableRowProps {
   cells: ReactNode[]
   selected?: boolean
   onOpenOptions: () => void
+  /** Cells from this index on are short labelled values when stacked. Default: the last two. */
+  labelledFrom?: number
 }
 
 /** Render a shared row for settings resource tables. */
@@ -303,6 +303,7 @@ export function SettingsResourceTableRow({
   cells,
   selected = false,
   onOpenOptions,
+  labelledFrom,
 }: SettingsResourceTableRowProps) {
   const { t } = useI18n()
 
@@ -310,18 +311,14 @@ export function SettingsResourceTableRow({
     <SettingsResourceStackedCells
       gridClassName={gridClassName}
       cells={cells}
-      labelledFrom={cells.length - 2}
-      className={cn(
-        'transition-colors',
-        selected
-          ? 'bg-primary/8 ring-1 ring-inset ring-primary/20'
-          : 'bg-transparent hover:bg-surface-high/60',
-      )}
+      labelledFrom={labelledFrom ?? cells.length - 2}
+      className={cn('transition-colors', selected ? 'bg-primary/8' : 'hover:bg-fill')}
       trailing={(
         <div className="ml-auto flex justify-end">
           <IconButton
             size="icon-sm"
-            variant={selected ? 'default' : 'ghost'}
+            variant="ghost"
+            active={selected}
             label={t({ ko: '상세 정보와 수정 열기', en: 'Open details and editing' })}
             onClick={onOpenOptions}
           >

@@ -124,25 +124,24 @@ export function WatchedFolderCard({
         <Field label={t({ ko: '제외 패턴', en: 'Excluded patterns' })}>
           <Input variant="settings" value={draft.exclude_patterns} onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))} placeholder={t({ ko: '@eaDir, thumbs, cache', en: '@eaDir, thumbs, cache' })} />
         </Field>
+      </div>
 
+      <div>
         <SettingsSwitchRow
           checked={draft.auto_scan}
           onCheckedChange={(checked) => setDraft((current) => ({ ...current, auto_scan: checked }))}
           label={t({ ko: '자동 스캔', en: 'Auto scan' })}
         />
-
         <SettingsSwitchRow
           checked={draft.recursive}
           onCheckedChange={(checked) => setDraft((current) => ({ ...current, recursive: checked }))}
           label={t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
         />
-
         <SettingsSwitchRow
           checked={draft.watcher_enabled}
           onCheckedChange={(checked) => setDraft((current) => ({ ...current, watcher_enabled: checked }))}
           label={t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
         />
-
         <SettingsSwitchRow
           checked={draft.is_active}
           onCheckedChange={(checked) => setDraft((current) => ({ ...current, is_active: checked }))}

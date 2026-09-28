@@ -46,7 +46,7 @@ export function AppearanceTab({
   } : null
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <input
         ref={fileInputRef}
         type="file"

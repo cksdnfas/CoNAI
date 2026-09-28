@@ -68,7 +68,7 @@ export function BackupSourceCreateForm({
         </Field>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div>
         <SettingsSwitchRow
           checked={newBackupSource.recursive}
           onCheckedChange={(checked) => onNewBackupSourceChange({ recursive: checked })}

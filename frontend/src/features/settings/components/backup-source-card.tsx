@@ -130,25 +130,25 @@ export function BackupSourceCard({
           <Field label={t({ ko: 'WebP 품질', en: 'WebP quality' })}>
             <NumberStepperInput min={1} max={100} variant="settings" value={draft.webp_quality} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, webp_quality: Number(nextValue) || 90 }))} disabled={draft.import_mode !== 'convert_webp'} />
           </Field>
+      </div>
 
-          <SettingsSwitchRow
-            checked={draft.recursive}
-            onCheckedChange={(checked) => setDraft((current) => ({ ...current, recursive: checked }))}
-            label={t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
-          />
-
-          <SettingsSwitchRow
-            checked={draft.watcher_enabled}
-            onCheckedChange={(checked) => setDraft((current) => ({ ...current, watcher_enabled: checked }))}
-            label={t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
-          />
-
-          <SettingsSwitchRow
-            checked={draft.is_active}
-            onCheckedChange={(checked) => setDraft((current) => ({ ...current, is_active: checked }))}
-            label={t({ ko: '백업 소스 활성화', en: 'Backup source active' })}
-          />
-        </div>
+      <div>
+        <SettingsSwitchRow
+          checked={draft.recursive}
+          onCheckedChange={(checked) => setDraft((current) => ({ ...current, recursive: checked }))}
+          label={t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
+        />
+        <SettingsSwitchRow
+          checked={draft.watcher_enabled}
+          onCheckedChange={(checked) => setDraft((current) => ({ ...current, watcher_enabled: checked }))}
+          label={t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
+        />
+        <SettingsSwitchRow
+          checked={draft.is_active}
+          onCheckedChange={(checked) => setDraft((current) => ({ ...current, is_active: checked }))}
+          label={t({ ko: '백업 소스 활성화', en: 'Backup source active' })}
+        />
+      </div>
 
         <SettingsResourceMetaList
           items={[

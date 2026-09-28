@@ -71,7 +71,7 @@ export function GeneralPreferencesSections({
   const historyMaxLabel = t({ ko: '생성 히스토리 최대 항목 수', en: 'Generation history maximum items' })
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       {visibleSections.has('basic') ? (
         <RowGroup heading={t({ ko: '기본', en: 'Basics' })} actions={<SectionDirtyBadge dirty={isSectionDirty('basic')} />}>
           <SettingRow
@@ -110,7 +110,7 @@ export function GeneralPreferencesSections({
             onCheckedChange={(checked) => onPatchGeneral({ showRatingBadges: checked })}
             label={t({ ko: '등급 배지 표시', en: 'Show rating badges' })}
           />
-          <SettingRow label={t({ ko: '상단 메뉴', en: 'Header menu' })} align="start" controlClassName="max-w-xl justify-start sm:justify-end">
+          <SettingRow label={t({ ko: '상단 메뉴', en: 'Header menu' })} align="start" controlClassName="justify-start sm:max-w-xl sm:justify-end">
             {HEADER_NAVIGATION_OPTIONS.map((option) => {
               const Icon = option.icon
               const pressed = headerNavigation[option.key] ?? true

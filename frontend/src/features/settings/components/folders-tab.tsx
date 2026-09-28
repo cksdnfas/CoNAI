@@ -2,12 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, RefreshCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, ScanAllSummary, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
 import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
 import { Modal } from '@/components/ui/modal'
-import { StatTile } from '@/components/ui/stat-tile'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
+import { SettingsEmptyRow, SettingsRowsSkeleton, SettingsStatLine } from './settings-rows'
 import { getScanStatusLabel, SettingsResourceStackedCells, SettingsResourceTable } from './settings-resource-shared'
 import { WatchedFolderCard } from './watched-folder-card'
 import { WatchedFolderListItem } from './watched-folder-list-item'
@@ -159,39 +158,38 @@ export function FoldersTab({
 
   return (
     <>
-      <div className="space-y-6">
-        <Section
-          variant="settings"
-          heading={t({ ko: '감시 폴더 운영', en: 'Watched folder operations' })}
-          actions={
-            <IconButton size="icon-sm" variant="secondary" onClick={onRefresh} label={t({ ko: '새로고침', en: 'Refresh' })}>
-              <RefreshCcw className="h-4 w-4" />
-            </IconButton>
-          }
+      <div className="space-y-8">
+        <RowGroup
+          heading={t({ ko: '감시 폴더', en: 'Watched folders' })}
+          actions={(
+            <>
+              <IconButton size="icon-sm" variant="ghost" onClick={onRefresh} label={t({ ko: '새로고침', en: 'Refresh' })}>
+                <RefreshCcw className="h-4 w-4" />
+              </IconButton>
+              <IconButton size="icon-sm" variant="ghost" onClick={() => setIsAddFolderModalOpen(true)} label={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}>
+                <Plus className="h-4 w-4" />
+              </IconButton>
+            </>
+          )}
         >
-          <div className="grid gap-3 text-sm sm:grid-cols-3">
-            <StatTile label={t({ ko: '감시 중', en: 'Watching' })} value={formatNumber(watchersHealth?.watching ?? 0)} valueClassName="text-xl" />
-            <StatTile label={t({ ko: '오류', en: 'Errors' })} value={formatNumber(watchersHealth?.error ?? 0)} valueClassName="text-xl" />
-            <StatTile label={t({ ko: '24시간 이벤트', en: 'Events 24h' })} value={formatNumber(watchersHealth?.totalEvents24h ?? 0)} valueClassName="text-xl" />
-          </div>
+          <SettingsStatLine
+            className="pb-2"
+            items={[
+              { label: t({ ko: '감시 중', en: 'Watching' }), value: formatNumber(watchersHealth?.watching ?? 0) },
+              { label: t({ ko: '오류', en: 'Errors' }), value: formatNumber(watchersHealth?.error ?? 0), tone: (watchersHealth?.error ?? 0) > 0 ? 'danger' : 'default' },
+              { label: t({ ko: '24시간 이벤트', en: 'Events 24h' }), value: formatNumber(watchersHealth?.totalEvents24h ?? 0) },
+            ]}
+          />
 
           {/* 전체 스캔은 60초를 훌쩍 넘기므로, 응답을 기다리는 대신 잡 진행률을 그대로 보여준다. */}
           <RuntimeJobProgress
             job={scanAllJob}
             cancel={onCancelScanAll}
             isCancelling={isCancellingScanAll}
-            className="mt-4"
+            className="pb-3"
           />
-        </Section>
 
-        <section className="space-y-4">
-          {foldersLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-sm" />
-              ))}
-            </div>
-          ) : null}
+          {foldersLoading ? <SettingsRowsSkeleton rows={2} /> : null}
 
           {foldersError ? (
             <Alert variant="destructive">
@@ -201,48 +199,38 @@ export function FoldersTab({
           ) : null}
 
           {!foldersLoading && !foldersError ? (
-            <Section
-              variant="settings"
-              heading={t({ ko: '등록된 감시 폴더', en: 'Registered watched folders' })}
-              actions={
-                <IconButton size="icon-sm" onClick={() => setIsAddFolderModalOpen(true)} label={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}>
-                  <Plus className="h-4 w-4" />
-                </IconButton>
-              }
-              bodyClassName="px-0 py-0"
-            >
-              {folders.length > 0 ? (
-                <SettingsResourceTable
-                  gridClassName={WATCHED_FOLDER_TABLE_GRID}
-                  stackBelow="3xl"
-                  headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '경로', en: 'Path' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
-                >
-                  {folders.map((folder) => (
-                    <WatchedFolderListItem
-                      key={folder.id}
-                      folder={folder}
-                      watcherState={folderWatcherMap.get(folder.id)}
-                      selected={selectedFolderId === folder.id}
-                      gridClassName={WATCHED_FOLDER_TABLE_GRID}
-                      onOpenOptions={setSelectedFolderId}
-                    />
-                  ))}
-                </SettingsResourceTable>
-              ) : (
-                <div className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '등록된 감시 폴더가 없어.', en: 'No registered watched folders yet.' })}</div>
-              )}
-            </Section>
+            folders.length > 0 ? (
+              <SettingsResourceTable
+                gridClassName={WATCHED_FOLDER_TABLE_GRID}
+                stackBelow="3xl"
+                headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '경로', en: 'Path' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
+              >
+                {folders.map((folder) => (
+                  <WatchedFolderListItem
+                    key={folder.id}
+                    folder={folder}
+                    watcherState={folderWatcherMap.get(folder.id)}
+                    selected={selectedFolderId === folder.id}
+                    gridClassName={WATCHED_FOLDER_TABLE_GRID}
+                    onOpenOptions={setSelectedFolderId}
+                  />
+                ))}
+              </SettingsResourceTable>
+            ) : (
+              <SettingsEmptyRow>{t({ ko: '등록된 감시 폴더가 없어.', en: 'No registered watched folders yet.' })}</SettingsEmptyRow>
+            )
           ) : null}
-        </section>
+        </RowGroup>
 
-        <section className="space-y-4">
-          {backupSourcesLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 2 }).map((_, index) => (
-                <Skeleton key={index} className="h-20 w-full rounded-sm" />
-              ))}
-            </div>
-          ) : null}
+        <RowGroup
+          heading={t({ ko: '백업 소스', en: 'Backup sources' })}
+          actions={(
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setIsAddBackupSourceModalOpen(true)} label={t({ ko: '백업 소스 추가', en: 'Add backup source' })}>
+              <Plus className="h-4 w-4" />
+            </IconButton>
+          )}
+        >
+          {backupSourcesLoading ? <SettingsRowsSkeleton rows={2} /> : null}
 
           {backupSourcesError ? (
             <Alert variant="destructive">
@@ -252,81 +240,63 @@ export function FoldersTab({
           ) : null}
 
           {!backupSourcesLoading && !backupSourcesError ? (
-            <Section
-              variant="settings"
-              heading={t({ ko: '등록된 백업 소스', en: 'Registered backup sources' })}
-              actions={
-                <IconButton size="icon-sm" onClick={() => setIsAddBackupSourceModalOpen(true)} label={t({ ko: '백업 소스 추가', en: 'Add backup source' })}>
-                  <Plus className="h-4 w-4" />
-                </IconButton>
-              }
-              bodyClassName="px-0 py-0"
-            >
-              {backupSources.length > 0 ? (
-                <SettingsResourceTable
-                  gridClassName={BACKUP_SOURCE_TABLE_GRID}
-                  stackBelow="4xl"
-                  headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '원본 경로', en: 'Source path' }), t({ ko: '대상', en: 'Target' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
-                >
-                  {backupSources.map((source) => (
-                    <BackupSourceListItem
-                      key={source.id}
-                      source={source}
-                      selected={selectedBackupSourceId === source.id}
-                      gridClassName={BACKUP_SOURCE_TABLE_GRID}
-                      onOpenOptions={setSelectedBackupSourceId}
-                    />
-                  ))}
-                </SettingsResourceTable>
-              ) : (
-                <div className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '등록된 백업 소스가 없어.', en: 'No registered backup sources yet.' })}</div>
-              )}
-            </Section>
-          ) : null}
-        </section>
-
-        <section className="space-y-4">
-          <Section variant="settings" heading={t({ ko: '최근 스캔 로그', en: 'Recent scan logs' })} bodyClassName="px-0 py-0">
-            {scanLogsLoading ? (
-              <div className="space-y-2 px-4 py-4">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Skeleton key={index} className="h-14 w-full rounded-sm" />
-                ))}
-              </div>
-            ) : null}
-
-            {!scanLogsLoading && scanLogs.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '최근 스캔 로그가 없어.', en: 'No recent scan logs.' })}</p> : null}
-
-            {!scanLogsLoading && scanLogs.length > 0 ? (
+            backupSources.length > 0 ? (
               <SettingsResourceTable
-                gridClassName={SCAN_LOG_TABLE_GRID}
+                gridClassName={BACKUP_SOURCE_TABLE_GRID}
                 stackBelow="4xl"
-                headers={[t({ ko: '폴더', en: 'Folder' }), t({ ko: '상태', en: 'Status' }), t({ ko: '스캔', en: 'Scanned' }), t({ ko: '신규', en: 'New' }), t({ ko: '기존', en: 'Existing' }), t({ ko: '오류', en: 'Errors' }), t({ ko: '시각', en: 'Time' })]}
+                headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '원본 경로', en: 'Source path' }), t({ ko: '대상', en: 'Target' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
               >
-                {scanLogs.map((log) => (
-                  <SettingsResourceStackedCells
-                    key={log.id}
-                    gridClassName={SCAN_LOG_TABLE_GRID}
-                    labelledFrom={1}
-                    className="text-sm transition-colors hover:bg-surface-high/60"
-                    cells={[
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-foreground">{getScanLogFolderLabel(log)}</div>
-                        {log.folder_path ? <div className="truncate font-mono text-2xs text-muted-foreground">{log.folder_path}</div> : null}
-                      </div>,
-                      <span className={`text-xs ${log.status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{getScanStatusLabel(log.status, t)}</span>,
-                      <span className="font-medium text-foreground">{formatNumber(log.total_scanned ?? 0)}</span>,
-                      <span className="font-medium text-foreground">{formatNumber(log.new_images ?? 0)}</span>,
-                      <span className="font-medium text-foreground">{formatNumber(log.existing_images ?? 0)}</span>,
-                      <span className="font-medium text-foreground">{formatNumber(log.error_count ?? 0)}</span>,
-                      <span className="text-xs text-muted-foreground">{formatDateTime(log.scan_date, locale)}</span>,
-                    ]}
+                {backupSources.map((source) => (
+                  <BackupSourceListItem
+                    key={source.id}
+                    source={source}
+                    selected={selectedBackupSourceId === source.id}
+                    gridClassName={BACKUP_SOURCE_TABLE_GRID}
+                    onOpenOptions={setSelectedBackupSourceId}
                   />
                 ))}
               </SettingsResourceTable>
-            ) : null}
-          </Section>
-        </section>
+            ) : (
+              <SettingsEmptyRow>{t({ ko: '등록된 백업 소스가 없어.', en: 'No registered backup sources yet.' })}</SettingsEmptyRow>
+            )
+          ) : null}
+        </RowGroup>
+
+        <RowGroup heading={t({ ko: '최근 스캔 로그', en: 'Recent scan logs' })}>
+          {scanLogsLoading ? <SettingsRowsSkeleton rows={3} /> : null}
+
+          {!scanLogsLoading && scanLogs.length === 0 ? <SettingsEmptyRow>{t({ ko: '최근 스캔 로그가 없어.', en: 'No recent scan logs.' })}</SettingsEmptyRow> : null}
+
+          {!scanLogsLoading && scanLogs.length > 0 ? (
+            <SettingsResourceTable
+              gridClassName={SCAN_LOG_TABLE_GRID}
+              stackBelow="4xl"
+              centerFrom={2}
+              headers={[t({ ko: '폴더', en: 'Folder' }), t({ ko: '상태', en: 'Status' }), t({ ko: '스캔', en: 'Scanned' }), t({ ko: '신규', en: 'New' }), t({ ko: '기존', en: 'Existing' }), t({ ko: '오류', en: 'Errors' }), t({ ko: '시각', en: 'Time' })]}
+            >
+              {scanLogs.map((log) => (
+                <SettingsResourceStackedCells
+                  key={log.id}
+                  gridClassName={SCAN_LOG_TABLE_GRID}
+                  labelledFrom={1}
+                  className="text-sm transition-colors hover:bg-fill"
+                  cells={[
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-foreground">{getScanLogFolderLabel(log)}</div>
+                      {log.folder_path ? <div className="truncate font-mono text-2xs text-muted-foreground">{log.folder_path}</div> : null}
+                    </div>,
+                    <span className={log.status === 'error' ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>{getScanStatusLabel(log.status, t)}</span>,
+                    <span className="font-medium text-foreground tabular-nums">{formatNumber(log.total_scanned ?? 0)}</span>,
+                    <span className="font-medium text-foreground tabular-nums">{formatNumber(log.new_images ?? 0)}</span>,
+                    <span className="font-medium text-foreground tabular-nums">{formatNumber(log.existing_images ?? 0)}</span>,
+                    <span className="font-medium text-foreground tabular-nums">{formatNumber(log.error_count ?? 0)}</span>,
+                    <span className="text-xs text-muted-foreground">{formatDateTime(log.scan_date, locale)}</span>,
+                  ]}
+                />
+              ))}
+            </SettingsResourceTable>
+          ) : null}
+        </RowGroup>
       </div>
 
       <Modal

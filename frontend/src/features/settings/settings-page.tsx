@@ -524,14 +524,14 @@ export function SettingsPage() {
       <div>
         <Suspense fallback={<SettingsSectionFallback />}>
           {activeTab === 'general' ? (
-            <div className="space-y-10">
+            <div className="space-y-8">
               <GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} />
               <AppearanceTabLazy {...appearanceTabProps} />
             </div>
           ) : null}
 
           {activeTab === 'library' ? (
-            <div className="space-y-10">
+            <div className="space-y-8">
               <GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} />
               <FoldersTabLazy {...foldersTabProps} />
               <MetadataTabLazy
@@ -554,7 +554,7 @@ export function SettingsPage() {
           ) : null}
 
           {activeTab === 'generation' ? (
-            <div className="space-y-10">
+            <div className="space-y-8">
               <ImageSaveTabLazy
                 {...imageSaveTabProps}
                 showMediaSettings={false}
@@ -567,7 +567,7 @@ export function SettingsPage() {
           {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
 
           {activeTab === 'system' ? (
-            <div className="space-y-10">
+            <div className="space-y-8">
               <McpHttpSettingsCardLazy />
               <GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} />
             </div>
