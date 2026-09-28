@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { FlaskConical, LoaderCircle, Save, Trash2, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -21,7 +21,7 @@ import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { ToggleRow } from '@/components/ui/toggle-row'
+import { SettingsSwitchRow } from './settings-switch-row'
 import { SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
 import {
   LLM_CONNECTIONS_TABLE_GRID,
@@ -199,14 +199,12 @@ function LlmConnectionFormFields({
         />
       </Field>
 
-      <ToggleRow className="md:col-span-2 justify-between gap-4">
-        <span className="text-sm text-foreground">{t({ ko: '연결 활성화', en: 'Enable connection' })}</span>
-        <input
-          type="checkbox"
-          checked={draft.isEnabled}
-          onChange={(event) => onChange({ isEnabled: event.target.checked })}
-        />
-      </ToggleRow>
+      <SettingsSwitchRow
+        className="md:col-span-2"
+        checked={draft.isEnabled}
+        onCheckedChange={(checked) => onChange({ isEnabled: checked })}
+        label={t({ ko: '연결 활성화', en: 'Enable connection' })}
+      />
     </div>
   )
 }
@@ -393,26 +391,22 @@ export function LlmConnectionEditorModal({
       <ModalFooter>
         {isEditMode ? (
           <>
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
               variant="outline"
               onClick={() => void testMutation.mutateAsync()}
               disabled={testMutation.isPending || isSaving}
-              aria-label={t('llmConnectionsTab.testConnection')}
-              title={t('llmConnectionsTab.testConnection')}
+              label={t('llmConnectionsTab.testConnection')}
             >
               {testMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
-            </Button>
-            <Button
-              type="button"
+            </IconButton>
+            <IconButton
               size="icon-sm"
               variant="destructive"
               onClick={async () => {
                 if (!provider) {
                   return
                 }
-
                 const confirmed = await confirm({
                   title: t({ ko: '연결 삭제', en: 'Delete connection' }),
                   description: t({ ko: "연결 '{providerName}' 을(를) 삭제할까?", en: "Delete connection '{providerName}'?" }, { providerName: provider.provider_name }),
@@ -424,26 +418,23 @@ export function LlmConnectionEditorModal({
                 }
               }}
               disabled={deleteMutation.isPending || isSaving}
-              aria-label={t('llmConnectionsTab.deleteConnection')}
-              title={t('llmConnectionsTab.deleteConnection')}
+              label={t('llmConnectionsTab.deleteConnection')}
             >
               {deleteMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </Button>
+            </IconButton>
           </>
         ) : null}
-        <Button type="button" size="icon-sm" variant="outline" onClick={onClose} disabled={isSaving} aria-label={t({ ko: '취소', en: 'Cancel' })} title={t({ ko: '취소', en: 'Cancel' })}>
+        <IconButton size="icon-sm" variant="outline" onClick={onClose} disabled={isSaving} label={t({ ko: '취소', en: 'Cancel' })}>
           <X className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
+        </IconButton>
+        <IconButton
           size="icon-sm"
           onClick={() => void (isEditMode ? updateMutation.mutateAsync() : createMutation.mutateAsync())}
           disabled={!canSave || isSaving}
-          aria-label={isEditMode ? t('llmConnectionsTab.saveConnection') : t('llmConnectionsTab.createAndSaveConnection')}
-          title={isEditMode ? t('llmConnectionsTab.saveConnection') : t('llmConnectionsTab.createAndSaveConnection')}
+          label={isEditMode ? t('llmConnectionsTab.saveConnection') : t('llmConnectionsTab.createAndSaveConnection')}
         >
           {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        </Button>
+        </IconButton>
       </ModalFooter>
     </Modal>
   )
@@ -501,8 +492,7 @@ export function LlmPresetEditorModal({
 
       <ModalFooter>
         {preset ? (
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
             variant="destructive"
             disabled={isSaving || isDeleting}
@@ -517,25 +507,22 @@ export function LlmPresetEditorModal({
                 void onDelete(preset)
               }
             }}
-            aria-label={t('llmConnectionsTab.deletePreset')}
-            title={t('llmConnectionsTab.deletePreset')}
+            label={t('llmConnectionsTab.deletePreset')}
           >
             {isDeleting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-          </Button>
+          </IconButton>
         ) : null}
-        <Button type="button" size="icon-sm" variant="outline" onClick={onClose} disabled={isSaving || isDeleting} aria-label={t({ ko: '취소', en: 'Cancel' })} title={t({ ko: '취소', en: 'Cancel' })}>
+        <IconButton size="icon-sm" variant="outline" onClick={onClose} disabled={isSaving || isDeleting} label={t({ ko: '취소', en: 'Cancel' })}>
           <X className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
+        </IconButton>
+        <IconButton
           size="icon-sm"
           onClick={() => void onSave(draft)}
           disabled={!canSave || isSaving || isDeleting}
-          aria-label={preset ? t('llmConnectionsTab.savePreset') : t({ ko: '{fieldLabel} 저장', en: 'Save {fieldLabel}' }, { fieldLabel: t(section.fieldLabel) })}
-          title={preset ? t('llmConnectionsTab.savePreset') : t({ ko: '{fieldLabel} 저장', en: 'Save {fieldLabel}' }, { fieldLabel: t(section.fieldLabel) })}
+          label={preset ? t('llmConnectionsTab.savePreset') : t({ ko: '{fieldLabel} 저장', en: 'Save {fieldLabel}' }, { fieldLabel: t(section.fieldLabel) })}
         >
           {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        </Button>
+        </IconButton>
       </ModalFooter>
     </Modal>
   )

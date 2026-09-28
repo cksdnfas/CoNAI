@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Clock3, KeyRound, Shield, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { cn } from '@/lib/utils'
@@ -115,36 +115,30 @@ export function SecurityAccountManagementList({
             </div>
 
             <div className="flex shrink-0 flex-wrap justify-end gap-1">
-              <Button
-                type="button"
+              <IconButton
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => openAccountEditor(account.id, 'group')}
-                title={t({ ko: '그룹 설정', en: 'Group settings' })}
-                aria-label={t({ ko: '그룹 설정', en: 'Group settings' })}
+                label={t({ ko: '그룹 설정', en: 'Group settings' })}
               >
                 <Shield className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
+              </IconButton>
+              <IconButton
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => openAccountEditor(account.id, 'password')}
-                title={t({ ko: '비밀번호 변경', en: 'Change password' })}
-                aria-label={t({ ko: '비밀번호 변경', en: 'Change password' })}
+                label={t({ ko: '비밀번호 변경', en: 'Change password' })}
               >
                 <KeyRound className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
+              </IconButton>
+              <IconButton
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => openAccountEditor(account.id, 'danger')}
-                title={t({ ko: '계정 삭제', en: 'Delete account' })}
-                aria-label={t({ ko: '계정 삭제', en: 'Delete account' })}
+                label={t({ ko: '계정 삭제', en: 'Delete account' })}
               >
                 <Trash2 className="h-4 w-4" />
-              </Button>
+              </IconButton>
               {renderExtraActions?.(account)}
             </div>
           </div>

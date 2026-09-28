@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getExternalApiProviders } from '@/lib/api-external-api'
 import { getAppSettings } from '@/lib/api-settings-general'
@@ -158,15 +158,13 @@ export function LlmConnectionsTab() {
         variant="settings"
         heading={t('llmConnectionsTab.llmConnections')}
         actions={
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
             onClick={() => setConnectionModalState({ mode: 'create' })}
-            aria-label={t('llmConnectionsTab.addConnection')}
-            title={t('llmConnectionsTab.addConnection')}
+            label={t('llmConnectionsTab.addConnection')}
           >
             <Plus className="h-4 w-4" />
-          </Button>
+          </IconButton>
         }
         bodyClassName="px-0 py-0"
       >
@@ -205,15 +203,13 @@ export function LlmConnectionsTab() {
             key={section.key}
             heading={t(section.heading)}
             actions={
-              <Button
-                type="button"
+              <IconButton
                 size="icon-sm"
                 onClick={() => setPresetModalState({ mode: 'create', presetType: section.key })}
-                aria-label={t(section.addLabel)}
-                title={t(section.addLabel)}
+                label={t(section.addLabel)}
               >
                 <Plus className="h-4 w-4" />
-              </Button>
+              </IconButton>
             }
             bodyClassName="px-0 py-0"
           >

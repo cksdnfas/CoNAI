@@ -1,6 +1,6 @@
 import { Upload, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@conai/shared'
@@ -276,28 +276,24 @@ export function UploadedFontCard({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-semibold text-foreground">{label}</div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
             variant="outline"
             onClick={onUpload}
             disabled={isUploadingFont}
-            aria-label={t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
-            title={t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
+            label={t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
           >
             <Upload className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
+          </IconButton>
+          <IconButton
             size="icon-sm"
             variant="outline"
             onClick={onClear}
             disabled={!hasUploadedFont}
-            aria-label={t({ ko: '{label} 해제', en: 'Clear {label}' }, { label })}
-            title={t({ ko: '{label} 해제', en: 'Clear {label}' }, { label })}
+            label={t({ ko: '{label} 해제', en: 'Clear {label}' }, { label })}
           >
             <X className="h-4 w-4" />
-          </Button>
+          </IconButton>
         </div>
       </div>
 

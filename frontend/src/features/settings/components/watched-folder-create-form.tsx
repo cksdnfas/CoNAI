@@ -1,10 +1,10 @@
 import { Input } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import type { NewWatchedFolderDraft } from '../settings-utils'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 interface WatchedFolderCreateFormProps {
   newFolder: NewWatchedFolderDraft
@@ -56,18 +56,21 @@ export function WatchedFolderCreateForm({
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
-        <ToggleRow>
-          <input type="checkbox" checked={newFolder.auto_scan} onChange={(event) => onNewFolderChange({ auto_scan: event.target.checked })} />
-          {t({ ko: '자동 스캔', en: 'Auto scan' })}
-        </ToggleRow>
-        <ToggleRow>
-          <input type="checkbox" checked={newFolder.recursive} onChange={(event) => onNewFolderChange({ recursive: event.target.checked })} />
-          {t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
-        </ToggleRow>
-        <ToggleRow>
-          <input type="checkbox" checked={newFolder.watcher_enabled} onChange={(event) => onNewFolderChange({ watcher_enabled: event.target.checked })} />
-          {t({ ko: '실시간 감시 시작', en: 'Start watching' })}
-        </ToggleRow>
+        <SettingsSwitchRow
+          checked={newFolder.auto_scan}
+          onCheckedChange={(checked) => onNewFolderChange({ auto_scan: checked })}
+          label={t({ ko: '자동 스캔', en: 'Auto scan' })}
+        />
+        <SettingsSwitchRow
+          checked={newFolder.recursive}
+          onCheckedChange={(checked) => onNewFolderChange({ recursive: checked })}
+          label={t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
+        />
+        <SettingsSwitchRow
+          checked={newFolder.watcher_enabled}
+          onCheckedChange={(checked) => onNewFolderChange({ watcher_enabled: checked })}
+          label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}
+        />
       </div>
 
       <SettingsResourceCreateActionRow

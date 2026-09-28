@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { IconButton } from '@/components/ui/icon-button'
 import { Play, RotateCcw, ScanSearch, Square } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { WatchedFolder, WatchedFolderUpdateInput } from '@/types/folder'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { formatDateTime, parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
 import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import {
   SettingsResourceFooterActions,
@@ -18,6 +17,7 @@ import {
   getWatcherStateLabel,
 } from './settings-resource-shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 interface WatchedFolderCardProps {
   folder: WatchedFolder
@@ -86,18 +86,18 @@ export function WatchedFolderCard({
       bodyClassName="space-y-5"
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onScan(folder.id))} title={t({ ko: '폴더 스캔', en: 'Scan folder' })} aria-label={t({ ko: '폴더 스캔', en: 'Scan folder' })}>
+          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onScan(folder.id))} label={t({ ko: '폴더 스캔', en: 'Scan folder' })}>
             <ScanSearch className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(folder.id))} title={t({ ko: '실시간 감시 시작', en: 'Start watching' })} aria-label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(folder.id))} label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
             <Play className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(folder.id))} title={t({ ko: '실시간 감시 중지', en: 'Stop watching' })} aria-label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(folder.id))} label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
             <Square className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(folder.id))} title={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })} aria-label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(folder.id))} label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
             <RotateCcw className="h-4 w-4" />
-          </Button>
+          </IconButton>
         </div>
       }
     >
@@ -130,29 +130,29 @@ export function WatchedFolderCard({
           <Input variant="settings" value={draft.exclude_patterns} onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))} placeholder={t({ ko: '@eaDir, thumbs, cache', en: '@eaDir, thumbs, cache' })} />
         </Field>
 
-        <ToggleRow>
-          <input type="checkbox" checked={draft.auto_scan} onChange={(event) => setDraft((current) => ({ ...current, auto_scan: event.target.checked }))} />
-          {t({ ko: '자동 스캔', en: 'Auto scan' })}
-        </ToggleRow>
+        <SettingsSwitchRow
+          checked={draft.auto_scan}
+          onCheckedChange={(checked) => setDraft((current) => ({ ...current, auto_scan: checked }))}
+          label={t({ ko: '자동 스캔', en: 'Auto scan' })}
+        />
 
-        <ToggleRow>
-          <input type="checkbox" checked={draft.recursive} onChange={(event) => setDraft((current) => ({ ...current, recursive: event.target.checked }))} />
-          {t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
-        </ToggleRow>
+        <SettingsSwitchRow
+          checked={draft.recursive}
+          onCheckedChange={(checked) => setDraft((current) => ({ ...current, recursive: checked }))}
+          label={t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
+        />
 
-        <ToggleRow>
-          <input
-            type="checkbox"
-            checked={draft.watcher_enabled}
-            onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
-          />
-          {t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
-        </ToggleRow>
+        <SettingsSwitchRow
+          checked={draft.watcher_enabled}
+          onCheckedChange={(checked) => setDraft((current) => ({ ...current, watcher_enabled: checked }))}
+          label={t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
+        />
 
-        <ToggleRow>
-          <input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />
-          {t({ ko: '폴더 활성화', en: 'Folder active' })}
-        </ToggleRow>
+        <SettingsSwitchRow
+          checked={draft.is_active}
+          onCheckedChange={(checked) => setDraft((current) => ({ ...current, is_active: checked }))}
+          label={t({ ko: '폴더 활성화', en: 'Folder active' })}
+        />
       </div>
 
       <SettingsResourceMetaList

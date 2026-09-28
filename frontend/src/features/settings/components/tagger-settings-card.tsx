@@ -4,10 +4,10 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TaggerModelInfo, TaggerSettings } from '@conai/shared'
 import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 interface TaggerSettingsCardProps {
   heading: ReactNode
@@ -37,20 +37,20 @@ export function TaggerSettingsCard({
       <div className="grid gap-4 md:grid-cols-2">
         {taggerDraft ? (
           <>
-            <ToggleRow className="md:col-span-2">
-              <input type="checkbox" checked={taggerDraft.enabled} onChange={(event) => onPatchTagger({ enabled: event.target.checked })} />
-              {t({ ko: 'WD Tagger 활성화', en: 'Enable WD Tagger' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={taggerDraft.enabled}
+              onCheckedChange={(checked) => onPatchTagger({ enabled: checked })}
+              label={t({ ko: 'WD Tagger 활성화', en: 'Enable WD Tagger' })}
+              className="md:col-span-2"
+            />
 
-            <ToggleRow className="md:col-span-2">
-              <input
-                type="checkbox"
-                checked={taggerDraft.autoTagOnUpload}
-                disabled={!isEnabled}
-                onChange={(event) => onPatchTagger({ autoTagOnUpload: event.target.checked })}
-              />
-              {t({ ko: '업로드 시 자동 태깅', en: 'Auto tag on upload' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={taggerDraft.autoTagOnUpload}
+              disabled={!isEnabled}
+              onCheckedChange={(checked) => onPatchTagger({ autoTagOnUpload: checked })}
+              label={t({ ko: '업로드 시 자동 태깅', en: 'Auto tag on upload' })}
+              className="md:col-span-2"
+            />
 
             <Field label={t({ ko: '모델', en: 'Model' })}>
               <Select variant="settings" value={taggerDraft.model} disabled={!isEnabled} onChange={(event) => onPatchTagger({ model: event.target.value as TaggerSettings['model'] })}>
@@ -82,15 +82,12 @@ export function TaggerSettingsCard({
               <Input variant="settings" value={taggerDraft.pythonPath} disabled={!isEnabled} onChange={(event) => onPatchTagger({ pythonPath: event.target.value })} placeholder="python" />
             </Field>
 
-            <ToggleRow>
-              <input
-                type="checkbox"
-                checked={taggerDraft.keepModelLoaded}
-                disabled={!isEnabled}
-                onChange={(event) => onPatchTagger({ keepModelLoaded: event.target.checked })}
-              />
-              {t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={taggerDraft.keepModelLoaded}
+              disabled={!isEnabled}
+              onCheckedChange={(checked) => onPatchTagger({ keepModelLoaded: checked })}
+              label={t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
+            />
 
             <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <NumberStepperInput min={1} variant="settings" disabled={!isEnabled} value={taggerDraft.autoUnloadMinutes} onValueCommit={(nextValue) => onPatchTagger({ autoUnloadMinutes: Number(nextValue) || 1 })} />

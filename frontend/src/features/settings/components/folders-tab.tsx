@@ -8,7 +8,7 @@ import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft }
 import { Modal } from '@/components/ui/modal'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Section } from '@/components/ui/section'
-import { getScanStatusLabel, SettingsResourceTable } from './settings-resource-shared'
+import { getScanStatusLabel, SettingsResourceStackedCells, SettingsResourceTable } from './settings-resource-shared'
 import { WatchedFolderCard } from './watched-folder-card'
 import { WatchedFolderListItem } from './watched-folder-list-item'
 import { WatchedFolderCreateForm } from './watched-folder-create-form'
@@ -19,9 +19,10 @@ import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
 import { useI18n } from '@/i18n'
 
-const WATCHED_FOLDER_TABLE_GRID = 'grid-cols-[minmax(180px,1.05fr)_minmax(420px,2.4fr)_72px_72px_56px] gap-3'
-const BACKUP_SOURCE_TABLE_GRID = 'grid-cols-[minmax(180px,0.95fr)_minmax(280px,1.55fr)_minmax(240px,1.25fr)_72px_72px_56px] gap-3'
-const SCAN_LOG_TABLE_GRID = 'grid-cols-[minmax(180px,1fr)_120px_88px_88px_88px_88px_120px] gap-3'
+// Tables switch to labelled cards below these container widths (see SettingsResourceTable `stackBelow`).
+const WATCHED_FOLDER_TABLE_GRID = '@3xl:grid-cols-[minmax(160px,1fr)_minmax(240px,2.4fr)_72px_72px_56px]'
+const BACKUP_SOURCE_TABLE_GRID = '@4xl:grid-cols-[minmax(150px,0.95fr)_minmax(200px,1.55fr)_minmax(160px,1.25fr)_72px_72px_56px]'
+const SCAN_LOG_TABLE_GRID = '@4xl:grid-cols-[minmax(160px,1fr)_110px_80px_80px_80px_80px_120px]'
 
 interface FoldersTabProps {
   newFolder: NewWatchedFolderDraft
@@ -217,7 +218,7 @@ export function FoldersTab({
               {folders.length > 0 ? (
                 <SettingsResourceTable
                   gridClassName={WATCHED_FOLDER_TABLE_GRID}
-                  minWidthClassName="min-w-[860px]"
+                  stackBelow="3xl"
                   headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '경로', en: 'Path' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
                 >
                   {folders.map((folder) => (
@@ -268,7 +269,7 @@ export function FoldersTab({
               {backupSources.length > 0 ? (
                 <SettingsResourceTable
                   gridClassName={BACKUP_SOURCE_TABLE_GRID}
-                  minWidthClassName="min-w-[1120px]"
+                  stackBelow="4xl"
                   headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '원본 경로', en: 'Source path' }), t({ ko: '대상', en: 'Target' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
                 >
                   {backupSources.map((source) => (
@@ -303,22 +304,28 @@ export function FoldersTab({
             {!scanLogsLoading && scanLogs.length > 0 ? (
               <SettingsResourceTable
                 gridClassName={SCAN_LOG_TABLE_GRID}
-                minWidthClassName="min-w-[980px]"
+                stackBelow="4xl"
                 headers={[t({ ko: '폴더', en: 'Folder' }), t({ ko: '상태', en: 'Status' }), t({ ko: '스캔', en: 'Scanned' }), t({ ko: '신규', en: 'New' }), t({ ko: '기존', en: 'Existing' }), t({ ko: '오류', en: 'Errors' }), t({ ko: '시각', en: 'Time' })]}
               >
                 {scanLogs.map((log) => (
-                  <div key={log.id} className={`grid items-center px-4 py-3 text-sm transition-colors hover:bg-surface-high/60 ${SCAN_LOG_TABLE_GRID}`}>
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-foreground">{getScanLogFolderLabel(log)}</div>
-                      {log.folder_path ? <div className="truncate font-mono text-[11px] text-muted-foreground">{log.folder_path}</div> : null}
-                    </div>
-                    <div className={`text-center text-xs ${log.status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{getScanStatusLabel(log.status, t)}</div>
-                    <div className="text-center font-medium text-foreground">{formatNumber(log.total_scanned ?? 0)}</div>
-                    <div className="text-center font-medium text-foreground">{formatNumber(log.new_images ?? 0)}</div>
-                    <div className="text-center font-medium text-foreground">{formatNumber(log.existing_images ?? 0)}</div>
-                    <div className="text-center font-medium text-foreground">{formatNumber(log.error_count ?? 0)}</div>
-                    <div className="text-center text-xs text-muted-foreground">{formatDateTime(log.scan_date, locale)}</div>
-                  </div>
+                  <SettingsResourceStackedCells
+                    key={log.id}
+                    gridClassName={SCAN_LOG_TABLE_GRID}
+                    labelledFrom={1}
+                    className="text-sm transition-colors hover:bg-surface-high/60"
+                    cells={[
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-foreground">{getScanLogFolderLabel(log)}</div>
+                        {log.folder_path ? <div className="truncate font-mono text-[11px] text-muted-foreground">{log.folder_path}</div> : null}
+                      </div>,
+                      <span className={`text-xs ${log.status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{getScanStatusLabel(log.status, t)}</span>,
+                      <span className="font-medium text-foreground">{formatNumber(log.total_scanned ?? 0)}</span>,
+                      <span className="font-medium text-foreground">{formatNumber(log.new_images ?? 0)}</span>,
+                      <span className="font-medium text-foreground">{formatNumber(log.existing_images ?? 0)}</span>,
+                      <span className="font-medium text-foreground">{formatNumber(log.error_count ?? 0)}</span>,
+                      <span className="text-xs text-muted-foreground">{formatDateTime(log.scan_date, locale)}</span>,
+                    ]}
+                  />
                 ))}
               </SettingsResourceTable>
             ) : null}

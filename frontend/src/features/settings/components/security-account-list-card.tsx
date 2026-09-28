@@ -1,9 +1,9 @@
 import { Palette } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { SecurityAccountManagementList } from './security-account-management-list'
 import { Section } from '@/components/ui/section'
+import { IconButton } from '@/components/ui/icon-button'
 import type { SecurityGroupColorMap } from './security-group-color-utils'
 
 interface SecurityAccountListCardProps {
@@ -43,16 +43,14 @@ export function SecurityAccountListCard({
         variant="settings"
         heading={t({ ko: '계정', en: 'Accounts' })}
         actions={(
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
             variant="outline"
             onClick={onOpenGroupColors}
-            aria-label={t('securityGroupColorEditorModal.permissionGroupColors')}
-            title={t('securityGroupColorEditorModal.permissionGroupColors')}
+            label={t('securityGroupColorEditorModal.permissionGroupColors')}
           >
             <Palette className="h-4 w-4" />
-          </Button>
+          </IconButton>
         )}
       >
         {isLoading ? (

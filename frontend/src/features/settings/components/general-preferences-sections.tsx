@@ -7,6 +7,8 @@ import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { ToggleRow } from '@/components/ui/toggle-row'
+import { Checkbox } from '@/components/ui/checkbox'
+import { SettingsSwitchRow } from './settings-switch-row'
 import { Section } from '@/components/ui/section'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
@@ -79,14 +81,11 @@ export function GeneralPreferencesSections({
                 <option value="en">{t({ ko: '영어', en: 'English' })}</option>
               </Select>
             </Field>
-            <ToggleRow>
-              <input
-                type="checkbox"
-                checked={generalDraft.promptForDownloadLocation ?? false}
-                onChange={(event) => onPatchGeneral({ promptForDownloadLocation: event.target.checked })}
-              />
-              {t({ ko: '다운로드할 때 파일명과 저장 위치 확인', en: 'Ask for file name and save location' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={generalDraft.promptForDownloadLocation ?? false}
+              onCheckedChange={(checked) => onPatchGeneral({ promptForDownloadLocation: checked })}
+              label={t({ ko: '다운로드할 때 파일명과 저장 위치 확인', en: 'Ask for file name and save location' })}
+            />
           </div>
         </Section>
       ) : null}
@@ -94,25 +93,26 @@ export function GeneralPreferencesSections({
       {visibleSections.has('appearance') ? (
         <Section variant="settings" heading={t({ ko: '탐색 및 표시', en: 'Navigation and display' })} actions={<SectionDirtyBadge dirty={isSectionDirty('appearance')} />}>
           <div className="grid gap-4 md:grid-cols-2">
-            <ToggleRow>
-              <input type="checkbox" checked={generalDraft.enableGallery ?? true} onChange={(event) => onPatchGeneral({ enableGallery: event.target.checked })} />
-              {t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}
-            </ToggleRow>
-            <ToggleRow>
-              <input type="checkbox" checked={generalDraft.showRatingBadges ?? true} onChange={(event) => onPatchGeneral({ showRatingBadges: event.target.checked })} />
-              {t({ ko: '등급 배지 표시', en: 'Show rating badges' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={generalDraft.enableGallery ?? true}
+              onCheckedChange={(checked) => onPatchGeneral({ enableGallery: checked })}
+              label={t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}
+            />
+            <SettingsSwitchRow
+              checked={generalDraft.showRatingBadges ?? true}
+              onCheckedChange={(checked) => onPatchGeneral({ showRatingBadges: checked })}
+              label={t({ ko: '등급 배지 표시', en: 'Show rating badges' })}
+            />
             <Inset className="md:col-span-2">
               <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {t({ ko: '상단 네비 표시', en: 'Header navigation' })}
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {HEADER_NAVIGATION_OPTIONS.map((option) => (
-                  <ToggleRow key={option.key}>
-                    <input
-                      type="checkbox"
+                  <ToggleRow key={option.key} className="cursor-pointer">
+                    <Checkbox
                       checked={(generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS)[option.key] ?? true}
-                      onChange={(event) => updateHeaderNavigationItem(option.key, event.target.checked)}
+                      onCheckedChange={(checked) => updateHeaderNavigationItem(option.key, checked === true)}
                     />
                     {t(option.label)}
                   </ToggleRow>
@@ -167,22 +167,24 @@ export function GeneralPreferencesSections({
                 }}
               />
             </Field>
-            <ToggleRow className="md:col-span-2">
-              <input type="checkbox" checked={generalDraft.deleteProtection.enabled} onChange={(event) => onPatchDeleteProtection({ enabled: event.target.checked })} />
-              {t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}
-            </ToggleRow>
-            <ToggleRow className="md:col-span-2">
-              <input type="checkbox" checked={generalDraft.autoCleanupCanvasOnShutdown ?? false} onChange={(event) => onPatchGeneral({ autoCleanupCanvasOnShutdown: event.target.checked })} />
-              {t({ ko: '종료 시 캔버스 임시 데이터 자동 정리', en: 'Clean up temporary canvas data on exit' })}
-            </ToggleRow>
-            <ToggleRow className="md:col-span-2">
-              <input
-                type="checkbox"
-                checked={generalDraft.applyRatingSafetyToGenerationHistory ?? false}
-                onChange={(event) => onPatchGeneral({ applyRatingSafetyToGenerationHistory: event.target.checked })}
-              />
-              {t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={generalDraft.deleteProtection.enabled}
+              onCheckedChange={(checked) => onPatchDeleteProtection({ enabled: checked })}
+              label={t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}
+              className="md:col-span-2"
+            />
+            <SettingsSwitchRow
+              checked={generalDraft.autoCleanupCanvasOnShutdown ?? false}
+              onCheckedChange={(checked) => onPatchGeneral({ autoCleanupCanvasOnShutdown: checked })}
+              label={t({ ko: '종료 시 캔버스 임시 데이터 자동 정리', en: 'Clean up temporary canvas data on exit' })}
+              className="md:col-span-2"
+            />
+            <SettingsSwitchRow
+              checked={generalDraft.applyRatingSafetyToGenerationHistory ?? false}
+              onCheckedChange={(checked) => onPatchGeneral({ applyRatingSafetyToGenerationHistory: checked })}
+              label={t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}
+              className="md:col-span-2"
+            />
           </div>
         </Section>
       ) : null}

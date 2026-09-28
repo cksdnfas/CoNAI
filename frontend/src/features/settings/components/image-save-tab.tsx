@@ -1,15 +1,16 @@
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { GenerationThrottleSettings, ImageSaveSettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { VideoOptimizationTab } from './video-optimization-tab'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
   { label: '720p', width: 1280, height: 720 },
@@ -95,16 +96,14 @@ export function ImageSaveTab({
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-base font-semibold text-foreground">{t({ ko: '예약작업', en: 'Reservations' })}</div>
-                  <Button
-                    type="button"
+                  <IconButton
                     size="icon-xs"
                     variant="ghost"
                     onClick={() => onPatchGenerationThrottle({ reservations: DEFAULT_GENERATION_THROTTLE_SETTINGS.reservations })}
-                    aria-label={t({ ko: '예약작업 실행 정책 초기값으로 되돌리기', en: 'Restore reservation policy defaults' })}
-                    title={t({ ko: '예약작업 초기값', en: 'Reservation defaults' })}
+                    label={t({ ko: '예약작업 실행 정책 초기값으로 되돌리기', en: 'Restore reservation policy defaults' })}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                  </Button>
+                  </IconButton>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label={t({ ko: '예약 동시 실행 수', en: 'Reservation concurrency' })}>
@@ -130,16 +129,14 @@ export function ImageSaveTab({
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-base font-semibold text-foreground">NovelAI</div>
-                  <Button
-                    type="button"
+                  <IconButton
                     size="icon-xs"
                     variant="ghost"
                     onClick={() => onPatchGenerationThrottle({ novelai: DEFAULT_GENERATION_THROTTLE_SETTINGS.novelai })}
-                    aria-label={t({ ko: 'NovelAI 생성 텀 초기값으로 되돌리기', en: 'Restore NovelAI pacing defaults' })}
-                    title={t({ ko: 'NovelAI 초기값', en: 'NovelAI defaults' })}
+                    label={t({ ko: 'NovelAI 생성 텀 초기값으로 되돌리기', en: 'Restore NovelAI pacing defaults' })}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                  </Button>
+                  </IconButton>
                 </div>
                 <div className="grid gap-4 md:grid-cols-5">
                   <Field label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
@@ -174,16 +171,14 @@ export function ImageSaveTab({
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-base font-semibold text-foreground">Codex</div>
-                  <Button
-                    type="button"
+                  <IconButton
                     size="icon-xs"
                     variant="ghost"
                     onClick={() => onPatchGenerationThrottle({ codex: DEFAULT_GENERATION_THROTTLE_SETTINGS.codex })}
-                    aria-label={t({ ko: 'Codex 생성 텀 초기값으로 되돌리기', en: 'Restore Codex pacing defaults' })}
-                    title={t({ ko: 'Codex 초기값', en: 'Codex defaults' })}
+                    label={t({ ko: 'Codex 생성 텀 초기값으로 되돌리기', en: 'Restore Codex pacing defaults' })}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                  </Button>
+                  </IconButton>
                 </div>
                 <div className="grid gap-4 md:grid-cols-5">
                   <Field label={t({ ko: '동시 실행 수', en: 'Concurrent jobs' })}>
@@ -253,14 +248,12 @@ export function ImageSaveTab({
                   />
                 </Field>
 
-                <ToggleRow className="md:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={imageSaveDraft.resizeEnabled}
-                    onChange={(event) => onPatchImageSave({ resizeEnabled: event.target.checked })}
-                  />
-                  {t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={imageSaveDraft.resizeEnabled}
+                  onCheckedChange={(checked) => onPatchImageSave({ resizeEnabled: checked })}
+                  label={t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}
+                  className="md:col-span-2"
+                />
 
                 <Field label={t({ ko: '크기 프리셋', en: 'Size presets' })}>
                   <div className="flex flex-wrap gap-2">
@@ -311,50 +304,35 @@ export function ImageSaveTab({
                   </Select>
                 </Field>
 
-                <ToggleRow>
-                  <input
-                    type="checkbox"
-                    checked={imageSaveDraft.applyToGenerationAttachments}
-                    onChange={(event) => onPatchImageSave({ applyToGenerationAttachments: event.target.checked })}
-                  />
-                  {t({ ko: '생성 첨부에 적용', en: 'Apply to generation attachments' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={imageSaveDraft.applyToGenerationAttachments}
+                  onCheckedChange={(checked) => onPatchImageSave({ applyToGenerationAttachments: checked })}
+                  label={t({ ko: '생성 첨부에 적용', en: 'Apply to generation attachments' })}
+                />
 
-                <ToggleRow>
-                  <input
-                    type="checkbox"
-                    checked={imageSaveDraft.applyToEditorSave}
-                    onChange={(event) => onPatchImageSave({ applyToEditorSave: event.target.checked })}
-                  />
-                  {t({ ko: '에디터 저장에 적용', en: 'Apply to editor saves' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={imageSaveDraft.applyToEditorSave}
+                  onCheckedChange={(checked) => onPatchImageSave({ applyToEditorSave: checked })}
+                  label={t({ ko: '에디터 저장에 적용', en: 'Apply to editor saves' })}
+                />
 
-                <ToggleRow>
-                  <input
-                    type="checkbox"
-                    checked={imageSaveDraft.applyToCanvasSave}
-                    onChange={(event) => onPatchImageSave({ applyToCanvasSave: event.target.checked })}
-                  />
-                  {t({ ko: '캔버스 저장에 적용', en: 'Apply to canvas saves' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={imageSaveDraft.applyToCanvasSave}
+                  onCheckedChange={(checked) => onPatchImageSave({ applyToCanvasSave: checked })}
+                  label={t({ ko: '캔버스 저장에 적용', en: 'Apply to canvas saves' })}
+                />
 
-                <ToggleRow>
-                  <input
-                    type="checkbox"
-                    checked={imageSaveDraft.applyToUpload}
-                    onChange={(event) => onPatchImageSave({ applyToUpload: event.target.checked })}
-                  />
-                  {t({ ko: '업로드에 적용', en: 'Apply to uploads' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={imageSaveDraft.applyToUpload}
+                  onCheckedChange={(checked) => onPatchImageSave({ applyToUpload: checked })}
+                  label={t({ ko: '업로드에 적용', en: 'Apply to uploads' })}
+                />
 
-                <ToggleRow>
-                  <input
-                    type="checkbox"
-                    checked={imageSaveDraft.applyToWorkflowOutputs}
-                    onChange={(event) => onPatchImageSave({ applyToWorkflowOutputs: event.target.checked })}
-                  />
-                  {t({ ko: '워크플로 출력에 적용', en: 'Apply to workflow outputs' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={imageSaveDraft.applyToWorkflowOutputs}
+                  onCheckedChange={(checked) => onPatchImageSave({ applyToWorkflowOutputs: checked })}
+                  label={t({ ko: '워크플로 출력에 적용', en: 'Apply to workflow outputs' })}
+                />
               </>
             ) : (
               <Skeleton className="h-64 w-full rounded-sm md:col-span-2" />

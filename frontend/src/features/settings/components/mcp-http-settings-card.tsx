@@ -20,7 +20,9 @@ import {
   updateMcpHttpEnabled,
 } from '@/lib/api-settings-mcp'
 import { Inset } from '@/components/ui/inset'
-import { ToggleRow } from '@/components/ui/toggle-row'
+import { Checkbox } from '@/components/ui/checkbox'
+import { IconButton } from '@/components/ui/icon-button'
+import { SettingsSwitchRow } from './settings-switch-row'
 import { Section } from '@/components/ui/section'
 import { InstantApplyHint } from './settings-section-status'
 
@@ -91,45 +93,63 @@ export function McpHttpSettingsCard() {
       {query.isError ? <Inset className="text-sm text-destructive">{query.error instanceof Error ? query.error.message : t({ ko: 'MCP 설정을 불러오지 못했어.', en: 'Could not load MCP settings.' })}</Inset> : null}
       {query.data ? (
         <div className="space-y-4">
-          <ToggleRow>
-            <input type="checkbox" checked={query.data.enabled} disabled={busy} onChange={(event) => enabled.mutate(event.target.checked)} />
-            {t({ ko: 'HTTP MCP 사용', en: 'Enable HTTP MCP' })}
-          </ToggleRow>
-          <div className="flex gap-2">
-            <Input variant="settings" readOnly value={endpoint} className="font-mono" />
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => void copy(endpoint)} aria-label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })} title={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></Button>
-            <Button type="button" size="icon-sm" variant="outline" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))} aria-label={t({ ko: '키 추가', en: 'Add key' })} title={t({ ko: '키 추가', en: 'Add key' })}><Plus /></Button>
+          <SettingsSwitchRow
+            checked={query.data.enabled}
+            disabled={busy}
+            onCheckedChange={(checked) => enabled.mutate(checked)}
+            label={t({ ko: 'HTTP MCP 사용', en: 'Enable HTTP MCP' })}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Input variant="settings" readOnly value={endpoint} className="min-w-0 flex-1 basis-56 font-mono" aria-label={t({ ko: 'MCP 주소', en: 'MCP URL' })} />
+            <IconButton size="icon-sm" variant="outline" onClick={() => void copy(endpoint)} label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></IconButton>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))}>
+              <Plus />
+              {t({ ko: '키 추가', en: 'Add key' })}
+            </Button>
           </div>
           <div className="space-y-3">
             {query.data.keys.map((key) => {
               const visible = visibleKeys.has(key.id)
               return (
                 <Inset key={key.id} className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Input variant="settings" readOnly value={key.name} className="max-w-44" />
-                    <Input variant="settings" type={visible ? 'text' : 'password'} readOnly value={key.apiKey} className="min-w-0 flex-1 font-mono" />
-                    <Button type="button" size="icon-sm" variant="outline" onClick={() => setVisibleKeys((current) => {
-                      const next = new Set(current); if (next.has(key.id)) next.delete(key.id); else next.add(key.id); return next
-                    })} aria-label={visible ? t({ ko: '키 숨기기', en: 'Hide key' }) : t({ ko: '키 보기', en: 'Show key' })}>{visible ? <EyeOff /> : <Eye />}</Button>
-                    <Button type="button" size="icon-sm" variant="outline" onClick={() => void copy(key.apiKey)} aria-label={t({ ko: '키 복사', en: 'Copy key' })} title={t({ ko: '키 복사', en: 'Copy key' })}><Copy /></Button>
-                    <Button type="button" size="icon-sm" variant="outline" disabled={busy} onClick={() => rotateKey.mutate(key.id)} aria-label={t({ ko: '키 새로 발급', en: 'Regenerate key' })} title={t({ ko: '키 새로 발급', en: 'Regenerate key' })}><RefreshCw /></Button>
-                    <Button type="button" size="icon-sm" variant="outline" disabled={busy} onClick={async () => {
-                      const confirmed = await confirm({
-                        title: t({ ko: '키 폐기', en: 'Revoke key' }),
-                        description: t({ ko: '이 키를 폐기할까?', en: 'Revoke this key?' }),
-                        confirmLabel: t({ ko: '폐기', en: 'Revoke' }),
-                        tone: 'destructive',
-                      })
-                      if (confirmed) revokeKey.mutate(key.id)
-                    }} aria-label={t({ ko: '키 폐기', en: 'Revoke key' })} title={t({ ko: '키 폐기', en: 'Revoke key' })}><Trash2 /></Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input variant="settings" readOnly value={key.name} className="w-full sm:w-44" aria-label={t({ ko: '키 이름', en: 'Key name' })} />
+                    <Input variant="settings" type={visible ? 'text' : 'password'} readOnly value={key.apiKey} className="min-w-0 flex-1 basis-48 font-mono" aria-label={t({ ko: 'API 키', en: 'API key' })} />
+                    <div className="flex shrink-0 items-center gap-1">
+                      <IconButton size="icon-sm" variant="outline" onClick={() => setVisibleKeys((current) => {
+                        const next = new Set(current)
+                        if (next.has(key.id)) next.delete(key.id)
+                        else next.add(key.id)
+                        return next
+                      })} label={visible ? t({ ko: '키 숨기기', en: 'Hide key' }) : t({ ko: '키 보기', en: 'Show key' })}>{visible ? <EyeOff /> : <Eye />}</IconButton>
+                      <IconButton size="icon-sm" variant="outline" onClick={() => void copy(key.apiKey)} label={t({ ko: '키 복사', en: 'Copy key' })}><Copy /></IconButton>
+                      <IconButton size="icon-sm" variant="outline" disabled={busy} onClick={async () => {
+                        const confirmed = await confirm({
+                          title: t({ ko: '키 새로 발급', en: 'Regenerate key' }),
+                          description: t({ ko: '지금 키를 쓰는 에이전트는 새 키로 바꿔야 다시 연결돼. 새로 발급할까?', en: 'Agents using the current key must switch to the new one to reconnect. Regenerate?' }),
+                          confirmLabel: t({ ko: '새로 발급', en: 'Regenerate' }),
+                          tone: 'destructive',
+                        })
+                        if (confirmed) rotateKey.mutate(key.id)
+                      }} label={t({ ko: '키 새로 발급', en: 'Regenerate key' })}><RefreshCw /></IconButton>
+                      <IconButton size="icon-sm" variant="outline" disabled={busy} onClick={async () => {
+                        const confirmed = await confirm({
+                          title: t({ ko: '키 폐기', en: 'Revoke key' }),
+                          description: t({ ko: '이 키를 폐기할까?', en: 'Revoke this key?' }),
+                          confirmLabel: t({ ko: '폐기', en: 'Revoke' }),
+                          tone: 'destructive',
+                        })
+                        if (confirmed) revokeKey.mutate(key.id)
+                      }} label={t({ ko: '키 폐기', en: 'Revoke key' })}><Trash2 /></IconButton>
+                    </div>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {SCOPES.map((scope) => {
                       const scopeCopy = getScopeCopy(scope, t)
                       return (
-                      <label key={scope} className="flex items-start gap-2 text-xs">
-                        <input type="checkbox" checked={key.scopes.includes(scope)} disabled={busy || (key.scopes.length === 1 && key.scopes[0] === scope)} onChange={(event) => {
-                          const scopes = event.target.checked ? [...key.scopes, scope] : key.scopes.filter((item) => item !== scope)
+                      <label key={scope} className="flex cursor-pointer items-start gap-2 text-xs has-[:disabled]:cursor-not-allowed">
+                        <Checkbox checked={key.scopes.includes(scope)} disabled={busy || (key.scopes.length === 1 && key.scopes[0] === scope)} onCheckedChange={(checked) => {
+                          const scopes = checked === true ? [...key.scopes, scope] : key.scopes.filter((item) => item !== scope)
                           updateKey.mutate({ keyId: key.id, name: key.name, scopes })
                         }} className="mt-0.5" />
                         <span className="min-w-0">

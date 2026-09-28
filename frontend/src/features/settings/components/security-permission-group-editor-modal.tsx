@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -188,12 +189,11 @@ export function SecurityPermissionGroupEditorModal({
                           {getPagePermissionLabel(language, permission.permissionKey, permission.label)}
                         </div>
                       </div>
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+                      <Checkbox
+                        className="mt-0.5"
                         checked={checked}
                         disabled={!canEditPermissions || isBusy}
-                        onChange={(event) => onTogglePermission(permission.permissionKey, event.target.checked)}
+                        onCheckedChange={(nextChecked) => onTogglePermission(permission.permissionKey, nextChecked === true)}
                       />
                     </label>
                   )

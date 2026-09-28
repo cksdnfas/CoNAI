@@ -1,5 +1,6 @@
 import { Palette, Pencil, Shield, Users, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { AuthPermissionGroupSummaryItem } from '@/lib/api-auth'
@@ -33,9 +34,9 @@ export function SecurityPermissionGroupListCard({
       heading={t({ ko: '권한 그룹', en: 'Permission groups' })}
       actions={(
         <div className="flex items-center gap-2">
-          <Button type="button" size="icon-sm" variant="outline" onClick={onOpenGroupColors} aria-label={t('securityGroupColorEditorModal.permissionGroupColors')} title={t('securityGroupColorEditorModal.permissionGroupColors')}>
+          <IconButton size="icon-sm" variant="outline" onClick={onOpenGroupColors} label={t('securityGroupColorEditorModal.permissionGroupColors')}>
             <Palette className="h-4 w-4" />
-          </Button>
+          </IconButton>
           <Button type="button" size="sm" onClick={onCreate}>
             <UserPlus className="h-4 w-4" />
             {t({ ko: '그룹 추가', en: 'Add group' })}
@@ -73,9 +74,9 @@ export function SecurityPermissionGroupListCard({
               </div>
 
               <div className="flex shrink-0 justify-end">
-                <Button type="button" size="icon-sm" variant="ghost" onClick={() => onEdit(group)} aria-label={t({ ko: '권한 그룹 열기', en: 'Open permission group' })} title={t({ ko: '권한 그룹 열기', en: 'Open permission group' })}>
+                <IconButton size="icon-sm" variant="ghost" onClick={() => onEdit(group)} label={t({ ko: '권한 그룹 열기', en: 'Open permission group' })}>
                   <Pencil className="h-4 w-4" />
-                </Button>
+                </IconButton>
               </div>
             </div>
           ))}

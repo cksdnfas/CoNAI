@@ -3,11 +3,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n, type TranslationDictionary } from '@/i18n'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import type { VideoOptimizationSettings } from '@conai/shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 /** Select value shown when CRF/audio no longer match any preset; never sent to the server. */
 const CUSTOM_PRESET_VALUE = 'custom'
@@ -52,14 +52,12 @@ export function VideoOptimizationTab({
               </Inset>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <ToggleRow className="md:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={videoOptimizationDraft.enabled}
-                    onChange={(event) => onPatchVideoOptimization({ enabled: event.target.checked })}
-                  />
-                  {t({ ko: '비디오 최적화 사용', en: 'Enable video optimization' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={videoOptimizationDraft.enabled}
+                  onCheckedChange={(checked) => onPatchVideoOptimization({ enabled: checked })}
+                  label={t({ ko: '비디오 최적화 사용', en: 'Enable video optimization' })}
+                  className="md:col-span-2"
+                />
 
                 <Field label={t({ ko: '프리셋', en: 'Preset' })}>
                   <Select
@@ -106,35 +104,26 @@ export function VideoOptimizationTab({
                 </Field>
 
                 <div className="md:col-span-2 grid gap-3">
-                  <ToggleRow>
-                    <input
-                      type="checkbox"
-                      checked={videoOptimizationDraft.applyToUpload}
-                      disabled={!isEnabled}
-                      onChange={(event) => onPatchVideoOptimization({ applyToUpload: event.target.checked })}
-                    />
-                    {t({ ko: '업로드 비디오에 적용', en: 'Apply to uploaded videos' })}
-                  </ToggleRow>
+                  <SettingsSwitchRow
+                    checked={videoOptimizationDraft.applyToUpload}
+                    disabled={!isEnabled}
+                    onCheckedChange={(checked) => onPatchVideoOptimization({ applyToUpload: checked })}
+                    label={t({ ko: '업로드 비디오에 적용', en: 'Apply to uploaded videos' })}
+                  />
 
-                  <ToggleRow>
-                    <input
-                      type="checkbox"
-                      checked={videoOptimizationDraft.applyToGeneratedOutputs}
-                      disabled={!isEnabled}
-                      onChange={(event) => onPatchVideoOptimization({ applyToGeneratedOutputs: event.target.checked })}
-                    />
-                    {t({ ko: '생성 결과 비디오에 적용', en: 'Apply to generated output videos' })}
-                  </ToggleRow>
+                  <SettingsSwitchRow
+                    checked={videoOptimizationDraft.applyToGeneratedOutputs}
+                    disabled={!isEnabled}
+                    onCheckedChange={(checked) => onPatchVideoOptimization({ applyToGeneratedOutputs: checked })}
+                    label={t({ ko: '생성 결과 비디오에 적용', en: 'Apply to generated output videos' })}
+                  />
 
-                  <ToggleRow>
-                    <input
-                      type="checkbox"
-                      checked={videoOptimizationDraft.applyToBackupImports}
-                      disabled={!isEnabled}
-                      onChange={(event) => onPatchVideoOptimization({ applyToBackupImports: event.target.checked })}
-                    />
-                    {t({ ko: '백업 유입 비디오에 적용', en: 'Apply to backup-imported videos' })}
-                  </ToggleRow>
+                  <SettingsSwitchRow
+                    checked={videoOptimizationDraft.applyToBackupImports}
+                    disabled={!isEnabled}
+                    onCheckedChange={(checked) => onPatchVideoOptimization({ applyToBackupImports: checked })}
+                    label={t({ ko: '백업 유입 비디오에 적용', en: 'Apply to backup-imported videos' })}
+                  />
                 </div>
               </div>
             </div>

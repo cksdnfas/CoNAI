@@ -1,7 +1,7 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, GripVertical, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import type { RatingTierRecord } from '@/features/search/search-types'
@@ -141,39 +141,33 @@ export function RatingTierSettingsCard({
                   </div>
 
                   <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
+                    <IconButton
                       size="icon-sm"
                       variant="outline"
                       onClick={() => onMoveRatingTierUp(tier.id)}
                       disabled={isFirst}
-                      title={t({ ko: '위로 이동', en: 'Move up' })}
-                      aria-label={t({ ko: '위로 이동', en: 'Move up' })}
+                      label={t({ ko: '위로 이동', en: 'Move up' })}
                     >
                       <ArrowUp className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
+                    </IconButton>
+                    <IconButton
                       size="icon-sm"
                       variant="outline"
                       onClick={() => onMoveRatingTierDown(tier.id)}
                       disabled={isLast}
-                      title={t({ ko: '아래로 이동', en: 'Move down' })}
-                      aria-label={t({ ko: '아래로 이동', en: 'Move down' })}
+                      label={t({ ko: '아래로 이동', en: 'Move down' })}
                     >
                       <ArrowDown className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
+                    </IconButton>
+                    <IconButton
                       size="icon-sm"
                       variant="outline"
                       onClick={() => onDeleteRatingTier(tier.id)}
                       disabled={ratingTiersDraft.length <= 1}
-                      title={t({ ko: '등급 삭제', en: 'Delete tier' })}
-                      aria-label={t({ ko: '등급 삭제', en: 'Delete tier' })}
+                      label={t({ ko: '등급 삭제', en: 'Delete tier' })}
                     >
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </IconButton>
                   </div>
                 </div>
 

@@ -2,11 +2,11 @@ import { CircleHelp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import { buildBackupTargetPreviewPath, type NewBackupSourceDraft } from '../settings-utils'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 interface BackupSourceCreateFormProps {
   newBackupSource: NewBackupSourceDraft
@@ -85,14 +85,16 @@ export function BackupSourceCreateForm({
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <ToggleRow>
-          <input type="checkbox" checked={newBackupSource.recursive} onChange={(event) => onNewBackupSourceChange({ recursive: event.target.checked })} />
-          {t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
-        </ToggleRow>
-        <ToggleRow>
-          <input type="checkbox" checked={newBackupSource.watcher_enabled} onChange={(event) => onNewBackupSourceChange({ watcher_enabled: event.target.checked })} />
-          {t({ ko: '실시간 감시 시작', en: 'Start watching' })}
-        </ToggleRow>
+        <SettingsSwitchRow
+          checked={newBackupSource.recursive}
+          onCheckedChange={(checked) => onNewBackupSourceChange({ recursive: checked })}
+          label={t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
+        />
+        <SettingsSwitchRow
+          checked={newBackupSource.watcher_enabled}
+          onCheckedChange={(checked) => onNewBackupSourceChange({ watcher_enabled: checked })}
+          label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}
+        />
       </div>
 
       <SettingsResourceCreateActionRow

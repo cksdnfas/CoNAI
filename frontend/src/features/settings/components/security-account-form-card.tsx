@@ -120,15 +120,9 @@ export function SecurityAccountFormCard({
             </Field>
           </div>
           <div className="flex justify-end">
-            <Button
-              type="button"
-              size="icon-sm"
-              onClick={onSubmitUpdate}
-              disabled={isUpdateDisabled}
-              aria-label={isSubmittingUpdate ? t({ ko: '관리자 계정 변경 중', en: 'Updating admin account' }) : t({ ko: '관리자 계정 저장', en: 'Save admin account' })}
-              title={isSubmittingUpdate ? t({ ko: '관리자 계정 변경 중', en: 'Updating admin account' }) : t({ ko: '관리자 계정 저장', en: 'Save admin account' })}
-            >
+            <Button type="button" size="sm" onClick={onSubmitUpdate} disabled={isUpdateDisabled}>
               <Save className="h-4 w-4" />
+              {isSubmittingUpdate ? t({ ko: '관리자 계정 변경 중', en: 'Updating admin account' }) : t({ ko: '관리자 계정 저장', en: 'Save admin account' })}
             </Button>
           </div>
         </div>

@@ -3,11 +3,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@conai/shared'
 import { Field } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 interface MetadataTabProps {
   metadataDraft: MetadataExtractionSettings | null
@@ -34,14 +34,12 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
                   {t('metadataTab.standardMetadataIsReadFirst')}
                 </Inset>
 
-                <ToggleRow className="md:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={metadataDraft.enableSecondaryExtraction}
-                    onChange={(event) => onPatchMetadata({ enableSecondaryExtraction: event.target.checked })}
-                  />
-                  {t({ ko: 'PNG 숨은 생성 정보 찾기', en: 'Look for hidden generation info in PNGs' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={metadataDraft.enableSecondaryExtraction}
+                  onCheckedChange={(checked) => onPatchMetadata({ enableSecondaryExtraction: checked })}
+                  label={t({ ko: 'PNG 숨은 생성 정보 찾기', en: 'Look for hidden generation info in PNGs' })}
+                  className="md:col-span-2"
+                />
 
                 <Field label={t({ ko: '숨은 정보 탐색 방식', en: 'Hidden info scan' })}>
                   <Select variant="settings" value={metadataDraft.stealthScanMode} disabled={!isStealthEnabled} onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}>
@@ -60,25 +58,19 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
                   <NumberStepperInput min={1} variant="settings" disabled={!isStealthEnabled} value={metadataDraft.stealthMaxResolutionMP} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxResolutionMP: Number(nextValue) || 1 })} />
                 </Field>
 
-                <ToggleRow>
-                  <input
-                    type="checkbox"
-                    checked={metadataDraft.skipStealthForComfyUI}
-                    disabled={!isStealthEnabled}
-                    onChange={(event) => onPatchMetadata({ skipStealthForComfyUI: event.target.checked })}
-                  />
-                  {t({ ko: 'ComfyUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as ComfyUI' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={metadataDraft.skipStealthForComfyUI}
+                  disabled={!isStealthEnabled}
+                  onCheckedChange={(checked) => onPatchMetadata({ skipStealthForComfyUI: checked })}
+                  label={t({ ko: 'ComfyUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as ComfyUI' })}
+                />
 
-                <ToggleRow>
-                  <input
-                    type="checkbox"
-                    checked={metadataDraft.skipStealthForWebUI}
-                    disabled={!isStealthEnabled}
-                    onChange={(event) => onPatchMetadata({ skipStealthForWebUI: event.target.checked })}
-                  />
-                  {t({ ko: 'WebUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as WebUI' })}
-                </ToggleRow>
+                <SettingsSwitchRow
+                  checked={metadataDraft.skipStealthForWebUI}
+                  disabled={!isStealthEnabled}
+                  onCheckedChange={(checked) => onPatchMetadata({ skipStealthForWebUI: checked })}
+                  label={t({ ko: 'WebUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as WebUI' })}
+                />
               </>
             ) : (
               <Skeleton className="h-48 w-full rounded-sm md:col-span-2" />

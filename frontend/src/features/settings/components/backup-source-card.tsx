@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CircleHelp, Play, RotateCcw, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { BackupSource, BackupSourceUpdateInput } from '@/types/folder'
@@ -9,7 +9,6 @@ import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { buildBackupTargetPreviewPath, formatDateTime, normalizeBackupTargetPath } from '../settings-utils'
 import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import {
   SettingsResourceFooterActions,
@@ -18,6 +17,7 @@ import {
   getWatcherStateLabel,
 } from './settings-resource-shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 interface BackupSourceCardProps {
   source: BackupSource
@@ -81,15 +81,15 @@ export function BackupSourceCard({
       bodyClassName="space-y-5"
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(source.id))} title={t({ ko: '실시간 감시 시작', en: 'Start watching' })} aria-label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
+          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(source.id))} label={t({ ko: '실시간 감시 시작', en: 'Start watching' })}>
             <Play className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(source.id))} title={t({ ko: '실시간 감시 중지', en: 'Stop watching' })} aria-label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(source.id))} label={t({ ko: '실시간 감시 중지', en: 'Stop watching' })}>
             <Square className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(source.id))} title={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })} aria-label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
+          </IconButton>
+          <IconButton size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(source.id))} label={t({ ko: '실시간 감시 재시작', en: 'Restart watching' })}>
             <RotateCcw className="h-4 w-4" />
-          </Button>
+          </IconButton>
         </div>
       }
     >
@@ -156,24 +156,23 @@ export function BackupSourceCard({
             <NumberStepperInput min={1} max={100} variant="settings" value={draft.webp_quality} onValueCommit={(nextValue) => setDraft((current) => ({ ...current, webp_quality: Number(nextValue) || 90 }))} disabled={draft.import_mode !== 'convert_webp'} />
           </Field>
 
-          <ToggleRow>
-            <input type="checkbox" checked={draft.recursive} onChange={(event) => setDraft((current) => ({ ...current, recursive: event.target.checked }))} />
-            {t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
-          </ToggleRow>
+          <SettingsSwitchRow
+            checked={draft.recursive}
+            onCheckedChange={(checked) => setDraft((current) => ({ ...current, recursive: checked }))}
+            label={t({ ko: '하위 폴더 포함', en: 'Include subfolders' })}
+          />
 
-          <ToggleRow>
-            <input
-              type="checkbox"
-              checked={draft.watcher_enabled}
-              onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
-            />
-            {t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
-          </ToggleRow>
+          <SettingsSwitchRow
+            checked={draft.watcher_enabled}
+            onCheckedChange={(checked) => setDraft((current) => ({ ...current, watcher_enabled: checked }))}
+            label={t({ ko: '실시간 감시 사용', en: 'Watch for changes' })}
+          />
 
-          <ToggleRow>
-            <input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />
-            {t({ ko: '백업 소스 활성화', en: 'Backup source active' })}
-          </ToggleRow>
+          <SettingsSwitchRow
+            checked={draft.is_active}
+            onCheckedChange={(checked) => setDraft((current) => ({ ...current, is_active: checked }))}
+            label={t({ ko: '백업 소스 활성화', en: 'Backup source active' })}
+          />
         </div>
 
         <SettingsResourceMetaList

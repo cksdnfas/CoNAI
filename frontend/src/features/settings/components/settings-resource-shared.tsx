@@ -1,8 +1,9 @@
-import type { ComponentProps, ReactNode } from 'react'
+import { createContext, useContext, type ComponentProps, type ReactNode } from 'react'
 import { Check, FolderPlus, LoaderCircle, Minus, Save, Settings2 } from 'lucide-react'
 import { SegmentedControl, type SegmentedControlItem } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 
@@ -112,11 +113,32 @@ export function SettingsStatusIcon({ checked = false, tone = 'muted', title }: S
   )
 }
 
+/** Container width below which a stackable table turns each row into a card. */
+export type SettingsResourceStackBreakpoint = '3xl' | '4xl'
+
+// Literal class strings per breakpoint so Tailwind can see them.
+const STACK_CLASSES: Record<SettingsResourceStackBreakpoint, { header: string; row: string; wide: string; hideWide: string; centerWide: string }> = {
+  '3xl': { header: 'hidden @3xl:grid', row: '@3xl:grid @3xl:gap-3', wide: '@3xl:basis-auto', hideWide: '@3xl:hidden', centerWide: '@3xl:justify-center' },
+  '4xl': { header: 'hidden @4xl:grid', row: '@4xl:grid @4xl:gap-3', wide: '@4xl:basis-auto', hideWide: '@4xl:hidden', centerWide: '@4xl:justify-center' },
+}
+
+interface ResourceTableLayout {
+  headers: ReactNode[]
+  stackBelow: SettingsResourceStackBreakpoint
+}
+
+const ResourceTableLayoutContext = createContext<ResourceTableLayout | null>(null)
+
 interface SettingsResourceTableProps {
   gridClassName: string
   minWidthClassName?: string
   headers: ReactNode[]
   children: ReactNode
+  /**
+   * Stack rows as labelled cards when the table's own width is below this container breakpoint.
+   * `gridClassName` must then carry the same container prefix (e.g. `@3xl:grid-cols-[…]`).
+   */
+  stackBelow?: SettingsResourceStackBreakpoint
 }
 
 interface SettingsSegmentedTableProps {
@@ -139,7 +161,32 @@ export function SettingsResourceTable({
   minWidthClassName = 'min-w-[880px]',
   headers,
   children,
+  stackBelow,
 }: SettingsResourceTableProps) {
+  if (stackBelow) {
+    const stack = STACK_CLASSES[stackBelow]
+    return (
+      <ResourceTableLayoutContext.Provider value={{ headers, stackBelow }}>
+        <div className="@container">
+          <div
+            className={cn(
+              stack.header,
+              'gap-3 border-b border-border/70 bg-surface-low/55 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground',
+              gridClassName,
+            )}
+          >
+            {headers.map((header, index) => (
+              <div key={index} className={cn(index >= headers.length - 3 ? 'text-center' : 'min-w-0')}>
+                {header}
+              </div>
+            ))}
+          </div>
+          <div className="divide-y divide-border/60">{children}</div>
+        </div>
+      </ResourceTableLayoutContext.Provider>
+    )
+  }
+
   return (
     <div className="overflow-x-auto">
       <div className={cn(minWidthClassName, 'w-full')}>
@@ -194,6 +241,55 @@ export function SettingsSegmentedTable({
   )
 }
 
+interface SettingsResourceStackedCellsProps {
+  gridClassName: string
+  cells: ReactNode[]
+  /** Cells from this index on are short values: labelled with their header and laid out inline when stacked. */
+  labelledFrom: number
+  className?: string
+  trailing?: ReactNode
+}
+
+/**
+ * Render one table row that becomes a card inside a stackable SettingsResourceTable:
+ * leading cells take full width, later cells show their column header as a label.
+ */
+export function SettingsResourceStackedCells({ gridClassName, cells, labelledFrom, className, trailing }: SettingsResourceStackedCellsProps) {
+  const layout = useContext(ResourceTableLayoutContext)
+
+  if (!layout) {
+    return (
+      <div className={cn('grid items-center px-4 py-3', gridClassName, className)}>
+        {cells.map((cell, index) => (
+          <div key={index} className={cn(index >= labelledFrom ? 'flex justify-center' : 'min-w-0')}>
+            {cell}
+          </div>
+        ))}
+        {trailing}
+      </div>
+    )
+  }
+
+  const stack = STACK_CLASSES[layout.stackBelow]
+  return (
+    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3', stack.row, 'items-center', gridClassName, className)}>
+      {cells.map((cell, index) => (
+        index >= labelledFrom ? (
+          <div key={index} className={cn('flex items-center gap-2', stack.centerWide)}>
+            <span className={cn('text-xs text-muted-foreground', stack.hideWide)}>{layout.headers[index]}</span>
+            {cell}
+          </div>
+        ) : (
+          <div key={index} className={cn('min-w-0 basis-full', stack.wide)}>
+            {cell}
+          </div>
+        )
+      ))}
+      {trailing}
+    </div>
+  )
+}
+
 interface SettingsResourceTableRowProps {
   gridClassName: string
   cells: ReactNode[]
@@ -211,34 +307,29 @@ export function SettingsResourceTableRow({
   const { t } = useI18n()
 
   return (
-    <div
+    <SettingsResourceStackedCells
+      gridClassName={gridClassName}
+      cells={cells}
+      labelledFrom={cells.length - 2}
       className={cn(
-        'grid items-center px-4 py-3 transition-colors',
-        gridClassName,
+        'transition-colors',
         selected
           ? 'bg-primary/6 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)]'
           : 'bg-transparent hover:bg-surface-high/60',
       )}
-    >
-      {cells.map((cell, index) => (
-        <div key={index} className={cn(index >= cells.length - 2 ? 'flex justify-center' : 'min-w-0')}>
-          {cell}
+      trailing={(
+        <div className="ml-auto flex justify-end">
+          <IconButton
+            size="icon-sm"
+            variant={selected ? 'default' : 'ghost'}
+            label={t({ ko: '상세 정보와 수정 열기', en: 'Open details and editing' })}
+            onClick={onOpenOptions}
+          >
+            <Settings2 className="h-4 w-4" />
+          </IconButton>
         </div>
-      ))}
-
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          size="icon-sm"
-          variant={selected ? 'default' : 'ghost'}
-          title={t({ ko: '상세 정보와 수정 열기', en: 'Open details and editing' })}
-          aria-label={t({ ko: '상세 정보와 수정 열기', en: 'Open details and editing' })}
-          onClick={onOpenOptions}
-        >
-          <Settings2 className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
+      )}
+    />
   )
 }
 
@@ -328,14 +419,9 @@ export function SettingsResourceFooterActions({
         {dangerLabel}
       </Button>
 
-      <Button
-        size="icon-sm"
-        disabled={primaryDisabled}
-        onClick={onPrimary}
-        aria-label={typeof primaryLabel === 'string' ? primaryLabel : t({ ko: '저장', en: 'Save' })}
-        title={typeof primaryLabel === 'string' ? primaryLabel : t({ ko: '저장', en: 'Save' })}
-      >
+      <Button size="sm" disabled={primaryDisabled} onClick={onPrimary}>
         {primaryDisabled ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        {primaryLabel ?? t({ ko: '저장', en: 'Save' })}
       </Button>
     </div>
   )

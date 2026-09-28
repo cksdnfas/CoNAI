@@ -7,10 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { KaloscopeServerStatus, KaloscopeSettings } from '@conai/shared'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
 import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { Section } from '@/components/ui/section'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SettingsSwitchRow } from './settings-switch-row'
 
 interface KaloscopeSettingsCardProps {
   heading: ReactNode
@@ -45,20 +45,20 @@ export function KaloscopeSettingsCard({
       <div className="grid gap-4 md:grid-cols-2">
         {kaloscopeDraft ? (
           <>
-            <ToggleRow className="md:col-span-2">
-              <input type="checkbox" checked={kaloscopeDraft.enabled} onChange={(event) => onPatchKaloscope({ enabled: event.target.checked })} />
-              {t({ ko: 'Kaloscope 활성화', en: 'Enable Kaloscope' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={kaloscopeDraft.enabled}
+              onCheckedChange={(checked) => onPatchKaloscope({ enabled: checked })}
+              label={t({ ko: 'Kaloscope 활성화', en: 'Enable Kaloscope' })}
+              className="md:col-span-2"
+            />
 
-            <ToggleRow className="md:col-span-2">
-              <input
-                type="checkbox"
-                checked={kaloscopeDraft.autoTagOnUpload}
-                disabled={!isEnabled}
-                onChange={(event) => onPatchKaloscope({ autoTagOnUpload: event.target.checked })}
-              />
-              {t({ ko: '새 이미지 자동 처리', en: 'Process new images automatically' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={kaloscopeDraft.autoTagOnUpload}
+              disabled={!isEnabled}
+              onCheckedChange={(checked) => onPatchKaloscope({ autoTagOnUpload: checked })}
+              label={t({ ko: '새 이미지 자동 처리', en: 'Process new images automatically' })}
+              className="md:col-span-2"
+            />
 
             <Field label={t({ ko: '실행 장치', en: 'Device' })}>
               <Select variant="settings" value={kaloscopeDraft.device} disabled={!isEnabled} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
@@ -72,15 +72,12 @@ export function KaloscopeSettingsCard({
               <NumberStepperInput min={1} max={200} variant="settings" disabled={!isEnabled} value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
             </Field>
 
-            <ToggleRow>
-              <input
-                type="checkbox"
-                checked={kaloscopeDraft.keepModelLoaded}
-                disabled={!isEnabled}
-                onChange={(event) => onPatchKaloscope({ keepModelLoaded: event.target.checked })}
-              />
-              {t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
-            </ToggleRow>
+            <SettingsSwitchRow
+              checked={kaloscopeDraft.keepModelLoaded}
+              disabled={!isEnabled}
+              onCheckedChange={(checked) => onPatchKaloscope({ keepModelLoaded: checked })}
+              label={t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
+            />
 
             <Field label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <NumberStepperInput
