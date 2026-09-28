@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Copy, Download, Save } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Copy, Download, Save } from 'lucide-react'
 import { useParams } from 'react-router-dom'
-import { PageHeader } from '@/components/common/page-header'
-import { Inset } from '@/components/ui/inset'
-import { Section } from '@/components/ui/section'
+import { PageToolbar } from '@/components/common/page-toolbar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Text } from '@/components/ui/text'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -171,76 +168,71 @@ export function ImageMetadataEditPage() {
     saveMutation.mutate(draft)
   }
 
+  // Same arrangement as the image page: a flat top row, the image on the page background, the fields in a column
+  // behind one vertical hairline (below it on narrow screens).
+  const gridClassName = cn('grid', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)]' : 'grid-cols-1')
+  const fieldColumnClassName = isDesktopPageLayout ? 'min-w-0 border-l border-line py-6 pl-6' : 'min-w-0 border-t border-line pt-6'
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={t('metadata.image.metadata.edit.page.edit.metadata')}
-        description={downloadName}
-        actions={
-          <>
-            <IconButton variant="ghost" onClick={handleBack} label={t({ ko: '돌아가기', en: 'Back' })}>
-              <ArrowLeft className="h-4 w-4" />
+    <div>
+      <PageToolbar
+        className="border-b border-line"
+        start={(
+          <div className="flex min-w-0 items-center gap-2">
+            <IconButton size="icon-sm" variant="ghost" onClick={handleBack} label={t({ ko: '돌아가기', en: 'Back' })}>
+              <ArrowLeft className="size-4" />
             </IconButton>
-            <IconButton variant="ghost" onClick={handleDownload} disabled={!draft || busy || !isEditableImage || Boolean(draftValidationError)} label={t({ ko: '다운로드', en: 'Download' })}>
-              <Download className="h-4 w-4" />
+            <h1 className="min-w-0 truncate text-sm font-bold text-foreground" title={downloadName}>
+              {t('metadata.image.metadata.edit.page.edit.metadata')}
+              <span className="ml-2 font-normal text-muted-foreground">{downloadName}</span>
+            </h1>
+          </div>
+        )}
+        actions={(
+          <>
+            <IconButton size="icon-sm" variant="ghost" onClick={handleDownload} disabled={!draft || busy || !isEditableImage || Boolean(draftValidationError)} label={t({ ko: '다운로드', en: 'Download' })}>
+              <Download className="size-4" />
             </IconButton>
             <Button
+              size="sm"
               onClick={handleSave}
               disabled={!canSave}
               title={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '바뀐 게 없어', en: 'No changes to save' }) : undefined}
             >
-              <Save className="h-4 w-4" />
+              <Save className="size-4" />
               {t({ ko: '저장', en: 'Save' })}
             </Button>
           </>
-        }
+        )}
       />
 
       {imageQuery.isLoading ? (
-        <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)]' : 'grid-cols-1')}>
-          <Skeleton className="min-h-[420px] w-full rounded-sm" />
-          <Skeleton className="min-h-[420px] w-full rounded-sm" />
+        <div className={gridClassName}>
+          <div className={cn('py-6', isDesktopPageLayout && 'pr-6')}>
+            <Skeleton className="h-[max(420px,60vh)] w-full rounded-sm" />
+          </div>
+          <div className={cn(fieldColumnClassName, 'space-y-3')}>
+            <Skeleton className="h-9 w-full rounded-sm" />
+            <Skeleton className="h-28 w-full rounded-sm" />
+            <Skeleton className="h-24 w-full rounded-sm" />
+          </div>
         </div>
       ) : null}
 
       {imageQuery.isError ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mt-6">
           <AlertTitle>{t('metadata.image.metadata.edit.page.failed.to.load.the.edit.target')}</AlertTitle>
           <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : t('metadata.image.metadata.edit.page.an.unknown.error.occurred')}</AlertDescription>
         </Alert>
       ) : null}
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
-        <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] items-start' : 'grid-cols-1')}>
-          <Section bodyClassName="space-y-4">
-            <div className="overflow-hidden rounded-sm bg-surface-lowest">
-              <div className="flex h-[max(420px,60vh)] items-center justify-center bg-surface-lowest">
-                <ImageDetailMedia image={image} renderUrl={renderUrl} />
-              </div>
-            </div>
+        <div className={gridClassName}>
+          <div className={cn('flex h-[max(420px,calc(100svh-var(--theme-shell-header-height)-7rem))] items-center justify-center py-6', isDesktopPageLayout && 'pr-6')}>
+            <ImageDetailMedia image={image} renderUrl={renderUrl} />
+          </div>
 
-            {image.composite_hash ? (
-              <Inset className="text-sm text-muted-foreground">
-                <details>
-                  <summary className="cursor-pointer select-none text-2xs uppercase tracking-overline">{t({ ko: '기술 정보', en: 'Technical details' })}</summary>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <Text variant="overline">{t({ ko: '복합 해시', en: 'Composite hash' })}</Text>
-                    <IconButton
-                      size="icon-sm"
-                      variant="ghost"
-                      onClick={() => void handleCopyHash()}
-                      label={t({ ko: '복합 해시 복사', en: 'Copy composite hash' })}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                  <p className="mt-1 break-all font-mono text-xs text-foreground/88">{image.composite_hash}</p>
-                </details>
-              </Inset>
-            ) : null}
-          </Section>
-
-          <Section heading={t({ ko: '메타 필드', en: 'Metadata fields' })}>
+          <div className={cn(fieldColumnClassName, 'space-y-6')}>
             {!isEditableImage ? (
               <Alert variant="destructive">
                 <AlertTitle>{t('metadata.image.metadata.edit.page.this.file.cannot.be.edited.in.place')}</AlertTitle>
@@ -264,7 +256,28 @@ export function ImageMetadataEditPage() {
                 <AlertDescription>{draftValidationError}</AlertDescription>
               </Alert>
             ) : null}
-          </Section>
+
+            {image.composite_hash ? (
+              <details className="group/tech border-t border-line pt-3 text-sm text-muted-foreground">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-bold text-foreground select-none [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="size-3.5 text-muted-foreground transition-transform group-open/tech:rotate-90" />
+                  {t({ ko: '기술 정보', en: 'Technical details' })}
+                </summary>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span>{t({ ko: '복합 해시', en: 'Composite hash' })}</span>
+                  <IconButton
+                    size="icon-xs"
+                    variant="ghost"
+                    onClick={() => void handleCopyHash()}
+                    label={t({ ko: '복합 해시 복사', en: 'Copy composite hash' })}
+                  >
+                    <Copy />
+                  </IconButton>
+                </div>
+                <p className="mt-0.5 font-mono text-xs break-all text-foreground/88">{image.composite_hash}</p>
+              </details>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

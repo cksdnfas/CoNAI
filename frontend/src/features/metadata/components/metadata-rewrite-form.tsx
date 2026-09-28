@@ -19,9 +19,9 @@ export function MetadataRewriteForm({ draft, disabled = false, formatLabel, show
   const resolvedFormatLabel = formatLabel ?? t('metadata.components.metadata.rewrite.form.output.format')
 
   return (
-    <div className={showHeader ? 'space-y-4 rounded-sm bg-surface-container p-4' : 'space-y-4'}>
+    <div className="space-y-4">
       {showHeader ? (
-        <div className="text-sm font-medium text-foreground">{t('metadata.components.metadata.rewrite.form.edit.metadata')}</div>
+        <div className="text-sm font-semibold text-foreground">{t('metadata.components.metadata.rewrite.form.edit.metadata')}</div>
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
