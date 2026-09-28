@@ -2,6 +2,10 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
+import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
+import { Text } from '@/components/ui/text'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
@@ -90,22 +94,16 @@ function HomeSearchSuggestionPanel({
   const { t } = useI18n()
 
   return (
-    <div className={cn('theme-floating-panel overflow-hidden rounded-sm border border-border/80 bg-background/95 shadow-[0_18px_40px_rgba(0,0,0,0.24)]', className)} style={style}>
-      <div className="flex items-center gap-2 border-b border-border/70 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
+    <div className={cn('theme-floating-panel overflow-hidden rounded-sm bg-background/95', className)} style={style}>
+      <div className="flex items-center gap-2 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
         <div className="min-w-0 flex-1">
           <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} />
         </div>
 
         {onClose ? (
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
-            aria-label={t('homeSearchDrawerContent.closeInputFilter')}
-            title={t('homeSearchDrawerContent.closeInputFilter')}
-          >
+          <IconButton size="icon-sm" variant="ghost" onClick={onClose} label={t('homeSearchDrawerContent.closeInputFilter')}>
             <X className="h-4 w-4" />
-          </button>
+          </IconButton>
         ) : null}
       </div>
 
@@ -233,7 +231,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
     <>
       <div
         className={cn(
-          'fixed inset-x-0 bottom-0 top-[var(--theme-shell-header-height)] z-40 bg-black/40 transition-opacity',
+          'fixed inset-x-0 bottom-0 top-[var(--theme-shell-header-height)] z-40 bg-backdrop/50 transition-opacity',
           isDrawerOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={closeDrawer}
@@ -241,16 +239,16 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
 
       <aside
         className={cn(
-          'theme-floating-panel fixed bottom-0 right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height))] max-w-full flex-col border-l border-border/80 bg-background/94 transition-transform duration-300',
+          'theme-floating-panel fixed bottom-0 right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height))] max-w-full flex-col bg-background/94 transition-transform duration-300',
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full',
         )}
         style={{ width: 'min(calc(100vw - 0.75rem), 420px)' }}
       >
-        <div className="theme-drawer-header flex items-center justify-between border-b border-border/80 bg-background/40">
-          <div className="text-2xl font-semibold tracking-tight text-foreground">{t({ ko: '라이브러리 검색', en: 'Search library' })}</div>
-          <button type="button" onClick={closeDrawer} className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground" aria-label={t('homeSearchDrawerContent.closeSearchDrawer')}>
+        <div className="theme-drawer-header flex items-center justify-between">
+          <Heading level={2}>{t({ ko: '라이브러리 검색', en: 'Search library' })}</Heading>
+          <IconButton variant="ghost" onClick={closeDrawer} label={t('homeSearchDrawerContent.closeSearchDrawer')} tooltipSide="left">
             <X className="h-5 w-5" />
-          </button>
+          </IconButton>
         </div>
 
         <div className="theme-drawer-body flex-1 space-y-4 overflow-y-auto">
@@ -280,7 +278,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '현재 필터', en: 'Current filters' })}</div>
+              <Text as="div" variant="overline" className="min-w-0 flex-1 font-semibold">{t({ ko: '현재 필터', en: 'Current filters' })}</Text>
             </div>
 
             <SearchChipList chips={draftChips} title={null} emptyMessage={t({ ko: '필터 없음', en: 'No filters' })} onCycleOperator={cycleChipOperator} onRemove={removeChip} />
@@ -297,10 +295,12 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '최근 검색', en: 'Recent searches' })}</div>
+              <Text as="div" variant="overline" className="min-w-0 flex-1 font-semibold">{t({ ko: '최근 검색', en: 'Recent searches' })}</Text>
               <div className="flex shrink-0 items-center gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
                   onClick={async () => {
                     const confirmed = await confirm({
                       title: t({ ko: '최근 검색 비우기', en: 'Clear recent searches' }),
@@ -313,10 +313,9 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                     }
                   }}
                   disabled={historyEntries.length === 0}
-                  className="text-xs text-muted-foreground transition hover:text-foreground disabled:opacity-50"
                 >
                   {t({ ko: '히스토리 비우기', en: 'Clear history' })}
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -325,7 +324,8 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
             {!historyLoading && historyEntries.length > 0 ? (
               <div className="space-y-2">
                 {historyEntries.map((entry) => (
-                  <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-border/70 bg-background/45 px-4 py-3">
+                  <Panel key={entry.id} padding="none" className="flex items-start gap-3 px-4 py-3">
+                    {/* eslint-disable-next-line no-restricted-syntax -- multi-line chip block as one hit target; Button is a single-line control */}
                     <button
                       type="button"
                       onClick={() => {
@@ -333,15 +333,15 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                         setIsSuggestionPanelOpen(false)
                         closeDrawer()
                       }}
-                      className="min-w-0 flex-1 text-left"
+                      className="min-w-0 flex-1 rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
                     >
                       <div className="flex flex-wrap gap-2">
                         {entry.chips.map((chip) => (
-                          <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-sm border border-border bg-background px-2.5 py-1.5 text-xs text-foreground">
-                            <span className="rounded-sm px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getSearchScopeStyle(chip.scope)}>
+                          <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-surface-high px-2 py-1 text-xs text-foreground">
+                            <span className="rounded-sm px-1.5 py-0.5 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
                               {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
                             </span>
-                            <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.08em] text-primary" title={t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator])}>
+                            <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary" title={t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator])}>
                               {t(SEARCH_OPERATOR_LABELS[chip.operator])}
                             </span>
                             <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
@@ -351,10 +351,10 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                         ))}
                       </div>
                     </button>
-                    <button type="button" onClick={() => void deleteHistoryEntry(entry.id)} className="mt-1 text-muted-foreground transition hover:text-foreground" aria-label={t('homeSearchDrawerContent.deleteSearchHistory')}>
+                    <IconButton size="icon-xs" variant="ghost" onClick={() => void deleteHistoryEntry(entry.id)} label={t('homeSearchDrawerContent.deleteSearchHistory')}>
                       <X className="h-4 w-4" />
-                    </button>
-                  </div>
+                    </IconButton>
+                  </Panel>
                 ))}
               </div>
             ) : null}

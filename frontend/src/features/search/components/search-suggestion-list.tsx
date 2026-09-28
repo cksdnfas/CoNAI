@@ -1,6 +1,7 @@
 import { SEARCH_AI_TOOL_OPTIONS } from '@/features/search/search-constants'
 import type { PromptCollectionItem } from '@/types/prompt'
 import type { RatingTierRecord, SearchAiToolGroup, SearchMetadataSuggestion, SearchScope } from '@/features/search/search-types'
+import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 
 interface SearchSuggestionListProps {
@@ -24,12 +25,15 @@ interface SearchSuggestionListProps {
   idlePromptText?: string
 }
 
+/** Edge-to-edge list row: nav tone and hover, with the trailing hint/count pushed right. */
+const suggestionRowClassName = 'h-auto justify-between gap-4 rounded-none px-4 py-3'
+
 function SuggestionActionRow({ label, hint, onClick }: { label: string; hint?: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high">
+    <Button type="button" onClick={onClick} variant="nav" className={suggestionRowClassName}>
       <span className="truncate text-sm text-foreground">{label}</span>
       {hint ? <span className="shrink-0 text-xs text-muted-foreground">{hint}</span> : null}
-    </button>
+    </Button>
   )
 }
 
@@ -70,15 +74,15 @@ export function SearchSuggestionList({
         {!suggestionsLoading && trimmedInput.length > 0 && promptSuggestions.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedEmptyPromptText}</div> : null}
         {!suggestionsLoading && promptSuggestions.length > 0
           ? promptSuggestions.map((item) => (
-              <button
+              <Button
                 key={`${item.type}-${item.id}`}
                 type="button"
                 onClick={() => onSelectSuggestion(item)}
-                className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
+                variant="nav" className={suggestionRowClassName}
               >
                 <span className="truncate text-sm text-secondary">{item.prompt}</span>
                 <span className="shrink-0 text-sm text-muted-foreground">{formatNumber(item.usage_count)}</span>
-              </button>
+              </Button>
             ))
           : null}
       </>
@@ -92,11 +96,11 @@ export function SearchSuggestionList({
         {!ratingTiersLoading && filteredRatingTiers.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedEmptyRatingText}</div> : null}
         {!ratingTiersLoading && filteredRatingTiers.length > 0
           ? filteredRatingTiers.map((tier) => (
-              <button
+              <Button
                 key={tier.id}
                 type="button"
                 onClick={() => onSelectRatingTier(tier)}
-                className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
+                variant="nav" className={suggestionRowClassName}
               >
                 <span className="text-sm font-semibold" style={tier.color ? { color: tier.color } : undefined}>
                   {tier.tier_name}
@@ -104,7 +108,7 @@ export function SearchSuggestionList({
                 <span className="shrink-0 text-sm text-muted-foreground">
                   {tier.min_score}~{tier.max_score === null ? '∞' : tier.max_score}
                 </span>
-              </button>
+              </Button>
             ))
           : null}
       </>
@@ -135,15 +139,15 @@ export function SearchSuggestionList({
       {!metadataLoading && metadataSuggestions.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{metadataEmptyText}</div> : null}
       {!metadataLoading && metadataSuggestions.length > 0
         ? metadataSuggestions.map((item) => (
-            <button
+            <Button
               key={item.value}
               type="button"
               onClick={() => onSelectMetadataSuggestion(item.value)}
-              className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
+              variant="nav" className={suggestionRowClassName}
             >
               <span className="truncate text-sm text-secondary">{item.value}</span>
               <span className="shrink-0 text-sm text-muted-foreground">{formatNumber(item.count)}</span>
-            </button>
+            </Button>
           ))
         : null}
     </>

@@ -1,8 +1,11 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { SEARCH_SCOPE_LABEL_KEYS, SEARCH_SCOPE_TABS } from '@/features/search/search-constants'
 import { getSearchScopeStyle } from '@/features/search/search-utils'
 import type { SearchScope } from '@/features/search/search-types'
+import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 
 interface SearchScopeTabsProps {
@@ -84,27 +87,27 @@ export function SearchScopeTabs({ searchScope, onChange, className }: SearchScop
   return (
     <div className={cn('relative', className)}>
       {canScrollLeft ? (
-        <button
-          type="button"
+        <IconButton
+          size="icon-sm"
+          variant="ghost"
           onClick={() => scrollRef.current?.scrollBy({ left: -160, behavior: 'smooth' })}
-          className="absolute left-0 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center bg-gradient-to-r from-background via-background/95 to-transparent text-sm font-semibold text-muted-foreground transition hover:text-foreground"
-          aria-label={t('search.components.search.scope.tabs.previous.filter.item')}
-          title={t('search.components.search.scope.tabs.previous.filter.item')}
+          className="absolute left-0 top-1/2 z-10 -translate-y-1/2 bg-gradient-to-r from-background via-background/95 to-transparent"
+          label={t('search.components.search.scope.tabs.previous.filter.item')}
         >
-          {'<'}
-        </button>
+          <ChevronLeft className="h-4 w-4" />
+        </IconButton>
       ) : null}
 
       {canScrollRight ? (
-        <button
-          type="button"
+        <IconButton
+          size="icon-sm"
+          variant="ghost"
           onClick={() => scrollRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
-          className="absolute right-0 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center bg-gradient-to-l from-background via-background/95 to-transparent text-sm font-semibold text-muted-foreground transition hover:text-foreground"
-          aria-label={t('search.components.search.scope.tabs.next.filter.item')}
-          title={t('search.components.search.scope.tabs.next.filter.item')}
+          className="absolute right-0 top-1/2 z-10 -translate-y-1/2 bg-gradient-to-l from-background via-background/95 to-transparent"
+          label={t('search.components.search.scope.tabs.next.filter.item')}
         >
-          {'>'}
-        </button>
+          <ChevronRight className="h-4 w-4" />
+        </IconButton>
       ) : null}
 
       <div
@@ -161,26 +164,26 @@ export function SearchScopeTabs({ searchScope, onChange, className }: SearchScop
           finishDrag()
         }}
       >
-        <div className="inline-flex min-w-full items-center gap-1 rounded-sm border border-border bg-surface-low p-1 pr-9">
+        <div className="inline-flex min-w-full items-center gap-1 rounded-sm bg-surface-low p-1 pr-9">
           {SEARCH_SCOPE_TABS.map((tab) => (
-            <button
+            <Button
               key={tab.value}
               data-scope={tab.value}
               type="button"
+              variant="ghost"
+              size="xs"
+              aria-pressed={searchScope === tab.value}
               onClick={() => {
                 if (suppressClickRef.current) {
                   return
                 }
                 onChange(tab.value)
               }}
-              className={cn(
-                'shrink-0 rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors select-none',
-                searchScope === tab.value ? 'shadow-sm' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
-              )}
+              className={cn('px-3 font-semibold select-none', searchScope === tab.value && 'shadow-elevation-1')}
               style={searchScope === tab.value ? getSearchScopeStyle(tab.value) : undefined}
             >
               {t(SEARCH_SCOPE_LABEL_KEYS[tab.value])}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

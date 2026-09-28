@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { useHomeSearch } from '@/features/home/home-search-context'
 import { registerTranslationCatalog, useI18n } from '@/i18n'
 
@@ -64,8 +65,8 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
   }
 
   return (
-    <button
-      type="button"
+    <IconButton
+      variant="ghost"
       onClick={() => {
         if (isDrawerOpen) {
           closeDrawer()
@@ -76,17 +77,18 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
         openDrawer()
       }}
       data-state={isDrawerOpen ? 'open' : appliedChips.length > 0 ? 'active' : 'closed'}
-      className="theme-shell-icon-button relative inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-      aria-label={isDrawerOpen ? t({ ko: '라이브러리 검색 닫기', en: 'Close library search' }) : t({ ko: '라이브러리 검색', en: 'Search library' })}
-      title={isDrawerOpen ? t({ ko: '라이브러리 검색 닫기', en: 'Close library search' }) : t({ ko: '라이브러리 검색', en: 'Search library' })}
+      aria-expanded={isDrawerOpen}
+      className="theme-shell-icon-button relative text-foreground/80 hover:text-foreground"
+      label={isDrawerOpen ? t({ ko: '라이브러리 검색 닫기', en: 'Close library search' }) : t({ ko: '라이브러리 검색', en: 'Search library' })}
+      tooltipSide="bottom"
     >
       <Search className="h-4 w-4" />
       {appliedChips.length > 0 ? (
-        <span className="absolute -right-1 -top-1 inline-flex min-w-[1rem] items-center justify-center rounded-sm border border-primary/25 bg-primary/16 px-1 text-[10px] font-semibold leading-4 text-primary shadow-[0_0_0_2px_var(--background)]">
+        <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-sm bg-primary px-1 text-2xs font-semibold leading-4 text-primary-foreground ring-2 ring-background">
           {appliedChips.length}
         </span>
       ) : null}
-    </button>
+    </IconButton>
   )
 }
 

@@ -133,7 +133,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
                     <span className="text-muted-foreground">{row.label}</span>
                     <span className={cn(
                       'text-right font-mono text-foreground',
-                      row.tone === 'success' && 'text-emerald-400',
+                      row.tone === 'success' && 'text-success',
                       row.tone === 'danger' && 'text-destructive',
                     )}>
                       {row.value}
