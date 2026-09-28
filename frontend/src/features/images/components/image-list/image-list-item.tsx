@@ -168,7 +168,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
         checked={selected}
         tabIndex={-1}
         aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: displayName })}
-        className="relative size-5 rounded-[5px] border-white/85 bg-black/45 shadow-[0_2px_8px_rgba(0,0,0,0.45)] backdrop-blur-sm before:absolute before:-inset-2.5 before:content-[''] hover:border-white data-[state=checked]:border-primary"
+        className="relative size-5 rounded-[5px] border-white/85 bg-backdrop/60 shadow-elevation-1 backdrop-blur-sm before:absolute before:-inset-2.5 before:content-[''] hover:border-white data-[state=checked]:border-primary"
         onClick={(event) => {
           event.stopPropagation()
           event.preventDefault()
@@ -223,7 +223,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
         <div className={cn('transition duration-300', blurPreview && 'scale-[1.03] blur-2xl saturate-[0.55]')}>
           {content}
         </div>
-        {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-black/18" /> : null}
+        {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-backdrop/25" /> : null}
       </div>
       {renderPersistentOverlay ? <div className="image-list-persistent-overlay absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
       {quickActions}

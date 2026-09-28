@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderPlus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
@@ -83,9 +83,9 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
 
   return (
     <>
-      <Button size="icon-sm" variant="secondary" onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} aria-label={t('images.components.detail.image.group.assign.action.add.to.group')} title={t('images.components.detail.image.group.assign.action.add.to.group')}>
+      <IconButton size="icon-sm" variant="secondary" onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} label={t('images.components.detail.image.group.assign.action.add.to.group')}>
         <FolderPlus className="h-4 w-4" />
-      </Button>
+      </IconButton>
 
       <GroupAssignModal
         open={isModalOpen}

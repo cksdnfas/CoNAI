@@ -2,6 +2,8 @@ import { useRef, useState } from 'react'
 import { LayoutGrid, RotateCcw } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -42,19 +44,17 @@ export function ImageListColumnFloatingControl({
               <div className="text-sm font-semibold text-foreground">{t({ ko: '현재 {count}개', en: 'Current: {count}' }, { count: formatNumber(value) })}</div>
             </div>
             {onReset ? (
-              <Button
-                type="button"
+              <IconButton
                 size="icon-xs"
                 variant="ghost"
                 onClick={() => {
                   onReset()
                   setIsOpen(false)
                 }}
-                aria-label={t({ ko: '기본값으로 되돌리기', en: 'Reset to default' })}
-                title={t({ ko: '기본값 {count}개로 되돌리기', en: 'Reset to default {count}' }, { count: formatNumber(defaultValue) })}
+                label={t({ ko: '기본값 {count}개로 되돌리기', en: 'Reset to default {count}' }, { count: formatNumber(defaultValue) })}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-              </Button>
+              </IconButton>
             ) : null}
           </div>
 
@@ -67,7 +67,7 @@ export function ImageListColumnFloatingControl({
                   type="button"
                   size="sm"
                   variant={isActive ? 'default' : 'secondary'}
-                  className="h-8 px-0"
+                  className="px-0"
                   onClick={() => {
                     onChange(option)
                     setIsOpen(false)
@@ -81,18 +81,21 @@ export function ImageListColumnFloatingControl({
         </div>
       </AnchoredPopup>
 
-      <button
-        type="button"
-        onClick={() => setIsOpen((current) => !current)}
-        className="theme-floating-panel pointer-events-auto inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/92 px-3 py-2 text-sm text-foreground shadow-[0_18px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm transition hover:bg-surface-high"
-        aria-label={t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })}
-        aria-haspopup="dialog"
-        aria-expanded={isOpen}
-        title={t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })}
-      >
-        <LayoutGrid className="h-4 w-4" />
-        <span className="text-xs font-semibold leading-none">{value}</span>
-      </button>
+      <Tip content={t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })} side="left">
+        {/* ghost keeps the floating glass surface visible underneath; the glass comes from theme-floating-panel. */}
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setIsOpen((current) => !current)}
+          className="theme-floating-panel pointer-events-auto text-foreground"
+          aria-label={t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })}
+          aria-haspopup="dialog"
+          aria-expanded={isOpen}
+        >
+          <LayoutGrid className="h-4 w-4" />
+          <span className="text-xs font-semibold leading-none tabular-nums">{value}</span>
+        </Button>
+      </Tip>
     </div>
   )
 }

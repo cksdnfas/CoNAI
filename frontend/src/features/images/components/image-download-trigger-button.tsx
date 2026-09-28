@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { Download } from 'lucide-react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { downloadImageSelection, type ImageDownloadType } from '@/lib/api-images'
@@ -134,26 +135,28 @@ export function ImageDownloadTriggerButton({
 
   return (
     <span ref={containerRef} className="relative inline-flex">
-      <Button
-        type="button"
-        size={size}
-        variant={variant}
-        className={className}
-        onClick={() => {
-          if (isVideo) {
-            void handleSelect('original')
-            return
-          }
+      <Tip content={title ?? t('images.components.image.download.trigger.button.download')}>
+        <Button
+          type="button"
+          size={size}
+          variant={variant}
+          className={className}
+          onClick={() => {
+            if (isVideo) {
+              void handleSelect('original')
+              return
+            }
 
-          setIsOpen((current) => !current)
-        }}
-        disabled={isDownloading}
-        aria-label={ariaLabel ?? t('images.components.image.download.trigger.button.download')}
-        title={title ?? t('images.components.image.download.trigger.button.download')}
-        data-no-select-drag="true"
-      >
-        {children ?? <Download className="h-4 w-4" />}
-      </Button>
+            setIsOpen((current) => !current)
+          }}
+          disabled={isDownloading}
+          aria-label={ariaLabel ?? t('images.components.image.download.trigger.button.download')}
+          aria-expanded={isVideo ? undefined : isOpen}
+          data-no-select-drag="true"
+        >
+          {children ?? <Download className="h-4 w-4" />}
+        </Button>
+      </Tip>
 
       {!isVideo ? (
         <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>

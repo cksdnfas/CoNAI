@@ -2,7 +2,7 @@ import { Suspense, lazy, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePenLine } from 'lucide-react'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { getExistingImageEditorSourceUrl, saveEditedImageToCanvas } from '@/lib/api-images'
@@ -109,9 +109,9 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
 
   return (
     <>
-      <Button size="icon-sm" variant="secondary" onClick={() => setIsEditorOpen(true)} disabled={saveMutation.isPending} aria-label={t('images.components.detail.image.edit.action.images.edit')} title={t('images.components.detail.image.edit.action.images.edit')}>
+      <IconButton size="icon-sm" variant="secondary" onClick={() => setIsEditorOpen(true)} disabled={saveMutation.isPending} label={t('images.components.detail.image.edit.action.images.edit')}>
         <FilePenLine className="h-4 w-4" />
-      </Button>
+      </IconButton>
 
       {isEditorOpen ? (
         <Suspense fallback={null}>

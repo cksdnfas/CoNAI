@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -96,11 +97,12 @@ function ImageDetailModalNavigationButtons({ navigation }: { navigation?: ImageD
   }
 
   const buttonClassName = 'group/modal-nav pointer-events-auto absolute top-1/2 z-30 flex h-28 w-12 -translate-y-1/2 items-center text-white/80 opacity-100 transition hover:text-white focus-visible:opacity-100 md:h-40 md:w-16 md:text-white/74 md:opacity-0 md:group-hover/image-pane:opacity-100'
-  const buttonInnerClassName = 'flex h-10 w-10 items-center justify-center rounded-sm border border-white/14 bg-black/42 shadow-[0_12px_32px_rgba(0,0,0,0.38)] backdrop-blur-md transition-colors group-hover/modal-nav:border-white/24 group-hover/modal-nav:bg-black/62 md:h-12 md:w-12'
+  const buttonInnerClassName = 'flex h-10 w-10 items-center justify-center rounded-sm bg-backdrop/50 shadow-elevation-2 backdrop-blur-md transition-colors group-hover/modal-nav:bg-backdrop/80 md:h-12 md:w-12'
 
   return (
     <>
       {navigation.canViewPrevious ? (
+        // eslint-disable-next-line no-restricted-syntax -- tall edge hit-zone with a photo scrim; Button sizes/tones do not fit
         <button
           type="button"
           className={cn(buttonClassName, 'left-0 justify-start bg-gradient-to-r from-black/36 via-black/12 to-transparent pl-1.5 md:pl-3')}
@@ -115,6 +117,7 @@ function ImageDetailModalNavigationButtons({ navigation }: { navigation?: ImageD
       ) : null}
 
       {navigation.canViewNext ? (
+        // eslint-disable-next-line no-restricted-syntax -- tall edge hit-zone with a photo scrim; Button sizes/tones do not fit
         <button
           type="button"
           className={cn(buttonClassName, 'right-0 justify-end bg-gradient-to-l from-black/36 via-black/12 to-transparent pr-1.5 md:pr-3')}
@@ -538,9 +541,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       />
 
       {shouldShowRelatedEmptyState ? (
-        <div className="rounded-sm border border-border/70 bg-surface-container/70 px-4 py-6 text-sm text-muted-foreground">
-          {t({ ko: '표시할 유사/중복 이미지가 없어.', en: 'No similar or duplicate images to show.' })}
-        </div>
+        <EmptyState title={t({ ko: '표시할 유사/중복 이미지가 없어.', en: 'No similar or duplicate images to show.' })} />
       ) : null}
     </div>
   )
@@ -566,7 +567,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
                   ]}
                   onChange={handleSelectImageAreaTab}
                   size="xs"
-                  className="image-detail-modal-image-tabs shrink-0 flex-nowrap whitespace-nowrap border-white/14 bg-black/42 text-white shadow-[0_12px_32px_rgba(0,0,0,0.32)] backdrop-blur-md"
+                  className="image-detail-modal-image-tabs shrink-0 flex-nowrap whitespace-nowrap border-transparent bg-backdrop/50 text-white shadow-elevation-2 backdrop-blur-md"
                 />
               </div>
             </div>
@@ -613,9 +614,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               {!imageQuery.isLoading && !imageQuery.isError && image && !activeTabIsCurrent ? (
                 <div className="image-detail-modal-related-pane image-detail-scroll-pane">
                   {!canLoadRelatedImages ? (
-                    <div className="rounded-sm border border-border/70 bg-surface-container/70 px-4 py-6 text-sm text-muted-foreground">
-                      {t({ ko: '이미지 파일만 유사 이미지 검사를 사용할 수 있어.', en: 'Similarity checks are available for image files only.' })}
-                    </div>
+                    <EmptyState title={t({ ko: '이미지 파일만 유사 이미지 검사를 사용할 수 있어.', en: 'Similarity checks are available for image files only.' })} />
                   ) : isSecondaryContentReady ? relatedImagesContent : (
                     <div className="space-y-4">
                       <Skeleton className="h-10 w-48 rounded-sm" />
@@ -642,6 +641,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               </Button>
             ) : null}
 
+            {/* eslint-disable-next-line no-restricted-syntax -- index.css toggles this row's display per breakpoint; Button's inline-flex would override it */}
             <button
               type="button"
               className="image-detail-modal-info-mobile-header"

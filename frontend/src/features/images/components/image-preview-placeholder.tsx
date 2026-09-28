@@ -27,14 +27,14 @@ export function ImagePreviewPlaceholder({
   return (
     <div
       className={cn(
-        'flex h-full w-full flex-col items-center justify-center gap-3 bg-[#0f0d0d] px-4 text-center text-[#c9a9a4]',
+        'flex h-full w-full flex-col items-center justify-center gap-3 bg-surface-lowest px-4 text-center text-muted-foreground',
         compact && 'gap-1.5 px-2',
         className,
       )}
       style={style}
     >
       <ImageOff className={cn('shrink-0 opacity-90', compact ? 'h-6 w-6' : 'h-14 w-14', iconClassName)} strokeWidth={1.8} />
-      <span className={cn('leading-none', compact ? 'text-[10px]' : 'text-base', labelClassName)}>{resolvedLabel}</span>
+      <span className={cn('leading-none', compact ? 'text-2xs' : 'text-base', labelClassName)}>{resolvedLabel}</span>
     </div>
   )
 }

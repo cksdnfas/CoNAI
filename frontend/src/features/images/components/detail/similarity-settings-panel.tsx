@@ -2,6 +2,8 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { Panel } from '@/components/ui/panel'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type SimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
@@ -86,18 +88,16 @@ export function SimilaritySettingsPanel({
               />
 
               <label className="flex items-center gap-3 pt-6 text-sm text-foreground sm:pt-7">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={draft.detailSimilarUseMetadataFilter}
-                  onChange={(event) => onPatchDraft({ detailSimilarUseMetadataFilter: event.target.checked })}
-                  className="h-4 w-4"
+                  onCheckedChange={(checked) => onPatchDraft({ detailSimilarUseMetadataFilter: checked === true })}
                 />
                 <span>{t('images.components.detail.similarity.settings.panel.prioritize.similar.resolutions.only')}</span>
               </label>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
+              <Panel tone="container" padding="none" className="space-y-3 p-3">
                 <SectionTitleWithTooltip title={t('images.components.detail.similarity.settings.panel.score.weights')} tooltip={t('images.components.detail.similarity.settings.panel.weight.used.in.the.final.score.calculation')} />
 
                 <SimilarityNumberField
@@ -134,9 +134,9 @@ export function SimilaritySettingsPanel({
                     detailSimilarWeights: { ...draft.detailSimilarWeights, color: value },
                   })}
                 />
-              </div>
+              </Panel>
 
-              <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
+              <Panel tone="container" padding="none" className="space-y-3 p-3">
                 <SectionTitleWithTooltip title={t('images.components.detail.similarity.settings.panel.per.item.thresholds')} tooltip={t('images.components.detail.similarity.settings.panel.each.item.must.fall.within.this.range')} />
 
                 <SimilarityNumberField
@@ -181,7 +181,7 @@ export function SimilaritySettingsPanel({
                     })}
                   />
                 </div>
-              </div>
+              </Panel>
             </div>
 
             <div className="flex justify-end gap-2">

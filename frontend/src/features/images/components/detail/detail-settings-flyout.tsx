@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
 import { useRef } from 'react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 
-export const detailSettingsLabelClassName = 'text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase'
+export const detailSettingsLabelClassName = 'text-xs font-semibold tracking-overline text-muted-foreground uppercase'
 
 interface DetailSettingsFlyoutProps {
   isOpen: boolean
@@ -31,9 +31,9 @@ export function DetailSettingsFlyout({
 
   return (
     <>
-      <Button ref={triggerRef} size="icon-sm" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onToggle} aria-label={triggerLabel} title={triggerTitle}>
+      <IconButton ref={triggerRef} size="icon-sm" variant="secondary" onClick={onToggle} label={triggerLabel} aria-expanded={isOpen}>
         {icon}
-      </Button>
+      </IconButton>
       <AnchoredPopup open={isOpen} anchorRef={triggerRef} onClose={onToggle} align="end" side="bottom" className={panelWidthClassName} closeOnBack>
         <div className={anchoredPopupHeaderClassName}>
           <div className={anchoredPopupLabelClassName}>{t('images.components.detail.detail.settings.flyout.options')}</div>

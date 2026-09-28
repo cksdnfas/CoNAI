@@ -51,6 +51,7 @@ export function ImageViewModalOverlay({
   }, [compositeHash, openSessionId])
 
   return createPortal(
+    // eslint-disable-next-line no-restricted-syntax -- full-bleed lightbox: Modal adds a titled, padded card this viewer must not have
     <div className="fixed inset-0 z-[90] bg-black" onMouseDown={onClose}>
       <div
         ref={containerRef}

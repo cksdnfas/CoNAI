@@ -59,7 +59,7 @@ export function ImageDetailMediaFrame({
         />
       ) : null}
       {shouldRenderPixelPreview && !isPixelPreviewReady ? (
-        <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-black/45 px-2 py-1 text-[11px] font-medium text-white/82 shadow-sm backdrop-blur-sm">
+        <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-backdrop/60 px-2 py-1 text-2xs font-medium text-white/82 backdrop-blur-sm">
           <LoaderCircle className="h-3 w-3 animate-spin" />
           {applyingLabel}
         </div>

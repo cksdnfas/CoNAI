@@ -48,11 +48,11 @@ const MATCH_TYPE_LABELS: Record<SimilarImage['matchType'], { ko: string; en: str
 
 /** Map score bands onto the shared similarity badge palette. */
 function getSimilarityBadgeClassName(similarity: number) {
-  if (similarity >= 92) return 'border border-emerald-300/45 bg-emerald-500/88 text-white'
-  if (similarity >= 82) return 'border border-sky-300/45 bg-sky-500/88 text-white'
-  if (similarity >= 68) return 'border border-violet-300/45 bg-violet-500/88 text-white'
-  if (similarity >= 52) return 'border border-amber-200/50 bg-amber-500/88 text-black'
-  return 'border border-rose-300/45 bg-rose-500/88 text-white'
+  if (similarity >= 92) return 'bg-success text-success-foreground'
+  if (similarity >= 82) return 'bg-info text-info-foreground'
+  if (similarity >= 68) return 'bg-surface-bright text-foreground'
+  if (similarity >= 52) return 'bg-warning text-warning-foreground'
+  return 'bg-destructive text-destructive-foreground'
 }
 
 /** Render the shared similarity score badge + popup shell used across image/text similarity cards. */
@@ -82,7 +82,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
         <Badge
           variant="secondary"
           className={cn(
-            'max-w-full shadow-sm backdrop-blur-sm tracking-normal normal-case',
+            'max-w-full shadow-elevation-1 tracking-normal normal-case',
             getSimilarityBadgeClassName(badgeValue),
           )}
           onMouseEnter={handleAnchorEnter}
@@ -101,7 +101,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
           anchorRef={anchorRef}
           align="start"
           side="bottom"
-          className="w-[min(240px,calc(100vw-1.5rem))] p-3 text-[11px]"
+          className="w-[min(240px,calc(100vw-1.5rem))] p-3 text-2xs"
           surfaceProps={{
             onMouseEnter: () => {
               setIsPopupHovered(true)

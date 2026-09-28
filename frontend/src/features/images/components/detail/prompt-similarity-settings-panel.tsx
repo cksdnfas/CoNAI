@@ -2,6 +2,7 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { Panel } from '@/components/ui/panel'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type PromptSimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
@@ -53,7 +54,7 @@ export function PromptSimilaritySettingsPanel({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
+              <Panel tone="container" padding="none" className="space-y-3 p-3">
                 <SectionTitleWithTooltip title={t('images.components.detail.prompt.similarity.settings.panel.score.weights')} tooltip={t('images.components.detail.prompt.similarity.settings.panel.weight.applied.when.calculating.the.combined.score')} />
 
                 <div className="space-y-2">
@@ -70,9 +71,9 @@ export function PromptSimilaritySettingsPanel({
                   <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
                   <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.auto} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
                 </div>
-              </div>
+              </Panel>
 
-              <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
+              <Panel tone="container" padding="none" className="space-y-3 p-3">
                 <SectionTitleWithTooltip title={t('images.components.detail.prompt.similarity.settings.panel.minimum.field.thresholds')} tooltip={t('images.components.detail.prompt.similarity.settings.panel.each.field.must.meet.or.exceed.this')} />
 
                 <div className="space-y-2">
@@ -89,7 +90,7 @@ export function PromptSimilaritySettingsPanel({
                   <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
                   <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.auto} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(value) } })} />
                 </div>
-              </div>
+              </Panel>
             </div>
 
             <div className="flex justify-end gap-2">

@@ -1,5 +1,5 @@
 import { ArrowLeft, RefreshCcw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
@@ -23,12 +23,12 @@ export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, o
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button size="icon-sm" variant="secondary" onClick={onBack} aria-label={t('images.components.detail.image.detail.actions.back.to.feed')} title={t('images.components.detail.image.detail.actions.back.to.feed')}>
+      <IconButton size="icon-sm" variant="secondary" onClick={onBack} label={t('images.components.detail.image.detail.actions.back.to.feed')}>
         <ArrowLeft className="h-4 w-4" />
-      </Button>
-      <Button size="icon-sm" variant="secondary" onClick={onRefresh} disabled={isRefreshing} aria-label={t('images.components.detail.image.detail.actions.refresh')} title={t('images.components.detail.image.detail.actions.refresh')}>
+      </IconButton>
+      <IconButton size="icon-sm" variant="secondary" onClick={onRefresh} disabled={isRefreshing} label={t('images.components.detail.image.detail.actions.refresh')}>
         <RefreshCcw className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-      </Button>
+      </IconButton>
       <ImageEditAction image={image} />
       <ImageGroupAssignAction image={image} />
       {downloadUrl ? <ImageDownloadTriggerButton image={image} /> : null}

@@ -7,6 +7,8 @@ import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Text } from '@/components/ui/text'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -187,7 +189,7 @@ export function ImageMetadataEditPage() {
             <Button
               onClick={handleSave}
               disabled={!canSave}
-              title={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '변경 사항이 없습니다', en: 'No changes to save' }) : undefined}
+              title={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '바뀐 게 없어', en: 'No changes to save' }) : undefined}
             >
               <Save className="h-4 w-4" />
               {t({ ko: '저장', en: 'Save' })}
@@ -213,33 +215,31 @@ export function ImageMetadataEditPage() {
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
         <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] items-start' : 'grid-cols-1')}>
           <Section bodyClassName="space-y-4">
-            <div className="overflow-hidden rounded-sm border border-border/70 bg-surface-lowest">
+            <div className="overflow-hidden rounded-sm bg-surface-lowest">
               <div className="flex h-[max(420px,60vh)] items-center justify-center bg-surface-lowest">
                 <ImageDetailMedia image={image} renderUrl={renderUrl} />
               </div>
             </div>
 
             <Inset className="text-sm text-muted-foreground">
-              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일', en: 'File' })}</p>
+              <Text variant="overline">{t({ ko: '파일', en: 'File' })}</Text>
               <p className="mt-2 break-all text-foreground">{downloadName}</p>
             </Inset>
 
             {image.composite_hash ? (
               <Inset className="text-sm text-muted-foreground">
                 <details>
-                  <summary className="cursor-pointer select-none text-[11px] uppercase tracking-[0.18em]">{t({ ko: '기술 정보', en: 'Technical details' })}</summary>
+                  <summary className="cursor-pointer select-none text-2xs uppercase tracking-overline">{t({ ko: '기술 정보', en: 'Technical details' })}</summary>
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '복합 해시', en: 'Composite hash' })}</p>
-                    <Button
-                      type="button"
+                    <Text variant="overline">{t({ ko: '복합 해시', en: 'Composite hash' })}</Text>
+                    <IconButton
                       size="icon-sm"
                       variant="ghost"
                       onClick={() => void handleCopyHash()}
-                      aria-label={t({ ko: '복합 해시 복사', en: 'Copy composite hash' })}
-                      title={t({ ko: '복합 해시 복사', en: 'Copy composite hash' })}
+                      label={t({ ko: '복합 해시 복사', en: 'Copy composite hash' })}
                     >
                       <Copy className="h-4 w-4" />
-                    </Button>
+                    </IconButton>
                   </div>
                   <p className="mt-1 break-all font-mono text-xs text-foreground/88">{image.composite_hash}</p>
                 </details>
@@ -247,7 +247,7 @@ export function ImageMetadataEditPage() {
             ) : null}
           </Section>
 
-          <Section heading={t('metadata.image.metadata.edit.page.edit.metadata')}>
+          <Section heading={t({ ko: '메타 필드', en: 'Metadata fields' })}>
             {!isEditableImage ? (
               <Alert variant="destructive">
                 <AlertTitle>{t('metadata.image.metadata.edit.page.this.file.cannot.be.edited.in.place')}</AlertTitle>
@@ -266,7 +266,7 @@ export function ImageMetadataEditPage() {
 
             {draftValidationError ? (
               <Alert variant="destructive">
-                <AlertTitle>{t({ ko: '입력값을 확인하세요', en: 'Check the values' })}</AlertTitle>
+                <AlertTitle>{t({ ko: '입력값을 확인해 줘', en: 'Check the values' })}</AlertTitle>
                 <AlertDescription>{draftValidationError}</AlertDescription>
               </Alert>
             ) : null}

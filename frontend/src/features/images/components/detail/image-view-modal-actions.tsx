@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ExternalLink, RefreshCcw, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { formatCountDisplay } from '@/lib/count-display'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
@@ -67,24 +67,25 @@ export function ImageViewModalActions({
     onClose()
   }
 
-  const overlayButtonClassName = 'border-white/14 bg-black/42 text-white shadow-[0_12px_32px_rgba(0,0,0,0.38)] hover:bg-black/62 hover:text-white'
+  // The toolbar floats over the photo stage, so its buttons use a translucent backdrop scrim instead of a surface tone.
+  const overlayButtonClassName = 'bg-backdrop/50 text-white shadow-elevation-1 backdrop-blur-md hover:bg-backdrop/80 hover:text-white'
 
   const navigationButtons = (
     <>
-      <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={onClose} aria-label={t('images.components.detail.image.view.modal.actions.close')} title={t('images.components.detail.image.view.modal.actions.close')}>
+      <IconButton size="icon-sm" variant="ghost" className={overlayButtonClassName} onClick={onClose} label={t('images.components.detail.image.view.modal.actions.close')}>
         <X className="h-4 w-4" />
-      </Button>
-      {showCounter ? <div className="shrink-0 px-2 text-xs text-muted-foreground">{counterLabel}</div> : null}
+      </IconButton>
+      {showCounter ? <div className="shrink-0 px-2 text-xs tabular-nums text-white/80">{counterLabel}</div> : null}
       {allowDetailNavigation ? (
-        <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={openDetailPage} aria-label={t('images.components.detail.image.view.modal.actions.open.detail.page')} title={t('images.components.detail.image.view.modal.actions.detail.page')}>
+        <IconButton size="icon-sm" variant="ghost" className={overlayButtonClassName} onClick={openDetailPage} label={t('images.components.detail.image.view.modal.actions.open.detail.page')}>
           <ExternalLink className="h-4 w-4" />
-        </Button>
+        </IconButton>
       ) : null}
       {/* The record is refetched every time the viewer opens (staleTime 0); a manual refresh only helps while it is still processing. */}
       {controls.image?.is_processing ? (
-        <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={controls.refresh} disabled={controls.isRefreshing} aria-label={t('images.components.detail.image.view.modal.actions.refresh')} title={t('images.components.detail.image.view.modal.actions.refresh')}>
+        <IconButton size="icon-sm" variant="ghost" className={overlayButtonClassName} onClick={controls.refresh} disabled={controls.isRefreshing} label={t('images.components.detail.image.view.modal.actions.refresh')}>
           <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-        </Button>
+        </IconButton>
       ) : null}
     </>
   )
@@ -92,7 +93,7 @@ export function ImageViewModalActions({
   const historyReuseButtons = historyReuseId !== null ? <GenerationHistoryReuseActions key={historyReuseId} historyId={historyReuseId} /> : null
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} /> : null
   const editButton = allowEditAction ? <ImageEditAction image={controls.image} /> : null
-  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="secondary" className={overlayButtonClassName} /> : null
+  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="ghost" className={overlayButtonClassName} /> : null
   const deleteButton = allowDeleteAction ? (
     <ImageDeleteAction
       image={controls.image}

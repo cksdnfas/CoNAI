@@ -12,6 +12,10 @@ import {
 } from '@/components/common/prompt-result-sections'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
+import { Switch } from '@/components/ui/switch'
+import { Text } from '@/components/ui/text'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
@@ -116,7 +120,7 @@ function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: Pr
       icon={<SlidersHorizontal className="h-4 w-4" />}
     >
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-4 rounded-sm border border-border/75 bg-surface-container/70 px-3 py-2.5">
+        <Panel tone="container" padding="sm" className="flex items-center justify-between gap-4">
           <label className={detailSettingsLabelClassName} htmlFor="prompt-grouping-depth-input">{t({ ko: '분류 깊이', en: 'Classification depth' })}</label>
           <NumberStepperInput
             id="prompt-grouping-depth-input"
@@ -126,19 +130,19 @@ function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: Pr
             step={1}
             value={options.classificationDepth}
             onValueCommit={(nextValue) => onChange({ classificationDepth: clampPromptGroupingDepth(Number(nextValue)) })}
-            className="h-8 w-16 rounded-sm border border-border bg-surface-low px-2 text-center font-mono text-sm font-semibold text-foreground outline-none transition-colors focus:border-primary"
+            className="h-8 w-16 rounded-sm border border-outline-input bg-surface-lowest px-2 text-center font-mono text-sm font-semibold text-foreground outline-none transition-colors focus:border-primary/55"
           />
-        </div>
+        </Panel>
 
-        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-sm border border-border/75 bg-surface-container/70 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-surface-high/70">
-          <span className="font-medium">{t({ ko: 'Danbooru를 루트 그룹으로 취급', en: 'Treat Danbooru as the root group' })}</span>
-          <input
-            type="checkbox"
-            checked={options.treatDanbooruAsRoot}
-            onChange={(event) => onChange({ treatDanbooruAsRoot: event.target.checked })}
-            className="h-4 w-4 shrink-0 accent-primary"
-          />
-        </label>
+        <Panel asChild tone="container" padding="sm" interactive>
+          <label className="flex items-center justify-between gap-4 text-sm text-foreground">
+            <span className="font-medium">{t({ ko: 'Danbooru를 루트 그룹으로 취급', en: 'Treat Danbooru as the root group' })}</span>
+            <Switch
+              checked={options.treatDanbooruAsRoot}
+              onCheckedChange={(checked) => onChange({ treatDanbooruAsRoot: checked })}
+            />
+          </label>
+        </Panel>
       </div>
     </DetailSettingsFlyout>
   )
@@ -205,7 +209,6 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const modelSearchValue = getImageModelSearchValue(image)
   const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
   const canTogglePromptGrouping = positivePromptTermItems.length > 0 || negativePromptTermItems.length > 0
-  const metaItemClassName = 'rounded-sm border border-border bg-surface-container p-4'
 
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -302,9 +305,9 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const handleCopyTechnicalValue = async (value: string) => {
     try {
       await copyTextToClipboard(value)
-      showSnackbar({ message: t({ ko: '복사했습니다.', en: 'Copied.' }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '복사했어.', en: 'Copied.' }), tone: 'info' })
     } catch {
-      showSnackbar({ message: t({ ko: '복사하지 못했습니다.', en: 'Could not copy.' }), tone: 'error' })
+      showSnackbar({ message: t({ ko: '복사하지 못했어.', en: 'Could not copy.' }), tone: 'error' })
     }
   }
 
@@ -344,7 +347,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               }}
             >
               <FilePenLine className="h-4 w-4" />
-              {t('metadata.image.metadata.edit.page.edit.metadata')}
+              {t({ ko: '메타 수정', en: 'Edit metadata' })}
             </Button>
           ) : null}
         </div>
@@ -352,53 +355,51 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         {fileName ? (
-          <div className={firstSeenLabel ? metaItemClassName : `${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일 이름', en: 'File name' })}</p>
+          <Panel className={firstSeenLabel ? undefined : 'sm:col-span-2'}>
+            <Text variant="overline">{t({ ko: '파일 이름', en: 'File name' })}</Text>
             <p className="mt-2 break-all text-foreground">{fileName}</p>
-          </div>
+          </Panel>
         ) : null}
         {firstSeenLabel ? (
-          <div className={fileName ? metaItemClassName : `${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '추가된 날짜', en: 'Added' })}</p>
+          <Panel className={fileName ? undefined : 'sm:col-span-2'}>
+            <Text variant="overline">{t({ ko: '추가된 날짜', en: 'Added' })}</Text>
             <p className="mt-2 text-foreground">{firstSeenLabel}</p>
-          </div>
+          </Panel>
         ) : null}
-        <div className={metaItemClassName}>
-          <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '크기', en: 'Dimensions' })}</p>
+        <Panel>
+          <Text variant="overline">{t({ ko: '크기', en: 'Dimensions' })}</Text>
           <p className="mt-2 text-foreground">{image.width && image.height ? `${image.width} × ${image.height}` : '—'}</p>
-        </div>
-        <div className={metaItemClassName}>
-          <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일 크기', en: 'File size' })}</p>
+        </Panel>
+        <Panel>
+          <Text variant="overline">{t({ ko: '파일 크기', en: 'File size' })}</Text>
           <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
-        </div>
+        </Panel>
         {modelSearchValue ? (
-          <div className={`${metaItemClassName} sm:col-span-2`}>
+          <Panel className="sm:col-span-2">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '모델', en: 'Model' })}</p>
-              <Button
-                type="button"
+              <Text variant="overline">{t({ ko: '모델', en: 'Model' })}</Text>
+              <IconButton
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => handleAddModelSearchFilter(modelSearchValue)}
-                aria-label={t({ ko: '이 모델로 검색', en: 'Search this model' })}
-                title={t({ ko: '이 모델로 검색', en: 'Search this model' })}
+                label={t({ ko: '이 모델로 검색', en: 'Search this model' })}
               >
                 <Search className="h-4 w-4" />
-              </Button>
+              </IconButton>
             </div>
             <p className="mt-2 break-words text-foreground">{modelSearchValue}</p>
-          </div>
+          </Panel>
         ) : null}
         {generationParamItems.map((item) => (
-          <div key={item.id} className={metaItemClassName}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">{item.label}</p>
+          <Panel key={item.id}>
+            <Text variant="overline">{item.label}</Text>
             <p className="mt-2 break-words text-foreground">{item.value}</p>
-          </div>
+          </Panel>
         ))}
         {extractedPromptCards.length > 0 ? (
-          <div className={`${metaItemClassName} sm:col-span-2`}>
+          <Panel className="sm:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</p>
+              <Text variant="overline">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</Text>
               {canTogglePromptGrouping ? (
                 <div className="flex items-center gap-2">
                   <SegmentedControl
@@ -422,12 +423,12 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             <div className="mt-3">
               <ExtractedPromptSections items={displayedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
             </div>
-          </div>
+          </Panel>
         ) : null}
         {autoPromptContent ? (
-          <div className={`${metaItemClassName} sm:col-span-2`}>
+          <Panel className="sm:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '자동 프롬프트', en: 'Auto prompt' })}</p>
+              <Text variant="overline">{t({ ko: '자동 프롬프트', en: 'Auto prompt' })}</Text>
             </div>
             <div className="mt-3 space-y-3">
               <RatingPromptSection entries={autoPromptContent.ratingEntries} />
@@ -454,22 +455,20 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 )}
               />
             </div>
-          </div>
+          </Panel>
         ) : null}
         {artistPromptSection ? (
-          <div className={`${metaItemClassName} sm:col-span-2`}>
+          <Panel className="sm:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '작가 프롬프트', en: 'Artist prompt' })}</p>
-              <Button
-                type="button"
+              <Text variant="overline">{t({ ko: '작가 프롬프트', en: 'Artist prompt' })}</Text>
+              <IconButton
                 size="icon-sm"
-                variant="secondary"
+                variant="ghost"
                 onClick={() => setIsArtistPromptSettingsOpen(true)}
-                aria-label={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}
-                title={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}
+                label={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}
               >
                 <Settings2 className="h-4 w-4" />
-              </Button>
+              </IconButton>
             </div>
             <div className="mt-3">
               <ArtistPromptSection
@@ -481,36 +480,36 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 onAddSearchFilter={handleAddAutoPromptSearchFilter}
               />
             </div>
-          </div>
+          </Panel>
         ) : null}
       </div>
 
       {technicalItems.length > 0 ? (
-        <details className={metaItemClassName}>
-          <summary className="cursor-pointer select-none text-[11px] uppercase tracking-[0.18em] marker:text-muted-foreground">
-            {t({ ko: '기술 정보', en: 'Technical details' })}
-          </summary>
-          <div className="mt-3 space-y-3">
-            {technicalItems.map((item) => (
-              <div key={item.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[11px] uppercase tracking-[0.18em]">{item.label}</p>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => void handleCopyTechnicalValue(item.value)}
-                    aria-label={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label: item.label })}
-                    title={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label: item.label })}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
+        <Panel asChild>
+          <details>
+            <summary className="cursor-pointer select-none text-2xs uppercase tracking-overline marker:text-muted-foreground">
+              {t({ ko: '기술 정보', en: 'Technical details' })}
+            </summary>
+            <div className="mt-3 space-y-3">
+              {technicalItems.map((item) => (
+                <div key={item.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <Text variant="overline">{item.label}</Text>
+                    <IconButton
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => void handleCopyTechnicalValue(item.value)}
+                      label={t({ ko: '{label} 복사', en: 'Copy {label}' }, { label: item.label })}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                  <p className="mt-1 break-all font-mono text-xs text-foreground/88">{item.value}</p>
                 </div>
-                <p className="mt-1 break-all font-mono text-xs text-foreground/88">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </details>
+              ))}
+            </div>
+          </details>
+        </Panel>
       ) : null}
 
       <ArtistPromptLinkSettingsModal

@@ -2,7 +2,9 @@ import type { ComponentProps, RefObject } from 'react'
 import { useRef, useState } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
+import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 
 export function NumberInputWithSuffix({ suffix, ...props }: ComponentProps<typeof NumberStepperInput> & { suffix: string }) {
@@ -24,10 +26,11 @@ function SectionTooltip({ anchorRef, title, description }: { anchorRef: RefObjec
 
   return (
     <>
-      <button
+      <Button
         ref={anchorRef}
         type="button"
-        className="inline-flex text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground"
+        variant="ghost"
+        size="icon-xs"
         aria-label={t({ ko: '{title} 설명 보기', en: 'View {title} description' }, { title })}
         onMouseEnter={() => setIsAnchorHovered(true)}
         onMouseLeave={() => setIsAnchorHovered(false)}
@@ -38,7 +41,7 @@ function SectionTooltip({ anchorRef, title, description }: { anchorRef: RefObjec
         }}
       >
         <CircleQuestionMark className="h-3.5 w-3.5" />
-      </button>
+      </Button>
       <AnchoredPopup
         open={isOpen}
         anchorRef={anchorRef}
@@ -51,8 +54,8 @@ function SectionTooltip({ anchorRef, title, description }: { anchorRef: RefObjec
         }}
       >
         <div className="space-y-1">
-          <div className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">{title}</div>
-          <div className="text-[12px] leading-5 text-foreground/92">{description}</div>
+          <Text as="div" variant="overline" className="font-semibold">{title}</Text>
+          <div className="text-xs leading-5 text-foreground">{description}</div>
         </div>
       </AnchoredPopup>
     </>

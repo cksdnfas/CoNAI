@@ -1,5 +1,9 @@
 import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
+import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { ImageDetailRenderMode } from './image-detail-utils'
@@ -70,47 +74,35 @@ export function ImageDetailAuxiliaryControls({
   }
 
   return (
-    <div className="absolute bottom-3 left-3 z-30 flex flex-col items-start gap-2" onPointerDown={(event) => event.stopPropagation()}>
+    <Panel
+      tone="high"
+      padding="none"
+      className="absolute bottom-3 left-3 z-30 flex flex-col items-start gap-1 p-1 shadow-elevation-2"
+      onPointerDown={(event) => event.stopPropagation()}
+    >
       {canUsePixelPreview ? (
         <div className="relative">
-          <Button
-            size="icon-sm"
-            type="button"
-            variant="secondary"
-            className={cn('relative bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', pixelPreviewMode !== 'off' && 'border-primary/45 text-primary')}
+          <IconButton
+            {...toolbarButtonProps}
+            className={cn('relative', pixelPreviewMode !== 'off' && 'text-primary')}
             onClick={onTogglePixelPreviewPanel}
-            title={t({ ko: '필터: {mode}', en: 'Filter: {mode}' }, { mode: pixelPreviewModeLabels[pixelPreviewMode] })}
-            aria-label={t({ ko: '필터 설정 열기: {mode}', en: 'Open filter settings: {mode}' }, { mode: pixelPreviewModeLabels[pixelPreviewMode] })}
+            aria-expanded={isPixelPreviewPanelOpen}
+            label={t({ ko: '필터: {mode}', en: 'Filter: {mode}' }, { mode: pixelPreviewModeLabels[pixelPreviewMode] })}
+            tooltipSide="right"
           >
             <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
-            {pixelPreviewMode !== 'off' ? (
-              <span className="absolute -right-1 -top-1 rounded-full border border-background bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">{pixelPreviewModeLabels[pixelPreviewMode]}</span>
-            ) : null}
-          </Button>
+            {pixelPreviewMode !== 'off' ? <span className="absolute right-1 top-1 size-1.5 rounded-full bg-primary" aria-hidden /> : null}
+          </IconButton>
 
           {isPixelPreviewPanelOpen ? (
-            <div className="absolute bottom-full left-0 mb-2 w-72 rounded-md border border-border bg-background p-3 text-xs text-foreground shadow-[0_18px_42px_rgba(0,0,0,0.45)]">
+            <Panel tone="high" radius="md" padding="none" className="absolute bottom-full left-0 mb-2 w-72 p-3 text-xs text-foreground shadow-elevation-2">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="font-semibold">{t('images.components.detail.image.detail.media.filter')}</div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isPixelPreviewEnabled}
-                  className={cn(
-                    'flex h-7 items-center gap-2 rounded-full border px-1.5 text-[11px] font-medium transition-colors',
-                    isPixelPreviewEnabled ? 'border-primary/60 bg-primary/18 text-primary' : 'border-border bg-surface-container text-muted-foreground',
-                  )}
-                  onClick={onTogglePixelPreviewEnabled}
-                >
-                  <span className="min-w-8 text-center">{isPixelPreviewEnabled ? 'ON' : 'OFF'}</span>
-                  <span className={cn('h-4 w-7 rounded-full p-0.5 transition-colors', isPixelPreviewEnabled ? 'bg-primary' : 'bg-muted-foreground/35')}>
-                    <span className={cn('block size-3 rounded-full bg-background transition-transform', isPixelPreviewEnabled && 'translate-x-3')} />
-                  </span>
-                </button>
+                <label htmlFor="pixel-preview-enabled" className="font-semibold">{t('images.components.detail.image.detail.media.filter')}</label>
+                <Switch id="pixel-preview-enabled" size="sm" checked={isPixelPreviewEnabled} onCheckedChange={() => onTogglePixelPreviewEnabled()} />
               </div>
               <div className="mb-3 grid grid-cols-3 gap-1.5">
                 {(['soft', 'medium', 'strong'] as const).map((mode) => (
-                  <Button key={mode} size="sm" type="button" variant={pixelPreviewMode === mode ? 'default' : 'secondary'} className="h-7 text-xs" onClick={() => onSetPixelPreviewMode(mode)}>
+                  <Button key={mode} size="xs" type="button" variant={pixelPreviewMode === mode ? 'default' : 'secondary'} onClick={() => onSetPixelPreviewMode(mode)}>
                     {pixelPreviewModeLabels[mode]}
                   </Button>
                 ))}
@@ -128,9 +120,9 @@ export function ImageDetailAuxiliaryControls({
                   <div className="mb-1 flex justify-between text-muted-foreground"><span>{t('images.components.detail.image.detail.media.dithering')}</span><span>{Math.round(activePixelPreviewSettings.ditherStrength * 100)}</span></div>
                   <input className="w-full accent-primary" type="range" min={0} max={60} step={2} value={Math.round(activePixelPreviewSettings.ditherStrength * 100)} onChange={(event) => onUpdatePixelPreviewSettings({ ditherStrength: Number(event.currentTarget.value) / 100 })} />
                 </label>
-                <label className="flex items-center justify-between gap-3 rounded-sm border border-border/70 bg-surface-container/50 px-2.5 py-2 text-muted-foreground">
+                <label className="flex items-center justify-between gap-3 py-0.5 text-muted-foreground">
                   <span>{t('images.components.detail.image.detail.media.smooth.downscale')}</span>
-                  <input type="checkbox" className="size-4 accent-primary" checked={activePixelPreviewSettings.smoothing} onChange={(event) => onUpdatePixelPreviewSettings({ smoothing: event.currentTarget.checked })} />
+                  <Checkbox checked={activePixelPreviewSettings.smoothing} onCheckedChange={(checked) => onUpdatePixelPreviewSettings({ smoothing: checked === true })} />
                 </label>
                 <label className="block">
                   <div className="mb-1 flex justify-between text-muted-foreground"><span>{t('images.components.detail.image.detail.media.edge.boost')}</span><span>{Math.round(activePixelPreviewSettings.edgeBoost * 100)}</span></div>
@@ -141,27 +133,27 @@ export function ImageDetailAuxiliaryControls({
                   <input className="w-full accent-primary" type="range" min={0} max={50} step={2} value={Math.round(activePixelPreviewSettings.sharpness * 100)} onChange={(event) => onUpdatePixelPreviewSettings({ sharpness: Number(event.currentTarget.value) / 100 })} />
                 </label>
               </div>
-            </div>
+            </Panel>
           ) : null}
         </div>
       ) : null}
 
       {canToggleRenderMode ? (
-        <Button
-          size="icon-sm"
-          type="button"
-          variant="secondary"
-          className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high"
+        <IconButton
+          {...toolbarButtonProps}
           onClick={onToggleRenderMode}
-          title={renderMode === 'original' ? t('images.components.detail.image.detail.media.view.thumbnails') : t('images.components.detail.image.detail.media.view.original')}
-          aria-label={renderMode === 'original' ? t('images.components.detail.image.detail.media.view.thumbnails') : t('images.components.detail.image.detail.media.view.original')}
+          label={renderMode === 'original' ? t('images.components.detail.image.detail.media.view.thumbnails') : t('images.components.detail.image.detail.media.view.original')}
+          tooltipSide="right"
         >
           {renderMode === 'original' ? <ImageIcon className="h-4 w-4" /> : <ScanSearch className="h-4 w-4" />}
-        </Button>
+        </IconButton>
       ) : null}
-    </div>
+    </Panel>
   )
 }
+
+/** Viewer toolbars share one size and tone so every icon control lines up. */
+const toolbarButtonProps = { size: 'icon-sm', variant: 'ghost', tooltipSide: 'top' } as const
 
 export function ImageDetailTransformControls({
   canZoomIn,
@@ -182,58 +174,52 @@ export function ImageDetailTransformControls({
 
   return (
     <div className="absolute bottom-3 right-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
-      <div
+      <Panel
+        tone="high"
+        padding="none"
         className={cn(
-          'flex flex-wrap items-center gap-1.5 rounded-sm border border-border bg-background p-2 text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] transition-all duration-200 ease-out',
+          'flex flex-wrap items-center gap-1 p-1 text-foreground shadow-elevation-2 transition-all duration-200 ease-out',
           isControlsCollapsed ? 'pointer-events-none translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
         )}
       >
-        {!isDefaultView ? <div className="hidden px-2 text-[11px] text-muted-foreground sm:block">{transformSummary}</div> : null}
-        <Button
-          size="icon-sm"
-          type="button"
-          variant="secondary"
-          className={cn('bg-surface-container hover:bg-surface-high', isWheelZoomEnabled && 'border-primary/40 text-primary')}
+        {!isDefaultView ? <div className="hidden px-2 text-2xs text-muted-foreground tabular-nums sm:block">{transformSummary}</div> : null}
+        <IconButton
+          {...toolbarButtonProps}
+          className="aria-pressed:bg-primary/12 aria-pressed:text-primary"
+          aria-pressed={isWheelZoomEnabled}
           onClick={onToggleWheelZoomEnabled}
-          title={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom') : t('images.components.detail.image.detail.media.enable.zoom')}
-          aria-label={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom.in.out') : t('images.components.detail.image.detail.media.enable.zoom.in.out')}
+          label={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom') : t('images.components.detail.image.detail.media.enable.zoom')}
         >
           {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-        </Button>
-        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onZoomOut} title={t('images.components.detail.image.detail.media.zoom.out')} aria-label={t('images.components.detail.image.detail.media.zoom.out')} disabled={!canZoomOut}>
+        </IconButton>
+        <IconButton {...toolbarButtonProps} onClick={onZoomOut} label={t('images.components.detail.image.detail.media.zoom.out')} disabled={!canZoomOut}>
           <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onZoomIn} title={t('images.components.detail.image.detail.media.zoom.in')} aria-label={t('images.components.detail.image.detail.media.zoom.in')} disabled={!canZoomIn}>
+        </IconButton>
+        <IconButton {...toolbarButtonProps} onClick={onZoomIn} label={t('images.components.detail.image.detail.media.zoom.in')} disabled={!canZoomIn}>
           <ZoomIn className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onRotateLeft} title={t('images.components.detail.image.detail.media.rotate.left')} aria-label={t('images.components.detail.image.detail.media.rotate.left')}>
+        </IconButton>
+        <IconButton {...toolbarButtonProps} onClick={onRotateLeft} label={t('images.components.detail.image.detail.media.rotate.left')}>
           <RotateCcw className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onRotateRight} title={t('images.components.detail.image.detail.media.rotate.right')} aria-label={t('images.components.detail.image.detail.media.rotate.right')}>
+        </IconButton>
+        <IconButton {...toolbarButtonProps} onClick={onRotateRight} label={t('images.components.detail.image.detail.media.rotate.right')}>
           <RotateCw className="h-4 w-4" />
-        </Button>
+        </IconButton>
         {!isDefaultView ? (
-          <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onResetView} title={t('images.components.detail.image.detail.media.reset')} aria-label={t('images.components.detail.image.detail.media.reset')}>
+          <IconButton {...toolbarButtonProps} onClick={onResetView} label={t('images.components.detail.image.detail.media.reset')}>
             <Undo2 className="h-4 w-4" />
-          </Button>
+          </IconButton>
         ) : null}
-        <Button size="icon-sm" type="button" variant="secondary" className="bg-surface-container hover:bg-surface-high" onClick={onToggleControlsCollapsed} title={t('images.components.detail.image.detail.media.collapse.controls')} aria-label={t('images.components.detail.image.detail.media.collapse.controls')}>
+        <IconButton {...toolbarButtonProps} onClick={onToggleControlsCollapsed} label={t('images.components.detail.image.detail.media.collapse.controls')}>
           <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
+        </IconButton>
+      </Panel>
 
       {isControlsCollapsed ? (
-        <Button
-          size="icon-sm"
-          type="button"
-          variant="secondary"
-          className="border-primary/55 bg-primary text-primary-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-primary/92 hover:text-primary-foreground"
-          onClick={onToggleControlsCollapsed}
-          title={t('images.components.detail.image.detail.media.expand.controls')}
-          aria-label={t('images.components.detail.image.detail.media.expand.controls')}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
+        <Panel tone="high" padding="none" className="p-1 shadow-elevation-2">
+          <IconButton {...toolbarButtonProps} onClick={onToggleControlsCollapsed} label={t('images.components.detail.image.detail.media.expand.controls')}>
+            <ChevronLeft className="h-4 w-4" />
+          </IconButton>
+        </Panel>
       ) : null}
     </div>
   )
