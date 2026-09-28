@@ -69,7 +69,7 @@ export function PromptPresetInlinePicker({
   }
 
   return (
-    <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="z-[170] w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden p-0" closeOnBack>
+    <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden p-0" closeOnBack>
       <div className={cn(anchoredPopupHeaderClassName, 'flex items-center justify-between gap-3')}>
         <div>
           <div className={anchoredPopupLabelClassName}>{t('image-generation.components.prompt.preset.inline.picker.preset')}</div>
@@ -108,7 +108,7 @@ export function PromptPresetInlinePicker({
           </div>
         )}
 
-        <div className="mt-3 border-t border-border/70 pt-3 text-xs leading-5 text-muted-foreground">
+        <div className="mt-4 text-xs leading-5 text-muted-foreground">
           {t('image-generation.components.prompt.preset.inline.picker.description.comment.prefix')} <code>{t('image-generation.components.prompt.preset.inline.picker.description.comment.token')}</code> {t('image-generation.components.prompt.preset.inline.picker.description.comment.suffix')}
         </div>
 

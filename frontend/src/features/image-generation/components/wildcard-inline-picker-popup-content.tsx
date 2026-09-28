@@ -1,7 +1,8 @@
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { WildcardRecord } from '@/lib/api-wildcards'
-import { cn } from '@/lib/utils'
 import type { WildcardWorkspaceTab } from './wildcard-generation-panel-helpers'
 import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
 import {
@@ -97,9 +98,12 @@ export function WildcardInlinePickerPopupContent({
     const preferredBadgeTool = resolvePreferredWildcardItemTool(record.items, tool)
 
     return (
-      <button
+      <Button
         key={record.id}
         type="button"
+        variant="nav"
+        data-active={isActive || undefined}
+        className="h-auto items-start justify-between gap-3 px-3 py-2 whitespace-normal"
         onMouseDown={(event) => {
           event.preventDefault()
           if (activeSource === 'preprocess') {
@@ -108,10 +112,6 @@ export function WildcardInlinePickerPopupContent({
             onInsertWildcard(record.name)
           }
         }}
-        className={cn(
-          'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
-          isActive ? 'bg-surface-high' : 'hover:bg-surface-lowest',
-        )}
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -129,41 +129,39 @@ export function WildcardInlinePickerPopupContent({
           <Badge variant={preferredBadgeTool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
           <Badge variant={preferredBadgeTool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
         </div>
-      </button>
+      </Button>
     )
   }
 
   return (
     <>
-      <div className="space-y-2 border-b border-border/70 px-3 py-2">
+      <div className="space-y-2 px-3 pt-2.5 pb-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           {activeSource === 'wildcard' ? (
             <div className="flex flex-wrap items-center gap-2">
-              <button
+              <Button
                 type="button"
+                size="xs"
+                variant={filterMode === 'available-only' ? 'secondary' : 'ghost'}
+                aria-pressed={filterMode === 'available-only'}
                 onMouseDown={handleModeChange('available-only', false)}
-                className={cn(
-                  'rounded-sm border px-2 py-1 text-xs transition-colors',
-                  filterMode === 'available-only' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
-                )}
               >
                 {t('image-generation.components.wildcard.inline.picker.field.search')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="xs"
+                variant={filterMode === 'all' ? 'secondary' : 'ghost'}
+                aria-pressed={filterMode === 'all'}
                 onMouseDown={handleModeChange('all', true)}
-                className={cn(
-                  'rounded-sm border px-2 py-1 text-xs transition-colors',
-                  filterMode === 'all' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
-                )}
               >
                 {t('image-generation.components.wildcard.inline.picker.field.browse.all')}
-              </button>
+              </Button>
             </div>
           ) : (
-            <div className="text-xs font-medium text-muted-foreground">
+            <Text as="div" variant="overline" className="font-semibold">
               {activeSource === 'danbooru-group' ? t({ ko: '태그 그룹', en: 'Tag Groups' }) : t({ ko: '전처리', en: 'Preprocess' })}
-            </div>
+            </Text>
           )}
           <Badge variant="outline">{activeSource === 'danbooru-group' ? groupSuggestions.length : isTreeExplorerMode ? explorerEntriesCount : activeListSuggestions.length}</Badge>
         </div>
@@ -177,24 +175,23 @@ export function WildcardInlinePickerPopupContent({
             {groupSuggestions.map((group, index) => {
               const isActive = index === activeIndex
               return (
-                <button
+                <Button
                   key={group.id}
                   type="button"
+                  variant="nav"
+                  data-active={isActive || undefined}
+                  className="h-auto items-start justify-between gap-3 px-3 py-2 whitespace-normal"
                   onMouseDown={(event) => {
                     event.preventDefault()
                     onInsertDanbooruGroup(group.label)
                   }}
-                  className={cn(
-                    'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
-                    isActive ? 'bg-surface-high' : 'hover:bg-surface-lowest',
-                  )}
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-foreground">{renderHighlightedText(group.label, normalizedActiveQuery)}</span>
                     {group.translatedLabel ? <span className="block truncate text-xs text-muted-foreground">{group.translatedLabel}</span> : null}
                   </span>
                   <Badge variant="outline">{group.count}</Badge>
-                </button>
+                </Button>
               )
             })}
           </div>
@@ -223,7 +220,7 @@ export function WildcardInlinePickerPopupContent({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
           {recentSuggestions.length > 0 ? (
             <div className="space-y-1">
-              <div className="px-1 text-2xs font-medium uppercase tracking-overline text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.recent')}</div>
+              <Text as="div" variant="overline" className="px-1 font-medium">{t('image-generation.components.wildcard.inline.picker.field.recent')}</Text>
               <div className="space-y-1">
                 {recentSuggestions.map(renderSuggestionButton)}
               </div>
@@ -232,7 +229,7 @@ export function WildcardInlinePickerPopupContent({
 
           {remainingSuggestions.length > 0 ? (
             <div className="space-y-1">
-              {recentSuggestions.length > 0 ? <div className="px-1 text-2xs font-medium uppercase tracking-overline text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.all.results')}</div> : null}
+              {recentSuggestions.length > 0 ? <Text as="div" variant="overline" className="px-1 font-medium">{t('image-generation.components.wildcard.inline.picker.field.all.results')}</Text> : null}
               <div className="space-y-1">
                 {remainingSuggestions.map(renderSuggestionButton)}
               </div>

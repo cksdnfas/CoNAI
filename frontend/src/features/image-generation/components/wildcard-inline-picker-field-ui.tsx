@@ -1,9 +1,11 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { FLOATING_DROPDOWN_MENU_CLASS } from './floating-dropdown-utils'
 import {
   getPromptSyntaxKindLabel,
   type PromptSyntaxToken,
@@ -62,38 +64,45 @@ export function renderHighlightedText(text: string, query: string) {
   )
 }
 
-function getPromptSyntaxHighlightClass(kind: PromptSyntaxTokenKind) {
-  if (kind === 'wildcard') {
-    return 'rounded-[0.2rem] bg-sky-400/20 ring-1 ring-inset ring-sky-300/18'
-  }
-
-  if (kind === 'preprocess') {
-    return 'rounded-[0.2rem] bg-amber-400/18 ring-1 ring-inset ring-amber-300/20'
-  }
-
-  if (kind === 'comment') {
-    return 'rounded-[0.2rem] bg-emerald-400/16 ring-1 ring-inset ring-emerald-300/20'
-  }
-
-  return 'rounded-[0.2rem] bg-violet-400/18 ring-1 ring-inset ring-violet-300/20'
+/**
+ * Prompt syntax kinds are categorical, mapped onto theme tokens so they stay legible in dark and light themes:
+ * wildcard = info, preprocess = warning, comment = success, LoRA / other = primary.
+ */
+const PROMPT_SYNTAX_TONE: Record<PromptSyntaxTokenKind, { overlay: string, chip: string, activeChip: string }> = {
+  wildcard: {
+    overlay: 'bg-info/18 ring-info/25',
+    chip: 'bg-info-soft text-info-soft-foreground hover:bg-info-soft hover:text-info-soft-foreground',
+    activeChip: 'ring-info/70',
+  },
+  preprocess: {
+    overlay: 'bg-warning/18 ring-warning/25',
+    chip: 'bg-warning-soft text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground',
+    activeChip: 'ring-warning/70',
+  },
+  comment: {
+    overlay: 'bg-success/16 ring-success/25',
+    chip: 'bg-success-soft text-success-soft-foreground hover:bg-success-soft hover:text-success-soft-foreground',
+    activeChip: 'ring-success/70',
+  },
+  lora: {
+    overlay: 'bg-primary/16 ring-primary/25',
+    chip: 'bg-primary/12 text-foreground hover:bg-primary/18 hover:text-foreground',
+    activeChip: 'ring-primary/60',
+  },
 }
 
+function getPromptSyntaxTone(kind: PromptSyntaxTokenKind) {
+  return PROMPT_SYNTAX_TONE[kind] ?? PROMPT_SYNTAX_TONE.lora
+}
+
+function getPromptSyntaxHighlightClass(kind: PromptSyntaxTokenKind) {
+  return cn('rounded-sm ring-1 ring-inset', getPromptSyntaxTone(kind).overlay)
+}
+
+/** Classes for a detected-syntax chip rendered as `<Button variant="ghost" size="xs">`: a tonal category fill, ring when active. */
 export function getPromptSyntaxChipClass(kind: PromptSyntaxTokenKind, isActive: boolean) {
-  const shared = 'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-2xs transition-colors'
-
-  if (kind === 'wildcard') {
-    return cn(shared, isActive ? 'border-sky-300/60 bg-sky-400/18 text-foreground' : 'border-sky-400/20 bg-sky-400/10 text-foreground/90 hover:bg-sky-400/16')
-  }
-
-  if (kind === 'preprocess') {
-    return cn(shared, isActive ? 'border-amber-300/60 bg-amber-400/18 text-foreground' : 'border-amber-400/20 bg-amber-400/10 text-foreground/90 hover:bg-amber-400/16')
-  }
-
-  if (kind === 'comment') {
-    return cn(shared, isActive ? 'border-emerald-300/60 bg-emerald-400/18 text-foreground' : 'border-emerald-400/20 bg-emerald-400/10 text-foreground/90 hover:bg-emerald-400/16')
-  }
-
-  return cn(shared, isActive ? 'border-violet-300/60 bg-violet-400/18 text-foreground' : 'border-violet-400/20 bg-violet-400/10 text-foreground/90 hover:bg-violet-400/16')
+  const tone = getPromptSyntaxTone(kind)
+  return cn('min-w-0 font-normal tracking-normal text-2xs hover:brightness-110', tone.chip, isActive && cn('ring-1 ring-inset', tone.activeChip))
 }
 
 export function renderPromptSyntaxOverlay(value: string, tokens: PromptSyntaxToken[]) {
@@ -230,7 +239,9 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
   return createPortal(
     <div
       ref={popupRef}
-      className="z-[150] rounded-sm border border-border bg-background/97 px-3 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.32)] backdrop-blur-sm"
+      data-surface="high"
+      // Sits just above the inline picker's anchored popovers (z-popover = 140).
+      className="z-[150] rounded-md bg-surface-high px-3 py-2.5 shadow-elevation-2"
       style={{
         position: 'fixed',
         top: position.top,
@@ -243,7 +254,7 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
     >
       <div className="space-y-2.5">
         <div className="space-y-1">
-          <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{getPromptSyntaxKindLabel(token.kind)}</div>
+          <Text as="div" variant="overline" className="font-semibold">{getPromptSyntaxKindLabel(token.kind)}</Text>
           <div className="break-all text-sm font-medium text-foreground">{token.name}</div>
           {token.loraWeight ? <div className="text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.weight.token.loraweight', { weight: token.loraWeight })}</div> : null}
         </div>
@@ -251,13 +262,13 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
         {token.previewItems.length > 0 ? (
           <div className="space-y-1.5">
             {token.previewItems.map((item, index) => (
-              <div key={`${token.key}:preview:${index}`} className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-xs leading-5 text-foreground/92">
+              <div key={`${token.key}:preview:${index}`} className="rounded-sm bg-surface-container px-2.5 py-2 text-xs leading-5 text-foreground">
                 <div className="break-words whitespace-pre-wrap">{item}</div>
               </div>
             ))}
           </div>
         ) : token.fallbackMessage ? (
-          <div className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-xs leading-5 text-foreground/92">
+          <div className="rounded-sm bg-surface-container px-2.5 py-2 text-xs leading-5 text-foreground">
             {token.fallbackMessage}
           </div>
         ) : null}
@@ -280,7 +291,9 @@ export function WildcardInlinePickerPopup({
 
   return createPortal(
     <div
-      className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'z-[160] overflow-hidden bg-surface-container')}
+      data-surface="high"
+      // Above the token popup (z-[150]) and anchored popovers (z-popover = 140).
+      className="fixed z-[160] overflow-hidden rounded-md bg-surface-high shadow-elevation-2"
       style={{
         top: position.top,
         left: position.left,
@@ -291,7 +304,7 @@ export function WildcardInlinePickerPopup({
         event.preventDefault()
       }}
     >
-      <div className="flex max-h-[inherit] min-h-0 flex-col overflow-hidden rounded-sm">{children}</div>
+      <div className="flex max-h-[inherit] min-h-0 flex-col overflow-hidden rounded-md">{children}</div>
     </div>,
     document.body,
   )
@@ -343,35 +356,35 @@ export function PromptAutocompletePopup({
 
   const renderPager = (page: number, pageCount: number, onPageChange: (page: number) => void) => (
     pageCount > 1 ? (
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border/70 bg-surface-container/95 px-2 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 bg-surface-high px-2 py-1.5">
         <span className="px-1 font-mono text-2xs text-muted-foreground">{page + 1}/{pageCount}</span>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            aria-label={t('image-generation.components.wildcard.inline.picker.autocomplete.previous.suggestion.page')}
-            title={t('image-generation.components.wildcard.inline.picker.autocomplete.previous')}
+          <IconButton
+            size="icon-xs"
+            variant="ghost"
+            label={t('image-generation.components.wildcard.inline.picker.autocomplete.previous.suggestion.page')}
+            tooltip={false}
             disabled={page <= 0}
             onMouseDown={(event) => {
               event.preventDefault()
               onPageChange(Math.max(0, page - 1))
             }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-sm border border-border/70 bg-surface-lowest text-muted-foreground transition hover:bg-surface-high hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            aria-label={t('image-generation.components.wildcard.inline.picker.autocomplete.next.suggestion.page')}
-            title={t('image-generation.components.wildcard.inline.picker.autocomplete.next')}
+            <ChevronLeft />
+          </IconButton>
+          <IconButton
+            size="icon-xs"
+            variant="ghost"
+            label={t('image-generation.components.wildcard.inline.picker.autocomplete.next.suggestion.page')}
+            tooltip={false}
             disabled={page >= pageCount - 1}
             onMouseDown={(event) => {
               event.preventDefault()
               onPageChange(Math.min(pageCount - 1, page + 1))
             }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-sm border border-border/70 bg-surface-lowest text-muted-foreground transition hover:bg-surface-high hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
           >
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
+            <ChevronRight />
+          </IconButton>
         </div>
       </div>
     ) : null
@@ -386,37 +399,38 @@ export function PromptAutocompletePopup({
               <div className="truncate px-1 text-2xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.related.tags.for', { label: activeCharacter.label })}</div>
               <div className="flex flex-wrap gap-1">
                 {PROMPT_RELATED_TAG_TABS.map((tab) => (
-                  <button
+                  <Button
                     key={tab.id}
                     type="button"
+                    size="xs"
+                    variant={relatedTagTab === tab.id ? 'secondary' : 'ghost'}
+                    aria-pressed={relatedTagTab === tab.id}
                     onMouseDown={(event) => {
                       event.preventDefault()
                       setRelatedTagTab(tab.id)
                     }}
-                    className={cn(
-                      'rounded-full border px-2 py-0.5 text-2xs transition',
-                      relatedTagTab === tab.id ? 'border-primary/50 bg-primary/15 text-foreground' : 'border-border/70 text-muted-foreground hover:bg-surface-high',
-                    )}
                   >
                     {tab.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
               {visibleRelatedTags.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {visibleRelatedTags.map((tag) => (
-                    <button
+                    <Button
                       key={`${activeCharacter.id}:related:${tag.id}`}
                       type="button"
+                      size="xs"
+                      variant="secondary"
+                      className="max-w-full font-normal"
                       title={tag.translatedName ? `${tag.displayName} [${tag.translatedName}]` : tag.displayName}
                       onMouseDown={(event) => {
                         event.preventDefault()
                         onSelectRelatedTag(tag.name)
                       }}
-                      className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-lowest px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high"
                     >
                       <span className="truncate">{formatPromptAutocompleteLabel({ label: tag.displayName, translatedName: tag.translatedName, usageCount: tag.usageCount })}</span>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               ) : (
@@ -434,18 +448,20 @@ export function PromptAutocompletePopup({
             ) : visibleSuggestions.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {visibleSuggestions.map((suggestion) => (
-                  <button
+                  <Button
                     key={suggestion.id}
                     type="button"
+                    size="xs"
+                    variant="secondary"
+                    className="max-w-full font-normal"
                     title={getPromptAutocompleteKindLabel(suggestion.kind)}
                     onMouseDown={(event) => {
                       event.preventDefault()
                       onSelect(suggestion)
                     }}
-                    className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-lowest px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high"
                   >
                     <span className="truncate">{formatPromptAutocompleteLabel(suggestion)}</span>
-                  </button>
+                  </Button>
                 ))}
               </div>
             ) : (

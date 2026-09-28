@@ -3,12 +3,13 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, File, Folder, RotateCcw, Search } from 'lucide-react'
 import { HierarchyNav, type HierarchyNavItemState } from '@/components/common/hierarchy-nav'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { buildComfyModelThumbnailUrl } from '@/lib/api-image-generation-workflows'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
+import { resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 
 const PATH_RANDOM_OPTION_VALUE = '__random__'
 const MODEL_PREVIEW_HOVER_DELAY_MS = 150
@@ -181,7 +182,7 @@ function collectPathOptionFolderIds(nodes: PathOptionTreeNode[]) {
 
 function renderPathOptionIcon(node: PathOptionTreeNode, state: HierarchyNavItemState) {
   if (node.kind === 'folder') {
-    return <Folder className={cn('h-4 w-4 shrink-0', state.isExpanded ? 'text-yellow-300' : 'text-muted-foreground')} />
+    return <Folder className={cn('h-4 w-4 shrink-0', state.isExpanded ? 'text-foreground' : 'text-muted-foreground')} />
   }
 
   if (node.kind === 'option') {
@@ -341,10 +342,11 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
   return (
     <>
       <div ref={triggerRef} className="flex min-w-0 gap-2">
+        {/* Select-style trigger: same input surface + outline as Select / Input, not a tonal action button. */}
         <Button
           type="button"
-          variant="secondary"
-          className="theme-input-surface h-auto min-h-10 min-w-0 flex-1 justify-between gap-3 rounded-sm border-border/80 px-3 py-2 text-left font-normal text-foreground hover:bg-surface-high"
+          variant="ghost"
+          className="theme-input-surface h-auto min-h-9 min-w-0 flex-1 justify-between gap-3 border px-3 py-2 text-left font-normal text-foreground hover:bg-surface-low hover:text-foreground"
           onClick={() => setIsOpen((current) => !current)}
           aria-haspopup="tree"
           aria-expanded={isOpen}
@@ -357,18 +359,16 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
         </Button>
 
         {onRefresh ? (
-          <Button
-            type="button"
+          <IconButton
             variant="secondary"
-            size="icon-sm"
-            className="theme-input-surface h-auto min-h-10 shrink-0 border-border/80"
+            size="icon"
+            className="shrink-0"
             disabled={refreshing}
             onClick={(event) => void handleRefresh(event)}
-            aria-label={resolvedRefreshLabel}
-            title={resolvedRefreshLabel}
+            label={resolvedRefreshLabel}
           >
-            <RotateCcw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-          </Button>
+            <RotateCcw className={cn(refreshing && 'animate-spin')} />
+          </IconButton>
         ) : null}
       </div>
 
@@ -376,7 +376,8 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
         ? createPortal(
             <div
               id={menuId}
-              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'overflow-auto p-2')}
+              data-surface="high"
+              className="fixed z-popover overflow-auto rounded-md bg-surface-high p-2 shadow-elevation-2"
               style={{ left: menuRect.left, top: menuRect.top, width: menuRect.width, maxHeight: menuRect.maxHeight }}
             >
               <div className="relative mb-2">
@@ -422,14 +423,14 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
       {isOpen && modelPreview && typeof document !== 'undefined'
         ? createPortal(
             <div
-              className="pointer-events-none fixed z-[10000] overflow-hidden rounded-sm border border-border/80 bg-popover shadow-xl"
+              className="pointer-events-none fixed z-floating overflow-hidden rounded-md bg-surface-high shadow-elevation-2"
               style={{ left: modelPreview.left, top: modelPreview.top, width: MODEL_PREVIEW_POPUP_WIDTH }}
             >
               <img
                 key={modelPreview.key}
                 src={modelPreview.src}
                 alt={t({ ko: '모델 썸네일', en: 'Model thumbnail' })}
-                className="block max-h-[240px] w-full bg-surface-low object-contain"
+                className="block max-h-[240px] w-full bg-surface-container object-contain"
                 loading="eager"
                 decoding="async"
                 onError={() => handleModelPreviewError(modelPreview.key)}

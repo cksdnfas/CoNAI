@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS, getGenerationCustomDropdownLists, scanGenerationComfyUIModelDropdownLists } from '@/lib/api-image-generation-workflows'
 import { cn } from '@/lib/utils'
@@ -75,31 +77,12 @@ function PowerLoraRowToggle({
   const { t } = useI18n()
 
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={pressed}
+    <Switch
+      size={compact ? 'sm' : 'default'}
+      checked={pressed}
+      onCheckedChange={onPressedChange}
       aria-label={pressed ? t('image-generation.components.power.lora.loader.input.disable.lora') : t('image-generation.components.power.lora.loader.input.enable.lora')}
-      onClick={() => onPressedChange(!pressed)}
-      className={cn(
-        'inline-flex shrink-0 items-center rounded-full border transition-colors',
-        compact ? 'h-4 w-7' : 'h-6 w-10',
-        pressed
-          ? compact
-            ? 'justify-end border-primary/55 bg-primary/25 px-[2px]'
-            : 'border-primary/60 bg-primary/25 justify-end pl-1 pr-[3px]'
-          : compact
-            ? 'justify-start border-border/70 bg-background/60 px-[2px]'
-            : 'border-border/80 bg-background/70 justify-start pr-1 pl-[3px]',
-      )}
-    >
-      <span
-        className={cn(
-          compact ? 'h-3 w-3 rounded-full transition-colors' : 'h-[18px] w-[18px] rounded-full transition-colors',
-          pressed ? 'bg-primary shadow-[0_0_0_1px_rgba(255,255,255,0.08)]' : 'bg-muted-foreground/65',
-        )}
-      />
-    </button>
+    />
   )
 }
 
@@ -182,7 +165,7 @@ export function PowerLoraLoaderInput({
   if (nodeItems.length === 0) {
     return (
       <div className={cn(isCompact ? 'space-y-1' : 'space-y-2')}>
-        <div className={cn('rounded-sm border border-dashed border-border/80 text-muted-foreground', isCompact ? 'px-2 py-1.5 text-2xs' : 'px-3 py-4 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
+        <div className={cn('ui-tone-plinth rounded-sm text-muted-foreground', isCompact ? 'px-2 py-1.5 text-2xs' : 'px-3 py-4 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
         {addLoraControl}
       </div>
     )
@@ -196,18 +179,13 @@ export function PowerLoraLoaderInput({
         return (
           <div
             key={item.key}
+            data-on={entry.on === true || undefined}
             className={cn(
-              'grid items-center rounded-sm border transition-colors',
+              // Tonal row; an enabled LoRA gets a faint primary tint instead of a coloured outline.
+              'ui-tone-plinth grid items-center rounded-sm transition-colors data-[on=true]:bg-primary/8',
               isCompact
                 ? 'grid-cols-[auto_minmax(0,1fr)_48px_auto] gap-2 px-2 py-1'
                 : 'grid-cols-[auto_minmax(0,1fr)_88px_auto] gap-3 px-3 py-2.5',
-              entry.on === true
-                ? isCompact
-                  ? 'border-primary/20 bg-surface-container/25'
-                  : 'border-primary/30 bg-surface-container/45'
-                : isCompact
-                  ? 'border-border/45 bg-background/20'
-                  : 'border-border/70 bg-background/30',
             )}
           >
             <PowerLoraRowToggle
@@ -243,18 +221,15 @@ export function PowerLoraLoaderInput({
               }}
             />
 
-            <button
-              type="button"
-              aria-label={t('image-generation.components.power.lora.loader.input.delete.lora', { label: item.label })}
-              title={t('image-generation.components.power.lora.loader.input.delete.lora', { label: item.label })}
+            <IconButton
+              size={isCompact ? 'icon-xs' : 'icon-sm'}
+              variant="ghost"
+              className="hover:text-destructive"
+              label={t('image-generation.components.power.lora.loader.input.delete.lora', { label: item.label })}
               onClick={() => handleRemoveLora(item.key)}
-              className={cn(
-                'inline-flex shrink-0 items-center justify-center rounded-sm border border-transparent text-muted-foreground transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive',
-                isCompact ? 'h-6 w-6' : 'h-8 w-8',
-              )}
             >
-              <Trash2 className={cn(isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
-            </button>
+              <Trash2 />
+            </IconButton>
           </div>
         )
       })}

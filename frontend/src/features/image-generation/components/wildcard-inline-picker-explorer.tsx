@@ -2,6 +2,9 @@ import { ChevronRight, Folder, FolderOpen, Plus } from 'lucide-react'
 import { useMemo, type MouseEventHandler } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { WildcardRecord } from '@/lib/api-wildcards'
 import { cn } from '@/lib/utils'
@@ -97,31 +100,31 @@ export function WildcardInlinePickerExplorer({
             <div key={node.id} className="space-y-1">
               <div className="flex items-center gap-1" style={{ paddingLeft: `${depth * 14}px` }}>
                 {hasChildren ? (
-                  <button
-                    type="button"
+                  <IconButton
+                    size="icon-sm"
+                    variant="ghost"
                     onMouseDown={handleToggleExpanded}
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-surface-low hover:text-foreground"
-                    aria-label={isExpanded ? t('image-generation.components.wildcard.inline.picker.explorer.collapse') : t('image-generation.components.wildcard.inline.picker.explorer.expand')}
-                    title={isExpanded ? t('image-generation.components.wildcard.inline.picker.explorer.collapse') : t('image-generation.components.wildcard.inline.picker.explorer.expand')}
+                    label={isExpanded ? t('image-generation.components.wildcard.inline.picker.explorer.collapse') : t('image-generation.components.wildcard.inline.picker.explorer.expand')}
+                    tooltip={false}
                   >
-                    <ChevronRight className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-90')} />
-                  </button>
+                    <ChevronRight className={cn('transition-transform', isExpanded && 'rotate-90')} />
+                  </IconButton>
                 ) : (
                   <span className="inline-flex h-8 w-8 shrink-0" aria-hidden="true" />
                 )}
 
-                <button
+                <Button
                   type="button"
+                  variant="nav"
+                  size="sm"
+                  data-active={isSelected || undefined}
                   onMouseDown={handleSelect}
-                  className={cn(
-                    'inline-flex min-w-0 flex-1 items-center gap-2 rounded-sm px-2 py-2 text-left text-sm transition-colors',
-                    isSelected ? 'bg-surface-high text-foreground' : 'hover:bg-surface-lowest text-foreground',
-                  )}
+                  className="min-w-0 flex-1 px-2 text-foreground"
                   title={node.name}
                 >
-                  {hasChildren || isSelected ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />}
+                  {hasChildren || isSelected ? <FolderOpen /> : <Folder />}
                   <span className="truncate">{node.name}</span>
-                </button>
+                </Button>
 
                 <div className="hidden shrink-0 items-center gap-1 md:flex">
                   <Badge variant={preferredBadgeTool === 'general' ? 'secondary' : 'outline'}>General {generalItemCount}</Badge>
@@ -129,15 +132,15 @@ export function WildcardInlinePickerExplorer({
                   <Badge variant={preferredBadgeTool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
                 </div>
 
-                <button
-                  type="button"
+                <IconButton
+                  size="icon-sm"
+                  variant="secondary"
                   onMouseDown={handleInsert}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-lowest text-muted-foreground transition-colors hover:bg-surface-high hover:text-foreground"
-                  aria-label={t({ ko: '{syntax} 추가', en: 'Add {syntax}' }, { syntax: insertSyntax })}
-                  title={t({ ko: '{label} {syntax} 추가', en: 'Add {label} {syntax}' }, { label: insertLabel, syntax: insertSyntax })}
+                  label={t({ ko: '{label} {syntax} 추가', en: 'Add {label} {syntax}' }, { label: insertLabel, syntax: insertSyntax })}
+                  tooltipSide="left"
                 >
-                  <Plus className="h-4 w-4" />
-                </button>
+                  <Plus />
+                </IconButton>
               </div>
 
               {hasChildren && isExpanded ? renderExplorerTree(node.children ?? [], depth + 1) : null}
@@ -150,7 +153,7 @@ export function WildcardInlinePickerExplorer({
 
   return (
     <>
-      <div className="border-b border-border/70 px-3 py-2">
+      <div className="px-3 py-2">
         <SegmentedTabBar
           value={activeTab}
           items={tabs}
@@ -163,11 +166,11 @@ export function WildcardInlinePickerExplorer({
 
       <div className="max-h-80 overflow-y-auto p-2">
         {treeNodes.length > 0 ? (
-          <div className="space-y-1 rounded-sm border border-border/70 bg-surface-low p-2">
+          <div className="space-y-1">
             {renderExplorerTree(treeNodes)}
           </div>
         ) : (
-          <div className="rounded-sm border border-border/70 bg-surface-low px-3 py-3 text-sm text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.explorer.no.items.in.this.category.yet')}</div>
+          <Text variant="muted" className="px-3 py-3">{t('image-generation.components.wildcard.inline.picker.explorer.no.items.in.this.category.yet')}</Text>
         )}
       </div>
     </>

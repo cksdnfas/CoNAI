@@ -1,5 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { getPromptSyntaxKindLabel, type PromptSyntaxToken } from './prompt-syntax-highlight-helpers'
@@ -48,12 +48,15 @@ export function WildcardInlinePickerDetectedChips({
           {detectedTokenSummaries.map((token) => {
             const isActive = token.key === activeDetectedTokenKey
             return (
-              <button
+              <Button
                 key={token.key}
-                ref={(node) => {
+                ref={(node: HTMLButtonElement | null) => {
                   detectedTokenButtonRefs.current.set(token.key, node)
                 }}
                 type="button"
+                variant="ghost"
+                size="xs"
+                aria-pressed={isActive}
                 className={getPromptSyntaxChipClass(token.kind, isActive)}
                 onMouseEnter={() => {
                   onCancelDetectedPopupClose()
@@ -75,9 +78,9 @@ export function WildcardInlinePickerDetectedChips({
                 }}
               >
                 <span className="max-w-[12rem] truncate">{token.kind === 'comment' ? t('image-generation.components.wildcard.inline.picker.field.comment.items', { count: token.count }) : token.rawText}</span>
-                <span className="text-muted-foreground">{getPromptSyntaxKindLabel(token.kind)}</span>
-                {token.count > 1 ? <Badge variant="secondary">{token.count}</Badge> : null}
-              </button>
+                <span className="opacity-75">{getPromptSyntaxKindLabel(token.kind)}</span>
+                {token.count > 1 ? <span className="font-semibold tabular-nums">×{token.count}</span> : null}
+              </Button>
             )
           })}
         </div>
@@ -89,24 +92,24 @@ export function WildcardInlinePickerDetectedChips({
           {detectedCharacters.map(({ candidate, suggestion }) => {
             const isActive = candidate.key === activeDetectedCharacterKey
             return (
-              <button
+              <Button
                 key={candidate.key}
-                ref={(node) => {
+                ref={(node: HTMLButtonElement | null) => {
                   detectedCharacterButtonRefs.current.set(candidate.key, node)
                 }}
                 type="button"
-                className={cn(
-                  'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-2xs transition-colors',
-                  isActive ? 'border-cyan-300/60 bg-cyan-400/18 text-foreground' : 'border-cyan-400/20 bg-cyan-400/10 text-foreground/90 hover:bg-cyan-400/16',
-                )}
+                variant="secondary"
+                size="xs"
+                aria-pressed={isActive}
+                className={cn('min-w-0 font-normal tracking-normal text-2xs', isActive && 'ring-1 ring-inset ring-primary/60')}
                 onClick={() => {
                   onSetActiveDetectedCharacterKey((current) => current === candidate.key ? null : candidate.key)
                 }}
               >
                 <span className="max-w-[12rem] truncate">{suggestion.label}</span>
                 {suggestion.translatedName ? <span className="max-w-[8rem] truncate text-muted-foreground">{suggestion.translatedName}</span> : null}
-                {suggestion.relatedTags?.length ? <Badge variant="secondary">{suggestion.relatedTags.length}</Badge> : null}
-              </button>
+                {suggestion.relatedTags?.length ? <span className="font-semibold tabular-nums text-muted-foreground">{suggestion.relatedTags.length}</span> : null}
+              </Button>
             )
           })}
         </div>
