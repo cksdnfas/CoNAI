@@ -49,7 +49,7 @@ function hasOpenDialog() {
 }
 
 function ImageListFallback() {
-  return <div className="min-h-[18rem] rounded-sm bg-surface-low animate-pulse" />
+  return <div className="min-h-[18rem] rounded-sm bg-fill animate-pulse" />
 }
 
 /** Render the reusable CoNAI image list using Virtuoso rendering + ViSelect selection. */

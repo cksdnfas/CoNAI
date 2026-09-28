@@ -4,8 +4,7 @@ import { CountSummary } from '@/components/ui/count-summary'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
-import { PageHeader } from '@/components/common/page-header'
-import { Inset } from '@/components/ui/inset'
+import { PageToolbar } from '@/components/common/page-toolbar'
 import { Section } from '@/components/ui/section'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -20,7 +19,7 @@ import { ImageListFeedFooter } from '@/features/images/components/image-list/ima
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
-import { SearchChipList } from '@/features/search/components/search-chip-list'
+import { SearchChipStrip } from '@/features/search/components/search-chip-strip'
 import { useI18n } from '@/i18n'
 import { COUNT_UNITS } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
@@ -104,7 +103,7 @@ export function HomePage() {
   })
 
   if (authStatusQuery.isLoading) {
-    return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
+    return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />
   }
 
   if (isAuthStatusUnavailable) {
@@ -118,13 +117,37 @@ export function HomePage() {
   }
 
   if (!canViewHome) {
-    return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
+    return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />
   }
 
   return (
     // Leave room under the list for the fixed selection bar while it is up.
-    <div className={cn('space-y-6', selectedIds.length > 0 && 'pb-24')}>
-      <PageHeader title={t('pageAccessCatalog.home')} />
+    <div className={cn('space-y-4', selectedIds.length > 0 && 'pb-24')}>
+      <PageToolbar
+        start={hasFeedData ? (
+          <div className="flex items-center gap-3 text-sm">
+            {/* The one count on Home: the real total ("계산 중" until the deferred count arrives). */}
+            <CountSummary {...feedCountState} unit={COUNT_UNITS.images} className="font-semibold text-foreground" />
+            {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
+              <LoadingState variant="inline" spinnerSize="sm" label={t({ ko: '새로고침 중…', en: 'Refreshing…' })} className="text-xs text-muted-foreground" />
+            ) : null}
+          </div>
+        ) : undefined}
+        actions={(
+          <>
+            {!isAnonymousSession && appliedChips.length > 0 ? (
+              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '필터 모두 지우기', en: 'Clear all filters' })} onClick={clearAppliedChips}>
+                <X className="size-4" />
+              </IconButton>
+            ) : null}
+            <HomeSortMenu value={sortOrder} onChange={setSortOrder} />
+          </>
+        )}
+      >
+        {!isAnonymousSession && appliedChips.length > 0 ? (
+          <SearchChipStrip chips={appliedChips} onCycleOperator={cycleAppliedChipOperator} onRemove={removeAppliedChip} />
+        ) : null}
+      </PageToolbar>
 
       {isAnonymousSession ? (
         <Section
@@ -142,15 +165,6 @@ export function HomePage() {
         />
       ) : null}
 
-      {!isAnonymousSession && appliedChips.length > 0 ? (
-        <Inset className="flex items-start gap-2">
-          <SearchChipList chips={appliedChips} title={null} onCycleOperator={cycleAppliedChipOperator} onRemove={removeAppliedChip} className="min-w-0 flex-1" />
-          <IconButton size="icon-sm" variant="ghost" label={t({ ko: '모두 지우기', en: 'Clear all' })} onClick={clearAppliedChips}>
-            <X className="size-4" />
-          </IconButton>
-        </Inset>
-      ) : null}
-
       {isInitialLoadError ? (
         <ErrorState
           title={errorTitle}
@@ -161,10 +175,10 @@ export function HomePage() {
       ) : null}
 
       {imagesQuery.isPending ? (
-        <section className="columns-1 gap-6 sm:columns-2 xl:columns-3 2xl:columns-4">
+        <section className="columns-1 gap-4 sm:columns-2 xl:columns-3 2xl:columns-4">
           {Array.from({ length: 8 }).map((_, index) => (
-            <div key={index} className="mb-6 break-inside-avoid overflow-hidden rounded-sm bg-surface-low">
-              <Skeleton className="min-h-[280px] w-full rounded-none" />
+            <div key={index} className="mb-4 break-inside-avoid overflow-hidden rounded-sm">
+              <Skeleton className="min-h-[280px] w-full rounded-sm" />
             </div>
           ))}
         </section>
@@ -185,18 +199,6 @@ export function HomePage() {
 
       {hasFeedData && visibleImages.length > 0 ? (
         <>
-          <Inset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-              {/* The one count on Home: the real total ("계산 중" until the deferred count arrives). */}
-              <CountSummary {...feedCountState} unit={COUNT_UNITS.images} className="text-sm font-medium text-foreground" />
-              {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
-                <LoadingState variant="inline" spinnerSize="sm" label={t({ ko: '새로고침 중…', en: 'Refreshing…' })} className="text-xs" />
-              ) : null}
-            </div>
-            <div className="flex items-center gap-2">
-              <HomeSortMenu value={sortOrder} onChange={setSortOrder} />
-            </div>
-          </Inset>
           {/* 스크롤을 따라다니는 칼럼 설정. 선택 바가 떠 있으면 그 위로 비켜 선다. */}
           <ImageListColumnFloatingControl
             value={homeColumnCount}
@@ -222,8 +224,8 @@ export function HomePage() {
             onLoadMore={imagesQuery.fetchNextPage}
             minColumnWidth={300}
             preferredColumnCount={homeColumnCount}
-            columnGap={24}
-            rowGap={24}
+            columnGap={12}
+            rowGap={12}
             gridItemHeight={280}
             renderItemPersistentOverlay={renderItemPersistentOverlay}
             shouldBlurItemPreview={shouldBlurItemPreview}

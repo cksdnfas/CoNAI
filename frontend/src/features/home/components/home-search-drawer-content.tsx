@@ -319,11 +319,11 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
             {historyLoading ? <BottomDrawerNotice>{t({ ko: '불러오는 중…', en: 'Loading…' })}</BottomDrawerNotice> : null}
             {!historyLoading && historyEntries.length === 0 ? <BottomDrawerNotice>{t({ ko: '히스토리 없음', en: 'No history' })}</BottomDrawerNotice> : null}
             {!historyLoading && historyEntries.length > 0 ? (
-              <div className="space-y-2">
+              <div>
                 {historyEntries.map((entry) => (
-                  // The whole entry is the hit target (Panel interactive); the delete key floats in its top-right corner.
-                  <div key={entry.id} className="relative">
-                    <Panel asChild padding="none" interactive className="block w-full py-3 pr-12 pl-4 text-left">
+                  // The whole entry is the hit target (hairline row); the delete key floats at its right edge.
+                  <div key={entry.id} className="relative border-b border-line last:border-b-0">
+                    <Panel asChild tone="none" padding="none" interactive className="block w-full rounded-none py-3 pr-12 pl-2 text-left">
                       <button
                         type="button"
                         onClick={() => {
@@ -349,7 +349,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                         </div>
                       </button>
                     </Panel>
-                    <IconButton size="icon-xs" variant="ghost" className="absolute top-3 right-3" onClick={() => void deleteHistoryEntry(entry.id)} label={t('homeSearchDrawerContent.deleteSearchHistory')}>
+                    <IconButton size="icon-xs" variant="ghost" className="absolute top-3 right-2" onClick={() => void deleteHistoryEntry(entry.id)} label={t('homeSearchDrawerContent.deleteSearchHistory')}>
                       <X className="h-4 w-4" />
                     </IconButton>
                   </div>

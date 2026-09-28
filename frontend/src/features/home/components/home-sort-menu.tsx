@@ -1,5 +1,5 @@
-import { ArrowDownUp } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,10 +28,9 @@ export function HomeSortMenu({ value, onChange }: HomeSortMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" size="sm" variant="ghost" aria-label={t({ ko: '정렬: {order}', en: 'Sort: {order}' }, { order: activeLabel })}>
-          <ArrowDownUp className="h-4 w-4" />
-          {activeLabel}
-        </Button>
+        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '정렬: {order}', en: 'Sort: {order}' }, { order: activeLabel })}>
+          {value === 'oldest' ? <ArrowUpNarrowWide className="size-4" /> : <ArrowDownWideNarrow className="size-4" />}
+        </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-40">
         <DropdownMenuLabel>{t({ ko: '정렬', en: 'Sort' })}</DropdownMenuLabel>

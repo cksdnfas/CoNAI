@@ -40,9 +40,9 @@ export function ImageListFeedFooter({ itemCount, hasMore, isLoadingMore, loadMor
   } else if (!hasMore && itemCount > 0) {
     content = (
       <div className="flex w-full max-w-md items-center gap-3 text-xs text-muted-foreground" role="status">
-        <span className="h-px flex-1 bg-surface-highest" aria-hidden />
+        <span className="h-px flex-1 bg-line" aria-hidden />
         <span>{t({ ko: '끝까지 다 봤어', en: "You've reached the end" })}</span>
-        <span className="h-px flex-1 bg-surface-highest" aria-hidden />
+        <span className="h-px flex-1 bg-line" aria-hidden />
       </div>
     )
   }

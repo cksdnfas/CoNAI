@@ -4,8 +4,7 @@ import { getSearchScopeStyle } from '@/features/search/search-utils'
 import type { SearchChip } from '@/features/search/search-types'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
-import { Panel } from '@/components/ui/panel'
+import { ListRow } from '@/components/ui/list-row'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -35,11 +34,11 @@ export function SearchChipList({
   return (
     <div className={cn('space-y-2', className)}>
       {resolvedTitle ? <Text as="div" variant="overline" className="font-semibold">{resolvedTitle}</Text> : null}
-      {chips.length === 0 ? <Inset className="text-sm text-muted-foreground">{resolvedEmptyMessage}</Inset> : null}
+      {chips.length === 0 ? <p className="py-2 text-sm text-muted-foreground">{resolvedEmptyMessage}</p> : null}
       {chips.length > 0 ? (
-        <div className="space-y-2">
+        <div>
           {chips.map((chip) => (
-            <Panel key={chip.id} padding="none" className="flex items-center gap-2 px-3 py-2.5">
+            <ListRow key={chip.id} className="gap-2">
               <span className="rounded-sm px-2 py-1 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
                 {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
               </span>
@@ -68,7 +67,7 @@ export function SearchChipList({
               >
                 <X className="h-4 w-4" />
               </IconButton>
-            </Panel>
+            </ListRow>
           ))}
         </div>
       ) : null}
