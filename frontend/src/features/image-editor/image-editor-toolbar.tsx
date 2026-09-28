@@ -54,7 +54,7 @@ function ToolButton({ active, children, onClick, label }: { active: boolean; chi
 
 /** Group related toolbar controls on one quiet strip. */
 function ToolbarGroup({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap items-center gap-1 rounded-sm bg-surface-lowest p-1">{children}</div>
+  return <div className="flex flex-wrap items-center gap-1 border-r border-line pr-2 last:border-r-0">{children}</div>
 }
 
 /** Render the main editor toolbar with tools, history, transform, and selection actions. */

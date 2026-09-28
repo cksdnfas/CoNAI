@@ -2,7 +2,6 @@ import type { RefObject, WheelEvent } from 'react'
 import type Konva from 'konva'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
-import { Panel } from '@/components/ui/panel'
 import { useI18n } from '@/i18n'
 import { Modal } from '@/components/ui/modal'
 import { ImageEditorCanvas } from './image-editor-canvas'
@@ -159,7 +158,7 @@ export function ImageEditorModalLayout({
       <div className="space-y-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-4">
-            <Panel tone="low" className="space-y-4">
+            <div className="space-y-4">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                   <Heading level={3} className="min-w-0 truncate">{sourceFileName || t({ ko: '편집 세션', en: 'Editor Session' })}</Heading>
                   <div className="text-xs text-muted-foreground">
@@ -170,10 +169,11 @@ export function ImageEditorModalLayout({
 
                 <ImageEditorToolbar {...toolbar} />
                 <ImageEditorCanvas {...canvas} />
-            </Panel>
+            </div>
           </div>
 
-          <div className="min-w-0 space-y-4 xl:sticky xl:top-0 xl:self-start">
+          {/* Side column: split from the canvas by one hairline, sections split by hairlines. */}
+          <div className="min-w-0 space-y-6 xl:sticky xl:top-0 xl:self-start xl:border-l xl:border-line xl:pl-5">
             <ImageEditorLayerPanel {...layerPanel} />
             <ImageEditorSessionActions {...sessionActions} />
           </div>

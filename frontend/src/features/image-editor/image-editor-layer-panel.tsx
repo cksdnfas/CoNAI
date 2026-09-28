@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
-import { Panel } from '@/components/ui/panel'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import type { ImageEditorLayer } from './image-editor-types'
@@ -48,7 +47,7 @@ export function ImageEditorLayerPanel({
   const { t } = useI18n()
 
   return (
-    <Panel tone="low" className="space-y-4">
+    <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <Heading level={3} className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-muted-foreground" /> {t({ ko: '레이어', en: 'Layers' })}
@@ -58,11 +57,11 @@ export function ImageEditorLayerPanel({
           </IconButton>
         </div>
 
-        <div className="space-y-2">
+        <div>
           {layers.length > 0 ? layers.map((layer, index) => {
             const isActive = layer.id === activeLayerId
             return (
-              <div key={layer.id} className={`space-y-2 rounded-sm p-3 ${isActive ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-surface-lowest'}`}>
+              <div key={layer.id} className={`space-y-2 border-b border-line py-3 last:border-b-0 ${isActive ? 'bg-primary/8 px-2 shadow-[inset_2px_0_0_var(--primary)]' : ''}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-2">
                     <Button type="button" variant="nav" size="xs" className="-mx-1.5 w-[calc(100%+0.75rem)]" onClick={() => onSetActiveLayerId(layer.id)}>
@@ -86,25 +85,25 @@ export function ImageEditorLayerPanel({
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1">
-                  <IconButton variant="subtle" size="icon-sm" onClick={() => onToggleLayerVisible(layer.id)} aria-pressed={!layer.visible} label={layer.visible ? t({ ko: '레이어 숨기기', en: 'Hide layer' }) : t({ ko: '레이어 보이기', en: 'Show layer' })}>
+                  <IconButton variant="ghost" size="icon-sm" onClick={() => onToggleLayerVisible(layer.id)} aria-pressed={!layer.visible} label={layer.visible ? t({ ko: '레이어 숨기기', en: 'Hide layer' }) : t({ ko: '레이어 보이기', en: 'Show layer' })}>
                     {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                   </IconButton>
-                  <IconButton variant="subtle" size="icon-sm" onClick={() => onToggleLayerLocked(layer.id)} aria-pressed={layer.locked} label={layer.locked ? t({ ko: '잠금 해제', en: 'Unlock layer' }) : t({ ko: '레이어 잠그기', en: 'Lock layer' })}>
+                  <IconButton variant="ghost" size="icon-sm" onClick={() => onToggleLayerLocked(layer.id)} aria-pressed={layer.locked} label={layer.locked ? t({ ko: '잠금 해제', en: 'Unlock layer' }) : t({ ko: '레이어 잠그기', en: 'Lock layer' })}>
                     {layer.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
                   </IconButton>
-                  <IconButton variant="subtle" size="icon-sm" onClick={() => onMoveLayer(layer.id, -1)} disabled={index === 0} label={t({ ko: '위로 이동', en: 'Move up' })}>
+                  <IconButton variant="ghost" size="icon-sm" onClick={() => onMoveLayer(layer.id, -1)} disabled={index === 0} label={t({ ko: '위로 이동', en: 'Move up' })}>
                     <ArrowUp className="h-4 w-4" />
                   </IconButton>
-                  <IconButton variant="subtle" size="icon-sm" onClick={() => onMoveLayer(layer.id, 1)} disabled={index === layers.length - 1} label={t({ ko: '아래로 이동', en: 'Move down' })}>
+                  <IconButton variant="ghost" size="icon-sm" onClick={() => onMoveLayer(layer.id, 1)} disabled={index === layers.length - 1} label={t({ ko: '아래로 이동', en: 'Move down' })}>
                     <ArrowDown className="h-4 w-4" />
                   </IconButton>
-                  <IconButton variant="subtle" size="icon-sm" onClick={() => onDuplicateLayer(layer.id)} disabled={loading} label={t({ ko: '복제', en: 'Duplicate' })}>
+                  <IconButton variant="ghost" size="icon-sm" onClick={() => onDuplicateLayer(layer.id)} disabled={loading} label={t({ ko: '복제', en: 'Duplicate' })}>
                     <CopyPlus className="h-4 w-4" />
                   </IconButton>
-                  <IconButton variant="subtle" size="icon-sm" onClick={onMergeLayerDown} disabled={!isActive || index === 0 || loading} label={t({ ko: '아래로 병합', en: 'Merge Down' })}>
+                  <IconButton variant="ghost" size="icon-sm" onClick={onMergeLayerDown} disabled={!isActive || index === 0 || loading} label={t({ ko: '아래로 병합', en: 'Merge Down' })}>
                     <ArrowDownToLine className="h-4 w-4" />
                   </IconButton>
-                  <IconButton variant="subtle" size="icon-sm" onClick={() => onDeleteLayer(layer.id)} disabled={layers.length === 1 && layer.type === 'draw'} label={t({ ko: '레이어 삭제', en: 'Delete layer' })}>
+                  <IconButton variant="ghost" size="icon-sm" onClick={() => onDeleteLayer(layer.id)} disabled={layers.length === 1 && layer.type === 'draw'} label={t({ ko: '레이어 삭제', en: 'Delete layer' })}>
                     <Trash2 className="h-4 w-4" />
                   </IconButton>
                 </div>
@@ -114,11 +113,11 @@ export function ImageEditorLayerPanel({
         </div>
 
         {enableMaskEditing ? (
-          <div className="flex items-center justify-between rounded-sm bg-surface-lowest p-3">
+          <div className="flex min-h-11 items-center justify-between border-t border-line pt-2">
             <div className="text-sm font-medium text-foreground">{t({ ko: '마스크 레이어', en: 'Mask layer' })}</div>
             <Badge variant={hasVisibleMask ? 'secondary' : 'outline'}>{hasVisibleMask ? t({ ko: '보임', en: 'Visible' }) : t({ ko: '비어 있음', en: 'Empty' })}</Badge>
           </div>
         ) : null}
-    </Panel>
+    </section>
   )
 }
