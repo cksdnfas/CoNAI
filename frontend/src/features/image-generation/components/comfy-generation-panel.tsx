@@ -51,7 +51,7 @@ type ComfyGenerationPanelProps = {
   refreshNonce: number
   onHistoryRefresh: () => void
   selectedWorkflowId: number | null
-  onSelectedWorkflowChange: (workflowId: number | null) => void
+  onSelectedWorkflowChange: (workflowId: number | null, options?: { replace?: boolean }) => void
   splitPaneScroll?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
@@ -313,7 +313,8 @@ export function ComfyGenerationPanel({
     }
 
     if (workflowsQuery.isSuccess && selectedWorkflow === null) {
-      onSelectedWorkflowChange(null)
+      // URL 에 남은 삭제/비활성 워크플로우 id 는 히스토리 항목을 늘리지 않고 조용히 정리한다.
+      onSelectedWorkflowChange(null, { replace: true })
     }
   }, [onSelectedWorkflowChange, selectedWorkflow, selectedWorkflowId, workflowsQuery.isSuccess])
 

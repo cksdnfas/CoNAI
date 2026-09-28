@@ -4,6 +4,9 @@ export type ImageGenerationTab = 'nai' | 'codex' | 'comfyui' | 'workflows' | 're
 
 type Translate = (input: TranslationInput, params?: TranslationParams) => string
 
+/** Query param that keeps the selected ComfyUI workflow across reloads and back navigation. */
+export const IMAGE_GENERATION_WORKFLOW_PARAM = 'workflow'
+
 export const IMAGE_GENERATION_TAB_ORDER: ImageGenerationTab[] = ['nai', 'codex', 'comfyui', 'workflows', 'reservations']
 
 export function getImageGenerationTabLabel(tab: ImageGenerationTab, t: Translate) {
@@ -37,4 +40,14 @@ export function parseImageGenerationTab(value?: string | null): ImageGenerationT
   }
 
   return 'nai'
+}
+
+/** Parse the selected ComfyUI workflow id from the URL, ignoring anything that is not a positive integer. */
+export function parseImageGenerationWorkflowId(value?: string | null): number | null {
+  if (!value || !/^\d+$/.test(value)) {
+    return null
+  }
+
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }

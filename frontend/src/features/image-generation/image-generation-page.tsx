@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -9,7 +9,14 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
-import { getImageGenerationTabLabel, getImageGenerationTabs, parseImageGenerationTab, type ImageGenerationTab } from './image-generation-tabs'
+import {
+  IMAGE_GENERATION_WORKFLOW_PARAM,
+  getImageGenerationTabLabel,
+  getImageGenerationTabs,
+  parseImageGenerationTab,
+  parseImageGenerationWorkflowId,
+  type ImageGenerationTab,
+} from './image-generation-tabs'
 
 const NaiGenerationPanelLazy = lazy(async () => {
   const module = await import('./components/nai-generation-panel')
@@ -54,14 +61,8 @@ export function ImageGenerationPage() {
   const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
-  const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(null)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const isWideLayout = useDesktopPageLayout()
-  const selectedComfyWorkflowQuery = useQuery({
-    queryKey: ['image-generation-selected-comfy-workflow', selectedComfyWorkflowId],
-    queryFn: () => getGenerationWorkflow(selectedComfyWorkflowId as number),
-    enabled: selectedComfyWorkflowId !== null,
-  })
   const imageGenerationTabs = useMemo(() => getImageGenerationTabs(t), [t])
   const visibleTabs = imageGenerationTabs
   const visibleTabValues = useMemo(() => new Set(visibleTabs.map((tab) => tab.value)), [visibleTabs])
@@ -69,6 +70,25 @@ export function ImageGenerationPage() {
   const activeTab = visibleTabValues.has(requestedTab)
     ? requestedTab
     : (visibleTabs[0]?.value ?? 'nai')
+  // 선택한 ComfyUI 워크플로우는 URL 에 둔다. 새로고침/뒤로가기에도 같은 워크플로우로 돌아온다.
+  const requestedComfyWorkflowId = parseImageGenerationWorkflowId(searchParams.get(IMAGE_GENERATION_WORKFLOW_PARAM))
+  const selectedComfyWorkflowId = activeTab === 'comfyui' ? requestedComfyWorkflowId : null
+  const setSelectedComfyWorkflowId = useCallback((workflowId: number | null, options?: { replace?: boolean }) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (workflowId === null) {
+        next.delete(IMAGE_GENERATION_WORKFLOW_PARAM)
+      } else {
+        next.set(IMAGE_GENERATION_WORKFLOW_PARAM, String(workflowId))
+      }
+      return next
+    }, { replace: options?.replace })
+  }, [setSearchParams])
+  const selectedComfyWorkflowQuery = useQuery({
+    queryKey: ['image-generation-selected-comfy-workflow', selectedComfyWorkflowId],
+    queryFn: () => getGenerationWorkflow(selectedComfyWorkflowId as number),
+    enabled: selectedComfyWorkflowId !== null,
+  })
   const selectedComfyWorkflowResultMode = activeTab === 'comfyui'
     ? selectedComfyWorkflowQuery.data?.result_view_mode ?? 'history'
     : 'history'
@@ -90,17 +110,17 @@ export function ImageGenerationPage() {
     const nextSearchParams = new URLSearchParams(searchParams)
     nextSearchParams.set('tab', nextTab)
     if (nextTab !== 'comfyui') {
-      setSelectedComfyWorkflowId(null)
+      nextSearchParams.delete(IMAGE_GENERATION_WORKFLOW_PARAM)
     }
     setIsControllerOpen(false)
     setSearchParams(nextSearchParams)
   }
 
   useEffect(() => {
-    if (activeTab !== 'comfyui' && selectedComfyWorkflowId !== null) {
-      setSelectedComfyWorkflowId(null)
+    if (activeTab !== 'comfyui' && requestedComfyWorkflowId !== null) {
+      setSelectedComfyWorkflowId(null, { replace: true })
     }
-  }, [activeTab, selectedComfyWorkflowId])
+  }, [activeTab, requestedComfyWorkflowId, setSelectedComfyWorkflowId])
 
   useEffect(() => {
     if (visibleTabValues.has(requestedTab)) {
