@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Trash2, WandSparkles } from 'lucide-react'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { Pencil, RefreshCw, Trash2, WandSparkles } from 'lucide-react'
+import { PageToolbar } from '@/components/common/page-toolbar'
+import { PageWithSidebar } from '@/components/common/page-with-sidebar'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   createWildcard,
@@ -18,8 +20,7 @@ import {
   type WildcardTool,
 } from '@/lib/api-wildcards'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
-import { cn } from '@/lib/utils'
+import { ToolbarSearchField } from '@/features/prompts/components/toolbar-search-field'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { LoraAutoCollectModal } from './lora-auto-collect-modal'
@@ -65,14 +66,13 @@ function getWorkspaceTabs(t: ReturnType<typeof useI18n>['t']): Array<{ value: Wi
   ]
 }
 
-/** Render the shared wildcard/preprocess/lora workspace with one common UI and tab-based data filters. */
+/** The /wildcards page: tab switch and search in one toolbar, the tab's tree in the sidebar, the selection flat on the right. */
 export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPanelProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
-  const isWideLayout = useDesktopPageLayout()
 
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WildcardWorkspaceTab>('wildcards')
   const [searchInput, setSearchInput] = useState('')
@@ -333,97 +333,111 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     await loraCollectMutation.mutateAsync(input)
   }
 
-  return (
-    <div className="space-y-6">
-      <SegmentedTabBar
-        value={activeWorkspaceTab}
-        items={workspaceTabs}
-        onChange={(nextTab) => setActiveWorkspaceTab(nextTab as WildcardWorkspaceTab)}
-        actions={(
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="secondary"
-            onClick={() => setIsPreviewModalOpen(true)}
-            aria-label={t('image-generation.components.wildcard.generation.panel.parsing.test')}
-            title={t('image-generation.components.wildcard.generation.panel.parsing.test')}
-          >
-            <WandSparkles className="h-4 w-4" />
-          </Button>
-        )}
-      />
-
-      {isSettingsTab ? (
-        <WildcardSyntaxSettingsPanel />
-      ) : (
-      <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
-        <WildcardExplorerSidebarPanel
-          isWideLayout={isWideLayout}
-          activeWorkspaceTab={activeWorkspaceTab}
-          browserEntries={browserEntries}
-          browserTreeNodes={browserTreeNodes}
-          filteredEntries={filteredEntries}
-          selectedWildcardId={selectedWildcardId}
-          selectedWildcard={selectedWildcard}
-          searchInput={searchInput}
-          canCreateInActiveTab={canCreateInActiveTab}
-          canEditInActiveTab={canEditWildcardEntries && !isReadonlyActiveTab}
-          canDeleteInActiveTab={canDeleteWildcardEntries && !isReadonlyActiveTab}
-          canScanLora={canScanLora}
-          isLoading={wildcardsQuery.isLoading}
-          isError={wildcardsQuery.isError}
-          isDeleting={deleteMutation.isPending}
-          isRefreshingLog={loraScanLogQuery.isFetching}
-          errorMessage={getErrorMessage(wildcardsQuery.error, t('image-generation.components.wildcard.generation.panel.could.not.load.the.list'))}
-          onSearchChange={setSearchInput}
-          onRefresh={() => {
-            void wildcardsQuery.refetch()
-          }}
-          onOpenLoraCollect={() => setIsLoraCollectModalOpen(true)}
-          onRefreshLoraLog={() => {
-            void loraScanLogQuery.refetch()
-          }}
-          onOpenCreate={handleOpenCreateModal}
-          onOpenEdit={handleOpenEditModal}
-          onDeleteSelected={() => {
-            void handleDeleteSelected()
-          }}
-          onSelectWildcard={setSelectedWildcardId}
+  const toolbar = (
+    <PageToolbar
+      start={(
+        <SegmentedControl
+          value={activeWorkspaceTab}
+          items={workspaceTabs}
+          onChange={(nextTab) => setActiveWorkspaceTab(nextTab as WildcardWorkspaceTab)}
+          size="sm"
+          semantics="tabs"
+          ariaLabel={t({ ko: '와일드카드 종류', en: 'Wildcard kind' })}
         />
-
-        <section className="space-y-6">
-          <WildcardDetailCard
-            selectedEntry={selectedEntry}
-            onCopySyntax={handleCopy}
-            extraActions={selectedWildcard && !isReadonlyActiveTab && (canEditWildcardEntries || canDeleteWildcardEntries) ? (
-              <>
-                {canEditWildcardEntries ? (
-                  <Button type="button" variant="secondary" size="icon-sm" className="bg-surface-low" onClick={handleOpenEditModal} aria-label={t('image-generation.components.wildcard.generation.panel.edit')} title={t('image-generation.components.wildcard.generation.panel.edit')}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                ) : null}
-                {canDeleteWildcardEntries ? (
-                  <Button type="button" variant="secondary" size="icon-sm" className="bg-surface-low" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending} aria-label={t('image-generation.components.wildcard.generation.panel.delete')} title={t('image-generation.components.wildcard.generation.panel.delete')}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                ) : null}
-              </>
-            ) : undefined}
-          />
-
-
-          {activeWorkspaceTab === 'lora' ? (
-            loraScanLogQuery.isError ? (
-              <Alert variant="destructive">
-                <AlertTitle>{t('image-generation.components.wildcard.generation.panel.could.not.load.lora.scan.logs')}</AlertTitle>
-                <AlertDescription>{getErrorMessage(loraScanLogQuery.error, t('image-generation.components.wildcard.generation.panel.could.not.load.recent.scan.logs'))}</AlertDescription>
-              </Alert>
-            ) : (
-              <LoraScanLogCard log={loraScanLogQuery.data ?? null} />
-            )
+      )}
+      actions={(
+        <>
+          {!isSettingsTab ? (
+            <IconButton variant="ghost" size="icon-sm" onClick={() => void wildcardsQuery.refetch()} label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}>
+              <RefreshCw />
+            </IconButton>
           ) : null}
-        </section>
-      </div>
+          <IconButton variant="ghost" size="icon-sm" onClick={() => setIsPreviewModalOpen(true)} label={t('image-generation.components.wildcard.generation.panel.parsing.test')}>
+            <WandSparkles />
+          </IconButton>
+        </>
+      )}
+    >
+      {!isSettingsTab ? (
+        <ToolbarSearchField
+          value={searchInput}
+          placeholder={t('image-generation.components.wildcard.explorer.sidebar.panel.search.name.or.path')}
+          onChange={setSearchInput}
+        />
+      ) : null}
+    </PageToolbar>
+  )
+
+  return (
+    <>
+      {isSettingsTab ? (
+        <div>
+          {toolbar}
+          <WildcardSyntaxSettingsPanel />
+        </div>
+      ) : (
+        <PageWithSidebar
+          storageKey="wildcards"
+          sidebarLabel={activeTabLabel}
+          toolbar={toolbar}
+          sidebar={(
+            <WildcardExplorerSidebarPanel
+              activeWorkspaceTab={activeWorkspaceTab}
+              tabLabel={activeTabLabel}
+              browserEntries={browserEntries}
+              browserTreeNodes={browserTreeNodes}
+              filteredEntries={filteredEntries}
+              selectedWildcardId={selectedWildcardId}
+              selectedWildcard={selectedWildcard}
+              searchInput={searchInput}
+              canCreateInActiveTab={canCreateInActiveTab}
+              canEditInActiveTab={canEditWildcardEntries && !isReadonlyActiveTab}
+              canScanLora={canScanLora}
+              isLoading={wildcardsQuery.isLoading}
+              isError={wildcardsQuery.isError}
+              isRefreshingLog={loraScanLogQuery.isFetching}
+              errorMessage={getErrorMessage(wildcardsQuery.error, t('image-generation.components.wildcard.generation.panel.could.not.load.the.list'))}
+              onOpenLoraCollect={() => setIsLoraCollectModalOpen(true)}
+              onRefreshLoraLog={() => {
+                void loraScanLogQuery.refetch()
+              }}
+              onOpenCreate={handleOpenCreateModal}
+              onSelectWildcard={setSelectedWildcardId}
+            />
+          )}
+        >
+          <div className="max-w-5xl space-y-10 pt-2">
+            <WildcardDetailCard
+              selectedEntry={selectedEntry}
+              onCopySyntax={handleCopy}
+              extraActions={selectedWildcard && !isReadonlyActiveTab && (canEditWildcardEntries || canDeleteWildcardEntries) ? (
+                <>
+                  {canEditWildcardEntries ? (
+                    <IconButton variant="ghost" size="icon-sm" onClick={handleOpenEditModal} label={t('image-generation.components.wildcard.generation.panel.edit')}>
+                      <Pencil />
+                    </IconButton>
+                  ) : null}
+                  {canDeleteWildcardEntries ? (
+                    <IconButton variant="ghost" size="icon-sm" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending} label={t('image-generation.components.wildcard.generation.panel.delete')}>
+                      <Trash2 />
+                    </IconButton>
+                  ) : null}
+                </>
+              ) : undefined}
+            />
+
+            {activeWorkspaceTab === 'lora' ? (
+              loraScanLogQuery.isError ? (
+                <Alert variant="destructive">
+                  <AlertTitle>{t('image-generation.components.wildcard.generation.panel.could.not.load.lora.scan.logs')}</AlertTitle>
+                  <AlertDescription>{getErrorMessage(loraScanLogQuery.error, t('image-generation.components.wildcard.generation.panel.could.not.load.recent.scan.logs'))}</AlertDescription>
+                </Alert>
+              ) : (
+                <LoraScanLogCard log={loraScanLogQuery.data ?? null} />
+              )
+            ) : null}
+          </div>
+        </PageWithSidebar>
       )}
 
       <LoraAutoCollectModal
@@ -468,7 +482,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
         onClose={() => setEditorState(null)}
         onSubmit={handleSubmitEditor}
       />
-    </div>
+    </>
   )
 }
 

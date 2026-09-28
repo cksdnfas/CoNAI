@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Folder, FolderOpen } from 'lucide-react'
-import { HierarchyNav } from '@/components/common/hierarchy-nav'
-import { SectionHeading } from '@/components/common/section-heading'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Inset } from '@/components/ui/inset'
+import { ListRow } from '@/components/ui/list-row'
+import { RowGroup } from '@/components/ui/row-group'
 import { StatTile } from '@/components/ui/stat-tile'
-import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
+import { SidebarTree } from '@/features/prompts/components/sidebar-tree'
 import { useI18n } from '@/i18n'
 import {
   type WildcardItemRecord,
@@ -25,7 +24,7 @@ function hasVisibleWildcardItems(items: WildcardItemRecord[]) {
   return items.some((item) => item.content.trim().length > 0)
 }
 
-/** Render the hierarchical wildcard tree used by the left workspace explorer. */
+/** Render the hierarchical wildcard tree used by the sidebar explorer. */
 export function WildcardTree({
   entries,
   selectedId,
@@ -36,21 +35,19 @@ export function WildcardTree({
   onSelect: (wildcardId: number) => void
 }) {
   return (
-    <HierarchyNav
+    <SidebarTree
       items={entries.map((entry) => entry.wildcard)}
-      expandable
       selectedId={selectedId}
       onSelect={(wildcard) => onSelect(wildcard.id)}
       getId={(wildcard) => wildcard.id}
       getParentId={(wildcard) => wildcard.parent_id}
-      getLabel={(wildcard) => <span className="truncate">{wildcard.name}</span>}
+      getLabel={(wildcard) => wildcard.name}
       sortItems={(left, right) => left.name.localeCompare(right.name)}
-      renderIcon={(_, state) => (state.hasChildren || state.isSelected ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
     />
   )
 }
 
-/** Render one read-only wildcard item list with the shared settings-style segmented table shell. */
+/** Render one read-only wildcard item list: tool switch over hairline rows. */
 function WildcardItemSection({
   activeTool,
   onChangeTool,
@@ -63,27 +60,38 @@ function WildcardItemSection({
   const { t, formatNumber } = useI18n()
 
   return (
-    <SettingsSegmentedTable
-      value={activeTool}
-      items={[
-        { value: 'general', label: 'General' },
-        { value: 'nai', label: 'NAI' },
-        { value: 'comfyui', label: 'ComfyUI' },
-      ]}
-      onChange={(value) => onChangeTool(value as WildcardTool)}
-      gridClassName="grid-cols-[3rem_minmax(0,1fr)_5rem]"
-      headers={[t({ ko: '번호', en: 'No.' }), t({ ko: '내용', en: 'Content' }), t({ ko: '가중치', en: 'Weight' })]}
-      count={<Badge variant="outline">{formatNumber(items.length)}</Badge>}
-      minWidthClassName="min-w-[520px]"
+    <RowGroup
+      heading={(
+        <SegmentedControl
+          value={activeTool}
+          items={[
+            { value: 'general', label: 'General' },
+            { value: 'nai', label: 'NAI' },
+            { value: 'comfyui', label: 'ComfyUI' },
+          ]}
+          onChange={(value) => onChangeTool(value as WildcardTool)}
+          size="xs"
+        />
+      )}
+      headingAs="div"
+      actions={<span className="text-xs tabular-nums text-muted-foreground">{formatNumber(items.length)}</span>}
+      bodyClassName="pt-2"
     >
+      <div className="flex h-8 items-center gap-3 border-b border-line text-xs text-muted-foreground/75">
+        <span className="w-8 shrink-0 text-center">{t({ ko: '번호', en: 'No.' })}</span>
+        <span className="min-w-0 flex-1">{t({ ko: '내용', en: 'Content' })}</span>
+        <span className="w-16 shrink-0 text-right">{t({ ko: '가중치', en: 'Weight' })}</span>
+      </div>
       {items.length > 0 ? items.map((item, index) => (
-        <div key={item.id} className="grid grid-cols-[3rem_minmax(0,1fr)_5rem] items-center px-4 py-3 text-sm transition-colors hover:bg-surface-high/60">
-          <div className="text-center font-medium tabular-nums text-muted-foreground">{formatNumber(index + 1)}</div>
-          <div className="min-w-0 truncate text-foreground" title={item.content}>{item.content}</div>
-          <div className="text-center text-foreground">{item.weight}</div>
-        </div>
-      )) : <div className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '등록된 항목이 없어.', en: 'No registered items.' })}</div>}
-    </SettingsSegmentedTable>
+        <ListRow
+          key={item.id}
+          leading={<span className="w-8 text-center text-xs tabular-nums text-muted-foreground">{formatNumber(index + 1)}</span>}
+          trailing={<span className="w-16 text-right tabular-nums">{item.weight}</span>}
+        >
+          <span className="min-w-0 truncate" title={item.content}>{item.content}</span>
+        </ListRow>
+      )) : <p className="py-4 text-sm text-muted-foreground">{t({ ko: '등록된 항목이 없어.', en: 'No registered items.' })}</p>}
+    </RowGroup>
   )
 }
 
@@ -128,27 +136,28 @@ export function WildcardDetailCard({
     )
   }, [selectedWildcard?.id, selectedGeneralItems, selectedNaiItems, selectedComfyItems])
 
+  if (!selectedWildcard) {
+    return <EmptyState size="compact" title={t({ ko: '항목을 선택하면 세부 정보를 보여줄게.', en: 'Select an item to see its details.' })} />
+  }
+
   return (
-    <section className="space-y-4">
-      <SectionHeading
-        variant="inside"
-        heading={selectedWildcard ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => void onCopySyntax(selectedWildcardSyntax, selectedWildcardSyntaxLabel)}
-            className="-ml-2 max-w-full"
-            title={t({ ko: '클릭해서 복사', en: 'Click to copy' })}
-          >
-            <code className="truncate text-sm font-medium text-primary">{selectedWildcardSyntax}</code>
-          </Button>
-        ) : t({ ko: '항목 선택', en: 'Select an item' })}
-        actions={selectedWildcard ? extraActions : undefined}
-      />
+    <section className="space-y-6">
+      <div className="flex min-h-10 items-center justify-between gap-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => void onCopySyntax(selectedWildcardSyntax, selectedWildcardSyntaxLabel)}
+          className="-ml-2 min-w-0 max-w-full"
+          title={t({ ko: '클릭해서 복사', en: 'Click to copy' })}
+        >
+          <code className="truncate text-base font-semibold text-foreground">{selectedWildcardSyntax}</code>
+        </Button>
+        {extraActions ? <div className="flex shrink-0 items-center gap-1">{extraActions}</div> : null}
+      </div>
 
       {selectedWildcard ? (
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="space-y-3 text-sm text-muted-foreground">
             <div className="flex flex-wrap gap-2 text-xs">
               <Badge variant="outline">{t({ ko: '하위 자동 포함 {value}', en: 'Include children {value}' }, { value: selectedWildcard.include_children === 1 ? 'ON' : 'OFF' })}</Badge>
@@ -169,9 +178,7 @@ export function WildcardDetailCard({
             items={activeItems}
           />
         </div>
-      ) : (
-        <EmptyState size="compact" title={t({ ko: '항목을 선택하면 세부 정보를 보여줄게.', en: 'Select an item to see its details.' })} />
-      )}
+      ) : null}
     </section>
   )
 }
@@ -181,39 +188,46 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
   const { t, formatNumber, formatDateTime } = useI18n()
 
   return (
-    <section className="space-y-4">
-      <SectionHeading
-        variant="inside"
-        heading={t({ ko: '최근 자동 수집 로그', en: 'Recent auto-collection log' })}
-        actions={log ? <Badge variant="outline">{formatNumber(log.totalWildcards)}</Badge> : undefined}
-      />
-
+    <RowGroup
+      headingAs="h2"
+      heading={t({ ko: '최근 자동 수집 로그', en: 'Recent auto-collection log' })}
+      actions={log ? <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(log.totalWildcards)}</span> : undefined}
+      bodyClassName="space-y-6 pt-2"
+    >
       {log ? (
-        <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatTile label={t({ ko: '시간', en: 'Time' })} value={formatWildcardDateTime(log.timestamp, formatDateTime)} valueClassName="font-normal" />
             <StatTile label={t({ ko: 'LoRA 가중치', en: 'LoRA weight' })} value={log.loraWeight} valueClassName="font-normal" />
             <StatTile label={t({ ko: '중복 처리', en: 'Duplicate handling' })} value={log.duplicateHandling} valueClassName="font-normal" />
             <StatTile label={t({ ko: '생성 항목', en: 'Created items' })} value={formatNumber(log.totalItems)} valueClassName="font-normal" />
           </div>
 
-          <div className="space-y-2">
+          <div>
             {log.wildcards.slice(0, 8).map((entry) => (
-              <Inset key={entry.id} className="px-3 py-2 text-xs text-muted-foreground">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-foreground">{getWildcardPromptSyntax(entry.name)}</span>
-                  <Badge variant="outline">{t({ ko: '항목 {count}', en: 'Items {count}' }, { count: formatNumber(entry.itemCount) })}</Badge>
-                  <Badge variant="outline">{t({ ko: '레벨 {level}', en: 'Level {level}' }, { level: formatNumber(entry.level) })}</Badge>
-                </div>
-                <div className="mt-1 break-all">{entry.folderName}</div>
-              </Inset>
+              <ListRow
+                key={entry.id}
+                size="lg"
+                trailing={(
+                  <span className="text-xs tabular-nums">
+                    {t({ ko: '항목 {count}', en: 'Items {count}' }, { count: formatNumber(entry.itemCount) })}
+                    {' · '}
+                    {t({ ko: '레벨 {level}', en: 'Level {level}' }, { level: formatNumber(entry.level) })}
+                  </span>
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{getWildcardPromptSyntax(entry.name)}</span>
+                  <span className="block truncate text-xs text-muted-foreground" title={entry.folderName}>{entry.folderName}</span>
+                </span>
+              </ListRow>
             ))}
-            {log.wildcards.length > 8 ? <div className="text-xs text-muted-foreground">{t({ ko: '외 {count}개 더 있어.', en: '{count} more.' }, { count: formatNumber(log.wildcards.length - 8) })}</div> : null}
+            {log.wildcards.length > 8 ? <div className="pt-2 text-xs text-muted-foreground">{t({ ko: '외 {count}개 더 있어.', en: '{count} more.' }, { count: formatNumber(log.wildcards.length - 8) })}</div> : null}
           </div>
-        </div>
+        </>
       ) : (
         <EmptyState size="compact" title={t({ ko: '아직 기록된 자동 수집 로그가 없어.', en: 'No auto-collection logs recorded yet.' })} />
       )}
-    </section>
+    </RowGroup>
   )
 }
