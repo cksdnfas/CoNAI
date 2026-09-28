@@ -64,6 +64,7 @@ export function LlmConnectionListItem({
     <SettingsResourceTableRow
       gridClassName={LLM_CONNECTIONS_TABLE_GRID}
       selected={selected}
+      labelledFrom={3}
       onOpenOptions={() => onOpenOptions(provider)}
       cells={[
         <div className="min-w-0 truncate font-medium text-foreground" title={provider.provider_name}>
@@ -99,6 +100,7 @@ export function LlmPresetListItem({
     <SettingsResourceTableRow
       gridClassName={LLM_PRESETS_TABLE_GRID}
       selected={selected}
+      labelledFrom={2}
       onOpenOptions={() => onOpenOptions(preset)}
       cells={[
         <div className="min-w-0 truncate font-medium text-foreground" title={preset.name}>{preset.name}</div>,

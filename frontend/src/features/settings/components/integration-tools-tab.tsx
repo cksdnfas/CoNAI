@@ -5,8 +5,8 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
 import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import { useI18n } from '@/i18n'
-import { StatTile } from '@/components/ui/stat-tile'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
+import { SettingRow } from '@/components/ui/setting-row'
 
 const CONAI_HELPER_DOWNLOAD_PATH = '/api/settings/resources/comfyui-helper/download'
 const CONAI_HELPER_PACKAGE_FILENAME = 'conai-helper-comfyui-custom-node.zip'
@@ -45,23 +45,24 @@ export function IntegrationToolsTab() {
   }
 
   return (
-    <div className="space-y-6">
-      <Section
-        variant="settings"
-        heading={t({ ko: 'ComfyUI 연동', en: 'ComfyUI integration' })}
-        actions={
-          <Button type="button" size="sm" onClick={() => void handleDownload()} disabled={isDownloading}>
-            <Download className="h-4 w-4" />
-            {isDownloading ? t({ ko: '다운로드 중', en: 'Downloading' }) : t({ ko: 'ZIP 다운로드', en: 'Download ZIP' })}
-          </Button>
-        }
-      >
-        <div className="grid gap-3 md:grid-cols-3">
-          <StatTile label={t({ ko: '패키지', en: 'Package' })} value="CoNAI Helper" />
-          <StatTile label={t({ ko: '대상', en: 'Target' })} value="ComfyUI custom_nodes" />
-          <StatTile label={t({ ko: '노드', en: 'Node' })} value="CoNAI Helper: Artifact Output" />
-        </div>
-      </Section>
-    </div>
+    <RowGroup
+      heading={t({ ko: 'ComfyUI 연동', en: 'ComfyUI integration' })}
+      actions={
+        <Button type="button" size="sm" variant="secondary" onClick={() => void handleDownload()} disabled={isDownloading}>
+          <Download className="h-4 w-4" />
+          {isDownloading ? t({ ko: '다운로드 중', en: 'Downloading' }) : t({ ko: 'ZIP 다운로드', en: 'Download ZIP' })}
+        </Button>
+      }
+    >
+      <SettingRow label={t({ ko: '패키지', en: 'Package' })}>
+        <span className="text-sm text-muted-foreground">CoNAI Helper</span>
+      </SettingRow>
+      <SettingRow label={t({ ko: '대상', en: 'Target' })}>
+        <span className="font-mono text-xs text-muted-foreground">ComfyUI custom_nodes</span>
+      </SettingRow>
+      <SettingRow label={t({ ko: '노드', en: 'Node' })}>
+        <span className="text-sm text-muted-foreground">CoNAI Helper: Artifact Output</span>
+      </SettingRow>
+    </RowGroup>
   )
 }

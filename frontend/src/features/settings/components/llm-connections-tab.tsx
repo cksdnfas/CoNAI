@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getExternalApiProviders } from '@/lib/api-external-api'
@@ -9,8 +8,9 @@ import { getAppSettings } from '@/lib/api-settings-general'
 import { updateLlmSettings } from '@/lib/api-settings-llm'
 import type { LlmPresetRecord, LlmSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
-import { Section } from '@/components/ui/section'
+import { RowGroup } from '@/components/ui/row-group'
 import { SettingsResourceTable } from './settings-resource-shared'
+import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import {
   LlmConnectionEditorModal,
   LlmConnectionListItem,
@@ -153,33 +153,29 @@ export function LlmConnectionsTab() {
   )
 
   return (
-    <div className="space-y-6">
-      <Section
-        variant="settings"
+    <div className="space-y-8">
+      <RowGroup
         heading={t('llmConnectionsTab.llmConnections')}
         actions={
           <IconButton
             size="icon-sm"
+            variant="ghost"
             onClick={() => setConnectionModalState({ mode: 'create' })}
             label={t('llmConnectionsTab.addConnection')}
           >
             <Plus className="h-4 w-4" />
           </IconButton>
         }
-        bodyClassName="px-0 py-0"
       >
         {providersQuery.isLoading ? (
-          <div className="space-y-2 px-4 py-4">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-16 w-full rounded-sm" />
-            ))}
-          </div>
+          <SettingsRowsSkeleton rows={3} />
         ) : llmProviders.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '연결된 LLM이 아직 없어.', en: 'No connected LLMs yet.' })}</div>
+          <SettingsEmptyRow>{t({ ko: '연결된 LLM이 아직 없어.', en: 'No connected LLMs yet.' })}</SettingsEmptyRow>
         ) : (
           <SettingsResourceTable
             gridClassName={LLM_CONNECTIONS_TABLE_GRID}
-            minWidthClassName="min-w-[1200px]"
+            stackBelow="4xl"
+            centerFrom={3}
             headers={[t({ ko: '연결', en: 'Connection' }), t({ ko: '기본 URL', en: 'Base URL' }), t({ ko: '기본 모델', en: 'Default model' }), t({ ko: '온도', en: 'Temperature' }), t({ ko: '최대 토큰', en: 'Max tokens' }), t({ ko: '활성', en: 'Active' }), '']}
           >
             {llmProviders.map((provider) => (
@@ -192,39 +188,35 @@ export function LlmConnectionsTab() {
             ))}
           </SettingsResourceTable>
         )}
-      </Section>
+      </RowGroup>
 
       {LLM_PRESET_SECTIONS.map((section) => {
         const presets = llmPresetCollections[section.key]
 
         return (
-          <Section
-            variant="settings"
+          <RowGroup
             key={section.key}
             heading={t(section.heading)}
             actions={
               <IconButton
                 size="icon-sm"
+                variant="ghost"
                 onClick={() => setPresetModalState({ mode: 'create', presetType: section.key })}
                 label={t(section.addLabel)}
               >
                 <Plus className="h-4 w-4" />
               </IconButton>
             }
-            bodyClassName="px-0 py-0"
           >
             {settingsQuery.isLoading ? (
-              <div className="space-y-2 px-4 py-4">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <Skeleton key={index} className="h-16 w-full rounded-sm" />
-                ))}
-              </div>
+              <SettingsRowsSkeleton rows={2} />
             ) : presets.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-muted-foreground">{t(section.emptyMessage)}</div>
+              <SettingsEmptyRow>{t(section.emptyMessage)}</SettingsEmptyRow>
             ) : (
               <SettingsResourceTable
                 gridClassName={LLM_PRESETS_TABLE_GRID}
-                minWidthClassName="min-w-[980px]"
+                stackBelow="3xl"
+                centerFrom={2}
                 headers={[t({ ko: '이름', en: 'Name' }), t(section.fieldLabel), t({ ko: '수정', en: 'Updated' }), '']}
               >
                 {presets.map((preset) => (
@@ -237,7 +229,7 @@ export function LlmConnectionsTab() {
                 ))}
               </SettingsResourceTable>
             )}
-          </Section>
+          </RowGroup>
         )
       })}
 
