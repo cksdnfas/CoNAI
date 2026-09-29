@@ -61,6 +61,11 @@ export async function getCodexGenerationStatus() {
   return requestJson<CodexGenerationStatusResponse>('/api/generation-queue/codex/status')
 }
 
+/** Cached CLI suggestions; custom model IDs remain supported when the cache is unavailable. */
+export async function getCodexGenerationModels() {
+  return requestJson<{ success: boolean; data: { models: Array<{ id: string; label: string }>; source: 'cli-cache' | 'unavailable' } }>('/api/generation-queue/codex/models')
+}
+
 /** Request cancellation for a queue job. */
 export async function cancelGenerationQueueJob(queueJobId: number) {
   return requestJson<GenerationQueueMutationResponse>(`/api/generation-queue/${queueJobId}/cancel`, {

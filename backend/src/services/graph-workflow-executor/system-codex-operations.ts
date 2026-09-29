@@ -20,6 +20,7 @@ import { GenerationQueueService } from '../generationQueueService'
 import { readQueueDebugMeta } from '../generation-queue/queueDebugMeta'
 import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
 import { assertCodexAvailable } from '../codexGenerationExecutor'
+import { parseCodexGenerationRequest } from '../codexGenerationOptions'
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
 
 const CODEX_RANDOM_ASPECT_CHOICES = [
@@ -324,10 +325,26 @@ export async function executeCodexImageGenerationNode(
     throw new Error('Codex mask input requires an image input')
   }
 
-  const operation = inputImage ? (maskImage ? 'infill' : 'edit') : 'generate'
+  const requestedOperation = normalizeOptionalString(resolvedInputs.operation)
+  // Missing/auto preserves existing workflows that inferred editing from attached inputs.
+  const operation = !requestedOperation || requestedOperation === 'auto'
+    ? (inputImage ? (maskImage ? 'infill' : 'edit') : 'generate')
+    : requestedOperation
+  const model = normalizeOptionalString(resolvedInputs.model)
   const requestedSize = resolveCodexRequestedSize(resolvedInputs)
   const count = Math.min(CODEX_MAX_COUNT, Math.max(CODEX_DEFAULT_COUNT, parsePositiveIntegerish(resolvedInputs.count) ?? CODEX_DEFAULT_COUNT))
   const imageSaveOptions = buildQueueImageSaveOptions()
+  const requestPayload = parseCodexGenerationRequest({
+    prompt,
+    model: model ?? undefined,
+    negative_prompt: negativePrompt ?? undefined,
+    size: requestedSize.size,
+    count,
+    operation,
+    image: inputImage ?? undefined,
+    mask: maskImage ?? undefined,
+    imageSaveOptions,
+  })
 
   await assertCodexAvailable('Codex 이미지 생성')
 
@@ -339,6 +356,7 @@ export async function executeCodexImageGenerationNode(
     details: {
       engine: 'codex',
       executionPath: 'generation_queue',
+      model,
       requestedSize: requestedSize.size,
       requestedAspectRatio: requestedSize.aspectRatio,
       requestedResolution: requestedSize.resolution,
@@ -356,14 +374,7 @@ export async function executeCodexImageGenerationNode(
       service_type: 'codex',
       workflow_name: moduleDefinition.name,
       request_payload: {
-        prompt,
-        negative_prompt: negativePrompt ?? undefined,
-        size: requestedSize.size,
-        count,
-        operation,
-        image: inputImage ?? undefined,
-        mask: maskImage ?? undefined,
-        imageSaveOptions,
+        ...requestPayload,
         _debug: {
           graph_execution_id: context.executionId,
           workflow_debug_mode: context.debugMode,

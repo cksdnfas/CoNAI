@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import { spawn, type ChildProcess } from 'child_process'
 import { runtimePaths } from '../config/runtimePaths'
 import { normalizeBase64ImageData } from '../utils/nai/requestBuilder'
+import { parseCodexGenerationRequest } from './codexGenerationOptions'
 
 export type CodexGenerationPayload = {
   prompt: string
@@ -179,10 +180,6 @@ function buildCodexPrompt(payload: CodexGenerationPayload, outputFileNames: stri
     `Prompt: ${payload.prompt}`,
   ]
 
-  if (payload.model?.trim()) {
-    lines.push(`Model hint: ${payload.model.trim()}`)
-  }
-
   if (payload.negative_prompt?.trim()) {
     lines.push(`Avoid: ${payload.negative_prompt.trim()}`)
   }
@@ -205,8 +202,14 @@ function buildCodexPrompt(payload: CodexGenerationPayload, outputFileNames: stri
 
   if (payload.image && payload.mask) {
     lines.push('Attached inputs: the first attached image is the reference image and the second attached image is the edit mask. White mask regions are editable; dark regions should stay preserved when supported.')
+  } else if (payload.image && operation === 'generate') {
+    lines.push('Attached inputs: use the first attached image as a visual reference for a NEW image. Follow the requested subject, style, colors, or composition; do not treat the reference as a canvas that must be preserved.')
   } else if (payload.image) {
-    lines.push('Attached inputs: the first attached image is the reference image to edit or match.')
+    lines.push('Attached inputs: EDIT the first attached image as the source canvas. Preserve its identity, composition, and all details not explicitly requested to change.')
+  }
+
+  if (payload.image) {
+    lines.push('Pass the attached input image(s) to the image generation tool itself so the result is grounded in those images, not only a text description. Local copies named reference-image and mask-image (when present) are in the current working directory.')
   }
 
   lines.push('', 'After the requested files exist, reply with ONLY: DONE')
@@ -478,7 +481,7 @@ export async function assertCodexAvailable(actionLabel = 'Codex', options?: Code
   return status
 }
 
-async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: string[], options?: CodexGenerationOptions) {
+async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: string[], model: string | undefined, options?: CodexGenerationOptions) {
   const stdoutPath = path.join(jobDirectory, 'codex-output.jsonl')
   const stderrPath = path.join(jobDirectory, 'codex-stderr.log')
   const lastMessagePath = path.join(jobDirectory, 'codex-last-message.txt')
@@ -495,6 +498,10 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
     '--output-last-message',
     lastMessagePath,
   ]
+
+  if (model?.trim()) {
+    args.push('--model', model.trim())
+  }
 
   for (const imagePath of imagePaths) {
     args.push('--image', imagePath)
@@ -634,6 +641,7 @@ async function discoverOutputFiles(jobDirectory: string, requestedFileNames: str
 }
 
 export async function executeCodexGeneration(payload: CodexGenerationPayload, options?: CodexGenerationOptions): Promise<CodexGenerationResult> {
+  parseCodexGenerationRequest(payload)
   await assertCodexAvailable('Codex 이미지 생성', options)
 
   if (typeof payload.prompt !== 'string' || payload.prompt.trim().length === 0) {
@@ -667,7 +675,7 @@ export async function executeCodexGeneration(payload: CodexGenerationPayload, op
 
   let runResult
   try {
-    runResult = await runCodexExec(jobDirectory, prompt, attachedImages, options)
+    runResult = await runCodexExec(jobDirectory, prompt, attachedImages, payload.model, options)
   } catch (error) {
     // 취소로 끝난 실행은 산출물이 없으므로 job 디렉터리를 남겨 둘 이유가 없다.
     if (options?.signal?.aborted) {

@@ -1,15 +1,18 @@
 import { CodexIcon } from '@/components/common/provider-icons'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Text } from '@/components/ui/text'
+import { Field } from '@/components/ui/field'
+import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 import { getAppSettings } from '@/lib/api-settings-general'
-import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
+import { createGenerationQueueJob, getCodexGenerationModels, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { useI18n } from '@/i18n'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
@@ -26,6 +29,7 @@ import { GenerateActionBar, GenerateActionDock } from './generate-action-bar'
 import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
 import { ResolutionPicker } from './resolution-picker'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
+import { CodexPromptPresetButton } from './codex-prompt-preset-button'
 
 type CodexGenerationPanelProps = {
   onHistoryRefresh: () => void
@@ -37,11 +41,13 @@ type CodexGenerationPanelProps = {
 }
 
 type CodexFormDraft = {
+  model: string
   prompt: string
   negativePrompt: string
   count: string
   aspectRatio: string
   resolution: string
+  imageMode: 'reference' | 'edit'
   referenceImage?: SelectedImageDraft
   maskImage?: SelectedImageDraft
 }
@@ -66,14 +72,16 @@ const CODEX_RESOLUTION_OPTIONS = [
 ] as const
 
 const DEFAULT_CODEX_FORM: CodexFormDraft = {
+  model: '',
   prompt: '',
   negativePrompt: '',
   count: '1',
   aspectRatio: '1:1',
   resolution: '1024',
+  imageMode: 'reference',
 }
 
-type PersistedCodexFormDraft = Pick<CodexFormDraft, 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution'>
+type PersistedCodexFormDraft = Pick<CodexFormDraft, 'model' | 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution' | 'imageMode'>
 
 function loadPersistedCodexFormDraft(): CodexFormDraft {
   if (typeof window === 'undefined') {
@@ -89,11 +97,13 @@ function loadPersistedCodexFormDraft(): CodexFormDraft {
     const parsedValue = JSON.parse(rawValue) as Partial<PersistedCodexFormDraft>
     return {
       ...DEFAULT_CODEX_FORM,
+      model: typeof parsedValue.model === 'string' ? parsedValue.model : '',
       prompt: typeof parsedValue.prompt === 'string' ? parsedValue.prompt : DEFAULT_CODEX_FORM.prompt,
       negativePrompt: typeof parsedValue.negativePrompt === 'string' ? parsedValue.negativePrompt : DEFAULT_CODEX_FORM.negativePrompt,
       count: typeof parsedValue.count === 'string' ? parsedValue.count : DEFAULT_CODEX_FORM.count,
       aspectRatio: typeof parsedValue.aspectRatio === 'string' ? parsedValue.aspectRatio : DEFAULT_CODEX_FORM.aspectRatio,
       resolution: typeof parsedValue.resolution === 'string' ? parsedValue.resolution : DEFAULT_CODEX_FORM.resolution,
+      imageMode: parsedValue.imageMode === 'edit' ? 'edit' : 'reference',
     }
   } catch {
     return DEFAULT_CODEX_FORM
@@ -106,11 +116,13 @@ function persistCodexFormDraft(form: CodexFormDraft) {
   }
 
   const persistableDraft: PersistedCodexFormDraft = {
+    model: form.model,
     prompt: form.prompt,
     negativePrompt: form.negativePrompt,
     count: form.count,
     aspectRatio: form.aspectRatio,
     resolution: form.resolution,
+    imageMode: form.imageMode,
   }
 
   try {
@@ -186,17 +198,21 @@ function resolveCodexAspectRatioAndResolution(size: unknown) {
   return null
 }
 
-/** Map a stored Codex queue payload onto the form; reference/mask images and the queue count are kept as they are. */
+/** Restore text and mode; historical image inputs must be reattached rather than reusing unrelated current images. */
 function buildCodexFormFromHistoryPayload(payload: Record<string, unknown>, current: CodexFormDraft) {
   const sizeSelection = resolveCodexAspectRatioAndResolution(payload.size)
   return {
     form: {
       ...current,
+      model: typeof payload.model === 'string' ? payload.model : '',
       prompt: typeof payload.prompt === 'string' ? payload.prompt : '',
       negativePrompt: typeof payload.negative_prompt === 'string' ? payload.negative_prompt : '',
+      imageMode: payload.operation === 'edit' || payload.operation === 'infill' ? 'edit' : 'reference',
+      referenceImage: undefined,
+      maskImage: undefined,
       ...(sizeSelection ?? {}),
     } satisfies CodexFormDraft,
-    hasImageInputs: payload.operation === 'edit' || payload.operation === 'infill',
+    hasImageInputs: payload.operation === 'edit' || payload.operation === 'infill' || 'image' in payload,
   }
 }
 
@@ -213,6 +229,8 @@ export function CodexGenerationPanel({
   const { t } = useI18n()
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const modelOptionsId = useId()
+  const modelOptionsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 60_000, retry: false })
   const [, setPortalRevision] = useState(0)
 
   const confirm = useConfirm()
@@ -227,8 +245,8 @@ export function CodexGenerationPanel({
     handledHistorySettingsLoadNonceRef.current = request.nonce
     consumeHistorySettingsLoad(request.nonce)
     const { form: nextForm, hasImageInputs } = buildCodexFormFromHistoryPayload(request.payload, codexForm)
-    const hasPromptContent = codexForm.prompt.trim().length > 0 || codexForm.negativePrompt.trim().length > 0
-    const changesPrompt = codexForm.prompt !== nextForm.prompt || codexForm.negativePrompt !== nextForm.negativePrompt
+    const hasPromptContent = codexForm.prompt.trim().length > 0 || codexForm.negativePrompt.trim().length > 0 || Boolean(codexForm.referenceImage)
+    const changesPrompt = codexForm.prompt !== nextForm.prompt || codexForm.negativePrompt !== nextForm.negativePrompt || Boolean(codexForm.referenceImage)
     void (async () => {
       if (hasPromptContent && changesPrompt && !(await confirmHistorySettingsOverwrite(confirm, t))) {
         return
@@ -273,16 +291,16 @@ export function CodexGenerationPanel({
   }, [codexForm])
 
   const operationLabel = useMemo(() => {
-    if (codexForm.referenceImage && codexForm.maskImage) {
+    if (codexForm.imageMode === 'edit' && codexForm.referenceImage && codexForm.maskImage) {
       return 'Infill'
     }
 
-    if (codexForm.referenceImage) {
+    if (codexForm.imageMode === 'edit') {
       return 'Edit'
     }
 
-    return 'Generate'
-  }, [codexForm.maskImage, codexForm.referenceImage])
+    return codexForm.referenceImage ? 'Reference' : 'Generate'
+  }, [codexForm.imageMode, codexForm.maskImage, codexForm.referenceImage])
 
   const queueCount = useMemo(() => clampCodexCount(codexForm.count), [codexForm.count])
   const outputSize = useMemo(() => resolveCodexSize(codexForm.aspectRatio, codexForm.resolution), [codexForm.aspectRatio, codexForm.resolution])
@@ -375,6 +393,11 @@ export function CodexGenerationPanel({
       return
     }
 
+    if (codexForm.imageMode === 'edit' && !codexForm.referenceImage) {
+      showSnackbar({ message: t({ ko: '편집할 원본 이미지를 첨부해줘.', en: 'Attach the source image to edit.' }), tone: 'error' })
+      return
+    }
+
     try {
       setIsSubmitting(true)
       const response = await createGenerationQueueJob({
@@ -382,13 +405,14 @@ export function CodexGenerationPanel({
         requested_group_path: targetGroupPath,
         request_summary: `Codex ${operationLabel} · ${prompt.slice(0, 48)}`,
         request_payload: {
+          model: codexForm.model.trim() || undefined,
           prompt,
           negative_prompt: normalizeTextSegmentSpreadsheetText(codexForm.negativePrompt).trim() || undefined,
           count: queueCount,
-          operation: codexForm.referenceImage ? (codexForm.maskImage ? 'infill' : 'edit') : 'generate',
+          operation: codexForm.imageMode === 'edit' ? (codexForm.maskImage ? 'infill' : 'edit') : 'generate',
           size: resolveCodexSize(pickCodexAspectRatio(codexForm.aspectRatio), codexForm.resolution),
           image: codexForm.referenceImage?.dataUrl,
-          mask: codexForm.maskImage?.dataUrl,
+          mask: codexForm.imageMode === 'edit' ? codexForm.maskImage?.dataUrl : undefined,
           imageSaveOptions: {
             format: generationSaveSettings.defaultFormat,
             quality: generationSaveSettings.quality,
@@ -453,6 +477,7 @@ export function CodexGenerationPanel({
   )
 
   const codexGenerateDisabled = codexForm.prompt.trim().length === 0 || !canGenerateWithCodex
+    || (codexForm.imageMode === 'edit' && !codexForm.referenceImage)
   const codexRepeat = {
     value: codexForm.count,
     min: CODEX_COUNT_MIN,
@@ -539,6 +564,19 @@ export function CodexGenerationPanel({
           splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
           useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
         )}>
+        <Field label={t({ ko: 'Codex 실행 모델', en: 'Codex agent model' })}>
+          <Input
+            value={codexForm.model}
+            onChange={(event) => handleFieldChange('model', event.target.value)}
+            list={modelOptionsId}
+            maxLength={200}
+            placeholder={t({ ko: '서버 CLI 기본값 (모델 ID 직접 입력 가능)', en: 'Server CLI default (or enter a model ID)' })}
+          />
+          <datalist id={modelOptionsId}>
+            {modelOptionsQuery.data?.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+          </datalist>
+          <Text as="span" variant="caption">{t({ ko: '비우면 서버 기본 모델을 사용해. 이미지 전용 모델이 아닌 Codex 실행 모델이며, 후보 목록에 없는 ID도 입력할 수 있어.', en: 'Leave empty for the server default. This selects the Codex agent model, not the image-tool model. You can also enter an ID outside the suggestions.' })}</Text>
+        </Field>
         <NaiPromptSection
           tool="codex"
           prompt={codexForm.prompt}
@@ -546,6 +584,10 @@ export function CodexGenerationPanel({
           onPromptChange={(value) => handleFieldChange('prompt', value)}
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
         />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Text variant="muted">{t({ ko: '생성 프롬프트는 결과에 저장돼. 결과의 “이 설정 불러오기”로 다시 사용할 수 있어.', en: 'Generation prompts are saved with results. Use “Load these settings” on a result to reuse them.' })}</Text>
+          <CodexPromptPresetButton prompt={codexForm.prompt} negativePrompt={codexForm.negativePrompt} />
+        </div>
 
         <Section variant="settings" heading={t({ ko: '출력', en: 'Output' })} className="@container">
           <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
@@ -563,13 +605,23 @@ export function CodexGenerationPanel({
               onTierChange={(value) => handleFieldChange('resolution', value)}
             />
           </div>
+          <Text variant="muted">{t({ ko: '비율과 해상도는 생성 요청값이며 실제 결과 크기는 달라질 수 있어.', en: 'Ratio and resolution are requested values; actual output dimensions may differ.' })}</Text>
         </Section>
 
         <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
+          <Field label={t({ ko: '이미지 사용 방식', en: 'Image usage' })}>
+            <Select value={codexForm.imageMode} onChange={(event) => setCodexForm((current) => ({ ...current, imageMode: event.target.value === 'edit' ? 'edit' : 'reference', maskImage: undefined }))}>
+              <option value="reference">{t({ ko: '새 이미지 생성 · 참조 (t2i)', en: 'New image · reference (t2i)' })}</option>
+              <option value="edit">{t({ ko: '원본 이미지 편집 (i2i)', en: 'Edit source image (i2i)' })}</option>
+            </Select>
+          </Field>
+          <Text variant="muted">{codexForm.imageMode === 'reference'
+            ? t({ ko: '이미지 없이 생성하거나, 첨부 이미지의 스타일·색감·구도를 참고해 새로 생성해.', en: 'Generate from text alone, or attach an image to guide the style, colors, or composition of a new image.' })
+            : t({ ko: '원본 이미지를 첨부하고 바꿀 내용을 적어줘. 마스크를 추가하면 해당 영역을 중심으로 편집해.', en: 'Attach the source image and describe your changes. Add a mask to focus the edit on a region.' })}</Text>
           <div className="grid gap-4 @2xl:grid-cols-2">
             <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <Text variant="label">{t({ ko: '참조 이미지', en: 'Reference Image' })}</Text>
+                <Text variant="label">{codexForm.imageMode === 'edit' ? t({ ko: '원본 이미지', en: 'Source image' }) : t({ ko: '참조 이미지 (선택)', en: 'Reference image (optional)' })}</Text>
                 <ImageAttachmentPickerButton
                   label={codexForm.referenceImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
                   modalTitle={t({ ko: 'Codex 참조 이미지 선택', en: 'Select Codex reference image' })}
@@ -577,7 +629,7 @@ export function CodexGenerationPanel({
                     setCodexForm((current) => ({
                       ...current,
                       referenceImage: image,
-                      maskImage: image ? current.maskImage : undefined,
+                      maskImage: undefined,
                     }))
                   }}
                 />
@@ -586,7 +638,7 @@ export function CodexGenerationPanel({
               {codexForm.referenceImage ? (
                 <div className="space-y-3">
                   <NaiSelectedImageCard image={codexForm.referenceImage} alt={t({ ko: 'Codex 참조 이미지', en: 'Codex reference image' })} />
-                  <Button type="button" variant="ghost" size="sm" onClick={() => handleFieldChange('referenceImage', undefined)}>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setCodexForm((current) => ({ ...current, referenceImage: undefined, maskImage: undefined }))}>
                     <X className="h-4 w-4" />
                     {t({ ko: '참조 이미지 제거', en: 'Remove reference image' })}
                   </Button>
@@ -594,7 +646,7 @@ export function CodexGenerationPanel({
               ) : null}
             </div>
 
-            <div className="min-w-0 space-y-3">
+            {codexForm.imageMode === 'edit' ? <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <Text variant="label">{t({ ko: '마스크 이미지', en: 'Mask Image' })}</Text>
                 <ImageAttachmentPickerButton
@@ -614,7 +666,7 @@ export function CodexGenerationPanel({
                   </Button>
                 </div>
               ) : null}
-            </div>
+            </div> : null}
           </div>
         </Section>
 

@@ -4,6 +4,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer'
 import { WorkflowModel } from '../../models/Workflow'
 import { GenerationQueueService } from '../../services/generationQueueService'
+import { parseCodexGenerationRequest } from '../../services/codexGenerationOptions'
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore'
 import {
   buildWorkflowRoleQueueLimitMessage,
@@ -269,6 +270,15 @@ export function createGenerationQueueActionRoutes() {
 
     let normalizedRequestPayload = request_payload
 
+    if (service_type === 'codex') {
+      try {
+        normalizedRequestPayload = parseCodexGenerationRequest(request_payload)
+      } catch (error) {
+        sendRouteBadRequest(res, error instanceof Error ? error.message : 'Invalid Codex request')
+        return
+      }
+    }
+
     if (service_type === 'comfyui') {
 
       const promptData = request_payload.prompt_data
@@ -402,7 +412,7 @@ export function createGenerationQueueActionRoutes() {
 
         ? {
 
-            ...request_payload,
+            ...normalizedRequestPayload,
 
             count: 1,
 

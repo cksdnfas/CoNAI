@@ -8,6 +8,7 @@ import { registerPromptOrganizationTools } from './tools/promptOrganizationTools
 import { registerGraphWorkflowTools } from './tools/graphWorkflowTools';
 import { ALL_MCP_HTTP_SCOPES, isMcpToolAllowed, type McpRequestContext } from './context';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
+import { registerPromptPresetTools } from './tools/promptPresetTools';
 
 /**
  * MCP 서버 팩토리
@@ -30,6 +31,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   }) as typeof server.tool;
 
   registerPromptTools(server);
+  registerPromptPresetTools(server);
   registerGenerationTools(server, context);
   registerGraphWorkflowTools(server, context);
   registerImageTools(server, context);

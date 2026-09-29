@@ -6,6 +6,8 @@ import { WorkflowModel } from '../../models/Workflow';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore';
 import { GenerationQueueService } from '../../services/generationQueueService';
+import { codexGenerationRequestSchema, getCodexModelSuggestions, parseCodexGenerationRequest } from '../../services/codexGenerationOptions';
+import { buildGenerationHistoryRequestSnapshot } from '../../services/generationHistoryRequestSnapshot';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
@@ -67,15 +69,38 @@ async function describeJob(jobId: number, context: McpRequestContext) {
 
 export function registerGenerationJobTools(server: McpServer, context: McpRequestContext): void {
   server.tool(
+    'get_codex_generation_options',
+    'Get the Codex image-generation request schema and cached agent-model suggestions. Use the same parameters as the Codex UI with submit_generation_job(service_type="codex"). Suggestions may be stale; custom model IDs are accepted. Prompts are saved with results; use get_generation_history_request to retrieve them and create_prompt_preset to save reusable text.',
+    {},
+    async () => ({ content: [{ type: 'text' as const, text: JSON.stringify({
+      ...await getCodexModelSuggestions(),
+      request_schema: z.toJSONSchema(codexGenerationRequestSchema),
+      default_model: 'Server Codex CLI default when model is omitted or empty',
+      example: { service_type: 'codex', request_payload: { prompt: 'Create a blue ceramic teapot', model: '', operation: 'generate', size: '1024x1024', count: 1 } },
+    }, null, 2) }] }),
+  );
+
+  server.tool(
+    'get_generation_history_request',
+    'Read the full saved prompt, negative prompt, selected model and request settings behind a generation result, as used by the UI reuse action. Image bytes are omitted; pruned requests may only retain result prompts.',
+    { history_id: z.number().int().positive() },
+    async ({ history_id }) => {
+      const record = HistoryQueryRepository.findAllWithMetadata({ ids: [history_id], limit: 1 })[0];
+      if (!record) return { isError: true, content: [{ type: 'text' as const, text: 'Generation history not found' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(buildGenerationHistoryRequestSnapshot(record), null, 2) }] };
+    },
+  );
+
+  server.tool(
     'submit_generation_job',
-    'Submit a durable asynchronous generation job and return immediately with a job ID. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.',
+    'Submit a durable asynchronous generation job and return immediately with a job ID. For Codex, get_codex_generation_options documents all UI-equivalent parameters including model, reference generation, editing, masks and save options. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.',
     {
       service_type: z.enum(['comfyui', 'novelai', 'codex']),
       workflow_id: z.number().int().positive().optional(),
       server_id: z.number().int().positive().optional().describe('ComfyUI only. Target one active workflow-eligible server. Cannot be combined with server_tag.'),
       server_tag: z.string().trim().min(1).max(64).optional().describe('ComfyUI only. Route to an active workflow-eligible server with this exact normalized tag. Cannot be combined with server_id.'),
       inputs: z.record(z.string(), z.unknown()).optional().describe('ComfyUI marked-field inputs, or a NovelAI/Codex payload alias'),
-      request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters'),
+      request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters. get_codex_generation_options returns the Codex schema: model (real CLI agent-model override), prompt, negative_prompt, operation, image, mask, size, count and imageSaveOptions.'),
       group_id: z.number().int().positive().optional(),
       group_path: mcpGroupPathSchema,
       priority: z.number().int().min(0).max(100000).default(100),
@@ -163,6 +188,10 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
           if (Object.keys(payload).length === 0) {
             throw new Error('request_payload is required for NovelAI and Codex jobs');
           }
+        }
+
+        if (service_type === 'codex') {
+          payload = parseCodexGenerationRequest(payload);
         }
 
         // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.

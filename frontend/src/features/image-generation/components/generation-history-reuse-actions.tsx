@@ -92,7 +92,9 @@ export function GenerationHistoryReuseActions({ historyId }: GenerationHistoryRe
         historyId,
         serviceType: snapshot.service_type,
         workflowId: snapshot.workflow_id,
-        payload: snapshot.request_payload,
+        payload: snapshot.service_type === 'codex' && snapshot.result_prompt
+          ? { ...snapshot.request_payload, prompt: snapshot.result_prompt, negative_prompt: snapshot.result_negative_prompt ?? '' }
+          : snapshot.request_payload,
       })
       imageViewModal?.closeImageView()
     } catch (error) {

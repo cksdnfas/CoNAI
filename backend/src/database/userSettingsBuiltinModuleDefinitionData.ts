@@ -1522,6 +1522,16 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
     category: 'generation',
     exposedInputs: [
       {
+        key: 'model', label: 'Codex 실행 모델', direction: 'input', data_type: 'text',
+        required: false, multiple: false, default_value: '',
+        description: 'Codex 실행 모델 ID야. 비우면 서버 CLI 기본값을 사용해. 이미지 전용 모델 ID와는 달라.',
+      },
+      {
+        key: 'operation', label: '이미지 사용 방식', direction: 'input', data_type: 'text',
+        required: false, multiple: false, default_value: 'auto',
+        description: 'generate: 새 이미지/참조 생성, edit: 원본 편집, infill: 마스크 편집. auto는 기존 동작대로 입력 이미지와 마스크에서 모드를 결정해.',
+      },
+      {
         key: 'prompt',
         label: '프롬프트',
         direction: 'input',
@@ -1577,7 +1587,7 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         data_type: 'image',
         required: false,
         multiple: false,
-        description: '편집이나 인페인트에 사용할 입력 이미지야.',
+        description: 'generate에서는 새 이미지의 참조로, edit/infill에서는 편집 원본으로 사용할 이미지야.',
       },
       {
         key: 'mask',
@@ -1617,6 +1627,14 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
     ],
     internalFixedValues: { operation_key: 'system.generate_image_codex' },
     uiSchema: [
+      {
+        key: 'model', label: 'Codex 실행 모델', data_type: 'text', default_value: '',
+        placeholder: '서버 CLI 기본값 (모델 ID 직접 입력 가능)',
+      },
+      {
+        key: 'operation', label: '이미지 사용 방식', data_type: 'select', default_value: 'auto',
+        options: ['auto', 'generate', 'edit', 'infill'],
+      },
       {
         key: 'prompt',
         label: '프롬프트',

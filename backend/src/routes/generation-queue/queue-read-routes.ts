@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { getCodexAvailabilityStatus } from '../../services/codexGenerationExecutor'
+import { getCodexModelSuggestions } from '../../services/codexGenerationOptions'
 import { readComfyRequestDebugSnapshot } from '../../services/generationRequestDebugService'
 import type { GenerationQueueJobRecord } from '../../types/generationQueue'
 import { sendRouteBadRequest } from '../routeValidation'
@@ -16,6 +17,10 @@ import { buildGenerationQueueListResponse } from './queue-list-service'
 
 export function createGenerationQueueReadRoutes() {
   const router = express.Router()
+
+  router.get('/codex/models', asyncHandler(async (_req: Request, res: Response) => {
+    res.json({ success: true, data: await getCodexModelSuggestions() })
+  }))
 
   /** GET /api/generation-queue/stats */
 
