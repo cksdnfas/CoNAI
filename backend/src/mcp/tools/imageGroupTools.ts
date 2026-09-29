@@ -91,16 +91,16 @@ export function registerImageGroupTools(server: McpServer): void {
 
   server.tool(
     'resolve_image_group_path',
-    "Resolve an image group path like 'ProjectName/Effects' to a group id. With create=true (default) missing groups are created under their parent.",
+    "Resolve group_path like 'ProjectName/Effects' to an image group id. With create=true (default) missing groups are created under their parent. Use create=false to look up an existing group without creating it. Generation tools accept group_path directly, so this step is optional before generation.",
     {
-      path: z.string().trim().min(1).max(1024).describe("Slash-separated group path, e.g. 'ProjectName/Effects' (max 5 levels)"),
+      group_path: z.string().trim().min(1).max(1024).describe("Slash-separated library group path, e.g. 'ProjectName/Effects' (max 5 levels); not a filesystem path"),
       create: z.boolean().default(true).describe('Create missing groups along the path'),
     },
-    async ({ path, create }) => {
+    async ({ group_path, create }) => {
       try {
-        const resolved = GroupPathService.resolve(path, { create });
+        const resolved = GroupPathService.resolve(group_path, { create });
         if (!resolved) {
-          return textResult({ found: false, path });
+          return textResult({ found: false, path: group_path });
         }
         return textResult({
           found: true,
