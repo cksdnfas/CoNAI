@@ -8,6 +8,7 @@ CoNAI를 설치하고, 이미지/비디오를 등록하고, 검색·분류·생�
 
 - [처음 시작하기](./START_HERE.md)
 - [설치와 실행](./INSTALLATION.md)
+- [Docker로 실행](./DOCKER.md)
 - [초기 설정](./INITIAL_SETUP.md)
 - [데이터 경로와 백업](./DATA_PATHS_AND_BACKUP.md)
 

@@ -6,6 +6,7 @@ CoNAI 사용과 연동에 필요한 가이드를 모아둔 섹션입니다.
 
 - [처음 시작하기](./START_HERE.md)
 - [설치와 실행](./INSTALLATION.md)
+- [Docker로 실행](./DOCKER.md)
 - [초기 설정](./INITIAL_SETUP.md)
 - [데이터 경로와 백업](./DATA_PATHS_AND_BACKUP.md)
 

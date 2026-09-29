@@ -6,12 +6,14 @@
 
 | 항목 | 기준 |
 | --- | --- |
-| Node.js | `>= 18.0.0` |
+| Node.js | `>= 20.19` |
 | npm | Node.js와 함께 설치되는 npm |
 | OS | Windows 권장 |
 | 디스크 | 이미지/비디오 저장 공간 충분히 확보 |
 
-권장 런타임은 Node.js 22 LTS입니다. Node 18 이상이면 실행 기준은 만족합니다.
+권장 런타임은 Node.js 22 LTS입니다.
+
+Node.js 없이 컨테이너로 실행하려면 [Docker로 실행](./DOCKER.md)을 보세요.
 
 ## 설치
 
@@ -92,7 +94,7 @@ npm run docs:build
 | `npm run build` | 일반 전체 빌드 |
 | `npm run build:integrated` | 통합 빌드 |
 | `npm run build:portable` | 포터블 패키지 생성 |
-| `npm run build:docker` | Docker 패키지 생성 |
+| `npm run build:docker` | Docker 패키지 생성 (루트 `Dockerfile` 사용법은 [Docker로 실행](./DOCKER.md)) |
 | `npm run build:all` | 통합/번들/포터블/Docker 빌드 묶음 |
 
 ## 실행 후 확인

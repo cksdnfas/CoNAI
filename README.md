@@ -44,6 +44,7 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 | 사용자 문서 | https://cksdnfas.github.io/CoNAI/ |
 | 가이드 목록 | https://cksdnfas.github.io/CoNAI/GUIDE/ |
 | 설치와 실행 | https://cksdnfas.github.io/CoNAI/GUIDE/INSTALLATION.html |
+| Docker로 실행 | https://cksdnfas.github.io/CoNAI/GUIDE/DOCKER.html |
 | 이미지 생성 개요 | https://cksdnfas.github.io/CoNAI/GUIDE/GENERATION_OVERVIEW.html |
 | 워크플로우 편집 | https://cksdnfas.github.io/CoNAI/GUIDE/WORKFLOW_EDITOR.html |
 | MCP 가이드 | https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html |
@@ -131,6 +132,35 @@ npm run build
 npm run start
 ```
 
+### Docker로 실행
+
+Node.js 설치 없이 컨테이너 하나로 실행합니다. 기본 이미지는 **CPU 전용**입니다.
+
+```bash
+docker compose up -d --build        # http://localhost:1666
+```
+
+NVIDIA GPU는 별도 빌드로 선택합니다. RTX 50 시리즈는 CUDA 인덱스를 `cu128`로 바꿔야 태거가 GPU를 씁니다.
+
+```bash
+# RTX 40 시리즈 이하
+docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
+
+# RTX 50 시리즈
+docker compose -f compose.yaml -f compose.gpu.yaml build   --build-arg PYTORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu128
+docker compose -f compose.yaml -f compose.gpu.yaml up -d
+```
+
+| 확인할 것 | 내용 |
+| --- | --- |
+| 데이터 | `conai-data` 볼륨 → `/app/data/user` |
+| 첫 관리자 | 컨테이너 안에서 `POST http://127.0.0.1:1666/api/auth/setup`으로 생성 |
+| 감시 폴더 | 호스트 폴더를 볼륨으로 마운트하고 컨테이너 경로로 등록 |
+| 프록시 없이 공개 | `TRUST_PROXY=false` 설정 |
+| GPU 확인 | `docker compose exec conai python3 -c "import torch; print(torch.cuda.is_available())"` |
+
+GPU 확인, Coolify 배포 설정, 환경 변수는 [Docker로 실행 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/DOCKER.html)에 정리돼 있습니다.
+
 ---
 
 ## 자주 쓰는 스크립트
@@ -185,6 +215,7 @@ CoNAI/
 - **GitHub Pages**: https://cksdnfas.github.io/CoNAI/
 - **가이드 홈**: [`docs/GUIDE/`](docs/GUIDE)
 - **릴리즈 노트**: [`docs/RELEASE-MD/`](docs/RELEASE-MD)
+- **Docker 가이드**: [`docs/GUIDE/DOCKER.md`](docs/GUIDE/DOCKER.md)
 - **MCP 가이드**: [`docs/GUIDE/MCP_GUIDE.md`](docs/GUIDE/MCP_GUIDE.md)
 - **워크플로우 편집**: [`docs/GUIDE/WORKFLOW_EDITOR.md`](docs/GUIDE/WORKFLOW_EDITOR.md)
 

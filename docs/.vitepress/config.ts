@@ -27,6 +27,7 @@ export default {
           { text: '전체 가이드 보기', link: '/GUIDE/' },
           { text: '처음 시작하기', link: '/GUIDE/START_HERE' },
           { text: '설치와 실행', link: '/GUIDE/INSTALLATION' },
+          { text: 'Docker로 실행', link: '/GUIDE/DOCKER' },
           { text: '초기 설정', link: '/GUIDE/INITIAL_SETUP' },
           { text: '데이터 경로와 백업', link: '/GUIDE/DATA_PATHS_AND_BACKUP' },
           { text: '감시 폴더와 백업 소스', link: '/GUIDE/WATCHED_FOLDERS' },
