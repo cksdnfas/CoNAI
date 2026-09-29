@@ -192,6 +192,61 @@ stdio:
 | `get_generation_history` | ComfyUI/NovelAI 생성 이력 조회 |
 | `search_images_by_tags` | WD Tagger 태그, 캐릭터, 등급 조건으로 검색 |
 
+### 이미지 그룹 정리
+
+프롬프트 그룹과 별개인 **커스텀 이미지 그룹**을 관리합니다. 감시폴더나 실제 파일 경로를 이동하는 기능은 아닙니다.
+
+| Tool | 용도 | HTTP MCP 키 권한 |
+| --- | --- | --- |
+| `list_image_groups` | 그룹 ID, 전체 경로, 이미지 수 조회 | `read` |
+| `get_image_groups` | 이미지의 직접 소속 그룹과 수동/자동수집 구분 조회 | `read` |
+| `resolve_image_group_path` | 경로로 그룹 조회·생성 (`create` 기본값 `true`) | `organize` |
+| `add_images_to_group` | 기존 이미지를 그룹에 추가, 자동수집 소속은 수동으로 전환 | `organize` |
+| `move_images_between_groups` | 선택 이미지를 원본 그룹에서 대상 그룹으로 이동 | `organize` |
+| `remove_images_from_group` | 특정 그룹에서 선택 이미지의 소속 제거 | `organize` |
+
+- 이미지 식별자는 `search_images` 또는 생성 결과의 `composite_hash`입니다. 변경 도구는 `composite_hashes` 배열로 1~500개를 받으며 중복은 한 번만 처리합니다.
+- 그룹은 ID 또는 경로 중 하나로 지정합니다. 추가 도구의 `group_path`는 없는 그룹을 생성합니다. 이동·제외는 기존 그룹만 사용하므로, 새 대상 그룹이 필요하면 `resolve_image_group_path`로 먼저 생성합니다.
+- 추가는 다른 그룹 소속을 유지합니다. `added`, `converted`, `skipped`, `missing_hashes`를 반환하며, 없는 이미지는 `skipped`에도 포함됩니다.
+- 이동은 원본에 직접 속한 이미지만 처리합니다. 대상에 이미 있으면 원본 소속만 제거하고, 대상의 자동수집 소속은 수동으로 전환합니다. 원본과 대상이 같으면 오류입니다. `moved`, `added`, `converted`, `already_in_target`, `skipped`, `skipped_hashes`를 반환합니다.
+- 제외는 원본 파일을 삭제하지 않습니다. `removed`, `skipped`, `skipped_hashes`를 반환합니다. 하위 그룹 소속으로 상위 그룹 목록에 보이는 이미지는 실제 소속 그룹을 조회한 뒤 제거해야 합니다.
+- 추가·이동·제외는 요청 단위 트랜잭션으로 처리합니다. DB 오류가 나면 해당 요청 전체를 되돌립니다. 없는 이미지나 소속은 위 규칙대로 건너뜁니다.
+- **이동·제외는 영구적인 자동수집 차단이 아닙니다.** 원본 그룹의 조건에 맞으면 자동수집 때 다시 들어올 수 있으며, 응답의 `auto_collection_may_readd: true`로 안내합니다.
+
+이미지 소속 확인 (`get_image_groups`):
+
+```json
+{ "composite_hash": "대상 이미지의 composite_hash" }
+```
+
+그룹 추가 (`add_images_to_group`):
+
+```json
+{
+  "composite_hashes": ["대상 이미지의 composite_hash"],
+  "group_path": "프로젝트/선별"
+}
+```
+
+그룹 이동 (`move_images_between_groups`, 두 그룹이 존재해야 함):
+
+```json
+{
+  "composite_hashes": ["대상 이미지의 composite_hash"],
+  "source_group_path": "프로젝트/검토중",
+  "target_group_path": "프로젝트/선별"
+}
+```
+
+그룹에서 제외 (`remove_images_from_group`):
+
+```json
+{
+  "composite_hashes": ["대상 이미지의 composite_hash"],
+  "group_path": "프로젝트/선별"
+}
+```
+
 ### 리소스 조회
 
 | Tool | 용도 |

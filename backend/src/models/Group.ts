@@ -263,6 +263,42 @@ export class GroupModel {
 }
 
 export class ImageGroupModel {
+  /** Add manual memberships atomically; surface database errors instead of treating them as duplicates. */
+  static addImagesToGroupManually(groupId: number, compositeHashes: string[]) {
+    return db.transaction(() => {
+      if (!GroupModel.findById(groupId)) {
+        throw new Error(`Group ${groupId} not found`);
+      }
+      const imageExists = db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?');
+      const insert = db.prepare(`
+        INSERT INTO image_groups (group_id, composite_hash, order_index, collection_type)
+        VALUES (?, ?, 0, 'manual')
+      `);
+      let added = 0;
+      let converted = 0;
+      let skipped = 0;
+      const missing_hashes: string[] = [];
+      for (const compositeHash of new Set(compositeHashes)) {
+        if (!imageExists.get(compositeHash)) {
+          missing_hashes.push(compositeHash);
+          skipped += 1;
+          continue;
+        }
+        const collectionType = this.getCollectionType(groupId, compositeHash);
+        if (collectionType === 'manual') {
+          skipped += 1;
+        } else if (collectionType === 'auto') {
+          this.convertToManual(groupId, compositeHash);
+          converted += 1;
+        } else {
+          insert.run(groupId, compositeHash);
+          added += 1;
+        }
+      }
+      return { added, converted, skipped, missing_hashes };
+    }).immediate();
+  }
+
   /**
    * 이미지를 그룹에 추가 (composite_hash 기반)
    */
