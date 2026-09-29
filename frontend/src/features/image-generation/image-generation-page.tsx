@@ -5,7 +5,6 @@ import { CalendarClock, Workflow } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SidebarToggle } from '@/components/common/page-toolbar'
 import { ProviderIcon } from '@/components/common/provider-icons'
-import { IconButton } from '@/components/ui/icon-button'
 import { usePageSidebar } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -90,11 +89,6 @@ export function ImageGenerationPage() {
   const rawTab = searchParams.get('tab')
   const activeTab = parseImageGenerationTab(rawTab)
   const isProviderTab = PROVIDER_TABS.includes(activeTab)
-  // 워크플로우/예약작업 아이콘을 다시 누르면 마지막으로 보던 제공자로 돌아간다.
-  const lastProviderTabRef = useRef<ImageGenerationTab>('nai')
-  if (isProviderTab) {
-    lastProviderTabRef.current = activeTab
-  }
   // 선택한 ComfyUI 워크플로우는 URL 에 둔다. 새로고침/뒤로가기에도 같은 워크플로우로 돌아온다.
   const requestedComfyWorkflowId = parseImageGenerationWorkflowId(searchParams.get(IMAGE_GENERATION_WORKFLOW_PARAM))
   const selectedComfyWorkflowId = activeTab === 'comfyui' ? requestedComfyWorkflowId : null
@@ -187,10 +181,6 @@ export function ImageGenerationPage() {
     setSearchParams(nextSearchParams)
   }
 
-  const handleToggleSecondaryView = (view: ImageGenerationTab) => {
-    handleChangeTab(activeTab === view ? lastProviderTabRef.current : view)
-  }
-
   useEffect(() => {
     if (activeTab !== 'comfyui' && requestedComfyWorkflowId !== null) {
       setSelectedComfyWorkflowId(null, { replace: true })
@@ -261,51 +251,38 @@ export function ImageGenerationPage() {
     />
   ) : null
 
-  const providerItems = PROVIDER_TABS.map((value) => ({
-    value,
-    label: <ProviderIcon provider={value} className="size-4" />,
-    ariaLabel: getImageGenerationTabLabel(value, t),
-  }))
-  const workflowLabel = getImageGenerationTabLabel('workflows', t)
-  const reservationsLabel = getImageGenerationTabLabel('reservations', t)
+  // 제공자 3개와 워크플로우·예약작업을 한 줄의 탭으로 나란히 둔다.
+  const tabItems = [
+    ...PROVIDER_TABS.map((value) => ({
+      value,
+      label: <ProviderIcon provider={value} className="size-4" />,
+      ariaLabel: getImageGenerationTabLabel(value, t),
+    })),
+    { value: 'workflows', label: <Workflow className="size-4" />, ariaLabel: getImageGenerationTabLabel('workflows', t) },
+    { value: 'reservations', label: <CalendarClock className="size-4" />, ariaLabel: getImageGenerationTabLabel('reservations', t) },
+  ]
   const historyTotal = historyFeed.historyQuery.data?.pages[0]?.total
   const resultCountLabel = shouldShowHistory && historyTotal !== undefined
     ? formatCountDisplay(countStateFromQuery({ total: historyTotal, isError: historyFeed.historyQuery.isError }), { t, formatNumber }).text
     : null
 
   const toolbar = (
-    <div data-slot="page-toolbar" className="flex min-h-14 shrink-0 items-center gap-2 py-2 sm:gap-3">
+    <div data-slot="page-toolbar" className="flex min-h-14 shrink-0 items-center gap-2 py-2 max-sm:flex-wrap sm:gap-3">
       <WorkspaceSidebarToggle />
       <SegmentedControl
-        value={isProviderTab ? activeTab : ''}
-        items={providerItems}
+        value={activeTab}
+        items={tabItems}
         onChange={(next) => handleChangeTab(next as ImageGenerationTab)}
         size={isWideLayout ? 'sm' : 'xs'}
         semantics="tabs"
-        ariaLabel={t({ ko: '생성 제공자', en: 'Generation provider' })}
+        ariaLabel={t({ ko: '생성 메뉴', en: 'Generation sections' })}
         className="shrink-0"
       />
-      <div id={GENERATION_TOOLBAR_STATUS_SLOT_ID} className={cn('flex min-w-0 flex-1 items-center overflow-hidden', !isProviderTab && 'invisible')} />
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-        <IconButton
-          size="icon-sm"
-          variant="ghost"
-          active={activeTab === 'workflows'}
-          onClick={() => handleToggleSecondaryView('workflows')}
-          label={workflowLabel}
-        >
-          <Workflow />
-        </IconButton>
-        <IconButton
-          size="icon-sm"
-          variant="ghost"
-          active={activeTab === 'reservations'}
-          onClick={() => handleToggleSecondaryView('reservations')}
-          label={reservationsLabel}
-        >
-          <CalendarClock />
-        </IconButton>
-      </div>
+      {/* 폰 폭에서는 연결 상태를 탭 아랫줄로 내린다. 비어 있으면(워크플로우·예약작업) 줄을 차지하지 않는다. */}
+      <div
+        id={GENERATION_TOOLBAR_STATUS_SLOT_ID}
+        className={cn('flex min-w-0 flex-1 items-center overflow-hidden max-sm:basis-full max-sm:empty:hidden', !isProviderTab && 'invisible')}
+      />
     </div>
   )
 

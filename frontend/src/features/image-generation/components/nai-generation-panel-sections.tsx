@@ -69,7 +69,7 @@ export function NaiToolbarStatus({ connected, tierName, anlasBalance, onOpenAuth
           <LogIn />
         </IconButton>
       ) : null}
-      <Button type="button" variant="ghost" size="icon-sm" className="hidden sm:inline-flex" asChild>
+      <Button type="button" variant="ghost" size="icon-sm" asChild>
         <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label={novelAiHomeLabel} title={novelAiHomeLabel}>
           <ExternalLink className="h-4 w-4" />
         </a>
