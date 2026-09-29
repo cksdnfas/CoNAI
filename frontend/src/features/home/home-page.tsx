@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { AuthStatusErrorState } from '@/features/auth/require-auth-permission'
 import { useAuthPermissionRedirect } from '@/features/auth/use-auth-permission-redirect'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
@@ -31,6 +32,8 @@ import { useHomePageData } from './use-home-page-data'
 
 /** Library images can be deleted from the viewer (still admin-only). Module constant keeps ImageList memoized. */
 const HOME_VIEWER_ACCESS_OPTIONS: ImageViewModalAccessOptions = { allowDeleteAction: true }
+// Signed-out visitors only look: no delete, group assignment or editing from the viewer.
+const ANONYMOUS_VIEWER_ACCESS_OPTIONS: ImageViewModalAccessOptions = { allowGroupAssignAction: false, allowEditAction: false }
 
 /** Keep item href identity stable so memoized image cells skip keystroke re-renders. */
 function getHomeImageHref(image: ImageRecord) {
@@ -93,6 +96,8 @@ export function HomePage() {
   })
 
   const isAuthStatusUnavailable = authStatusQuery.isError && !canViewHome
+  // Signed-out visitors open the viewer only when the anonymous group grants image detail.
+  const canOpenImages = !isAnonymousSession || hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.image-detail.view')
   // A failed next page or background refetch keeps the loaded images on screen; only a failed first load replaces them.
   const hasFeedData = (imagesQuery.data?.pages.length ?? 0) > 0
   const isInitialLoadError = imagesQuery.isError && !hasFeedData
@@ -214,8 +219,8 @@ export function HomePage() {
             items={visibleImages}
             resetKey={imageListResetKey}
             layout="masonry"
-            activationMode={isAnonymousSession ? 'none' : 'modal'}
-            getItemHref={isAnonymousSession ? undefined : getHomeImageHref}
+            activationMode={canOpenImages ? 'modal' : 'none'}
+            getItemHref={canOpenImages ? getHomeImageHref : undefined}
             selectable={!isAnonymousSession}
             selectedIds={selectedIds}
             onSelectedIdsChange={setSelectedIds}
@@ -230,7 +235,7 @@ export function HomePage() {
             renderItemPersistentOverlay={renderItemPersistentOverlay}
             shouldBlurItemPreview={shouldBlurItemPreview}
             sequenceTotal={feedSequenceTotal}
-            modalAccessOptions={HOME_VIEWER_ACCESS_OPTIONS}
+            modalAccessOptions={isAnonymousSession ? ANONYMOUS_VIEWER_ACCESS_OPTIONS : HOME_VIEWER_ACCESS_OPTIONS}
           />
 
           <ImageListFeedFooter
