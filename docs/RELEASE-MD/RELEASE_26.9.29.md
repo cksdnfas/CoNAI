@@ -2,7 +2,7 @@
 
 ## Version 26.9.29 (2026-09-29)
 
-v26.9.29는 26.8.9 릴리즈 커밋 이후 진행된 265개 non-merge 커밋을 묶은 안정 릴리즈입니다. 앱 전체 화면을 테두리 없는 플랫 디자인으로 다시 만들고, 갤러리·생성·설정 화면의 조작 흐름을 정리했으며, MCP 원격 사용과 MiniMax H3 Director, NovelAI v5 지원을 확장했습니다. GitHub `main`에 반영됐지만 버전으로 묶이지 않았던 8월 수정 사항도 함께 포함됩니다.
+v26.9.29는 26.8.9 릴리즈 커밋 이후 진행된 270개 non-merge 커밋을 묶은 안정 릴리즈입니다. 앱 전체 화면을 테두리 없는 플랫 디자인으로 다시 만들고, 갤러리·생성·설정 화면의 조작 흐름을 정리했으며, MCP 원격 사용과 MiniMax H3 Director, NovelAI v5 지원을 확장했습니다. GitHub `main`에 반영됐지만 버전으로 묶이지 않았던 8월 수정 사항도 함께 포함됩니다.
 
 ---
 
@@ -43,6 +43,7 @@ v26.9.29는 26.8.9 릴리즈 커밋 이후 진행된 265개 non-merge 커밋을 
 - 생성 이력에서 프롬프트 복사와 당시 설정 불러오기, 이력 행의 원본 요청 확인
 - 선택한 ComfyUI 워크플로우를 URL에 유지하고, 잘못된 입력 필드는 생성 시 해당 위치에 표시
 - 대기열 예상 완료 시간, 취소 확인, 예약 탭 분리
+- 워크플로우·예약작업을 NAI·Codex·ComfyUI와 같은 탭 줄에 배치하고, 휴대폰에서는 연결 상태를 탭 아래 줄로 분리
 - 생성 이력 범위별 비우기와 실패 이력 정리 확인 절차 추가
 - 여러 장을 한 번에 요청해도 모든 배치 결과가 지정한 그룹에 들어가도록 수정
 - 초기화·라이브러리 삭제 등 되돌릴 수 없는 동작에 확인 창 추가
@@ -98,6 +99,10 @@ v26.9.29는 26.8.9 릴리즈 커밋 이후 진행된 265개 non-merge 커밋을 
 
 - 로그인 오류를 번역된 인라인 메시지로 표시하고 로그인 후 홈으로 이동
 - 막힌 페이지 안내와 브라우저별 언어 선택, 게스트 가입 복구 흐름 추가
+- 권한 그룹 편집 창을 갤러리·생성·월페이퍼·관리 구역으로 나누고, 페이지 권한 아래에 동작 권한을 묶어 표시하며 모든 권한 이름을 한글로 통일
+- 게스트가 익명 그룹에서 물려받은 권한을 편집 창에 잠긴 체크로 표시
+- 프리셋 추가·수정·삭제, LoRA 폴더 스캔, 워크플로우 편집 권한을 게스트·커스텀 그룹에 부여할 수 있고, 커스텀 그룹에도 와일드카드 수정·삭제 허용
+- 익명 그룹에 이미지 상세 권한이 있으면 로그인하지 않은 방문자도 이미지 뷰어를 열 수 있음(삭제·그룹 지정·편집은 숨김)
 - 인증 DB 정보와 Danbooru DB 경로는 관리자에게만 표시
 - 배포 호스트의 같은 출처 요청을 CORS에서 허용
 - Docker 브리지 환경에서 모든 클라이언트가 같은 IP로 보이는 점을 고려해 로그인·API·업로드·게스트 가입 속도 제한 완화
@@ -105,6 +110,7 @@ v26.9.29는 26.8.9 릴리즈 커밋 이후 진행된 265개 non-merge 커밋을 
 - 백그라운드 미디어 재시도 상태 저장과 런타임 경계·복구 경로 보강
 - 태거 데몬 상태를 소유 프로세스에 묶고 "모델 메모리 유지" 옵션이 실제로 자동 언로드를 건너뛰도록 수정
 - 선택형 GPU Docker 런타임 추가와 Docker 이미지의 torch 설치 순서 수정
+- Docker CPU/GPU 설치 가이드(`docs/GUIDE/DOCKER.md`) 추가
 
 ---
 
@@ -122,9 +128,9 @@ v26.9.29는 26.8.9 릴리즈 커밋 이후 진행된 265개 non-merge 커밋을 
 ### 포함된 커밋 범위
 
 - 기준 릴리즈 커밋: `457f287f` (`26.8.9`)
-- 마지막 기능 커밋: `5a19e842`
-- 커밋 범위: `457f287f..5a19e842`
-- non-merge commits: **265**
+- 마지막 기능 커밋: `7bcd77d4`
+- 커밋 범위: `457f287f..7bcd77d4`
+- non-merge commits: **270**
 - 대표 커밋:
   - `5561aaea` perf(startup): smooth post-boot I/O storm that stalled web navigation
   - `692a73e9` feat(nai): add v5 and token-only authentication
@@ -136,6 +142,7 @@ v26.9.29는 26.8.9 릴리즈 커밋 이후 진행된 265개 non-merge 커밋을 
   - `3f474747` feat(ui): add Radix-based checkbox, switch, tooltip, tabs, menus, slider, progress and IconButton
   - `3137741d` feat(layout): PageWithSidebar, PageToolbar and sidebar rows
   - `5a19e842` feat(ui): keep the page toolbar under the header while scrolling
+  - `1d36336b` feat(settings): group and localize the permission-group editor
 
 ---
 
