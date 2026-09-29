@@ -5,11 +5,11 @@
 **ComfyUI · NovelAI · Stable Diffusion 결과물을 한곳에서 찾고, 정리하고, 다시 생성하는 로컬 AI 미디어 작업대**
 
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f?style=for-the-badge)](https://cksdnfas.github.io/CoNAI/)
-[![Release](https://img.shields.io/badge/release-26.8.9-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.8.9.md)
+[![Release](https://img.shields.io/badge/release-26.9.29-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.9.29.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.19-339933?style=for-the-badge)](package.json)
 [![Docs Deploy](https://img.shields.io/github/actions/workflow/status/cksdnfas/CoNAI/docs-pages.yml?branch=main&label=pages&style=for-the-badge)](https://github.com/cksdnfas/CoNAI/actions/workflows/docs-pages.yml)
 
-[📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.8.9 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.8.9.md)
+[📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.9.29 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.9.29.md)
 
 </div>
 
@@ -25,15 +25,15 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 
 ---
 
-## 26.8.9 릴리즈
+## 26.9.29 릴리즈
 
-- MiniMax H3 Director: DaSiWa 워크플로우 전용 타임라인, 프롬프트 구성, 신규 입력 규격, 미디어 비율 표시 지원
-- ComfyUI 편집: 같은 노드의 필드를 한 그룹으로 정리하고 숫자 범위·드롭다운·연결 필드 동작 개선
-- 실시간 실행: ComfyUI 노드 진행률, 생성 이력 갱신, 로그인 사용자 큐 보기와 역할별 동시 실행 제한 추가
-- 미디어 경험: 업로드 썸네일, 포스터 우선 비디오 프리뷰, 상세 제스처와 등급 안전 처리 최적화
-- 런타임 품질: watcher·시작 순서·WebSocket 재연결 안정화와 설정·히스토리·미디어·프론트엔드 구조 정리
+- 새 플랫 UI: 테두리 대신 구분선과 여백 중심 화면, 공용 사이드바 레이아웃과 고정 툴바, 아이콘 버튼과 앱 내 대화상자
+- 갤러리: 필터 칩·정렬, 체크박스·범위 선택·드래그로 그룹 넣기, 뷰어형 상세 페이지와 바로 삭제
+- 생성: 필름스트립 결과 스테이지, 결과 그룹 지정, 이력에서 설정 불러오기, 대기열 예상 시간
+- ComfyUI·NAI: 최신 MiniMax H3 Director, NovelAI v5·토큰 인증·투명 배경, 공용 필드 입력기
+- MCP·운영: 설정에서 HTTP 원격 접속, 워크플로우 실행·그룹 도구, 재시작 직후 스캔 폭주 완화, GPU Docker 런타임
 
-자세한 내용은 [`docs/RELEASE-MD/RELEASE_26.8.9.md`](docs/RELEASE-MD/RELEASE_26.8.9.md)에서 확인합니다.
+자세한 내용은 [`docs/RELEASE-MD/RELEASE_26.9.29.md`](docs/RELEASE-MD/RELEASE_26.9.29.md)에서 확인합니다.
 
 ---
 
@@ -47,8 +47,8 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 | 이미지 생성 개요 | https://cksdnfas.github.io/CoNAI/GUIDE/GENERATION_OVERVIEW.html |
 | 워크플로우 편집 | https://cksdnfas.github.io/CoNAI/GUIDE/WORKFLOW_EDITOR.html |
 | MCP 가이드 | https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html |
-| 최신 안정 릴리즈 | [GitHub Release 26.8.9](https://github.com/cksdnfas/CoNAI/releases/tag/26.8.9) |
-| 26.8.9 릴리즈 노트 | [`docs/RELEASE-MD/RELEASE_26.8.9.md`](docs/RELEASE-MD/RELEASE_26.8.9.md) |
+| 최신 안정 릴리즈 | [GitHub Release 26.9.29](https://github.com/cksdnfas/CoNAI/releases/tag/26.9.29) |
+| 26.9.29 릴리즈 노트 | [`docs/RELEASE-MD/RELEASE_26.9.29.md`](docs/RELEASE-MD/RELEASE_26.9.29.md) |
 | 전체 릴리즈 노트 | [`docs/RELEASE-MD/`](docs/RELEASE-MD) |
 
 ---

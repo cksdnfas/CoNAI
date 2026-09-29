@@ -28,6 +28,6 @@ export {
 export * from './constants/index';
 
 // Version info
-export const VERSION = '26.8.9';
+export const VERSION = '26.9.29';
 
 export * from './utils/minimaxDirectorResolution';
