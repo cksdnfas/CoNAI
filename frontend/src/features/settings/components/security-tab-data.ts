@@ -27,6 +27,7 @@ import type {
 } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
+import { getChildPermissionKeys } from './security-permission-catalog'
 
 const AUTH_ACCOUNTS_QUERY_KEY = ['auth-accounts'] as const
 const AUTH_PERMISSION_GROUPS_QUERY_KEY = ['auth-permission-groups', 'all'] as const
@@ -347,10 +348,35 @@ export function useSecurityTabData() {
     const editingCustomGroup = permissionGroupEditorMode === 'create'
       || (activePermissionGroup !== null && !activePermissionGroup.systemGroup)
     if (editingCustomGroup) {
-      return catalog.filter((permission) => permission.permissionKey.startsWith('page.') || permission.permissionKey === 'upload.create')
+      // Guest signup belongs to the built-in anonymous/guest groups; the server rejects it on custom groups.
+      return catalog.filter((permission) => permission.permissionKey !== 'auth.guest.create')
     }
     return catalog
   }, [activePermissionGroup, pageAccessQuery.data?.permissions, permissionGroupEditorMode])
+
+  /** Permission key → nearest ancestor group that grants it (guest inherits anonymous, admin inherits guest). */
+  const inheritedPermissionSources = useMemo(() => {
+    const sources: Record<string, string> = {}
+    const groups = permissionGroupsQuery.data ?? []
+    if (permissionGroupEditorMode !== 'edit' || !activePermissionGroup) {
+      return sources
+    }
+
+    const visited = new Set<string>([activePermissionGroup.groupKey])
+    let parentKey = activePermissionGroup.parentGroupKey
+    while (parentKey && !visited.has(parentKey)) {
+      visited.add(parentKey)
+      const parent = groups.find((group) => group.groupKey === parentKey)
+      if (!parent) {
+        break
+      }
+      for (const permissionKey of parent.directPermissionKeys) {
+        sources[permissionKey] ??= parent.groupKey
+      }
+      parentKey = parent.parentGroupKey
+    }
+    return sources
+  }, [activePermissionGroup, permissionGroupEditorMode, permissionGroupsQuery.data])
 
   const addableAccounts = useMemo(() => {
     const memberIds = new Set(activePermissionGroupMembers.map((member) => member.id))
@@ -387,11 +413,13 @@ export function useSecurityTabData() {
   }
 
   const togglePermissionKey = (permissionKey: string, enabled: boolean) => {
+    // Turning a page off also drops the actions nested under it, since they don't work without the page.
+    const removedKeys = new Set([permissionKey, ...getChildPermissionKeys(permissionKey)])
     setPermissionGroupDraft((current) => ({
       ...current,
       permissionKeys: enabled
         ? Array.from(new Set([...current.permissionKeys, permissionKey]))
-        : current.permissionKeys.filter((currentPermissionKey) => currentPermissionKey !== permissionKey),
+        : current.permissionKeys.filter((currentPermissionKey) => !removedKeys.has(currentPermissionKey)),
     }))
   }
 
@@ -528,6 +556,7 @@ export function useSecurityTabData() {
     permissionGroups: permissionGroupsQuery.data ?? [],
     isLoadingPermissionGroups: permissionGroupsQuery.isLoading,
     pagePermissionCatalog: editablePermissionCatalog,
+    inheritedPermissionSources,
     isLoadingPagePermissions: pageAccessQuery.isLoading,
     openCreatePermissionGroupEditor,
     openEditPermissionGroupEditor,

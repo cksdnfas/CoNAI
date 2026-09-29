@@ -97,22 +97,24 @@ function formatSqliteUtcTimestamp(value: string | null | undefined) {
     : value;
 }
 
+/** English fallback labels for action permissions; the settings UI names every known key itself. */
+const ACTION_PERMISSION_LABELS: Readonly<Record<string, string>> = {
+  'auth.guest.create': 'Guest Account Signup',
+  'upload.create': 'Upload Files',
+  'wildcards.edit': 'Wildcard Edit',
+  'wildcards.delete': 'Wildcard Delete',
+  'wildcards.lora.scan': 'LoRA Folder Scan',
+  'prompts.create': 'Preset Create',
+  'prompts.update': 'Preset Edit',
+  'prompts.delete': 'Preset Delete',
+  'workflows.update': 'Workflow Edit',
+};
+
 /** Format one editable built-in permission into the current UI label shape. */
 function formatBuiltInPermissionLabel(permissionKey: string, resource: string): string {
-  if (permissionKey === 'auth.guest.create') {
-    return 'Guest Account Signup';
-  }
-
-  if (permissionKey === 'upload.create') {
-    return 'Upload Files';
-  }
-
-  if (permissionKey === 'wildcards.edit') {
-    return 'Wildcard Edit';
-  }
-
-  if (permissionKey === 'wildcards.delete') {
-    return 'Wildcard Delete';
+  const actionLabel = ACTION_PERMISSION_LABELS[permissionKey];
+  if (actionLabel) {
+    return actionLabel;
   }
 
   return resource

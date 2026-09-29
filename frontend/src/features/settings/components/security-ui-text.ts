@@ -21,21 +21,6 @@ const ACCOUNT_STATUS_LABELS: LocalizedMap = {
   locked: { ko: '잠김', en: 'Locked' },
 }
 
-const PAGE_PERMISSION_LABELS: LocalizedMap = {
-  'auth.guest.create': { ko: '게스트 회원가입', en: 'Guest account signup' },
-  'page.home.view': { ko: '홈', en: 'Home' },
-  'page.groups.view': { ko: '그룹', en: 'Groups' },
-  'page.prompts.view': { ko: '프롬프트', en: 'Prompts' },
-  'page.generation.view': { ko: '생성', en: 'Generation' },
-  'page.wildcards.view': { ko: '와일드카드', en: 'Wildcards' },
-  'page.image-detail.view': { ko: '이미지 상세', en: 'Image detail' },
-  'page.metadata-editor.view': { ko: '메타데이터 편집', en: 'Metadata editor' },
-  'page.upload.view': { ko: '업로드', en: 'Upload' },
-  'page.settings.view': { ko: '설정', en: 'Settings' },
-  'page.wallpaper.view': { ko: '월페이퍼 편집', en: 'Wallpaper editor' },
-  'page.wallpaper.runtime.view': { ko: '월페이퍼 런타임', en: 'Wallpaper runtime' },
-}
-
 function resolveLabel(map: LocalizedMap, key: string, language: AppLanguage) {
   return map[key]?.[language] ?? map[key]?.ko ?? null
 }
@@ -71,8 +56,4 @@ export function getAccountStatusLabel(language: AppLanguage, status?: string | n
   }
 
   return resolveLabel(ACCOUNT_STATUS_LABELS, status, language) ?? status
-}
-
-export function getPagePermissionLabel(language: AppLanguage, permissionKey: string, fallbackLabel?: string | null) {
-  return resolveLabel(PAGE_PERMISSION_LABELS, permissionKey, language) ?? fallbackLabel?.trim() ?? permissionKey
 }

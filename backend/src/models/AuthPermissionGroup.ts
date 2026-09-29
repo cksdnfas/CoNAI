@@ -11,6 +11,7 @@ export interface PagePermissionRecord {
   description: string | null;
 }
 
+/** Permissions the settings UI can grant; anything else stays admin-only through the seeded admin grant. */
 const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
   'auth.guest.create',
   'page.home.view',
@@ -27,7 +28,15 @@ const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
   'upload.create',
   'wildcards.edit',
   'wildcards.delete',
+  'wildcards.lora.scan',
+  'prompts.create',
+  'prompts.update',
+  'prompts.delete',
+  'workflows.update',
 ] as const;
+
+/** Public guest signup only makes sense on the built-in anonymous/guest groups. */
+const CUSTOM_GROUP_EXCLUDED_PERMISSION_KEYS: ReadonlySet<string> = new Set(['auth.guest.create']);
 
 export interface PermissionGroupPageAccessRecord {
   group_key: BuiltInPermissionGroupKey;
@@ -63,17 +72,6 @@ interface PermissionIdRecord {
 
 /** Resolve and update built-in permission-group access records. */
 export class AuthPermissionGroup {
-  /** List the current page-view permission catalog in stable order. */
-  static listPagePermissions(): PagePermissionRecord[] {
-    const db = getAuthDb();
-    return db.prepare(`
-      SELECT permission_key, resource, action, description
-      FROM auth_permissions
-      WHERE permission_key LIKE 'page.%'
-      ORDER BY id ASC
-    `).all() as PagePermissionRecord[];
-  }
-
   /** List the editable built-in permission catalog used by the anonymous/guest settings UI. */
   static listBuiltInEditablePermissions(): PagePermissionRecord[] {
     return this.listPermissionsByKeys(BUILT_IN_EDITABLE_PERMISSION_KEYS);
@@ -97,14 +95,12 @@ export class AuthPermissionGroup {
       FROM auth_permission_groups g
       LEFT JOIN auth_permission_groups parent ON parent.id = g.parent_group_id
       LEFT JOIN auth_group_permissions gp ON gp.group_id = g.id AND gp.allowed = 1
-      LEFT JOIN auth_permissions p ON p.id = gp.permission_id AND (
-        p.permission_key LIKE 'page.%'
-        OR p.permission_key IN ('auth.guest.create', 'upload.create', 'wildcards.edit', 'wildcards.delete')
-      )
+      LEFT JOIN auth_permissions p ON p.id = gp.permission_id
+        AND p.permission_key IN (${BUILT_IN_EDITABLE_PERMISSION_KEYS.map(() => '?').join(', ')})
       LEFT JOIN auth_account_group_memberships agm ON agm.group_id = g.id
       GROUP BY g.id
       ORDER BY g.priority ASC, g.id ASC
-    `).all() as Array<{
+    `).all(...BUILT_IN_EDITABLE_PERMISSION_KEYS) as Array<{
       id: number;
       group_key: string;
       name: string;
@@ -390,10 +386,7 @@ export class AuthPermissionGroup {
 
   /** Resolve custom-group permissions without exposing public guest signup control. */
   private static getCustomEditablePermissionKeys(): string[] {
-    return [
-      ...this.listPagePermissions().map((permission) => permission.permission_key),
-      'upload.create',
-    ];
+    return BUILT_IN_EDITABLE_PERMISSION_KEYS.filter((permissionKey) => !CUSTOM_GROUP_EXCLUDED_PERMISSION_KEYS.has(permissionKey));
   }
 
   /** Load one or more permissions in stable caller-defined key order. */

@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -16,9 +15,9 @@ import type {
 import { Field } from '@/components/ui/field'
 import { Modal } from '@/components/ui/modal'
 import { SecurityAccountManagementList } from './security-account-management-list'
+import { SecurityPermissionChecklist } from './security-permission-checklist'
 import {
   getAccountTypeLabel,
-  getPagePermissionLabel,
   getPermissionGroupDisplayName,
   getPermissionGroupKindLabel,
 } from './security-ui-text'
@@ -40,6 +39,7 @@ interface SecurityPermissionGroupEditorModalProps {
   availableGroups: PermissionGroupListItem[]
   selectedAddMemberAccountId: number | null
   permissionCatalog: PageAccessPermissionItem[]
+  inheritedPermissionSources: Record<string, string>
   draft: PermissionGroupDraft
   isLoadingDetail: boolean
   isSaving: boolean
@@ -79,6 +79,7 @@ export function SecurityPermissionGroupEditorModal({
   availableGroups,
   selectedAddMemberAccountId,
   permissionCatalog,
+  inheritedPermissionSources,
   draft,
   isLoadingDetail,
   isSaving,
@@ -167,36 +168,17 @@ export function SecurityPermissionGroupEditorModal({
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-foreground">{t({ ko: '페이지 권한', en: 'Page permissions' })}</h3>
+              <h3 className="text-sm font-semibold text-foreground">{t({ ko: '권한', en: 'Permissions' })}</h3>
               {!canEditPermissions ? <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge> : null}
             </div>
 
-            <div>
-              {permissionCatalog.length === 0 ? (
-                <div className="text-sm text-muted-foreground">{t({ ko: '표시할 페이지 권한이 아직 없어.', en: 'There are no page permissions to show yet.' })}</div>
-              ) : (
-                permissionCatalog.map((permission) => {
-                  const checked = draft.permissionKeys.includes(permission.permissionKey)
-                  return (
-                    <label
-                      key={permission.permissionKey}
-                      className="flex min-h-11 cursor-pointer items-center justify-between gap-4 border-b border-line py-2 last:border-b-0"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm text-foreground">
-                          {getPagePermissionLabel(language, permission.permissionKey, permission.label)}
-                        </div>
-                      </div>
-                      <Checkbox
-                        checked={checked}
-                        disabled={!canEditPermissions || isBusy}
-                        onCheckedChange={(nextChecked) => onTogglePermission(permission.permissionKey, nextChecked === true)}
-                      />
-                    </label>
-                  )
-                })
-              )}
-            </div>
+            <SecurityPermissionChecklist
+              permissionCatalog={permissionCatalog}
+              selectedKeys={draft.permissionKeys}
+              inheritedSources={inheritedPermissionSources}
+              disabled={!canEditPermissions || isBusy}
+              onToggle={onTogglePermission}
+            />
           </section>
 
           {!isCreateMode ? (

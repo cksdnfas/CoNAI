@@ -144,6 +144,7 @@ export function SecurityTab() {
         availableGroups={securityTabData.availableGroups}
         selectedAddMemberAccountId={securityTabData.selectedAddMemberAccountId}
         permissionCatalog={securityTabData.pagePermissionCatalog}
+        inheritedPermissionSources={securityTabData.inheritedPermissionSources}
         draft={securityTabData.permissionGroupDraft}
         isLoadingDetail={securityTabData.isLoadingPermissionGroupDetail}
         isSaving={securityTabData.isSavingPermissionGroup}
