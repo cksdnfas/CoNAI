@@ -570,12 +570,11 @@ export function CodexGenerationPanel({
             onChange={(event) => handleFieldChange('model', event.target.value)}
             list={modelOptionsId}
             maxLength={200}
-            placeholder={t({ ko: '서버 CLI 기본값 (모델 ID 직접 입력 가능)', en: 'Server CLI default (or enter a model ID)' })}
+            placeholder={t({ ko: '기본값', en: 'Default' })}
           />
           <datalist id={modelOptionsId}>
             {modelOptionsQuery.data?.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
           </datalist>
-          <Text as="span" variant="caption">{t({ ko: '비우면 서버 기본 모델을 사용해. 이미지 전용 모델이 아닌 Codex 실행 모델이며, 후보 목록에 없는 ID도 입력할 수 있어.', en: 'Leave empty for the server default. This selects the Codex agent model, not the image-tool model. You can also enter an ID outside the suggestions.' })}</Text>
         </Field>
         <NaiPromptSection
           tool="codex"
@@ -584,8 +583,7 @@ export function CodexGenerationPanel({
           onPromptChange={(value) => handleFieldChange('prompt', value)}
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
         />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Text variant="muted">{t({ ko: '생성 프롬프트는 결과에 저장돼. 결과의 “이 설정 불러오기”로 다시 사용할 수 있어.', en: 'Generation prompts are saved with results. Use “Load these settings” on a result to reuse them.' })}</Text>
+        <div className="flex justify-end">
           <CodexPromptPresetButton prompt={codexForm.prompt} negativePrompt={codexForm.negativePrompt} />
         </div>
 
@@ -605,7 +603,6 @@ export function CodexGenerationPanel({
               onTierChange={(value) => handleFieldChange('resolution', value)}
             />
           </div>
-          <Text variant="muted">{t({ ko: '비율과 해상도는 생성 요청값이며 실제 결과 크기는 달라질 수 있어.', en: 'Ratio and resolution are requested values; actual output dimensions may differ.' })}</Text>
         </Section>
 
         <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
@@ -615,9 +612,6 @@ export function CodexGenerationPanel({
               <option value="edit">{t({ ko: '원본 이미지 편집 (i2i)', en: 'Edit source image (i2i)' })}</option>
             </Select>
           </Field>
-          <Text variant="muted">{codexForm.imageMode === 'reference'
-            ? t({ ko: '이미지 없이 생성하거나, 첨부 이미지의 스타일·색감·구도를 참고해 새로 생성해.', en: 'Generate from text alone, or attach an image to guide the style, colors, or composition of a new image.' })
-            : t({ ko: '원본 이미지를 첨부하고 바꿀 내용을 적어줘. 마스크를 추가하면 해당 영역을 중심으로 편집해.', en: 'Attach the source image and describe your changes. Add a mask to focus the edit on a region.' })}</Text>
           <div className="grid gap-4 @2xl:grid-cols-2">
             <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
@@ -46,7 +47,7 @@ export function CodexPromptPresetButton({ prompt, negativePrompt }: { prompt: st
       setOpen(false)
       setName('')
       await queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
-      showSnackbar({ message: t({ ko: '프리셋을 저장했어. 프롬프트 행의 프리셋 삽입 버튼으로 다시 사용할 수 있어.', en: 'Preset saved. Use the preset button on a prompt row to insert it again.' }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '프리셋을 저장했어.', en: 'Preset saved.' }), tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '프리셋 저장에 실패했어.', en: 'Failed to save the preset.' })), tone: 'error' })
     } finally {
@@ -55,9 +56,9 @@ export function CodexPromptPresetButton({ prompt, negativePrompt }: { prompt: st
   }
 
   return <>
-    <Button type="button" variant="secondary" size="sm" disabled={!prompt.trim() && !negativePrompt.trim()} onClick={() => { setKind(prompt.trim() ? 'positive' : 'negative'); setOpen(true) }}>
-      <Save className="size-4" />{label}
-    </Button>
+    <IconButton variant="ghost" size="icon-sm" label={label} disabled={!prompt.trim() && !negativePrompt.trim()} onClick={() => { setKind(prompt.trim() ? 'positive' : 'negative'); setOpen(true) }}>
+      <Save />
+    </IconButton>
     <Modal open={open} title={label} onClose={() => { if (!saving) setOpen(false) }} widthClassName="max-w-xl">
       <form onSubmit={(event) => void save(event)}>
         <ModalBody className="space-y-4">

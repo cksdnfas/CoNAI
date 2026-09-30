@@ -324,6 +324,16 @@
     font-feature-settings: 'rlig' 1, 'calt' 1;
   }
 
+  /*
+   * Native select popups can't paint translucent fills (--field), so Chrome falls back to a white list while the
+   * options keep the light foreground text. Give every option an opaque themed surface instead.
+   */
+  select option,
+  select optgroup {
+    background-color: var(--card);
+    color: var(--foreground);
+  }
+
   ::selection {
     background: color-mix(in srgb, var(--secondary) 30%, var(--primary) 70%);
     color: #2a0d00;
