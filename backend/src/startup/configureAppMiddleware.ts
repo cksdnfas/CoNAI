@@ -219,7 +219,8 @@ export function configureAppMiddleware(
     threshold: 1024,
     filter: (req, res) => {
       const contentType = String(res.getHeader('Content-Type') ?? '');
-      if (contentType.includes('event-stream')) {
+      // Streams (SSE, Codex chat NDJSON) must reach the client as they are written, not after a gzip block fills.
+      if (contentType.includes('event-stream') || contentType.includes('x-ndjson')) {
         return false;
       }
       return dependencies.defaultCompressionFilter(req, res);

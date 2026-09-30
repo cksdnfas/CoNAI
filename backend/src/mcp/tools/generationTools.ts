@@ -27,7 +27,7 @@ export function registerGenerationTools(server: McpServer, context: McpRequestCo
   registerWorkflowListTools(server);
   registerComfyGenerationTools(server, context);
   registerWorkflowDetailTools(server);
-  registerNovelAiGenerationTools(server);
+  registerNovelAiGenerationTools(server, context);
   registerGenerationJobTools(server, context);
 }
 
@@ -131,6 +131,7 @@ async function saveMcpComfyOutputs(params: {
   server: ComfyUIServerRecord;
   suppliedInputs: Record<string, unknown>;
   groupId?: number;
+  requester?: McpRequestContext['requester'];
 }) {
   const { comfyService, substitutedWorkflow } = await prepareMcpComfyWorkflow({
     workflow: params.workflow,
@@ -143,6 +144,8 @@ async function saveMcpComfyOutputs(params: {
     workflowName: params.workflow.name,
     groupId: params.groupId,
     serverId: params.server.id,
+    requestedByAccountId: params.requester?.accountId ?? undefined,
+    requestedByAccountType: params.requester?.accountType ?? undefined,
   });
 
   try {
@@ -163,6 +166,8 @@ async function saveMcpComfyOutputs(params: {
             workflowName: params.workflow.name,
             groupId: params.groupId,
             serverId: params.server.id,
+            requestedByAccountId: params.requester?.accountId ?? undefined,
+            requestedByAccountType: params.requester?.accountType ?? undefined,
           });
           historyIds.push(outputHistoryId);
         } catch (historyError) {
@@ -226,6 +231,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
           server: serverRecord,
           suppliedInputs: (inputs ?? prompt_data ?? {}) as Record<string, unknown>,
           groupId: targetGroupId,
+          requester: context.requester,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(await replaceOutputPathsWithArtifacts(result, context), null, 2) }] };
       } catch (error) {
@@ -262,6 +268,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
               server: serverRecord,
               suppliedInputs,
               groupId: targetGroupId,
+              requester: context.requester,
             });
             return await replaceOutputPathsWithArtifacts(result, context);
           } catch (error) {

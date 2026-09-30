@@ -74,6 +74,24 @@ exit
 
 원격에서 만들어야 하면 `CONAI_SETUP_TOKEN` 환경 변수를 설정하고, 같은 요청에 `x-conai-setup-token` 헤더를 붙입니다. 계정을 만든 뒤에는 토큰을 지우세요.
 
+## Codex 로그인
+
+이미지에 Codex CLI가 들어 있습니다. 관리자 계정으로 생성 → Codex 탭을 열고, `로그인 필요` 옆 로그인 버튼을 누르면 일회용 코드와 인증 페이지 링크가 뜹니다. 아무 브라우저에서 인증 페이지를 열어 코드를 입력하면 자동으로 적용됩니다.
+
+앱 대신 터미널에서 해도 됩니다.
+
+```bash
+docker compose exec conai codex login --device-auth
+```
+
+로그인 정보는 볼륨의 `/app/data/user/codex`(`CODEX_HOME`)에 저장되므로 이미지를 다시 빌드해도 유지됩니다. 이 폴더에는 계정 토큰이 들어 있으니 볼륨 백업을 다룰 때 주의하세요.
+
+CLI 업데이트는 Codex 탭 상태 옆의 업데이트 버튼(관리자, 새 버전이 있을 때)으로 합니다. 업데이트본은 볼륨의 `/app/data/user/codex-cli`에 설치되어 컨테이너를 다시 만들어도 남습니다.
+
+::: warning Codex sandbox
+Docker 기본 설정은 Codex의 Linux sandbox(bwrap)가 쓰는 user namespace를 막습니다. 그래서 이미지는 `CODEX_SANDBOX_MODE=danger-full-access`로 Codex를 sandbox 없이 실행하고, 컨테이너 자체를 격리 경계로 씁니다. 이 상태에서 Codex는 컨테이너 안 파일(`/app/data/user` 포함)에 접근할 수 있으므로, Codex 생성 권한은 신뢰하는 계정에만 주세요.
+:::
+
 ## 감시 폴더 연결
 
 컨테이너는 호스트 폴더를 직접 볼 수 없습니다. 감시할 폴더를 `compose.yaml`의 `volumes`에 추가하고, CoNAI의 감시 폴더에는 **컨테이너 안 경로**를 등록합니다.
@@ -100,6 +118,9 @@ services:
 | `PUBLIC_BASE_URL` | 없음 | 외부 공개 주소. 허용 origin과 외부 접속 판단에 사용 |
 | `CONAI_SETUP_TOKEN` | 없음 | 원격 초기 관리자 생성용 일회성 토큰 |
 | `HF_TOKEN` | 없음 | Hugging Face 모델 다운로드 속도 제한 완화(선택) |
+| `CODEX_HOME` | `/app/data/user/codex` | Codex CLI 로그인 정보·설정 위치 |
+| `CODEX_NPM_PREFIX` | `/app/data/user/codex-cli` | 앱에서 업데이트한 Codex CLI 설치 위치 |
+| `CODEX_SANDBOX_MODE` | `danger-full-access` | `codex exec --sandbox` 값. 컨테이너 밖 기본값은 `workspace-write` |
 
 ::: warning 프록시 없이 공개할 때
 `TRUST_PROXY=1`인 상태에서 리버스 프록시 없이 포트를 바로 열면, 클라이언트가 `X-Forwarded-For` 헤더로 IP를 속일 수 있습니다. 또 Docker Desktop의 브리지 네트워크에서는 모든 접속이 같은 게이트웨이 IP(예: `172.x.0.1`)로 보여서, IP 기준 속도 제한이 방문자 전체에 함께 걸립니다. 방문자별 IP가 필요하면 클라이언트 IP를 넘겨주는 프록시(cloudflared, Caddy, Traefik 등)를 앞에 두고 `TRUST_PROXY=1`을 유지하세요.

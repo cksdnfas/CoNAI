@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { mcpHttpSettingsService, type McpHttpAuthentication } from '../services/mcpHttpSettingsService';
+import { authenticateCodexChatMcpRequest } from '../services/codex-chat/codexChatAccess';
 
 export type McpResponseLocals = {
   mcpAuth?: McpHttpAuthentication;
@@ -26,6 +27,14 @@ function isSignedArtifactRequest(req: Request): boolean {
 /** Authenticate HTTP MCP before the large JSON parser is allowed to read request bytes. */
 export function requireMcpHttpAccess(req: Request, res: Response, next: NextFunction): void {
   res.setHeader('Cache-Control', 'no-store');
+
+  // Codex chat sessions reach MCP with an internal loopback token, independent of the public HTTP MCP switch.
+  const chatAuthentication = authenticateCodexChatMcpRequest(req, readMcpApiKey(req));
+  if (chatAuthentication) {
+    (res.locals as McpResponseLocals).mcpAuth = chatAuthentication;
+    next();
+    return;
+  }
 
   if (!mcpHttpSettingsService.loadSettings().enabled) {
     res.status(404).json({

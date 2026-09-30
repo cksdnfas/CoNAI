@@ -1,10 +1,27 @@
 import type { McpHttpScope } from '@conai/shared';
+import type { AuthAccountType } from '../types/authAccount';
+
+/** Account that owns the jobs and history a request creates (set for Codex chat sessions). */
+export interface McpRequester {
+  accountId: number | null;
+  accountType: AuthAccountType | null;
+}
 
 export interface McpRequestContext {
   scopes: McpHttpScope[];
   keyId?: string;
   keyName?: string;
   baseUrl?: string;
+  requester?: McpRequester;
+  /** `codex-chat`: an agent acting inside the app on a user's behalf. */
+  source?: 'http' | 'codex-chat';
+}
+
+/** Codex chat must not spend paid NovelAI multi-sample generations on its own; one image per request is free. */
+export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: unknown) {
+  if (context.source === 'codex-chat' && typeof nSamples === 'number' && nSamples > 1) {
+    throw new Error('n_samples must be 1 in Codex chat (2+ samples cost Anlas). Submit separate requests for more images.');
+  }
 }
 
 export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore'];

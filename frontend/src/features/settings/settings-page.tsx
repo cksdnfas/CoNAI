@@ -80,6 +80,11 @@ const IntegrationToolsTabLazy = lazy(async () => {
   return { default: module.IntegrationToolsTab }
 })
 
+const CodexChatSettingsCardLazy = lazy(async () => {
+  const module = await import('./components/codex-chat-settings-card')
+  return { default: module.CodexChatSettingsCard }
+})
+
 const LlmConnectionsTabLazy = lazy(async () => {
   const module = await import('./components/llm-connections-tab')
   return { default: module.LlmConnectionsTab }
@@ -560,6 +565,7 @@ export function SettingsPage() {
                 showMediaSettings={false}
               />
               <LlmConnectionsTabLazy />
+              <CodexChatSettingsCardLazy />
               <IntegrationToolsTabLazy />
             </div>
           ) : null}

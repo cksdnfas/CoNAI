@@ -4,8 +4,9 @@ import { GenerationHistoryService } from '../../services/generationHistoryServic
 import { executeNaiGeneration } from '../../services/naiGenerationExecutor';
 import { getToken } from '../../utils/nai/auth';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
+import { assertChatNaiSampleCount, type McpRequestContext } from '../context';
 
-export function registerNovelAiGenerationTools(server: McpServer): void {
+export function registerNovelAiGenerationTools(server: McpServer, context: McpRequestContext): void {
   // NovelAI 이미지 생성
   server.tool(
     'generate_nai',
@@ -34,6 +35,7 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
     },
     async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, transparent_background, group_id, group_path }) => {
       try {
+        assertChatNaiSampleCount(context, n_samples);
         const token = getToken();
         if (!token) {
           return {
@@ -72,6 +74,8 @@ export function registerNovelAiGenerationTools(server: McpServer): void {
           const historyId = await GenerationHistoryService.createNAIHistory({
             model: metadata.model || 'unknown',
             groupId: targetGroupId,
+            requestedByAccountId: context.requester?.accountId ?? undefined,
+            requestedByAccountType: context.requester?.accountType ?? undefined,
           });
           historyIds.push(historyId);
 

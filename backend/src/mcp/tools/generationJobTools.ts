@@ -11,7 +11,7 @@ import { buildGenerationHistoryRequestSnapshot } from '../../services/generation
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
-import type { McpRequestContext } from '../context';
+import { assertChatNaiSampleCount, type McpRequestContext } from '../context';
 import { normalizeMcpWorkflowInputs, parseMcpMarkedFields } from './mcpComfyWorkflowService';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import {
@@ -193,6 +193,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
         if (service_type === 'codex') {
           payload = parseCodexGenerationRequest(payload);
         }
+        if (service_type === 'novelai') {
+          assertChatNaiSampleCount(context, (payload as Record<string, unknown>).n_samples);
+        }
 
         // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.
         const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
@@ -207,6 +210,8 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
           requested_server_tag: routing.requestedServerTag,
           request_payload: payload,
           request_summary: `MCP ${service_type} generation`,
+          requested_by_account_id: context.requester?.accountId ?? null,
+          requested_by_account_type: context.requester?.accountType ?? null,
         };
         const creation = idempotency_key && idempotencyScope && requestHash
           ? GenerationQueueModel.createIdempotent(createData, {

@@ -42,7 +42,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     /app/data/user/temp \
     /app/data/user/models \
     /app/data/user/config \
+    /app/data/user/codex \
     /app/data/user/RecycleBin
+
+# Codex CLI for the Codex generation tab. Sign in from the app (admin) or `docker exec -it <container> codex login --device-auth`.
+RUN npm install -g --no-audit --no-fund @openai/codex
 
 COPY --from=build /app/package*.json /app/
 COPY --from=build /app/node_modules /app/node_modules
@@ -58,7 +62,10 @@ ENV NODE_ENV=production \
     CONAI_WORKER_HTTP=false \
     TRUST_PROXY=1 \
     PYTHON_PATH=python3 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    CODEX_HOME=/app/data/user/codex \
+    CODEX_NPM_PREFIX=/app/data/user/codex-cli \
+    CODEX_SANDBOX_MODE=danger-full-access
 
 EXPOSE 1666
 

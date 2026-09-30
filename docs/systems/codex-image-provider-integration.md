@@ -105,7 +105,7 @@ The Codex temp root should have explicit cleanup rules:
 1. `GenerationQueueService` picks the queued Codex job.
 2. Worker transitions the job through `queued -> dispatching -> running`.
 3. Worker creates a job-specific workspace under `runtimePaths.tempDir`.
-4. Worker runs `codex exec --ephemeral --skip-git-repo-check --sandbox workspace-write` in that workspace.
+4. Worker runs `codex exec --ephemeral --skip-git-repo-check --sandbox <mode>` in that workspace. `<mode>` is `CODEX_SANDBOX_MODE` (default `workspace-write`; the Docker image sets `danger-full-access` because Docker's default seccomp blocks the bwrap sandbox).
 5. If Codex yields stable identifiers or useful final messages, persist them in queue debug metadata and/or lightweight history metadata.
 
 ### Result phase

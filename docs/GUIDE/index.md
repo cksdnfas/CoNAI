@@ -30,6 +30,7 @@ CoNAI를 설치하고, 이미지/비디오를 등록하고, 검색·분류·생�
 - [이미지 생성 개요](./GENERATION_OVERVIEW.md)
 - [NAI 생성](./NAI_GENERATION.md)
 - [Codex 생성](./CODEX_GENERATION.md)
+- [Codex 채팅](./CODEX_CHAT.md)
 - [ComfyUI 생성](./COMFYUI_GENERATION.md)
 - [워크플로우 편집](./WORKFLOW_EDITOR.md)
 - [MCP 가이드](./MCP_GUIDE.md)

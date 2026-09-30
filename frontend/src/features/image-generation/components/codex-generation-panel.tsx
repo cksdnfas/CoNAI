@@ -3,7 +3,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, RotateCcw, X } from 'lucide-react'
+import { LogIn, RefreshCw, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -30,6 +30,9 @@ import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolb
 import { ResolutionPicker } from './resolution-picker'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import { CodexPromptPresetButton } from './codex-prompt-preset-button'
+import { CodexDeviceLoginDialog } from './codex-device-login-dialog'
+import { CodexCliUpdateButton } from './codex-cli-update-button'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 
 type CodexGenerationPanelProps = {
   onHistoryRefresh: () => void
@@ -317,6 +320,12 @@ export function CodexGenerationPanel({
   const codexStatus = codexStatusQuery.data?.data ?? null
   const canGenerateWithCodex = codexStatusQuery.isSuccess ? Boolean(codexStatus?.available) : false
   const showStatusRecovery = codexStatusQuery.isError || (codexStatusQuery.isSuccess && !codexStatus?.available)
+  const authStatusQuery = useAuthStatusQuery()
+  // 서버 전체를 한 계정으로 로그인시키는 동작이라 관리자에게만 노출한다.
+  const isAdmin = authStatusQuery.data?.isAdmin === true
+  const canStartCodexLogin = isAdmin
+    && codexStatusQuery.isSuccess && Boolean(codexStatus?.installed) && !codexStatus?.authenticated
+  const [isCodexLoginOpen, setIsCodexLoginOpen] = useState(false)
   const useInlineActionBar = splitPaneScroll
 
   const generateButtonLabel = isSubmitting
@@ -364,6 +373,15 @@ export function CodexGenerationPanel({
   const handleRefreshStatus = useCallback(() => {
     void refetchCodexStatus()
   }, [refetchCodexStatus])
+
+  const handleCloseCodexLogin = useCallback(() => setIsCodexLoginOpen(false), [])
+
+  const codexLoginButton = canStartCodexLogin ? (
+    <IconButton variant="ghost" size="icon-sm" onClick={() => setIsCodexLoginOpen(true)} label={t({ ko: 'Codex 로그인', en: 'Sign in to Codex' })}>
+      <LogIn />
+    </IconButton>
+  ) : null
+  const codexUpdateButton = isAdmin ? <CodexCliUpdateButton onUpdated={handleRefreshStatus} /> : null
 
   const { requestPath: targetGroupPath } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
 
@@ -467,6 +485,8 @@ export function CodexGenerationPanel({
             <RefreshCw className={cn(codexStatusQuery.isPending && 'animate-spin')} />
           </IconButton>
         ) : null}
+        {codexLoginButton}
+        {codexUpdateButton}
         {useDrawerCompactChrome ? (
           <IconButton variant="ghost" size="icon-sm" onClick={() => void handleReset()} disabled={isSubmitting} label={t({ ko: '초기화', en: 'Reset' })}>
             <RotateCcw />
@@ -537,6 +557,8 @@ export function CodexGenerationPanel({
               : t({ ko: 'Codex 없음', en: 'Codex missing' })}
     >
       {statusRecheckButton}
+      {codexLoginButton}
+      {codexUpdateButton}
     </GenerationToolbarStatus>
   )
 
@@ -672,6 +694,7 @@ export function CodexGenerationPanel({
         {useInlineActionBar ? <GenerateActionDock>{actionSection}</GenerateActionDock> : null}
       </div>
 
+      <CodexDeviceLoginDialog open={isCodexLoginOpen} onClose={handleCloseCodexLogin} onSucceeded={handleRefreshStatus} />
     </>
   )
 }

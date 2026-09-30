@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import type { McpHttpApiKey, McpHttpScope, McpHttpSettings } from '@conai/shared';
 import { runtimePaths } from '../config/runtimePaths';
+import type { McpRequester } from '../mcp/context';
 
 const MCP_HTTP_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'mcp-http.json');
 const MCP_API_KEY_PREFIX = 'conai_mcp_';
@@ -17,6 +18,8 @@ export interface McpHttpAuthentication {
   keyId: string;
   keyName: string;
   scopes: McpHttpScope[];
+  requester?: McpRequester;
+  source?: 'http' | 'codex-chat';
 }
 
 function generateApiKey(): string {

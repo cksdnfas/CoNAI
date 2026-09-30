@@ -1,13 +1,13 @@
 import type { TranslationInput, TranslationParams } from '@/i18n'
 
-export type ImageGenerationTab = 'nai' | 'codex' | 'comfyui' | 'workflows' | 'reservations'
+export type ImageGenerationTab = 'nai' | 'codex' | 'comfyui' | 'workflows' | 'reservations' | 'chat'
 
 type Translate = (input: TranslationInput, params?: TranslationParams) => string
 
 /** Query param that keeps the selected ComfyUI workflow across reloads and back navigation. */
 export const IMAGE_GENERATION_WORKFLOW_PARAM = 'workflow'
 
-export const IMAGE_GENERATION_TAB_ORDER: ImageGenerationTab[] = ['nai', 'codex', 'comfyui', 'workflows', 'reservations']
+export const IMAGE_GENERATION_TAB_ORDER: ImageGenerationTab[] = ['nai', 'codex', 'comfyui', 'workflows', 'reservations', 'chat']
 
 export function getImageGenerationTabLabel(tab: ImageGenerationTab, t: Translate) {
   if (tab === 'nai') {
@@ -21,6 +21,9 @@ export function getImageGenerationTabLabel(tab: ImageGenerationTab, t: Translate
   }
   if (tab === 'workflows') {
     return t({ ko: '워크플로우', en: 'Workflow' })
+  }
+  if (tab === 'chat') {
+    return t({ ko: 'Codex 채팅', en: 'Codex chat' })
   }
 
   return t({ ko: '예약작업', en: 'Reservations' })

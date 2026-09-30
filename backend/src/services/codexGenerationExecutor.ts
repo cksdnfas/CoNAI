@@ -216,17 +216,110 @@ function buildCodexPrompt(payload: CodexGenerationPayload, outputFileNames: stri
   return lines.join('\n')
 }
 
+const CODEX_SANDBOX_MODES = ['read-only', 'workspace-write', 'danger-full-access'] as const
+
+/**
+ * `codex exec --sandbox` 값. Docker 기본 seccomp는 비특권 user namespace를 막아 bwrap sandbox가 실패하므로,
+ * 컨테이너 이미지는 `CODEX_SANDBOX_MODE=danger-full-access`로 컨테이너 자체를 격리 경계로 삼는다.
+ */
+export function resolveCodexSandboxMode() {
+  const configured = process.env.CODEX_SANDBOX_MODE?.trim()
+  return CODEX_SANDBOX_MODES.find((mode) => mode === configured) ?? 'workspace-write'
+}
+
+const CODEX_PACKAGE_SEGMENTS = ['@openai', 'codex'] as const
+
+export type CodexCliInstallation = {
+  source: 'prefix' | 'global'
+  packageDir: string
+  entry: string
+  version: string | null
+}
+
+function readPackageVersion(packageDir: string) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as { version?: unknown }
+    return typeof parsed.version === 'string' ? parsed.version : null
+  } catch {
+    return null
+  }
+}
+
+function toInstallation(source: CodexCliInstallation['source'], packageDir: string): CodexCliInstallation | null {
+  const entry = path.join(packageDir, 'bin', 'codex.js')
+  return fs.existsSync(entry) ? { source, packageDir, entry, version: readPackageVersion(packageDir) } : null
+}
+
+/** Compare `x.y.z[-pre]` versions; a prerelease sorts before its release. */
+export function compareCodexVersions(left: string, right: string) {
+  const parse = (value: string) => {
+    const [core, prerelease] = value.split('-', 2)
+    return { parts: core.split('.').map((part) => Number.parseInt(part, 10) || 0), prerelease: prerelease ?? null }
+  }
+  const a = parse(left)
+  const b = parse(right)
+  for (let index = 0; index < 3; index += 1) {
+    const diff = (a.parts[index] ?? 0) - (b.parts[index] ?? 0)
+    if (diff !== 0) {
+      return diff
+    }
+  }
+  if (a.prerelease === b.prerelease) {
+    return 0
+  }
+  return a.prerelease === null ? 1 : b.prerelease === null ? -1 : a.prerelease.localeCompare(b.prerelease)
+}
+
+/**
+ * 설치된 npm Codex CLI 목록. `CODEX_NPM_PREFIX`(앱에서 업데이트하는 위치; Docker는 볼륨)와 npm 전역 설치를 본다.
+ * npm `--prefix` 전역 설치는 POSIX에서 `lib/node_modules`, Windows에서 `node_modules` 아래에 풀린다.
+ */
+export function findCodexCliInstallations(): CodexCliInstallation[] {
+  const installations: CodexCliInstallation[] = []
+  const prefix = process.env.CODEX_NPM_PREFIX?.trim()
+  if (prefix) {
+    const prefixInstall = toInstallation('prefix', path.join(prefix, 'lib', 'node_modules', ...CODEX_PACKAGE_SEGMENTS))
+      ?? toInstallation('prefix', path.join(prefix, 'node_modules', ...CODEX_PACKAGE_SEGMENTS))
+    if (prefixInstall) {
+      installations.push(prefixInstall)
+    }
+  }
+
+  const globalPackageDir = process.platform === 'win32'
+    ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm', 'node_modules', ...CODEX_PACKAGE_SEGMENTS)
+    : path.join(path.dirname(process.execPath), '..', 'lib', 'node_modules', ...CODEX_PACKAGE_SEGMENTS)
+  const globalInstall = toInstallation('global', globalPackageDir)
+  if (globalInstall) {
+    installations.push(globalInstall)
+  }
+
+  return installations
+}
+
+/** 버전이 가장 높은 설치본. 같으면 prefix(앱 업데이트 위치)를 쓴다. 이미지 재빌드로 전역이 더 새로워지면 전역을 쓴다. */
+export function resolveNewestCodexCliInstallation() {
+  return findCodexCliInstallations().reduce<CodexCliInstallation | null>((best, candidate) => {
+    if (!best) {
+      return candidate
+    }
+    if (!candidate.version || !best.version) {
+      return best.version ? best : candidate
+    }
+    return compareCodexVersions(candidate.version, best.version) > 0 ? candidate : best
+  }, null)
+}
+
 export function resolveCodexCommand() {
+  const installation = resolveNewestCodexCliInstallation()
+  if (installation) {
+    return {
+      command: process.execPath,
+      prefixArgs: [installation.entry],
+    }
+  }
+
   if (process.platform === 'win32') {
     const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
-    const npmCodexJsPath = path.join(appData, 'npm', 'node_modules', '@openai', 'codex', 'bin', 'codex.js')
-    if (fs.existsSync(npmCodexJsPath)) {
-      return {
-        command: process.execPath,
-        prefixArgs: [npmCodexJsPath],
-      }
-    }
-
     const npmCodexCmdPath = path.join(appData, 'npm', 'codex.cmd')
     if (fs.existsSync(npmCodexCmdPath)) {
       return {
@@ -246,7 +339,7 @@ export function resolveCodexCommand() {
  * spawn 내장 timeout은 직계 자식만 SIGKILL 해서, win32 래퍼(node codex.js)가 띄운 실제
  * codex.exe가 고아로 남는다. 프로세스 트리 전체를 종료한다.
  */
-function killCodexProcessTree(child: ChildProcess, signal: 'SIGTERM' | 'SIGKILL') {
+export function killCodexProcessTree(child: ChildProcess, signal: 'SIGTERM' | 'SIGKILL') {
   const pid = child.pid
   if (typeof pid !== 'number' || child.exitCode !== null || child.signalCode !== null) {
     return
@@ -289,7 +382,7 @@ type CodexProcessTimeout = {
 }
 
 /** 지정 시간이 지나면 SIGTERM → 유예 후 강제 종료 순으로 codex 프로세스 트리를 정리한다. */
-function scheduleCodexProcessTimeout(child: ChildProcess, timeoutMs: number): CodexProcessTimeout {
+export function scheduleCodexProcessTimeout(child: ChildProcess, timeoutMs: number): CodexProcessTimeout {
   let timedOut = false
   let escalationTimer: NodeJS.Timeout | null = null
 
@@ -493,7 +586,7 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
     '--skip-git-repo-check',
     '--ephemeral',
     '--sandbox',
-    'workspace-write',
+    resolveCodexSandboxMode(),
     '--json',
     '--output-last-message',
     lastMessagePath,

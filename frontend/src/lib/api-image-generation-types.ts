@@ -94,6 +94,25 @@ export interface CodexGenerationStatus {
   exitCode: number | null
 }
 
+/** Installed vs npm-latest Codex CLI version (admin only). */
+export interface CodexCliVersionInfo {
+  current: string | null
+  latest: string | null
+  updateAvailable: boolean
+  updating: boolean
+  installTarget: 'prefix' | 'global'
+  message: string | null
+}
+
+/** Server-side `codex login --device-auth` progress (admin only). */
+export interface CodexDeviceLoginState {
+  status: 'idle' | 'starting' | 'pending' | 'succeeded' | 'failed' | 'cancelled'
+  verificationUrl: string | null
+  userCode: string | null
+  expiresAt: string | null
+  message: string | null
+}
+
 export interface GenerationHistoryRecord {
   id: number
   service_type: GenerationServiceType

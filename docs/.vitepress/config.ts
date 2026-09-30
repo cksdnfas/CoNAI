@@ -40,6 +40,7 @@ export default {
           { text: '이미지 생성 개요', link: '/GUIDE/GENERATION_OVERVIEW' },
           { text: 'NAI 생성', link: '/GUIDE/NAI_GENERATION' },
           { text: 'Codex 생성', link: '/GUIDE/CODEX_GENERATION' },
+          { text: 'Codex 채팅', link: '/GUIDE/CODEX_CHAT' },
           { text: 'ComfyUI 생성', link: '/GUIDE/COMFYUI_GENERATION' },
           { text: '워크플로우 편집', link: '/GUIDE/WORKFLOW_EDITOR' },
           { text: '설정 전체 지도', link: '/GUIDE/SETTINGS_OVERVIEW' },

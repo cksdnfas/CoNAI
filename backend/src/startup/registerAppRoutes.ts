@@ -18,6 +18,7 @@ import { graphWorkflowRoutes } from '../routes/graphWorkflows';
 import naiRoutes from '../routes/nai';
 import generationHistoryRoutes from '../routes/generation-history.routes';
 import generationQueueRoutes from '../routes/generation-queue.routes';
+import codexChatRoutes from '../routes/codex-chat.routes';
 import { wildcardMutationRoutes } from '../routes/wildcards.mutation.routes';
 import { wildcardReadRoutes } from '../routes/wildcards.read.routes';
 import { wildcardUtilityRoutes } from '../routes/wildcards.utility.routes';
@@ -285,6 +286,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/nai', options.uploadLimiter, optionalAuth, requirePermission('page.generation.view'), naiRoutes);
   app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, allowScopedGenerationHistoryAccess, generationHistoryRoutes);
   app.use('/api/generation-queue', requireAuth, generationQueueRoutes);
+  app.use('/api/codex-chat', requireAuth, codexChatRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardUtilityRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardMutationRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardReadRoutes);

@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { runtimePaths } from '../config/runtimePaths'
 import { normalizeOptionalString } from '../utils/valueNormalization'
-import { assertCodexAvailable, resolveCodexCommand } from './codexGenerationExecutor'
+import { assertCodexAvailable, resolveCodexCommand, resolveCodexSandboxMode } from './codexGenerationExecutor'
 
 const CODEX_MESSAGE_JOB_ROOT = path.join(runtimePaths.tempDir, 'codex-message-jobs')
 const CODEX_CANCELLED_MESSAGE = '__CODEX_MESSAGE_CANCELLED__'
@@ -120,7 +120,7 @@ async function runCodexExec(params: {
     '--skip-git-repo-check',
     '--ephemeral',
     '--sandbox',
-    'workspace-write',
+    resolveCodexSandboxMode(),
     '--json',
     '--output-last-message',
     lastMessagePath,

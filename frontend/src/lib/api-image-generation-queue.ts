@@ -1,5 +1,5 @@
 import { requestJson } from './api-image-generation-request'
-import type { CodexGenerationStatus, CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus } from './api-image-generation-types'
+import type { CodexCliVersionInfo, CodexDeviceLoginState, CodexGenerationStatus, CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus } from './api-image-generation-types'
 
 interface GenerationQueueListResponse {
   success: boolean
@@ -18,6 +18,11 @@ interface GenerationQueueMutationResponse {
 interface CodexGenerationStatusResponse {
   success: boolean
   data: CodexGenerationStatus
+}
+
+interface CodexDeviceLoginResponse {
+  success: boolean
+  data: CodexDeviceLoginState
 }
 
 /** Load queue jobs for the image generation workspace. */
@@ -59,6 +64,28 @@ export async function createGenerationQueueJob(payload: CreateGenerationQueueJob
 /** Load current Codex CLI availability/authentication state for the image-generation workspace. */
 export async function getCodexGenerationStatus() {
   return requestJson<CodexGenerationStatusResponse>('/api/generation-queue/codex/status')
+}
+
+/** Start (or rejoin) the server's Codex device-code sign-in; resolves once the one-time code is ready. */
+export async function startCodexDeviceLogin() {
+  return requestJson<CodexDeviceLoginResponse>('/api/generation-queue/codex/login', { method: 'POST' })
+}
+
+export async function getCodexDeviceLogin() {
+  return requestJson<CodexDeviceLoginResponse>('/api/generation-queue/codex/login')
+}
+
+export async function cancelCodexDeviceLogin() {
+  return requestJson<CodexDeviceLoginResponse>('/api/generation-queue/codex/login', { method: 'DELETE' })
+}
+
+export async function getCodexCliVersion(options?: { refresh?: boolean }) {
+  return requestJson<{ success: boolean; data: CodexCliVersionInfo }>(`/api/generation-queue/codex/cli${options?.refresh ? '?refresh=true' : ''}`)
+}
+
+/** Install the latest Codex CLI on the server; rejected while Codex jobs are running. */
+export async function updateCodexCli() {
+  return requestJson<{ success: boolean; data: CodexCliVersionInfo }>('/api/generation-queue/codex/cli/update', { method: 'POST' })
 }
 
 /** Cached CLI suggestions; custom model IDs remain supported when the cache is unavailable. */

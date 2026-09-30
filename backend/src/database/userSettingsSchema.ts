@@ -383,6 +383,33 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Codex chat: one row per conversation; the Codex thread holds the model context, these rows are the UI transcript.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS codex_chat_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
+      codex_thread_id TEXT,
+      title TEXT NOT NULL DEFAULT '',
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS codex_chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id INTEGER NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+      content TEXT NOT NULL DEFAULT '',
+      tool_calls TEXT,
+      status TEXT NOT NULL CHECK(status IN ('completed', 'failed', 'interrupted')) DEFAULT 'completed',
+      error TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (thread_id) REFERENCES codex_chat_threads(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_codex_chat_threads_account ON codex_chat_threads(account_id, updated_date DESC)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_codex_chat_messages_thread ON codex_chat_messages(thread_id, id)');
+
   // 19. Generic long-running runtime jobs (thumbnail regenerate / group rematch / folder scan ...)
   // 진행률·취소·재시작 복구의 정본. images.db 는 스캔이 두들기는 hot DB 라 하트비트 쓰기를 얹지 않는다.
   db.exec(`
