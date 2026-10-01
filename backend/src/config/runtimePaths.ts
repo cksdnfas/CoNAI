@@ -144,6 +144,18 @@ export function ensureRuntimeDirectories(): void {
     }
   });
 
+  // Codex CLI refuses to start when CODEX_HOME is missing. The Docker image creates it, but an
+  // existing volume mounted over /app/data/user hides that, so create it here.
+  const codexHome = process.env.CODEX_HOME?.trim();
+  if (codexHome && !fs.existsSync(codexHome)) {
+    try {
+      fs.mkdirSync(codexHome, { recursive: true });
+      console.log(`✅ Created directory: ${codexHome}`);
+    } catch (error) {
+      console.error(`❌ Failed to create directory: ${codexHome}`, error);
+    }
+  }
+
   // Create upload subdirectories to match default database folders
   const subdirectories = [
     path.join(uploadsDir, 'images'),           // 직접 업로드
