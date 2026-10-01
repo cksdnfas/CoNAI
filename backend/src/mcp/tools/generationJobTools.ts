@@ -70,7 +70,7 @@ async function describeJob(jobId: number, context: McpRequestContext) {
 export function registerGenerationJobTools(server: McpServer, context: McpRequestContext): void {
   server.tool(
     'get_codex_generation_options',
-    'Get the Codex image-generation request schema and cached agent-model suggestions. Use the same parameters as the Codex UI with submit_generation_job(service_type="codex"). Suggestions may be stale; custom model IDs are accepted. Prompts are saved with results; use get_generation_history_request to retrieve them and create_prompt_preset to save reusable text.',
+    'Get the Codex image-generation request schema and the agent models the server's Codex CLI offers. Use the same parameters as the Codex UI with submit_generation_job(service_type="codex"). The list may be incomplete; custom model IDs are accepted. Prompts are saved with results; use get_generation_history_request to retrieve them and create_prompt_preset to save reusable text.',
     {},
     async () => ({ content: [{ type: 'text' as const, text: JSON.stringify({
       ...await getCodexModelSuggestions(),

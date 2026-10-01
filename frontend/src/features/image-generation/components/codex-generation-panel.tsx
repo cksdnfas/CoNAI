@@ -1,7 +1,7 @@
 import { CodexIcon } from '@/components/common/provider-icons'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LogIn, RefreshCw, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,6 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Text } from '@/components/ui/text'
 import { Field } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
 import { getAppSettings } from '@/lib/api-settings-general'
 import { createGenerationQueueJob, getCodexGenerationModels, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { useI18n } from '@/i18n'
@@ -32,6 +31,7 @@ import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from 
 import { CodexPromptPresetButton } from './codex-prompt-preset-button'
 import { CodexDeviceLoginDialog } from './codex-device-login-dialog'
 import { CodexCliUpdateButton } from './codex-cli-update-button'
+import { CodexModelSelect } from './codex-model-select'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 
 type CodexGenerationPanelProps = {
@@ -232,7 +232,6 @@ export function CodexGenerationPanel({
   const { t } = useI18n()
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const modelOptionsId = useId()
   const modelOptionsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 60_000, retry: false })
   const [, setPortalRevision] = useState(0)
 
@@ -587,16 +586,11 @@ export function CodexGenerationPanel({
           useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
         )}>
         <Field label={t({ ko: 'Codex 실행 모델', en: 'Codex agent model' })}>
-          <Input
+          <CodexModelSelect
             value={codexForm.model}
-            onChange={(event) => handleFieldChange('model', event.target.value)}
-            list={modelOptionsId}
-            maxLength={200}
-            placeholder={t({ ko: '기본값', en: 'Default' })}
+            onChange={(value) => handleFieldChange('model', value)}
+            models={modelOptionsQuery.data?.data.models}
           />
-          <datalist id={modelOptionsId}>
-            {modelOptionsQuery.data?.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-          </datalist>
         </Field>
         <NaiPromptSection
           tool="codex"

@@ -1,7 +1,5 @@
-import { useEffect, useId, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ToggleChip } from '@/components/ui/chip'
-import { Input } from '@/components/ui/input'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -9,6 +7,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { getCodexChatSettings, updateCodexChatSettings, type CodexChatScope, type CodexChatSettings } from '@/lib/api-codex-chat'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
+import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
 import { SettingsSwitchRow } from './settings-switch-row'
 import { InstantApplyHint } from './settings-section-status'
 import { SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
@@ -33,10 +32,8 @@ export function CodexChatSettingsCard() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const modelListId = useId()
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: getCodexChatSettings })
   const modelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000 })
-  const [modelDraft, setModelDraft] = useState<string | null>(null)
 
   const update = useMutation({
     mutationFn: updateCodexChatSettings,
@@ -47,17 +44,7 @@ export function CodexChatSettingsCard() {
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '저장하지 못했어.', en: 'Could not save.' }), tone: 'error' }),
   })
 
-  useEffect(() => {
-    setModelDraft(null)
-  }, [query.data?.model])
-
   const settings = query.data
-  const commitModel = () => {
-    if (modelDraft === null || !settings || modelDraft.trim() === settings.model) {
-      return
-    }
-    update.mutate({ model: modelDraft.trim() })
-  }
 
   const modelLabel = t({ ko: '실행 모델', en: 'Agent model' })
 
@@ -94,25 +81,17 @@ export function CodexChatSettingsCard() {
             </div>
           </SettingRow>
           <SettingRow label={modelLabel} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
-            <Input
+            <CodexModelSelect
               variant="settings"
-              value={modelDraft ?? settings.model}
-              onChange={(event) => setModelDraft(event.target.value)}
-              onBlur={commitModel}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.currentTarget.blur()
-                }
+              value={settings.model}
+              onChange={(model) => {
+                if (model !== settings.model) update.mutate({ model })
               }}
-              list={modelListId}
-              maxLength={200}
-              placeholder={t({ ko: '기본값', en: 'Default' })}
+              models={modelsQuery.data?.data.models}
+              disabled={update.isPending}
               aria-label={modelLabel}
               className="min-w-0 flex-1"
             />
-            <datalist id={modelListId}>
-              {modelsQuery.data?.data.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-            </datalist>
           </SettingRow>
         </>
       ) : null}

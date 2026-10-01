@@ -88,9 +88,11 @@ export async function updateCodexCli() {
   return requestJson<{ success: boolean; data: CodexCliVersionInfo }>('/api/generation-queue/codex/cli/update', { method: 'POST' })
 }
 
-/** Cached CLI suggestions; custom model IDs remain supported when the cache is unavailable. */
+export type CodexModelOption = { id: string; label: string; isDefault?: boolean }
+
+/** Models the server's Codex CLI offers; custom model IDs remain supported when the list is unavailable. */
 export async function getCodexGenerationModels() {
-  return requestJson<{ success: boolean; data: { models: Array<{ id: string; label: string }>; source: 'cli-cache' | 'unavailable' } }>('/api/generation-queue/codex/models')
+  return requestJson<{ success: boolean; data: { models: CodexModelOption[]; source: 'cli' | 'cli-cache' | 'unavailable' } }>('/api/generation-queue/codex/models')
 }
 
 /** Request cancellation for a queue job. */
