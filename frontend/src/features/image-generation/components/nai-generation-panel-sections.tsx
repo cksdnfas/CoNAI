@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { GenerateActionBar, GenerateActionBarIconButton, type GenerateActionBarVariant } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { GenerationToolbarStatus } from './generation-toolbar-status'
-import { PromptToggleField } from './prompt-toggle-field'
+import { PromptToggleField, type PromptToggleExtraTab } from './prompt-toggle-field'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
 interface NaiConnectionHeaderProps {
@@ -94,6 +94,7 @@ interface NaiPromptSectionProps {
   tool?: PromptWildcardTool
   onPromptChange: (value: string) => void
   onNegativePromptChange: (value: string) => void
+  extraTabs?: PromptToggleExtraTab[]
 }
 
 /** Render the primary prompt section for NovelAI generation. */
@@ -103,6 +104,7 @@ export function NaiPromptSection({
   tool = 'nai',
   onPromptChange,
   onNegativePromptChange,
+  extraTabs,
 }: NaiPromptSectionProps) {
   return (
     <PromptToggleField
@@ -111,8 +113,7 @@ export function NaiPromptSection({
       negativeValue={negativePrompt}
       onPositiveChange={onPromptChange}
       onNegativeChange={onNegativePromptChange}
-      positiveRows={6}
-      negativeRows={6}
+      extraTabs={extraTabs}
     />
   )
 }
