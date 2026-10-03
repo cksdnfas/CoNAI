@@ -42,8 +42,12 @@ type GenerationResultStageProps = {
   onShowHistory?: () => void
 }
 
-/** Progress card for the requester's running or queued job on this provider. */
-function StageJobProgress({ job, jobCount, nowMs }: { job: GenerationQueueJobRecord; jobCount: number; nowMs: number }) {
+/**
+ * Progress for the requester's running or queued job on this provider.
+ * `inline` sits in the meta-line slot under the media so it never covers video controls;
+ * the floating card is only used on an empty stage.
+ */
+function StageJobProgress({ job, jobCount, nowMs, inline = false }: { job: GenerationQueueJobRecord; jobCount: number; nowMs: number; inline?: boolean }) {
   const { t, formatNumber } = useI18n()
   const isRunning = job.status === 'running'
   const percent = getGenerationQueueProgressPercent(job, nowMs)
@@ -55,7 +59,13 @@ function StageJobProgress({ job, jobCount, nowMs }: { job: GenerationQueueJobRec
     : getGenerationQueueWaitLabel(job, t, formatNumber) ?? getGenerationQueueLaneLabel(job, t, formatNumber)
 
   return (
-    <div role="status" className="w-full max-w-sm space-y-2 rounded-md bg-surface-container/90 p-3 shadow-elevation-2 backdrop-blur-md">
+    <div
+      role="status"
+      className={cn(
+        'w-full',
+        inline ? 'space-y-1.5' : 'max-w-sm space-y-2 rounded-md bg-surface-container/90 p-3 shadow-elevation-2 backdrop-blur-md',
+      )}
+    >
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="min-w-0 truncate font-medium text-foreground">
           {title}
@@ -215,8 +225,8 @@ export function GenerationResultStage({
             />
           )}
 
-          {activeJob ? (
-            <div className={cn('pointer-events-none absolute inset-x-3 flex justify-center', selected ? 'bottom-3' : 'inset-y-3 items-center')}>
+          {activeJob && !selected ? (
+            <div className="pointer-events-none absolute inset-3 flex items-center justify-center">
               <StageJobProgress job={activeJob} jobCount={activeJobCount} nowMs={nowMs} />
             </div>
           ) : null}
@@ -224,6 +234,7 @@ export function GenerationResultStage({
         {actions}
       </div>
 
+      {activeJob && selected ? <StageJobProgress job={activeJob} jobCount={activeJobCount} nowMs={nowMs} inline /> : null}
       {selected ? <StageMetaLine key={selectedId} image={selected} /> : null}
 
       {items.length > 0 ? (
