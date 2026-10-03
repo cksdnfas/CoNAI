@@ -1,60 +1,63 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent, PointerEvent } from 'react'
 
-/** Collect horizontal nav scroll hints and drag-to-scroll behavior for the app shell. */
-export function useAppShellNavScroll(watchKey: string) {
-  const navScrollRef = useRef<HTMLDivElement | null>(null)
-  const navDragPointerIdRef = useRef<number | null>(null)
-  const navDragStartXRef = useRef(0)
-  const navDragStartScrollLeftRef = useRef(0)
-  const suppressNavClickRef = useRef(false)
-  const [canScrollNavLeft, setCanScrollNavLeft] = useState(false)
-  const [canScrollNavRight, setCanScrollNavRight] = useState(false)
-  const [isDraggingNav, setIsDraggingNav] = useState(false)
+/**
+ * Edge hints (can scroll left/right) and mouse drag-to-scroll for a horizontal strip with a hidden scrollbar.
+ * Used by the app-shell nav and the generation result filmstrip. `watchKey` re-binds when the strip's content changes.
+ */
+export function useHorizontalDragScroll(watchKey: unknown) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const dragPointerIdRef = useRef<number | null>(null)
+  const dragStartXRef = useRef(0)
+  const dragStartScrollLeftRef = useRef(0)
+  const suppressClickRef = useRef(false)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   useEffect(() => {
-    const navScrollElement = navScrollRef.current
-    if (!navScrollElement) {
+    const scrollElement = scrollRef.current
+    if (!scrollElement) {
       return
     }
 
-    const updateNavScrollHints = () => {
-      const maxScrollLeft = Math.max(0, navScrollElement.scrollWidth - navScrollElement.clientWidth)
-      setCanScrollNavLeft(navScrollElement.scrollLeft > 4)
-      setCanScrollNavRight(navScrollElement.scrollLeft < maxScrollLeft - 4)
+    const updateScrollHints = () => {
+      const maxScrollLeft = Math.max(0, scrollElement.scrollWidth - scrollElement.clientWidth)
+      setCanScrollLeft(scrollElement.scrollLeft > 4)
+      setCanScrollRight(scrollElement.scrollLeft < maxScrollLeft - 4)
     }
 
-    updateNavScrollHints()
+    updateScrollHints()
 
     const resizeObserver = new ResizeObserver(() => {
-      updateNavScrollHints()
+      updateScrollHints()
     })
-    resizeObserver.observe(navScrollElement)
+    resizeObserver.observe(scrollElement)
 
-    const contentElement = navScrollElement.firstElementChild
+    const contentElement = scrollElement.firstElementChild
     if (contentElement instanceof HTMLElement) {
       resizeObserver.observe(contentElement)
     }
 
-    navScrollElement.addEventListener('scroll', updateNavScrollHints, { passive: true })
-    window.addEventListener('resize', updateNavScrollHints)
+    scrollElement.addEventListener('scroll', updateScrollHints, { passive: true })
+    window.addEventListener('resize', updateScrollHints)
 
     return () => {
       resizeObserver.disconnect()
-      navScrollElement.removeEventListener('scroll', updateNavScrollHints)
-      window.removeEventListener('resize', updateNavScrollHints)
+      scrollElement.removeEventListener('scroll', updateScrollHints)
+      window.removeEventListener('resize', updateScrollHints)
     }
   }, [watchKey])
 
-  /** Reset the temporary nav-drag state after horizontal scroll gestures. */
-  const finishNavDrag = () => {
-    navDragPointerIdRef.current = null
-    navDragStartXRef.current = 0
-    navDragStartScrollLeftRef.current = 0
-    setIsDraggingNav(false)
+  /** Reset the temporary drag state after horizontal scroll gestures. */
+  const finishDrag = () => {
+    dragPointerIdRef.current = null
+    dragStartXRef.current = 0
+    dragStartScrollLeftRef.current = 0
+    setIsDragging(false)
 
     window.setTimeout(() => {
-      suppressNavClickRef.current = false
+      suppressClickRef.current = false
     }, 0)
   }
 
@@ -63,59 +66,59 @@ export function useAppShellNavScroll(watchKey: string) {
       return
     }
 
-    navDragPointerIdRef.current = event.pointerId
-    navDragStartXRef.current = event.clientX
-    navDragStartScrollLeftRef.current = navScrollRef.current?.scrollLeft ?? 0
-    suppressNavClickRef.current = false
-    setIsDraggingNav(false)
+    dragPointerIdRef.current = event.pointerId
+    dragStartXRef.current = event.clientX
+    dragStartScrollLeftRef.current = scrollRef.current?.scrollLeft ?? 0
+    suppressClickRef.current = false
+    setIsDragging(false)
   }
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (navDragPointerIdRef.current !== event.pointerId || !navScrollRef.current) {
+    if (dragPointerIdRef.current !== event.pointerId || !scrollRef.current) {
       return
     }
 
-    const deltaX = event.clientX - navDragStartXRef.current
-    if (!isDraggingNav && Math.abs(deltaX) > 6) {
-      suppressNavClickRef.current = true
-      setIsDraggingNav(true)
+    const deltaX = event.clientX - dragStartXRef.current
+    if (!isDragging && Math.abs(deltaX) > 6) {
+      suppressClickRef.current = true
+      setIsDragging(true)
     }
 
     if (Math.abs(deltaX) <= 1) {
       return
     }
 
-    navScrollRef.current.scrollLeft = navDragStartScrollLeftRef.current - deltaX
+    scrollRef.current.scrollLeft = dragStartScrollLeftRef.current - deltaX
     event.preventDefault()
     event.stopPropagation()
   }
 
   const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (navDragPointerIdRef.current !== event.pointerId) {
+    if (dragPointerIdRef.current !== event.pointerId) {
       return
     }
 
-    finishNavDrag()
+    finishDrag()
   }
 
   const handlePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
-    if (navDragPointerIdRef.current !== event.pointerId) {
+    if (dragPointerIdRef.current !== event.pointerId) {
       return
     }
 
-    finishNavDrag()
+    finishDrag()
   }
 
   const handlePointerLeave = (event: PointerEvent<HTMLDivElement>) => {
-    if (navDragPointerIdRef.current !== event.pointerId || !isDraggingNav) {
+    if (dragPointerIdRef.current !== event.pointerId || !isDragging) {
       return
     }
 
-    finishNavDrag()
+    finishDrag()
   }
 
-  const handleNavItemClick = (event: MouseEvent<HTMLElement>) => {
-    if (!suppressNavClickRef.current) {
+  const handleItemClick = (event: MouseEvent<HTMLElement>) => {
+    if (!suppressClickRef.current) {
       return
     }
 
@@ -124,15 +127,15 @@ export function useAppShellNavScroll(watchKey: string) {
   }
 
   return {
-    navScrollRef,
-    canScrollNavLeft,
-    canScrollNavRight,
-    isDraggingNav,
+    scrollRef,
+    canScrollLeft,
+    canScrollRight,
+    isDragging,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
     handlePointerCancel,
     handlePointerLeave,
-    handleNavItemClick,
+    handleItemClick,
   }
 }

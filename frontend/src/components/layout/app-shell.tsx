@@ -16,7 +16,7 @@ import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
 import type { HeaderNavigationItemKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
-import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
+import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { Tip } from '@/components/ui/tooltip'
 
 const GenerationQueueHeaderWidgetLazy = lazy(async () => {
@@ -98,17 +98,17 @@ function AppShellLayout() {
   const shouldShowAccountMenu = headerNavigation.account !== false
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
   const {
-    navScrollRef,
-    canScrollNavLeft,
-    canScrollNavRight,
-    isDraggingNav,
+    scrollRef: navScrollRef,
+    canScrollLeft: canScrollNavLeft,
+    canScrollRight: canScrollNavRight,
+    isDragging: isDraggingNav,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
     handlePointerCancel,
     handlePointerLeave,
-    handleNavItemClick,
-  } = useAppShellNavScroll(location.pathname)
+    handleItemClick: handleNavItemClick,
+  } = useHorizontalDragScroll(location.pathname)
 
   if (isWallpaperRuntime) {
     return (

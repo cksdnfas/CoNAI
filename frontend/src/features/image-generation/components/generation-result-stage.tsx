@@ -1,6 +1,7 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, type KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { History, ImageIcon, Maximize2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, History, ImageIcon, Maximize2 } from 'lucide-react'
+import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -44,7 +45,7 @@ type GenerationResultStageProps = {
 
 /**
  * Progress for the requester's running or queued job on this provider.
- * `inline` sits in the meta-line slot under the media so it never covers video controls;
+ * `inline` is a bare gauge under the media (the stage/ETA text moves to its tooltip) so it never covers video controls;
  * the floating card is only used on an empty stage.
  */
 function StageJobProgress({ job, jobCount, nowMs, inline = false }: { job: GenerationQueueJobRecord; jobCount: number; nowMs: number; inline?: boolean }) {
@@ -58,14 +59,13 @@ function StageJobProgress({ job, jobCount, nowMs, inline = false }: { job: Gener
     ? getGenerationQueueRemainingLabel(job, t, formatNumber, nowMs)
     : getGenerationQueueWaitLabel(job, t, formatNumber) ?? getGenerationQueueLaneLabel(job, t, formatNumber)
 
+  if (inline) {
+    const label = [title, jobCount > 1 ? `+${formatNumber(jobCount - 1)}` : null, detail].filter(Boolean).join(' · ')
+    return <Progress size="sm" value={isRunning ? percent : null} aria-label={label || undefined} title={label || undefined} />
+  }
+
   return (
-    <div
-      role="status"
-      className={cn(
-        'w-full',
-        inline ? 'space-y-1.5' : 'max-w-sm space-y-2 rounded-md bg-surface-container/90 p-3 shadow-elevation-2 backdrop-blur-md',
-      )}
-    >
+    <div role="status" className="w-full max-w-sm space-y-2 rounded-md bg-surface-container/90 p-3 shadow-elevation-2 backdrop-blur-md">
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="min-w-0 truncate font-medium text-foreground">
           {title}
@@ -123,7 +123,18 @@ export function GenerationResultStage({
 }: GenerationResultStageProps) {
   const { t } = useI18n()
   const imageViewModal = useImageViewModal()
-  const stripRef = useRef<HTMLDivElement | null>(null)
+  const {
+    scrollRef: stripRef,
+    canScrollLeft,
+    canScrollRight,
+    isDragging,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerCancel,
+    handlePointerLeave,
+    handleItemClick,
+  } = useHorizontalDragScroll(items.length)
   const selectedId = selected ? String(selected.id) : null
   const isBlurred = selected ? shouldBlur?.(selected) ?? false : false
   const isVideo = selected ? getImageListMediaKind(selected) === 'video' : false
@@ -135,7 +146,7 @@ export function GenerationResultStage({
 
     const thumb = stripRef.current.querySelector<HTMLElement>(`[data-stage-id="${CSS.escape(selectedId)}"]`)
     thumb?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [selectedId])
+  }, [selectedId, stripRef])
 
   const handleStripKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
@@ -234,18 +245,32 @@ export function GenerationResultStage({
         {actions}
       </div>
 
-      {activeJob && selected ? <StageJobProgress job={activeJob} jobCount={activeJobCount} nowMs={nowMs} inline /> : null}
+      {/* Fixed-height slot: the gauge coming and going must not resize the media above it. */}
+      {selected ? (
+        <div className="flex h-1 shrink-0 items-center">
+          {activeJob ? <StageJobProgress job={activeJob} jobCount={activeJobCount} nowMs={nowMs} inline /> : null}
+        </div>
+      ) : null}
       {selected ? <StageMetaLine key={selectedId} image={selected} /> : null}
 
       {items.length > 0 ? (
         <div className="flex shrink-0 items-center gap-2">
+          <div className="relative min-w-0 flex-1">
           <div
             ref={stripRef}
             role="listbox"
             aria-label={t({ ko: '최근 결과', en: 'Recent results' })}
             aria-orientation="horizontal"
             onKeyDown={handleStripKeyDown}
-            className="flex min-w-0 flex-1 gap-2 overflow-x-auto p-1"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            onPointerLeave={handlePointerLeave}
+            onClickCapture={handleItemClick}
+            style={{ touchAction: 'pan-y pinch-zoom' }}
+            // Scrollbar hidden (it ran into the active thumb's ring); edge chevrons + drag replace it.
+            className={cn('theme-nav-scroll flex gap-2 overflow-x-auto p-1.5', isDragging && 'cursor-grabbing select-none')}
           >
             {items.map((item) => {
               const id = String(item.id)
@@ -260,8 +285,10 @@ export function GenerationResultStage({
                   tabIndex={isActive || (selectedId === null && item === items[0]) ? 0 : -1}
                   data-stage-id={id}
                   onClick={() => onSelect(id)}
+                  draggable={false}
                   className={cn(
                     'relative h-16 w-auto shrink-0 overflow-hidden rounded-sm p-0 opacity-70 hover:opacity-100 sm:h-20',
+                    isDragging && 'pointer-events-none',
                     isActive && 'opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background',
                   )}
                 >
@@ -269,12 +296,24 @@ export function GenerationResultStage({
                     src={item.thumbnail_url ?? undefined}
                     alt=""
                     loading="lazy"
+                    draggable={false}
                     className={cn('h-full w-auto max-w-none object-contain', shouldBlur?.(item) && 'blur-md')}
                     style={item.width && item.height ? { aspectRatio: `${item.width} / ${item.height}` } : undefined}
                   />
                 </Button>
               )
             })}
+          </div>
+          {canScrollLeft ? (
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-4 pl-1 text-foreground/45">
+              <ChevronLeft className="h-4 w-4" />
+            </div>
+          ) : null}
+          {canScrollRight ? (
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pl-4 pr-1 text-foreground/55">
+              <ChevronRight className="h-4 w-4" />
+            </div>
+          ) : null}
           </div>
           {onShowHistory ? (
             <IconButton size="icon-sm" variant="ghost" onClick={onShowHistory} label={t({ ko: '전체 기록', en: 'All history' })}>
