@@ -1,15 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useI18n } from '@/i18n'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
-
-/** An extra tab next to positive/negative (e.g. NAI character prompts). */
-export type PromptToggleExtraTab = {
-  value: string
-  label: ReactNode
-  content: ReactNode
-}
 
 type PromptToggleFieldProps = {
   tool: PromptWildcardTool
@@ -23,8 +16,7 @@ type PromptToggleFieldProps = {
   negativeLabel?: string
   positivePlaceholder?: string
   negativePlaceholder?: string
-  extraTabs?: PromptToggleExtraTab[]
-  /** Smaller tab bar for nested editors (e.g. one character inside the character tab). */
+  /** Smaller tab bar for nested editors (one NAI character block). */
   compact?: boolean
 }
 
@@ -61,18 +53,15 @@ export function PromptToggleField({
   negativeLabel,
   positivePlaceholder = '',
   negativePlaceholder = '',
-  extraTabs = [],
   compact = false,
 }: PromptToggleFieldProps) {
   const { t, formatNumber } = useI18n()
-  const [activeTab, setActiveTab] = useState('positive')
+  const [activeTab, setActiveTab] = useState<'positive' | 'negative'>('positive')
   const resolvedPositiveLabel = positiveLabel ?? t('image-generation.components.prompt.toggle.field.positive')
   const resolvedNegativeLabel = negativeLabel ?? t('image-generation.components.prompt.toggle.field.negative')
-  const extraTab = extraTabs.find((tab) => tab.value === activeTab) ?? null
-  const currentTab = extraTab ? activeTab : activeTab === 'negative' ? 'negative' : 'positive'
-  const promptValue = currentTab === 'negative' ? negativeValue : positiveValue
+  const promptValue = activeTab === 'negative' ? negativeValue : positiveValue
 
-  const summary = extraTab ? null : t({ ko: '{characters}자 · {rows}행', en: '{characters} chars · {rows} rows' }, {
+  const summary = t({ ko: '{characters}자 · {rows}행', en: '{characters} chars · {rows} rows' }, {
     characters: formatNumber(promptValue.trim().length),
     rows: formatNumber(getTextSegmentSpreadsheetRows(promptValue).length),
   })
@@ -81,27 +70,24 @@ export function PromptToggleField({
     <div className="min-w-0 space-y-3">
       <SegmentedTabBar
         size={compact ? 'xs' : 'sm'}
-        value={currentTab}
+        value={activeTab}
         ariaLabel={t({ ko: '프롬프트', en: 'Prompt' })}
         items={[
           { value: 'positive', label: <PromptTabLabel label={resolvedPositiveLabel} value={positiveValue} /> },
           { value: 'negative', label: <PromptTabLabel label={resolvedNegativeLabel} value={negativeValue} /> },
-          ...extraTabs.map(({ value, label }) => ({ value, label })),
         ]}
-        onChange={setActiveTab}
-        actions={summary ? <span className="text-xs tabular-nums text-muted-foreground">{summary}</span> : undefined}
+        onChange={(value) => setActiveTab(value === 'negative' ? 'negative' : 'positive')}
+        actions={<span className="text-xs tabular-nums text-muted-foreground">{summary}</span>}
       />
 
-      {extraTab ? extraTab.content : (
-        <TextSegmentSpreadsheetInput
-          key={currentTab}
-          tool={tool}
-          value={promptValue}
-          placeholder={currentTab === 'negative' ? negativePlaceholder : positivePlaceholder}
-          autocompletePromptType={currentTab === 'negative' ? 'negative' : 'positive'}
-          onChange={(nextRows) => (currentTab === 'negative' ? onNegativeChange : onPositiveChange)(joinTextSegmentSpreadsheetRows(nextRows))}
-        />
-      )}
+      <TextSegmentSpreadsheetInput
+        key={activeTab}
+        tool={tool}
+        value={promptValue}
+        placeholder={activeTab === 'negative' ? negativePlaceholder : positivePlaceholder}
+        autocompletePromptType={activeTab}
+        onChange={(nextRows) => (activeTab === 'negative' ? onNegativeChange : onPositiveChange)(joinTextSegmentSpreadsheetRows(nextRows))}
+      />
     </div>
   )
 }

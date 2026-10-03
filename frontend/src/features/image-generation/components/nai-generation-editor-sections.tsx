@@ -137,101 +137,106 @@ export function NaiGenerationEditorSections({
         negativePrompt={naiForm.negativePrompt}
         onPromptChange={(value) => handleNaiFieldChange('prompt', value)}
         onNegativePromptChange={(value) => handleNaiFieldChange('negativePrompt', value)}
-        extraTabs={[{
-          value: 'characters',
-          label: (
-            <span className="inline-flex items-center gap-1.5">
-              {t({ ko: '캐릭터', en: 'Characters' })}
-              {hasCharacters ? <span className="text-xs tabular-nums text-muted-foreground">{naiForm.characters.length}</span> : null}
-            </span>
-          ),
-          content: !supportsCharacterPrompts ? (
-            <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}</Text>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <ToggleRow variant="detail" className="min-w-0 flex-1 justify-between">
-                  <span className="font-medium">AI's Choice</span>
-                  <Switch
-                    checked={naiForm.characterPositionAiChoice}
-                    disabled={!canUseCharacterPositions}
-                    onCheckedChange={(checked) => setNaiForm((current) => ({
-                      ...current,
-                      characterPositionAiChoice: checked,
-                    }))}
-                  />
-                </ToggleRow>
-                <IconButton
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={handleAddCharacterPrompt}
-                  label={t('image-generation.components.nai.generation.editor.sections.add.character')}
-                >
-                  <Plus className="h-4 w-4" />
-                </IconButton>
-              </div>
-
-              {useCharacterPositions ? (
-                <NaiControllerInsetBlock>
-                  <NaiCharacterPositionBoard
-                    characters={naiForm.characters.map((character, index) => ({
-                      label: `Character ${index + 1}`,
-                      centerX: character.centerX,
-                      centerY: character.centerY,
-                    }))}
-                    selectedIndex={selectedCharacterIndex}
-                    onSelectIndex={setSelectedCharacterIndex}
-                    onPositionChange={(index, centerX, centerY) => {
-                      handleCharacterPromptChange(index, 'centerX', centerX)
-                      handleCharacterPromptChange(index, 'centerY', centerY)
-                    }}
-                  />
-                </NaiControllerInsetBlock>
-              ) : null}
-
-              {hasCharacters ? (
-                <div className="divide-y divide-line">
-                  {naiForm.characters.map((character, index) => (
-                    <div
-                      key={`nai-character-${index}`}
-                      data-selected={index === selectedCharacterIndex || undefined}
-                      className="space-y-2 py-3 transition-shadow data-[selected=true]:shadow-[inset_2px_0_0_var(--primary)] data-[selected=true]:pl-3"
-                      onClick={() => setSelectedCharacterIndex(index)}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Text as="div" variant="label">Character {index + 1}</Text>
-                          <Badge variant="outline">{useCharacterPositions ? `${character.centerX} · ${character.centerY}` : "AI's Choice"}</Badge>
-                        </div>
-                        <IconButton
-                          size="icon-sm"
-                          variant="ghost"
-                          label={t('image-generation.components.nai.common.remove')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleRemoveCharacterPrompt(index)
-                          }}
-                        >
-                          <Trash2 />
-                        </IconButton>
-                      </div>
-
-                      <PromptToggleField
-                        compact
-                        tool="nai"
-                        positiveValue={character.prompt}
-                        negativeValue={character.uc}
-                        onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
-                        onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ),
-        }]}
       />
+
+      <Section
+        // Remount when the list goes empty <-> non-empty so it opens once characters exist (e.g. reused from history).
+        key={hasCharacters ? 'nai-characters-present' : 'nai-characters-empty'}
+        variant="settings"
+        heading={t({ ko: '캐릭터 프롬프트', en: 'Character Prompt' })}
+        collapsible
+        defaultOpen={hasCharacters}
+        actions={(
+          <>
+            <span className="px-1 text-xs tabular-nums text-muted-foreground">{naiForm.characters.length}</span>
+            <IconButton
+              size="icon-sm"
+              variant="ghost"
+              onClick={handleAddCharacterPrompt}
+              disabled={!supportsCharacterPrompts}
+              label={t('image-generation.components.nai.generation.editor.sections.add.character')}
+            >
+              <Plus className="h-4 w-4" />
+            </IconButton>
+          </>
+        )}
+      >
+        {!supportsCharacterPrompts ? (
+          <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}</Text>
+        ) : (
+          <>
+            <ToggleRow variant="detail" className="justify-between">
+              <span className="font-medium">AI's Choice</span>
+              <Switch
+                checked={naiForm.characterPositionAiChoice}
+                disabled={!canUseCharacterPositions}
+                onCheckedChange={(checked) => setNaiForm((current) => ({
+                  ...current,
+                  characterPositionAiChoice: checked,
+                }))}
+              />
+            </ToggleRow>
+
+            {useCharacterPositions ? (
+              <NaiControllerInsetBlock>
+                <NaiCharacterPositionBoard
+                  characters={naiForm.characters.map((character, index) => ({
+                    label: `Character ${index + 1}`,
+                    centerX: character.centerX,
+                    centerY: character.centerY,
+                  }))}
+                  selectedIndex={selectedCharacterIndex}
+                  onSelectIndex={setSelectedCharacterIndex}
+                  onPositionChange={(index, centerX, centerY) => {
+                    handleCharacterPromptChange(index, 'centerX', centerX)
+                    handleCharacterPromptChange(index, 'centerY', centerY)
+                  }}
+                />
+              </NaiControllerInsetBlock>
+            ) : null}
+
+            {hasCharacters ? (
+              <div className="divide-y divide-line">
+                {naiForm.characters.map((character, index) => (
+                  <div
+                    key={`nai-character-${index}`}
+                    data-selected={index === selectedCharacterIndex || undefined}
+                    className="space-y-2 py-3 pl-3 transition-shadow data-[selected=true]:shadow-[inset_2px_0_0_var(--primary)]"
+                    onClick={() => setSelectedCharacterIndex(index)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Text as="div" variant="label">Character {index + 1}</Text>
+                        <Badge variant="outline">{useCharacterPositions ? `${character.centerX} · ${character.centerY}` : "AI's Choice"}</Badge>
+                      </div>
+                      <IconButton
+                        size="icon-sm"
+                        variant="ghost"
+                        label={t('image-generation.components.nai.common.remove')}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          handleRemoveCharacterPrompt(index)
+                        }}
+                      >
+                        <Trash2 />
+                      </IconButton>
+                    </div>
+
+                    <PromptToggleField
+                      compact
+                      tool="nai"
+                      positiveValue={character.prompt}
+                      negativeValue={character.uc}
+                      onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
+                      onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </>
+        )}
+      </Section>
 
       <NaiSettingsSection
         naiForm={naiForm}
