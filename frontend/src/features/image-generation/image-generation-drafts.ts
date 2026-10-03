@@ -3,7 +3,7 @@ import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
 import type { NAIFormDraft, SelectedImageDraft, WorkflowFieldDraftValue, WorkflowNodeDraftValue, WorkflowTextDraftSegments } from './image-generation-shared'
-import { DEFAULT_NAI_FORM, EMPTY_NAI_CHARACTER_PROMPT, EMPTY_NAI_CHARACTER_REFERENCE, EMPTY_NAI_VIBE } from './image-generation-shared'
+import { DEFAULT_NAI_FORM, EMPTY_NAI_CHARACTER_PROMPT } from './image-generation-shared'
 import {
   getMiniMaxH3DirectorAssets,
   isMiniMaxH3DirectorInputLink,
@@ -64,8 +64,6 @@ function removeLocalStorageValue(key: string) {
 
 function normalizePersistedNaiFormDraft(value: Partial<NAIFormDraft> | null | undefined): NAIFormDraft {
   const rawCharacters = Array.isArray(value?.characters) ? value.characters : []
-  const rawVibes = Array.isArray(value?.vibes) ? value.vibes : []
-  const rawCharacterReferences = Array.isArray(value?.characterReferences) ? value.characterReferences : []
 
   return {
     ...DEFAULT_NAI_FORM,
@@ -74,22 +72,10 @@ function normalizePersistedNaiFormDraft(value: Partial<NAIFormDraft> | null | un
       ...EMPTY_NAI_CHARACTER_PROMPT,
       ...character,
     })),
-    vibes: rawVibes.map((vibe) => ({
-      ...EMPTY_NAI_VIBE,
-      strength: typeof vibe?.strength === 'string' ? vibe.strength : EMPTY_NAI_VIBE.strength,
-      informationExtracted: typeof vibe?.informationExtracted === 'string' ? vibe.informationExtracted : EMPTY_NAI_VIBE.informationExtracted,
-      encoded: '',
-      image: undefined,
-    })),
-    characterReferences: rawCharacterReferences.map((reference) => ({
-      ...EMPTY_NAI_CHARACTER_REFERENCE,
-      type: reference?.type === 'character' || reference?.type === 'style' || reference?.type === 'character&style'
-        ? reference.type
-        : EMPTY_NAI_CHARACTER_REFERENCE.type,
-      strength: typeof reference?.strength === 'string' ? reference.strength : EMPTY_NAI_CHARACTER_REFERENCE.strength,
-      fidelity: typeof reference?.fidelity === 'string' ? reference.fidelity : EMPTY_NAI_CHARACTER_REFERENCE.fidelity,
-      image: undefined,
-    })),
+    // Vibe/reference images are too heavy for localStorage, and a row restored without its image
+    // looks applied but is dropped from the request. Don't bring them back at all.
+    vibes: [],
+    characterReferences: [],
     sourceImage: undefined,
     maskImage: undefined,
   }
@@ -98,15 +84,8 @@ function normalizePersistedNaiFormDraft(value: Partial<NAIFormDraft> | null | un
 function buildPersistableNaiFormDraft(form: NAIFormDraft): NAIFormDraft {
   return {
     ...form,
-    vibes: form.vibes.map((vibe) => ({
-      ...vibe,
-      encoded: '',
-      image: undefined,
-    })),
-    characterReferences: form.characterReferences.map((reference) => ({
-      ...reference,
-      image: undefined,
-    })),
+    vibes: [],
+    characterReferences: [],
     sourceImage: undefined,
     maskImage: undefined,
   }

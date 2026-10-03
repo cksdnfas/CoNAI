@@ -1,21 +1,19 @@
-import type { ReactNode } from 'react'
-import { Plus, Save, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useState, type ReactNode } from 'react'
+import { Plus } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Section } from '@/components/ui/section'
-import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { StoredNaiCharacterReferenceAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAICharacterReferenceDraft, type SelectedImageDraft } from '../../image-generation-shared'
 import { ImageAttachmentPickerButton } from '../image-attachment-picker'
-import { NaiSelectedImageCard } from '../nai-selected-image-card'
+import { NaiAssetRow } from './nai-asset-row'
 import { NaiSavedAssetBrowser, type NaiSavedAssetBrowserProps } from './nai-saved-asset-browser'
 
 /** Saved-reference library wiring: the caller owns fetching/filtering, so each surface keeps its own query + search rules. */
-export type NaiCharacterReferenceLibraryProps = Omit<NaiSavedAssetBrowserProps, 'items' | 'onSelect' | 'emptyMessage' | 'title' | 'className'> & {
+export type NaiCharacterReferenceLibraryProps = Omit<NaiSavedAssetBrowserProps, 'items' | 'onSelect' | 'emptyMessage'> & {
   assets: StoredNaiCharacterReferenceAsset[]
   emptyMessage?: string
   onSelect: (asset: StoredNaiCharacterReferenceAsset) => void
@@ -30,7 +28,8 @@ type NaiCharacterReferencesEditorProps = {
   description?: ReactNode
   /** Shown when there are no rows; omit to render nothing. */
   emptyLabel?: string
-  onAdd: () => void
+  /** Append one new reference row from a picked image. */
+  onAddImage: (image: SelectedImageDraft) => void
   onRemove: (index: number) => void
   onImageChange: (index: number, image?: SelectedImageDraft) => void
   onFieldChange: (index: number, field: 'type' | 'strength' | 'fidelity', value: string) => void
@@ -39,14 +38,16 @@ type NaiCharacterReferencesEditorProps = {
   library: NaiCharacterReferenceLibraryProps
 }
 
-/** Shared NAI character-reference editor (rows + saved-reference library) used by the NAI generation form and module-graph inputs. */
+type PickerState = { mode: 'add' } | { mode: 'replace'; index: number } | null
+
+/** Shared NAI character-reference editor used by the NAI generation form and module-graph inputs: compact rows + one add picker. */
 export function NaiCharacterReferencesEditor({
   references,
   supportsCharacterReference = true,
   defaultOpen = false,
   description,
   emptyLabel,
-  onAdd,
+  onAddImage,
   onRemove,
   onImageChange,
   onFieldChange,
@@ -54,108 +55,121 @@ export function NaiCharacterReferencesEditor({
   library,
 }: NaiCharacterReferencesEditorProps) {
   const { t } = useI18n()
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  const [picker, setPicker] = useState<PickerState>(null)
   const { assets, emptyMessage, onSelect, ...browserProps } = library
 
   return (
-    <div className="space-y-0">
-      <Section
-        variant="settings"
-        heading={t({ ko: '레퍼런스', en: 'References' })}
-        description={description}
-        collapsible
-        defaultOpen={defaultOpen}
-        className="@container"
-        actions={(
-          <>
-            <span className="px-1 text-xs tabular-nums text-muted-foreground">{references.length}</span>
-            <IconButton
-              size="icon-sm"
-              variant="ghost"
-              onClick={onAdd}
-              disabled={!supportsCharacterReference}
-              label={t('image-generation.components.nai.references.section.add.reference')}
-            >
-              <Plus />
-            </IconButton>
-          </>
-        )}
-      >
-        {!supportsCharacterReference ? <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</Text> : null}
+    <Section
+      variant="settings"
+      heading={t({ ko: '레퍼런스', en: 'References' })}
+      description={description}
+      collapsible
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      className="@container"
+      actions={(
+        <>
+          <span className="px-1 text-xs tabular-nums text-muted-foreground">{references.length}</span>
+          <IconButton
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => setPicker({ mode: 'add' })}
+            disabled={!supportsCharacterReference}
+            label={t('image-generation.components.nai.references.section.add.reference')}
+          >
+            <Plus />
+          </IconButton>
+          <ImageAttachmentPickerButton
+            hideTrigger
+            label={t('image-generation.components.nai.references.section.add.reference')}
+            modalTitle={picker?.mode === 'replace'
+              ? t('image-generation.components.nai.references.section.select.reference.image.with.index', { index: picker.index + 1 })
+              : t('image-generation.components.nai.references.section.add.reference')}
+            allowSaveDialog={false}
+            open={picker !== null}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) {
+                setPicker(null)
+              }
+            }}
+            librarySource={picker?.mode === 'add' ? {
+              label: t({ ko: '저장됨', en: 'Saved' }),
+              content: (
+                <NaiSavedAssetBrowser
+                  {...browserProps}
+                  items={assets.map((asset) => ({
+                    id: asset.id,
+                    title: asset.label,
+                    subtitle: asset.description?.trim() || asset.type,
+                    imageUrl: asset.thumbnail_url || asset.image_url || asset.image_data_url,
+                  }))}
+                  emptyMessage={emptyMessage ?? t('image-generation.components.nai.references.section.no.search.results.or.saved.references')}
+                  onSelect={(assetId) => {
+                    const asset = assets.find((entry) => entry.id === assetId)
+                    if (asset) {
+                      onSelect(asset)
+                      setIsOpen(true)
+                      setPicker(null)
+                    }
+                  }}
+                />
+              ),
+            } : undefined}
+            onSelect={(image) => {
+              if (!image || !picker) {
+                return
+              }
+              if (picker.mode === 'replace') {
+                onImageChange(picker.index, image)
+              } else {
+                onAddImage(image)
+                setIsOpen(true)
+              }
+            }}
+          />
+        </>
+      )}
+    >
+      {!supportsCharacterReference ? <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</Text> : null}
 
-        {references.length > 0 ? (
-          <div className="divide-y divide-line">
-            {references.map((reference, index) => (
-              <div key={`nai-character-reference-${index}`} className="space-y-4 py-4 first:pt-0 last:pb-0">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <Text as="div" variant="label">Reference {index + 1}</Text>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ImageAttachmentPickerButton
-                      label={reference.image
-                        ? t('image-generation.components.nai.references.section.change.reference.image')
-                        : t('image-generation.components.nai.references.section.select.reference.image')}
-                      modalTitle={t('image-generation.components.nai.references.section.select.reference.image.with.index', { index: index + 1 })}
-                      allowSaveDialog={false}
-                      onSelect={(image) => onImageChange(index, image)}
-                    />
-                    <Button type="button" variant="ghost" size="sm" onClick={() => onRemove(index)}>
-                      <Trash2 />
-                      {t('image-generation.components.nai.common.remove')}
-                    </Button>
-                  </div>
-                </div>
-
-                {reference.image ? <NaiSelectedImageCard image={reference.image} alt={`NAI character reference ${index + 1}`} /> : null}
-
-                <div className="grid gap-4 @lg:grid-cols-3">
-                  <FormField label={t({ ko: '유형', en: 'Type' })}>
-                    <Select value={reference.type} onChange={(event) => onFieldChange(index, 'type', event.target.value)}>
-                      <option value="character">{t({ ko: '캐릭터', en: 'Character' })}</option>
-                      <option value="style">{t({ ko: '스타일', en: 'Style' })}</option>
-                      <option value="character&style">{t({ ko: '캐릭터+스타일', en: 'Character + Style' })}</option>
-                    </Select>
-                  </FormField>
-                  <FormField label={t({ ko: '강도', en: 'Strength' })}>
-                    <NumberStepperInput min={0} max={1} step={0.01} value={reference.strength} onValueCommit={(value) => onFieldChange(index, 'strength', value)} />
-                  </FormField>
-                  <FormField label={t({ ko: '충실도', en: 'Fidelity' })}>
-                    <NumberStepperInput min={0} max={1} step={0.01} value={reference.fidelity} onValueCommit={(value) => onFieldChange(index, 'fidelity', value)} />
-                  </FormField>
-                </div>
-
-                {onSave ? (
-                  <div className="flex justify-end">
-                    <Button type="button" variant="secondary" onClick={() => onSave(index)} disabled={!reference.image}>
-                      <Save className="h-4 w-4" />
-                      {t('image-generation.components.nai.common.save')}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : emptyLabel ? (
-          <EmptyState size="compact" title={emptyLabel} />
-        ) : null}
-      </Section>
-
-      <NaiSavedAssetBrowser
-        {...browserProps}
-        title={t({ ko: '저장된 레퍼런스', en: 'Saved references' })}
-        items={assets.map((asset) => ({
-          id: asset.id,
-          title: asset.label,
-          subtitle: asset.description?.trim() || asset.type,
-          imageUrl: asset.thumbnail_url || asset.image_url || asset.image_data_url,
-        }))}
-        emptyMessage={emptyMessage ?? t('image-generation.components.nai.references.section.no.search.results.or.saved.references')}
-        className="mt-4 @container"
-        onSelect={(assetId) => {
-          const asset = assets.find((entry) => entry.id === assetId)
-          if (asset) {
-            onSelect(asset)
-          }
-        }}
-      />
-    </div>
+      {references.length > 0 ? (
+        <div className="divide-y divide-line">
+          {references.map((reference, index) => (
+            <NaiAssetRow
+              key={`nai-character-reference-${index}`}
+              image={reference.image}
+              title={reference.image?.fileName || `Reference ${index + 1}`}
+              meta={(
+                <select
+                  aria-label={t({ ko: '유형', en: 'Type' })}
+                  value={reference.type}
+                  onChange={(event) => onFieldChange(index, 'type', event.target.value)}
+                  className="-ml-1 h-6 max-w-full cursor-pointer field-sizing-content rounded-sm bg-transparent px-1 text-xs text-muted-foreground outline-none hover:bg-field focus-visible:ring-2 focus-visible:ring-primary/15"
+                >
+                  <option value="character">{t({ ko: '캐릭터', en: 'Character' })}</option>
+                  <option value="style">{t({ ko: '스타일', en: 'Style' })}</option>
+                  <option value="character&style">{t({ ko: '캐릭터+스타일', en: 'Character + Style' })}</option>
+                </select>
+              )}
+              strength={reference.strength}
+              strengthMin={0}
+              onStrengthCommit={(value) => onFieldChange(index, 'strength', value)}
+              menuFields={(
+                <FormField label={t({ ko: '충실도', en: 'Fidelity' })}>
+                  <NumberStepperInput min={0} max={1} step={0.01} value={reference.fidelity} onValueCommit={(value) => onFieldChange(index, 'fidelity', value)} />
+                </FormField>
+              )}
+              onReplaceImage={() => setPicker({ mode: 'replace', index })}
+              onSave={onSave ? () => onSave(index) : undefined}
+              saveDisabled={!reference.image}
+              onRemove={() => onRemove(index)}
+            />
+          ))}
+        </div>
+      ) : emptyLabel ? (
+        <EmptyState size="compact" title={emptyLabel} />
+      ) : null}
+    </Section>
   )
 }

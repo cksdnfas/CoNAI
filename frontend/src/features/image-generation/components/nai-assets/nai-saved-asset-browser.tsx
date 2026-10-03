@@ -1,11 +1,6 @@
-import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
-import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Section } from '@/components/ui/section'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
-import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import type { NaiSavedAssetSortOption } from './nai-saved-asset-preferences'
 import { NaiSavedAssetTile } from './nai-saved-asset-tile'
@@ -18,14 +13,11 @@ export type NaiSavedAssetBrowserItem = {
 }
 
 export type NaiSavedAssetBrowserProps = {
-  title?: string
   items: NaiSavedAssetBrowserItem[]
   searchValue: string
   searchPlaceholder?: string
   emptyMessage: string
   isLoading: boolean
-  defaultExpanded?: boolean
-  className?: string
   onSearchChange: (value: string) => void
   onSelect: (assetId: string) => void
   onEdit?: (assetId: string) => void
@@ -36,16 +28,13 @@ export type NaiSavedAssetBrowserProps = {
   onTogglePin?: (assetId: string) => void
 }
 
-/** Render one collapsible saved vibe/reference library: count + search (+ sort) stay visible while collapsed. */
+/** Saved vibe/reference library shown as the "saved" tab of the add picker: search (+ sort) over a masonry of tiles. */
 export function NaiSavedAssetBrowser({
-  title = 'Save Image',
   items,
   searchValue,
   searchPlaceholder,
   emptyMessage,
   isLoading,
-  defaultExpanded = false,
-  className,
   onSearchChange,
   onSelect,
   onEdit,
@@ -55,76 +44,57 @@ export function NaiSavedAssetBrowser({
   onTogglePin,
 }: NaiSavedAssetBrowserProps) {
   const { t } = useI18n()
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-  const effectiveSearchPlaceholder = searchPlaceholder ?? t('image-generation.components.nai.saved.image.browser.section.search.name.description')
-  const toggleLabel = isExpanded
-    ? t('image-generation.components.nai.saved.image.browser.section.collapse', { title })
-    : t('image-generation.components.nai.saved.image.browser.section.expand', { title })
 
   return (
-    <Section
-      variant="controller"
-      heading={<Text as="span" variant="overline" className="font-semibold">{title}</Text>}
-      className={className}
-      bodyClassName={isExpanded ? 'space-y-0' : 'hidden'}
-      actions={(
-        <>
-          <span className="px-1 text-xs tabular-nums text-muted-foreground">{items.length}</span>
-          <div className="w-[9.5rem] sm:w-44 md:w-52">
-            <Input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder={effectiveSearchPlaceholder} />
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={searchValue}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder={searchPlaceholder ?? t('image-generation.components.nai.saved.image.browser.section.search.name.description')}
+          className="max-w-md flex-1"
+        />
+        {sort ? (
+          <div className="w-36">
+            <Select
+              aria-label={t({ ko: '정렬', en: 'Sort' })}
+              value={sort.value}
+              onChange={(event) => sort.onChange(event.target.value as NaiSavedAssetSortOption)}
+            >
+              <option value="pinned">{t({ ko: '핀 우선', en: 'Pinned first' })}</option>
+              <option value="recent">{t({ ko: '최근 사용순', en: 'Recently used' })}</option>
+              <option value="latest">{t({ ko: '최신순', en: 'Newest first' })}</option>
+              <option value="oldest">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
+              <option value="name">{t({ ko: '이름순', en: 'By name' })}</option>
+            </Select>
           </div>
-          {sort ? (
-            <div className="w-32">
-              <Select
-                aria-label={t({ ko: '정렬', en: 'Sort' })}
-                value={sort.value}
-                onChange={(event) => sort.onChange(event.target.value as NaiSavedAssetSortOption)}
-              >
-                <option value="pinned">{t({ ko: '핀 우선', en: 'Pinned first' })}</option>
-                <option value="recent">{t({ ko: '최근 사용순', en: 'Recently used' })}</option>
-                <option value="latest">{t({ ko: '최신순', en: 'Newest first' })}</option>
-                <option value="oldest">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
-                <option value="name">{t({ ko: '이름순', en: 'By name' })}</option>
-              </Select>
-            </div>
-          ) : null}
-          <IconButton
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => setIsExpanded((current) => !current)}
-            aria-expanded={isExpanded}
-            label={toggleLabel}
-          >
-            <ChevronDown className={cn('transition-transform', !isExpanded && '-rotate-90')} />
-          </IconButton>
-        </>
+        ) : null}
+        <span className="text-xs tabular-nums text-muted-foreground">{items.length}</span>
+      </div>
+
+      {isLoading ? (
+        <Text variant="muted">{t('image-generation.components.nai.saved.image.browser.section.loading')}</Text>
+      ) : items.length > 0 ? (
+        <div className="max-h-[60vh] overflow-y-auto pr-1">
+          <div className="columns-2 gap-3 sm:columns-3 lg:columns-5">
+            {items.map((item) => (
+              <NaiSavedAssetTile
+                key={item.id}
+                title={item.title}
+                subtitle={item.subtitle}
+                imageUrl={item.imageUrl}
+                isPinned={pinnedIds?.has(item.id)}
+                onSelect={() => onSelect(item.id)}
+                onEdit={onEdit ? () => onEdit(item.id) : undefined}
+                onDelete={onDelete ? () => onDelete(item.id) : undefined}
+                onTogglePin={onTogglePin ? () => onTogglePin(item.id) : undefined}
+              />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <Text variant="muted">{emptyMessage}</Text>
       )}
-    >
-      {isExpanded ? (
-        isLoading ? (
-          <Text variant="muted">{t('image-generation.components.nai.saved.image.browser.section.loading')}</Text>
-        ) : items.length > 0 ? (
-          <div className="max-h-[41rem] overflow-y-auto pr-1">
-            <div className="grid grid-cols-2 gap-3 @lg:grid-cols-3">
-              {items.map((item) => (
-                <NaiSavedAssetTile
-                  key={item.id}
-                  title={item.title}
-                  subtitle={item.subtitle}
-                  imageUrl={item.imageUrl}
-                  isPinned={pinnedIds?.has(item.id)}
-                  onSelect={() => onSelect(item.id)}
-                  onEdit={onEdit ? () => onEdit(item.id) : undefined}
-                  onDelete={onDelete ? () => onDelete(item.id) : undefined}
-                  onTogglePin={onTogglePin ? () => onTogglePin(item.id) : undefined}
-                />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <Text variant="muted">{emptyMessage}</Text>
-        )
-      ) : null}
-    </Section>
+    </div>
   )
 }

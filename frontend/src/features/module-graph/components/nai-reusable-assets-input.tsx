@@ -240,7 +240,7 @@ function NaiVibeNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 
       vibes={formDrafts}
       defaultOpen
       emptyLabel={t({ ko: '아직 vibe 입력이 없어.', en: 'There are no vibe inputs yet.' })}
-      onAdd={() => updateVibes([...drafts, { encoded: '', strength: '0.6', informationExtracted: '1' }])}
+      onAddImage={(image) => updateVibes([...drafts, { image: image.dataUrl, encoded: '', strength: '0.6', informationExtracted: '1' }])}
       onRemove={(index) => updateVibes(drafts.filter((_, draftIndex) => draftIndex !== index))}
       onImageChange={(index, image) => updateVibes(replaceAt(drafts, index, { image: image?.dataUrl }))}
       onFieldChange={(index, field, nextValue) => updateVibes(replaceAt(drafts, index, { [field]: nextValue }))}
@@ -251,7 +251,6 @@ function NaiVibeNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 
         searchPlaceholder: t({ ko: '이름 / 모델 검색', en: 'Search name / model' }),
         emptyMessage: t({ ko: '검색 결과가 없거나 저장된 vibe가 없어.', en: 'There are no search results or saved vibes.' }),
         isLoading: savedVibesQuery.isLoading,
-        defaultExpanded: true,
         onSearchChange: setSearch,
         onSelect: (asset) => void appendSavedVibe(asset),
         sort: { value: sort, onChange: preferences.setSort },
@@ -313,7 +312,7 @@ function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAss
       references={formDrafts}
       defaultOpen
       emptyLabel={t({ ko: '아직 reference 입력이 없어.', en: 'There are no reference inputs yet.' })}
-      onAdd={() => updateCharacterReferences([...drafts, { type: 'character&style', strength: '0.6', fidelity: '1' }])}
+      onAddImage={(image) => updateCharacterReferences([...drafts, { image: image.dataUrl, type: 'character&style', strength: '0.6', fidelity: '1' }])}
       onRemove={(index) => updateCharacterReferences(drafts.filter((_, draftIndex) => draftIndex !== index))}
       onImageChange={(index, image) => updateCharacterReferences(replaceAt(drafts, index, { image: image?.dataUrl }))}
       onFieldChange={(index, field, nextValue) => updateCharacterReferences(replaceAt(drafts, index, (
@@ -327,7 +326,6 @@ function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAss
         searchPlaceholder: t({ ko: '이름 / 타입 검색', en: 'Search name / type' }),
         emptyMessage: t({ ko: '검색 결과가 없거나 저장된 reference가 없어.', en: 'There are no search results or saved references.' }),
         isLoading: savedCharacterReferencesQuery.isLoading,
-        defaultExpanded: true,
         onSearchChange: setSearch,
         onSelect: (asset) => void appendSavedCharacterReference(asset),
         sort: { value: sort, onChange: preferences.setSort },

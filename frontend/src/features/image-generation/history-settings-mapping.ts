@@ -78,11 +78,14 @@ export function buildNaiFormFromHistoryPayload(payload: Record<string, unknown>,
       ))
     : []
 
+  const model = readText(payload.model) || current.model
   const form: NAIFormDraft = {
     ...current,
     prompt: readText(payload.prompt) ?? '',
     negativePrompt: readText(payload.negative_prompt) ?? '',
-    model: readText(payload.model) || current.model,
+    model,
+    // The kept vibes were encoded for the current model; re-encode on submit when it changes.
+    vibes: model === current.model ? current.vibes : current.vibes.map((vibe) => (vibe.image ? { ...vibe, encoded: '' } : vibe)),
     action,
     sampler: readText(payload.sampler) || DEFAULT_NAI_FORM.sampler,
     scheduler: readText(payload.noise_schedule) || DEFAULT_NAI_FORM.scheduler,

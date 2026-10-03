@@ -22,7 +22,7 @@ export type NaiSavedAssetTileProps = {
 
 // On-media control: the image behind it has no theme tone, so it sits on the backdrop scrim (no Button variant for this yet).
 
-/** Render one saved vibe/reference as an image tile; click loads it, corner buttons pin/edit/delete. */
+/** Render one saved vibe/reference as a masonry tile at its own aspect ratio; click adds it, corner buttons pin/edit/delete. */
 export function NaiSavedAssetTile({
   title,
   subtitle,
@@ -69,27 +69,27 @@ export function NaiSavedAssetTile({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
-      className="group relative isolate h-60 overflow-hidden rounded-sm bg-surface-container text-left outline-none transition-transform duration-300 hover:-translate-y-0.5 focus-visible:ring-[3px] focus-visible:ring-ring/40"
+      className="group relative isolate mb-3 block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
     >
       {previewImage && previewState === 'ready' ? (
         <ImagePreviewMedia
           image={previewImage}
           alt={title}
           loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          className="block h-auto w-full transition-transform duration-500 group-hover:scale-[1.03]"
           onError={() => setHasPreviewError(true)}
         />
       ) : (
         <ImagePreviewPlaceholder
           label={getImagePreviewStateLabel(previewState)}
-          className="absolute inset-0 bg-gradient-to-b from-surface-lowest to-surface-high text-xs text-muted-foreground"
+          className="aspect-square w-full bg-gradient-to-b from-surface-lowest to-surface-high text-xs text-muted-foreground"
           iconClassName="h-10 w-10"
           labelClassName="text-xs"
           compact
         />
       )}
 
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/84 via-black/42 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
       <div className="absolute right-2 top-2 z-10 flex gap-1.5">
         {onTogglePin ? (
@@ -133,7 +133,7 @@ export function NaiSavedAssetTile({
         ) : null}
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-10 space-y-1 p-3">
+      <div className="absolute inset-x-0 bottom-0 z-10 space-y-0.5 p-2.5">
         <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
           {isPinned ? <Pin className="h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
           <span className="truncate">{title}</span>

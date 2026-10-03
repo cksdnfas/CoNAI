@@ -83,6 +83,20 @@ export function useNaiGenerationActions({
       return
     }
 
+    // The payload builders drop image-less rows, so the row would look applied while being ignored.
+    const emptyVibeCount = naiForm.vibes.filter((vibe) => !vibe.image && vibe.encoded.trim().length === 0).length
+    const emptyReferenceCount = naiForm.characterReferences.filter((reference) => !reference.image).length
+    if (emptyVibeCount > 0 || emptyReferenceCount > 0) {
+      showSnackbar({
+        message: t({
+          ko: '이미지가 없는 바이브·레퍼런스 행이 있어. 이미지를 넣거나 행을 지워줘.',
+          en: 'Some vibe or reference rows have no image. Add an image or remove the row.',
+        }),
+        tone: 'error',
+      })
+      return
+    }
+
     try {
       const sampleCount = clampNaiSampleCount(naiForm.samples)
       const useCharacterPositions = shouldUseNaiCharacterPositions(naiForm)

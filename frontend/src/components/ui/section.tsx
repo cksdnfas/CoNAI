@@ -92,6 +92,9 @@ type SectionProps = ComponentProps<'section'> & VariantProps<typeof sectionVaria
   actions?: ReactNode
   collapsible?: boolean
   defaultOpen?: boolean
+  /** Controlled open state for collapsible sections (e.g. open the body when the caller adds content). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   headerClassName?: string
   bodyClassName?: string
 }
@@ -106,6 +109,8 @@ function Section({
   actions,
   collapsible = false,
   defaultOpen = true,
+  open,
+  onOpenChange,
   children,
   className,
   headerClassName,
@@ -113,7 +118,8 @@ function Section({
   ...props
 }: SectionProps) {
   const { t } = useI18n()
-  const [isOpen, setIsOpen] = useState(defaultOpen)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen)
+  const isOpen = open ?? uncontrolledOpen
   const slots = sectionSlots[variant ?? 'page']
   const isRaised = tone === 'raised'
   const Heading = headingAs ?? slots.headingAs
@@ -136,7 +142,10 @@ function Section({
               type="button"
               size="icon-sm"
               variant="ghost"
-              onClick={() => setIsOpen((current) => !current)}
+              onClick={() => {
+                setUncontrolledOpen(!isOpen)
+                onOpenChange?.(!isOpen)
+              }}
               aria-expanded={isOpen}
               aria-label={toggleLabel}
             >

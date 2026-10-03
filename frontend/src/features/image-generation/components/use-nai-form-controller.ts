@@ -143,6 +143,11 @@ export function useNaiFormController({
         [field]: value,
       }
 
+      // Vibe encodings are model-specific; re-encode the ones we still have images for on submit.
+      if (field === 'model' && value !== current.model) {
+        nextForm.vibes = current.vibes.map((vibe) => (vibe.image ? { ...vibe, encoded: '' } : vibe))
+      }
+
       if (field === 'width' || field === 'height') {
         nextForm.resolutionPreset = resolveNaiResolutionPreset(
           field === 'width' ? value : nextForm.width,
@@ -226,15 +231,20 @@ export function useNaiFormController({
     })
   }
 
-  /** Add one empty vibe row. */
-  const handleAddVibe = () => {
+  /** Add one vibe row for a picked image; it is encoded on submit. */
+  const handleAddVibe = (image: SelectedImageDraft) => {
     setNaiForm((current) => ({
       ...current,
-      vibes: [...current.vibes, { ...EMPTY_NAI_VIBE }],
+      vibes: [...current.vibes, { ...EMPTY_NAI_VIBE, image }],
     }))
   }
 
-  /** Update one editable vibe field. */
+  /**
+   * Update one editable vibe field.
+   * The encoding bakes in information-extracted, so changing it drops the cached payload and the
+   * vibe is re-encoded on submit. Image-less vibes (pasted/stored encodings) keep theirs: there is
+   * nothing to re-encode from.
+   */
   const handleVibeFieldChange = (index: number, field: 'strength' | 'informationExtracted', value: string) => {
     setNaiForm((current) => ({
       ...current,
@@ -243,6 +253,7 @@ export function useNaiFormController({
           ? {
             ...vibe,
             [field]: value,
+            ...(field === 'informationExtracted' && vibe.image && value !== vibe.informationExtracted ? { encoded: '' } : {}),
           }
           : vibe
       )),
@@ -273,11 +284,11 @@ export function useNaiFormController({
     }))
   }
 
-  /** Add one empty character-reference row. */
-  const handleAddCharacterReference = () => {
+  /** Add one character-reference row for a picked image. */
+  const handleAddCharacterReference = (image: SelectedImageDraft) => {
     setNaiForm((current) => ({
       ...current,
-      characterReferences: [...current.characterReferences, { ...EMPTY_NAI_CHARACTER_REFERENCE }],
+      characterReferences: [...current.characterReferences, { ...EMPTY_NAI_CHARACTER_REFERENCE, image }],
     }))
   }
 

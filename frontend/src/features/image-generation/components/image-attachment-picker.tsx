@@ -37,7 +37,7 @@ import {
   type SelectedImageDraft,
 } from '../image-generation-shared'
 
-type ImageAttachmentSource = 'upload' | 'system' | 'save'
+type ImageAttachmentSource = 'library' | 'upload' | 'system' | 'save'
 
 type ImageAttachmentPickerButtonProps = {
   label: string
@@ -48,6 +48,12 @@ type ImageAttachmentPickerButtonProps = {
   selectedImage?: SelectedImageDraft | null
   onRemove?: () => void
   onSelect: (image?: SelectedImageDraft) => void
+  /** Controlled open state; pair with `hideTrigger` to open the picker from another control. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  hideTrigger?: boolean
+  /** Extra first tab (e.g. a saved-asset library); the caller closes the picker when it handles a pick. */
+  librarySource?: { label: string; content: ReactNode }
 }
 
 type PendingImageSaveState = {
@@ -191,11 +197,31 @@ function ImageAttachmentBrowserSection({
 }
 
 /** Render a shared image attachment button backed by upload/system/save picker sources. */
-export function ImageAttachmentPickerButton({ label, modalTitle, disabled = false, allowSaveDialog = true, uploadOnly = false, selectedImage, onRemove, onSelect }: ImageAttachmentPickerButtonProps) {
+export function ImageAttachmentPickerButton({
+  label,
+  modalTitle,
+  disabled = false,
+  allowSaveDialog = true,
+  uploadOnly = false,
+  selectedImage,
+  onRemove,
+  onSelect,
+  open,
+  onOpenChange,
+  hideTrigger = false,
+  librarySource,
+}: ImageAttachmentPickerButtonProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [isOpen, setIsOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const isOpen = open ?? uncontrolledOpen
+  const setIsOpen = (nextOpen: boolean) => {
+    setUncontrolledOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+  }
+  const hasLibrarySource = Boolean(librarySource) && !uploadOnly
+  const librarySourceLabel = librarySource?.label
   const [source, setSource] = useState<ImageAttachmentSource>('upload')
   const [isImporting, setIsImporting] = useState(false)
   const [systemPage, setSystemPage] = useState(1)
@@ -207,16 +233,20 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingImageSave, setPendingImageSave] = useState<PendingImageSaveState | null>(null)
   const sourceItems = useMemo(() => {
-    const values = uploadOnly ? IMAGE_ATTACHMENT_SOURCE_VALUES.filter((item) => item === 'upload') : IMAGE_ATTACHMENT_SOURCE_VALUES
+    const values: ImageAttachmentSource[] = uploadOnly
+      ? ['upload']
+      : hasLibrarySource ? ['library', ...IMAGE_ATTACHMENT_SOURCE_VALUES] : IMAGE_ATTACHMENT_SOURCE_VALUES
     return values.map((value) => ({
       value,
-      label: value === 'upload'
+      label: value === 'library'
+        ? librarySourceLabel ?? ''
+        : value === 'upload'
         ? t({ ko: '업로드', en: 'Upload' })
         : value === 'system'
           ? t({ ko: '시스템', en: 'System' })
           : 'Save',
     }))
-  }, [t, uploadOnly])
+  }, [hasLibrarySource, librarySourceLabel, t, uploadOnly])
 
   const appSettingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -240,14 +270,14 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
       return
     }
 
-    setSource('upload')
+    setSource(hasLibrarySource ? 'library' : 'upload')
     setSystemPage(1)
     setSystemImages([])
     setSelectedSystemIds([])
     setSelectedSaveIds([])
     setSystemSearch('')
     setSaveSearch('')
-  }, [isOpen])
+  }, [hasLibrarySource, isOpen])
 
   useEffect(() => {
     if (uploadOnly && source !== 'upload') {
@@ -515,10 +545,12 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
 
   return (
     <>
-      <Button type="button" variant="secondary" disabled={disabled} onClick={() => setIsOpen(true)}>
-        <ImagePlus className="h-4 w-4" />
-        {label}
-      </Button>
+      {hideTrigger ? null : (
+        <Button type="button" variant="secondary" disabled={disabled} onClick={() => setIsOpen(true)}>
+          <ImagePlus className="h-4 w-4" />
+          {label}
+        </Button>
+      )}
 
       <Modal
         open={isOpen}
@@ -538,6 +570,8 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
               <SegmentedTabBar value={source} items={sourceItems} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
             </div>
           ) : null}
+
+          {hasLibrarySource && source === 'library' ? librarySource?.content : null}
 
           {source === 'upload' ? (
             <div className="pt-1">

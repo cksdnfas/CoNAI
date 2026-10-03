@@ -108,7 +108,7 @@ export function NaiGenerationEditorSections({
   handleAddCharacterPrompt: () => void
   handleCharacterPromptChange: (index: number, field: 'prompt' | 'uc' | 'centerX' | 'centerY', value: string) => void
   handleRemoveCharacterPrompt: (index: number) => void
-  handleAddCharacterReference: () => void
+  handleAddCharacterReference: (image: SelectedImageDraft) => void
   handleCharacterReferenceFieldChange: (index: number, field: 'type' | 'strength' | 'fidelity', value: string) => void
   handleCharacterReferenceImageChange: (index: number, image?: SelectedImageDraft) => void
   handleRemoveCharacterReference: (index: number) => void
@@ -116,7 +116,7 @@ export function NaiGenerationEditorSections({
   handleLoadCharacterReferenceFromStore: (assetId: string) => Promise<void>
   handleOpenEditCharacterReferenceFromStore: (assetId: string) => void
   handleDeleteCharacterReferenceFromStore: (assetId: string) => Promise<void>
-  handleAddVibe: () => void
+  handleAddVibe: (image: SelectedImageDraft) => void
   handleVibeFieldChange: (index: number, field: 'strength' | 'informationExtracted', value: string) => void
   handleVibeImageChange: (index: number, image?: SelectedImageDraft) => void
   handleRemoveVibe: (index: number) => void
@@ -325,7 +325,7 @@ export function NaiGenerationEditorSections({
       <NaiCharacterReferencesEditor
         supportsCharacterReference={supportsCharacterReference}
         references={naiForm.characterReferences}
-        onAdd={handleAddCharacterReference}
+        onAddImage={handleAddCharacterReference}
         onRemove={handleRemoveCharacterReference}
         onImageChange={handleCharacterReferenceImageChange}
         onFieldChange={handleCharacterReferenceFieldChange}
@@ -343,8 +343,8 @@ export function NaiGenerationEditorSections({
 
       <NaiVibesEditor
         vibes={naiForm.vibes}
-        showEncodeStatus
-        onAdd={handleAddVibe}
+        encodesOnSubmit
+        onAddImage={handleAddVibe}
         onRemove={handleRemoveVibe}
         onImageChange={handleVibeImageChange}
         onFieldChange={handleVibeFieldChange}
