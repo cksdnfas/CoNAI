@@ -7,7 +7,9 @@ const headers = { 'Content-Type': 'application/json' }
 export const listStoredFiles = (parentId: string | null, offset = 0) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}`)
 export const listStoredFolders = () => requestApiData<StoredFileEntry[]>('/api/files/folders')
 export const storedFileDownloadUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/download`)
-/** Small WebP preview; image files only. */
+export const storedFileViewUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/view`)
+export const getStoredFileNeighbors = (id: string) => requestApiData<{ previous: StoredFileEntry | null; next: StoredFileEntry | null }>(`/api/files/${encodeURIComponent(id)}/neighbors`)
+/** Small WebP preview of image and video files. */
 export const storedFileThumbnailUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/thumbnail`)
 export const readStoredFileText = (id: string, offset = 0) => requestApiData<StoredFileText>(`/api/files/${encodeURIComponent(id)}/text?offset=${offset}`)
 export const createStoredFolder = (parentId: string | null, name: string) => requestApiData<StoredFileEntry>('/api/files/folders', { method: 'POST', headers, body: JSON.stringify({ parentId, name }) })

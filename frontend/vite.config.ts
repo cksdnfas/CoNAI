@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { defineConfig, loadEnv } from 'vite'
 import babel from '@rolldown/plugin-babel'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
@@ -71,6 +72,7 @@ export default defineConfig(({ command, mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+        '@pdfjs': path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')),
       },
       dedupe: ['react', 'react-dom'],
     },

@@ -152,7 +152,8 @@ export class VideoFrameExtractor {
   private static async extractSingleFrame(
     videoPath: string,
     timestamp: number,
-    outputPath: string
+    outputPath: string,
+    preview = false
   ): Promise<void> {
     const seekTime = this.formatTime(timestamp);
     const errors: string[] = [];
@@ -161,21 +162,25 @@ export class VideoFrameExtractor {
       try {
         await new Promise<void>((resolve, reject) => {
           const ffmpeg = spawn(ffmpegCmd, [
+            ...(preview ? ['-nostdin', '-protocol_whitelist', 'file,pipe', '-threads', '1'] : []),
             '-ss', seekTime,              // Seek to timestamp
             '-i', videoPath,              // Input video
             '-vframes', '1',              // Extract 1 frame
+            ...(preview ? ['-vf', 'scale=320:320:force_original_aspect_ratio=decrease', '-c:v', 'libwebp', '-quality', '78', '-threads', '1'] : []),
             '-f', 'image2',               // Force image format
             '-y',                         // Overwrite output
             outputPath
           ]);
 
           let stderr = '';
+          const timer = preview ? setTimeout(() => { ffmpeg.kill(); reject(new Error('Preview extraction timed out')); }, 20_000) : undefined;
 
           ffmpeg.stderr.on('data', (data) => {
-            stderr += data.toString();
+            stderr = (stderr + data.toString()).slice(-8000);
           });
 
           ffmpeg.on('close', (code) => {
+            clearTimeout(timer);
             if (code !== 0) {
               reject(new Error(`FFmpeg frame extraction failed (code ${code}): ${stderr}`));
               return;
@@ -184,6 +189,7 @@ export class VideoFrameExtractor {
           });
 
           ffmpeg.on('error', (error) => {
+            clearTimeout(timer);
             reject(new Error(`Failed to spawn FFmpeg: ${error.message}`));
           });
         });
@@ -195,6 +201,15 @@ export class VideoFrameExtractor {
     }
 
     throw new Error(`FFmpeg frame extraction failed for all candidates: ${errors.join(' | ')}`);
+  }
+
+  /** Private-file thumbnail at one second, falling back to frame zero for sub-second clips. */
+  static async extractPreviewFrame(videoPath: string, outputPath: string): Promise<void> {
+    for (const timestamp of [1, 0]) {
+      await this.extractSingleFrame(videoPath, timestamp, outputPath, true);
+      if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) return;
+    }
+    throw new Error('No video frame');
   }
 
   /**

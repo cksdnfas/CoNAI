@@ -20,9 +20,10 @@ import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFiles, listStoredFolders, moveStoredFiles, readStoredFileText, renameStoredFile, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
+import { FilePreview } from './file-preview'
 
 const FILE_DRAG_TYPE = 'application/x-conai-file-ids'
 const PAGE_SIZE = 100
@@ -92,7 +93,7 @@ function FileTile({ entry, selected, showCheckbox, canSelect, draggable, onOpen,
 }) {
   const { t } = useI18n()
   const [thumbFailed, setThumbFailed] = useState(false)
-  const showThumb = entry.kind === 'file' && mediaKind(entry) === 'image' && entry.mimeType !== 'image/svg+xml' && !thumbFailed
+  const showThumb = entry.kind === 'file' && ['image', 'video'].includes(mediaKind(entry)) && entry.mimeType !== 'image/svg+xml' && !thumbFailed
   const extension = entry.kind === 'file' ? extensionOf(entry.name) : null
 
   return (
@@ -476,46 +477,8 @@ export function FileBrowser({ parentId, onNavigate, onPick }: {
         </ModalFooter>
       </Modal>
 
-      {preview ? <FilePreview entry={preview} onClose={() => setPreview(null)} /> : null}
+      {preview ? <FilePreview entry={preview} onClose={() => setPreview(null)} onNavigate={setPreview} /> : null}
     </>
-  )
-}
-
-/** Images, video and audio play from the download URL; other files are read as text, page by page. */
-function FilePreview({ entry, onClose }: { entry: StoredFileEntry; onClose: () => void }) {
-  const { t } = useI18n()
-  const [offset, setOffset] = useState(0)
-  const kind = mediaKind(entry)
-  const url = storedFileDownloadUrl(entry.id)
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, 'text', entry.id, offset], queryFn: () => readStoredFileText(entry.id, offset), retry: false, enabled: kind === 'other' })
-
-  let content
-  if (kind === 'image') {
-    content = <img src={url} alt={entry.name} className="mx-auto max-h-[65vh] max-w-full rounded-sm object-contain" />
-  } else if (kind === 'video') {
-    content = <video src={url} controls className="mx-auto max-h-[65vh] max-w-full rounded-sm" />
-  } else if (kind === 'audio') {
-    content = <audio src={url} controls className="w-full" />
-  } else if (query.isPending) {
-    content = <LoadingState />
-  } else if (query.isError) {
-    content = <EmptyState icon={File} title={t({ ko: '미리 볼 수 없는 파일이야', en: 'No preview for this file' })} />
-  } else {
-    content = <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-low p-3 font-mono text-xs leading-relaxed">{query.data.text}</pre>
-  }
-
-  return (
-    <Modal open title={entry.name} onClose={onClose} widthClassName="max-w-4xl">
-      <ModalBody>{content}</ModalBody>
-      <ModalFooter>
-        <span className="flex-1 truncate text-xs text-muted-foreground">{formatFileSize(entry.size)}{entry.mimeType ? ` · ${entry.mimeType}` : ''}</span>
-        {kind === 'other' && offset > 0 ? <Button variant="ghost" size="sm" onClick={() => setOffset(0)}>{t({ ko: '처음', en: 'Beginning' })}</Button> : null}
-        {kind === 'other' && query.data?.nextOffset != null ? <Button variant="secondary" size="sm" onClick={() => setOffset(query.data?.nextOffset ?? 0)}>{t({ ko: '다음 부분', en: 'Next part' })}</Button> : null}
-        <IconButton asChild variant="secondary" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}>
-          <a href={url} download><Download /></a>
-        </IconButton>
-      </ModalFooter>
-    </Modal>
   )
 }
 

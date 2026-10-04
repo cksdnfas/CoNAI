@@ -14,7 +14,7 @@ type FileRow = {
   kind: 'file' | 'folder'; mime_type: string | null; size: number; created_at: string; updated_at: string;
 };
 
-const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.json', '.jsonl', '.csv', '.tsv', '.yaml', '.yml', '.xml', '.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.py', '.sh', '.sql', '.log', '.ini', '.toml', '.srt', '.vtt']);
+export const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.json', '.jsonl', '.csv', '.tsv', '.yaml', '.yml', '.xml', '.html', '.htm', '.svg', '.css', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.py', '.sh', '.sql', '.log', '.ini', '.toml', '.srt', '.vtt']);
 const MAX_DEPTH = 64;
 export const MAX_CHAT_ATTACHMENTS = 20;
 
@@ -109,6 +109,20 @@ export const FileStoreService = {
   },
 
   get(owner: string, id: string) { return toEntry(requireRow(owner, id)); },
+
+  neighbors(owner: string, id: string) {
+    const row = requireRow(owner, id);
+    const find = (previous: boolean) => {
+      const operator = previous ? '<' : '>';
+      const direction = previous ? 'DESC' : 'ASC';
+      const found = getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries
+        WHERE owner_key = ? AND parent_id IS ? AND kind = 'file' AND deleted_at IS NULL
+        AND (name_key, id) ${operator} (?, ?) ORDER BY name_key ${direction}, id ${direction} LIMIT 1`)
+        .get(owner, row.parent_id, row.name_key, row.id) as FileRow | undefined;
+      return found ? toEntry(found) : null;
+    };
+    return { previous: find(true), next: find(false) };
+  },
 
   list(owner: string, parentId: string | null, offset = 0, limit = 100): FileStoreListing {
     requireFolder(owner, parentId);

@@ -184,5 +184,6 @@ API LLM은 요약 뒤의 `관련 설정` 시스템 메시지로, Codex는 해당
 
 ## 함께 보기
 
+- [파일 보관함](./FILES.md)
 - [Codex 생성](./CODEX_GENERATION.md)
 - [Docker로 실행 → Codex 로그인](./DOCKER.md#codex-로그인)
