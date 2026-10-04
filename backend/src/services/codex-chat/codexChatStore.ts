@@ -47,6 +47,11 @@ export type CodexChatThreadRecord = {
   codex_output_tokens: number | null
   /** Codex chats: JSON keys of lore entries already given to the Codex thread since its last compaction. */
   codex_lore_sent: string | null
+  /** `group`: several profiles answer by @mention, `profile_id` being the representative. */
+  kind: 'direct' | 'group'
+  /** Group rooms: bot-to-bot wakes per user message and messages handed to a woken member (null: defaults). */
+  group_chain_limit: number | null
+  group_window_limit: number | null
   created_date: string
   updated_date: string
 }
@@ -59,6 +64,8 @@ export type CodexChatMessageRecord = {
   thread_id: number
   role: 'user' | 'assistant'
   content: string
+  /** Group rooms: the profile that wrote this reply. Null for the user and in direct chats. */
+  speaker_profile_id: number | null
   tool_calls: CodexChatToolCall[]
   status: 'completed' | 'failed' | 'interrupted'
   error: string | null
@@ -210,6 +217,7 @@ export const CodexChatStore = {
     const db = getUserSettingsDb()
     db.transaction(() => {
       db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ?').run(threadId)
+      db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)
     })()
   },
@@ -281,14 +289,14 @@ export const CodexChatStore = {
     }).immediate()
   },
 
-  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error'>, fileIds: string[] = []) {
+  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error'> & { speaker_profile_id?: number | null }, fileIds: string[] = []) {
     const db = getUserSettingsDb()
     return db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
       if (!thread) throw new Error('Chat thread not found')
       const attachments = FileStoreService.validateAttachments(fileOwnerKey(thread.account_id), fileIds)
       const result = db.prepare(`
-        INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error) VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error, speaker_profile_id) VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
         message.thread_id,
         message.role,
@@ -296,6 +304,7 @@ export const CodexChatStore = {
         message.tool_calls.length > 0 ? JSON.stringify(message.tool_calls) : null,
         message.status,
         message.error,
+        message.speaker_profile_id ?? null,
       )
       for (const file of attachments) db.prepare('INSERT INTO chat_file_attachments (message_id, file_id) VALUES (?, ?)').run(result.lastInsertRowid, file.id)
       CodexChatStore.touchThread(message.thread_id)

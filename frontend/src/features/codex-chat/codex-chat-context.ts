@@ -25,6 +25,9 @@ export type CodexChatLiveTurn = {
   /** LLM chats: the model's reasoning so far (shown folded, never stored). */
   reasoning: string
   toolCalls: Map<string, CodexChatToolCall>
+  /** Group rooms: the member answering now (null between members) and who answers after it. */
+  speakerProfileId?: number | null
+  queue?: number[]
 }
 
 export interface CodexChatApi {

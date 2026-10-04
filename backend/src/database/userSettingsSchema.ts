@@ -448,6 +448,26 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Group room members: answer order, and each Codex member's own Codex thread (memory) and usage.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_group_members (
+      thread_id INTEGER NOT NULL,
+      profile_id INTEGER NOT NULL,
+      member_order INTEGER NOT NULL DEFAULT 0,
+      last_seen_message_id INTEGER,
+      codex_thread_id TEXT,
+      codex_context_tokens INTEGER,
+      codex_context_window INTEGER,
+      codex_input_tokens INTEGER,
+      codex_cached_input_tokens INTEGER,
+      codex_output_tokens INTEGER,
+      codex_lore_sent TEXT,
+      joined_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (thread_id, profile_id),
+      FOREIGN KEY (thread_id) REFERENCES codex_chat_threads(id) ON DELETE CASCADE
+    )
+  `);
+
   // Shared lorebooks: chat profiles link them by id (llm_chat_profiles.lorebook_ids), so one edit reaches every linked profile.
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_lorebooks (
@@ -518,6 +538,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['codex_cached_input_tokens', 'INTEGER'],
     ['codex_output_tokens', 'INTEGER'],
     ['codex_lore_sent', 'TEXT'],
+    // Group rooms: several profiles answer by @mention; profile_id is the representative who answers unaddressed messages.
+    ['kind', "TEXT NOT NULL DEFAULT 'direct'"],
+    ['group_chain_limit', 'INTEGER'],
+    ['group_window_limit', 'INTEGER'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {
@@ -527,6 +551,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
   for (const [columnName, definition] of [
     ['alternatives', 'TEXT'],
     ['active_alternative', 'INTEGER NOT NULL DEFAULT 0'],
+    // Group rooms: the profile that wrote an assistant message (null in direct chats and for the user).
+    ['speaker_profile_id', 'INTEGER'],
   ]) {
     if (!hasColumn('codex_chat_messages', columnName)) {
       db.exec(`ALTER TABLE codex_chat_messages ADD COLUMN ${columnName} ${definition}`);

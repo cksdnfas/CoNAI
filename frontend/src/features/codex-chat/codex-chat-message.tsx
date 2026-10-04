@@ -18,6 +18,7 @@ import type { ChatAvatarSize } from './chat-appearance'
 import { ChatErrorChip } from './chat-error-chip'
 import { ChatMarkdown, type ChatEmoticonMap } from './chat-markdown'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { MENTION_CLASS, splitMentions } from './chat-mentions'
 
 const HISTORY_POLL_MS = 3000
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
@@ -232,10 +233,13 @@ function CodexChatToolMedia({ calls, size = 'regular', media }: { calls: CodexCh
   )
 }
 
-export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content }: { content: string }) {
+/** `mentions`: group room member names, highlighted where the message addresses them. */
+export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content, mentions }: { content: string; mentions?: readonly string[] }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground">{content}</div>
+      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground">
+        {mentions?.length ? splitMentions(content, mentions).map((part, index) => part.mention ? <span key={index} className={MENTION_CLASS}>{part.text}</span> : part.text) : content}
+      </div>
     </div>
   )
 })
@@ -267,6 +271,8 @@ export type ChatSpeaker = {
   cast?: ChatCastSpeaker[]
   /** The profile's emoticons (`&*keyword*&`). */
   emoticons?: ChatEmoticonMap | null
+  /** Group rooms: member names, so `@name` mentions are highlighted. */
+  mentions?: readonly string[]
 }
 
 /** A `[Name]` line (or line start) switching the speaker; only names of the profile or its cast count. */
@@ -330,7 +336,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const { t } = useI18n()
   const avatarBeside = speaker !== null && avatarSize !== 'sm'
   const toolBadge = toolCalls.length > 0 ? <ToolCallsBadge calls={toolCalls} /> : null
-  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} />
+  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} mentions={speaker?.mentions} />
   const avatarOf = (who: { name: string; avatar: string | null }, engine: ChatEngine) => (
     <ChatProfileAvatar name={who.name} avatar={who.avatar} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
   )

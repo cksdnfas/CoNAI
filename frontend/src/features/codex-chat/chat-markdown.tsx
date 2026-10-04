@@ -1,6 +1,7 @@
 import { createContext, memo, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { rehypeMentions } from './chat-mentions'
 import { Check, Copy, Eye } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
@@ -246,13 +247,21 @@ function rehypeRoleplay() {
  * A reply as Markdown (GitHub flavour: tables, task lists, strikethrough). Raw HTML is not rendered; fence it to preview.
  * `roleplay` colours "dialogue", *narration* and 'thoughts' with the profile's colours (CSS variables on the transcript).
  */
-export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null }: { text: string; roleplay?: boolean; blocks?: ChatDisplayBlock[]; emoticons?: ChatEmoticonMap | null }) {
+export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null, mentions }: {
+  text: string
+  roleplay?: boolean
+  blocks?: ChatDisplayBlock[]
+  emoticons?: ChatEmoticonMap | null
+  /** Group rooms: member names whose `@name` mentions are highlighted. */
+  mentions?: readonly string[]
+}) {
   const blocksByKey = useMemo(() => new Map((blocks ?? []).filter((block) => block.enabled && block.key).map((block) => [block.key, block])), [blocks])
+  const rehypePlugins = useMemo(() => [...(roleplay ? [rehypeRoleplay] : []), ...(mentions?.length ? [rehypeMentions(mentions)] : [])], [roleplay, mentions])
   return (
     <ChatEmoticonsContext.Provider value={emoticons}>
       <ChatDisplayBlocksContext.Provider value={blocksByKey}>
         <div className={cn('chat-markdown break-words text-foreground', roleplay && '[&_em]:text-(--chat-rp-narration)')}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={roleplay ? [rehypeRoleplay] : []} components={MARKDOWN_COMPONENTS} urlTransform={urlTransform}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={MARKDOWN_COMPONENTS} urlTransform={urlTransform}>
             {injectEmoticons(fenceBareHtml(text), emoticons)}
           </ReactMarkdown>
         </div>

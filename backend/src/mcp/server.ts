@@ -6,11 +6,12 @@ import { registerImageGroupTools } from './tools/imageGroupTools';
 import { registerResourceTools } from './tools/resourceTools';
 import { registerPromptOrganizationTools } from './tools/promptOrganizationTools';
 import { registerGraphWorkflowTools } from './tools/graphWorkflowTools';
-import { ALL_MCP_HTTP_SCOPES, isMcpToolAllowed, type McpRequestContext } from './context';
+import { ALL_MCP_HTTP_SCOPES, CHAT_ROOM_TOOLS, isMcpToolAllowed, type McpRequestContext } from './context';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
 import { registerEmoticonTools } from './tools/emoticonTools';
+import { registerChatRoomTools } from './tools/chatRoomTools';
 
 /**
  * MCP 서버 팩토리
@@ -26,7 +27,10 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   const originalTool = server.tool.bind(server);
   (server as McpServer & { tool: typeof server.tool }).tool = ((...args: unknown[]) => {
     const toolName = typeof args[0] === 'string' ? args[0] : '';
-    if (!isMcpToolAllowed(toolName, context.scopes) || (context.toolAllowlist && !context.toolAllowlist.includes(toolName))) {
+    const allowed = CHAT_ROOM_TOOLS.has(toolName)
+      ? context.chatRoomTools === true
+      : isMcpToolAllowed(toolName, context.scopes) && (!context.toolAllowlist || context.toolAllowlist.includes(toolName));
+    if (!allowed) {
       return undefined;
     }
     return (originalTool as (...toolArgs: unknown[]) => unknown)(...args);
@@ -43,6 +47,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerResourceTools(server);
   registerPromptOrganizationTools(server);
   registerWorkflowTransferTools(server);
+  registerChatRoomTools(server, context);
 
   return server;
 }

@@ -27,6 +27,8 @@ import { exportChatMarkdown } from '../services/codex-chat/chatExport'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
 import { CHAT_CARD_MAX_BYTES, importChatCard, readLorebookFile } from '../services/codex-chat/chatCardImport'
+import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
+import { GroupChatService } from '../services/codex-chat/groupChatService'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -53,6 +55,11 @@ function parseThreadId(req: Request, res: Response) {
     sendRouteBadRequest(res, 'Invalid thread id')
   }
   return threadId
+}
+
+/** Group rooms take their own path for sending, rewriting and stopping (false when the thread is not the caller's). */
+function isGroupThread(req: Request, threadId: number) {
+  return CodexChatStore.findThread(threadId, getRequesterAccountId(req))?.kind === 'group'
 }
 
 function sendChatError(res: Response, error: unknown) {
@@ -184,7 +191,53 @@ router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, a
 }))
 
 router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
-  res.json({ success: true, data: CodexChatService.listThreads(requesterFrom(req)) })
+  const threads = CodexChatService.listThreads(requesterFrom(req))
+  const members = ChatGroupStore.memberIdsByThread(threads.filter((thread) => thread.kind === 'group').map((thread) => thread.id))
+  res.json({ success: true, data: threads.map((thread) => thread.kind === 'group' ? { ...thread, member_profile_ids: members.get(thread.id) ?? [] } : thread) })
+})
+
+/** POST /api/codex-chat/threads/group — `{ profileIds, representativeId, title? }`: a group room (empty, no greeting). */
+router.post('/threads/group', requireChatAccess, (req: Request, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    res.status(201).json({ success: true, data: GroupChatService.create(requesterFrom(req), { profileIds: body.profileIds, representativeId: body.representativeId, title: body.title }) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+/** PATCH /api/codex-chat/threads/:threadId/group — representative, title, bot-to-bot chain and handed-over window. */
+router.patch('/threads/:threadId/group', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    res.json({ success: true, data: GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit }) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+router.post('/threads/:threadId/members', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    res.json({ success: true, data: GroupChatService.addMembers(requesterFrom(req), threadId, req.body?.profileIds) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+router.delete('/threads/:threadId/members/:profileId', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  const profileId = parseId(req.params.profileId)
+  if (threadId === null) return
+  if (profileId === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }
+  try {
+    res.json({ success: true, data: GroupChatService.removeMember(requesterFrom(req), threadId, profileId) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
 })
 
 /** POST /api/codex-chat/threads — `{ profileId }`: a new chat with that profile's engine and persona. */
@@ -209,7 +262,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
   try {
     const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
-    if (thread.engine !== 'llm') {
+    if (thread.engine !== 'llm' || thread.kind === 'group') {
       sendRouteBadRequest(res, 'Only LLM chats have context settings')
       return
     }
@@ -246,6 +299,7 @@ router.post('/threads/:threadId/summarize', requireChatAccess, asyncHandler(asyn
   if (threadId === null) return
   try {
     const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
+    if (thread.kind === 'group') throw new CodexChatError('그룹 방에서는 압축하지 않아. 이전 대화는 참가자가 직접 찾아봐.', 409)
     if (thread.engine !== 'llm') {
       // Codex chats: Codex folds its own memory of the chat.
       res.json({ success: true, data: await CodexChatService.compact(requesterFrom(req), threadId) })
@@ -491,7 +545,10 @@ router.get('/threads/:threadId/export', requireChatAccess, (req: Request, res: R
     if (format === 'json') {
       res.type('application/json').send(JSON.stringify({ format: 'conai-chat', version: 1, exportedAt: new Date().toISOString(), profileName: profile?.name ?? null, thread: detail.thread, messages: detail.messages, media: detail.media }, null, 2))
     } else {
-      res.type('text/markdown').send(exportChatMarkdown(detail.thread, detail.messages, CodexChatService.listThreadMedia(requester, threadId), profile?.name ?? '어시스턴트', `${req.protocol}://${req.get('host')}`))
+      const speakers = new Map(detail.thread.kind === 'group'
+        ? [...new Set(detail.messages.map((message) => message.speaker_profile_id).filter((id): id is number => id !== null))].map((id) => [id, ChatProfileStore.find(id)?.name ?? '(나간 참가자)'] as const)
+        : [])
+      res.type('text/markdown').send(exportChatMarkdown(detail.thread, detail.messages, CodexChatService.listThreadMedia(requester, threadId), profile?.name ?? '어시스턴트', `${req.protocol}://${req.get('host')}`, speakers))
     }
   } catch (error) { sendChatError(res, error) }
 })
@@ -500,7 +557,8 @@ router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
-    res.json({ success: true, data: CodexChatService.getThread(requesterFrom(req), threadId) })
+    const requester = requesterFrom(req)
+    res.json({ success: true, data: isGroupThread(req, threadId) ? GroupChatService.getThread(requester, threadId) : CodexChatService.getThread(requester, threadId) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -521,7 +579,8 @@ router.delete('/threads/:threadId', requireChatAccess, asyncHandler(async (req: 
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
-    await CodexChatService.deleteThread(requesterFrom(req), threadId)
+    if (isGroupThread(req, threadId)) await GroupChatService.deleteThread(requesterFrom(req), threadId)
+    else await CodexChatService.deleteThread(requesterFrom(req), threadId)
     res.json({ success: true })
   } catch (error) {
     sendChatError(res, error)
@@ -532,7 +591,8 @@ router.post('/threads/:threadId/interrupt', requireChatAccess, asyncHandler(asyn
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
-    await CodexChatService.interrupt(requesterFrom(req), threadId)
+    if (isGroupThread(req, threadId)) await GroupChatService.stop(threadId)
+    else await CodexChatService.interrupt(requesterFrom(req), threadId)
     res.json({ success: true })
   } catch (error) {
     sendChatError(res, error)
@@ -543,7 +603,7 @@ router.post('/threads/:threadId/clear', requireChatAccess, (req: Request, res: R
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
-    res.json({ success: true, data: CodexChatService.clearThread(requesterFrom(req), threadId) })
+    res.json({ success: true, data: isGroupThread(req, threadId) ? GroupChatService.clearThread(requesterFrom(req), threadId) : CodexChatService.clearThread(requesterFrom(req), threadId) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -556,6 +616,12 @@ router.post('/threads/:threadId/messages/:messageId/alternative', requireChatAcc
     return
   }
   try {
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (isGroupThread(req, threadId)) {
+      CodexChatService.selectAlternative(requesterFrom(req), threadId, messageId, req.body.index)
+      res.json({ success: true, data: GroupChatService.getThread(requesterFrom(req), threadId) })
+      return
+    }
     res.json({ success: true, data: CodexChatService.selectAlternative(requesterFrom(req), threadId, messageId, req.body.index) })
   } catch (error) { sendChatError(res, error) }
 })
@@ -568,7 +634,10 @@ async function rewriteMessage(req: Request, res: Response, edit: boolean) {
     sendRouteBadRequest(res, '메시지 내용을 확인해줘.')
     return
   }
-  await streamChatReply(res, (write) => CodexChatService.rewriteMessage(requesterFrom(req), threadId, messageId, edit ? req.body.content : undefined, write))
+  const content = edit ? req.body.content : undefined
+  await streamChatReply(res, (write) => isGroupThread(req, threadId)
+    ? GroupChatService.rewriteMessage(requesterFrom(req), threadId, messageId, content, write)
+    : CodexChatService.rewriteMessage(requesterFrom(req), threadId, messageId, content, write))
 }
 
 router.post('/threads/:threadId/messages/:messageId/regenerate', requireChatAccess, asyncHandler((req, res) => rewriteMessage(req, res, false)))
@@ -614,7 +683,9 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
     return
   }
 
-  await streamChatReply(res, (write) => CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds))
+  await streamChatReply(res, (write) => isGroupThread(req, threadId)
+    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds)
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds))
 }))
 
 export default router

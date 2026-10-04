@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, streamCodexChatMessage, streamChatRewrite, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, streamCodexChatMessage, streamChatRewrite, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
@@ -40,6 +40,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [isStartingChat, setIsStartingChat] = useState(false)
   const draftRef = useRef(draft)
   const streamAbortRef = useRef<AbortController | null>(null)
+  /** Settles when the streamed reply has wound down, so a group room message can cut in after it. */
+  const activeReplyRef = useRef<Promise<void> | null>(null)
 
   draftRef.current = draft
   attachmentsRef.current = draftAttachments
@@ -111,9 +113,20 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string }, literalText?: string) => {
     const text = rewrite ? '' : (literalText ?? draftRef.current).trim()
     const attachments = rewrite ? [] : attachmentsRef.current
-    if ((!rewrite && !text && attachments.length === 0) || streamAbortRef.current || uploadBusyRef.current) {
+    if ((!rewrite && !text && attachments.length === 0) || uploadBusyRef.current) {
       return false
     }
+    const isGroup = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId))?.thread.kind === 'group'
+    if (streamAbortRef.current) {
+      // In a group room the user may cut in: the server stops the room's reply when the new message arrives, so stop
+      // reading the old stream and let it wind down first.
+      if (!isGroup || rewrite) return false
+      streamAbortRef.current.abort()
+      await activeReplyRef.current
+      if (streamAbortRef.current) return false
+    }
+    let settle: () => void = () => {}
+    activeReplyRef.current = new Promise((resolve) => { settle = resolve })
 
     const sentThreadId = threadId
     const controller = new AbortController()
@@ -126,9 +139,31 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setLiveTurn({ threadId: sentThreadId, userText: text, attachments, text: '', reasoning: '', toolCalls: new Map() })
     let accepted = false
 
+    /** Group rooms: a stored message joins the transcript right away, since more members keep the stream going. */
+    const putMessage = (message: CodexChatMessage) => queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => current ? {
+      ...current,
+      messages: current.messages.some((entry) => entry.id === message.id)
+        ? current.messages.map((entry) => entry.id === message.id ? message : entry)
+        : [...current.messages, message],
+    } : current)
+
     try {
       const onEvent = (event: CodexChatStreamEvent) => {
-        if (event.type === 'delta') {
+        if (isGroup && event.type === 'user') {
+          accepted = true
+          putMessage(event.message)
+          setLiveTurn((current) => current ? { ...current, userText: '', attachments: [] } : current)
+          void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+        } else if (event.type === 'speaker') {
+          setLiveTurn((current) => current ? { ...current, text: '', reasoning: '', toolCalls: new Map(), speakerProfileId: event.profileId, queue: event.queue } : current)
+        } else if (event.type === 'queue') {
+          setLiveTurn((current) => current ? { ...current, queue: event.queue } : current)
+        } else if (event.type === 'notice') {
+          showSnackbar({ message: event.message })
+        } else if (isGroup && event.type === 'done') {
+          putMessage(event.message)
+          setLiveTurn((current) => current ? { ...current, text: '', reasoning: '', toolCalls: new Map(), speakerProfileId: null, replacingMessageId: undefined } : current)
+        } else if (event.type === 'delta') {
           setLiveTurn((current) => (current ? { ...current, text: current.text + event.text } : current))
         } else if (event.type === 'reasoning') {
           setLiveTurn((current) => (current ? { ...current, reasoning: current.reasoning + event.text } : current))
@@ -177,6 +212,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
       ])
       setLiveTurn(null)
+      settle()
     }
     return accepted
   }, [queryClient, showSnackbar, t])

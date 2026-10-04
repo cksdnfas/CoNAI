@@ -228,6 +228,12 @@ export interface CodexChatThread {
   codex_input_tokens: number | null
   codex_cached_input_tokens: number | null
   codex_output_tokens: number | null
+  /** `group`: several profiles answer by @mention; `profile_id` is the representative. */
+  kind: 'direct' | 'group'
+  group_chain_limit: number | null
+  group_window_limit: number | null
+  /** Group rooms in chat lists: member profiles in room order. */
+  member_profile_ids?: number[]
   created_date: string
   updated_date: string
 }
@@ -240,6 +246,8 @@ export interface CodexChatMessage {
   thread_id: number
   role: 'user' | 'assistant'
   content: string
+  /** Group rooms: the profile that wrote this reply. */
+  speaker_profile_id: number | null
   tool_calls: CodexChatToolCall[]
   status: 'completed' | 'failed' | 'interrupted'
   error: string | null
@@ -259,10 +267,22 @@ export interface CodexChatThreadDetail {
   media: Record<string, CodexChatMediaInfo>
   /** Generation jobs this chat started that are still running (results attach as they land). */
   pendingJobs: number
-  /** Partial reply of a turn still running on the server (after a reload). */
-  running: { text: string; toolCalls: CodexChatToolCall[]; replacingMessageId?: number } | null
+  /** Partial reply of a turn still running on the server (after a reload); group rooms add who answers and who is next. */
+  running: { text: string; toolCalls: CodexChatToolCall[]; replacingMessageId?: number; speakerProfileId?: number | null; queue?: number[] } | null
   /** Codex chats: Codex folds its memory once a request's input reaches this many tokens. */
   codexCompactTokens?: number
+  group?: ChatGroupInfo
+}
+
+/** A group room: members in order, the representative (answers unaddressed messages) and its limits. */
+export interface ChatGroupInfo {
+  memberIds: number[]
+  representativeId: number | null
+  /** Bot-to-bot wakes per user message. */
+  chainLimit: number
+  /** Messages handed to a woken member. */
+  windowLimit: number
+  limits: { chain: { default: number; min: number; max: number }; window: { default: number; min: number; max: number } }
 }
 
 /** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */
@@ -285,6 +305,10 @@ export type CodexChatStreamEvent =
   | { type: 'tool'; call: CodexChatToolCall }
   | { type: 'done'; message: CodexChatMessage }
   | { type: 'error'; message: string }
+  /** Group rooms: this member answers now, `queue` after it. */
+  | { type: 'speaker'; profileId: number; queue: number[] }
+  | { type: 'queue'; queue: number[] }
+  | { type: 'notice'; message: string }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
@@ -414,6 +438,23 @@ export function listCodexChatThreads() {
 
 export function createCodexChatThread(profileId: number) {
   return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId }) })
+}
+
+export function createGroupChat(input: { profileIds: number[]; representativeId: number; title?: string }) {
+  return requestApiData<CodexChatThread>('/api/codex-chat/threads/group', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+/** `null` limits restore the defaults. */
+export function updateGroupChat(threadId: number, patch: { representativeId?: number; title?: string; chainLimit?: number | null; windowLimit?: number | null }) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/group`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function addGroupChatMembers(threadId: number, profileIds: number[]) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileIds }) })
+}
+
+export function removeGroupChatMember(threadId: number, profileId: number) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members/${profileId}`, { method: 'DELETE' })
 }
 
 export function getCodexChatThread(threadId: number) {

@@ -17,7 +17,8 @@ import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
 import { selectLoreEntries } from './chatLorebook'
-import { LlmChatService } from './llmChatService'
+import { LlmChatService, type GroupReplyResult } from './llmChatService'
+import { ChatGroupStore } from './chatGroupStore'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
 import { logger } from '../../utils/logger'
@@ -89,6 +90,12 @@ export type CodexChatStreamEvent =
   | { type: 'tool'; call: CodexChatToolCall }
   | { type: 'done'; message: CodexChatMessageRecord }
   | { type: 'error'; message: string }
+  /** Group rooms: this member answers now; `queue` is who answers after it. */
+  | { type: 'speaker'; profileId: number; queue: number[] }
+  /** Group rooms: a reply woke more members. */
+  | { type: 'queue'; queue: number[] }
+  /** Group rooms: something the user should know that is not an error of the reply (a member was skipped). */
+  | { type: 'notice'; message: string }
 
 type TurnState = {
   chatThreadId: number
@@ -104,6 +111,8 @@ type TurnState = {
   lastError: string | null
   finished: Promise<CodexChatMessageRecord>
   resolveFinished: (message: CodexChatMessageRecord) => void
+  /** Group rooms: stores the reply with its speaker. Direct chats store it as the thread's reply. */
+  persist?: (reply: GroupReplyResult) => CodexChatMessageRecord
 }
 
 type Session = {
@@ -135,10 +144,10 @@ const sessions = new Map<string, Session>()
 const startingSessions = new Map<string, Promise<Session>>()
 const startingThreads = new Set<number>()
 
-/** MCP grants are per process (token), so processes are keyed by account + scopes + tool allowlist. */
-function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null) {
+/** MCP grants are per process (token), so processes are keyed by account + scopes + tool allowlist (+ room tools). */
+function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools: boolean) {
   const tools = toolAllowlist ? [...toolAllowlist].sort().join(',') : '*'
-  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}`
+  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${roomTools ? '|room' : ''}`
 }
 
 /** The profile's model and reasoning effort, falling back to the CLI config and then the model's default effort. */
@@ -320,15 +329,11 @@ function finishTurn(session: Session, turn: TurnState, status: CodexChatMessageR
     .filter(Boolean)
     .join('\n\n')
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  const messageId = CodexChatStore.addMessage({
-    thread_id: turn.chatThreadId,
-    role: 'assistant',
-    content,
-    tool_calls: toolCalls,
-    status,
-    error,
-  })
-  const message = CodexChatStore.listMessages(turn.chatThreadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
+  const reply = { content, tool_calls: toolCalls, status, error }
+  const message = turn.persist ? turn.persist(reply) : (() => {
+    const messageId = CodexChatStore.addMessage({ thread_id: turn.chatThreadId, role: 'assistant', ...reply })
+    return CodexChatStore.listMessages(turn.chatThreadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
+  })()
   emit(turn, { type: 'done', message })
   turn.listeners.clear()
   turn.resolveFinished(message)
@@ -339,14 +344,17 @@ function recordTokenUsage(codexThreadId: string, value: unknown) {
   const usage = value as { last?: { inputTokens?: number }; total?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number }; modelContextWindow?: number | null } | undefined
   if (!usage?.total) return
   const count = (tokens: unknown) => (typeof tokens === 'number' && Number.isFinite(tokens) ? Math.max(0, Math.round(tokens)) : 0)
-  CodexChatStore.setCodexUsage(codexThreadId, {
+  const values = {
     // A compaction reports 0: the folded size is only known after the next request.
     contextTokens: count(usage.last?.inputTokens) || null,
     contextWindow: typeof usage.modelContextWindow === 'number' ? usage.modelContextWindow : null,
     inputTokens: count(usage.total.inputTokens),
     cachedInputTokens: count(usage.total.cachedInputTokens),
     outputTokens: count(usage.total.outputTokens),
-  })
+  }
+  // A Codex thread belongs to a direct chat or to one member of a group room.
+  CodexChatStore.setCodexUsage(codexThreadId, values)
+  ChatGroupStore.setMemberCodexUsage(codexThreadId, values)
 }
 
 /** Codex folded the thread's memory: mark where in the transcript. */
@@ -357,6 +365,8 @@ function recordCompaction(session: Session, codexThreadId: string) {
     const messages = CodexChatStore.listMessages(chatThread.id)
     const folded = turn?.userMessageId ? messages.filter((message) => message.id < (turn.userMessageId as number)) : messages
     CodexChatStore.markCodexCompacted(codexThreadId, folded.at(-1)?.id ?? null)
+  } else {
+    ChatGroupStore.markMemberCompacted(codexThreadId)
   }
 }
 
@@ -424,10 +434,10 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
   }
 }
 
-async function startSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null): Promise<Session> {
+async function startSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools: boolean): Promise<Session> {
   const { knownFeatures, mcpServers } = await probeCodexCli()
   const args = buildAppServerArgs(knownFeatures, mcpServers)
-  const token = issueCodexChatMcpToken(requester, scopes, toolAllowlist)
+  const token = issueCodexChatMcpToken(requester, scopes, toolAllowlist, roomTools)
   let client: CodexAppServerClient | undefined
   let configModel: string | null = null
   let configEffort: CodexReasoningEffort | null = null
@@ -453,7 +463,7 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
   }
 
   const session: Session = {
-    key: sessionKey(requester, scopes, toolAllowlist),
+    key: sessionKey(requester, scopes, toolAllowlist, roomTools),
     requester,
     client,
     token,
@@ -472,8 +482,8 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
   return session
 }
 
-async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null) {
-  const key = sessionKey(requester, scopes, toolAllowlist)
+async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools = false) {
+  const key = sessionKey(requester, scopes, toolAllowlist, roomTools)
   const existing = sessions.get(key)
   if (existing?.client.isAlive) {
     clearIdleTimer(existing)
@@ -482,7 +492,7 @@ async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolA
 
   let starting = startingSessions.get(key)
   if (!starting) {
-    starting = startSession(requester, scopes, toolAllowlist).finally(() => startingSessions.delete(key))
+    starting = startSession(requester, scopes, toolAllowlist, roomTools).finally(() => startingSessions.delete(key))
     startingSessions.set(key, starting)
   }
   return starting
@@ -520,8 +530,11 @@ function requireThread(requester: McpRequester, threadId: number) {
   return thread
 }
 
-/** Load the Codex thread into this process: start a new one, or resume from its rollout (a fresh one if that is gone). */
-async function ensureCodexThread(session: Session, chatThreadId: number, codexThreadId: string | null, profile: ChatProfile) {
+/**
+ * Load the Codex thread into this process: start a new one, or resume from its rollout (a fresh one if that is gone).
+ * `saveNew` records a newly started thread where the chat (or the group member) keeps it.
+ */
+async function ensureCodexThread(session: Session, codexThreadId: string | null, profile: ChatProfile, saveNew: (codexThreadId: string) => void) {
   const compactLimit = codexCompactLimit(profile)
   if (codexThreadId && session.loadedThreads.get(codexThreadId) === compactLimit) {
     return codexThreadId
@@ -546,7 +559,7 @@ async function ensureCodexThread(session: Session, chatThreadId: number, codexTh
     ...threadOverrides(session, profile),
     serviceName: 'conai',
   }, THREAD_REQUEST_TIMEOUT_MS)
-  CodexChatStore.setCodexThreadId(chatThreadId, started.thread.id)
+  saveNew(started.thread.id)
   session.loadedThreads.set(started.thread.id, compactLimit)
   return started.thread.id
 }
@@ -564,7 +577,7 @@ function readLoreSent(value: string | null) {
  * Remove a Codex thread's rollout (its memory on disk) once the chat no longer uses it. Best effort and in the
  * background: any chat process can delete it (they share CODEX_HOME), and one is started only when none is running.
  */
-function deleteCodexRollout(requester: McpRequester, codexThreadId: string | null) {
+export function deleteCodexRollout(requester: McpRequester, codexThreadId: string | null) {
   if (!codexThreadId) return
   void (async () => {
     for (const session of sessions.values()) session.loadedThreads.delete(codexThreadId)
@@ -588,6 +601,77 @@ function findActiveTurn(chatThreadId: number) {
     }
   }
   return null
+}
+
+/**
+ * One Codex member's reply in a group room, in that member's own Codex thread (its memory of the room). The input is
+ * built after lore is chosen, so lore already in the member's memory is skipped. `persist` stores the reply.
+ */
+export async function runCodexGroupReply(params: {
+  requester: McpRequester
+  threadId: number
+  profile: ChatProfile
+  messages: CodexChatMessageRecord[]
+  buildInput: (lore: string) => string
+  signal: AbortSignal
+  emit: (event: CodexChatStreamEvent) => void
+  persist: (reply: GroupReplyResult) => CodexChatMessageRecord
+}): Promise<CodexChatMessageRecord> {
+  const { requester, threadId, profile } = params
+  assertChatAvailable(requester)
+  const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
+  const session = await ensureSession(requester, scopes, profile.toolAllowlist, true)
+  const run = resolveCodexRun(session, profile)
+  const codexThreadId = await ensureCodexThread(session, ChatGroupStore.member(threadId, profile.id)?.codex_thread_id ?? null, profile,
+    (id) => ChatGroupStore.setMemberCodexThread(threadId, profile.id, id))
+  if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이 참가자의 이전 답변이 아직 진행 중이야.', 409)
+
+  let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
+  const turn: TurnState = {
+    chatThreadId: threadId,
+    codexThreadId,
+    turnId: null,
+    userMessageId: null,
+    agentMessages: new Map(),
+    commentaryItems: new Set(),
+    toolCalls: new Map(),
+    listeners: new Set([params.emit]),
+    lastError: null,
+    finished: new Promise<CodexChatMessageRecord>((resolve) => { resolveFinished = resolve }),
+    resolveFinished: (message) => resolveFinished(message),
+    persist: params.persist,
+  }
+  session.activeTurns.set(codexThreadId, turn)
+  clearIdleTimer(session)
+  const interrupt = () => {
+    if (turn.turnId) void session.client.request('turn/interrupt', { threadId: codexThreadId, turnId: turn.turnId }).catch(() => undefined)
+  }
+  params.signal.addEventListener('abort', interrupt, { once: true })
+  try {
+    if (params.signal.aborted) {
+      finishTurn(session, turn, 'interrupted', null)
+    } else {
+      try {
+        // Read after ensureCodexThread: a new Codex thread starts with no lore in its memory.
+        const sent = readLoreSent(ChatGroupStore.member(threadId, profile.id)?.codex_lore_sent ?? null)
+        const lore = selectLoreEntries(profile, params.messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile), { skip: (key) => sent.has(key) })
+        const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
+          threadId: codexThreadId,
+          model: run.model,
+          effort: run.effort,
+          input: [{ type: 'text', text: params.buildInput(lore.text), text_elements: [] }],
+        }, THREAD_REQUEST_TIMEOUT_MS)
+        turn.turnId = response.turn.id
+        if (lore.keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, [...sent, ...lore.keys].slice(-LORE_SENT_MAX_KEYS))
+        if (params.signal.aborted) interrupt()
+      } catch (error) {
+        finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
+      }
+    }
+    return await turn.finished
+  } finally {
+    params.signal.removeEventListener('abort', interrupt)
+  }
 }
 
 export const CodexChatService = {
@@ -619,7 +703,7 @@ export const CodexChatService = {
       const profile = requireCodexProfile(thread.profile_id)
       const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
       session = await ensureSession(requester, scopes, profile.toolAllowlist)
-      codexThreadId = await ensureCodexThread(session, threadId, thread.codex_thread_id, profile)
+      codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
       // The rollout was gone and a fresh thread started: nothing left to fold.
       if (codexThreadId !== thread.codex_thread_id) return CodexChatService.getThread(requester, threadId).thread
 
@@ -753,7 +837,7 @@ export const CodexChatService = {
       const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
       const session = await ensureSession(requester, scopes, profile.toolAllowlist)
       const run = resolveCodexRun(session, profile)
-      const codexThreadId = await ensureCodexThread(session, threadId, thread.codex_thread_id, profile)
+      const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
 
       let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
       const finished = new Promise<CodexChatMessageRecord>((resolve) => {

@@ -9,7 +9,7 @@ import { loadChatSettings } from './chatSettings'
 import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import type { CodexChatStreamEvent } from './codexChatService'
-import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage } from './llmChatCompletion'
+import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { buildChatMessages, fillCharacterPlaceholders, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, updateThreadSummary } from './llmChatContext'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
@@ -126,20 +126,28 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   return (output.length > outputLimit ? `${output.slice(0, outputLimit)}\n…(truncated)` : output) || '(no output)'
 }
 
-/** Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer. */
-async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
+/** A direct chat's reply: the profile's prompt and the thread's context window. */
+function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
+  return streamReply(turn, requester, profile, (tools) => buildChatMessages({
+    profile,
+    thread,
+    messages: CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId),
+    config: resolveContextConfig(thread, profile),
+    tools,
+  }))
+}
+
+/**
+ * Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer.
+ * `roomTools` adds the group room history tools (offered even when the profile has no MCP scopes).
+ */
+async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[], roomTools = false) {
   const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: profileGenerationOptions(profile) })
   const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-  const bridge = scopes.length > 0 ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist) : null
+  const bridge = scopes.length > 0 || roomTools ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist, { roomTools }) : null
 
   try {
-    const messages: ChatCompletionMessage[] = buildChatMessages({
-      profile,
-      thread,
-      messages: CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId),
-      config: resolveContextConfig(thread, profile),
-      tools: bridge?.tools ?? [],
-    })
+    const messages = buildMessages(bridge?.tools ?? [])
 
     // Image viewing is only offered to models the profile says can see images.
     const offeredTools = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
@@ -244,6 +252,46 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
       })
     })
   return turn.finished
+}
+
+export type GroupReplyResult = Pick<CodexChatMessageRecord, 'content' | 'tool_calls' | 'status' | 'error'>
+
+/**
+ * One group room member's reply (not stored here: the room stores it with its speaker). Streams `delta`,
+ * `reasoning` and `tool` events to `emit`; `signal` stops it, leaving what was written as an interrupted reply.
+ */
+export async function generateLlmGroupReply(params: {
+  requester: McpRequester
+  threadId: number
+  profile: ChatProfile
+  buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[]
+  /** Offer the room history tools (when part of the room is not in the request). */
+  roomTools: boolean
+  signal: AbortSignal
+  emit: (event: CodexChatStreamEvent) => void
+}): Promise<GroupReplyResult> {
+  assertLlmChatAvailable(params.requester)
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  if (params.signal.aborted) abort()
+  params.signal.addEventListener('abort', abort, { once: true })
+  const turn: LlmTurn = {
+    threadId: params.threadId, controller, text: '', reasoning: '', toolCalls: new Map(),
+    listeners: new Set([params.emit]), finished: Promise.resolve({} as CodexChatMessageRecord),
+  }
+  let status: CodexChatMessageRecord['status'] = 'completed'
+  let error: string | null = null
+  try {
+    await streamReply(turn, params.requester, params.profile, params.buildMessages, params.roomTools)
+    if (controller.signal.aborted) status = 'interrupted'
+  } catch (caught) {
+    status = controller.signal.aborted ? 'interrupted' : 'failed'
+    error = controller.signal.aborted ? null : caught instanceof Error ? caught.message : String(caught)
+  } finally {
+    params.signal.removeEventListener('abort', abort)
+  }
+  const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
+  return { content: stripThinking(turn.text).trim(), tool_calls: toolCalls, status, error }
 }
 
 export const LlmChatService = {

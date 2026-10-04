@@ -54,15 +54,15 @@ export function intersectChatScopes(configured: readonly ChatScope[], access: Ch
   return configured.filter((scope) => access.scopes.includes(scope))
 }
 
-const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null }>()
+const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; roomTools: boolean }>()
 
 /**
  * One token per chat app-server process; it lets that process reach `/mcp` as the chatting account with the
  * scopes its profiles were given (processes are keyed by account + scopes).
  */
-export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null) {
+export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools = false) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { requester, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null })
+  tokens.set(token, { requester, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, roomTools })
   return token
 }
 
@@ -88,7 +88,7 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
   const { requester } = grant
   const access = resolveChatAccess(requester.accountId)
   const scopes = intersectChatScopes(grant.scopes, access)
-  if (!access.codex || scopes.length === 0) {
+  if (!access.codex || (scopes.length === 0 && !grant.roomTools)) {
     return null
   }
 
@@ -99,5 +99,6 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
     requester,
     source: 'codex-chat',
     toolAllowlist: grant.toolAllowlist,
+    chatRoomTools: grant.roomTools,
   }
 }

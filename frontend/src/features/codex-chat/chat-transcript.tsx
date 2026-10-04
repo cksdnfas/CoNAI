@@ -10,7 +10,15 @@ import { ChatFileLinks } from './chat-attachments'
 import type { CodexChatLiveTurn } from './codex-chat-context'
 import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker } from './codex-chat-message'
 
-type MessageLook = { speaker: ChatSpeaker | null; avatarSize: ChatAvatarSize; largeThumbnails: boolean }
+type MessageLook = {
+  speaker: ChatSpeaker | null
+  avatarSize: ChatAvatarSize
+  largeThumbnails: boolean
+  /** Group rooms: who wrote a reply (its speaker), instead of the chat's one speaker. */
+  speakerOf?: (profileId: number | null) => ChatSpeaker | null
+  /** Group rooms: member names, so `@name` mentions are highlighted. */
+  mentions?: readonly string[]
+}
 
 type MessageActions = {
   busy: boolean
@@ -42,7 +50,7 @@ function ChatMessageEditor({ message, busy, onSave, onCancel }: {
   </div>
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, actions, ...look }: MessageLook & {
+const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, actions, speakerOf, mentions, ...look }: MessageLook & {
   message: CodexChatMessage; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
 }) {
   const { t } = useI18n()
@@ -54,8 +62,8 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : message.content && <CodexChatUserMessage content={message.content} />}<ChatFileLinks files={message.attachments} /></>
-      : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} media={media} {...look} />}
+        : message.content && <CodexChatUserMessage content={message.content} mentions={mentions} />}<ChatFileLinks files={message.attachments} /></>
+      : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} media={media} {...look} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} />}
     {actions.canRewrite && (isUser || lastReply) && actions.editingId !== message.id ? (
       <div className={cn('mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
         {isUser
@@ -92,10 +100,12 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, fla
   </>
 })
 
-export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, ...look }: MessageLook & { turn: CodexChatLiveTurn }) {
+export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, mentions, ...look }: MessageLook & { turn: CodexChatLiveTurn }) {
+  // Group rooms: between two members nobody is replying yet.
+  const replying = turn.speakerProfileId !== null
   return <>
-    {turn.userText && <CodexChatUserMessage content={turn.userText} />}
+    {turn.userText && <CodexChatUserMessage content={turn.userText} mentions={mentions} />}
     <ChatFileLinks files={turn.attachments} />
-    <CodexChatAssistantMessage content={turn.text} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming {...look} />
+    {replying ? <CodexChatAssistantMessage content={turn.text} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming {...look} speaker={speakerOf && turn.speakerProfileId !== undefined ? speakerOf(turn.speakerProfileId) : look.speaker} /> : null}
   </>
 })

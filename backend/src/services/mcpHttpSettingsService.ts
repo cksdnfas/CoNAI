@@ -21,6 +21,8 @@ export interface McpHttpAuthentication {
   requester?: McpRequester;
   source?: 'http' | 'codex-chat';
   toolAllowlist?: string[] | null;
+  /** Codex chat sessions of group rooms: the room history tools. */
+  chatRoomTools?: boolean;
 }
 
 function generateApiKey(): string {

@@ -167,7 +167,7 @@ export function rawMessagesEstimate(messages: ChatCompletionMessage[], tools: Ch
 
 // ---- Window ---------------------------------------------------------------------------------------------------
 
-function toCompletionMessages(message: CodexChatMessageRecord): ChatCompletionMessage[] {
+export function toCompletionMessages(message: CodexChatMessageRecord): ChatCompletionMessage[] {
   if (message.role === 'user') {
     return [{ role: 'user', content: chatContentWithAttachments(message.content, message.attachments) }]
   }
@@ -236,7 +236,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
   return [...result, ...examples]
 }
 
-function sendableMessages(messages: CodexChatMessageRecord[]) {
+export function sendableMessages(messages: CodexChatMessageRecord[]) {
   return messages.filter((message) => message.content.trim() || message.tool_calls.length > 0)
 }
 
