@@ -1,13 +1,14 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowUp, LayoutGrid, Maximize2, Minimize2, Plus, SlidersHorizontal, Square, Trash2, TriangleAlert, X } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Archive, Download, Eraser, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import {
   CHAT_PROFILES_QUERY_KEY,
@@ -19,6 +20,10 @@ import {
   listChatProfiles,
   listCodexChatThreads,
   selectChatAlternative,
+  clearCodexChatThread,
+  summarizeCodexChatThread,
+  updateCodexChatThreadContext,
+  type ChatSearchResult,
   type ChatProfileSummary,
   type CodexChatMessage,
   type CodexChatThread,
@@ -39,6 +44,8 @@ import {
 import { CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
 import { ChatLiveMessage, ChatSavedMessages } from './chat-transcript'
 import { Button } from '@/components/ui/button'
+import { CHAT_COMMANDS, ChatCommandList, type ChatCommand } from './chat-commands'
+import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
 
 const CodexChatContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexChatContextView }))
 const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
@@ -162,6 +169,13 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const [flashMessageId, setFlashMessageId] = useState<number | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
+  const [commandPending, setCommandPending] = useState(false)
+  const [commandIndex, setCommandIndex] = useState(0)
+  const [dismissedCommand, setDismissedCommand] = useState<string | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchText, setSearchText] = useState('')
+  const commandListId = useId()
   const [historyWindow, setHistoryWindow] = useState<{ threadId: number | null; firstId: number | null }>({ threadId: null, firstId: null })
   const prependHeightRef = useRef<number | null>(null)
   const followBottomRef = useRef(true)
@@ -216,7 +230,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '답변 전환 실패', en: 'Could not switch answer' })), tone: 'error' }),
   })
-  const isBusy = isStreaming || serverRunning || alternativeMutation.isPending
+  const isBusy = isStreaming || serverRunning || alternativeMutation.isPending || commandPending
   const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
   const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
   const firstIndex = historyWindow.threadId === activeThreadId ? messages.findIndex((message) => message.id === historyWindow.firstId) : -1
@@ -326,11 +340,75 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const profileMissing = thread !== null && (!profile || !profile.isEnabled)
   const codexUnavailable = isCodexThread && !codexStatus?.available
-  const canSend = activeThreadId !== null && (Boolean(draft.trim()) || chat.draftAttachments.length > 0) && !chat.attachmentsUploading && !isBusy && !profileMissing && !codexUnavailable
+  const isCommand = draft.startsWith('/') && !draft.startsWith('//')
+  const matchingCommands = CHAT_COMMANDS.filter((command) => command.name.startsWith(draft.slice(1).toLowerCase()))
+  const showCommands = isCommand && !/\s/.test(draft) && dismissedCommand !== draft && matchingCommands.length > 0
+  const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
+  const canSend = activeThreadId !== null && (Boolean(draft.trim()) || chat.draftAttachments.length > 0) && !chat.attachmentsUploading && !isBusy && (isCommand || (!profileMissing && !codexUnavailable))
+
+  const runCommand = async (text: string) => {
+    if (isBusy) return
+    const match = /^\/(\S+)\s*(.*)$/s.exec(text.trim())
+    const name = match?.[1].toLowerCase()
+    const argument = match?.[2].trim() ?? ''
+    if (!CHAT_COMMANDS.some((command) => command.name === name)) {
+      showSnackbar({ message: t({ ko: '없는 커맨드야. /help로 목록을 열어봐.', en: 'Unknown command. Use /help.' }), tone: 'error' })
+      return
+    }
+    setDraft('')
+    setCommandPending(true)
+    try {
+      if (name === 'help') { setDraft('/'); setDismissedCommand(null); setCommandIndex(0); return }
+      if (name === 'new') {
+        const chosen = argument ? profiles.find((entry) => entry.usable && entry.name.toLowerCase() === argument.toLowerCase()) : profile
+        if (!chosen?.usable) throw new Error(t({ ko: '쓸 수 있는 프로필 이름을 입력해줘.', en: 'Enter a usable profile name.' }))
+        await startChat(chosen.id)
+      } else if (name === 'search') { setSearchText(argument); setSearchOpen(true) }
+      else if (name === 'export') setExportOpen(true)
+      else if (activeThreadId !== null) {
+        if (name === 'clear') {
+          if (!await confirm({ title: t({ ko: '대화 비우기', en: 'Clear chat' }), description: isCodexThread ? t({ ko: '대화와 Codex 기억을 비울까? 원본 파일과 생성 이미지는 남아.', en: 'Clear the conversation and Codex memory? Original files and generated images stay.' }) : t({ ko: '대화를 비울까? 원본 파일과 생성 이미지는 남아.', en: 'Clear the conversation? Original files and generated images stay.' }), confirmLabel: t({ ko: '비우기', en: 'Clear' }), tone: 'destructive' })) return
+          const detail = await clearCodexChatThread(activeThreadId)
+          queryClient.setQueryData(codexChatThreadQueryKey(activeThreadId), detail)
+          setEditingMessageId(null)
+          await queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(activeThreadId) })
+          await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+        } else {
+          if (isCodexThread) throw new Error(t({ ko: 'API LLM 채팅에서만 쓸 수 있어.', en: 'Available in API LLM chats only.' }))
+          if (name === 'compact') {
+            await summarizeCodexChatThread(activeThreadId)
+            await updateCodexChatThreadContext(activeThreadId, { summaryEnabled: true })
+            await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(activeThreadId) })
+          } else if (name === 'retry') {
+            if (lastReplyId === null) throw new Error(t({ ko: '다시 생성할 답변이 없어.', en: 'No answer to regenerate.' }))
+            await regenerate(activeThreadId, lastReplyId)
+          } else if (name === 'edit') {
+            const lastUser = [...messages].reverse().find((message) => message.role === 'user')
+            if (!lastUser) throw new Error(t({ ko: '수정할 메시지가 없어.', en: 'No message to edit.' }))
+            setEditingMessageId(lastUser.id)
+            chat.focusMessage(lastUser.id)
+          }
+        }
+      }
+    } catch (error) { showSnackbar({ message: getErrorMessage(error, t({ ko: '커맨드 실행 실패', en: 'Command failed' })), tone: 'error' }) }
+    finally { setCommandPending(false) }
+  }
+
+  const pickCommand = (command: ChatCommand) => {
+    if ('argument' in command) { setDraft(`/${command.name} `); composerRef.current?.focus() }
+    else void runCommand(`/${command.name}`)
+  }
+
+  const pickSearchResult = (result: ChatSearchResult) => {
+    selectThread(result.threadId)
+    chat.focusMessage(result.messageId)
+    setSearchOpen(false)
+  }
 
   const handleSend = () => {
     if (canSend && activeThreadId !== null) {
-      void chat.send(activeThreadId)
+      if (isCommand) void runCommand(draft)
+      else void chat.send(activeThreadId, draft.startsWith('//') ? draft.slice(1) : undefined)
     }
   }
 
@@ -350,6 +428,21 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!event.nativeEvent.isComposing && showCommands) {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDismissedCommand(draft); return }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        setCommandIndex((selectedCommand + (event.key === 'ArrowDown' ? 1 : -1) + matchingCommands.length) % matchingCommands.length)
+        return
+      }
+      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+        event.preventDefault()
+        const selected = matchingCommands[selectedCommand]
+        if (event.key === 'Tab') { setDraft(`/${selected.name} `); setDismissedCommand(null) }
+        else void runCommand(`/${selected.name}`)
+        return
+      }
+    }
     // Enter sends; Shift+Enter breaks the line. Ignore Enter that commits an IME (Korean) composition.
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault()
@@ -360,23 +453,23 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const untitled = t({ ko: '새 채팅', en: 'New chat' })
   const pickProfile = (profileId: number) => void startChat(profileId)
 
-  const contextButton = thread && !isCodexThread ? (
-    <IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => setView(activeView === 'context' ? 'chat' : 'context')} label={t({ ko: '컨텍스트', en: 'Context' })}>
-      <SlidersHorizontal />
-    </IconButton>
-  ) : null
-  const galleryButton = activeThreadId !== null ? (
-    <IconButton variant="ghost" size="icon-sm" active={activeView === 'gallery'} onClick={() => setView(activeView === 'gallery' ? 'chat' : 'gallery')} label={t({ ko: '이미지 모아보기', en: 'Image gallery' })}>
-      <LayoutGrid />
-    </IconButton>
-  ) : null
-  const appearanceButton = thread && activeView === 'chat' ? <ChatAppearanceButton /> : null
   const newChatButton = <NewChatMenu profiles={profiles} disabled={isBusy || isStartingChat} onPick={pickProfile} />
-  const deleteButton = (
-    <IconButton variant="ghost" size="icon-sm" onClick={() => void handleDelete()} disabled={activeThreadId === null || isBusy || deleteMutation.isPending} label={t({ ko: '채팅 삭제', en: 'Delete chat' })}>
-      <Trash2 />
-    </IconButton>
-  )
+  const chatMenu = <DropdownMenu>
+    <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
+      <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
+    </DropdownMenuTrigger></Tip>
+    <DropdownMenuContent align="end" className="min-w-48">
+      <DropdownMenuItem disabled={isCodexThread} onSelect={() => setView('context')}><SlidersHorizontal />{t({ ko: '컨텍스트', en: 'Context' })}</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setView('gallery')}><LayoutGrid />{t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem>
+      <ChatAppearanceButton asMenuItem />
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem>
+      <DropdownMenuItem disabled={isBusy || isCodexThread} onSelect={() => void runCommand('/compact')}><Archive />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
   const headerAvatar = speaker ? <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} engine={speaker.engine} size="sm" /> : null
 
   const transcript = (
@@ -387,7 +480,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }}>
       <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')} style={chatTranscriptStyle(appearance, profile?.style)}>
         {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
-        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} media={media} actions={messageActions} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
+        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} summaryUntilId={thread?.summary_until_message_id ?? null} media={media} actions={messageActions} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <ChatLiveMessage turn={liveTurn} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
         ) : null}
@@ -406,6 +499,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const composer = (
     <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? 'mx-auto max-w-3xl px-4 sm:px-6' : 'px-3')}>
+      {showCommands ? <ChatCommandList id={commandListId} commands={matchingCommands} selected={selectedCommand} onSelect={pickCommand} /> : null}
       {warning ? <p className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : null}
       <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
       <div className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm')}>
@@ -413,11 +507,14 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         <textarea
           ref={composerRef}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => { setDraft(event.target.value); setCommandIndex(0) }}
           onKeyDown={handleComposerKeyDown}
           rows={1}
           placeholder={profile ? t({ ko: '{name}에게 메시지', en: 'Message {name}' }, { name: profile.name }) : t({ ko: '메시지', en: 'Message' })}
           aria-label={t({ ko: '메시지', en: 'Message' })}
+          aria-autocomplete="list"
+          aria-controls={showCommands ? commandListId : undefined}
+          aria-activedescendant={showCommands ? `${commandListId}-${selectedCommand}` : undefined}
           className="block min-h-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
         {isBusy ? (
@@ -456,16 +553,25 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ? t({ ko: '컨텍스트', en: 'Context' })
       : thread ? thread.title || untitled : untitled
 
+  const dialogs = <>
+    <ChatExportDialog threadId={activeThreadId} open={exportOpen} onClose={() => setExportOpen(false)} />
+    <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={t({ ko: '채팅 검색', en: 'Search chats' })} widthClassName="max-w-lg">
+      <ModalBody><ChatSearchInput value={searchText} onChange={setSearchText} /><ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} /></ModalBody>
+    </Modal>
+  </>
+
   if (layout === 'page') {
     return (
       <div className="flex min-h-0 flex-1">
+        {dialogs}
         <nav aria-label={t({ ko: '채팅 목록', en: 'Chats' })} className="hidden w-60 shrink-0 flex-col gap-1 border-r border-line py-2 pr-3 md:flex">
           <div className="flex items-center justify-between pb-1 pl-2">
             <span className="text-xs font-semibold text-muted-foreground">{t({ ko: '채팅', en: 'Chats' })}</span>
             {newChatButton}
           </div>
+          <div className="px-2 pb-2"><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {threads.map((entry) => {
+            {searchText.trim() ? <ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} /> : threads.map((entry) => {
               const entryProfile = entry.profile_id ? profilesById.get(entry.profile_id) : undefined
               return (
                 <ListRow key={entry.id} asChild interactive size="sm" selected={entry.id === activeThreadId}>
@@ -487,16 +593,13 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
               {headerAvatar}
               <span className="truncate text-sm font-semibold">{viewTitle}</span>
             </span>
-            {contextButton}
-            {galleryButton}
-            {appearanceButton}
-            <span className="md:hidden">{newChatButton}</span>
+            {newChatButton}
+            {chatMenu}
             {onCollapse ? (
               <IconButton variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={onCollapse} label={t({ ko: '패널로 접기', en: 'Fold into panel' })}>
                 <Minimize2 />
               </IconButton>
             ) : null}
-            {deleteButton}
           </div>
           {body}
         </div>
@@ -506,14 +609,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {dialogs}
       <div className="flex h-12 shrink-0 items-center gap-0.5 border-b border-line pl-2.5 pr-1.5">
         {headerAvatar}
         <ThreadSelect threads={threads} activeThreadId={activeThreadId} disabled={isBusy} onSelect={selectThread} />
-        {contextButton}
-        {galleryButton}
-        {appearanceButton}
         {newChatButton}
-        {deleteButton}
+        {chatMenu}
         {onExpand ? (
           <IconButton variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={onExpand} label={t({ ko: '전체 페이지로 열기', en: 'Open full page' })}>
             <Maximize2 />

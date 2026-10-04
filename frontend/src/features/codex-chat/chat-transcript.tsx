@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { Fragment, memo, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Pencil, RotateCcw, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
@@ -74,15 +74,22 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
 })
 
 /** Stored rows stay untouched while a live turn streams or the composer changes. */
-export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, flashMessageId, media, actions, ...look }: MessageLook & {
+export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, flashMessageId, summaryUntilId, media, actions, ...look }: MessageLook & {
   messages: CodexChatMessage[]
   flashMessageId: number | null
   media?: Record<string, CodexChatMediaInfo>
   actions: MessageActions
+  summaryUntilId: number | null
 }) {
-  return messages.map((message) => (
-    <ChatMessageRow key={message.id} message={message} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
-  ))
+  const { t } = useI18n()
+  const divider = <div role="separator" className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-line" />{t({ ko: '여기까지 요약됨', en: 'Summarized up to here' })}<span className="h-px flex-1 bg-line" /></div>
+  return <>
+    {summaryUntilId !== null && messages[0]?.id > summaryUntilId ? divider : null}
+    {messages.map((message) => <Fragment key={message.id}>
+      <ChatMessageRow message={message} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
+      {message.id === summaryUntilId ? divider : null}
+    </Fragment>)}
+  </>
 })
 
 export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, ...look }: MessageLook & { turn: CodexChatLiveTurn }) {

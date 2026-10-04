@@ -5,6 +5,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
 import { Switch } from '@/components/ui/switch'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n'
 import type { ChatStyle, ChatTypeface } from '@/lib/api-codex-chat'
 
@@ -131,7 +132,7 @@ function AppearanceRow({ label, children }: { label: string; children: ReactNode
 }
 
 /** Header key with the reader's adjustments: avatar size, text size, line spacing, background on/off. */
-export function ChatAppearanceButton() {
+export function ChatAppearanceButton({ asMenuItem = false }: { asMenuItem?: boolean }) {
   const { t } = useI18n()
   const { appearance, update, reset } = useChatAppearance()
   const [open, setOpen] = useState(false)
@@ -140,14 +141,14 @@ export function ChatAppearanceButton() {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Tip content={t({ ko: '채팅 모양', en: 'Chat appearance' })}>
+      <Tip content={asMenuItem ? null : t({ ko: '채팅 모양', en: 'Chat appearance' })}>
         <PopoverTrigger asChild>
-          <IconButton variant="ghost" size="icon-sm" label={t({ ko: '채팅 모양', en: 'Chat appearance' })} tooltip={false}>
+          {asMenuItem ? <DropdownMenuItem onSelect={(event) => event.preventDefault()}><ALargeSmall />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem> : <IconButton variant="ghost" size="icon-sm" label={t({ ko: '채팅 모양', en: 'Chat appearance' })} tooltip={false}>
             <ALargeSmall />
-          </IconButton>
+          </IconButton>}
         </PopoverTrigger>
       </Tip>
-      <PopoverContent align="end" className="w-72 space-y-3" onKeyDownCapture={(event) => {
+      <PopoverContent align="end" side={asMenuItem ? 'left' : 'bottom'} className="w-72 space-y-3" onKeyDownCapture={(event) => {
         // A nested tooltip can consume Radix's document Escape handler before the popover sees it.
         if (event.key === 'Escape') {
           event.preventDefault()

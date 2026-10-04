@@ -108,8 +108,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     }
   }, [queryClient, showSnackbar, t])
 
-  const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string }) => {
-    const text = rewrite ? '' : draftRef.current.trim()
+  const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string }, literalText?: string) => {
+    const text = rewrite ? '' : (literalText ?? draftRef.current).trim()
     const attachments = rewrite ? [] : attachmentsRef.current
     if ((!rewrite && !text && attachments.length === 0) || streamAbortRef.current || uploadBusyRef.current) {
       return false
@@ -181,7 +181,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     return accepted
   }, [queryClient, showSnackbar, t])
 
-  const send = useCallback(async (threadId: number) => { await reply(threadId) }, [reply])
+  const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
   const regenerate = useCallback((threadId: number, messageId: number) => reply(threadId, { messageId }), [reply])
   const editMessage = useCallback((threadId: number, messageId: number, content: string) => reply(threadId, { messageId, content }), [reply])
 

@@ -106,6 +106,14 @@ function removeMessagesAfter(threadId: number, messageId: number) {
 }
 
 export const CodexChatStore = {
+  searchMessages(accountId: number | null, query: string) {
+    return getUserSettingsDb().prepare(`SELECT m.id AS messageId, m.thread_id AS threadId, t.title, t.profile_id AS profileId,
+      m.role, m.created_date AS createdDate, substr(m.content, MAX(1, instr(lower(m.content), lower(?)) - 60), 220) AS excerpt
+      FROM codex_chat_messages m JOIN codex_chat_threads t ON t.id = m.thread_id
+      WHERE t.account_id IS ? AND instr(lower(m.content), lower(?)) > 0 ORDER BY m.id DESC LIMIT 50
+    `).all(query, accountId, query) as Array<{ messageId: number; threadId: number; title: string; profileId: number | null; role: 'user' | 'assistant'; createdDate: string; excerpt: string }>
+  },
+
   listThreads(accountId: number | null) {
     return getUserSettingsDb().prepare(`
       SELECT * FROM codex_chat_threads WHERE account_id IS ? ORDER BY updated_date DESC, id DESC

@@ -320,6 +320,18 @@ export function clearCodexChatThread(threadId: number) {
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/clear`, { method: 'POST' })
 }
 
+export type ChatSearchResult = { messageId: number; threadId: number; title: string; profileId: number | null; role: 'user' | 'assistant'; createdDate: string; excerpt: string }
+
+export function searchChatMessages(query: string) {
+  return requestApiData<ChatSearchResult[]>(`/api/codex-chat/search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
+}
+
+export async function exportChat(threadId: number, format: 'md' | 'json') {
+  const response = await fetch(buildApiUrl(`/api/codex-chat/threads/${threadId}/export?format=${format}`), { credentials: 'include', cache: 'no-store' })
+  if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `Request failed: ${response.status}`)
+  return response.blob()
+}
+
 export function selectChatAlternative(threadId: number, messageId: number, index: number) {
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/alternative`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ index }) })
 }

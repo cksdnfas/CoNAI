@@ -21,6 +21,7 @@ import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatServ
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
 import { FileStoreError } from '../services/fileStoreService'
+import { exportChatMarkdown } from '../services/codex-chat/chatExport'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -389,6 +390,32 @@ router.get('/admin/models', requireAdmin, asyncHandler(async (req: Request, res:
 }))
 
 // ---- Threads ---------------------------------------------------------------------------------------------------
+
+router.get('/search', requireChatAccess, (req: Request, res: Response) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+  if (!query || query.length > 200) { sendRouteBadRequest(res, '검색어는 1~200자로 입력해줘.'); return }
+  res.json({ success: true, data: CodexChatStore.searchMessages(getRequesterAccountId(req), query) })
+})
+
+router.get('/threads/:threadId/export', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  const format = req.query.format ?? 'md'
+  if (format !== 'md' && format !== 'json') { sendRouteBadRequest(res, '내보내기 형식은 md 또는 json이야.'); return }
+  try {
+    const requester = requesterFrom(req)
+    const detail = CodexChatService.getThread(requester, threadId)
+    const profile = detail.thread.profile_id ? ChatProfileStore.find(detail.thread.profile_id) : null
+    res.setHeader('Content-Disposition', `attachment; filename="chat-${threadId}.${format}"`)
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Cache-Control', 'private, no-store')
+    if (format === 'json') {
+      res.type('application/json').send(JSON.stringify({ format: 'conai-chat', version: 1, exportedAt: new Date().toISOString(), profileName: profile?.name ?? null, thread: detail.thread, messages: detail.messages, media: detail.media }, null, 2))
+    } else {
+      res.type('text/markdown').send(exportChatMarkdown(detail.thread, detail.messages, CodexChatService.listThreadMedia(requester, threadId), profile?.name ?? '어시스턴트', `${req.protocol}://${req.get('host')}`))
+    }
+  } catch (error) { sendChatError(res, error) }
+})
 
 router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)

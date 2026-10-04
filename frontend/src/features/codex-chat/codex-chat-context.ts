@@ -50,7 +50,7 @@ export interface CodexChatApi {
   removeAttachment: (id: string) => void
   uploadAttachments: (files: File[]) => Promise<void>
   /** Send `draft` to `threadId` and stream the reply. */
-  send: (threadId: number) => Promise<void>
+  send: (threadId: number, text?: string) => Promise<void>
   regenerate: (threadId: number, messageId: number) => Promise<boolean>
   editMessage: (threadId: number, messageId: number, content: string) => Promise<boolean>
   stop: (threadId: number) => void
