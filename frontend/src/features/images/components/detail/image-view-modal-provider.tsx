@@ -10,6 +10,7 @@ import {
   type ImageViewSequenceTotal,
 } from './image-view-modal-context'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
+import { registerTranslationCatalog } from '@/i18n'
 
 type ImageViewModalOverlayModule = typeof import('./image-view-modal-overlay')
 type ImageViewModalOverlayComponent = ImageViewModalOverlayModule['ImageViewModalOverlay']
@@ -21,8 +22,18 @@ type IdlePreloadWindow = Window & {
 let imageViewModalOverlayLoadPromise: Promise<{ default: ImageViewModalOverlayComponent }> | null = null
 
 function loadImageViewModalOverlay() {
-  imageViewModalOverlayLoadPromise ??= import('./image-view-modal-overlay')
-    .then((module) => ({ default: module.ImageViewModalOverlay }))
+  // The overlay opens from any route (chat, files, ...), so it must bring its own
+  // catalogs instead of relying on the current route having registered them.
+  imageViewModalOverlayLoadPromise ??= Promise.all([
+    import('./image-view-modal-overlay'),
+    import('@/i18n/resources/images').then((module) => module.imagesCatalog),
+    import('@/i18n/resources/image-editor').then((module) => module.imageEditorCatalog),
+  ])
+    .then(([module, imagesCatalog, imageEditorCatalog]) => {
+      registerTranslationCatalog(imagesCatalog)
+      registerTranslationCatalog(imageEditorCatalog)
+      return { default: module.ImageViewModalOverlay }
+    })
     .catch((error: unknown) => {
       imageViewModalOverlayLoadPromise = null
       throw error
