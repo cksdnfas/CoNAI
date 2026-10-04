@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { McpRequester } from '../../mcp/context'
 import { createMcpServer } from '../../mcp/server'
-import type { CodexChatScope } from './codexChatSettings'
+import type { ChatScope } from './chatSettings'
 import type { ChatCompletionTool } from './llmChatCompletion'
 
 export type ChatMcpToolResult = { content?: unknown[]; structuredContent?: unknown; isError?: boolean }
@@ -11,7 +11,7 @@ export type ChatMcpToolResult = { content?: unknown[]; structuredContent?: unkno
  * The CoNAI MCP server, connected in-process for an API LLM chat: the same tools, scope filter and requester
  * ownership as the HTTP endpoint, without a network hop or token. One bridge per reply; close it afterwards.
  */
-export async function openChatMcpBridge(requester: McpRequester, scopes: CodexChatScope[]) {
+export async function openChatMcpBridge(requester: McpRequester, scopes: ChatScope[]) {
   const server = createMcpServer({ scopes: [...scopes], requester, source: 'llm-chat' })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)

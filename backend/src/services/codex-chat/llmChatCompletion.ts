@@ -25,6 +25,13 @@ export type ChatCompletionResult = {
   reasoning: string
   toolCalls: ChatCompletionToolCall[]
   finishReason: string | null
+  /** Prompt tokens the server reported, when it reports usage. */
+  promptTokens: number | null
+}
+
+function readPromptTokens(json: unknown) {
+  const value = (json as { usage?: { prompt_tokens?: unknown } } | null)?.usage?.prompt_tokens
+  return typeof value === 'number' && value > 0 ? value : null
 }
 
 /** No reply bytes for this long means the server is stuck; a long answer that keeps streaming is fine. */
@@ -169,6 +176,7 @@ function readJsonCompletion(json: unknown): ChatCompletionResult {
     reasoning: readReasoning(message),
     toolCalls: finalizeToolCalls(drafts),
     finishReason: typeof choice.finish_reason === 'string' ? choice.finish_reason : null,
+    promptTokens: readPromptTokens(json),
   }
 }
 
@@ -211,6 +219,7 @@ export async function streamChatCompletion(params: {
     let content = ''
     let reasoning = ''
     let finishReason: string | null = null
+    let promptTokens: number | null = null
     const drafts = new Map<number, ToolCallDraft>()
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
     let buffer = ''
@@ -225,6 +234,7 @@ export async function streamChatCompletion(params: {
       } catch {
         return
       }
+      promptTokens = readPromptTokens(json) ?? promptTokens
       if (json.error) {
         const error = json.error as { message?: string }
         throw new Error(`LLM 오류: ${error.message ?? JSON.stringify(json.error)}`)
@@ -277,7 +287,7 @@ export async function streamChatCompletion(params: {
       handleEvent(buffer.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n'))
     }
 
-    return { content, reasoning, toolCalls: finalizeToolCalls(drafts), finishReason }
+    return { content, reasoning, toolCalls: finalizeToolCalls(drafts), finishReason, promptTokens }
   } catch (error) {
     if (idle.signal.aborted && !params.signal.aborted) {
       throw idle.signal.reason instanceof Error ? idle.signal.reason : new Error('LLM 응답이 너무 오래 멈춰 있어.')

@@ -1,13 +1,13 @@
 import type { McpRequester } from '../../mcp/context'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
+import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { loadChatSettings } from './chatSettings'
 import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage } from './llmChatCompletion'
-import { buildChatMessages, fillCharacterPlaceholders, resolveContextConfig, stripThinking, updateThreadSummary } from './llmChatContext'
-import { LlmChatProfileStore, type LlmChatProfile } from './llmChatProfiles'
-import { loadLlmChatSettings } from './llmChatSettings'
+import { buildChatMessages, fillCharacterPlaceholders, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, updateThreadSummary } from './llmChatContext'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
 const STORED_TOOL_OUTPUT_LENGTH = 4000
@@ -44,8 +44,8 @@ function emit(turn: LlmTurn, event: CodexChatStreamEvent) {
 }
 
 export function assertLlmChatAvailable(requester: McpRequester) {
-  if (!loadLlmChatSettings().enabled) {
-    throw new LlmChatError('LLM 채팅이 꺼져 있어.', 403)
+  if (!loadChatSettings().enabled) {
+    throw new LlmChatError('채팅이 꺼져 있어.', 403)
   }
   if (!resolveChatAccess(requester.accountId).llm) {
     throw new LlmChatError('LLM 채팅 권한이 없어.', 403)
@@ -53,8 +53,8 @@ export function assertLlmChatAvailable(requester: McpRequester) {
 }
 
 function requireUsableProfile(profileId: number | null) {
-  const profile = profileId === null ? null : LlmChatProfileStore.find(profileId)
-  if (!profile) {
+  const profile = profileId === null ? null : ChatProfileStore.find(profileId)
+  if (!profile || profile.engine !== 'llm') {
     throw new LlmChatError('이 채팅의 프로필이 지워졌어.', 409)
   }
   if (!profile.isEnabled) {
@@ -108,8 +108,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
 }
 
 /** Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer. */
-async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: LlmChatProfile) {
-  const settings = loadLlmChatSettings()
+async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
   const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, temperature: profile.temperature, maxTokens: profile.maxTokens })
   const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
   const bridge = scopes.length > 0 ? await openChatMcpBridge(requester, scopes) : null
@@ -120,11 +119,12 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       thread,
       messages: CodexChatStore.listMessages(thread.id),
       config: resolveContextConfig(thread, profile),
-      withTools: Boolean(bridge),
+      tools: bridge?.tools ?? [],
     })
 
     for (let round = 1; ; round += 1) {
-      const tools = bridge && round <= settings.maxToolRounds ? bridge.tools : []
+      const tools = bridge && round <= profile.maxToolRounds ? bridge.tools : []
+      const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
       let separated = turn.text.length === 0
       const result = await streamChatCompletion({
         target,
@@ -143,6 +143,9 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
         },
       })
 
+      if (round === 1 && result.promptTokens) {
+        recordPromptUsage(profile.id, rawEstimate, result.promptTokens)
+      }
       if (!bridge || tools.length === 0 || result.toolCalls.length === 0) {
         return
       }

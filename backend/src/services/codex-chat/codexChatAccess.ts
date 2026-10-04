@@ -6,7 +6,7 @@ import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
 import { AuthAccessControlService } from '../authAccessControlService'
 import type { McpHttpAuthentication } from '../mcpHttpSettingsService'
 import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
-import { CODEX_CHAT_SCOPES, loadCodexChatSettings, type CodexChatScope } from './codexChatSettings'
+import { CHAT_SCOPES, loadChatSettings, type ChatScope } from './chatSettings'
 
 const CHAT_MCP_TOKEN_PREFIX = 'conai_chat_'
 
@@ -15,7 +15,7 @@ export const CHAT_PERMISSION_KEYS = {
   llm: 'chat.llm.use',
 } as const
 
-const CHAT_TOOL_PERMISSION_KEYS: Record<CodexChatScope, string> = {
+const CHAT_TOOL_PERMISSION_KEYS: Record<ChatScope, string> = {
   read: 'chat.tools.read',
   generate: 'chat.tools.generate',
   organize: 'chat.tools.organize',
@@ -25,7 +25,7 @@ export type ChatAccess = {
   codex: boolean
   llm: boolean
   /** MCP scopes this account may hand to a chat agent; a chat's own scope setting is intersected with it. */
-  scopes: CodexChatScope[]
+  scopes: ChatScope[]
 }
 
 /**
@@ -45,21 +45,24 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
   return {
     codex: has(CHAT_PERMISSION_KEYS.codex),
     llm: has(CHAT_PERMISSION_KEYS.llm),
-    scopes: CODEX_CHAT_SCOPES.filter((scope) => has(CHAT_TOOL_PERMISSION_KEYS[scope])),
+    scopes: CHAT_SCOPES.filter((scope) => has(CHAT_TOOL_PERMISSION_KEYS[scope])),
   }
 }
 
 /** A chat's configured scopes, narrowed to what the chatting account may use. */
-export function intersectChatScopes(configured: readonly CodexChatScope[], access: ChatAccess) {
+export function intersectChatScopes(configured: readonly ChatScope[], access: ChatAccess) {
   return configured.filter((scope) => access.scopes.includes(scope))
 }
 
-const tokens = new Map<string, McpRequester>()
+const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[] }>()
 
-/** One token per chat app-server process; it lets that process reach `/mcp` as the chatting account. */
-export function issueCodexChatMcpToken(requester: McpRequester) {
+/**
+ * One token per chat app-server process; it lets that process reach `/mcp` as the chatting account with the
+ * scopes its profiles were given (processes are keyed by account + scopes).
+ */
+export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[]) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, requester)
+  tokens.set(token, { requester, scopes: [...scopes] })
   return token
 }
 
@@ -70,7 +73,7 @@ export function revokeCodexChatMcpToken(token: string) {
 /**
  * Authenticate an internal chat token. Only direct loopback requests qualify (the app-server runs next to the
  * backend), and the grant is re-checked on every call: chat enabled, the account still holds `chat.codex.use`, and the
- * scopes are the chat setting narrowed to the account's `chat.tools.*` keys.
+ * scopes are the profile's, narrowed to the account's current `chat.tools.*` keys.
  * Works while the public HTTP MCP endpoint is disabled.
  */
 export function authenticateCodexChatMcpRequest(req: Request, candidate: string | null): McpHttpAuthentication | null {
@@ -78,13 +81,13 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
     return null
   }
 
-  const requester = tokens.get(candidate)
-  const settings = loadCodexChatSettings()
-  if (!requester || !settings.enabled) {
+  const grant = tokens.get(candidate)
+  if (!grant || !loadChatSettings().enabled) {
     return null
   }
+  const { requester } = grant
   const access = resolveChatAccess(requester.accountId)
-  const scopes = intersectChatScopes(settings.scopes, access)
+  const scopes = intersectChatScopes(grant.scopes, access)
   if (!access.codex || scopes.length === 0) {
     return null
   }

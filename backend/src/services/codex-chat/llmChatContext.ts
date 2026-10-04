@@ -1,11 +1,12 @@
+import { resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
-import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage } from './llmChatCompletion'
-import type { LlmChatProfile } from './llmChatProfiles'
-import { loadLlmChatSettings } from './llmChatSettings'
+import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 
 /** Tool output replayed to the model for turns still in the window. */
 const REPLAYED_TOOL_OUTPUT_LENGTH = 4000
 const SUMMARY_TOOL_NOTE_LENGTH = 300
+/** Room kept for the reply when the profile sets no max tokens. */
+const DEFAULT_REPLY_RESERVE_TOKENS = 2048
 
 const TOOL_GUIDANCE = [
   'You can act on CoNAI, a local app for managing and generating AI images, only through the provided tools.',
@@ -16,19 +17,23 @@ const TOOL_GUIDANCE = [
 
 export type LlmChatContextConfig = {
   contextTurns: number
+  /** Token budget for the whole request (null: turns only). */
+  contextTokens: number | null
+  replyReserveTokens: number
   summaryEnabled: boolean
   summaryTriggerTurns: number
   summaryPrompt: string
 }
 
-/** Thread override → profile default → global LLM chat setting. */
-export function resolveContextConfig(thread: CodexChatThreadRecord, profile: LlmChatProfile | null): LlmChatContextConfig {
-  const settings = loadLlmChatSettings()
+/** The chat's own overrides (turn count, summary on/off), else the profile's settings. */
+export function resolveContextConfig(thread: CodexChatThreadRecord, profile: ChatProfile): LlmChatContextConfig {
   return {
-    contextTurns: thread.context_turns ?? profile?.contextTurns ?? settings.contextTurns,
-    summaryEnabled: thread.summary_enabled !== null ? thread.summary_enabled === 1 : profile?.summaryEnabled ?? settings.summaryEnabled,
-    summaryTriggerTurns: settings.summaryTriggerTurns,
-    summaryPrompt: settings.summaryPrompt,
+    contextTurns: thread.context_turns ?? profile.contextTurns,
+    contextTokens: profile.contextTokens,
+    replyReserveTokens: profile.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS,
+    summaryEnabled: thread.summary_enabled !== null ? thread.summary_enabled === 1 : profile.summaryEnabled,
+    summaryTriggerTurns: profile.summaryTriggerTurns,
+    summaryPrompt: resolveSummaryPrompt(profile),
   }
 }
 
@@ -38,8 +43,19 @@ export function stripThinking(text: string) {
 }
 
 /** `{{char}}` / `{{user}}` placeholders, as character cards write them. */
-export function fillCharacterPlaceholders(text: string, profile: LlmChatProfile) {
+export function fillCharacterPlaceholders(text: string, profile: ChatProfile) {
   return text.replace(/\{\{\s*char\s*\}\}/gi, profile.name).replace(/\{\{\s*user\s*\}\}/gi, '사용자')
+}
+
+/** System prompt, character, user persona and example dialogue as one block (both engines use it). */
+export function buildPersonaPrompt(profile: ChatProfile) {
+  const sections = [
+    profile.systemPrompt,
+    profile.characterDescription ? `## 캐릭터: ${profile.name}\n${profile.characterDescription}` : '',
+    profile.userPersona ? `## 사용자\n${profile.userPersona}` : '',
+    profile.exampleDialogue ? `## 대화 예시\n${profile.exampleDialogue}` : '',
+  ]
+  return fillCharacterPlaceholders(sections.filter(Boolean).join('\n\n'), profile)
 }
 
 /** A turn starts at a user message; a greeting before the first user message is a turn of its own. */
@@ -55,16 +71,45 @@ export function splitTurns(messages: CodexChatMessageRecord[]) {
   return turns
 }
 
-function buildSystemPrompt(profile: LlmChatProfile, withTools: boolean) {
-  const sections = [
-    profile.systemPrompt,
-    profile.characterDescription ? `## 캐릭터: ${profile.name}\n${profile.characterDescription}` : '',
-    profile.userPersona ? `## 사용자\n${profile.userPersona}` : '',
-    profile.exampleDialogue ? `## 대화 예시\n${profile.exampleDialogue}` : '',
-    withTools ? TOOL_GUIDANCE : '',
-  ]
-  return fillCharacterPlaceholders(sections.filter(Boolean).join('\n\n'), profile)
+// ---- Token estimate -------------------------------------------------------------------------------------------
+
+/** Server-reported prompt tokens ÷ our estimate, per profile, so the estimate tracks each model's tokenizer. */
+const estimateRatios = new Map<number, number>()
+
+/** Rough tokens: ~4 ASCII characters or ~1 other character (Korean, CJK) per token. Errs high. */
+function rawTokenEstimate(text: string) {
+  let ascii = 0
+  let other = 0
+  for (const char of text) {
+    if (char.charCodeAt(0) < 128) ascii += 1
+    else other += 1
+  }
+  return Math.ceil(ascii / 4 + other)
 }
+
+export function estimateTokens(profileId: number, text: string) {
+  return Math.ceil(rawTokenEstimate(text) * (estimateRatios.get(profileId) ?? 1))
+}
+
+export function estimateMessagesTokens(profileId: number, messages: ChatCompletionMessage[], tools: ChatCompletionTool[] = []) {
+  return estimateTokens(profileId, JSON.stringify(messages) + (tools.length > 0 ? JSON.stringify(tools) : ''))
+}
+
+/** Feed back the prompt tokens a server reported for a request we estimated (smoothed, clamped to 0.4–2.5×). */
+export function recordPromptUsage(profileId: number, rawEstimate: number, promptTokens: number) {
+  if (rawEstimate <= 0 || promptTokens <= 0) {
+    return
+  }
+  const measured = Math.min(2.5, Math.max(0.4, promptTokens / rawEstimate))
+  const previous = estimateRatios.get(profileId)
+  estimateRatios.set(profileId, previous === undefined ? measured : previous * 0.7 + measured * 0.3)
+}
+
+export function rawMessagesEstimate(messages: ChatCompletionMessage[], tools: ChatCompletionTool[] = []) {
+  return rawTokenEstimate(JSON.stringify(messages) + (tools.length > 0 ? JSON.stringify(tools) : ''))
+}
+
+// ---- Window ---------------------------------------------------------------------------------------------------
 
 function toCompletionMessages(message: CodexChatMessageRecord): ChatCompletionMessage[] {
   if (message.role === 'user') {
@@ -90,30 +135,60 @@ function toCompletionMessages(message: CodexChatMessageRecord): ChatCompletionMe
 }
 
 /**
- * The request for one reply: the profile's system prompt (stable, so servers can reuse the cached prefix), the
- * rolling summary when enabled, then the last N turns — which end with the user message just stored.
+ * The turns that fit: at most `contextTurns`, and — with a token budget — only as many recent turns as fit beside the
+ * fixed part (system prompt, summary, tool schemas) and the reply reserve. The newest turn is always kept.
  */
-export function buildChatMessages(params: {
-  profile: LlmChatProfile
-  thread: CodexChatThreadRecord
-  messages: CodexChatMessageRecord[]
-  config: LlmChatContextConfig
-  withTools: boolean
-}): ChatCompletionMessage[] {
-  const { profile, thread, messages, config } = params
-  const systemPrompt = buildSystemPrompt(profile, params.withTools)
+function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], config: LlmChatContextConfig, fixedTokens: number) {
+  const candidates = turns.slice(-config.contextTurns)
+  if (config.contextTokens === null) {
+    return candidates
+  }
+  let remaining = config.contextTokens - config.replyReserveTokens - fixedTokens
+  const kept: CodexChatMessageRecord[][] = []
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const cost = estimateMessagesTokens(profileId, candidates[index].flatMap(toCompletionMessages))
+    if (kept.length > 0 && cost > remaining) {
+      break
+    }
+    kept.unshift(candidates[index])
+    remaining -= cost
+  }
+  return kept
+}
+
+function buildSystemMessages(profile: ChatProfile, thread: CodexChatThreadRecord, config: LlmChatContextConfig, withTools: boolean) {
+  const systemPrompt = [buildPersonaPrompt(profile), withTools ? TOOL_GUIDANCE : ''].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
   if (config.summaryEnabled && thread.summary?.trim()) {
     result.push({ role: 'system', content: `## 지금까지의 대화 요약\n${thread.summary.trim()}` })
   }
-  const window = splitTurns(messages.filter((message) => message.content.trim() || message.tool_calls.length > 0)).slice(-config.contextTurns)
-  for (const message of window.flat()) {
-    result.push(...toCompletionMessages(message))
-  }
   return result
 }
 
-function transcriptLine(message: CodexChatMessageRecord, profile: LlmChatProfile) {
+function sendableMessages(messages: CodexChatMessageRecord[]) {
+  return messages.filter((message) => message.content.trim() || message.tool_calls.length > 0)
+}
+
+/**
+ * The request for one reply: the profile's system prompt (stable, so servers can reuse the cached prefix), the
+ * rolling summary when enabled, then the recent turns that fit — ending with the user message just stored.
+ */
+export function buildChatMessages(params: {
+  profile: ChatProfile
+  thread: CodexChatThreadRecord
+  messages: CodexChatMessageRecord[]
+  config: LlmChatContextConfig
+  tools: ChatCompletionTool[]
+}): ChatCompletionMessage[] {
+  const { profile, thread, config, tools } = params
+  const system = buildSystemMessages(profile, thread, config, tools.length > 0)
+  const window = selectWindow(profile.id, splitTurns(sendableMessages(params.messages)), config, estimateMessagesTokens(profile.id, system, tools))
+  return [...system, ...window.flat().flatMap(toCompletionMessages)]
+}
+
+// ---- Summary --------------------------------------------------------------------------------------------------
+
+function transcriptLine(message: CodexChatMessageRecord, profile: ChatProfile) {
   const speaker = message.role === 'user' ? '사용자' : profile.name
   const tools = message.tool_calls.map((call) => `[도구 ${call.tool}: ${(call.summary ?? '').slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]`)
   return [`${speaker}: ${message.content}`, ...tools].join('\n')
@@ -122,11 +197,10 @@ function transcriptLine(message: CodexChatMessageRecord, profile: LlmChatProfile
 const summarizing = new Set<number>()
 
 /**
- * Fold turns that left the window into the thread summary (previous summary + those turns → new summary).
- * Automatic runs wait until `summaryTriggerTurns` turns have dropped out; `force` folds in everything not yet
- * summarized, including the turns still in the window.
+ * Fold turns that left the window (turn count or token budget) into the thread summary. Automatic runs wait until
+ * `summaryTriggerTurns` turns have dropped out; `force` folds in everything not yet summarized.
  */
-export async function updateThreadSummary(threadId: number, profile: LlmChatProfile, options: { force?: boolean; signal?: AbortSignal } = {}) {
+export async function updateThreadSummary(threadId: number, profile: ChatProfile, options: { force?: boolean; signal?: AbortSignal } = {}) {
   if (summarizing.has(threadId)) {
     return null
   }
@@ -139,8 +213,9 @@ export async function updateThreadSummary(threadId: number, profile: LlmChatProf
     return null
   }
 
-  const turns = splitTurns(CodexChatStore.listMessages(threadId))
-  const candidates = (options.force ? turns : turns.slice(0, Math.max(0, turns.length - config.contextTurns))).flat()
+  const turns = splitTurns(sendableMessages(CodexChatStore.listMessages(threadId)))
+  const windowSize = selectWindow(profile.id, turns, config, estimateMessagesTokens(profile.id, buildSystemMessages(profile, thread, config, profile.mcpEnabled))).length
+  const candidates = (options.force ? turns : turns.slice(0, Math.max(0, turns.length - windowSize))).flat()
   const pending = candidates.filter((message) => message.id > (thread.summary_until_message_id ?? 0))
   const pendingTurns = pending.filter((message) => message.role === 'user').length
   if (pending.length === 0 || (!options.force && pendingTurns < config.summaryTriggerTurns)) {
@@ -166,8 +241,4 @@ export async function updateThreadSummary(threadId: number, profile: LlmChatProf
   } finally {
     summarizing.delete(threadId)
   }
-}
-
-export function isSummarizing(threadId: number) {
-  return summarizing.has(threadId)
 }

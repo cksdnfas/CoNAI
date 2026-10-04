@@ -8,9 +8,11 @@ import { onBeforeCodexCliUpdate, isCodexCliUpdating } from '../codexCliMaintenan
 import { resolveCodexCommand } from '../codexGenerationExecutor'
 import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import { CodexAppServerClient, type CodexAppServerNotification } from './codexAppServerClient'
-import { issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken } from './codexChatAccess'
-import { loadCodexChatSettings, onCodexChatSettingsChange } from './codexChatSettings'
+import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { loadChatSettings, type ChatScope } from './chatSettings'
+import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken } from './codexChatAccess'
 import { collectCodexChatMedia } from './codexChatMedia'
+import { buildPersonaPrompt, fillCharacterPlaceholders } from './llmChatContext'
 import { LlmChatService } from './llmChatService'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
@@ -84,8 +86,12 @@ type Session = {
   requester: McpRequester
   client: CodexAppServerClient
   token: string
-  model: string | null
-  reasoningEffort: CodexReasoningEffort | null
+  /** MCP scopes of this process's token; profiles with other scopes get their own process. */
+  scopes: ChatScope[]
+  /** The CLI's configured model and effort, used when a profile leaves them empty. */
+  configModel: string | null
+  configEffort: CodexReasoningEffort | null
+  catalog: Awaited<ReturnType<typeof getCodexModelSuggestions>>
   loadedThreads: Set<string>
   activeTurns: Map<string, TurnState>
   idleTimer: NodeJS.Timeout | null
@@ -100,8 +106,23 @@ export class CodexChatError extends Error {
 const sessions = new Map<string, Session>()
 const startingSessions = new Map<string, Promise<Session>>()
 
-function sessionKey(requester: McpRequester) {
-  return requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`
+function sessionKey(requester: McpRequester, scopes: ChatScope[]) {
+  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}`
+}
+
+/** The profile's model and reasoning effort, falling back to the CLI config and then the model's default effort. */
+function resolveCodexRun(session: Session, profile: ChatProfile) {
+  const model = profile.model || session.configModel || null
+  const selectedModel = model ? session.catalog.models.find((entry) => entry.id === model) : session.catalog.models.find((entry) => entry.isDefault)
+  const supported = selectedModel?.supportedReasoningEfforts
+  if (profile.reasoningEffort && supported && !supported.includes(profile.reasoningEffort)) {
+    throw new CodexChatError('이 프로필의 추론 강도를 선택한 모델이 지원하지 않아. 프로필 설정에서 바꿔줘.')
+  }
+  const effort = profile.reasoningEffort
+    || (session.configEffort && (!supported || supported.includes(session.configEffort)) ? session.configEffort : null)
+    || selectedModel?.defaultReasoningEffort
+    || null
+  return { model, effort }
 }
 
 function chatWorkDir() {
@@ -182,14 +203,16 @@ function buildAppServerArgs(knownFeatures: Set<string>, mcpServers: string[]) {
   ]
 }
 
-function threadOverrides(session: Session) {
+function threadOverrides(session: Session, profile: ChatProfile) {
+  const { model, effort } = resolveCodexRun(session, profile)
+  const persona = buildPersonaPrompt(profile)
   return {
-    model: session.model,
-    ...(session.reasoningEffort ? { config: { model_reasoning_effort: session.reasoningEffort } } : {}),
+    model,
+    ...(effort ? { config: { model_reasoning_effort: effort } } : {}),
     cwd: chatWorkDir(),
     approvalPolicy: 'never',
     sandbox: 'read-only',
-    developerInstructions: DEVELOPER_INSTRUCTIONS,
+    developerInstructions: persona ? `${DEVELOPER_INSTRUCTIONS}\n\n${persona}` : DEVELOPER_INSTRUCTIONS,
   }
 }
 
@@ -323,37 +346,28 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
   }
 }
 
-async function startSession(requester: McpRequester): Promise<Session> {
+async function startSession(requester: McpRequester, scopes: ChatScope[]): Promise<Session> {
   const { knownFeatures, mcpServers } = await probeCodexCli()
   const args = buildAppServerArgs(knownFeatures, mcpServers)
-  const token = issueCodexChatMcpToken(requester)
+  const token = issueCodexChatMcpToken(requester, scopes)
   let client: CodexAppServerClient | undefined
-  let model: string | null = null
-  let reasoningEffort: CodexReasoningEffort | null = null
+  let configModel: string | null = null
+  let configEffort: CodexReasoningEffort | null = null
+  let catalog: Session['catalog']
   try {
     client = await CodexAppServerClient.start({
       args,
       cwd: chatWorkDir(),
       env: { ...process.env, NO_COLOR: '1', [MCP_TOKEN_ENV]: token },
     })
-    const [{ config }, catalog] = await Promise.all([
+    const [{ config }, models] = await Promise.all([
       client.request<{ config: { model?: string | null; model_reasoning_effort?: unknown } }>('config/read', { includeLayers: false }),
       getCodexModelSuggestions(),
     ])
-    const settings = loadCodexChatSettings()
     assertChatAvailable(requester)
-    model = settings.model || config.model || null
-    const selectedModel = model ? catalog.models.find((entry) => entry.id === model) : catalog.models.find((entry) => entry.isDefault)
-    const supported = selectedModel?.supportedReasoningEfforts
-    if (settings.reasoningEffort && supported && !supported.includes(settings.reasoningEffort)) {
-      throw new CodexChatError('선택한 모델에서 지원하지 않는 추론 강도야. 채팅 설정에서 바꿔줘.')
-    }
-    const configuredEffort = isCodexReasoningEffort(config.model_reasoning_effort) ? config.model_reasoning_effort : null
-    // Resolve "default" again for each session so resuming a thread cannot retain a previous explicit effort.
-    reasoningEffort = settings.reasoningEffort
-      || (configuredEffort && (!supported || supported.includes(configuredEffort)) ? configuredEffort : null)
-      || selectedModel?.defaultReasoningEffort
-      || null
+    configModel = config.model || null
+    configEffort = isCodexReasoningEffort(config.model_reasoning_effort) ? config.model_reasoning_effort : null
+    catalog = models
   } catch (error) {
     client?.close()
     revokeCodexChatMcpToken(token)
@@ -361,12 +375,14 @@ async function startSession(requester: McpRequester): Promise<Session> {
   }
 
   const session: Session = {
-    key: sessionKey(requester),
+    key: sessionKey(requester, scopes),
     requester,
     client,
     token,
-    model,
-    reasoningEffort,
+    scopes: [...scopes],
+    configModel,
+    configEffort,
+    catalog,
     loadedThreads: new Set(),
     activeTurns: new Map(),
     idleTimer: null,
@@ -377,8 +393,8 @@ async function startSession(requester: McpRequester): Promise<Session> {
   return session
 }
 
-async function ensureSession(requester: McpRequester) {
-  const key = sessionKey(requester)
+async function ensureSession(requester: McpRequester, scopes: ChatScope[]) {
+  const key = sessionKey(requester, scopes)
   const existing = sessions.get(key)
   if (existing?.client.isAlive) {
     clearIdleTimer(existing)
@@ -387,15 +403,15 @@ async function ensureSession(requester: McpRequester) {
 
   let starting = startingSessions.get(key)
   if (!starting) {
-    starting = startSession(requester).finally(() => startingSessions.delete(key))
+    starting = startSession(requester, scopes).finally(() => startingSessions.delete(key))
     startingSessions.set(key, starting)
   }
   return starting
 }
 
 function assertChatAvailable(requester: McpRequester) {
-  if (!loadCodexChatSettings().enabled) {
-    throw new CodexChatError('Codex 채팅이 꺼져 있어.', 403)
+  if (!loadChatSettings().enabled) {
+    throw new CodexChatError('채팅이 꺼져 있어.', 403)
   }
   if (!resolveChatAccess(requester.accountId).codex) {
     throw new CodexChatError('Codex 채팅 권한이 없어.', 403)
@@ -403,6 +419,18 @@ function assertChatAvailable(requester: McpRequester) {
   if (isCodexCliUpdating()) {
     throw new CodexChatError('Codex CLI 업데이트 중이야. 끝난 뒤 다시 보내줘.', 409)
   }
+}
+
+/** The enabled Codex profile a Codex chat runs with. */
+function requireCodexProfile(profileId: number | null) {
+  const profile = profileId === null ? null : ChatProfileStore.find(profileId)
+  if (!profile || profile.engine !== 'codex') {
+    throw new CodexChatError('이 채팅의 프로필이 지워졌어.', 409)
+  }
+  if (!profile.isEnabled) {
+    throw new CodexChatError('이 채팅의 프로필이 꺼져 있어.', 409)
+  }
+  return profile
 }
 
 function requireThread(requester: McpRequester, threadId: number) {
@@ -414,14 +442,14 @@ function requireThread(requester: McpRequester, threadId: number) {
 }
 
 /** Load the Codex thread into this process: start a new one, or resume from its rollout (a fresh one if that is gone). */
-async function ensureCodexThread(session: Session, chatThreadId: number, codexThreadId: string | null) {
+async function ensureCodexThread(session: Session, chatThreadId: number, codexThreadId: string | null, profile: ChatProfile) {
   if (codexThreadId && session.loadedThreads.has(codexThreadId)) {
     return codexThreadId
   }
 
   if (codexThreadId) {
     try {
-      await session.client.request('thread/resume', { threadId: codexThreadId, ...threadOverrides(session) }, THREAD_REQUEST_TIMEOUT_MS)
+      await session.client.request('thread/resume', { threadId: codexThreadId, ...threadOverrides(session, profile) }, THREAD_REQUEST_TIMEOUT_MS)
       session.loadedThreads.add(codexThreadId)
       return codexThreadId
     } catch {
@@ -430,7 +458,7 @@ async function ensureCodexThread(session: Session, chatThreadId: number, codexTh
   }
 
   const started = await session.client.request<{ thread: { id: string } }>('thread/start', {
-    ...threadOverrides(session),
+    ...threadOverrides(session, profile),
     serviceName: 'conai',
   }, THREAD_REQUEST_TIMEOUT_MS)
   CodexChatStore.setCodexThreadId(chatThreadId, started.thread.id)
@@ -454,13 +482,18 @@ export const CodexChatService = {
     return CodexChatStore.listThreads(requester.accountId)
   },
 
-  /** A Codex chat, or with `profileId` an LLM chat with that profile (its greeting becomes the first message). */
-  createThread(requester: McpRequester, profileId: number | null = null) {
-    if (profileId !== null) {
+  /** A chat with the profile's engine; the profile's greeting becomes the first message. */
+  createThread(requester: McpRequester, profileId: number) {
+    const profile = ChatProfileStore.find(profileId)
+    if (profile?.engine !== 'codex') {
       return requireThread(requester, LlmChatService.createThread(requester, profileId))
     }
     assertChatAvailable(requester)
-    const id = CodexChatStore.createThread(requester.accountId, '')
+    requireCodexProfile(profile.id)
+    const id = CodexChatStore.createThread(requester.accountId, '', 'codex', profile.id)
+    if (profile.greeting) {
+      CodexChatStore.addMessage({ thread_id: id, role: 'assistant', content: fillCharacterPlaceholders(profile.greeting, profile), tool_calls: [], status: 'completed', error: null })
+    }
     return requireThread(requester, id)
   },
 
@@ -521,8 +554,11 @@ export const CodexChatService = {
       throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     }
 
-    const session = await ensureSession(requester)
-    const codexThreadId = await ensureCodexThread(session, threadId, thread.codex_thread_id)
+    const profile = requireCodexProfile(thread.profile_id)
+    const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
+    const session = await ensureSession(requester, scopes)
+    const run = resolveCodexRun(session, profile)
+    const codexThreadId = await ensureCodexThread(session, threadId, thread.codex_thread_id, profile)
 
     let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
     const finished = new Promise<CodexChatMessageRecord>((resolve) => {
@@ -553,8 +589,8 @@ export const CodexChatService = {
     try {
       const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
         threadId: codexThreadId,
-        model: session.model,
-        effort: session.reasoningEffort,
+        model: run.model,
+        effort: run.effort,
         input: [{ type: 'text', text: trimmed, text_elements: [] }],
       }, THREAD_REQUEST_TIMEOUT_MS)
       turn.turnId = response.turn.id
@@ -588,6 +624,5 @@ export const CodexChatService = {
   },
 }
 
-// Settings (including reasoning effort) apply to the next session; a CLI update must not replace binaries under a running process.
-onCodexChatSettingsChange(() => void CodexChatService.stopAllSessions('설정 변경'))
+// Profiles pass model and effort per turn, so only a CLI update needs the processes gone (it must not replace running binaries).
 onBeforeCodexCliUpdate(() => CodexChatService.stopAllSessions('CLI 업데이트'))

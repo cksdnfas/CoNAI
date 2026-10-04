@@ -410,14 +410,16 @@ export function createUserSettingsSchema(db: Database.Database): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_codex_chat_threads_account ON codex_chat_threads(account_id, updated_date DESC)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_codex_chat_messages_thread ON codex_chat_messages(thread_id, id)');
 
-  // LLM chat profiles: an API LLM connection + model with a persona; chat threads with engine 'llm' point at one.
+  // Chat profiles: an engine (API LLM connection or the server Codex CLI) + model with a persona; every chat thread points at one.
   db.exec(`
     CREATE TABLE IF NOT EXISTS llm_chat_profiles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       avatar TEXT,
-      provider_name TEXT NOT NULL,
+      engine TEXT NOT NULL DEFAULT 'llm',
+      provider_name TEXT NOT NULL DEFAULT '',
       model TEXT,
+      reasoning_effort TEXT,
       system_prompt TEXT NOT NULL DEFAULT '',
       character_description TEXT NOT NULL DEFAULT '',
       example_dialogue TEXT NOT NULL DEFAULT '',
@@ -428,9 +430,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
       mcp_enabled INTEGER NOT NULL DEFAULT 0,
       mcp_scopes TEXT NOT NULL DEFAULT '["read"]',
       context_turns INTEGER,
+      context_tokens INTEGER,
       summary_enabled INTEGER,
+      summary_trigger_turns INTEGER,
+      summary_prompt TEXT,
       summary_provider_name TEXT,
       summary_model TEXT,
+      max_tool_rounds INTEGER,
       is_enabled INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -493,6 +499,19 @@ export function createUserSettingsSchema(db: Database.Database): void {
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {
       db.exec(`ALTER TABLE codex_chat_threads ADD COLUMN ${columnName} ${definition}`);
+    }
+  }
+  const chatProfileColumns: Array<[string, string]> = [
+    ['engine', "TEXT NOT NULL DEFAULT 'llm'"],
+    ['reasoning_effort', 'TEXT'],
+    ['context_tokens', 'INTEGER'],
+    ['summary_trigger_turns', 'INTEGER'],
+    ['summary_prompt', 'TEXT'],
+    ['max_tool_rounds', 'INTEGER'],
+  ];
+  for (const [columnName, definition] of chatProfileColumns) {
+    if (!hasColumn('llm_chat_profiles', columnName)) {
+      db.exec(`ALTER TABLE llm_chat_profiles ADD COLUMN ${columnName} ${definition}`);
     }
   }
 
