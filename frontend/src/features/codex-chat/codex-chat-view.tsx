@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { ArrowLeft, ArrowUp, Archive, ChevronDown, Download, Eraser, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -92,38 +92,6 @@ function ChatBackground({ url, dim, blur }: { url: string; dim: number; blur: nu
         style={{ backgroundImage: `url("${url}")`, filter: blur > 0 ? `blur(${blur}px)` : undefined, transform: blur > 0 ? 'scale(1.06)' : undefined }}
       />
       <div className="absolute inset-0 bg-background" style={{ opacity: dim / 100 }} />
-    </div>
-  )
-}
-
-/** "+": pick the profile of a new chat. */
-function NewChatMenu({ profiles, threads, disabled, onPick, onOpen }: { profiles: ChatProfileSummary[]; threads: CodexChatThread[]; disabled: boolean; onPick: (profileId: number) => void; onOpen: () => void }) {
-  const { t } = useI18n()
-  const byId = new Map(profiles.filter((profile) => profile.usable).map((profile) => [profile.id, profile]))
-  const recent = [...new Set(threads.map((thread) => thread.profile_id))].flatMap((id) => id !== null && byId.has(id) ? [byId.get(id) as ChatProfileSummary] : []).slice(0, 3)
-  return (
-    <div className="flex shrink-0 items-center">
-      <IconButton variant="ghost" size="icon-sm" disabled={disabled} onClick={onOpen} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
-    <DropdownMenu>
-      <Tip content={t({ ko: '최근 프로필', en: 'Recent profiles' })}>
-        <DropdownMenuTrigger asChild>
-          <IconButton variant="ghost" size="icon-xs" className="w-4" disabled={disabled} label={t({ ko: '최근 프로필', en: 'Recent profiles' })} tooltip={false}>
-            <ChevronDown />
-          </IconButton>
-        </DropdownMenuTrigger>
-      </Tip>
-      <DropdownMenuContent align="end" className="min-w-56">
-        <DropdownMenuLabel>{t({ ko: '최근 프로필', en: 'Recent profiles' })}</DropdownMenuLabel>
-        {recent.map((profile) => (
-          <DropdownMenuItem key={profile.id} onSelect={() => onPick(profile.id)}>
-            <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="sm" />
-            <span className="truncate">{profile.name}</span>
-          </DropdownMenuItem>
-        ))}
-        {recent.length > 0 ? <DropdownMenuSeparator /> : null}
-        <DropdownMenuItem onSelect={onOpen}><LayoutGrid />{t({ ko: '전체 보기', en: 'All profiles' })}</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
     </div>
   )
 }
@@ -529,7 +497,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const untitled = t({ ko: '새 채팅', en: 'New chat' })
   const pickProfile = (profileId: number) => void startChat(profileId)
 
-  const newChatButton = <NewChatMenu profiles={profiles} threads={threads} disabled={isBusy || isStartingChat} onPick={pickProfile} onOpen={() => selectThread(null)} />
+  // "+" opens the profile picker, which lists the most recently used profiles first.
+  const newChatButton = <IconButton variant="ghost" size="icon-sm" disabled={isBusy || isStartingChat} onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
   const chatMenu = <ChatAppearancePopover open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
     <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>

@@ -1,10 +1,10 @@
-import { useEffect, useId, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { ALargeSmall, RotateCcw } from 'lucide-react'
-import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 import type { ChatStyle, ChatTypeface } from '@/lib/api-codex-chat'
 
 export type ChatAvatarSize = 'sm' | 'md' | 'lg'
@@ -125,12 +125,65 @@ export function chatTranscriptStyle(appearance: ChatAppearance, style: ChatStyle
   } as CSSProperties
 }
 
-function AppearanceRow({ label, children }: { label: string; children: ReactNode }) {
+type Choice<T extends string> = { value: T; label: ReactNode }
+
+/**
+ * A small set of choices at the end of a row (radio group): the picked one is a light pill. Arrow keys move between
+ * them, as in a native radio group.
+ */
+function CompactChoice<T extends string>({ label, value, choices, onChange }: { label: string; value: T; choices: Choice<T>[]; onChange: (value: T) => void }) {
+  const move = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
+    if (!step) return
+    event.preventDefault()
+    const index = choices.findIndex((choice) => choice.value === value)
+    const next = choices[(index + step + choices.length) % choices.length]
+    onChange(next.value)
+    const group = event.currentTarget
+    window.requestAnimationFrame(() => group.querySelector<HTMLButtonElement>(`[data-value="${next.value}"]`)?.focus())
+  }
   return (
-    <div className="space-y-1.5">
-      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+    <div role="radiogroup" aria-label={label} onKeyDown={move} className="flex shrink-0 gap-0.5 rounded-md bg-foreground/6 p-0.5">
+      {choices.map((choice) => {
+        const checked = choice.value === value
+        return (
+          // eslint-disable-next-line no-restricted-syntax -- a radio pill; Button's sizes and fills do not fit this compact control
+          <button
+            key={choice.value}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            data-value={choice.value}
+            tabIndex={checked ? 0 : -1}
+            onClick={() => onChange(choice.value)}
+            className={cn(
+              'h-6 cursor-pointer whitespace-nowrap rounded-sm px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40',
+              checked ? 'bg-foreground font-semibold text-background' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {choice.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function AppearanceRow({ label, htmlFor, children }: { label: string; htmlFor?: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-10 items-center justify-between gap-3">
+      {htmlFor ? <label htmlFor={htmlFor} className="cursor-pointer text-sm">{label}</label> : <span className="text-sm">{label}</span>}
       {children}
     </div>
+  )
+}
+
+function AppearanceGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="border-t border-line pt-2.5 first-of-type:border-t-0 first-of-type:pt-1">
+      <h3 className="text-2xs font-semibold text-muted-foreground">{title}</h3>
+      {children}
+    </section>
   )
 }
 
@@ -144,110 +197,67 @@ export const CHAT_APPEARANCE_ICON = ALargeSmall
 export function ChatAppearancePopover({ open, onOpenChange, children }: { open: boolean; onOpenChange: (open: boolean) => void; children: ReactNode }) {
   const { t } = useI18n()
   const { appearance, update, reset } = useChatAppearance()
-  const setOpen = onOpenChange
   const backgroundId = useId()
   const isDefault = JSON.stringify(appearance) === JSON.stringify(DEFAULT_CHAT_APPEARANCE)
+  const small = t({ ko: '작게', en: 'S' })
+  const medium = t({ ko: '보통', en: 'M' })
+  const large = t({ ko: '크게', en: 'L' })
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverAnchor asChild>{children}</PopoverAnchor>
-      <PopoverContent align="end" side="bottom" className="max-h-[calc(100vh-6rem)] w-72 space-y-3 overflow-y-auto"
+      <PopoverContent align="end" side="bottom" className="max-h-[calc(100vh-6rem)] w-80 space-y-1.5 overflow-y-auto px-3.5 pb-2 pt-3"
         // Focus returning to the menu button as the menu closes must not dismiss it; a click outside or Esc does.
         onFocusOutside={(event) => event.preventDefault()}
         onKeyDownCapture={(event) => {
-        // A nested tooltip can consume Radix's document Escape handler before the popover sees it.
-        if (event.key === 'Escape') {
-          event.preventDefault()
-          event.stopPropagation()
-          setOpen(false)
-        }
-      }}>
-        <div className="flex items-center justify-between">
+          // A nested tooltip can consume Radix's document Escape handler before the popover sees it.
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            onOpenChange(false)
+          }
+        }}>
+        <div className="flex h-7 items-center justify-between">
           <span className="text-sm font-semibold">{t({ ko: '채팅 모양', en: 'Chat appearance' })}</span>
           <IconButton size="icon-xs" variant="ghost" disabled={isDefault} onClick={reset} label={t({ ko: '기본값으로', en: 'Reset' })}>
             <RotateCcw />
           </IconButton>
         </div>
-        <AppearanceRow label={t({ ko: '프로필 사진', en: 'Avatar' })}>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={appearance.avatarSize}
-            onChange={(value) => update({ avatarSize: value as ChatAvatarSize })}
-            items={[
-              { value: 'sm', label: t({ ko: '작게', en: 'Small' }) },
-              { value: 'md', label: t({ ko: '보통', en: 'Medium' }) },
-              { value: 'lg', label: t({ ko: '크게', en: 'Large' }) },
-            ]}
-          />
-        </AppearanceRow>
-        <AppearanceRow label={t({ ko: '글자 크기', en: 'Text size' })}>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={appearance.fontSize}
-            onChange={(value) => update({ fontSize: value as ChatFontSize })}
-            items={(['sm', 'md', 'lg', 'xl'] as const).map((size) => ({ value: size, label: <span className="tabular-nums">{FONT_SIZE_PX[size]}</span> }))}
-          />
-        </AppearanceRow>
-        <AppearanceRow label={t({ ko: '줄 간격', en: 'Line spacing' })}>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={appearance.lineHeight}
-            onChange={(value) => update({ lineHeight: value as ChatLineHeight })}
-            items={[
-              { value: 'tight', label: t({ ko: '좁게', en: 'Tight' }) },
-              { value: 'normal', label: t({ ko: '보통', en: 'Normal' }) },
-              { value: 'relaxed', label: t({ ko: '넓게', en: 'Relaxed' }) },
-            ]}
-          />
-        </AppearanceRow>
-        <AppearanceRow label={t({ ko: '문장 속 이모티콘', en: 'Inline emoticons' })}>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={appearance.emoticonSize}
-            onChange={(value) => update({ emoticonSize: value as ChatEmoticonSize })}
-            items={[
-              { value: 'sm', label: t({ ko: '작게', en: 'Small' }) },
-              { value: 'md', label: t({ ko: '보통', en: 'Medium' }) },
-              { value: 'lg', label: t({ ko: '크게', en: 'Large' }) },
-              { value: 'xl', label: t({ ko: '아주 크게', en: 'Huge' }) },
-            ]}
-          />
-        </AppearanceRow>
-        <AppearanceRow label={t({ ko: '스티커', en: 'Stickers' })}>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={appearance.stickerSize}
-            onChange={(value) => update({ stickerSize: value as ChatStickerSize })}
-            items={[
-              { value: 'sm', label: t({ ko: '작게', en: 'Small' }) },
-              { value: 'md', label: t({ ko: '보통', en: 'Medium' }) },
-              { value: 'lg', label: t({ ko: '크게', en: 'Large' }) },
-            ]}
-          />
-        </AppearanceRow>
-        <AppearanceRow label={t({ ko: '이미지', en: 'Images' })}>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={appearance.imageSize}
-            onChange={(value) => update({ imageSize: value as ChatImageSize })}
-            items={[
-              { value: 'sm', label: t({ ko: '작게', en: 'Small' }) },
-              { value: 'md', label: t({ ko: '보통', en: 'Medium' }) },
-              { value: 'full', label: t({ ko: '채팅 너비', en: 'Chat width' }) },
-            ]}
-          />
-        </AppearanceRow>
-        <div className="flex items-center justify-between gap-3 text-xs font-semibold text-muted-foreground">
-          <label htmlFor={backgroundId} className="flex-1 cursor-pointer">{t({ ko: '배경 이미지', en: 'Background image' })}</label>
-          <Switch id={backgroundId} checked={appearance.showBackground} onCheckedChange={(showBackground) => update({ showBackground })} />
-        </div>
+        <AppearanceGroup title={t({ ko: '글', en: 'Text' })}>
+          <AppearanceRow label={t({ ko: '글자 크기', en: 'Text size' })}>
+            <CompactChoice label={t({ ko: '글자 크기', en: 'Text size' })} value={appearance.fontSize} onChange={(fontSize) => update({ fontSize })}
+              choices={(['sm', 'md', 'lg', 'xl'] as const).map((size) => ({ value: size, label: <span className="tabular-nums">{FONT_SIZE_PX[size]}</span> }))} />
+          </AppearanceRow>
+          <AppearanceRow label={t({ ko: '줄 간격', en: 'Line spacing' })}>
+            <CompactChoice label={t({ ko: '줄 간격', en: 'Line spacing' })} value={appearance.lineHeight} onChange={(lineHeight) => update({ lineHeight })}
+              choices={[{ value: 'tight', label: t({ ko: '좁게', en: 'Tight' }) }, { value: 'normal', label: medium }, { value: 'relaxed', label: t({ ko: '넓게', en: 'Wide' }) }]} />
+          </AppearanceRow>
+        </AppearanceGroup>
+        <AppearanceGroup title={t({ ko: '사진·이모티콘', en: 'Avatars · emoticons' })}>
+          <AppearanceRow label={t({ ko: '프로필 사진', en: 'Avatar' })}>
+            <CompactChoice label={t({ ko: '프로필 사진', en: 'Avatar' })} value={appearance.avatarSize} onChange={(avatarSize) => update({ avatarSize })}
+              choices={[{ value: 'sm', label: small }, { value: 'md', label: medium }, { value: 'lg', label: large }]} />
+          </AppearanceRow>
+          <AppearanceRow label={t({ ko: '문장 속 이모티콘', en: 'Inline emoticons' })}>
+            <CompactChoice label={t({ ko: '문장 속 이모티콘', en: 'Inline emoticons' })} value={appearance.emoticonSize} onChange={(emoticonSize) => update({ emoticonSize })}
+              choices={[{ value: 'sm', label: 'S' }, { value: 'md', label: 'M' }, { value: 'lg', label: 'L' }, { value: 'xl', label: 'XL' }]} />
+          </AppearanceRow>
+          <AppearanceRow label={t({ ko: '스티커', en: 'Stickers' })}>
+            <CompactChoice label={t({ ko: '스티커', en: 'Stickers' })} value={appearance.stickerSize} onChange={(stickerSize) => update({ stickerSize })}
+              choices={[{ value: 'sm', label: small }, { value: 'md', label: medium }, { value: 'lg', label: large }]} />
+          </AppearanceRow>
+        </AppearanceGroup>
+        <AppearanceGroup title={t({ ko: '이미지', en: 'Images' })}>
+          <AppearanceRow label={t({ ko: '답변 이미지', en: 'Reply images' })}>
+            <CompactChoice label={t({ ko: '답변 이미지', en: 'Reply images' })} value={appearance.imageSize} onChange={(imageSize) => update({ imageSize })}
+              choices={[{ value: 'sm', label: small }, { value: 'md', label: medium }, { value: 'full', label: t({ ko: '채팅 너비', en: 'Full width' }) }]} />
+          </AppearanceRow>
+          <AppearanceRow label={t({ ko: '배경 이미지', en: 'Background image' })} htmlFor={backgroundId}>
+            <Switch id={backgroundId} checked={appearance.showBackground} onCheckedChange={(showBackground) => update({ showBackground })} />
+          </AppearanceRow>
+        </AppearanceGroup>
       </PopoverContent>
     </Popover>
   )
 }
+

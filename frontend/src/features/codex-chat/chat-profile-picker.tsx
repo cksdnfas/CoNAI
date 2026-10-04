@@ -14,12 +14,19 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
 }) {
   const { t, formatDateTime } = useI18n()
   const [query, setQuery] = useState('')
+  // Each profile's latest direct chat (threads come newest first); group rooms belong to several profiles.
   const recent = useMemo(() => {
     const result = new Map<number, CodexChatThread>()
-    for (const thread of threads) if (thread.profile_id !== null && !result.has(thread.profile_id)) result.set(thread.profile_id, thread)
+    for (const thread of threads) if (thread.kind !== 'group' && thread.profile_id !== null && !result.has(thread.profile_id)) result.set(thread.profile_id, thread)
     return result
   }, [threads])
-  const usable = profiles.filter((profile) => profile.usable && `${profile.name} ${profile.tagline} ${profile.engine} ${profile.model}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const rank = useMemo(() => new Map([...recent.keys()].map((profileId, index) => [profileId, index])), [recent])
+  // Most recently used first; profiles never chatted with keep their settings order after them.
+  const usable = profiles
+    .filter((profile) => profile.usable && `${profile.name} ${profile.tagline} ${profile.engine} ${profile.model}`.toLowerCase().includes(query.trim().toLowerCase()))
+    .map((profile, index) => ({ profile, order: rank.get(profile.id) ?? recent.size + index }))
+    .sort((a, b) => a.order - b.order)
+    .map((entry) => entry.profile)
   return <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
     <div className="mx-auto max-w-4xl">
       <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t({ ko: '프로필 검색', en: 'Search profiles' })} aria-label={t({ ko: '프로필 검색', en: 'Search profiles' })} className="mb-4" />
