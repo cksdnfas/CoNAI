@@ -14,7 +14,7 @@ import { streamCacheableFile } from './images/query-file-helpers'
 import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
-import { buildCodexInstructions, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
+import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
 import { buildLeadingMessages, estimateTokens, fillCharacterPlaceholders } from '../services/codex-chat/llmChatContext'
 import { buildLorebookText, ChatLorebookStore } from '../services/codex-chat/chatLorebook'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
@@ -247,7 +247,8 @@ router.post('/threads/:threadId/summarize', requireChatAccess, asyncHandler(asyn
   try {
     const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
     if (thread.engine !== 'llm') {
-      sendRouteBadRequest(res, 'Only LLM chats can be summarized')
+      // Codex chats: Codex folds its own memory of the chat.
+      res.json({ success: true, data: await CodexChatService.compact(requesterFrom(req), threadId) })
       return
     }
     await LlmChatService.summarize(requesterFrom(req), thread)
@@ -273,7 +274,7 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
 
 /** Values the profile editor fills in for a new profile, and the scopes it may offer. */
 router.get('/admin/profile-defaults', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, summaryPrompt: DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
+  res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, codexCompactTokens: CODEX_COMPACT_TOKENS, summaryPrompt: DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
 })
 
 router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {

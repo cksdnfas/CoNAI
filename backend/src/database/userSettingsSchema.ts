@@ -511,6 +511,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['summary_until_message_id', 'INTEGER'],
     ['summary_updated_date', 'DATETIME'],
     ['context_revision', 'INTEGER NOT NULL DEFAULT 0'],
+    // Codex chats: the app-server's own token usage of the Codex thread, and lore entries already in its memory.
+    ['codex_context_tokens', 'INTEGER'],
+    ['codex_context_window', 'INTEGER'],
+    ['codex_input_tokens', 'INTEGER'],
+    ['codex_cached_input_tokens', 'INTEGER'],
+    ['codex_output_tokens', 'INTEGER'],
+    ['codex_lore_sent', 'TEXT'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {

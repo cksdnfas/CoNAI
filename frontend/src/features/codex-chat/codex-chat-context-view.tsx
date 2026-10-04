@@ -103,3 +103,45 @@ export function CodexChatContextView({ thread, profileTurns, profileSummaryEnabl
     </div>
   )
 }
+
+/** One Codex chat's memory as Codex reports it: how full it is, what it has used, and folding it now. */
+export function CodexEngineContextView({ thread, compactTokens }: { thread: CodexChatThread; compactTokens: number | null }) {
+  const { t, formatNumber, formatDateTime } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const compactMutation = useMutation({
+    mutationFn: () => summarizeCodexChatThread(thread.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '압축하지 못했어.', en: 'Could not compact.' })), tone: 'error' }),
+  })
+  const tokens = (value: number | null) => (value === null ? '—' : formatNumber(value))
+  const cachedShare = thread.codex_input_tokens ? Math.round(((thread.codex_cached_input_tokens ?? 0) / thread.codex_input_tokens) * 100) : null
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+      <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
+        <span className="text-sm tabular-nums">{tokens(thread.codex_context_tokens)} / {tokens(compactTokens)}</span>
+      </SettingRow>
+      <SettingRow label={t({ ko: '모델 한도', en: 'Model window' })}>
+        <span className="text-sm tabular-nums">{tokens(thread.codex_context_window)}</span>
+      </SettingRow>
+      <SettingRow label={t({ ko: '누적 입력', en: 'Total input' })}>
+        <span className="text-sm tabular-nums">
+          {tokens(thread.codex_input_tokens)}
+          {cachedShare !== null ? <span className="text-muted-foreground"> · {t({ ko: '캐시', en: 'cached' })} {cachedShare}%</span> : null}
+        </span>
+      </SettingRow>
+      <SettingRow label={t({ ko: '누적 출력', en: 'Total output' })}>
+        <span className="text-sm tabular-nums">{tokens(thread.codex_output_tokens)}</span>
+      </SettingRow>
+
+      <div className="flex items-center gap-2 pt-4">
+        <span className="flex-1 text-sm">{t({ ko: '압축', en: 'Compaction' })}</span>
+        {thread.summary_updated_date ? <span className="text-xs text-muted-foreground">{formatDateTime(parseServerDate(thread.summary_updated_date))}</span> : null}
+        <Button size="sm" variant="secondary" onClick={() => compactMutation.mutate()} disabled={compactMutation.isPending || !thread.codex_thread_id}>
+          {compactMutation.isPending ? t({ ko: '압축 중…', en: 'Compacting…' }) : t({ ko: '지금 압축', en: 'Compact now' })}
+        </Button>
+      </div>
+    </div>
+  )
+}

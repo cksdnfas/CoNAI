@@ -189,6 +189,8 @@ export interface ChatProfileDefaults {
   summaryTriggerTurns: number
   maxToolRounds: number
   toolOutputLimit: number
+  /** Codex profiles: compaction limit when `contextTokens` is empty, and the lowest one allowed. */
+  codexCompactTokens: { default: number; min: number }
   summaryPrompt: string
   scopes: ChatScope[]
   style: ChatStyle
@@ -219,6 +221,13 @@ export interface CodexChatThread {
   summary: string | null
   summary_until_message_id: number | null
   summary_updated_date: string | null
+  /** Codex chats: input tokens of the last model request (null right after a compaction) and the model's window. */
+  codex_context_tokens: number | null
+  codex_context_window: number | null
+  /** Codex chats: tokens the Codex thread has used in total. */
+  codex_input_tokens: number | null
+  codex_cached_input_tokens: number | null
+  codex_output_tokens: number | null
   created_date: string
   updated_date: string
 }
@@ -252,6 +261,8 @@ export interface CodexChatThreadDetail {
   pendingJobs: number
   /** Partial reply of a turn still running on the server (after a reload). */
   running: { text: string; toolCalls: CodexChatToolCall[]; replacingMessageId?: number } | null
+  /** Codex chats: Codex folds its memory once a request's input reaches this many tokens. */
+  codexCompactTokens?: number
 }
 
 /** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */

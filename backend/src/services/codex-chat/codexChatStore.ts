@@ -38,6 +38,15 @@ export type CodexChatThreadRecord = {
   summary_until_message_id: number | null
   summary_updated_date: string | null
   context_revision: number
+  /** Codex chats: the last model request's input tokens (the live context size) and the model's window. */
+  codex_context_tokens: number | null
+  codex_context_window: number | null
+  /** Codex chats: tokens the Codex thread has used in total. */
+  codex_input_tokens: number | null
+  codex_cached_input_tokens: number | null
+  codex_output_tokens: number | null
+  /** Codex chats: JSON keys of lore entries already given to the Codex thread since its last compaction. */
+  codex_lore_sent: string | null
   created_date: string
   updated_date: string
 }
@@ -68,6 +77,10 @@ type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternative
 
 const TITLE_MAX_LENGTH = 60
 
+/** A new or emptied Codex thread starts with no usage and no lore in its memory. */
+const RESET_CODEX_STATE = `codex_context_tokens = NULL, codex_context_window = NULL, codex_input_tokens = NULL,
+  codex_cached_input_tokens = NULL, codex_output_tokens = NULL, codex_lore_sent = NULL`
+
 function parseToolCalls(value: string | null): CodexChatToolCall[] {
   if (!value) {
     return []
@@ -95,7 +108,7 @@ function invalidateContext(threadId: number, changedMessageId: number) {
     summary = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary END,
     summary_updated_date = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary_updated_date END,
     summary_until_message_id = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary_until_message_id END,
-    codex_thread_id = NULL, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?
+    codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?
   `).run(changedMessageId, changedMessageId, changedMessageId, threadId)
 }
 
@@ -156,8 +169,31 @@ export const CodexChatStore = {
 
   setCodexThreadId(threadId: number, codexThreadId: string) {
     getUserSettingsDb().prepare(`
-      UPDATE codex_chat_threads SET codex_thread_id = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?
+      UPDATE codex_chat_threads SET codex_thread_id = ?, ${RESET_CODEX_STATE}, updated_date = CURRENT_TIMESTAMP WHERE id = ?
     `).run(codexThreadId, threadId)
+  },
+
+  findThreadByCodexId(codexThreadId: string) {
+    return getUserSettingsDb().prepare('SELECT * FROM codex_chat_threads WHERE codex_thread_id = ?').get(codexThreadId) as CodexChatThreadRecord | undefined
+  },
+
+  setCodexUsage(codexThreadId: string, usage: { contextTokens: number | null; contextWindow: number | null; inputTokens: number; cachedInputTokens: number; outputTokens: number }) {
+    getUserSettingsDb().prepare(`
+      UPDATE codex_chat_threads SET codex_context_tokens = ?, codex_context_window = ?, codex_input_tokens = ?, codex_cached_input_tokens = ?,
+      codex_output_tokens = ? WHERE codex_thread_id = ?
+    `).run(usage.contextTokens, usage.contextWindow, usage.inputTokens, usage.cachedInputTokens, usage.outputTokens, codexThreadId)
+  },
+
+  /** Codex folded its memory up to `untilMessageId` (shown as the summary divider); lore must be given again. */
+  markCodexCompacted(codexThreadId: string, untilMessageId: number | null) {
+    getUserSettingsDb().prepare(`
+      UPDATE codex_chat_threads SET summary_until_message_id = ?, summary_updated_date = CURRENT_TIMESTAMP, codex_lore_sent = NULL,
+      context_revision = context_revision + 1 WHERE codex_thread_id = ?
+    `).run(untilMessageId, codexThreadId)
+  },
+
+  setCodexLoreSent(threadId: number, keys: string[]) {
+    getUserSettingsDb().prepare('UPDATE codex_chat_threads SET codex_lore_sent = ? WHERE id = ?').run(keys.length > 0 ? JSON.stringify(keys) : null, threadId)
   },
 
   renameThread(threadId: number, title: string) {
@@ -214,7 +250,7 @@ export const CodexChatStore = {
     db.transaction(() => {
       removeMessagesAfter(threadId, 0)
       db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL,
-        codex_thread_id = NULL, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
+        codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
       if (greeting) CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: greeting, tool_calls: [], status: 'completed', error: null })
     }).immediate()
   },

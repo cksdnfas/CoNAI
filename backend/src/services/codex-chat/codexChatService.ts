@@ -16,16 +16,31 @@ import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
-import { buildLorebookText } from './chatLorebook'
+import { selectLoreEntries } from './chatLorebook'
 import { LlmChatService } from './llmChatService'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
+import { logger } from '../../utils/logger'
 
 const SESSION_IDLE_MS = 15 * 60 * 1000
 const THREAD_REQUEST_TIMEOUT_MS = 2 * 60 * 1000
+const COMPACT_TIMEOUT_MS = 5 * 60 * 1000
+/** Lore keys remembered per chat; more than this only means some lore may be given again. */
+const LORE_SENT_MAX_KEYS = 500
 const CLI_PROBE_TIMEOUT_MS = 20 * 1000
 const MCP_SERVER_NAME = 'conai'
 const MCP_TOKEN_ENV = 'CONAI_CHAT_MCP_TOKEN'
+
+/**
+ * Codex keeps a chat's whole memory and re-reads it on every model request, so it folds that memory once a request's
+ * input reaches this many tokens (profile `contextTokens`). Its fixed prompt and the CoNAI tools alone take ~25k, so a
+ * lower limit would fold on every turn.
+ */
+export const CODEX_COMPACT_TOKENS = { default: 64_000, min: 48_000 } as const
+
+export function codexCompactLimit(profile: Pick<ChatProfile, 'contextTokens'>) {
+  return Math.max(CODEX_COMPACT_TOKENS.min, profile.contextTokens ?? CODEX_COMPACT_TOKENS.default)
+}
 
 /** Everything that could run code, touch files, browse or spawn agents. `shell_tool` is required (fail-closed). */
 const DISABLED_FEATURES = [
@@ -79,6 +94,8 @@ type TurnState = {
   chatThreadId: number
   codexThreadId: string
   turnId: string | null
+  /** The user message that started the turn (a compaction inside the turn folds what came before it). */
+  userMessageId: number | null
   agentMessages: Map<string, string>
   /** Items the model marked as interim commentary; the stored reply keeps only the final answer. */
   commentaryItems: Set<string>
@@ -100,8 +117,11 @@ type Session = {
   configModel: string | null
   configEffort: CodexReasoningEffort | null
   catalog: Awaited<ReturnType<typeof getCodexModelSuggestions>>
-  loadedThreads: Set<string>
+  /** Codex threads loaded in this process, with the compaction limit they were loaded with. */
+  loadedThreads: Map<string, number>
   activeTurns: Map<string, TurnState>
+  /** Manual compactions waiting for Codex to finish, by Codex thread id. */
+  compactions: Map<string, { resolve: () => void; reject: (error: Error) => void }>
   idleTimer: NodeJS.Timeout | null
 }
 
@@ -223,7 +243,7 @@ function threadOverrides(session: Session, profile: ChatProfile) {
   const { model, effort } = resolveCodexRun(session, profile)
   return {
     model,
-    ...(effort ? { config: { model_reasoning_effort: effort } } : {}),
+    config: { ...(effort ? { model_reasoning_effort: effort } : {}), model_auto_compact_token_limit: codexCompactLimit(profile) },
     cwd: chatWorkDir(),
     approvalPolicy: 'never',
     sandbox: 'read-only',
@@ -315,11 +335,52 @@ function finishTurn(session: Session, turn: TurnState, status: CodexChatMessageR
   scheduleIdleClose(session)
 }
 
+function recordTokenUsage(codexThreadId: string, value: unknown) {
+  const usage = value as { last?: { inputTokens?: number }; total?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number }; modelContextWindow?: number | null } | undefined
+  if (!usage?.total) return
+  const count = (tokens: unknown) => (typeof tokens === 'number' && Number.isFinite(tokens) ? Math.max(0, Math.round(tokens)) : 0)
+  CodexChatStore.setCodexUsage(codexThreadId, {
+    // A compaction reports 0: the folded size is only known after the next request.
+    contextTokens: count(usage.last?.inputTokens) || null,
+    contextWindow: typeof usage.modelContextWindow === 'number' ? usage.modelContextWindow : null,
+    inputTokens: count(usage.total.inputTokens),
+    cachedInputTokens: count(usage.total.cachedInputTokens),
+    outputTokens: count(usage.total.outputTokens),
+  })
+}
+
+/** Codex folded the thread's memory: mark where in the transcript. */
+function recordCompaction(session: Session, codexThreadId: string) {
+  const chatThread = CodexChatStore.findThreadByCodexId(codexThreadId)
+  if (chatThread) {
+    const turn = session.activeTurns.get(codexThreadId)
+    const messages = CodexChatStore.listMessages(chatThread.id)
+    const folded = turn?.userMessageId ? messages.filter((message) => message.id < (turn.userMessageId as number)) : messages
+    CodexChatStore.markCodexCompacted(codexThreadId, folded.at(-1)?.id ?? null)
+  }
+}
+
 function handleNotification(session: Session, notification: CodexAppServerNotification) {
   const { method, params } = notification
   const threadId = typeof params.threadId === 'string' ? params.threadId : null
+  if (threadId && method === 'thread/tokenUsage/updated') {
+    recordTokenUsage(threadId, params.tokenUsage)
+    return
+  }
+  if (threadId && method === 'item/completed' && (params.item as { type?: unknown } | undefined)?.type === 'contextCompaction') {
+    recordCompaction(session, threadId)
+    return
+  }
   const turn = threadId ? session.activeTurns.get(threadId) : undefined
   if (!turn) {
+    // A manual compaction runs as a turn of its own. It is done only when that turn completes: input sent before then
+    // would join the compaction turn, and its completion would end the reply.
+    if (threadId && method === 'turn/completed') {
+      const completed = (params.turn ?? {}) as { status?: string; error?: { message?: string } | null }
+      const waiting = session.compactions.get(threadId)
+      if (waiting && completed.status === 'failed') waiting.reject(new CodexChatError(completed.error?.message || 'Codex가 대화를 압축하지 못했어.', 502))
+      else waiting?.resolve()
+    }
     return
   }
 
@@ -400,8 +461,9 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
     configModel,
     configEffort,
     catalog,
-    loadedThreads: new Set(),
+    loadedThreads: new Map(),
     activeTurns: new Map(),
+    compactions: new Map(),
     idleTimer: null,
   }
   client.on('notification', (notification: CodexAppServerNotification) => handleNotification(session, notification))
@@ -460,14 +522,20 @@ function requireThread(requester: McpRequester, threadId: number) {
 
 /** Load the Codex thread into this process: start a new one, or resume from its rollout (a fresh one if that is gone). */
 async function ensureCodexThread(session: Session, chatThreadId: number, codexThreadId: string | null, profile: ChatProfile) {
-  if (codexThreadId && session.loadedThreads.has(codexThreadId)) {
+  const compactLimit = codexCompactLimit(profile)
+  if (codexThreadId && session.loadedThreads.get(codexThreadId) === compactLimit) {
     return codexThreadId
   }
 
   if (codexThreadId) {
+    // A loaded thread keeps the config it was loaded with; unload it so the new compaction limit applies.
+    if (session.loadedThreads.has(codexThreadId)) {
+      await session.client.request('thread/unsubscribe', { threadId: codexThreadId }, THREAD_REQUEST_TIMEOUT_MS).catch(() => undefined)
+      session.loadedThreads.delete(codexThreadId)
+    }
     try {
       await session.client.request('thread/resume', { threadId: codexThreadId, ...threadOverrides(session, profile) }, THREAD_REQUEST_TIMEOUT_MS)
-      session.loadedThreads.add(codexThreadId)
+      session.loadedThreads.set(codexThreadId, compactLimit)
       return codexThreadId
     } catch {
       // Rollout missing (CODEX_HOME reset, other account): continue in a new Codex thread.
@@ -479,8 +547,36 @@ async function ensureCodexThread(session: Session, chatThreadId: number, codexTh
     serviceName: 'conai',
   }, THREAD_REQUEST_TIMEOUT_MS)
   CodexChatStore.setCodexThreadId(chatThreadId, started.thread.id)
-  session.loadedThreads.add(started.thread.id)
+  session.loadedThreads.set(started.thread.id, compactLimit)
   return started.thread.id
+}
+
+function readLoreSent(value: string | null) {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]')
+    return new Set(Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === 'string') : [])
+  } catch {
+    return new Set<string>()
+  }
+}
+
+/**
+ * Remove a Codex thread's rollout (its memory on disk) once the chat no longer uses it. Best effort and in the
+ * background: any chat process can delete it (they share CODEX_HOME), and one is started only when none is running.
+ */
+function deleteCodexRollout(requester: McpRequester, codexThreadId: string | null) {
+  if (!codexThreadId) return
+  void (async () => {
+    for (const session of sessions.values()) session.loadedThreads.delete(codexThreadId)
+    const session = [...sessions.values()].find((entry) => entry.client.isAlive) ?? await ensureSession(requester, [], null)
+    try {
+      await session.client.request('thread/delete', { threadId: codexThreadId }, THREAD_REQUEST_TIMEOUT_MS)
+    } finally {
+      scheduleIdleClose(session)
+    }
+  })().catch((error) => {
+    logger.warn(`[CodexChat] Could not delete Codex thread ${codexThreadId}: ${error instanceof Error ? error.message : String(error)}`)
+  })
 }
 
 function findActiveTurn(chatThreadId: number) {
@@ -504,7 +600,47 @@ export const CodexChatService = {
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     CodexChatStore.clearThread(threadId, profile?.greeting ? fillCharacterPlaceholders(profile.greeting, profile) : '')
+    deleteCodexRollout(requester, thread.codex_thread_id)
     return CodexChatService.getThread(requester, threadId)
+  },
+
+  /** Codex chats: fold the Codex thread's memory now (what /compact does), and wait until Codex has finished. */
+  async compact(requester: McpRequester, threadId: number) {
+    const thread = requireThread(requester, threadId)
+    if (thread.engine === 'llm') throw new CodexChatError('Codex 채팅이 아니야.', 409)
+    assertChatAvailable(requester)
+    if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (!thread.codex_thread_id) throw new CodexChatError('아직 압축할 대화가 없어.', 409)
+
+    startingThreads.add(threadId)
+    let session: Session | null = null
+    let codexThreadId: string | null = null
+    try {
+      const profile = requireCodexProfile(thread.profile_id)
+      const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
+      session = await ensureSession(requester, scopes, profile.toolAllowlist)
+      codexThreadId = await ensureCodexThread(session, threadId, thread.codex_thread_id, profile)
+      // The rollout was gone and a fresh thread started: nothing left to fold.
+      if (codexThreadId !== thread.codex_thread_id) return CodexChatService.getThread(requester, threadId).thread
+
+      const active = session
+      const key = codexThreadId
+      const finished = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new CodexChatError('Codex 압축이 너무 오래 걸려.', 504)), COMPACT_TIMEOUT_MS)
+        active.compactions.set(key, {
+          resolve: () => { clearTimeout(timer); resolve() },
+          reject: (error) => { clearTimeout(timer); reject(error) },
+        })
+      })
+      clearIdleTimer(active)
+      await active.client.request('thread/compact/start', { threadId: key }, THREAD_REQUEST_TIMEOUT_MS)
+      await finished
+      return CodexChatService.getThread(requester, threadId).thread
+    } finally {
+      if (session && codexThreadId) session.compactions.delete(codexThreadId)
+      if (session) scheduleIdleClose(session)
+      startingThreads.delete(threadId)
+    }
   },
 
   rewriteMessage(requester: McpRequester, threadId: number, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
@@ -554,11 +690,13 @@ export const CodexChatService = {
       return { thread, messages, media, pendingJobs, running: LlmChatService.running(threadId) }
     }
     const active = findActiveTurn(threadId)
+    const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     return {
       thread,
       messages,
       media,
       pendingJobs,
+      codexCompactTokens: profile ? codexCompactLimit(profile) : CODEX_COMPACT_TOKENS.default,
       running: active
         ? {
             text: [...active.turn.agentMessages.values()].join('\n\n'),
@@ -587,6 +725,7 @@ export const CodexChatService = {
       finishTurn(active.session, active.turn, 'interrupted', null)
     }
     CodexChatStore.deleteThread(threadId)
+    deleteCodexRollout(requester, thread.codex_thread_id)
   },
 
   /**
@@ -624,6 +763,7 @@ export const CodexChatService = {
         chatThreadId: threadId,
         codexThreadId,
         turnId: null,
+        userMessageId: null,
         agentMessages: new Map(),
         commentaryItems: new Set(),
         toolCalls: new Map(),
@@ -633,6 +773,7 @@ export const CodexChatService = {
         resolveFinished,
       }
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null }, attachments.map((file) => file.id))
+      turn.userMessageId = userMessageId
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {
@@ -642,15 +783,19 @@ export const CodexChatService = {
       emit(turn, { type: 'user', message: userMessage })
 
       try {
-        const lore = buildLorebookText(profile, CodexChatStore.listMessages(threadId), (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile))
+        // Codex keeps every turn's input in its memory, so lore already given since the last compaction (same entry,
+        // same content) is not given again. Read after ensureCodexThread: a new Codex thread starts with none.
+        const sent = readLoreSent(CodexChatStore.findThreadById(threadId)?.codex_lore_sent ?? null)
+        const lore = selectLoreEntries(profile, CodexChatStore.listMessages(threadId), (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile), { skip: (key) => sent.has(key) })
         const input = chatContentWithAttachments(trimmed, attachments)
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: lore ? `[참고 설정]\n${lore}\n[/참고 설정]\n\n${input}` : input, text_elements: [] }],
+          input: [{ type: 'text', text: lore.text ? `[참고 설정]\n${lore.text}\n[/참고 설정]\n\n${input}` : input, text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
+        if (lore.keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, [...sent, ...lore.keys].slice(-LORE_SENT_MAX_KEYS))
       } catch (error) {
         finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
       }

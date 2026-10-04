@@ -507,7 +507,21 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
               </>
             ) : null}
           </Section>
-        ) : null}
+        ) : (
+          <Section title={t({ ko: '컨텍스트', en: 'Context' })}>
+            <Field label={t({ ko: '압축 기준 (토큰)', en: 'Compact at (tokens)' })} className="md:max-w-[calc(50%-0.375rem)]">
+              <NumberStepperInput
+                variant="settings"
+                allowEmpty
+                step={8000}
+                min={defaults?.codexCompactTokens.min ?? 48_000}
+                value={draft.contextTokens}
+                placeholder={`${t({ ko: '기본', en: 'Default' })} (${(defaults?.codexCompactTokens.default ?? 64_000).toLocaleString()})`}
+                onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })}
+              />
+            </Field>
+          </Section>
+        )}
       </ModalBody>
       <ModalFooter>
         {profile ? (

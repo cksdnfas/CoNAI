@@ -48,6 +48,7 @@ import { CHAT_COMMANDS, ChatCommandList, type ChatCommand } from './chat-command
 import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
 
 const CodexChatContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexChatContextView }))
+const CodexEngineContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexEngineContextView }))
 const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
 
 const RUNNING_POLL_MS = 2000
@@ -240,7 +241,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const visibleMessages = useMemo(() => messages.slice(-windowCount), [messages, windowCount])
   const media = threadQuery.data?.media
   const runningFromServer = serverRunning ? threadQuery.data?.running ?? null : null
-  const activeView = activeThreadId === null ? 'chat' : view === 'context' && isCodexThread ? 'chat' : view
+  const activeView = activeThreadId === null ? 'chat' : view
   const isTranscript = activeView === 'chat'
 
   const handleEdit = useCallback(async (id: number, content: string) => {
@@ -374,10 +375,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           await queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(activeThreadId) })
           await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
         } else {
-          if (isCodexThread) throw new Error(t({ ko: 'API LLM 채팅에서만 쓸 수 있어.', en: 'Available in API LLM chats only.' }))
+          if (isCodexThread && name !== 'compact') throw new Error(t({ ko: 'API LLM 채팅에서만 쓸 수 있어.', en: 'Available in API LLM chats only.' }))
           if (name === 'compact') {
+            // Codex folds its own memory; an LLM chat folds into its summary, which must then be on.
             await summarizeCodexChatThread(activeThreadId)
-            await updateCodexChatThreadContext(activeThreadId, { summaryEnabled: true })
+            if (!isCodexThread) await updateCodexChatThreadContext(activeThreadId, { summaryEnabled: true })
             await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(activeThreadId) })
           } else if (name === 'retry') {
             if (lastReplyId === null) throw new Error(t({ ko: '다시 생성할 답변이 없어.', en: 'No answer to regenerate.' }))
@@ -459,12 +461,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger></Tip>
     <DropdownMenuContent align="end" className="min-w-48">
-      <DropdownMenuItem disabled={isCodexThread} onSelect={() => setView('context')}><SlidersHorizontal />{t({ ko: '컨텍스트', en: 'Context' })}</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setView('context')}><SlidersHorizontal />{t({ ko: '컨텍스트', en: 'Context' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setView('gallery')}><LayoutGrid />{t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem>
       <ChatAppearanceButton asMenuItem />
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem>
-      <DropdownMenuItem disabled={isBusy || isCodexThread} onSelect={() => void runCommand('/compact')}><Archive />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>
+      <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><Archive />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
@@ -536,7 +538,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   } else if (activeView === 'gallery') {
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {
-    body = <Suspense fallback={null}><CodexChatContextView thread={thread} profileTurns={profile?.contextTurns ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} /></Suspense>
+    body = <Suspense fallback={null}>{isCodexThread
+      ? <CodexEngineContextView thread={thread} compactTokens={threadQuery.data?.codexCompactTokens ?? null} />
+      : <CodexChatContextView thread={thread} profileTurns={profile?.contextTurns ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} />}</Suspense>
   } else {
     body = backgroundUrl && profile ? (
       <div className="relative flex min-h-0 flex-1 flex-col">
