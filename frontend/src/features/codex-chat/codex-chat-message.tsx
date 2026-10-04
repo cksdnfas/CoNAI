@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronRight, ImageOff, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -254,8 +254,44 @@ function ActivityLine({ toolCalls }: { toolCalls: CodexChatToolCall[] }) {
   )
 }
 
-/** Who answers in a chat: the thread's profile. */
-export type ChatSpeaker = { name: string; avatar: string | null; engine: ChatEngine; roleplay?: boolean; blocks?: ChatDisplayBlock[] }
+/** Another character of the profile who can speak in a reply (`[Name]` lines). */
+export type ChatCastSpeaker = { name: string; avatar: string | null; color: string }
+
+/** Who answers in a chat: the thread's profile, its look, and the other characters it voices. */
+export type ChatSpeaker = {
+  name: string
+  avatar: string | null
+  engine: ChatEngine
+  roleplay?: boolean
+  blocks?: ChatDisplayBlock[]
+  cast?: ChatCastSpeaker[]
+}
+
+/** A `[Name]` line (or line start) switching the speaker; only names of the profile or its cast count. */
+const CAST_MARKER_PATTERN = /^[ \t]*\[([^\]\n]{1,40})\][ \t]*/gm
+
+type CastSegment = { speaker: ChatCastSpeaker | null; text: string }
+
+/** Splits a reply into parts by speaker; `speaker: null` is the profile itself. */
+function splitByCast(text: string, profileName: string, cast: ChatCastSpeaker[]): CastSegment[] {
+  const members = new Map(cast.filter((member) => member.name).map((member) => [member.name.toLowerCase(), member]))
+  const segments: CastSegment[] = []
+  let current: CastSegment = { speaker: null, text: '' }
+  let cursor = 0
+  for (const match of text.matchAll(CAST_MARKER_PATTERN)) {
+    const name = match[1].trim().toLowerCase()
+    const member = members.get(name)
+    if (!member && name !== profileName.toLowerCase()) continue
+    const index = match.index ?? 0
+    current.text += text.slice(cursor, index)
+    segments.push(current)
+    current = { speaker: member ?? null, text: '' }
+    cursor = index + match[0].length
+  }
+  current.text += text.slice(cursor)
+  segments.push(current)
+  return segments.filter((segment) => segment.text.trim())
+}
 
 /** The model's reasoning while it streams, folded by default (never stored). */
 function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
@@ -291,39 +327,61 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
 }) {
   const { t } = useI18n()
   const avatarBeside = speaker !== null && avatarSize !== 'sm'
-  const avatar = speaker ? (
-    <ChatProfileAvatar
-      name={speaker.name}
-      avatar={speaker.avatar}
-      engine={speaker.engine}
-      size={AVATAR_SIZE[avatarSize]}
-      className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined}
-    />
-  ) : null
   const toolBadge = toolCalls.length > 0 ? <ToolCallsBadge calls={toolCalls} /> : null
+  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} />
+  const avatarOf = (who: { name: string; avatar: string | null }, engine: ChatEngine) => (
+    <ChatProfileAvatar name={who.name} avatar={who.avatar} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
+  )
 
-  const reply = (
-    <div className="min-w-0 flex-1 space-y-2">
-      {speaker || toolBadge ? (
-        <div className="flex min-h-6 items-center gap-1.5">
-          {avatarBeside ? null : avatar}
-          {speaker ? <span className="truncate text-xs font-semibold text-muted-foreground">{speaker.name}</span> : null}
-          {toolBadge}
-        </div>
-      ) : null}
+  /** One speaker's part: avatar beside (or inline with) the name, then the content. */
+  const row = (key: string, who: { name: string; avatar: string | null; color?: string } | null, engine: ChatEngine, extra: ReactNode, children: ReactNode) => {
+    const avatar = who ? avatarOf(who, engine) : null
+    const body = (
+      <div className="min-w-0 flex-1 space-y-2">
+        {who || extra ? (
+          <div className="flex min-h-6 items-center gap-1.5">
+            {avatarBeside ? null : avatar}
+            {who ? <span className="truncate text-xs font-semibold text-muted-foreground" style={who.color ? { color: who.color } : undefined}>{who.name}</span> : null}
+            {extra}
+          </div>
+        ) : null}
+        {children}
+      </div>
+    )
+    return avatarBeside ? <div key={key} className="flex items-start gap-3">{avatar}{body}</div> : <div key={key}>{body}</div>
+  }
+
+  const segments = content && speaker?.cast?.length ? splitByCast(content, speaker.name, speaker.cast) : null
+  const hasCast = segments?.some((segment) => segment.speaker !== null) ?? false
+  // Without cast lines the whole reply is the profile's; with them, only the leading part (if any) is.
+  const ownText = hasCast ? (segments?.[0]?.speaker === null ? segments[0].text : '') : content
+  const castSegments = hasCast ? (segments ?? []).filter((segment, index) => !(index === 0 && segment.speaker === null)) : []
+  const ownParts = (
+    <>
       {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
       <CodexChatToolMedia calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} media={media} />
-      {content ? <ChatMarkdown text={content} roleplay={speaker?.roleplay} blocks={speaker?.blocks} /> : null}
+      {ownText ? markdown(ownText) : null}
+    </>
+  )
+  const showOwnRow = !hasCast || Boolean(ownText || reasoning || toolCalls.length > 0)
+  const footer = (
+    <>
       {streaming ? <ActivityLine toolCalls={toolCalls} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}
-    </div>
+    </>
   )
 
-  return avatarBeside ? (
-    <div className="flex items-start gap-3">
-      {avatar}
-      {reply}
+  if (!hasCast) {
+    return row('own', speaker, speaker?.engine ?? 'llm', toolBadge, <>{ownParts}{footer}</>)
+  }
+
+  return (
+    <div className="space-y-5">
+      {showOwnRow ? row('own', speaker, speaker?.engine ?? 'llm', toolBadge, ownParts) : null}
+      {castSegments.map((segment, index) => row(`cast-${index}`, segment.speaker ?? speaker, segment.speaker ? 'llm' : speaker?.engine ?? 'llm', null, markdown(segment.text)))}
+      {/* Status lines line up with the text column. */}
+      <div className={cn('space-y-2', avatarBeside && (avatarSize === 'lg' ? 'pl-17' : 'pl-13'))}>{footer}</div>
     </div>
-  ) : reply
+  )
 }

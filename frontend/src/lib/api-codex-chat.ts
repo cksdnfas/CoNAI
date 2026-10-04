@@ -36,6 +36,15 @@ export interface ChatDisplayBlock {
   enabled: boolean
 }
 
+/** Another character the profile voices; the model switches to them with a `[Name]` line. */
+export interface ChatCastMember {
+  id: string
+  name: string
+  avatar: string | null
+  /** Name colour `#rrggbb`, or empty. */
+  color: string
+}
+
 /** How a profile's chats look. Colours are `#rrggbb`, or empty for the theme's text colour. */
 export interface ChatStyle {
   typeface: ChatTypeface
@@ -46,6 +55,7 @@ export interface ChatStyle {
   backgroundDim: number
   backgroundBlur: number
   blocks: ChatDisplayBlock[]
+  cast: ChatCastMember[]
 }
 
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */

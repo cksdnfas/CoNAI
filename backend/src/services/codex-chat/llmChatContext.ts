@@ -219,7 +219,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     examples.length > 0 ? EXAMPLE_NOTE : '',
     withTools ? TOOL_GUIDANCE : '',
     REPLY_FORMAT_GUIDANCE,
-    buildChatStyleGuidance(profile.style),
+    buildChatStyleGuidance(profile.style, profile.name),
   ].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
   if (config.summaryEnabled && thread?.summary?.trim()) {

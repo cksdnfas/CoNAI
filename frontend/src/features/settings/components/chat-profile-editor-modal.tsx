@@ -39,18 +39,18 @@ import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 
 import { ChatDisplayBlocksEditor } from './chat-profile-blocks'
+import { ChatCastEditor } from './chat-profile-cast'
+import { readAvatarFile } from './chat-profile-images'
 import { ChatProfileLook } from './chat-profile-look'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
 import { ChatProfileToolsAdvanced } from './chat-profile-tools'
 
-const AVATAR_SIZE_PX = 128
-
 /** `background` stays undefined until the image is changed or removed, so saving does not resend it. */
 type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background'>> & { sortOrder: number; background?: string | null }
 
 /** Shown until the server's defaults load (new profiles only). */
-const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [] }
+const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [], cast: [] }
 
 function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults | undefined): Draft {
   return {
@@ -81,28 +81,6 @@ function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults |
     isEnabled: profile?.isEnabled ?? true,
     sortOrder: profile?.sortOrder ?? 0,
   }
-}
-
-/** Square-crop and shrink a picked image to a small WebP data URL for the avatar column. */
-function readAvatarFile(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const url = URL.createObjectURL(file)
-    const image = new Image()
-    image.onload = () => {
-      const side = Math.min(image.naturalWidth, image.naturalHeight)
-      const canvas = document.createElement('canvas')
-      canvas.width = AVATAR_SIZE_PX
-      canvas.height = AVATAR_SIZE_PX
-      canvas.getContext('2d')?.drawImage(image, (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side, 0, 0, AVATAR_SIZE_PX, AVATAR_SIZE_PX)
-      URL.revokeObjectURL(url)
-      resolve(canvas.toDataURL('image/webp', 0.85))
-    }
-    image.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('image'))
-    }
-    image.src = url
-  })
 }
 
 function numberOrNull(value: string) {
@@ -318,6 +296,10 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
             onStyleChange={(style) => patch({ style })}
             onBackgroundChange={(background) => patch({ background })}
           />
+          <div className="space-y-2 border-t border-line pt-3">
+            <h4 className="text-xs font-semibold text-muted-foreground">{t({ ko: '등장인물', en: 'Characters' })}</h4>
+            <ChatCastEditor cast={draft.style.cast} onChange={(cast) => patch({ style: { ...draft.style, cast } })} />
+          </div>
           <div className="space-y-2 border-t border-line pt-3">
             <h4 className="text-xs font-semibold text-muted-foreground">{t({ ko: '표시 블록', en: 'Display blocks' })}</h4>
             <ChatDisplayBlocksEditor blocks={draft.style.blocks} characterName={draft.name} onChange={(blocks) => patch({ style: { ...draft.style, blocks } })} />

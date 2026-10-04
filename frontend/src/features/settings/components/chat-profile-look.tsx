@@ -10,30 +10,7 @@ import { CHAT_TYPEFACE_FAMILY, chatTranscriptStyle, DEFAULT_CHAT_APPEARANCE } fr
 import { ChatMarkdown } from '@/features/codex-chat/chat-markdown'
 import { useI18n } from '@/i18n'
 import type { ChatStyle, ChatTypeface } from '@/lib/api-codex-chat'
-
-const BACKGROUND_MAX_SIDE_PX = 1600
-
-/** Shrink a picked image to a WebP data URL of at most 1600px on its long side. */
-function readBackgroundFile(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const url = URL.createObjectURL(file)
-    const image = new Image()
-    image.onload = () => {
-      const scale = Math.min(1, BACKGROUND_MAX_SIDE_PX / Math.max(image.naturalWidth, image.naturalHeight))
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(image.naturalWidth * scale)
-      canvas.height = Math.round(image.naturalHeight * scale)
-      canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height)
-      URL.revokeObjectURL(url)
-      resolve(canvas.toDataURL('image/webp', 0.82))
-    }
-    image.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('image'))
-    }
-    image.src = url
-  })
-}
+import { readBackgroundFile } from './chat-profile-images'
 
 /** An overline-labelled group. Not a <label>: these hold several controls (segments, a picture and its remove key). */
 function Group({ label, children }: { label: ReactNode; children: ReactNode }) {

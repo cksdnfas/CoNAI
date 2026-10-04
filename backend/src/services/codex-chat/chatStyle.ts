@@ -31,6 +31,16 @@ export type ChatDisplayBlock = {
   enabled: boolean
 }
 
+/** Another character who can speak in this profile's replies, marked by a `[Name]` line. */
+export type ChatCastMember = {
+  id: string
+  name: string
+  /** Small data URL (resized in the browser). */
+  avatar: string | null
+  /** Name colour, `#rrggbb`; empty for the default. */
+  color: string
+}
+
 export type ChatStyle = {
   typeface: ChatTypeface
   /** Colour dialogue / narration / thoughts and tell the model to mark them. */
@@ -41,6 +51,8 @@ export type ChatStyle = {
   /** Background image blur, 0–20 (px). */
   backgroundBlur: number
   blocks: ChatDisplayBlock[]
+  /** Characters besides the profile itself; replies switch speaker with `[Name]` lines. */
+  cast: ChatCastMember[]
 }
 
 export const DEFAULT_CHAT_STYLE: ChatStyle = {
@@ -50,7 +62,13 @@ export const DEFAULT_CHAT_STYLE: ChatStyle = {
   backgroundDim: 55,
   backgroundBlur: 0,
   blocks: [],
+  cast: [],
 }
+
+const MAX_CAST = 8
+const CAST_NAME_MAX_LENGTH = 40
+const CAST_AVATAR_MAX_LENGTH = 120_000
+const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/
 
 const MAX_BLOCKS = 12
 const BLOCK_KEY_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/
@@ -97,6 +115,25 @@ function normalizeBlocks(value: unknown): ChatDisplayBlock[] {
   })
 }
 
+function normalizeCast(value: unknown): ChatCastMember[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.slice(0, MAX_CAST).flatMap((entry, index) => {
+    if (!entry || typeof entry !== 'object') return []
+    const record = entry as Record<string, unknown>
+    // Brackets and line breaks would break the `[Name]` marker.
+    const name = typeof record.name === 'string' ? record.name.replace(/[[\]\r\n]/g, '').trim().slice(0, CAST_NAME_MAX_LENGTH) : ''
+    const avatar = typeof record.avatar === 'string' && record.avatar.length <= CAST_AVATAR_MAX_LENGTH && AVATAR_PATTERN.test(record.avatar) ? record.avatar : null
+    return [{
+      id: typeof record.id === 'string' && record.id ? record.id.slice(0, 40) : `c${index}-${Date.now().toString(36)}`,
+      name,
+      avatar,
+      color: color(record.color, ''),
+    }]
+  })
+}
+
 export function normalizeChatStyle(value: unknown): ChatStyle {
   let raw: unknown = value
   if (typeof value === 'string') {
@@ -119,6 +156,7 @@ export function normalizeChatStyle(value: unknown): ChatStyle {
     backgroundDim: bounded(record.backgroundDim, 0, 90, DEFAULT_CHAT_STYLE.backgroundDim),
     backgroundBlur: bounded(record.backgroundBlur, 0, 20, DEFAULT_CHAT_STYLE.backgroundBlur),
     blocks: normalizeBlocks(record.blocks),
+    cast: normalizeCast(record.cast),
   }
 }
 
@@ -147,7 +185,23 @@ function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
   ].join('\n')
 }
 
+function buildCastGuidance(cast: ChatCastMember[], profileName: string) {
+  const names = cast.map((member) => member.name).filter(Boolean)
+  if (names.length === 0) {
+    return ''
+  }
+  return [
+    `Characters: ${[profileName, ...names].join(', ')}. You voice all of them.`,
+    'When another character speaks or acts, start that part with a line containing only their name in square brackets, then their text on the next lines. Switch back the same way.',
+    `Text before the first such line belongs to ${profileName}. Example:`,
+    `[${names[0]}]`,
+    '"..."',
+    `[${profileName}]`,
+    '"..."',
+  ].join('\n')
+}
+
 /** The part of the system prompt that tells the model about the profile's display conventions. */
-export function buildChatStyleGuidance(style: ChatStyle) {
-  return [style.roleplay ? ROLEPLAY_GUIDANCE : '', buildBlocksGuidance(style.blocks)].filter(Boolean).join('\n\n')
+export function buildChatStyleGuidance(style: ChatStyle, profileName: string) {
+  return [style.roleplay ? ROLEPLAY_GUIDANCE : '', buildCastGuidance(style.cast, profileName), buildBlocksGuidance(style.blocks)].filter(Boolean).join('\n\n')
 }

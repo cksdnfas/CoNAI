@@ -210,7 +210,7 @@ function buildAppServerArgs(knownFeatures: Set<string>, mcpServers: string[]) {
 
 /** What a Codex profile's chats get as developer instructions: the fixed tool rules, then the profile's prompt. */
 export function buildCodexInstructions(profile: ChatProfile) {
-  return [DEVELOPER_INSTRUCTIONS, buildChatStyleGuidance(profile.style), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
+  return [DEVELOPER_INSTRUCTIONS, buildChatStyleGuidance(profile.style, profile.name), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
 }
 
 function threadOverrides(session: Session, profile: ChatProfile) {
