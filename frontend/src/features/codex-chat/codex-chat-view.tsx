@@ -166,6 +166,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const serverRunning = Boolean(threadQuery.data?.running) && !isStreaming
   const isBusy = isStreaming || serverRunning
   const messages: CodexChatMessage[] = useMemo(() => threadQuery.data?.messages ?? [], [threadQuery.data?.messages])
+  const media = threadQuery.data?.media
   const runningFromServer = serverRunning ? threadQuery.data?.running ?? null : null
   const activeView = activeThreadId === null ? 'chat' : view === 'context' && isCodexThread ? 'chat' : view
   const isTranscript = activeView === 'chat'
@@ -290,7 +291,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           >
             {message.role === 'user'
               ? <CodexChatUserMessage content={message.content} />
-              : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} largeThumbnails={layout === 'page'} speaker={speaker} />}
+              : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} largeThumbnails={layout === 'page'} speaker={speaker} media={media} />}
           </div>
         ))}
         {liveTurn && liveTurn.threadId === activeThreadId ? (

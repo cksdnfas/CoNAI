@@ -60,7 +60,16 @@ export interface ImageSearchParamsInput {
   start_date?: string;
   end_date?: string;
   group_id?: number;
+  /** `video` (video files), `animated` (GIF and other animated stills), `image` (still images). */
+  media_type?: 'image' | 'video' | 'animated';
 }
+
+/** SQL for the kind of an image's active file; `image_files.file_type` is image | video | animated. */
+const MEDIA_TYPE_CONDITIONS: Record<NonNullable<ImageSearchParamsInput['media_type']>, string> = {
+  video: "(mf.file_type = 'video' OR mf.mime_type LIKE 'video/%')",
+  animated: "mf.file_type = 'animated'",
+  image: "(mf.file_type = 'image' AND COALESCE(mf.mime_type, '') NOT LIKE 'video/%')",
+};
 
 /** Append the positive-prompt search clause including NAI character prompt fallback fields. */
 export function appendPositivePromptSearchCondition(
@@ -191,6 +200,14 @@ export function buildImageSearchFilterParts(
   if (searchParams.max_file_size) {
     conditions.push('if.file_size <= ?');
     params.push(searchParams.max_file_size);
+  }
+  if (searchParams.media_type && MEDIA_TYPE_CONDITIONS[searchParams.media_type]) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM image_files mf
+      WHERE mf.composite_hash = im.composite_hash
+        AND mf.file_status = 'active'
+        AND ${MEDIA_TYPE_CONDITIONS[searchParams.media_type]}
+    )`);
   }
   if (searchParams.start_date) {
     conditions.push('DATE(im.first_seen_date) >= DATE(?)');

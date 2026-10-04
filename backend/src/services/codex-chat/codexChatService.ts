@@ -106,8 +106,10 @@ export class CodexChatError extends Error {
 const sessions = new Map<string, Session>()
 const startingSessions = new Map<string, Promise<Session>>()
 
-function sessionKey(requester: McpRequester, scopes: ChatScope[]) {
-  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}`
+/** MCP grants are per process (token), so processes are keyed by account + scopes + tool allowlist. */
+function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null) {
+  const tools = toolAllowlist ? [...toolAllowlist].sort().join(',') : '*'
+  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}`
 }
 
 /** The profile's model and reasoning effort, falling back to the CLI config and then the model's default effort. */
@@ -203,16 +205,21 @@ function buildAppServerArgs(knownFeatures: Set<string>, mcpServers: string[]) {
   ]
 }
 
+/** What a Codex profile's chats get as developer instructions: the fixed tool rules, then the profile's prompt. */
+export function buildCodexInstructions(profile: ChatProfile) {
+  const persona = buildPersonaPrompt(profile, { dialogueAsText: true })
+  return persona ? `${DEVELOPER_INSTRUCTIONS}\n\n${persona}` : DEVELOPER_INSTRUCTIONS
+}
+
 function threadOverrides(session: Session, profile: ChatProfile) {
   const { model, effort } = resolveCodexRun(session, profile)
-  const persona = buildPersonaPrompt(profile)
   return {
     model,
     ...(effort ? { config: { model_reasoning_effort: effort } } : {}),
     cwd: chatWorkDir(),
     approvalPolicy: 'never',
     sandbox: 'read-only',
-    developerInstructions: persona ? `${DEVELOPER_INSTRUCTIONS}\n\n${persona}` : DEVELOPER_INSTRUCTIONS,
+    developerInstructions: buildCodexInstructions(profile),
   }
 }
 
@@ -346,10 +353,10 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
   }
 }
 
-async function startSession(requester: McpRequester, scopes: ChatScope[]): Promise<Session> {
+async function startSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null): Promise<Session> {
   const { knownFeatures, mcpServers } = await probeCodexCli()
   const args = buildAppServerArgs(knownFeatures, mcpServers)
-  const token = issueCodexChatMcpToken(requester, scopes)
+  const token = issueCodexChatMcpToken(requester, scopes, toolAllowlist)
   let client: CodexAppServerClient | undefined
   let configModel: string | null = null
   let configEffort: CodexReasoningEffort | null = null
@@ -375,7 +382,7 @@ async function startSession(requester: McpRequester, scopes: ChatScope[]): Promi
   }
 
   const session: Session = {
-    key: sessionKey(requester, scopes),
+    key: sessionKey(requester, scopes, toolAllowlist),
     requester,
     client,
     token,
@@ -393,8 +400,8 @@ async function startSession(requester: McpRequester, scopes: ChatScope[]): Promi
   return session
 }
 
-async function ensureSession(requester: McpRequester, scopes: ChatScope[]) {
-  const key = sessionKey(requester, scopes)
+async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null) {
+  const key = sessionKey(requester, scopes, toolAllowlist)
   const existing = sessions.get(key)
   if (existing?.client.isAlive) {
     clearIdleTimer(existing)
@@ -403,7 +410,7 @@ async function ensureSession(requester: McpRequester, scopes: ChatScope[]) {
 
   let starting = startingSessions.get(key)
   if (!starting) {
-    starting = startSession(requester, scopes).finally(() => startingSessions.delete(key))
+    starting = startSession(requester, scopes, toolAllowlist).finally(() => startingSessions.delete(key))
     startingSessions.set(key, starting)
   }
   return starting
@@ -497,15 +504,19 @@ export const CodexChatService = {
     return requireThread(requester, id)
   },
 
+  /** The transcript, a reply still running, and the media kind of every image it references (for players). */
   getThread(requester: McpRequester, threadId: number) {
     const thread = requireThread(requester, threadId)
+    const messages = CodexChatStore.listMessages(threadId)
+    const media = Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height }]))
     if (thread.engine === 'llm') {
-      return { thread, messages: CodexChatStore.listMessages(threadId), running: LlmChatService.running(threadId) }
+      return { thread, messages, media, running: LlmChatService.running(threadId) }
     }
     const active = findActiveTurn(threadId)
     return {
       thread,
-      messages: CodexChatStore.listMessages(threadId),
+      messages,
+      media,
       running: active
         ? {
             text: [...active.turn.agentMessages.values()].join('\n\n'),
@@ -556,7 +567,7 @@ export const CodexChatService = {
 
     const profile = requireCodexProfile(thread.profile_id)
     const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-    const session = await ensureSession(requester, scopes)
+    const session = await ensureSession(requester, scopes, profile.toolAllowlist)
     const run = resolveCodexRun(session, profile)
     const codexThreadId = await ensureCodexThread(session, threadId, thread.codex_thread_id, profile)
 

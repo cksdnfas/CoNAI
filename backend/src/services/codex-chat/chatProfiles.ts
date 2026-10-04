@@ -13,13 +13,31 @@ export const CHAT_PROFILE_LIMITS = {
   contextTokens: { min: 1024, max: 4_000_000 },
   summaryTriggerTurns: { min: 1, max: 200 },
   maxToolRounds: { min: 1, max: 20 },
+  toolOutputLimit: { min: 500, max: 100_000 },
 } as const
 
 export const CHAT_PROFILE_DEFAULTS = {
   contextTurns: 20,
   summaryTriggerTurns: 6,
   maxToolRounds: 8,
+  /** Characters of one tool result handed to the model within a reply. */
+  toolOutputLimit: 12_000,
 } as const
+
+const MAX_PROMPT_SECTIONS = 30
+const SECTION_TITLE_MAX_LENGTH = 80
+
+/**
+ * A user-defined block of the prompt. `text` goes into the system prompt under its title; `dialogue` is example
+ * conversation, sent as real user/assistant turns when its lines carry speaker labels.
+ */
+export type ChatPromptSection = {
+  id: string
+  title: string
+  content: string
+  kind: 'text' | 'dialogue'
+  enabled: boolean
+}
 
 export const DEFAULT_CHAT_SUMMARY_PROMPT = [
   '아래는 지금까지의 대화 요약과, 그 뒤에 이어진 대화야.',
@@ -44,15 +62,17 @@ export type ChatProfile = {
   /** Codex only; empty uses the CLI / model default. */
   reasoningEffort: CodexReasoningEffort | ''
   systemPrompt: string
-  characterDescription: string
-  exampleDialogue: string
-  userPersona: string
+  promptSections: ChatPromptSection[]
   /** Stored as the first assistant message of a new chat. */
   greeting: string
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
   mcpScopes: ChatScope[]
+  /** Only these tools (within the scopes); null offers every tool the scopes allow. */
+  toolAllowlist: string[] | null
+  /** LLM: characters of one tool result the model sees within a reply. */
+  toolOutputLimit: number
   /** LLM context: recent turns sent with each request, capped by `contextTokens` when set. */
   contextTurns: number
   contextTokens: number | null
@@ -83,6 +103,9 @@ type ProfileRow = {
   model: string | null
   reasoning_effort: string | null
   system_prompt: string
+  prompt_sections: string | null
+  tool_allowlist: string | null
+  tool_output_limit: number | null
   character_description: string
   example_dialogue: string
   user_persona: string
@@ -119,7 +142,50 @@ function parseScopes(value: unknown): ChatScope[] {
   return Array.isArray(list) ? CHAT_SCOPES.filter((scope) => list.includes(scope)) : []
 }
 
+function parseJsonArray(value: string | null): unknown[] | null {
+  if (!value) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function normalizeSections(value: unknown): ChatPromptSection[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.slice(0, MAX_PROMPT_SECTIONS).flatMap((entry, index) => {
+    if (!entry || typeof entry !== 'object') return []
+    const record = entry as Record<string, unknown>
+    const title = text(record.title, SECTION_TITLE_MAX_LENGTH)
+    const content = text(record.content, TEXT_MAX_LENGTH)
+    if (!title && !content) return []
+    return [{
+      id: text(record.id, 40) || `s${index}-${Date.now().toString(36)}`,
+      title,
+      content,
+      kind: record.kind === 'dialogue' ? 'dialogue' as const : 'text' as const,
+      enabled: record.enabled !== false,
+    }]
+  })
+}
+
+/** Profiles made before free-form sections kept character / persona / example dialogue in fixed columns. */
+function legacySections(row: ProfileRow): ChatPromptSection[] {
+  return [
+    row.character_description ? { id: 'legacy-character', title: `캐릭터: ${row.name}`, content: row.character_description, kind: 'text' as const, enabled: true } : null,
+    row.user_persona ? { id: 'legacy-persona', title: '사용자', content: row.user_persona, kind: 'text' as const, enabled: true } : null,
+    row.example_dialogue ? { id: 'legacy-dialogue', title: '대화 예시', content: row.example_dialogue, kind: 'dialogue' as const, enabled: true } : null,
+  ].filter((section): section is ChatPromptSection => section !== null)
+}
+
 function toProfile(row: ProfileRow): ChatProfile {
+  const storedSections = parseJsonArray(row.prompt_sections)
+  const allowlist = parseJsonArray(row.tool_allowlist)
   return {
     id: row.id,
     name: row.name,
@@ -129,14 +195,14 @@ function toProfile(row: ProfileRow): ChatProfile {
     model: row.model ?? '',
     reasoningEffort: isCodexReasoningEffort(row.reasoning_effort) ? row.reasoning_effort : '',
     systemPrompt: row.system_prompt,
-    characterDescription: row.character_description,
-    exampleDialogue: row.example_dialogue,
-    userPersona: row.user_persona,
+    promptSections: storedSections ? normalizeSections(storedSections) : legacySections(row),
     greeting: row.greeting,
     temperature: row.temperature,
     maxTokens: row.max_tokens,
     mcpEnabled: row.mcp_enabled === 1,
     mcpScopes: parseScopes(row.mcp_scopes),
+    toolAllowlist: allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
+    toolOutputLimit: row.tool_output_limit ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
     contextTurns: row.context_turns ?? CHAT_PROFILE_DEFAULTS.contextTurns,
     contextTokens: row.context_tokens,
     summaryEnabled: row.summary_enabled === 1,
@@ -200,14 +266,20 @@ function toColumns(input: ChatProfileInput) {
     model: text(input.model, MODEL_MAX_LENGTH) || null,
     reasoning_effort: engine === 'codex' && input.reasoningEffort ? input.reasoningEffort : null,
     system_prompt: text(input.systemPrompt, TEXT_MAX_LENGTH),
-    character_description: text(input.characterDescription, TEXT_MAX_LENGTH),
-    example_dialogue: text(input.exampleDialogue, TEXT_MAX_LENGTH),
-    user_persona: text(input.userPersona, TEXT_MAX_LENGTH),
+    prompt_sections: JSON.stringify(normalizeSections(input.promptSections ?? [])),
+    // The fixed columns are superseded by prompt_sections; cleared so an old row is not read as legacy again.
+    character_description: '',
+    example_dialogue: '',
+    user_persona: '',
     greeting: text(input.greeting, TEXT_MAX_LENGTH),
     temperature: optionalNumber(input.temperature, { min: 0, max: 2 }, false),
     max_tokens: optionalNumber(input.maxTokens, { min: 1, max: 1_000_000 }, true),
     mcp_enabled: input.mcpEnabled ? 1 : 0,
     mcp_scopes: JSON.stringify(parseScopes(input.mcpScopes ?? ['read'])),
+    tool_allowlist: Array.isArray(input.toolAllowlist)
+      ? JSON.stringify([...new Set(input.toolAllowlist.filter((name): name is string => typeof name === 'string' && /^[a-z0-9_]{1,64}$/.test(name)))])
+      : null,
+    tool_output_limit: optionalNumber(input.toolOutputLimit, CHAT_PROFILE_LIMITS.toolOutputLimit, true) ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
     context_turns: optionalNumber(input.contextTurns, CHAT_PROFILE_LIMITS.contextTurns, true) ?? CHAT_PROFILE_DEFAULTS.contextTurns,
     context_tokens: optionalNumber(input.contextTokens, CHAT_PROFILE_LIMITS.contextTokens, true),
     summary_enabled: input.summaryEnabled ? 1 : 0,
@@ -222,6 +294,12 @@ function toColumns(input: ChatProfileInput) {
 }
 
 export const ChatProfileStore = {
+  /** A profile as it would be saved, without saving it (prompt preview of an unsaved draft). */
+  draft(input: ChatProfileInput, profileId = 0): ChatProfile {
+    const now = new Date().toISOString()
+    return toProfile({ ...toColumns(input), id: profileId, created_date: now, updated_date: now } as ProfileRow)
+  },
+
   list(options: { enabledOnly?: boolean } = {}) {
     const rows = getUserSettingsDb().prepare(`
       SELECT * FROM llm_chat_profiles ${options.enabledOnly ? 'WHERE is_enabled = 1' : ''} ORDER BY sort_order ASC, id ASC

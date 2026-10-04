@@ -255,6 +255,17 @@ function MediaLightboxStage({ item, canViewPrevious, canViewNext, onViewPrevious
             autoPlay
             playsInline
             className="max-h-full max-w-full"
+            onCanPlay={(event) => {
+              // Browsers refuse autoplay with sound once the opening click is no longer "recent" (e.g. after an
+              // image attempt failed first); fall back to muted playback so the video still starts.
+              const video = event.currentTarget
+              if (video.paused) {
+                video.play().catch(() => {
+                  video.muted = true
+                  void video.play().catch(() => undefined)
+                })
+              }
+            }}
             onError={() => setRenderAs('failed')}
           />
         </div>

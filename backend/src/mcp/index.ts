@@ -46,6 +46,7 @@ router.post('/mcp', async (req: Request, res: Response) => {
       baseUrl,
       requester: auth?.requester,
       source: auth?.source ?? 'http',
+      toolAllowlist: auth?.toolAllowlist ?? null,
     });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // Stateless 모드

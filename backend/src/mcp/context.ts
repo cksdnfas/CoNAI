@@ -15,6 +15,8 @@ export interface McpRequestContext {
   requester?: McpRequester;
   /** `codex-chat` / `llm-chat`: an agent acting inside the app on a user's behalf. */
   source?: 'http' | 'codex-chat' | 'llm-chat';
+  /** Chat profiles can narrow the tools further than the scopes (null/undefined: every tool the scopes allow). */
+  toolAllowlist?: string[] | null;
 }
 
 export function isChatMcpSource(source: McpRequestContext['source']) {
@@ -81,6 +83,10 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   import_workflow_definition: 'restore',
   restore_deleted_workflow: 'restore',
 };
+
+export function getMcpToolScope(toolName: string): McpHttpScope | null {
+  return TOOL_SCOPES[toolName] ?? null;
+}
 
 export function isMcpToolAllowed(toolName: string, scopes: readonly McpHttpScope[]): boolean {
   const requiredScope = TOOL_SCOPES[toolName];

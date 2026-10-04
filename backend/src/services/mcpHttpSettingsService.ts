@@ -20,6 +20,7 @@ export interface McpHttpAuthentication {
   scopes: McpHttpScope[];
   requester?: McpRequester;
   source?: 'http' | 'codex-chat';
+  toolAllowlist?: string[] | null;
 }
 
 function generateApiKey(): string {

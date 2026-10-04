@@ -437,6 +437,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
       summary_provider_name TEXT,
       summary_model TEXT,
       max_tool_rounds INTEGER,
+      prompt_sections TEXT,
+      tool_allowlist TEXT,
+      tool_output_limit INTEGER,
       is_enabled INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -508,6 +511,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['summary_trigger_turns', 'INTEGER'],
     ['summary_prompt', 'TEXT'],
     ['max_tool_rounds', 'INTEGER'],
+    ['prompt_sections', 'TEXT'],
+    ['tool_allowlist', 'TEXT'],
+    ['tool_output_limit', 'INTEGER'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

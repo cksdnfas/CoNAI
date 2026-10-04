@@ -34,6 +34,15 @@ export interface ChatProfileSummary {
   summaryEnabled: boolean
 }
 
+/** A user-defined prompt block: `text` joins the system prompt under its title, `dialogue` is example conversation. */
+export interface ChatPromptSection {
+  id: string
+  title: string
+  content: string
+  kind: 'text' | 'dialogue'
+  enabled: boolean
+}
+
 /** A full chat profile (admin). */
 export interface ChatProfile {
   id: number
@@ -44,14 +53,15 @@ export interface ChatProfile {
   model: string
   reasoningEffort: CodexReasoningEffort | ''
   systemPrompt: string
-  characterDescription: string
-  exampleDialogue: string
-  userPersona: string
+  promptSections: ChatPromptSection[]
   greeting: string
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
   mcpScopes: ChatScope[]
+  /** Only these tools; null offers every tool the scopes allow. */
+  toolAllowlist: string[] | null
+  toolOutputLimit: number
   contextTurns: number
   contextTokens: number | null
   summaryEnabled: boolean
@@ -72,6 +82,7 @@ export interface ChatProfileDefaults {
   contextTurns: number
   summaryTriggerTurns: number
   maxToolRounds: number
+  toolOutputLimit: number
   summaryPrompt: string
   scopes: ChatScope[]
 }
@@ -113,9 +124,17 @@ export interface CodexChatMessage {
   created_date: string
 }
 
+/** Media kind of an image a transcript references (so videos can play inline). */
+export interface CodexChatMediaInfo {
+  mimeType: string | null
+  width: number | null
+  height: number | null
+}
+
 export interface CodexChatThreadDetail {
   thread: CodexChatThread
   messages: CodexChatMessage[]
+  media: Record<string, CodexChatMediaInfo>
   /** Partial reply of a turn still running on the server (after a reload). */
   running: { text: string; toolCalls: CodexChatToolCall[] } | null
 }
@@ -176,6 +195,28 @@ export function updateChatProfile(profileId: number, patch: ChatProfileInput) {
 
 export function deleteChatProfile(profileId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/profiles/${profileId}`, { method: 'DELETE' })
+}
+
+export interface ChatToolInfo {
+  name: string
+  description: string
+  scope: ChatScope | null
+}
+
+export interface ChatProfilePreview {
+  engine: ChatEngine
+  messages: Array<{ role: string; content: string | null }>
+  tools: string[]
+  tokens: { prompt: number; tools: number; total: number }
+  contextTokens: number | null
+}
+
+export function listChatTools() {
+  return requestApiData<ChatToolInfo[]>('/api/codex-chat/admin/tools', { cache: 'no-store' })
+}
+
+export function previewChatProfile(draft: ChatProfileInput & { id?: number }) {
+  return requestApiData<ChatProfilePreview>('/api/codex-chat/admin/profiles/preview', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(draft) })
 }
 
 export function listChatConnectionModels(providerName: string) {

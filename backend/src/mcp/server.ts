@@ -24,7 +24,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   const originalTool = server.tool.bind(server);
   (server as McpServer & { tool: typeof server.tool }).tool = ((...args: unknown[]) => {
     const toolName = typeof args[0] === 'string' ? args[0] : '';
-    if (!isMcpToolAllowed(toolName, context.scopes)) {
+    if (!isMcpToolAllowed(toolName, context.scopes) || (context.toolAllowlist && !context.toolAllowlist.includes(toolName))) {
       return undefined;
     }
     return (originalTool as (...toolArgs: unknown[]) => unknown)(...args);

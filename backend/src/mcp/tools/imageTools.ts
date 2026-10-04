@@ -21,7 +21,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 이미지 고급 검색
   server.tool(
     'search_images',
-    'Search images stored in the system by prompt text, AI tool, model, dimensions, file size, date range, or group.',
+    'Search the media library (images, videos and animated GIFs) by prompt text, AI tool, model, dimensions, date range, group or media type. Each result says its media_type.',
     {
       search_text: z.string().optional().describe('Search in positive prompts'),
       negative_text: z.string().optional().describe('Search in negative prompts'),
@@ -34,6 +34,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       start_date: z.string().optional().describe('Start date filter (YYYY-MM-DD)'),
       end_date: z.string().optional().describe('End date filter (YYYY-MM-DD)'),
       group_id: z.number().int().optional().describe('Filter by group ID'),
+      media_type: z.enum(['image', 'video', 'animated']).optional().describe('Only still images, videos, or animated GIFs'),
       page: z.number().int().min(1).default(1).describe('Page number'),
       limit: z.number().int().min(1).max(100).default(20).describe('Results per page'),
       sort_by: z.enum(['upload_date', 'filename', 'file_size', 'width', 'height']).default('upload_date').describe('Sort field'),
@@ -54,6 +55,9 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
         // 응답 크기를 줄이기 위해 핵심 필드만 추출
         const images = result.images.map((img: any) => ({
           composite_hash: img.composite_hash,
+          media_type: img.mime_type?.startsWith('video/') ? 'video' : img.mime_type === 'image/gif' ? 'animated' : 'image',
+          mime_type: img.mime_type ?? null,
+          duration: img.duration ?? null,
           width: img.width,
           height: img.height,
           ai_tool: img.ai_tool,

@@ -8,6 +8,8 @@ const SUMMARY_TOOL_NOTE_LENGTH = 300
 /** Room kept for the reply when the profile sets no max tokens. */
 const DEFAULT_REPLY_RESERVE_TOKENS = 2048
 
+const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 실제 대화는 그 다음부터야.'
+
 const TOOL_GUIDANCE = [
   'You can act on CoNAI, a local app for managing and generating AI images, only through the provided tools.',
   'For generation, prefer submit_generation_job, then poll get_generation_job until it finishes, and mention the resulting history ids.',
@@ -47,15 +49,54 @@ export function fillCharacterPlaceholders(text: string, profile: ChatProfile) {
   return text.replace(/\{\{\s*char\s*\}\}/gi, profile.name).replace(/\{\{\s*user\s*\}\}/gi, '사용자')
 }
 
-/** System prompt, character, user persona and example dialogue as one block (both engines use it). */
-export function buildPersonaPrompt(profile: ChatProfile) {
-  const sections = [
-    profile.systemPrompt,
-    profile.characterDescription ? `## 캐릭터: ${profile.name}\n${profile.characterDescription}` : '',
-    profile.userPersona ? `## 사용자\n${profile.userPersona}` : '',
-    profile.exampleDialogue ? `## 대화 예시\n${profile.exampleDialogue}` : '',
-  ]
-  return fillCharacterPlaceholders(sections.filter(Boolean).join('\n\n'), profile)
+const USER_SPEAKERS = /^(?:\{\{\s*user\s*\}\}|user|사용자|유저|나)\s*[:：]\s?/i
+const ASSISTANT_SPEAKERS = /^(?:\{\{\s*char\s*\}\}|char|assistant|ai|캐릭터)\s*[:：]\s?/i
+
+/**
+ * Example dialogue as user/assistant turns: each `사용자:` / `{{user}}:` or `{{char}}:` / `<name>:` line starts an
+ * utterance and unlabelled lines continue it (`<START>` separators are dropped). Null unless both sides speak.
+ */
+export function parseExampleDialogue(content: string, profile: ChatProfile): ChatCompletionMessage[] | null {
+  const namePattern = new RegExp(`^${profile.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[:：]\\s?`)
+  const turns: Array<{ role: 'user' | 'assistant'; lines: string[] }> = []
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trimEnd()
+    if (/^\s*<start>\s*$/i.test(line)) continue
+    const role = USER_SPEAKERS.test(line) ? 'user' : ASSISTANT_SPEAKERS.test(line) || namePattern.test(line) ? 'assistant' : null
+    if (role) {
+      const text = line.replace(role === 'user' ? USER_SPEAKERS : ASSISTANT_SPEAKERS.test(line) ? ASSISTANT_SPEAKERS : namePattern, '')
+      const last = turns.at(-1)
+      if (last?.role === role) last.lines.push(text)
+      else turns.push({ role, lines: [text] })
+    } else if (turns.length > 0 && line.trim()) {
+      turns[turns.length - 1].lines.push(line)
+    }
+  }
+  if (!turns.some((turn) => turn.role === 'user') || !turns.some((turn) => turn.role === 'assistant')) {
+    return null
+  }
+  return turns.map((turn) => ({ role: turn.role, content: fillCharacterPlaceholders(turn.lines.join('\n').trim(), profile) }))
+}
+
+/**
+ * The system prompt and the enabled text sections (each under its title) as one block. Dialogue sections join it
+ * as text only when `dialogueAsText` (Codex) or when their lines carry no speaker labels.
+ */
+export function buildPersonaPrompt(profile: ChatProfile, options: { dialogueAsText?: boolean } = {}) {
+  const blocks = [profile.systemPrompt]
+  for (const section of profile.promptSections) {
+    if (!section.enabled || !section.content.trim()) continue
+    if (section.kind === 'dialogue' && !options.dialogueAsText && parseExampleDialogue(section.content, profile)) continue
+    blocks.push(section.title ? `## ${section.title}\n${section.content}` : section.content)
+  }
+  return fillCharacterPlaceholders(blocks.filter(Boolean).join('\n\n'), profile)
+}
+
+/** Example turns from dialogue sections, sent right after the system messages. */
+function buildExampleMessages(profile: ChatProfile): ChatCompletionMessage[] {
+  return profile.promptSections
+    .filter((section) => section.enabled && section.kind === 'dialogue')
+    .flatMap((section) => parseExampleDialogue(section.content, profile) ?? [])
 }
 
 /** A turn starts at a user message; a greeting before the first user message is a turn of its own. */
@@ -156,13 +197,23 @@ function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], conf
   return kept
 }
 
-function buildSystemMessages(profile: ChatProfile, thread: CodexChatThreadRecord, config: LlmChatContextConfig, withTools: boolean) {
-  const systemPrompt = [buildPersonaPrompt(profile), withTools ? TOOL_GUIDANCE : ''].filter(Boolean).join('\n\n')
+/**
+ * Everything before the real conversation: the system prompt (stable, so servers can reuse the cached prefix), the
+ * rolling summary, then example turns. Chat templates often allow system messages only at the start, so the note that
+ * the examples are not real lives in the system prompt rather than around them.
+ */
+export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean) {
+  const examples = buildExampleMessages(profile)
+  const systemPrompt = [
+    buildPersonaPrompt(profile),
+    examples.length > 0 ? EXAMPLE_NOTE : '',
+    withTools ? TOOL_GUIDANCE : '',
+  ].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
-  if (config.summaryEnabled && thread.summary?.trim()) {
+  if (config.summaryEnabled && thread?.summary?.trim()) {
     result.push({ role: 'system', content: `## 지금까지의 대화 요약\n${thread.summary.trim()}` })
   }
-  return result
+  return [...result, ...examples]
 }
 
 function sendableMessages(messages: CodexChatMessageRecord[]) {
@@ -181,7 +232,7 @@ export function buildChatMessages(params: {
   tools: ChatCompletionTool[]
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const system = buildSystemMessages(profile, thread, config, tools.length > 0)
+  const system = buildLeadingMessages(profile, thread, config, tools.length > 0)
   const window = selectWindow(profile.id, splitTurns(sendableMessages(params.messages)), config, estimateMessagesTokens(profile.id, system, tools))
   return [...system, ...window.flat().flatMap(toCompletionMessages)]
 }
@@ -214,7 +265,7 @@ export async function updateThreadSummary(threadId: number, profile: ChatProfile
   }
 
   const turns = splitTurns(sendableMessages(CodexChatStore.listMessages(threadId)))
-  const windowSize = selectWindow(profile.id, turns, config, estimateMessagesTokens(profile.id, buildSystemMessages(profile, thread, config, profile.mcpEnabled))).length
+  const windowSize = selectWindow(profile.id, turns, config, estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled))).length
   const candidates = (options.force ? turns : turns.slice(0, Math.max(0, turns.length - windowSize))).flat()
   const pending = candidates.filter((message) => message.id > (thread.summary_until_message_id ?? 0))
   const pendingTurns = pending.filter((message) => message.role === 'user').length

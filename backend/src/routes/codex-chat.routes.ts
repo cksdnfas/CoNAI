@@ -6,7 +6,10 @@ import type { McpRequester } from '../mcp/context'
 import { CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
 import { CHAT_SCOPES, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
-import { CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
+import { getMcpToolScope } from '../mcp/context'
+import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
+import { buildCodexInstructions, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
+import { buildLeadingMessages, estimateTokens } from '../services/codex-chat/llmChatContext'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
@@ -257,6 +260,57 @@ router.delete('/admin/profiles/:profileId', requireAdmin, (req: Request, res: Re
   }
   res.json({ success: true, data: { deleted: ChatProfileStore.delete(profileId) } })
 })
+
+/** Every chat-grantable MCP tool with its scope and description, for the profile editor's tool picker. */
+router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const bridge = await openChatMcpBridge(requesterFrom(req), [...CHAT_SCOPES])
+  try {
+    res.json({
+      success: true,
+      data: bridge.tools.map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })),
+    })
+  } finally {
+    await bridge.close()
+  }
+}))
+
+/**
+ * POST /admin/profiles/preview — what a (possibly unsaved) profile sends before the conversation: the leading
+ * messages (or Codex developer instructions) and the tool schemas, with token estimates (calibrated per saved
+ * profile once a server has reported real usage).
+ */
+router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as ChatProfileInput & { id?: unknown }
+    const profileId = parseId(body.id) ?? 0
+    const profile = ChatProfileStore.draft(body, profileId)
+    const bridge = profile.mcpEnabled && profile.mcpScopes.length > 0
+      ? await openChatMcpBridge(requesterFrom(req), profile.mcpScopes, profile.toolAllowlist)
+      : null
+    try {
+      const tools = bridge?.tools ?? []
+      const messages = profile.engine === 'codex'
+        ? [{ role: 'developer', content: buildCodexInstructions(profile) }]
+        : buildLeadingMessages(profile, null, { summaryEnabled: false }, tools.length > 0)
+      const promptTokens = estimateTokens(profileId, JSON.stringify(messages))
+      const toolTokens = tools.length > 0 ? estimateTokens(profileId, JSON.stringify(tools)) : 0
+      res.json({
+        success: true,
+        data: {
+          engine: profile.engine,
+          messages,
+          tools: tools.map((tool) => tool.function.name),
+          tokens: { prompt: promptTokens, tools: toolTokens, total: promptTokens + toolTokens },
+          contextTokens: profile.engine === 'llm' ? profile.contextTokens : null,
+        },
+      })
+    } finally {
+      await bridge?.close()
+    }
+  } catch (error) {
+    sendChatError(res, error)
+  }
+}))
 
 /** Model ids an LLM connection offers (`GET {base}/models`), for the profile editor. */
 router.get('/admin/models', requireAdmin, asyncHandler(async (req: Request, res: Response) => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, Trash2 } from 'lucide-react'
+import { Eye, Save, Trash2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
@@ -36,6 +36,10 @@ import { getExternalApiProviders } from '@/lib/api-external-api'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 
+import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
+import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
+import { ChatProfileToolsAdvanced } from './chat-profile-tools'
+
 const AVATAR_SIZE_PX = 128
 
 type Draft = Required<Omit<ChatProfileInput, 'sortOrder'>> & { sortOrder: number }
@@ -49,14 +53,14 @@ function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults |
     model: profile?.model ?? '',
     reasoningEffort: profile?.reasoningEffort ?? '',
     systemPrompt: profile?.systemPrompt ?? '',
-    characterDescription: profile?.characterDescription ?? '',
-    exampleDialogue: profile?.exampleDialogue ?? '',
-    userPersona: profile?.userPersona ?? '',
+    promptSections: profile?.promptSections ?? [],
     greeting: profile?.greeting ?? '',
     temperature: profile?.temperature ?? null,
     maxTokens: profile?.maxTokens ?? null,
     mcpEnabled: profile?.mcpEnabled ?? false,
     mcpScopes: profile?.mcpScopes ?? ['read'],
+    toolAllowlist: profile?.toolAllowlist ?? null,
+    toolOutputLimit: profile?.toolOutputLimit ?? defaults?.toolOutputLimit ?? 12000,
     contextTurns: profile?.contextTurns ?? defaults?.contextTurns ?? 20,
     contextTokens: profile?.contextTokens ?? null,
     summaryEnabled: profile?.summaryEnabled ?? false,
@@ -97,10 +101,13 @@ function numberOrNull(value: string) {
   return value.trim() === '' || !Number.isFinite(number) ? null : number
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
   return (
     <section className="space-y-3 border-t border-line pt-4 first:border-t-0 first:pt-0">
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        {actions}
+      </div>
       {children}
     </section>
   )
@@ -128,6 +135,7 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [draft, setDraft] = useState<Draft>(() => buildDraft(profile, defaults))
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -271,22 +279,23 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
           )}
         </Section>
 
-        <Section title={t({ ko: '캐릭터', en: 'Character' })}>
+        <Section
+          title={t({ ko: '프롬프트', en: 'Prompt' })}
+          actions={(
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setPreviewOpen(true)} label={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })}>
+              <Eye />
+            </IconButton>
+          )}
+        >
           <Field label={t({ ko: '시스템 프롬프트', en: 'System prompt' })}>
-            <Textarea variant="settings" rows={4} value={draft.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
+            <Textarea variant="settings" rows={5} value={draft.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
           </Field>
-          <Field label={t({ ko: '캐릭터 설명', en: 'Character description' })}>
-            <Textarea variant="settings" rows={4} value={draft.characterDescription} onChange={(event) => patch({ characterDescription: event.target.value })} />
-          </Field>
-          <Field label={t({ ko: '대화 예시', en: 'Example dialogue' })}>
-            <Textarea variant="settings" rows={4} value={draft.exampleDialogue} onChange={(event) => patch({ exampleDialogue: event.target.value })} />
-          </Field>
-          <Field label={t({ ko: '내 페르소나', en: 'My persona' })}>
-            <Textarea variant="settings" rows={3} value={draft.userPersona} onChange={(event) => patch({ userPersona: event.target.value })} />
-          </Field>
-          <Field label={t({ ko: '첫 인사말', en: 'Greeting' })}>
-            <Textarea variant="settings" rows={2} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} />
-          </Field>
+          <ChatPromptSectionsEditor sections={draft.promptSections} onChange={(promptSections) => patch({ promptSections })} />
+          <div className="border-t border-line">
+            <CollapsibleRow title={t({ ko: '첫 인사말', en: 'Greeting' })} meta={draft.greeting.trim() ? null : t({ ko: '없음', en: 'none' })}>
+              <Textarea variant="settings" rows={3} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
+            </CollapsibleRow>
+          </div>
         </Section>
 
         <Section title={t({ ko: '도구', en: 'Tools' })}>
@@ -306,10 +315,18 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
               })}
             </div>
           ) : null}
-          {isLlm && draft.mcpEnabled ? (
-            <Field label={t({ ko: '도구 호출 반복 한도', en: 'Tool round limit' })}>
-              <NumberStepperInput variant="settings" step={1} min={1} max={20} value={draft.maxToolRounds} onValueCommit={(value) => patch({ maxToolRounds: numberOrNull(value) ?? draft.maxToolRounds })} />
-            </Field>
+          {draft.mcpEnabled ? (
+            <div className="border-t border-line">
+              <ChatProfileToolsAdvanced
+                open={open}
+                scopes={draft.mcpScopes}
+                allowlist={draft.toolAllowlist}
+                isLlm={isLlm}
+                maxToolRounds={draft.maxToolRounds}
+                toolOutputLimit={draft.toolOutputLimit}
+                onChange={patch}
+              />
+            </div>
           ) : null}
         </Section>
 
@@ -359,6 +376,7 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
           <Save />
         </IconButton>
       </ModalFooter>
+      <ChatProfilePreviewModal open={previewOpen} draft={{ ...draft, id: profile?.id }} onClose={() => setPreviewOpen(false)} />
     </Modal>
   )
 }

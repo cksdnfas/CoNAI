@@ -11,7 +11,6 @@ import { buildChatMessages, fillCharacterPlaceholders, rawMessagesEstimate, reco
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
 const STORED_TOOL_OUTPUT_LENGTH = 4000
-const LIVE_TOOL_OUTPUT_LENGTH = 12_000
 const STOP_WAIT_MS = 8000
 
 export class LlmChatError extends Error {
@@ -71,7 +70,7 @@ function parseArguments(raw: string): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
-async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: string; function: { name: string; arguments: string } }) {
+async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: string; function: { name: string; arguments: string } }, outputLimit: number) {
   const record: CodexChatToolCall = {
     id: call.id,
     tool: call.function.name,
@@ -104,14 +103,14 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   record.summary = output ? truncateToolSummary(output) : null
   record.output = output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
-  return output.slice(0, LIVE_TOOL_OUTPUT_LENGTH) || '(no output)'
+  return (output.length > outputLimit ? `${output.slice(0, outputLimit)}\n…(truncated)` : output) || '(no output)'
 }
 
 /** Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer. */
 async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
   const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, temperature: profile.temperature, maxTokens: profile.maxTokens })
   const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-  const bridge = scopes.length > 0 ? await openChatMcpBridge(requester, scopes) : null
+  const bridge = scopes.length > 0 ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist) : null
 
   try {
     const messages: ChatCompletionMessage[] = buildChatMessages({
@@ -155,7 +154,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
         if (turn.controller.signal.aborted) {
           return
         }
-        messages.push({ role: 'tool', tool_call_id: call.id, content: await runToolCall(turn, bridge, call) })
+        messages.push({ role: 'tool', tool_call_id: call.id, content: await runToolCall(turn, bridge, call, profile.toolOutputLimit) })
       }
     }
   } finally {

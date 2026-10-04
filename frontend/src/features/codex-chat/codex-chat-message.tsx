@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { Spinner } from '@/components/ui/loading-state'
 import { Tip } from '@/components/ui/tooltip'
+import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
-import type { ChatEngine, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
 import { requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
@@ -53,16 +54,16 @@ const THUMB_PLACEHOLDER_CLASS = { regular: 'h-28 w-28', large: 'h-40 w-40' } as 
 
 type ThumbSize = keyof typeof THUMB_SIZE_CLASS
 
-/** A library image as the lightbox needs it; history rows add the mime type and size they know. */
-export function buildChatImageRecord(compositeHash: string, record?: GenerationHistoryRecord): ImageRecord {
+/** A library image as the lightbox needs it; history rows and the thread's media map add mime type and size. */
+export function buildChatImageRecord(compositeHash: string, record?: GenerationHistoryRecord, info?: CodexChatMediaInfo): ImageRecord {
   return {
     id: compositeHash,
     composite_hash: compositeHash,
     thumbnail_url: buildApiUrl(`/api/images/${compositeHash}/thumbnail`),
     image_url: buildApiUrl(`/api/images/${compositeHash}/file`),
-    mime_type: record?.actual_mime_type ?? null,
-    width: record?.actual_width ?? record?.width ?? null,
-    height: record?.actual_height ?? record?.height ?? null,
+    mime_type: record?.actual_mime_type ?? info?.mimeType ?? null,
+    width: record?.actual_width ?? info?.width ?? record?.width ?? null,
+    height: record?.actual_height ?? info?.height ?? record?.height ?? null,
   }
 }
 
@@ -83,7 +84,12 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
         onClick={onOpen}
         {...hoverPreview.triggerProps}
       >
-        <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
+        {isVideo ? (
+          // Videos play muted and looped in place, like the library grid.
+          <ImagePreviewMedia image={image} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
+        ) : (
+          <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
+        )}
       </button>
       {hoverPreview.preview}
     </>
@@ -107,13 +113,13 @@ function resolveHistoryHash(record: GenerationHistoryRecord | undefined) {
 }
 
 /** A generation result: polls the history row until its image lands, then shows it like any library image. */
-function HistoryThumb({ historyId, size, onOpen }: { historyId: number; size: ThumbSize; onOpen: (compositeHash: string) => void }) {
+function HistoryThumb({ historyId, size, media, onOpen }: { historyId: number; size: ThumbSize; media?: Record<string, CodexChatMediaInfo>; onOpen: (compositeHash: string) => void }) {
   const historyQuery = useQuery(historyQueryOptions(historyId))
   const record = historyQuery.data?.record
   const compositeHash = resolveHistoryHash(record)
 
   if (record?.generation_status === 'completed' && compositeHash) {
-    return <ChatImageThumb image={buildChatImageRecord(compositeHash, record)} size={size} onOpen={() => onOpen(compositeHash)} />
+    return <ChatImageThumb image={buildChatImageRecord(compositeHash, record, media?.[compositeHash])} size={size} onOpen={() => onOpen(compositeHash)} />
   }
 
   return (
@@ -161,7 +167,7 @@ function ToolCallRow({ group }: { group: ToolCallGroup }) {
     : row
 }
 
-export function CodexChatToolCalls({ calls, size = 'regular' }: { calls: CodexChatToolCall[]; size?: ThumbSize }) {
+export function CodexChatToolCalls({ calls, size = 'regular', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; media?: Record<string, CodexChatMediaInfo> }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const historyIds = [...new Set(calls.flatMap((call) => call.historyIds))]
   // History rows resolve to library images too; skip hashes a history thumbnail already shows.
@@ -173,9 +179,9 @@ export function CodexChatToolCalls({ calls, size = 'regular' }: { calls: CodexCh
     ...historyQueries.flatMap((query) => {
       const record = query.data?.record
       const hash = record?.generation_status === 'completed' ? resolveHistoryHash(record) : null
-      return hash ? [buildChatImageRecord(hash, record)] : []
+      return hash ? [buildChatImageRecord(hash, record, media?.[hash])] : []
     }),
-    ...compositeHashes.map((hash) => buildChatImageRecord(hash)),
+    ...compositeHashes.map((hash) => buildChatImageRecord(hash, undefined, media?.[hash])),
   ]
   const openLightbox = (compositeHash: string) => {
     const index = lightboxItems.findIndex((item) => item.composite_hash === compositeHash)
@@ -193,8 +199,8 @@ export function CodexChatToolCalls({ calls, size = 'regular' }: { calls: CodexCh
       </div>
       {historyIds.length > 0 || compositeHashes.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} onOpen={openLightbox} />)}
-          {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash)} size={size} onOpen={() => openLightbox(hash)} />)}
+          {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} media={media} onOpen={openLightbox} />)}
+          {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={size} onOpen={() => openLightbox(hash)} />)}
         </div>
       ) : null}
       <MediaLightbox items={lightboxItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
@@ -228,7 +234,7 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
   )
 }
 
-export function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, largeThumbnails = false, speaker = null }: {
+export function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, largeThumbnails = false, speaker = null, media }: {
   content: string
   toolCalls: CodexChatToolCall[]
   status?: CodexChatMessage['status']
@@ -238,6 +244,8 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
   streaming?: boolean
   largeThumbnails?: boolean
   speaker?: ChatSpeaker | null
+  /** Media kind of the images the thread references (videos play inline). */
+  media?: Record<string, CodexChatMediaInfo>
 }) {
   const { t } = useI18n()
 
@@ -250,7 +258,7 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
         </div>
       ) : null}
       {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
-      <CodexChatToolCalls calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} />
+      <CodexChatToolCalls calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} media={media} />
       {content ? <ChatText text={content} /> : null}
       {streaming && !content && !reasoning ? <Spinner size="sm" className="text-muted-foreground" /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}

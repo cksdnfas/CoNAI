@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
+import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
 import { getCodexChatThreadMedia, type CodexChatMediaItem } from '@/lib/api-codex-chat'
@@ -55,7 +56,11 @@ function GalleryTile({ entry, showFoundMark, onOpen }: { entry: GalleryEntry; sh
         onClick={onOpen}
         {...hoverPreview.triggerProps}
       >
-        <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className="block h-full w-full object-cover" />
+        {isVideo ? (
+          <ImagePreviewMedia image={image} className="block h-full w-full object-cover" />
+        ) : (
+          <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className="block h-full w-full object-cover" />
+        )}
         {showFoundMark && media.source === 'found' ? (
           <span className="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-backdrop text-white">
             <Search className="size-3" />
