@@ -16,7 +16,7 @@ import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
 import { buildLeadingMessages, estimateTokens, fillCharacterPlaceholders } from '../services/codex-chat/llmChatContext'
-import { buildLorebookText } from '../services/codex-chat/chatLorebook'
+import { buildLorebookText, ChatLorebookStore } from '../services/codex-chat/chatLorebook'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
@@ -26,7 +26,7 @@ import { FileStoreError } from '../services/fileStoreService'
 import { exportChatMarkdown } from '../services/codex-chat/chatExport'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
-import { CHAT_CARD_MAX_BYTES, importChatCard } from '../services/codex-chat/chatCardImport'
+import { CHAT_CARD_MAX_BYTES, importChatCard, readLorebookFile } from '../services/codex-chat/chatCardImport'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -343,6 +343,59 @@ router.delete('/admin/profiles/:profileId', requireAdmin, (req: Request, res: Re
     return
   }
   res.json({ success: true, data: { deleted: ChatProfileStore.delete(profileId) } })
+})
+
+/** Shared lorebooks. Profiles link them by id, so an edit or a re-import reaches every linked profile at once. */
+router.get('/admin/lorebooks', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ChatLorebookStore.list() })
+})
+
+router.post('/admin/lorebooks', requireAdmin, (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
+  res.status(201).json({ success: true, data: ChatLorebookStore.create(body) })
+})
+
+const lorebookUpload = multer({ storage: multer.memoryStorage(), defParamCharset: 'utf8', limits: { fileSize: CHAT_CARD_MAX_BYTES, files: 1, fields: 0, parts: 2 } }).single('file')
+function receiveLorebookFile(req: Request, res: Response, next: NextFunction) {
+  lorebookUpload(req, res, (error) => {
+    if (error) { res.status(400).json({ success: false, error: '로어북 JSON 또는 카드 PNG 한 개를 골라줘. 최대 8MB야.' }); return }
+    next()
+  })
+}
+
+/** POST /admin/lorebooks/import — a new shared lorebook from a world info / lorebook JSON or a card with a book. */
+router.post('/admin/lorebooks/import', requireAdmin, receiveLorebookFile, (req: Request, res: Response) => {
+  try {
+    if (!req.file) throw new ChatProfileError('로어북 파일을 골라줘.')
+    res.status(201).json({ success: true, data: ChatLorebookStore.create(readLorebookFile(req.file.buffer, req.file.originalname)) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /admin/lorebooks/:lorebookId/import — replace the entries from a newer file; the name and links stay. */
+router.post('/admin/lorebooks/:lorebookId/import', requireAdmin, receiveLorebookFile, (req: Request, res: Response) => {
+  const lorebookId = parseId(req.params.lorebookId)
+  if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
+  try {
+    if (!req.file) throw new ChatProfileError('로어북 파일을 골라줘.')
+    const updated = ChatLorebookStore.update(lorebookId, { entries: readLorebookFile(req.file.buffer, req.file.originalname).entries })
+    if (!updated) { res.status(404).json({ success: false, error: '로어북을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.put('/admin/lorebooks/:lorebookId', requireAdmin, (req: Request, res: Response) => {
+  const lorebookId = parseId(req.params.lorebookId)
+  if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
+  const updated = ChatLorebookStore.update(lorebookId, { name: body.name, entries: body.entries })
+  if (!updated) { res.status(404).json({ success: false, error: '로어북을 찾을 수 없어.' }); return }
+  res.json({ success: true, data: updated })
+})
+
+router.delete('/admin/lorebooks/:lorebookId', requireAdmin, (req: Request, res: Response) => {
+  const lorebookId = parseId(req.params.lorebookId)
+  if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
+  res.json({ success: true, data: { deleted: ChatLorebookStore.delete(lorebookId) } })
 })
 
 /** Every chat-grantable MCP tool with its scope and description, for the profile editor's tool picker. */

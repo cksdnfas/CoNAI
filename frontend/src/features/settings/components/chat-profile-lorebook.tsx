@@ -51,7 +51,7 @@ export function ChatLorebookEditor({ entries, onChange }: { entries: ChatLoreEnt
       <Switch checked={entry.enabled} onCheckedChange={(enabled) => update(entry.id, { enabled })} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} />
       <IconButton size="icon-sm" variant="ghost" label={t({ ko: '로어 삭제', en: 'Delete lore' })} onClick={() => onChange(entries.filter((item) => item.id !== entry.id))}><Trash2 /></IconButton>
     </>}><LoreFields entry={entry} onChange={(patch) => update(entry.id, patch)} /></CollapsibleRow>)}
-    <Button variant="secondary" size="sm" disabled={entries.length >= 100} onClick={() => {
+    <Button variant="secondary" size="sm" disabled={entries.length >= 500} onClick={() => {
       const entry: ChatLoreEntry = { id: crypto.randomUUID(), keys: [], content: '', enabled: true, constant: false, order: entries.length, caseSensitive: false }
       onChange([...entries, entry]); setOpenId(entry.id)
     }}><BookPlus />{t({ ko: '설정 추가', en: 'Add entry' })}</Button>

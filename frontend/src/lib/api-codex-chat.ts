@@ -9,6 +9,7 @@ export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
 export const CHAT_ADMIN_PROFILES_QUERY_KEY = ['codex-chat-admin-profiles'] as const
 export const CHAT_ADMIN_SETTINGS_QUERY_KEY = ['codex-chat-admin-settings'] as const
+export const CHAT_LOREBOOKS_QUERY_KEY = ['codex-chat-lorebooks'] as const
 export const CHAT_STATUS_QUERY_KEY = ['codex-chat-status'] as const
 
 export interface CodexChatStatus {
@@ -121,8 +122,19 @@ export interface ChatLoreEntry {
   caseSensitive: boolean
 }
 
+/** A shared lorebook; profiles link it by id, so editing or re-importing it reaches every linked profile. */
+export interface ChatLorebook {
+  id: number
+  name: string
+  entries: ChatLoreEntry[]
+  profiles: Array<{ id: number; name: string }>
+  createdDate: string
+  updatedDate: string
+}
+
 export interface ChatProfile {
-  lorebook: ChatLoreEntry[]
+  /** Linked shared lorebooks, in priority order. */
+  lorebookIds: number[]
   loreScanDepth: number
   loreTokenBudget: number
   tagline: string
@@ -297,6 +309,30 @@ export function importChatProfileCard(file: File) {
   const body = new FormData()
   body.append('file', file)
   return requestApiData<ChatProfileInput>('/api/codex-chat/admin/profiles/import-card', { method: 'POST', body })
+}
+
+export function listChatLorebooks() {
+  return requestApiData<ChatLorebook[]>('/api/codex-chat/admin/lorebooks')
+}
+
+export function createChatLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
+  return requestApiData<ChatLorebook>('/api/codex-chat/admin/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+/** A new lorebook from a file, or (with `lorebookId`) that book's entries replaced from a newer file. */
+export function importChatLorebook(file: File, lorebookId?: number) {
+  const body = new FormData()
+  body.append('file', file)
+  const path = lorebookId ? `/api/codex-chat/admin/lorebooks/${lorebookId}/import` : '/api/codex-chat/admin/lorebooks/import'
+  return requestApiData<ChatLorebook>(path, { method: 'POST', body })
+}
+
+export function updateChatLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[] }) {
+  return requestApiData<ChatLorebook>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function deleteChatLorebook(lorebookId: number) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'DELETE' })
 }
 
 export function updateChatProfile(profileId: number, patch: ChatProfileInput) {

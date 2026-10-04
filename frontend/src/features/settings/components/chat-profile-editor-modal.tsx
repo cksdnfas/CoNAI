@@ -22,12 +22,14 @@ import { CodexReasoningSelect } from '@/features/image-generation/components/cod
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
+  CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   CHAT_SCOPES,
   chatProfileBackgroundUrl,
   createChatProfile,
   deleteChatProfile,
   listChatConnectionModels,
+  listChatLorebooks,
   updateChatProfile,
   type ChatProfile,
   type ChatProfileDefaults,
@@ -44,7 +46,6 @@ import { ChatCastEditor } from './chat-profile-cast'
 import { ChatEmoticonGroupPicker } from './chat-profile-emoticons'
 import { readAvatarFile } from './chat-profile-images'
 import { ChatProfileLook } from './chat-profile-look'
-import { ChatLorebookEditor } from './chat-profile-lorebook'
 import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
@@ -60,7 +61,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
   return {
     name: profile?.name ?? '',
     tagline: profile?.tagline ?? '',
-    lorebook: profile?.lorebook ?? [],
+    lorebookIds: profile?.lorebookIds ?? [],
     loreScanDepth: profile?.loreScanDepth ?? defaults?.loreScanDepth ?? 4,
     loreTokenBudget: profile?.loreTokenBudget ?? defaults?.loreTokenBudget ?? 1024,
     avatar: profile?.avatar ?? null,
@@ -186,12 +187,14 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     retry: false,
     staleTime: 60_000,
   })
+  const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: open })
   const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && !isLlm })
 
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY }),
     ])
   }
   const saveMutation = useMutation({
@@ -397,7 +400,18 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
               <NumberStepperInput variant="settings" min={0} max={32768} step={128} value={draft.loreTokenBudget} onValueCommit={(value) => patch({ loreTokenBudget: numberOrNull(value) ?? 1024 })} />
             </Field>
           </div>
-          <ChatLorebookEditor entries={draft.lorebook} onChange={(lorebook) => patch({ lorebook })} />
+          <div className="flex flex-wrap gap-1.5">
+            {(lorebooksQuery.data ?? []).map((lorebook) => {
+              const linked = draft.lorebookIds.includes(lorebook.id)
+              return (
+                <ToggleChip key={lorebook.id} pressed={linked} onClick={() => patch({ lorebookIds: linked ? draft.lorebookIds.filter((id) => id !== lorebook.id) : [...draft.lorebookIds, lorebook.id] })}>
+                  {lorebook.name}
+                  <span className="opacity-60">{lorebook.entries.length}</span>
+                </ToggleChip>
+              )
+            })}
+            {lorebooksQuery.isSuccess && lorebooksQuery.data.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '가져온 로어북이 없어.', en: 'No lorebooks yet.' })}</span> : null}
+          </div>
         </Section>
 
         <Section title={t({ ko: '꾸미기', en: 'Look' })}>

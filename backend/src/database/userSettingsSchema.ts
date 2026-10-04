@@ -448,6 +448,17 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Shared lorebooks: chat profiles link them by id (llm_chat_profiles.lorebook_ids), so one edit reaches every linked profile.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_lorebooks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      entries TEXT NOT NULL DEFAULT '[]',
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // 19. Generic long-running runtime jobs (thumbnail regenerate / group rematch / folder scan ...)
   // 진행률·취소·재시작 복구의 정본. images.db 는 스캔이 두들기는 hot DB 라 하트비트 쓰기를 얹지 않는다.
   db.exec(`
@@ -516,7 +527,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
   }
   const chatProfileColumns: Array<[string, string]> = [
     ['tagline', "TEXT NOT NULL DEFAULT ''"],
-    ['lorebook', 'TEXT'],
+    ['lorebook_ids', 'TEXT'],
     ['alternate_greetings', 'TEXT'],
     ['lore_scan_depth', 'INTEGER NOT NULL DEFAULT 4'],
     ['lore_token_budget', 'INTEGER NOT NULL DEFAULT 1024'],

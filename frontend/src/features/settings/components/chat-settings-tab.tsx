@@ -1,28 +1,34 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileUp, Pencil, Plus } from 'lucide-react'
+import { BookOpen, FileUp, Pencil, Plus, RefreshCw } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
+import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_ADMIN_SETTINGS_QUERY_KEY,
+  CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   CHAT_STATUS_QUERY_KEY,
   getChatAdminSettings,
   getChatProfileDefaults,
+  importChatLorebook,
   importChatProfileCard,
   listChatAdminProfiles,
+  listChatLorebooks,
   updateChatAdminSettings,
   updateChatProfile,
+  type ChatLorebook,
   type ChatProfile,
   type ChatProfileInput,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { ChatLorebookEditorModal } from './chat-lorebook-editor-modal'
 import { ChatProfileEditorModal } from './chat-profile-editor-modal'
 import { InstantApplyHint } from './settings-section-status'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
@@ -33,24 +39,50 @@ function profileModelLine(profile: ChatProfile, t: ReturnType<typeof useI18n>['t
   return profile.engine === 'codex' ? `Codex · ${model}` : `${profile.providerName} · ${model}`
 }
 
-/** Settings › Chat: the chat switch, chat profiles (Codex and API LLM) and the LLM connections they use. */
+/** Settings › Chat: the chat switch, chat profiles (Codex and API LLM) and the shared lorebooks profiles link. */
 export function ChatSettingsTab() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [editor, setEditor] = useState<{ profile: ChatProfile | null; draft?: ChatProfileInput } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
+  const [lorebookEditor, setLorebookEditor] = useState<{ lorebook: ChatLorebook | null } | null>(null)
+  const lorebookImportRef = useRef<HTMLInputElement>(null)
+  /** Set while a file is picked to refresh that book; null picks a new book. */
+  const lorebookTargetRef = useRef<number | null>(null)
 
   const settingsQuery = useQuery({ queryKey: CHAT_ADMIN_SETTINGS_QUERY_KEY, queryFn: getChatAdminSettings })
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
+  const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks })
   const defaultsQuery = useQuery({ queryKey: ['codex-chat-profile-defaults'], queryFn: getChatProfileDefaults, staleTime: Infinity })
 
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const importMutation = useMutation({
     mutationFn: importChatProfileCard,
-    onSuccess: (draft) => setEditor({ profile: null, draft }),
+    onSuccess: (draft) => {
+      // A card's own lorebook is added to the shared lorebooks and linked to the draft.
+      if (draft.lorebookIds?.length) void queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })
+      setEditor({ profile: null, draft })
+    },
     onError,
   })
+  const lorebookImportMutation = useMutation({
+    mutationFn: ({ file, lorebookId }: { file: File; lorebookId: number | null }) => importChatLorebook(file, lorebookId ?? undefined),
+    onSuccess: async (lorebook, { lorebookId }) => {
+      await queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })
+      showSnackbar({
+        message: lorebookId
+          ? t({ ko: '{name} 업데이트했어. 항목 {count}개.', en: 'Updated {name}: {count} entries.' }, { name: lorebook.name, count: lorebook.entries.length })
+          : t({ ko: '{name} 가져왔어. 항목 {count}개.', en: 'Imported {name}: {count} entries.' }, { name: lorebook.name, count: lorebook.entries.length }),
+        tone: 'info',
+      })
+    },
+    onError,
+  })
+  const pickLorebookFile = (lorebookId: number | null) => {
+    lorebookTargetRef.current = lorebookId
+    lorebookImportRef.current?.click()
+  }
   const settingsMutation = useMutation({
     mutationFn: updateChatAdminSettings,
     onSuccess: (settings) => {
@@ -71,6 +103,7 @@ export function ChatSettingsTab() {
   })
 
   const profiles = profilesQuery.data ?? []
+  const lorebooks = lorebooksQuery.data ?? []
 
   return (
     <div className="space-y-8">
@@ -135,6 +168,45 @@ export function ChatSettingsTab() {
         {profilesQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(profilesQuery.error, t({ ko: '프로필을 불러오지 못했어.', en: 'Could not load profiles.' }))}</p> : null}
       </RowGroup>
 
+      <RowGroup
+        heading={t({ ko: '로어북', en: 'Lorebooks' })}
+        actions={(
+          <div className="flex items-center gap-1">
+            <input ref={lorebookImportRef} type="file" accept=".json,.lorebook,.png,application/json,image/png" className="hidden" aria-label={t({ ko: '로어북 파일', en: 'Lorebook file' })} onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) lorebookImportMutation.mutate({ file, lorebookId: lorebookTargetRef.current })
+            }} />
+            <IconButton size="icon-sm" variant="ghost" disabled={lorebookImportMutation.isPending} onClick={() => pickLorebookFile(null)} label={t({ ko: '로어북 가져오기', en: 'Import lorebook' })}><FileUp /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setLorebookEditor({ lorebook: null })} label={t({ ko: '로어북 추가', en: 'Add lorebook' })}><Plus /></IconButton>
+          </div>
+        )}
+      >
+        {lorebooksQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
+        {lorebooksQuery.isSuccess && lorebooks.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 로어북이 없어.', en: 'No lorebooks yet.' })}</SettingsEmptyRow> : null}
+        {lorebooks.map((lorebook) => (
+          <div key={lorebook.id} className="flex min-h-14 items-center gap-3 border-t border-line py-2.5 first:border-t-0">
+            <BookOpen className="size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold">{lorebook.name}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {t({ ko: '항목 {count}개', en: '{count} entries' }, { count: lorebook.entries.length })}
+                {' · '}
+                {lorebook.profiles.length > 0 ? (
+                  <Tip content={lorebook.profiles.map((profile) => profile.name).join(', ')}>
+                    <span>{t({ ko: '프로필 {count}개', en: '{count} profiles' }, { count: lorebook.profiles.length })}</span>
+                  </Tip>
+                ) : t({ ko: '연결 없음', en: 'Not linked' })}
+              </div>
+            </div>
+            <IconButton size="icon-sm" variant="ghost" disabled={lorebookImportMutation.isPending} onClick={() => pickLorebookFile(lorebook.id)} label={t({ ko: '파일로 업데이트', en: 'Update from file' })}><RefreshCw /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setLorebookEditor({ lorebook })} label={t({ ko: '편집', en: 'Edit' })}><Pencil /></IconButton>
+          </div>
+        ))}
+        {lorebooksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(lorebooksQuery.error, t({ ko: '로어북을 불러오지 못했어.', en: 'Could not load lorebooks.' }))}</p> : null}
+      </RowGroup>
+
+      <ChatLorebookEditorModal open={lorebookEditor !== null} lorebook={lorebookEditor?.lorebook ?? null} onClose={() => setLorebookEditor(null)} />
       <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} initialDraft={editor?.draft} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
     </div>
   )
