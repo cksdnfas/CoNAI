@@ -2,10 +2,8 @@ import { useEffect, useId, useState, type CSSProperties, type ReactNode } from '
 import { ALargeSmall, RotateCcw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Tip } from '@/components/ui/tooltip'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
-import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n'
 import type { ChatStyle, ChatTypeface } from '@/lib/api-codex-chat'
 
@@ -26,7 +24,11 @@ export type ChatAppearance = {
   emoticonSize: ChatEmoticonSize
   /** Emoticons on a line of their own. */
   stickerSize: ChatStickerSize
+  /** Images and videos replies bring: small / medium thumbnails, or the chat's width at their own ratio. */
+  imageSize: ChatImageSize
 }
+
+export type ChatImageSize = 'sm' | 'md' | 'full'
 
 export type ChatEmoticonSize = 'sm' | 'md' | 'lg' | 'xl'
 export type ChatStickerSize = 'sm' | 'md' | 'lg'
@@ -37,7 +39,7 @@ const STICKER_SIZE_PX: Record<ChatStickerSize, number> = { sm: 96, md: 128, lg: 
 const STORAGE_KEY = 'conai.chat.appearance'
 const CHANGED_EVENT = 'conai:chat-appearance-changed'
 
-export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = { avatarSize: 'md', fontSize: 'md', lineHeight: 'normal', showBackground: true, emoticonSize: 'md', stickerSize: 'md' }
+export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = { avatarSize: 'md', fontSize: 'md', lineHeight: 'normal', showBackground: true, emoticonSize: 'md', stickerSize: 'md', imageSize: 'full' }
 
 const FONT_SIZE_PX: Record<ChatFontSize, number> = { sm: 13, md: 14, lg: 16, xl: 18 }
 const LINE_HEIGHT: Record<ChatLineHeight, number> = { tight: 1.5, normal: 1.7, relaxed: 1.9 }
@@ -60,6 +62,7 @@ function normalize(value: unknown): ChatAppearance {
     showBackground: raw.showBackground !== false,
     emoticonSize: pick(raw.emoticonSize, ['sm', 'md', 'lg', 'xl'], DEFAULT_CHAT_APPEARANCE.emoticonSize),
     stickerSize: pick(raw.stickerSize, ['sm', 'md', 'lg'], DEFAULT_CHAT_APPEARANCE.stickerSize),
+    imageSize: pick(raw.imageSize, ['sm', 'md', 'full'], DEFAULT_CHAT_APPEARANCE.imageSize),
   }
 }
 
@@ -131,24 +134,27 @@ function AppearanceRow({ label, children }: { label: string; children: ReactNode
   )
 }
 
-/** Header key with the reader's adjustments: avatar size, text size, line spacing, background on/off. */
-export function ChatAppearanceButton({ asMenuItem = false }: { asMenuItem?: boolean }) {
+export const CHAT_APPEARANCE_ICON = ALargeSmall
+
+/**
+ * The reader's adjustments (avatar, text, spacing, emoticons, images, background), opened from the chat menu and
+ * placed under `children` (the menu's button). It is not nested in the menu: moving the pointer across menu items
+ * would take focus away and close it before it could be reached.
+ */
+export function ChatAppearancePopover({ open, onOpenChange, children }: { open: boolean; onOpenChange: (open: boolean) => void; children: ReactNode }) {
   const { t } = useI18n()
   const { appearance, update, reset } = useChatAppearance()
-  const [open, setOpen] = useState(false)
+  const setOpen = onOpenChange
   const backgroundId = useId()
   const isDefault = JSON.stringify(appearance) === JSON.stringify(DEFAULT_CHAT_APPEARANCE)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Tip content={asMenuItem ? null : t({ ko: '채팅 모양', en: 'Chat appearance' })}>
-        <PopoverTrigger asChild>
-          {asMenuItem ? <DropdownMenuItem onSelect={(event) => event.preventDefault()}><ALargeSmall />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem> : <IconButton variant="ghost" size="icon-sm" label={t({ ko: '채팅 모양', en: 'Chat appearance' })} tooltip={false}>
-            <ALargeSmall />
-          </IconButton>}
-        </PopoverTrigger>
-      </Tip>
-      <PopoverContent align="end" side={asMenuItem ? 'left' : 'bottom'} className="w-72 space-y-3" onKeyDownCapture={(event) => {
+      <PopoverAnchor asChild>{children}</PopoverAnchor>
+      <PopoverContent align="end" side="bottom" className="max-h-[calc(100vh-6rem)] w-72 space-y-3 overflow-y-auto"
+        // Focus returning to the menu button as the menu closes must not dismiss it; a click outside or Esc does.
+        onFocusOutside={(event) => event.preventDefault()}
+        onKeyDownCapture={(event) => {
         // A nested tooltip can consume Radix's document Escape handler before the popover sees it.
         if (event.key === 'Escape') {
           event.preventDefault()
@@ -221,6 +227,19 @@ export function ChatAppearanceButton({ asMenuItem = false }: { asMenuItem?: bool
               { value: 'sm', label: t({ ko: '작게', en: 'Small' }) },
               { value: 'md', label: t({ ko: '보통', en: 'Medium' }) },
               { value: 'lg', label: t({ ko: '크게', en: 'Large' }) },
+            ]}
+          />
+        </AppearanceRow>
+        <AppearanceRow label={t({ ko: '이미지', en: 'Images' })}>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            value={appearance.imageSize}
+            onChange={(value) => update({ imageSize: value as ChatImageSize })}
+            items={[
+              { value: 'sm', label: t({ ko: '작게', en: 'Small' }) },
+              { value: 'md', label: t({ ko: '보통', en: 'Medium' }) },
+              { value: 'full', label: t({ ko: '채팅 너비', en: 'Chat width' }) },
             ]}
           />
         </AppearanceRow>

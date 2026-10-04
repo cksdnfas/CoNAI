@@ -1,4 +1,4 @@
-import { memo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { memo, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronRight, ImageOff, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -22,10 +22,11 @@ import { MENTION_CLASS, splitMentions } from './chat-mentions'
 
 const HISTORY_POLL_MS = 3000
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
-const THUMB_SIZE_CLASS = { regular: 'h-28 max-w-[14rem]', large: 'h-40 max-w-[20rem]' } as const
-const THUMB_PLACEHOLDER_CLASS = { regular: 'h-28 w-28', large: 'h-40 w-40' } as const
+/** `full`: the chat's width at the image's own ratio (the original file, so it stays sharp). */
+const THUMB_SIZE_CLASS = { sm: 'h-28 max-w-[14rem]', md: 'h-40 max-w-[20rem]', full: 'block h-auto w-full object-contain' } as const
+const THUMB_PLACEHOLDER_CLASS = { sm: 'h-28 w-28', md: 'h-40 w-40', full: 'aspect-video w-full' } as const
 
-type ThumbSize = keyof typeof THUMB_SIZE_CLASS
+export type ThumbSize = keyof typeof THUMB_SIZE_CLASS
 
 /** A library image as the lightbox needs it; history rows and the thread's media map add mime type and size. */
 export function buildChatImageRecord(compositeHash: string, record?: GenerationHistoryRecord, info?: CodexChatMediaInfo): ImageRecord {
@@ -40,12 +41,49 @@ export function buildChatImageRecord(compositeHash: string, record?: GenerationH
   }
 }
 
+/** Retries of a thumbnail that is not served yet; the waits add up to about a minute. */
+const THUMB_RETRY_DELAYS_MS = [1000, 2000, 3000, 5000, 8000, 10000, 15000, 15000]
+
+/**
+ * A new result is marked completed slightly before its file finishes post-processing, and until then the image routes
+ * answer 404. Load the thumbnail again a few times (new URL each time) instead of leaving a blank until reload.
+ */
+function useRetriedThumbnail(url: string) {
+  const [attempt, setAttempt] = useState(0)
+  const [failed, setFailed] = useState(false)
+  const [waiting, setWaiting] = useState(false)
+  const timerRef = useRef<number | null>(null)
+  useEffect(() => () => { if (timerRef.current !== null) window.clearTimeout(timerRef.current) }, [])
+  const onError = () => {
+    if (attempt >= THUMB_RETRY_DELAYS_MS.length) {
+      setFailed(true)
+      return
+    }
+    setWaiting(true)
+    timerRef.current = window.setTimeout(() => {
+      setAttempt((current) => current + 1)
+      setWaiting(false)
+    }, THUMB_RETRY_DELAYS_MS[attempt])
+  }
+  const src = attempt === 0 || !url ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`
+  return { src, waiting, failed, onError }
+}
+
 /** Click opens the lightbox; on PC a short hover shows a larger preview beside it. */
 function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: ThumbSize; onOpen: () => void }) {
   const { t } = useI18n()
   const thumbnailUrl = image.thumbnail_url ?? ''
+  const retried = useRetriedThumbnail(size === 'full' ? image.image_url ?? thumbnailUrl : thumbnailUrl)
   const isVideo = image.mime_type?.startsWith('video/') === true
   const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
+
+  if (!isVideo && (retried.waiting || retried.failed)) {
+    return (
+      <div className={cn('flex shrink-0 items-center justify-center rounded-sm bg-surface-high text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
+        {retried.failed ? <ImageOff className="size-5" /> : <Spinner size="md" />}
+      </div>
+    )
+  }
 
   return (
     <>
@@ -53,7 +91,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
       <button
         type="button"
         aria-label={t({ ko: '크게 보기', en: 'View larger' })}
-        className="shrink-0 cursor-zoom-in rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className={cn('shrink-0 cursor-zoom-in rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40', size === 'full' && 'w-full')}
         onClick={onOpen}
         {...hoverPreview.triggerProps}
       >
@@ -61,7 +99,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
           // Videos play muted and looped in place, like the library grid.
           <ImagePreviewMedia image={image} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
         ) : (
-          <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
+          <img src={retried.src} alt="" loading="lazy" draggable={false} onError={retried.onError} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
         )}
       </button>
       {hoverPreview.preview}
@@ -189,7 +227,7 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
 }
 
 /** Images and videos the reply's tools produced or found. */
-function CodexChatToolMedia({ calls, size = 'regular', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; media?: Record<string, CodexChatMediaInfo> }) {
+function CodexChatToolMedia({ calls, size = 'md', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; media?: Record<string, CodexChatMediaInfo> }) {
   const { t } = useI18n()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const historyIds = [...new Set(calls.flatMap((call) => call.historyIds))]
@@ -319,7 +357,7 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
 /** Appearance setting → avatar size; small keeps the name line compact, larger sizes sit in a column beside the reply. */
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, largeThumbnails = false, speaker = null, media, avatarSize = 'md' }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, imageSize = 'full', speaker = null, media, avatarSize = 'md' }: {
   content: string
   toolCalls: CodexChatToolCall[]
   status?: CodexChatMessage['status']
@@ -327,7 +365,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   /** Live reasoning text of a streaming LLM reply. */
   reasoning?: string
   streaming?: boolean
-  largeThumbnails?: boolean
+  /** The reader's image size (chat appearance). */
+  imageSize?: ThumbSize
   speaker?: ChatSpeaker | null
   /** Media kind of the images the thread references (videos play inline). */
   media?: Record<string, CodexChatMediaInfo>
@@ -367,7 +406,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const ownParts = (
     <>
       {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
-      <CodexChatToolMedia calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} media={media} />
+      <CodexChatToolMedia calls={toolCalls} size={imageSize} media={media} />
       {ownText ? markdown(ownText) : null}
     </>
   )

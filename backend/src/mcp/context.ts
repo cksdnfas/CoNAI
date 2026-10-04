@@ -17,8 +17,8 @@ export interface McpRequestContext {
   source?: 'http' | 'codex-chat' | 'llm-chat';
   /** Chat profiles can narrow the tools further than the scopes (null/undefined: every tool the scopes allow). */
   toolAllowlist?: string[] | null;
-  /** Chat agents in group rooms: the room history tools (room ownership is checked per call). */
-  chatRoomTools?: boolean;
+  /** Chat agents in group rooms: `call` offers room_call_member, `all` adds the history tools (room ownership is checked per call). */
+  chatRoomTools?: 'call' | 'all' | false;
 }
 
 export function isChatMcpSource(source: McpRequestContext['source']) {
@@ -100,7 +100,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
 };
 
 /** Read-only tools over the caller's own group chat rooms; offered to chat agents in group rooms regardless of scopes. */
-export const CHAT_ROOM_TOOLS = new Set(['room_history_search', 'room_history_read']);
+export const CHAT_ROOM_TOOLS = new Set(['room_call_member', 'room_history_search', 'room_history_read']);
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {
   return TOOL_SCOPES[toolName] ?? null;

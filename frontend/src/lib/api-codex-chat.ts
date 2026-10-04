@@ -97,6 +97,16 @@ export interface ChatProfileSummary {
   backgroundVersion: string | null
 }
 
+/** An image copied in from a character card (`chat-asset:<name>` in profile and message text). */
+export function chatAssetUrl(name: string) {
+  return buildApiUrl(`/api/codex-chat/assets/${encodeURIComponent(name)}`)
+}
+
+/** Copy the web images these texts show into CoNAI; returns the texts pointing at the copies. */
+export function localizeChatImages(texts: string[]) {
+  return requestApiData<{ texts: string[]; saved: number; failed: Array<{ url: string; reason: string }>; messages: number }>('/api/codex-chat/admin/chat-assets/localize', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ texts }) })
+}
+
 /** The chat background image of a profile. */
 export function chatProfileBackgroundUrl(profileId: number, version: string) {
   return buildApiUrl(`/api/codex-chat/profiles/${profileId}/background?v=${encodeURIComponent(version)}`)

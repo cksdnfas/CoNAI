@@ -6,7 +6,9 @@ import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
-import { buildGroupCodexInput, buildGroupLlmMessages, parseMentions, trimForeignSpeakerLines } from './groupChatContext'
+import { buildGroupCodexInput, buildGroupLlmMessages, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
+import { registerGroupWake } from './groupWakeRegistry'
+import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { sendableMessages } from './llmChatContext'
 import { generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
 
@@ -20,6 +22,8 @@ type GroupRun = {
   stopped: boolean
   current: { profileId: number; controller: AbortController } | null
   queue: number[]
+  /** Members the current speaker called with the room_call_member tool; they join the queue after its reply. */
+  called: number[]
   text: string
   toolCalls: Map<string, CodexChatToolCall>
   listeners: Set<(event: CodexChatStreamEvent) => void>
@@ -104,8 +108,13 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     emit(run, event)
   }
   const others = members.filter((member) => member.id !== profile.id).map((member) => member.name)
-  const persist = (reply: GroupReplyResult) => {
-    const content = trimForeignSpeakerLines(reply.content, profile.name, others)
+  const persist = (raw: GroupReplyResult) => {
+    // Keep the reply as written when cutting other speakers' lines would leave nothing; an empty reply is a failure
+    // the user can see (and regenerate), not a blank message.
+    const reply = !raw.content.trim() && raw.tool_calls.length === 0 && raw.status === 'completed'
+      ? { ...raw, status: 'failed' as const, error: '빈 답변이 왔어. 다시 생성해봐.' }
+      : raw
+    const content = trimForeignSpeakerLines(reply.content, profile.name, others) || reply.content.trim()
     if (replacingMessageId) {
       // A connection failure must not replace a usable answer with an empty failed alternative.
       if (reply.status === 'completed' || content || reply.tool_calls.length) {
@@ -138,8 +147,9 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         requester,
         threadId: run.threadId,
         profile,
-        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, windowLimit: limits.window, withTools: tools.length > 0 }),
-        roomTools: sendableMessages(messages).length > limits.window,
+        // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
+        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, windowLimit: limits.window, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)) }),
+        roomTools: sendableMessages(messages).length > limits.window ? 'all' : 'call',
         signal: controller.signal,
         emit: forward,
       }))
@@ -170,11 +180,12 @@ async function processQueue(run: GroupRun, requester: McpRequester, options: { c
       continue
     }
     emit(run, { type: 'speaker', profileId, queue: [...run.queue] })
+    run.called = []
     const message = await replyAs(run, requester, profile)
     emit(run, { type: 'done', message })
     if (!options.chain || message.status !== 'completed') continue
     const chainLimit = groupLimitsOf(CodexChatStore.findThreadById(run.threadId) as CodexChatThreadRecord).chain
-    for (const next of parseMentions(message.content, members, profile.id)) {
+    for (const next of [...run.called, ...parseMentions(message.content, members, profile.id)]) {
       if (wakes >= chainLimit) break
       if (run.queue.includes(next)) continue
       run.queue.push(next)
@@ -189,13 +200,29 @@ async function startRun(threadId: number, listener: (event: CodexChatStreamEvent
   if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: () => void = () => {}
   const run: GroupRun = {
-    threadId, stopped: false, current: null, queue: [], text: '', toolCalls: new Map(),
+    threadId, stopped: false, current: null, queue: [], called: [], text: '', toolCalls: new Map(),
     listeners: new Set([listener]), finished: new Promise((resolve) => { resolveFinished = resolve }),
   }
   runs.set(threadId, run)
+  // room_call_member: the member answering now asks for others by name.
+  const unregister = registerGroupWake(threadId, (names) => {
+    const caller = run.current?.profileId
+    if (caller === undefined) return { error: 'Nobody is answering in this room right now.' }
+    const members = memberProfiles(threadId)
+    const woken: string[] = []
+    const unknown: string[] = []
+    for (const name of names) {
+      const id = resolveMemberName(name, members)
+      if (id === null || id === caller) { unknown.push(name); continue }
+      if (!run.called.includes(id)) run.called.push(id)
+      woken.push(members.find((member) => member.id === id)?.name ?? name)
+    }
+    return { woken, unknown, members: members.filter((member) => member.id !== caller).map((member) => member.name) }
+  })
   try {
     await work(run)
   } finally {
+    unregister()
     runs.delete(threadId)
     run.listeners.clear()
     resolveFinished()

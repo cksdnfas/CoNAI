@@ -141,7 +141,7 @@ function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThrea
  * Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer.
  * `roomTools` adds the group room history tools (offered even when the profile has no MCP scopes).
  */
-async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[], roomTools = false) {
+async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[], roomTools: 'call' | 'all' | false = false) {
   const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: profileGenerationOptions(profile) })
   const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
   const bridge = scopes.length > 0 || roomTools ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist, { roomTools }) : null
@@ -265,8 +265,8 @@ export async function generateLlmGroupReply(params: {
   threadId: number
   profile: ChatProfile
   buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[]
-  /** Offer the room history tools (when part of the room is not in the request). */
-  roomTools: boolean
+  /** Room tools offered: `call` (room_call_member), `all` adding history search when part of the room is not shown. */
+  roomTools: 'call' | 'all'
   signal: AbortSignal
   emit: (event: CodexChatStreamEvent) => void
 }): Promise<GroupReplyResult> {

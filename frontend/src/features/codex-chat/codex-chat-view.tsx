@@ -31,7 +31,7 @@ import {
 import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
-import { ChatAppearanceButton, chatTranscriptStyle, useChatAppearance } from './chat-appearance'
+import { CHAT_APPEARANCE_ICON as AppearanceIcon, ChatAppearancePopover, chatTranscriptStyle, useChatAppearance } from './chat-appearance'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
@@ -186,6 +186,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [invite, setInvite] = useState<GroupInviteMode | null>(null)
+  const [appearanceOpen, setAppearanceOpen] = useState(false)
+  /** The menu hands focus back to its button as it closes; skip that when the appearance popover takes over. */
+  const appearanceOpenRef = useRef(false)
   const [caret, setCaret] = useState(0)
   const [mentionIndex, setMentionIndex] = useState(0)
   const [dismissedMention, setDismissedMention] = useState<string | null>(null)
@@ -527,14 +530,14 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const pickProfile = (profileId: number) => void startChat(profileId)
 
   const newChatButton = <NewChatMenu profiles={profiles} threads={threads} disabled={isBusy || isStartingChat} onPick={pickProfile} onOpen={() => selectThread(null)} />
-  const chatMenu = <DropdownMenu>
+  const chatMenu = <ChatAppearancePopover open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
     <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger></Tip>
-    <DropdownMenuContent align="end" className="min-w-48">
+    <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={(event) => { if (appearanceOpenRef.current) { event.preventDefault(); appearanceOpenRef.current = false } }}>
       {isGroup ? null : <DropdownMenuItem onSelect={() => setView('context')}><SlidersHorizontal />{t({ ko: '컨텍스트', en: 'Context' })}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => setView('gallery')}><LayoutGrid />{t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem>
-      <ChatAppearanceButton asMenuItem />
+      <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem>
       {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><Archive />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>}
@@ -542,7 +545,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
     </DropdownMenuContent>
-  </DropdownMenu>
+  </DropdownMenu></span></ChatAppearancePopover>
   const headerAvatar = isGroup
     ? group && activeThreadId !== null
       ? (
@@ -574,11 +577,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }}>
       <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')} style={chatTranscriptStyle(appearance, profile?.style)}>
         {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
-        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
+        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} imageSize={appearance.imageSize} speaker={speaker} avatarSize={appearance.avatarSize} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         {liveTurn && liveTurn.threadId === activeThreadId ? (
-          <ChatLiveMessage turn={liveTurn} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
+          <ChatLiveMessage turn={liveTurn} imageSize={appearance.imageSize} speaker={speaker} avatarSize={appearance.avatarSize} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         ) : null}
-        {runningFromServer && runningSpeaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming largeThumbnails={layout === 'page'} speaker={runningSpeaker} avatarSize={appearance.avatarSize} /> : null}
+        {runningFromServer && runningSpeaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming imageSize={appearance.imageSize} speaker={runningSpeaker} avatarSize={appearance.avatarSize} /> : null}
       </div>
     </div>
   )

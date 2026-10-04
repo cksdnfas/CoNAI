@@ -2,6 +2,7 @@ import sharp from 'sharp'
 import { PngExtractor } from '../metadata/extractors/pngExtractor'
 import { ChatProfileError, normalizeAlternateGreetings, type ChatProfileInput, type ChatPromptSection } from './chatProfiles'
 import { ChatLorebookStore, normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
+import { localizeImages, rewriteImageLinks } from './chatCardAssets'
 
 export const CHAT_CARD_MAX_BYTES = 8 * 1024 * 1024
 const text = (value: unknown, limit = 20_000) => typeof value === 'string' ? value.trim().slice(0, limit) : ''
@@ -55,6 +56,12 @@ export async function importChatCard(buffer: Buffer, providerName: string): Prom
     const content = text(data[key])
     if (content) sections.push({ id: `card-${key}`, title, kind, content, enabled: true })
   }
+  // Web images in the card's text are copied into CoNAI (hosts get blocked, links die); failures keep the link.
+  const systemPrompt = text(data.system_prompt).replace(/\{\{\s*original\s*\}\}/gi, '').trim()
+  const greeting = text(data.first_mes)
+  const alternateGreetings = normalizeAlternateGreetings(data.alternate_greetings)
+  const { saved } = await localizeImages([systemPrompt, greeting, ...alternateGreetings, ...sections.map((section) => section.content)])
+  const localized = (value: string) => rewriteImageLinks(value, saved)
   const book = object(data.character_book)
   const entries = bookEntries(book)
   const lorebookIds = entries.length > 0 ? [ChatLorebookStore.create({ name: text(book.name, 80) || name, entries }).id] : []
@@ -62,8 +69,10 @@ export async function importChatCard(buffer: Buffer, providerName: string): Prom
   return {
     name, avatar, engine: 'llm', providerName, mcpEnabled: false,
     tagline: text(data.tagline, 200) || text(data.creator_notes, 200) || tags.slice(0, 200),
-    systemPrompt: text(data.system_prompt).replace(/\{\{\s*original\s*\}\}/gi, '').trim(),
-    promptSections: sections, greeting: text(data.first_mes), alternateGreetings: normalizeAlternateGreetings(data.alternate_greetings),
+    systemPrompt: localized(systemPrompt),
+    promptSections: sections.map((section) => ({ ...section, content: localized(section.content) })),
+    greeting: localized(greeting),
+    alternateGreetings: alternateGreetings.map(localized),
     lorebookIds,
     loreScanDepth: typeof book.scan_depth === 'number' && Number.isFinite(book.scan_depth) ? Math.max(1, Math.min(100, Math.round(book.scan_depth))) : 4,
     loreTokenBudget: typeof book.token_budget === 'number' && Number.isFinite(book.token_budget) ? Math.max(0, Math.min(32768, Math.round(book.token_budget))) : 1024,

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
+import { requestGroupWake } from '../../services/codex-chat/groupWakeRegistry';
 import type { McpRequestContext } from '../context';
 
 const MESSAGE_TEXT_LIMIT = 2000;
@@ -32,8 +33,32 @@ function speakerName(row: RoomMessageRow, names: Map<number, string>) {
   return names.get(row.speaker_profile_id) as string;
 }
 
-/** Read-only access to the conversation of a group chat room the caller owns (registered only for chat agents in group rooms). */
+/** Group room tools for chat agents in a room the caller owns: call another member, and read the room's history. */
 export function registerChatRoomTools(server: McpServer, context: McpRequestContext): void {
+  server.tool(
+    'room_call_member',
+    'Ask other members of the group chat room you are in to answer right after you. Use their exact names from the room header (not translated). They write their own answers; do not write them yourself.',
+    {
+      room_id: z.number().int().positive().describe('Group room id from the room header'),
+      names: z.array(z.string().trim().min(1).max(60)).min(1).max(6).describe('Member names exactly as listed in the room header'),
+    },
+    async ({ room_id, names }) => {
+      try {
+        requireRoom(context, room_id);
+        const result = requestGroupWake(room_id, names);
+        if ('error' in result) return errorResult(result.error);
+        if (result.woken.length === 0) return errorResult(`No such member: ${result.unknown.join(', ')}. Members you can call: ${result.members.join(', ')}`);
+        return textResult({
+          called: result.woken,
+          ...(result.unknown.length > 0 ? { not_found: result.unknown, members: result.members } : {}),
+          note: 'They will answer right after your reply is posted, in their own message. Do not guess or describe their answer, and do not say they did not answer; just finish your own lines.',
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
   server.tool(
     'room_history_search',
     'Search earlier messages of the group chat room you are in (the room id is given in the room header). Returns message ids, speakers and excerpts, newest first.',

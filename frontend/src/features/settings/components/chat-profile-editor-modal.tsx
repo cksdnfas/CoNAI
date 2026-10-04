@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, Save, Trash2 } from 'lucide-react'
+import { Eye, ImageDown, Save, Trash2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
@@ -30,6 +30,7 @@ import {
   deleteChatProfile,
   listChatConnectionModels,
   listChatLorebooks,
+  localizeChatImages,
   updateChatProfile,
   type ChatProfile,
   type ChatProfileDefaults,
@@ -204,6 +205,23 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
       onClose()
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+  /** Card images on the web: copy them into CoNAI and point the draft at the copies (saved with the profile). */
+  const localizeMutation = useMutation({
+    mutationFn: () => localizeChatImages([draft.systemPrompt, draft.greeting, ...draft.alternateGreetings, ...draft.promptSections.map((section) => section.content)]),
+    onSuccess: (result) => {
+      const [systemPrompt, greeting, ...rest] = result.texts
+      const alternateGreetings = rest.slice(0, draft.alternateGreetings.length)
+      const sectionTexts = rest.slice(draft.alternateGreetings.length)
+      patch({ systemPrompt, greeting, alternateGreetings, promptSections: draft.promptSections.map((section, index) => ({ ...section, content: sectionTexts[index] ?? section.content })) })
+      showSnackbar({
+        message: result.saved === 0 && result.failed.length === 0
+          ? t({ ko: '저장할 외부 이미지가 없어.', en: 'No web images to save.' })
+          : t({ ko: '이미지 {saved}장을 저장했어. 못 받은 것 {failed}장. 프로필을 저장하면 반영돼.', en: 'Saved {saved} images, {failed} failed. Save the profile to keep them.' }, { saved: result.saved, failed: result.failed.length }),
+        tone: result.failed.length > 0 && result.saved === 0 ? 'error' : 'info',
+      })
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '이미지를 저장하지 못했어.', en: 'Could not save the images.' })), tone: 'error' }),
   })
   const deleteMutation = useMutation({
     mutationFn: () => deleteChatProfile(profile?.id ?? 0),
@@ -529,6 +547,9 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             <Trash2 />
           </IconButton>
         ) : null}
+        <IconButton size="icon-sm" variant="ghost" onClick={() => localizeMutation.mutate()} disabled={localizeMutation.isPending} label={t({ ko: '외부 이미지 저장', en: 'Save web images' })}>
+          <ImageDown />
+        </IconButton>
         <span className="flex-1" />
         <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={!canSave} label={t({ ko: '저장', en: 'Save' })}>
           <Save />

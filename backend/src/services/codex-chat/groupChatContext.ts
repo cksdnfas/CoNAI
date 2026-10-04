@@ -21,13 +21,36 @@ function addressableText(text: string) {
 }
 
 /**
+ * Names a member answers to: its full name, and for a name of several words its first word when no other member
+ * shares it (`@Ochako` for "Ochako Uraraka"). Lower case.
+ */
+function memberAliases(members: Member[]) {
+  const aliases: Array<{ alias: string; id: number }> = members.filter((member) => member.name.trim()).map((member) => ({ alias: member.name.trim().toLowerCase(), id: member.id }))
+  const firstWords = new Map<string, number[]>()
+  for (const member of members) {
+    const words = member.name.trim().toLowerCase().split(/\s+/)
+    if (words.length > 1 && words[0].length >= 2) firstWords.set(words[0], [...(firstWords.get(words[0]) ?? []), member.id])
+  }
+  for (const [word, ids] of firstWords) {
+    if (ids.length === 1 && !aliases.some((entry) => entry.alias === word)) aliases.push({ alias: word, id: ids[0] })
+  }
+  return aliases.sort((a, b) => b.alias.length - a.alias.length)
+}
+
+/** The member a name (with or without `@`) means, by the same aliases as mentions. */
+export function resolveMemberName(name: string, members: Member[]) {
+  const wanted = name.trim().replace(/^@/, '').toLowerCase()
+  return memberAliases(members).find((entry) => entry.alias === wanted)?.id ?? null
+}
+
+/**
  * Members addressed with `@name`, in the order they appear; `@모두` (`@all`) adds every member in room order. The
  * longest matching name wins, and a name must not run into more ASCII word characters (`@카이야` still names 카이,
  * Korean particles follow names directly). `exclude` (the writer) is never returned.
  */
 export function parseMentions(text: string, members: Member[], exclude?: number) {
   const source = addressableText(text)
-  const byLength = [...members].sort((a, b) => b.name.length - a.name.length)
+  const aliases = memberAliases(members)
   const result: number[] = []
   const add = (id: number) => { if (id !== exclude && !result.includes(id)) result.push(id) }
   for (let index = source.indexOf('@'); index >= 0; index = source.indexOf('@', index + 1)) {
@@ -35,7 +58,7 @@ export function parseMentions(text: string, members: Member[], exclude?: number)
     const rest = source.slice(index + 1)
     const lower = rest.toLowerCase()
     const everyone = EVERYONE_WORDS.find((word) => lower.startsWith(word) && !/^[A-Za-z0-9_]/.test(rest.slice(word.length)))
-    const member = byLength.find((entry) => entry.name && lower.startsWith(entry.name.toLowerCase()) && !/^[A-Za-z0-9_]/.test(rest.slice(entry.name.length)))
+    const member = aliases.find((entry) => lower.startsWith(entry.alias) && !/^[A-Za-z0-9_]/.test(rest.slice(entry.alias.length)))
     if (member) add(member.id)
     else if (everyone) members.forEach((entry) => add(entry.id))
   }
@@ -58,13 +81,16 @@ function transcriptLine(message: CodexChatMessageRecord, names: Map<number, stri
 export function buildGroupHeader(params: { thread: CodexChatThreadRecord; members: Member[]; self: Member; hiddenCount: number }) {
   const { thread, members, self, hiddenCount } = params
   const roster = members.map((member) => `${member.name}${member.id === thread.profile_id ? '(대표)' : ''}`).join(', ')
+  const handles = members.filter((member) => member.id !== self.id).map((member) => `@${member.name}`).join(', ')
   return [
     '## 그룹 채팅방',
     `방 이름: ${thread.title || '그룹 채팅'} (room_id ${thread.id})`,
     `참가자: ${USER_SPEAKER_NAME}, ${roster}. 너는 ${self.name}야.`,
     `- 사용자와 여러 참가자가 함께 대화해. 다른 사람의 말은 \`[이름] 내용\` 형식으로 보여.`,
     `- 너는 ${self.name}로서 네 말만 해. 다른 참가자나 사용자의 대사를 대신 쓰지 말고, 답 앞에 \`[이름]\`이나 \`이름:\` 머리말을 붙이지 마.`,
-    '- 다른 참가자에게 말을 걸거나 의견을 물을 때만 `@이름`을 써. 그러면 그 참가자가 이어서 답해. 필요 없으면 쓰지 마.',
+    handles
+      ? `- 다른 참가자에게 말을 걸어 대답을 들어야 할 때는 이름을 번역하거나 바꾸지 말고 그대로 써: ${handles}. 또는 room_call_member 도구에 room_id ${thread.id}와 그 이름을 넣어 불러. 부르면 그 참가자가 네 다음에 직접 답하니, 그 참가자의 대답은 네가 쓰지 마. 필요 없으면 부르지 마.`
+      : '',
     // The history tools only help when part of the room is not shown; otherwise models call them for nothing.
     hiddenCount > 0 ? `- 이 앞에 대화가 ${hiddenCount}개 더 있어. 꼭 필요할 때만 room_history_search / room_history_read 도구에 room_id ${thread.id}를 넣어 찾아봐.` : '',
   ].filter(Boolean).join('\n')

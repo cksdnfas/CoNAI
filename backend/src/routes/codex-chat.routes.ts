@@ -28,6 +28,7 @@ import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
 import { CHAT_CARD_MAX_BYTES, importChatCard, readLorebookFile } from '../services/codex-chat/chatCardImport'
 import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
+import { chatAssetFile, localizeImages, rewriteImageLinks, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
 
 const MESSAGE_MAX_LENGTH = 20000
@@ -188,6 +189,17 @@ router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, a
     return
   }
   await streamCacheableFile(req, res, file.path, file.mimeType ?? 'application/octet-stream')
+}))
+
+/** GET /api/codex-chat/assets/:name — an image copied in from a character card (content-addressed, so cached for good). */
+router.get('/assets/:name', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const file = chatAssetFile(String(req.params.name ?? ''))
+  if (!file) {
+    res.status(404).json({ success: false, error: 'Not found' })
+    return
+  }
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  await streamCacheableFile(req, res, file.path, file.mimeType)
 }))
 
 router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
@@ -452,6 +464,25 @@ router.delete('/admin/lorebooks/:lorebookId', requireAdmin, (req: Request, res: 
   if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
   res.json({ success: true, data: { deleted: ChatLorebookStore.delete(lorebookId) } })
 })
+
+/**
+ * POST /admin/chat-assets/localize — `{ texts }`: copy the web images these texts show into CoNAI and return the texts
+ * pointing at the copies (the profile editor applies them to its draft). Chat messages already showing those links
+ * (greetings posted before) are updated too.
+ */
+router.post('/admin/chat-assets/localize', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const texts = (req.body as { texts?: unknown } | undefined)?.texts
+  if (!Array.isArray(texts) || texts.length > 300 || !texts.every((value) => typeof value === 'string' && value.length <= 40_000)) {
+    sendRouteBadRequest(res, 'texts must be up to 300 strings')
+    return
+  }
+  try {
+    const { saved, failed } = await localizeImages(texts as string[])
+    res.json({ success: true, data: { texts: (texts as string[]).map((value) => rewriteImageLinks(value, saved)), saved: saved.size, failed, messages: rewriteStoredMessages(saved) } })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+}))
 
 /** Every chat-grantable MCP tool with its scope and description, for the profile editor's tool picker. */
 router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: Response) => {

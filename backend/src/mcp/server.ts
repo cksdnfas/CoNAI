@@ -28,7 +28,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   (server as McpServer & { tool: typeof server.tool }).tool = ((...args: unknown[]) => {
     const toolName = typeof args[0] === 'string' ? args[0] : '';
     const allowed = CHAT_ROOM_TOOLS.has(toolName)
-      ? context.chatRoomTools === true
+      ? context.chatRoomTools === 'all' || (context.chatRoomTools === 'call' && toolName === 'room_call_member')
       : isMcpToolAllowed(toolName, context.scopes) && (!context.toolAllowlist || context.toolAllowlist.includes(toolName));
     if (!allowed) {
       return undefined;

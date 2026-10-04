@@ -6,7 +6,7 @@ import { Check, Copy, Eye } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
-import { chatEmoticonUrl, type ChatDisplayBlock } from '@/lib/api-codex-chat'
+import { chatAssetUrl, chatEmoticonUrl, type ChatDisplayBlock } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { ChatDisplayBlockView, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 
@@ -89,6 +89,8 @@ const EMOTE_TOKEN_PATTERN = /&\*([^*&\n]{1,40})\*&/g
 const EMOTE_LINE_PATTERN = /^\s*&\*([^*&\n]{1,40})\*&\s*$/
 const EMOTE_SCHEME = 'emote:'
 const STICKER_SCHEME = 'emote-sticker:'
+/** Images copied in from character cards: `chat-asset:<sha256>.<ext>`. */
+const ASSET_PATTERN = /^chat-asset:([a-f0-9]{64}\.(?:png|jpg|webp|gif))$/
 
 /**
  * `&*keyword*&` → an image reference the `img` component draws: alone on a line it is a sticker, inside text an
@@ -116,6 +118,8 @@ function injectEmoticons(text: string, emoticons: ChatEmoticonMap | null) {
 
 /** Lets the emoticon schemes through; everything else gets react-markdown's safe default. */
 function urlTransform(url: string) {
+  const asset = ASSET_PATTERN.exec(url)
+  if (asset) return chatAssetUrl(asset[1])
   return url.startsWith(EMOTE_SCHEME) || url.startsWith(STICKER_SCHEME) ? url : defaultUrlTransform(url)
 }
 

@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { CodexChatMediaInfo, CodexChatMessage } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
-import type { ChatAvatarSize } from './chat-appearance'
+import type { ChatAvatarSize, ChatImageSize } from './chat-appearance'
 import { ChatFileLinks } from './chat-attachments'
 import type { CodexChatLiveTurn } from './codex-chat-context'
 import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker } from './codex-chat-message'
@@ -13,7 +13,7 @@ import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker } fro
 type MessageLook = {
   speaker: ChatSpeaker | null
   avatarSize: ChatAvatarSize
-  largeThumbnails: boolean
+  imageSize: ChatImageSize
   /** Group rooms: who wrote a reply (its speaker), instead of the chat's one speaker. */
   speakerOf?: (profileId: number | null) => ChatSpeaker | null
   /** Group rooms: member names, so `@name` mentions are highlighted. */
