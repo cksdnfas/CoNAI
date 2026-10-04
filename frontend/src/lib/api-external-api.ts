@@ -63,6 +63,21 @@ export async function getExternalApiProviders() {
   return Array.isArray(response.data) ? response.data : []
 }
 
+/** An API LLM chat profile a workflow LLM node can run on. */
+export interface LlmProfileOptionRecord {
+  id: number
+  name: string
+  avatar: string | null
+  provider_name: string
+  model: string | null
+  is_enabled: boolean
+}
+
+export async function getLlmProfileOptions() {
+  const response = await fetchJson<{ success: boolean; data?: LlmProfileOptionRecord[] }>('/api/external-api/llm-profile-options')
+  return Array.isArray(response.data) ? response.data : []
+}
+
 export async function getExternalApiLlmOptions() {
   const response = await fetchJson<ExternalApiLlmOptionsResponse>('/api/external-api/llm-options')
   return Array.isArray(response.data) ? response.data : []

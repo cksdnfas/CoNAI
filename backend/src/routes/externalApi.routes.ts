@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ExternalApiService } from '../services/externalApiService';
+import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth, requirePermission } from '../middleware/authMiddleware';
 import { hasConfiguredAuth } from './auth-route-helpers';
@@ -31,6 +32,26 @@ router.get('/llm-options', requirePermission('page.generation.view'), asyncHandl
   res.json({
     success: true,
     data: providers,
+  });
+}));
+
+/**
+ * API LLM chat profiles a workflow LLM node can use: name, connection and model only (no prompts or secrets).
+ * GET /api/external-api/llm-profile-options
+ */
+router.get('/llm-profile-options', requirePermission('page.generation.view'), asyncHandler(async (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: ChatProfileStore.list()
+      .filter((profile) => profile.engine === 'llm')
+      .map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        avatar: profile.avatar,
+        provider_name: profile.providerName,
+        model: profile.model || ExternalApiProvider.findEnabledLlmOptions().find((option) => option.provider_name === profile.providerName)?.default_model || null,
+        is_enabled: profile.isEnabled,
+      })),
   });
 }));
 

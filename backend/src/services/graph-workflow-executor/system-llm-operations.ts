@@ -1,4 +1,6 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
+import { ChatProfileStore, profileGenerationOptions } from '../codex-chat/chatProfiles'
+import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { executeLlmTextRequest } from '../llmProviderService'
 import { throwIfExecutionAborted } from './execution-abort'
 import { buildRuntimeArtifact } from './system-module-artifacts'
@@ -43,8 +45,34 @@ export async function executeCallLlmNode(
   moduleDefinition: ParsedModuleDefinition,
   resolvedInputs: Record<string, any>,
 ) {
-  const providerName = normalizeOptionalString(resolvedInputs.provider_name)
-  const legacyModelOverride = normalizeOptionalString(resolvedInputs.model)
+  // A chat profile carries the connection, model and generation options; the node's temperature / output limit, when
+  // filled, override it. Nodes saved before profiles keep their bare connection (and now honour their model field).
+  const profileId = normalizeOptionalNumber(resolvedInputs.profile_id)
+  const nodeTemperature = normalizeOptionalNumber(resolvedInputs.temperature)
+  const nodeMaxTokens = normalizeOptionalNumber(resolvedInputs.max_tokens)
+  let providerName: string | null
+  let model: string | null
+  let generation: LlmGenerationOptions
+  if (profileId !== null) {
+    const profile = ChatProfileStore.find(profileId)
+    if (!profile) {
+      throw new Error(`LLM 프로필을 찾을 수 없어: ${profileId}`)
+    }
+    if (profile.engine !== 'llm') {
+      throw new Error(`API LLM 프로필만 쓸 수 있어: ${profile.name}`)
+    }
+    providerName = profile.providerName
+    model = profile.model || null
+    generation = {
+      ...profileGenerationOptions(profile),
+      ...(nodeTemperature !== null ? { temperature: nodeTemperature } : {}),
+      ...(nodeMaxTokens !== null ? { maxTokens: nodeMaxTokens } : {}),
+    }
+  } else {
+    providerName = normalizeOptionalString(resolvedInputs.provider_name)
+    model = normalizeOptionalString(resolvedInputs.model)
+    generation = { temperature: nodeTemperature, maxTokens: nodeMaxTokens }
+  }
   const prompt = normalizeOptionalString(resolvedInputs.prompt) ?? ''
   const systemPrompt = normalizeOptionalString(resolvedInputs.system_prompt)
   const contextValue = normalizeOptionalString(resolvedInputs.context)
@@ -59,8 +87,9 @@ export async function executeCallLlmNode(
     message: `LLM node request started: ${moduleDefinition.name}`,
     details: {
       operationKey: 'system.call_llm',
+      profileId,
       providerName,
-      modelOverrideIgnored: legacyModelOverride,
+      model,
       responseMode,
       hasStructuredOutputJson: Boolean(structuredOutputJson),
       hasImage: Boolean(imageDataUrl),
@@ -77,9 +106,8 @@ export async function executeCallLlmNode(
       systemPrompt,
       context: contextValue,
       image: imageDataUrl,
-      model: null,
-      temperature: normalizeOptionalNumber(resolvedInputs.temperature),
-      maxTokens: normalizeOptionalNumber(resolvedInputs.max_tokens),
+      model,
+      generation,
       responseMode,
       structuredOutputJson,
       includeRawResponseMetadata: context.debugMode,

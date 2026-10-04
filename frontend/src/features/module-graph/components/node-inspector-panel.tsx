@@ -13,7 +13,7 @@ import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n, type TranslationInput } from '@/i18n'
-import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
+import { getLlmProfileOptions } from '@/lib/api-external-api'
 import { getLlmPresetOptions } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
@@ -114,9 +114,9 @@ export function NodeInspectorPanel({
   const isSystemCallLlmNode = selectedNodeOperationKey === 'system.call_llm'
   const isSystemCallCodexMessageNode = selectedNodeOperationKey === 'system.call_codex_message'
   const isSystemLoadLlmPresetNode = selectedNodeOperationKey === 'system.load_llm_preset'
-  const llmProvidersQuery = useQuery({
-    queryKey: ['external-api-llm-options', 'node-inspector-panel'],
-    queryFn: () => getExternalApiLlmOptions(),
+  const llmProfilesQuery = useQuery({
+    queryKey: ['llm-profile-options', 'node-inspector-panel'],
+    queryFn: () => getLlmProfileOptions(),
     enabled: isSystemCallLlmNode,
     staleTime: 30_000,
   })
@@ -126,35 +126,18 @@ export function NodeInspectorPanel({
     enabled: isSystemLoadLlmPresetNode,
     staleTime: 30_000,
   })
-  const llmModelBindings = (() => {
-    if (!isSystemCallLlmNode) {
-      return [] as Array<ExternalApiLlmOptionRecord & { default_model: string }>
-    }
-
-    const entries = (llmProvidersQuery.data ?? [])
-      .map((provider) => ({
-        ...provider,
-        default_model: normalizeOptionalString(provider.default_model),
-      }))
-      .filter((provider): provider is ExternalApiLlmOptionRecord & { default_model: string } => Boolean(provider.default_model))
-      .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
-
-    return entries
-  })()
-  const llmModelOptions = llmModelBindings.map((provider) => ({
-    value: provider.provider_name,
-    label: `${provider.provider_name} · ${provider.default_model}`,
+  // The LLM node runs on a chat profile (connection, model, reasoning, extra parameters); its own temperature and
+  // output limit stay empty unless they should override the profile.
+  const llmProfileOptions = (llmProfilesQuery.data ?? []).map((profile) => ({
+    value: String(profile.id),
+    label: profile.model ? `${profile.name} · ${profile.model}` : profile.name,
   })) satisfies ModuleGraphSelectOption[]
-  const applyLlmModelBinding = (node: ModuleGraphNode, providerName: string) => {
-    const selectedBinding = llmModelBindings.find((entry) => entry.provider_name === providerName)
-    if (!selectedBinding) {
-      return
-    }
-
-    onNodeValueChange(node.id, 'provider_name', selectedBinding.provider_name)
+  const applyLlmProfile = (node: ModuleGraphNode, profileId: string) => {
+    onNodeValueChange(node.id, 'profile_id', profileId ? Number(profileId) : '')
+    onNodeValueChange(node.id, 'provider_name', '')
     onNodeValueChange(node.id, 'model', '')
-    onNodeValueChange(node.id, 'temperature', typeof selectedBinding.default_temperature === 'number' ? selectedBinding.default_temperature : '')
-    onNodeValueChange(node.id, 'max_tokens', typeof selectedBinding.default_max_tokens === 'number' ? selectedBinding.default_max_tokens : 1024)
+    onNodeValueChange(node.id, 'temperature', '')
+    onNodeValueChange(node.id, 'max_tokens', '')
   }
 
   useEffect(() => {
@@ -248,7 +231,7 @@ export function NodeInspectorPanel({
       )
     }
 
-    if (isSystemCallLlmNode && port.key === 'provider_name') {
+    if (isSystemCallLlmNode && (port.key === 'provider_name' || port.key === 'model')) {
       return null
     }
 
@@ -263,19 +246,19 @@ export function NodeInspectorPanel({
       return null
     }
 
-    if (isSystemCallLlmNode && port.key === 'model' && llmModelOptions.length > 0) {
-      const currentProviderName = normalizeOptionalString(node.data.inputValues?.provider_name)
-      const effectiveSelectValue = currentProviderName && llmModelOptions.some((option) => typeof option !== 'string' && option.value === currentProviderName)
-        ? currentProviderName
-        : ''
-
+    if (isSystemCallLlmNode && port.key === 'profile_id') {
+      const currentProfileId = rawValue === undefined || rawValue === null || rawValue === '' ? '' : String(rawValue)
+      // Nodes saved before profiles name a bare connection; show it until a profile is picked.
+      const legacyProvider = normalizeOptionalString(node.data.inputValues?.provider_name)
       return renderPortCard(
         <TypedFieldInput
           kind="select"
-          value={effectiveSelectValue}
-          onChange={(value) => applyLlmModelBinding(node, String(value))}
-          options={llmModelOptions}
-          emptyLabel={t({ ko: '모델 선택', en: 'Select model' })}
+          value={llmProfileOptions.some((option) => option.value === currentProfileId) ? currentProfileId : ''}
+          onChange={(value) => applyLlmProfile(node, String(value))}
+          options={llmProfileOptions}
+          emptyLabel={!currentProfileId && legacyProvider
+            ? t({ ko: '연결: {name} (이전 방식)', en: 'Connection: {name} (legacy)' }, { name: legacyProvider })
+            : t({ ko: 'LLM 프로필 선택', en: 'Select LLM profile' })}
         />,
       )
     }

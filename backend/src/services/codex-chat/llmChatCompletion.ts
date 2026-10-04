@@ -1,4 +1,5 @@
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
+import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
 
 export type ChatCompletionToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
@@ -20,8 +21,8 @@ export type ChatCompletionTarget = {
   endpoint: string
   apiKey: string | null
   model: string
-  temperature: number | null
-  maxTokens: number | null
+  /** What the request asks for; unset options are not sent. */
+  generation: LlmGenerationOptions
 }
 
 export type ChatCompletionResult = {
@@ -56,12 +57,6 @@ function parseConfig(value: unknown): Record<string, unknown> {
   return {}
 }
 
-function configNumber(config: Record<string, unknown>, key: string) {
-  const value = config[key]
-  const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN
-  return Number.isFinite(number) ? number : null
-}
-
 /** An enabled LLM connection with its OpenAI-compatible API base, defaults and key. */
 function resolveConnection(providerName: string) {
   const provider = ExternalApiProvider.findByName(providerName)
@@ -91,9 +86,9 @@ function resolveConnection(providerName: string) {
  * Resolve an LLM connection (Settings → LLM connections) to its chat-completions endpoint and defaults.
  * Ollama connections use Ollama's OpenAI-compatible `/v1` API so both types speak one protocol.
  */
-export function resolveChatCompletionTarget(providerName: string, overrides: { model?: string | null; temperature?: number | null; maxTokens?: number | null } = {}): ChatCompletionTarget {
+export function resolveChatCompletionTarget(providerName: string, overrides: { model?: string | null; generation?: LlmGenerationOptions } = {}): ChatCompletionTarget {
   const { provider, config, apiBase, apiKey } = resolveConnection(providerName)
-  const model = normalizeOptionalString(overrides.model) ?? normalizeOptionalString(config.default_model as string | undefined)
+  const model = normalizeOptionalString(overrides.model) ?? readLlmConnectionConfig(config).defaultModel
   if (!model) {
     throw new Error(`LLM 모델이 정해지지 않았어: ${provider.display_name}`)
   }
@@ -104,8 +99,7 @@ export function resolveChatCompletionTarget(providerName: string, overrides: { m
     endpoint: `${apiBase}/chat/completions`,
     apiKey,
     model,
-    temperature: overrides.temperature ?? configNumber(config, 'default_temperature'),
-    maxTokens: overrides.maxTokens ?? configNumber(config, 'default_max_tokens'),
+    generation: overrides.generation ?? {},
   }
 }
 
@@ -122,7 +116,7 @@ export async function listChatCompletionModels(providerName: string) {
   }
   const json = await response.json() as { data?: Array<{ id?: unknown }> }
   const ids = (json.data ?? []).map((entry) => (typeof entry.id === 'string' ? entry.id : '')).filter(Boolean)
-  return { models: [...new Set(ids)], defaultModel: normalizeOptionalString(config.default_model as string | undefined) ?? null }
+  return { models: [...new Set(ids)], defaultModel: readLlmConnectionConfig(config).defaultModel }
 }
 
 function buildHeaders(target: ChatCompletionTarget) {
@@ -134,15 +128,9 @@ function buildHeaders(target: ChatCompletionTarget) {
 }
 
 function buildBody(target: ChatCompletionTarget, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], stream: boolean) {
-  const body: Record<string, unknown> = { model: target.model, messages, stream }
+  const body: Record<string, unknown> = { ...buildOpenAiGenerationFields(target.generation), model: target.model, messages, stream }
   if (tools.length > 0) {
     body.tools = tools
-  }
-  if (target.temperature !== null) {
-    body.temperature = target.temperature
-  }
-  if (target.maxTokens !== null) {
-    body.max_tokens = target.maxTokens
   }
   return body
 }

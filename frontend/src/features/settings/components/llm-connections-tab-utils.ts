@@ -9,8 +9,8 @@ export type LlmConnectionDraft = {
   providerType: ExternalApiProviderType
   baseUrl: string
   defaultModel: string
-  defaultTemperature: string
-  defaultMaxTokens: string
+  /** Request time limit in seconds; empty uses the server-wide default. */
+  timeoutSeconds: string
   apiKey: string
   isEnabled: boolean
 }
@@ -35,7 +35,7 @@ export type LlmPresetModalState =
   | null
 
 // Container-prefixed: the tables stack into labelled rows below these widths (SettingsResourceTable stackBelow).
-export const LLM_CONNECTIONS_TABLE_GRID = '@4xl:grid-cols-[minmax(180px,1.15fr)_minmax(160px,1fr)_minmax(160px,0.95fr)_80px_96px_64px_48px]'
+export const LLM_CONNECTIONS_TABLE_GRID = '@4xl:grid-cols-[minmax(180px,1.15fr)_minmax(160px,1fr)_minmax(160px,0.95fr)_96px_64px_48px]'
 export const LLM_PRESETS_TABLE_GRID = '@3xl:grid-cols-[minmax(180px,0.9fr)_minmax(240px,1.6fr)_140px_48px]'
 
 export const STRUCTURED_OUTPUT_JSON_EXAMPLE = `{
@@ -120,8 +120,7 @@ export function buildEmptyDraft(): LlmConnectionDraft {
     providerType: 'llm_openai_compatible',
     baseUrl: '',
     defaultModel: '',
-    defaultTemperature: '',
-    defaultMaxTokens: '',
+    timeoutSeconds: '',
     apiKey: '',
     isEnabled: true,
   }
@@ -133,9 +132,8 @@ export function buildProviderDraft(provider: ExternalApiProviderRecord): LlmConn
     displayName: provider.display_name,
     providerType: provider.provider_type,
     baseUrl: normalizeOptionalString(provider.base_url) ?? '',
-    defaultModel: normalizeOptionalString(provider.additional_config?.default_model) ?? '',
-    defaultTemperature: normalizeOptionalNumberString(provider.additional_config?.default_temperature ?? provider.additional_config?.temperature),
-    defaultMaxTokens: normalizeOptionalNumberString(provider.additional_config?.default_max_tokens ?? provider.additional_config?.max_tokens),
+    defaultModel: normalizeOptionalString(provider.additional_config?.default_model ?? provider.additional_config?.model) ?? '',
+    timeoutSeconds: readTimeoutSeconds(provider),
     apiKey: '',
     isEnabled: provider.is_enabled,
   }
@@ -154,12 +152,14 @@ export function getDefaultModelSummary(provider: ExternalApiProviderRecord, notS
   return defaultModel || notSetLabel
 }
 
-export function getDefaultTemperatureSummary(provider: ExternalApiProviderRecord, autoLabel: string) {
-  return normalizeOptionalNumberString(provider.additional_config?.default_temperature ?? provider.additional_config?.temperature) || autoLabel
+function readTimeoutSeconds(provider: ExternalApiProviderRecord) {
+  const ms = Number(provider.additional_config?.request_timeout_ms ?? provider.additional_config?.timeout_ms)
+  return Number.isFinite(ms) && ms > 0 ? String(Math.round(ms / 1000)) : ''
 }
 
-export function getDefaultMaxTokensSummary(provider: ExternalApiProviderRecord, autoLabel: string) {
-  return normalizeOptionalNumberString(provider.additional_config?.default_max_tokens ?? provider.additional_config?.max_tokens) || autoLabel
+export function getTimeoutSummary(provider: ExternalApiProviderRecord, defaultLabel: string) {
+  const seconds = readTimeoutSeconds(provider)
+  return seconds ? `${seconds}s` : defaultLabel
 }
 
 export function getBaseUrlSummary(provider: ExternalApiProviderRecord, notSetLabel: string) {
@@ -168,14 +168,16 @@ export function getBaseUrlSummary(provider: ExternalApiProviderRecord, notSetLab
 
 export function buildAdditionalConfig(draft: LlmConnectionDraft, baseConfig?: Record<string, unknown> | null) {
   const restConfig = { ...(baseConfig ?? {}) }
-  delete restConfig.default_response_mode
-  delete restConfig.response_mode
+  // Generation options live on chat profiles / workflow nodes now; legacy keys are dropped on save.
+  for (const key of ['default_response_mode', 'response_mode', 'default_temperature', 'temperature', 'default_max_tokens', 'max_tokens', 'model', 'timeout_ms']) {
+    delete restConfig[key]
+  }
+  const seconds = Number(draft.timeoutSeconds)
 
   return {
     ...restConfig,
     default_model: draft.defaultModel || undefined,
-    default_temperature: draft.defaultTemperature || undefined,
-    default_max_tokens: draft.defaultMaxTokens || undefined,
+    request_timeout_ms: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : undefined,
   }
 }
 

@@ -37,6 +37,7 @@ import {
 import { getExternalApiProviders } from '@/lib/api-external-api'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
+import { cn } from '@/lib/utils'
 
 import { ChatDisplayBlocksEditor } from './chat-profile-blocks'
 import { ChatCastEditor } from './chat-profile-cast'
@@ -61,6 +62,8 @@ function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults |
     providerName: profile?.providerName ?? '',
     model: profile?.model ?? '',
     reasoningEffort: profile?.reasoningEffort ?? '',
+    reasoningBudgetTokens: profile?.reasoningBudgetTokens ?? null,
+    extraParams: profile?.extraParams ?? '',
     systemPrompt: profile?.systemPrompt ?? '',
     promptSections: profile?.promptSections ?? [],
     greeting: profile?.greeting ?? '',
@@ -111,6 +114,29 @@ function SwitchLine({ label, checked, onCheckedChange }: { label: string; checke
   )
 }
 
+/** A model of a connection: its listed models, or free text when the server lists none. Empty uses the default. */
+function ConnectionModelSelect({ value, models, defaultModel, emptyLabel, onChange }: {
+  value: string
+  models: string[]
+  defaultModel: string | null
+  /** What an empty value means; defaults to the connection's default model. */
+  emptyLabel?: string
+  onChange: (value: string) => void
+}) {
+  const { t } = useI18n()
+  const fallback = emptyLabel ?? (defaultModel ? t({ ko: '연결 기본 모델 ({model})', en: 'Connection default ({model})' }, { model: defaultModel }) : t({ ko: '연결 기본 모델', en: 'Connection default' }))
+  if (models.length === 0) {
+    return <Input variant="settings" value={value} placeholder={fallback} onChange={(event) => onChange(event.target.value)} />
+  }
+  return (
+    <Select variant="settings" value={value} onChange={(event) => onChange(event.target.value)}>
+      <option value="">{fallback}</option>
+      {models.map((model) => <option key={model} value={model}>{model}</option>)}
+      {value && !models.includes(value) ? <option value={value}>{value}</option> : null}
+    </Select>
+  )
+}
+
 /** Create or edit one chat profile (engine, model, persona, tools, context). */
 export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
   open: boolean
@@ -141,6 +167,13 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
     queryKey: ['codex-chat-connection-models', draft.providerName],
     queryFn: () => listChatConnectionModels(draft.providerName),
     enabled: open && isLlm && Boolean(draft.providerName),
+    retry: false,
+    staleTime: 60_000,
+  })
+  const summaryModelsQuery = useQuery({
+    queryKey: ['codex-chat-connection-models', draft.summaryProviderName || draft.providerName],
+    queryFn: () => listChatConnectionModels(draft.summaryProviderName || draft.providerName),
+    enabled: open && isLlm && draft.summaryEnabled && Boolean(draft.summaryProviderName || draft.providerName),
     retry: false,
     staleTime: 60_000,
   })
@@ -190,7 +223,16 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
     if (confirmed) deleteMutation.mutate()
   }
 
-  const connectionDefault = t({ ko: '연결 기본값', en: 'Connection default' })
+  const serverDefault = t({ ko: '서버 기본값', en: 'Server default' })
+  const extraParamsError = (() => {
+    if (!isLlm || !draft.extraParams.trim()) return null
+    try {
+      const parsed: unknown = JSON.parse(draft.extraParams)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? null : t({ ko: 'JSON 객체여야 해.', en: 'Must be a JSON object.' })
+    } catch {
+      return t({ ko: 'JSON 형식이 아니야.', en: 'Not valid JSON.' })
+    }
+  })()
   const models = modelsQuery.data?.models ?? []
   const backgroundUrl = draft.background !== undefined
     ? draft.background
@@ -226,7 +268,7 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
           <SegmentedControl
             size="sm"
             value={draft.engine}
-            onChange={(engine) => patch({ engine: engine === 'codex' ? 'codex' : 'llm', model: '', reasoningEffort: '' })}
+            onChange={(engine) => patch({ engine: engine === 'codex' ? 'codex' : 'llm', model: '', reasoningEffort: '', reasoningBudgetTokens: null })}
             items={[
               { value: 'llm', label: t({ ko: 'API LLM', en: 'API LLM' }) },
               { value: 'codex', label: 'Codex' },
@@ -234,31 +276,53 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
             ariaLabel={t({ ko: '엔진', en: 'Engine' })}
           />
           {isLlm ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label={t({ ko: 'LLM 연결', en: 'LLM connection' })}>
-                <Select variant="settings" value={draft.providerName} onChange={(event) => patch({ providerName: event.target.value, model: '' })}>
-                  <option value="">{t({ ko: '골라줘', en: 'Choose' })}</option>
-                  {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
-                </Select>
-              </Field>
-              <Field label={t({ ko: '모델', en: 'Model' })}>
-                {models.length > 0 ? (
-                  <Select variant="settings" value={draft.model} onChange={(event) => patch({ model: event.target.value })}>
-                    <option value="">{modelsQuery.data?.defaultModel ? `${connectionDefault} (${modelsQuery.data.defaultModel})` : connectionDefault}</option>
-                    {models.map((model) => <option key={model} value={model}>{model}</option>)}
-                    {draft.model && !models.includes(draft.model) ? <option value={draft.model}>{draft.model}</option> : null}
+            <>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label={t({ ko: 'LLM 연결', en: 'LLM connection' })}>
+                  <Select variant="settings" value={draft.providerName} onChange={(event) => patch({ providerName: event.target.value, model: '' })}>
+                    <option value="">{t({ ko: '골라줘', en: 'Choose' })}</option>
+                    {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
                   </Select>
-                ) : (
-                  <Input variant="settings" value={draft.model} placeholder={connectionDefault} onChange={(event) => patch({ model: event.target.value })} />
-                )}
-              </Field>
-              <Field label={t({ ko: '온도', en: 'Temperature' })}>
-                <NumberStepperInput variant="settings" allowEmpty step={0.1} min={0} max={2} value={draft.temperature} placeholder={connectionDefault} onValueCommit={(value) => patch({ temperature: numberOrNull(value) })} />
-              </Field>
-              <Field label={t({ ko: '최대 토큰', en: 'Max tokens' })}>
-                <NumberStepperInput variant="settings" allowEmpty step={256} min={1} value={draft.maxTokens} placeholder={connectionDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
-              </Field>
-            </div>
+                </Field>
+                <Field label={t({ ko: '모델', en: 'Model' })}>
+                  <ConnectionModelSelect value={draft.model} models={models} defaultModel={modelsQuery.data?.defaultModel ?? null} onChange={(model) => patch({ model })} />
+                </Field>
+                <Field label={t({ ko: '온도', en: 'Temperature' })}>
+                  <NumberStepperInput variant="settings" allowEmpty step={0.1} min={0} max={2} value={draft.temperature} placeholder={serverDefault} onValueCommit={(value) => patch({ temperature: numberOrNull(value) })} />
+                </Field>
+                <Field label={t({ ko: '최대 출력 토큰 (추론 포함)', en: 'Max output tokens (incl. reasoning)' })}>
+                  <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+                </Field>
+                <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
+                  <Select variant="settings" value={draft.reasoningEffort} onChange={(event) => patch({ reasoningEffort: event.target.value as ChatProfileInput['reasoningEffort'] ?? '' })}>
+                    <option value="">{serverDefault}</option>
+                    <option value="none">{t({ ko: '끔 (none)', en: 'Off (none)' })}</option>
+                    <option value="low">low</option>
+                    <option value="medium">medium</option>
+                    <option value="high">high</option>
+                  </Select>
+                </Field>
+                <Field label={t({ ko: '추론 토큰 예산', en: 'Reasoning token budget' })}>
+                  <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.reasoningBudgetTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ reasoningBudgetTokens: numberOrNull(value) })} />
+                </Field>
+              </div>
+              <div className="border-t border-line">
+                <CollapsibleRow title={t({ ko: '고급', en: 'Advanced' })} meta={draft.extraParams.trim() ? t({ ko: '추가 파라미터 있음', en: 'extra parameters set' }) : null}>
+                  <Field label={t({ ko: '추가 파라미터 (JSON)', en: 'Extra parameters (JSON)' })}>
+                    <Textarea
+                      variant="settings"
+                      rows={4}
+                      className={cn('font-mono text-xs', extraParamsError && 'border-destructive')}
+                      value={draft.extraParams}
+                      placeholder={'{\n  "chat_template_kwargs": { "enable_thinking": true }\n}'}
+                      onChange={(event) => patch({ extraParams: event.target.value })}
+                      aria-invalid={Boolean(extraParamsError)}
+                    />
+                  </Field>
+                  {extraParamsError ? <p className="text-xs text-destructive">{extraParamsError}</p> : null}
+                </CollapsibleRow>
+              </div>
+            </>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               <Field label={t({ ko: 'Codex 모델', en: 'Codex model' })}>
@@ -371,7 +435,13 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
                     </Select>
                   </Field>
                   <Field label={t({ ko: '요약 모델', en: 'Summary model' })}>
-                    <Input variant="settings" value={draft.summaryModel} placeholder={draft.summaryProviderName ? connectionDefault : t({ ko: '대화 모델', en: 'Chat model' })} onChange={(event) => patch({ summaryModel: event.target.value })} />
+                    <ConnectionModelSelect
+                      value={draft.summaryModel}
+                      models={summaryModelsQuery.data?.models ?? []}
+                      defaultModel={draft.summaryProviderName ? summaryModelsQuery.data?.defaultModel ?? null : null}
+                      emptyLabel={draft.summaryProviderName ? undefined : t({ ko: '대화 모델 그대로', en: 'Same as chat' })}
+                      onChange={(summaryModel) => patch({ summaryModel })}
+                    />
                   </Field>
                 </div>
                 <Field label={t({ ko: '요약 프롬프트', en: 'Summary prompt' })}>

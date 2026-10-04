@@ -116,7 +116,12 @@ export interface ChatProfile {
   engine: ChatEngine
   providerName: string
   model: string
+  /** Codex: CLI effort. API LLM: none / low / medium / high, sent as reasoning_effort. Empty: not sent. */
   reasoningEffort: CodexReasoningEffort | ''
+  /** API LLM: reasoning_budget_tokens; null is not sent. */
+  reasoningBudgetTokens: number | null
+  /** API LLM: extra request fields as JSON object text. */
+  extraParams: string
   systemPrompt: string
   promptSections: ChatPromptSection[]
   greeting: string

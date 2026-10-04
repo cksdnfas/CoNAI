@@ -227,11 +227,10 @@ export function InputPortCell({
     : isSystemCallLlmPort && port.key === 'max_tokens'
       ? 128
       : uiField?.min
-  const numberPlaceholder = isSystemCallLlmPort && port.key === 'temperature'
-    ? '0.7'
-    : isSystemCallLlmPort && port.key === 'max_tokens'
-      ? '1024'
-      : (typeof port.default_value === 'number' ? String(port.default_value) : port.label)
+  // Empty LLM sampling fields use the node's profile values.
+  const numberPlaceholder = isSystemCallLlmPort && (port.key === 'temperature' || port.key === 'max_tokens')
+    ? t({ ko: '프로필 값', en: 'Profile value' })
+    : (typeof port.default_value === 'number' ? String(port.default_value) : port.label)
   const preview = getCompactValuePreview(rawValue ?? port.default_value)
   const isInlineTextPort = port.data_type === 'text' && uiField?.ui_hint === 'inline'
   const isPromptLikePort = (port.data_type === 'text' || port.data_type === 'prompt') && !isInlineTextPort

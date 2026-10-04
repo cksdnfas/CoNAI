@@ -1,4 +1,5 @@
-import { resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
+import { summaryGenerationOptions } from '../llmGenerationOptions'
+import { profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
@@ -293,7 +294,7 @@ export async function updateThreadSummary(threadId: number, profile: ChatProfile
   try {
     const target = resolveChatCompletionTarget(profile.summaryProviderName || profile.providerName, {
       model: profile.summaryProviderName ? profile.summaryModel || null : profile.summaryModel || profile.model || null,
-      temperature: 0.3,
+      generation: summaryGenerationOptions(profileGenerationOptions(profile)),
     })
     const transcript = pending.map((message) => transcriptLine(message, profile)).join('\n\n')
     const summary = stripThinking(await completeChat(target, [

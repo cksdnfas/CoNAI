@@ -1,6 +1,7 @@
 import { isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
+import { isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type ChatStyle } from './chatStyle'
 
 const NAME_MAX_LENGTH = 60
@@ -60,8 +61,12 @@ export type ChatProfile = {
   providerName: string
   /** Empty uses the connection's (LLM) or the CLI's (Codex) default model. */
   model: string
-  /** Codex only; empty uses the CLI / model default. */
+  /** Codex: the CLI effort. API LLM: none / low / medium / high (sent as reasoning_effort). Empty: not set. */
   reasoningEffort: CodexReasoningEffort | ''
+  /** API LLM: reasoning token budget (reasoning_budget_tokens); null leaves it to the server. */
+  reasoningBudgetTokens: number | null
+  /** API LLM: extra request fields as a JSON object text (e.g. chat_template_kwargs); empty for none. */
+  extraParams: string
   systemPrompt: string
   promptSections: ChatPromptSection[]
   /** Stored as the first assistant message of a new chat. */
@@ -109,6 +114,8 @@ type ProfileRow = {
   provider_name: string
   model: string | null
   reasoning_effort: string | null
+  reasoning_budget_tokens: number | null
+  extra_params: string | null
   system_prompt: string
   prompt_sections: string | null
   tool_allowlist: string | null
@@ -204,6 +211,8 @@ function toProfile(row: ProfileRow): ChatProfile {
     providerName: row.provider_name,
     model: row.model ?? '',
     reasoningEffort: isCodexReasoningEffort(row.reasoning_effort) ? row.reasoning_effort : '',
+    reasoningBudgetTokens: row.reasoning_budget_tokens,
+    extraParams: row.extra_params ?? '',
     systemPrompt: row.system_prompt,
     promptSections: storedSections ? normalizeSections(storedSections) : legacySections(row),
     greeting: row.greeting,
@@ -247,6 +256,23 @@ function optionalNumber(value: unknown, range: { min: number; max: number }, int
   return integer ? Math.round(clamped) : clamped
 }
 
+/** What an API LLM profile asks of each request (unset options are not sent). */
+export function profileGenerationOptions(profile: ChatProfile): LlmGenerationOptions {
+  let extraParams: Record<string, unknown> | null = null
+  try {
+    extraParams = parseLlmExtraParams(profile.extraParams)
+  } catch {
+    extraParams = null
+  }
+  return {
+    temperature: profile.temperature,
+    maxTokens: profile.maxTokens,
+    reasoningEffort: isLlmReasoningEffort(profile.reasoningEffort) ? profile.reasoningEffort : null,
+    reasoningBudgetTokens: profile.reasoningBudgetTokens,
+    extraParams,
+  }
+}
+
 /** The summary prompt a profile actually uses. */
 export function resolveSummaryPrompt(profile: ChatProfile) {
   return profile.summaryPrompt.trim() || DEFAULT_CHAT_SUMMARY_PROMPT
@@ -271,8 +297,17 @@ function toColumns(input: ChatProfileInput) {
   if (background && (background.length > BACKGROUND_MAX_LENGTH || !BACKGROUND_PATTERN.test(background))) {
     throw new ChatProfileError('배경 이미지가 올바르지 않거나 너무 커.')
   }
-  if (input.reasoningEffort && !isCodexReasoningEffort(input.reasoningEffort)) {
+  if (input.reasoningEffort && (engine === 'codex' ? !isCodexReasoningEffort(input.reasoningEffort) : !isLlmReasoningEffort(input.reasoningEffort))) {
     throw new ChatProfileError('추론 강도 값이 올바르지 않아.')
+  }
+  let extraParams = ''
+  if (engine === 'llm' && typeof input.extraParams === 'string' && input.extraParams.trim()) {
+    try {
+      parseLlmExtraParams(input.extraParams)
+    } catch (error) {
+      throw new ChatProfileError(error instanceof Error ? error.message : '추가 파라미터가 올바르지 않아.')
+    }
+    extraParams = input.extraParams.trim().slice(0, 20_000)
   }
 
   return {
@@ -281,7 +316,9 @@ function toColumns(input: ChatProfileInput) {
     engine,
     provider_name: providerName,
     model: text(input.model, MODEL_MAX_LENGTH) || null,
-    reasoning_effort: engine === 'codex' && input.reasoningEffort ? input.reasoningEffort : null,
+    reasoning_effort: input.reasoningEffort || null,
+    reasoning_budget_tokens: engine === 'llm' ? optionalNumber(input.reasoningBudgetTokens, { min: 1, max: 1_000_000 }, true) : null,
+    extra_params: extraParams || null,
     system_prompt: text(input.systemPrompt, TEXT_MAX_LENGTH),
     prompt_sections: JSON.stringify(normalizeSections(input.promptSections ?? [])),
     // The fixed columns are superseded by prompt_sections; cleared so an old row is not read as legacy again.

@@ -36,9 +36,8 @@ import {
   buildProviderPlaceholder,
   formatPresetUpdatedAt,
   getBaseUrlSummary,
-  getDefaultMaxTokensSummary,
   getDefaultModelSummary,
-  getDefaultTemperatureSummary,
+  getTimeoutSummary,
   summarizePresetValue,
   type LlmConnectionDraft,
   type LlmConnectionModalState,
@@ -77,8 +76,7 @@ export function LlmConnectionListItem({
           {baseUrlSummary}
         </div>,
         <div className="min-w-0 truncate text-sm font-medium text-foreground" title={getDefaultModelSummary(provider, notSetLabel)}>{getDefaultModelSummary(provider, notSetLabel)}</div>,
-        <div className="text-center text-sm font-medium text-foreground">{getDefaultTemperatureSummary(provider, autoLabel)}</div>,
-        <div className="text-center text-sm font-medium text-foreground">{getDefaultMaxTokensSummary(provider, autoLabel)}</div>,
+        <div className="text-center text-sm font-medium text-foreground">{getTimeoutSummary(provider, autoLabel)}</div>,
         <SettingsStatusIcon checked={provider.is_enabled} title={provider.is_enabled ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })} />,
       ]}
     />
@@ -169,25 +167,15 @@ function LlmConnectionFormFields({
         />
       </Field>
 
-      <Field label={t('llmConnectionsTab.defaultTemperature')}>
+      <Field label={t({ ko: '요청 제한 시간 (초)', en: 'Request time limit (seconds)' })}>
         <NumberStepperInput
           variant="settings"
-          step={0.1}
-          min={0}
-          value={draft.defaultTemperature}
-          onValueCommit={(value) => onChange({ defaultTemperature: value })}
-          placeholder={t({ ko: '예: 0.7', en: 'e.g. 0.7' })}
-        />
-      </Field>
-
-      <Field label={t('llmConnectionsTab.defaultMaxTokens')}>
-        <NumberStepperInput
-          variant="settings"
-          step={128}
-          min={128}
-          value={draft.defaultMaxTokens}
-          onValueCommit={(value) => onChange({ defaultMaxTokens: value })}
-          placeholder={t({ ko: '예: 1024', en: 'e.g. 1024' })}
+          allowEmpty
+          step={30}
+          min={5}
+          value={draft.timeoutSeconds}
+          onValueCommit={(value) => onChange({ timeoutSeconds: value })}
+          placeholder={t({ ko: '기본 600', en: 'Default 600' })}
         />
       </Field>
 

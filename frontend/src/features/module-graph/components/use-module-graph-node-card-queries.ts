@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getExternalApiLlmOptions } from '@/lib/api-external-api'
+import { getLlmProfileOptions } from '@/lib/api-external-api'
 import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
 import { getLlmPresetOptions } from '@/lib/api-settings-llm'
 
@@ -38,9 +38,9 @@ export function useModuleGraphNodeCardQueries({
     needsLlmModelOptions,
     needsLlmPresetOptions,
   })
-  const llmProvidersQuery = useQuery({
-    queryKey: ['external-api-llm-options', 'module-graph-node-card'],
-    queryFn: () => getExternalApiLlmOptions(),
+  const llmProfilesQuery = useQuery({
+    queryKey: ['llm-profile-options', 'module-graph-node-card'],
+    queryFn: () => getLlmProfileOptions(),
     enabled: enabled.llmProviders,
     staleTime: 30_000,
   })
@@ -66,7 +66,7 @@ export function useModuleGraphNodeCardQueries({
   return {
     comfyServersQuery,
     llmPresetsQuery,
-    llmProvidersQuery,
+    llmProfilesQuery,
     workflowServersQuery,
   }
 }

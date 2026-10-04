@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { buildOllamaGenerationFields, buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions } from './llmGenerationOptions'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { normalizeOptionalString } from '../utils/valueNormalization'
 import type { ProviderType } from '../types/externalApi'
@@ -18,8 +19,8 @@ export type ExecuteLlmTextRequest = {
   context?: string | null
   image?: string | null
   model?: string | null
-  temperature?: number | null
-  maxTokens?: number | null
+  /** Temperature, output limit, reasoning and extra fields; unset ones are not sent. */
+  generation?: LlmGenerationOptions | null
   responseMode?: LlmResponseMode | null
   structuredOutputJson?: string | null
   includeRawResponseMetadata?: boolean
@@ -43,11 +44,10 @@ const MAX_DEBUG_TEXT_LENGTH = 20_000
 const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 600_000
 
 /** 연결별 설정 > 환경변수 > 기본값 순으로 요청 전체 제한 시간을 정한다. */
-function resolveLlmRequestTimeoutMs(additionalConfig: Record<string, any> | null | undefined) {
-  const providerTimeoutMs = normalizeOptionalNumber(additionalConfig?.request_timeout_ms)
-    ?? normalizeOptionalNumber(additionalConfig?.timeout_ms)
-  if (providerTimeoutMs !== null && providerTimeoutMs > 0) {
-    return Math.floor(providerTimeoutMs)
+function resolveLlmRequestTimeoutMs(additionalConfig: unknown) {
+  const providerTimeoutMs = readLlmConnectionConfig(additionalConfig).timeoutMs
+  if (providerTimeoutMs !== null) {
+    return providerTimeoutMs
   }
 
   const configured = Number(process.env.CONAI_LLM_REQUEST_TIMEOUT_MS)
@@ -157,38 +157,6 @@ function stringifyDebugValue(value: unknown) {
   } catch {
     return '[unserializable]'
   }
-}
-
-function parseProviderDefaultModel(additionalConfig: Record<string, any> | null | undefined) {
-  const directDefaultModel = normalizeOptionalString(additionalConfig?.default_model)
-  if (directDefaultModel) {
-    return directDefaultModel
-  }
-
-  const nestedModel = normalizeOptionalString(additionalConfig?.model)
-  if (nestedModel) {
-    return nestedModel
-  }
-
-  return null
-}
-
-function parseProviderDefaultTemperature(additionalConfig: Record<string, any> | null | undefined) {
-  const directDefaultTemperature = normalizeOptionalNumber(additionalConfig?.default_temperature)
-  if (directDefaultTemperature !== null) {
-    return directDefaultTemperature
-  }
-
-  return normalizeOptionalNumber(additionalConfig?.temperature)
-}
-
-function parseProviderDefaultMaxTokens(additionalConfig: Record<string, any> | null | undefined) {
-  const directDefaultMaxTokens = normalizeOptionalNumber(additionalConfig?.default_max_tokens)
-  if (directDefaultMaxTokens !== null) {
-    return directDefaultMaxTokens
-  }
-
-  return normalizeOptionalNumber(additionalConfig?.max_tokens)
 }
 
 function normalizeStructuredOutputJson(value: unknown) {
@@ -341,8 +309,7 @@ async function executeOpenAiCompatibleRequest(params: {
   systemPrompt: string | null
   contextValue: string | null
   imageDataUrl: string | null
-  temperature: number | null
-  maxTokens: number | null
+  generation: LlmGenerationOptions
   responseMode: LlmResponseMode
   structuredOutputJson: string | null
   timeoutMs: number
@@ -360,23 +327,14 @@ async function executeOpenAiCompatibleRequest(params: {
   const systemMessage = [params.systemPrompt, jsonInstruction].filter((value): value is string => Boolean(value)).join('\n\n')
   const userPrompt = buildUserPrompt(params.prompt, params.contextValue)
   const buildBody = (imageFormat: 'data_url' | 'raw_base64') => {
-    const body: Record<string, unknown> = {
+    return {
+      ...buildOpenAiGenerationFields(params.generation),
       model: params.model,
       messages: [
         ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
         { role: 'user', content: buildOpenAiCompatibleUserContent(userPrompt, params.imageDataUrl, imageFormat) },
       ],
     }
-
-    if (params.temperature !== null) {
-      body.temperature = params.temperature
-    }
-
-    if (params.maxTokens !== null) {
-      body.max_tokens = params.maxTokens
-    }
-
-    return body
   }
 
   const endpoint = `${params.baseUrl.replace(/\/+$/, '')}/chat/completions`
@@ -422,8 +380,7 @@ async function executeOllamaRequest(params: {
   systemPrompt: string | null
   contextValue: string | null
   imageDataUrl: string | null
-  temperature: number | null
-  maxTokens: number | null
+  generation: LlmGenerationOptions
   responseMode: LlmResponseMode
   structuredOutputJson: string | null
   timeoutMs: number
@@ -433,6 +390,7 @@ async function executeOllamaRequest(params: {
   const systemBlock = [params.systemPrompt, jsonInstruction].filter((value): value is string => Boolean(value)).join('\n\n')
 
   const body: Record<string, unknown> = {
+    ...buildOllamaGenerationFields({ ...params.generation, maxTokens: typeof params.generation.maxTokens === 'number' ? Math.max(1, Math.floor(params.generation.maxTokens)) : null }),
     model: params.model,
     prompt: buildUserPrompt(params.prompt, params.contextValue),
     stream: false,
@@ -444,17 +402,6 @@ async function executeOllamaRequest(params: {
 
   if (systemBlock) {
     body.system = systemBlock
-  }
-
-  const options: Record<string, unknown> = {}
-  if (params.temperature !== null) {
-    options.temperature = params.temperature
-  }
-  if (params.maxTokens !== null) {
-    options.num_predict = Math.max(1, Math.floor(params.maxTokens))
-  }
-  if (Object.keys(options).length > 0) {
-    body.options = options
   }
 
   const response = await postWithTimeout(`${params.baseUrl.replace(/\/+$/, '')}/api/generate`, {
@@ -733,7 +680,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
 
   const structuredOutputJson = normalizeStructuredOutputJson(request.structuredOutputJson)
   const responseMode: LlmResponseMode = structuredOutputJson ? 'json' : 'text'
-  const model = normalizeOptionalString(request.model) ?? parseProviderDefaultModel(provider.additional_config)
+  const model = normalizeOptionalString(request.model) ?? readLlmConnectionConfig(provider.additional_config).defaultModel
   if (!model) {
     throw new Error(`LLM 모델이 필요해: ${provider.display_name}`)
   }
@@ -742,8 +689,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
   const systemPrompt = normalizeOptionalString(request.systemPrompt)
   const contextValue = normalizeOptionalString(request.context)
   const imageDataUrl = await normalizeVisionImageDataUrl(request.image)
-  const temperature = normalizeOptionalNumber(request.temperature) ?? parseProviderDefaultTemperature(provider.additional_config)
-  const maxTokens = normalizeOptionalNumber(request.maxTokens) ?? parseProviderDefaultMaxTokens(provider.additional_config)
+  const generation: LlmGenerationOptions = request.generation ?? {}
   const timeoutMs = resolveLlmRequestTimeoutMs(provider.additional_config)
 
   let result: Awaited<ReturnType<typeof executeOpenAiCompatibleRequest>> | Awaited<ReturnType<typeof executeOllamaRequest>>
@@ -755,8 +701,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       systemPrompt,
       contextValue,
       imageDataUrl,
-      temperature,
-      maxTokens,
+      generation,
       responseMode,
       structuredOutputJson,
       timeoutMs,
@@ -771,8 +716,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       systemPrompt,
       contextValue,
       imageDataUrl,
-      temperature,
-      maxTokens,
+      generation,
       responseMode,
       structuredOutputJson,
       timeoutMs,

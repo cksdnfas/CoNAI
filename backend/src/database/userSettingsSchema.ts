@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { applyGenerationQueueDebugColumns } from './migrations/029_add_generation_queue_debug_columns';
 import { applyGenerationQueueInputRefs } from './migrations/032_add_generation_queue_input_refs';
 import { applyGenerationQueueIdempotency } from './migrations/035_add_generation_queue_idempotency';
+import { migrateLlmConnectionGenerationDefaults } from './llmConnectionDefaultsMigration';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
@@ -517,6 +518,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['chat_style', 'TEXT'],
     ['background_image', 'TEXT'],
     ['vision_enabled', 'INTEGER'],
+    ['reasoning_budget_tokens', 'INTEGER'],
+    ['extra_params', 'TEXT'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {
@@ -1039,6 +1042,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     INSERT OR IGNORE INTO external_api_providers (provider_name, display_name, is_enabled)
     VALUES (?, ?, ?)
   `).run('civitai', 'Civitai', 1);
+
+  // Generation defaults move from LLM connections to the profiles that use them (no-op once done).
+  migrateLlmConnectionGenerationDefaults(db);
 
   console.log('  ✅ User settings tables created (19 tables + indexes)');
 

@@ -1,4 +1,4 @@
-import type { ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
+import type { LlmProfileOptionRecord } from '@/lib/api-external-api'
 import type { ModuleGraphSelectOption } from './module-graph-simple-value-input'
 
 type ModelDefaultSource = {
@@ -25,20 +25,11 @@ export function normalizeSelectOptions(options: ModuleGraphSelectOption[] | null
     : []
 }
 
-export function getLlmModelBindings(providers: ExternalApiLlmOptionRecord[] | undefined) {
-  return (providers ?? [])
-    .map((provider) => ({
-      ...provider,
-      default_model: normalizeOptionalString(provider.default_model),
-    }))
-    .filter((provider): provider is ExternalApiLlmOptionRecord & { default_model: string } => Boolean(provider.default_model))
-    .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
-}
-
-export function getLlmModelOptions(bindings: Array<ExternalApiLlmOptionRecord & { default_model: string }>) {
-  return bindings.map((provider) => ({
-    value: provider.provider_name,
-    label: `${provider.provider_name} · ${provider.default_model}`,
+/** The LLM node's choices: API LLM chat profiles, shown as "name · model". */
+export function getLlmProfileSelectOptions(profiles: LlmProfileOptionRecord[] | undefined) {
+  return (profiles ?? []).map((profile) => ({
+    value: String(profile.id),
+    label: profile.model ? `${profile.name} · ${profile.model}` : profile.name,
   })) satisfies ModuleGraphSelectOption[]
 }
 

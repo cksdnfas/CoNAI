@@ -408,7 +408,7 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
   },
   {
     name: 'LLM 호출',
-    description: 'LM Studio, Ollama, 또는 OpenAI 호환 LLM 연결을 호출해서 텍스트나 JSON 응답을 받아와.',
+    description: '채팅 프로필(API LLM)의 연결·모델·생성 옵션으로 LLM을 호출해서 텍스트나 JSON 응답을 받아와.',
     category: 'llm',
     exposedInputs: [
       {
@@ -519,6 +519,11 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
     ],
     internalFixedValues: { operation_key: 'system.call_llm' },
     uiSchema: [
+      {
+        key: 'profile_id',
+        label: 'LLM 프로필',
+        data_type: 'number',
+      },
       {
         key: 'provider_name',
         label: '연결 이름',

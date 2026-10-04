@@ -7,8 +7,7 @@ import { useI18n } from '@/i18n'
 import type { ModuleGraphNode } from '../module-graph-shared'
 import { normalizeOptionalString, parsePositiveIntegerish } from '../module-graph-shared'
 import {
-  getLlmModelBindings,
-  getLlmModelOptions,
+    getLlmProfileSelectOptions,
   getSelectOptionValue,
   normalizeSelectOptions,
   resolveModelSelectValue,
@@ -107,9 +106,10 @@ export function useModuleGraphNodeCustomControls({
     needsLlmPresetOptions,
   })
 
-  const llmModelBindings = needsLlmModelOptions ? getLlmModelBindings(queries.llmProvidersQuery.data) : []
-  const llmModelOptions = getLlmModelOptions(llmModelBindings)
-  const llmSelectedProviderName = normalizeOptionalString(data.inputValues?.provider_name) ?? ''
+  const llmModelOptions = needsLlmModelOptions ? getLlmProfileSelectOptions(queries.llmProfilesQuery.data) : []
+  const llmSelectedProfileId = data.inputValues?.profile_id === undefined || data.inputValues?.profile_id === null ? '' : String(data.inputValues.profile_id)
+  // Nodes saved before profiles name a bare connection; it shows until a profile is picked.
+  const llmLegacyProviderName = llmSelectedProfileId ? '' : normalizeOptionalString(data.inputValues?.provider_name) ?? ''
   const codexModelPort = controlKeys.has('codex-model') ? inputPorts.find((port) => port.key === 'model') : null
   const codexModelUiField = controlKeys.has('codex-model') ? uiFieldByKey.get('model') ?? null : null
   const codexModelOptions = normalizeSelectOptions(codexModelUiField?.data_type === 'select' ? codexModelUiField.options : null)
@@ -128,7 +128,7 @@ export function useModuleGraphNodeCustomControls({
     uiField: naiModelUiField,
     options: naiModelOptions,
   })
-  const canConfigureLlmModel = Boolean(needsLlmModelOptions && llmModelOptions.length > 0 && data.onNodeValueChange)
+  const canConfigureLlmModel = Boolean(needsLlmModelOptions && data.onNodeValueChange)
   const canConfigureCodexModel = Boolean(controlKeys.has('codex-model') && codexModelOptions.length > 0 && data.onNodeValueChange)
   const canConfigureNaiModel = Boolean(controlKeys.has('nai-model') && naiModelOptions.length > 0 && data.onNodeValueChange && !connectedInputKeys.has('model'))
   const canConfigureLlmPreset = Boolean(needsLlmPresetOptions && data.onNodeValueChange)
@@ -156,6 +156,8 @@ export function useModuleGraphNodeCustomControls({
   }
   if (needsLlmModelOptions) {
     hiddenInputPortKeys.add('provider_name')
+    hiddenInputPortKeys.add('profile_id')
+    hiddenInputPortKeys.add('model')
     hiddenInputPortKeys.add('system_prompt_preset_name')
     hiddenInputPortKeys.add('prompt_preset_name')
     hiddenInputPortKeys.add('structured_output_json_preset_name')
@@ -182,13 +184,13 @@ export function useModuleGraphNodeCustomControls({
     hasKnownComfyTargetValue: knownComfyTargetValues.has(comfyTargetValue),
     hiddenInputPortKeys,
     id,
-    llmModelBindings,
     llmModelOptions,
+    llmSelectedProfileId,
+    llmLegacyProviderName,
     llmPresetEntries,
     llmPresetName,
     llmPresetType,
     llmPresetsLoading: queries.llmPresetsQuery.isLoading,
-    llmSelectedProviderName,
     naiModelOptions,
     naiModelValue,
     selectedLlmPreset,
@@ -199,13 +201,14 @@ type ModuleGraphNodeCustomControlsState = ReturnType<typeof useModuleGraphNodeCu
 
 export function ModuleGraphNodeCustomControls({ data, state }: { data: ModuleGraphNode['data']; state: ModuleGraphNodeCustomControlsState }) {
   const { t } = useI18n()
-  const applyLlmModelBinding = (providerName: string) => {
-    const selectedBinding = state.llmModelBindings.find((entry) => entry.provider_name === providerName)
-    if (!selectedBinding || !data.onNodeValueChange) return
-    data.onNodeValueChange(state.id, 'provider_name', selectedBinding.provider_name)
+  // Picking a profile replaces a legacy connection; temperature / output limit go back to the profile's values.
+  const applyLlmProfile = (profileId: string) => {
+    if (!data.onNodeValueChange) return
+    data.onNodeValueChange(state.id, 'profile_id', profileId ? Number(profileId) : '')
+    data.onNodeValueChange(state.id, 'provider_name', '')
     data.onNodeValueChange(state.id, 'model', '')
-    data.onNodeValueChange(state.id, 'temperature', typeof selectedBinding.default_temperature === 'number' ? selectedBinding.default_temperature : '')
-    data.onNodeValueChange(state.id, 'max_tokens', typeof selectedBinding.default_max_tokens === 'number' ? selectedBinding.default_max_tokens : 1024)
+    data.onNodeValueChange(state.id, 'temperature', '')
+    data.onNodeValueChange(state.id, 'max_tokens', '')
   }
   const applyComfyTargetValue = (nextValue: string) => {
     if (!data.onNodeValueChange) return
@@ -245,9 +248,9 @@ export function ModuleGraphNodeCustomControls({ data, state }: { data: ModuleGra
 
       {state.canConfigureLlmModel ? (
         <div className="nodrag nowheel mt-2 space-y-1">
-          <Text as="div" variant="overline" className="px-0.5 font-medium">{t({ ko: '모델', en: 'Model' })}</Text>
-          <Select value={state.llmSelectedProviderName} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); applyLlmModelBinding(event.target.value) }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
-            <option value="">{t({ ko: '모델 선택', en: 'Select model' })}</option>
+          <Text as="div" variant="overline" className="px-0.5 font-medium">{t({ ko: 'LLM 프로필', en: 'LLM profile' })}</Text>
+          <Select value={state.llmSelectedProfileId} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); applyLlmProfile(event.target.value) }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
+            <option value="">{state.llmLegacyProviderName ? t({ ko: '연결: {name} (이전 방식)', en: 'Connection: {name} (legacy)' }, { name: state.llmLegacyProviderName }) : t({ ko: 'LLM 프로필 선택', en: 'Select LLM profile' })}</option>
             {state.llmModelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </div>

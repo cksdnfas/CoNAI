@@ -176,7 +176,7 @@ export function LlmConnectionsTab() {
             gridClassName={LLM_CONNECTIONS_TABLE_GRID}
             stackBelow="4xl"
             centerFrom={3}
-            headers={[t({ ko: '연결', en: 'Connection' }), t({ ko: '기본 URL', en: 'Base URL' }), t({ ko: '기본 모델', en: 'Default model' }), t({ ko: '온도', en: 'Temperature' }), t({ ko: '최대 토큰', en: 'Max tokens' }), t({ ko: '활성', en: 'Active' }), '']}
+            headers={[t({ ko: '연결', en: 'Connection' }), t({ ko: '기본 URL', en: 'Base URL' }), t({ ko: '기본 모델', en: 'Default model' }), t({ ko: '제한 시간', en: 'Time limit' }), t({ ko: '활성', en: 'Active' }), '']}
           >
             {llmProviders.map((provider) => (
               <LlmConnectionListItem

@@ -1,4 +1,5 @@
 import type { McpRequester } from '../../mcp/context'
+import { profileGenerationOptions } from './chatProfiles'
 import { validateChatAttachments } from './chatAttachments'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -125,7 +126,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
 
 /** Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer. */
 async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
-  const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, temperature: profile.temperature, maxTokens: profile.maxTokens })
+  const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: profileGenerationOptions(profile) })
   const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
   const bridge = scopes.length > 0 ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist) : null
 
