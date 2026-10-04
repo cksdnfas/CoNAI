@@ -21,6 +21,19 @@ export interface CodexChatStatus {
   scopes: ChatScope[]
 }
 
+export type ChatTypeface = 'sans' | 'serif' | 'mono'
+
+/** How a profile's chats look. Colours are `#rrggbb`, or empty for the theme's text colour. */
+export interface ChatStyle {
+  typeface: ChatTypeface
+  /** Colour "dialogue", *narration* and 'thoughts' (the model is told to mark them). */
+  roleplay: boolean
+  colors: { dialogue: string; narration: string; thought: string }
+  /** Background dimming 0–90 (%) and blur 0–20 (px). */
+  backgroundDim: number
+  backgroundBlur: number
+}
+
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */
 export interface ChatProfileSummary {
   id: number
@@ -32,6 +45,14 @@ export interface ChatProfileSummary {
   /** Context defaults a chat can override (LLM profiles). */
   contextTurns: number
   summaryEnabled: boolean
+  style: ChatStyle
+  /** Null: no background image. Otherwise part of the image URL, so it changes with the image. */
+  backgroundVersion: string | null
+}
+
+/** The chat background image of a profile. */
+export function chatProfileBackgroundUrl(profileId: number, version: string) {
+  return buildApiUrl(`/api/codex-chat/profiles/${profileId}/background?v=${encodeURIComponent(version)}`)
 }
 
 /** A user-defined prompt block: `text` joins the system prompt under its title, `dialogue` is example conversation. */
@@ -70,13 +91,16 @@ export interface ChatProfile {
   summaryProviderName: string | null
   summaryModel: string
   maxToolRounds: number
+  style: ChatStyle
+  backgroundVersion: string | null
   isEnabled: boolean
   sortOrder: number
   createdDate: string
   updatedDate: string
 }
 
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate'>>
+/** `background`: a new image (data URL), null to remove it, left out to keep the current one. */
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion'>> & { background?: string | null }
 
 export interface ChatProfileDefaults {
   contextTurns: number
@@ -85,6 +109,7 @@ export interface ChatProfileDefaults {
   toolOutputLimit: number
   summaryPrompt: string
   scopes: ChatScope[]
+  style: ChatStyle
 }
 
 export interface CodexChatToolCall {

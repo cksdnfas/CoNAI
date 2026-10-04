@@ -12,6 +12,7 @@ import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken } from './codexChatAccess'
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
+import { buildChatStyleGuidance } from './chatStyle'
 import { buildPersonaPrompt, fillCharacterPlaceholders, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
 import { LlmChatService } from './llmChatService'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -209,8 +210,7 @@ function buildAppServerArgs(knownFeatures: Set<string>, mcpServers: string[]) {
 
 /** What a Codex profile's chats get as developer instructions: the fixed tool rules, then the profile's prompt. */
 export function buildCodexInstructions(profile: ChatProfile) {
-  const persona = buildPersonaPrompt(profile, { dialogueAsText: true })
-  return persona ? `${DEVELOPER_INSTRUCTIONS}\n\n${persona}` : DEVELOPER_INSTRUCTIONS
+  return [DEVELOPER_INSTRUCTIONS, buildChatStyleGuidance(profile.style), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
 }
 
 function threadOverrides(session: Session, profile: ChatProfile) {

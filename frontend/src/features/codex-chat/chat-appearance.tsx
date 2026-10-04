@@ -4,29 +4,33 @@ import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
+import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
+import type { ChatStyle, ChatTypeface } from '@/lib/api-codex-chat'
 
 export type ChatAvatarSize = 'sm' | 'md' | 'lg'
 export type ChatFontSize = 'sm' | 'md' | 'lg' | 'xl'
-export type ChatFontFamily = 'sans' | 'serif' | 'mono'
 export type ChatLineHeight = 'tight' | 'normal' | 'relaxed'
 
-/** How the transcript looks, per browser: avatar, text size, typeface and line spacing. */
+/**
+ * What a reader may adjust, per browser, on top of the profile's look (typeface, colours, background): avatar and
+ * text size, line spacing, and whether to show the background at all.
+ */
 export type ChatAppearance = {
   avatarSize: ChatAvatarSize
   fontSize: ChatFontSize
-  fontFamily: ChatFontFamily
   lineHeight: ChatLineHeight
+  showBackground: boolean
 }
 
 const STORAGE_KEY = 'conai.chat.appearance'
 const CHANGED_EVENT = 'conai:chat-appearance-changed'
 
-export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = { avatarSize: 'md', fontSize: 'md', fontFamily: 'sans', lineHeight: 'normal' }
+export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = { avatarSize: 'md', fontSize: 'md', lineHeight: 'normal', showBackground: true }
 
 const FONT_SIZE_PX: Record<ChatFontSize, number> = { sm: 13, md: 14, lg: 16, xl: 18 }
 const LINE_HEIGHT: Record<ChatLineHeight, number> = { tight: 1.5, normal: 1.7, relaxed: 1.9 }
-const FONT_FAMILY: Record<ChatFontFamily, string | undefined> = {
+export const CHAT_TYPEFACE_FAMILY: Record<ChatTypeface, string | undefined> = {
   sans: undefined,
   serif: 'ui-serif, Georgia, "Noto Serif KR", "Nanum Myeongjo", Batang, serif',
   mono: 'ui-monospace, "Cascadia Code", "D2Coding", Consolas, monospace',
@@ -41,8 +45,8 @@ function normalize(value: unknown): ChatAppearance {
   return {
     avatarSize: pick(raw.avatarSize, ['sm', 'md', 'lg'], DEFAULT_CHAT_APPEARANCE.avatarSize),
     fontSize: pick(raw.fontSize, ['sm', 'md', 'lg', 'xl'], DEFAULT_CHAT_APPEARANCE.fontSize),
-    fontFamily: pick(raw.fontFamily, ['sans', 'serif', 'mono'], DEFAULT_CHAT_APPEARANCE.fontFamily),
     lineHeight: pick(raw.lineHeight, ['tight', 'normal', 'relaxed'], DEFAULT_CHAT_APPEARANCE.lineHeight),
+    showBackground: raw.showBackground !== false,
   }
 }
 
@@ -87,13 +91,20 @@ export function useChatAppearance() {
   return { appearance, update, reset: () => writeAppearance(DEFAULT_CHAT_APPEARANCE) }
 }
 
-/** Inherited by every message: text size, spacing and typeface. Small labels (names, tool chips) keep their own size. */
-export function chatTranscriptStyle(appearance: ChatAppearance): CSSProperties {
+/**
+ * Inherited by every message: the reader's text size and spacing, the profile's typeface and roleplay colours (as
+ * variables the Markdown renderer uses). Small labels (names, tool chips) keep their own size.
+ */
+export function chatTranscriptStyle(appearance: ChatAppearance, style: ChatStyle | null | undefined): CSSProperties {
+  const colors = style?.roleplay ? style.colors : null
   return {
     fontSize: `${FONT_SIZE_PX[appearance.fontSize]}px`,
     lineHeight: LINE_HEIGHT[appearance.lineHeight],
-    fontFamily: FONT_FAMILY[appearance.fontFamily],
-  }
+    fontFamily: style ? CHAT_TYPEFACE_FAMILY[style.typeface] : undefined,
+    ...(colors?.dialogue ? { '--chat-rp-dialogue': colors.dialogue } : {}),
+    ...(colors?.narration ? { '--chat-rp-narration': colors.narration } : {}),
+    ...(colors?.thought ? { '--chat-rp-thought': colors.thought } : {}),
+  } as CSSProperties
 }
 
 function AppearanceRow({ label, children }: { label: string; children: ReactNode }) {
@@ -105,7 +116,7 @@ function AppearanceRow({ label, children }: { label: string; children: ReactNode
   )
 }
 
-/** Header key with the transcript's look: avatar size, text size, typeface, line spacing. */
+/** Header key with the reader's adjustments: avatar size, text size, line spacing, background on/off. */
 export function ChatAppearanceButton() {
   const { t } = useI18n()
   const { appearance, update, reset } = useChatAppearance()
@@ -149,19 +160,6 @@ export function ChatAppearanceButton() {
             items={(['sm', 'md', 'lg', 'xl'] as const).map((size) => ({ value: size, label: <span className="tabular-nums">{FONT_SIZE_PX[size]}</span> }))}
           />
         </AppearanceRow>
-        <AppearanceRow label={t({ ko: '글꼴', en: 'Typeface' })}>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={appearance.fontFamily}
-            onChange={(value) => update({ fontFamily: value as ChatFontFamily })}
-            items={[
-              { value: 'sans', label: t({ ko: '기본', en: 'Default' }) },
-              { value: 'serif', label: <span style={{ fontFamily: FONT_FAMILY.serif }}>{t({ ko: '명조', en: 'Serif' })}</span> },
-              { value: 'mono', label: <span style={{ fontFamily: FONT_FAMILY.mono }}>{t({ ko: '고정폭', en: 'Mono' })}</span> },
-            ]}
-          />
-        </AppearanceRow>
         <AppearanceRow label={t({ ko: '줄 간격', en: 'Line spacing' })}>
           <SegmentedControl
             size="xs"
@@ -175,6 +173,10 @@ export function ChatAppearanceButton() {
             ]}
           />
         </AppearanceRow>
+        <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-muted-foreground">
+          {t({ ko: '배경 이미지', en: 'Background image' })}
+          <Switch checked={appearance.showBackground} onCheckedChange={(showBackground) => update({ showBackground })} />
+        </label>
       </PopoverContent>
     </Popover>
   )

@@ -1,6 +1,7 @@
 import { isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
+import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type ChatStyle } from './chatStyle'
 
 const NAME_MAX_LENGTH = 60
 const MODEL_MAX_LENGTH = 200
@@ -86,6 +87,10 @@ export type ChatProfile = {
   summaryModel: string
   /** Model ↔ tool round trips allowed in one reply. */
   maxToolRounds: number
+  /** Typeface, roleplay colours, background dimming. */
+  style: ChatStyle
+  /** Chat background as a data URL; served on its own route, never inside profile lists. */
+  background: string | null
   isEnabled: boolean
   sortOrder: number
   createdDate: string
@@ -122,6 +127,8 @@ type ProfileRow = {
   summary_provider_name: string | null
   summary_model: string | null
   max_tool_rounds: number | null
+  chat_style: string | null
+  background_image: string | null
   is_enabled: number
   sort_order: number
   created_date: string
@@ -211,6 +218,8 @@ function toProfile(row: ProfileRow): ChatProfile {
     summaryProviderName: row.summary_provider_name,
     summaryModel: row.summary_model ?? '',
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
+    style: normalizeChatStyle(row.chat_style),
+    background: row.background_image,
     isEnabled: row.is_enabled === 1,
     sortOrder: row.sort_order,
     createdDate: row.created_date,
@@ -254,6 +263,10 @@ function toColumns(input: ChatProfileInput) {
   if (avatar && (avatar.length > AVATAR_MAX_LENGTH || !AVATAR_PATTERN.test(avatar))) {
     throw new ChatProfileError('아바타 이미지가 올바르지 않거나 너무 커.')
   }
+  const background = typeof input.background === 'string' && input.background ? input.background : null
+  if (background && (background.length > BACKGROUND_MAX_LENGTH || !BACKGROUND_PATTERN.test(background))) {
+    throw new ChatProfileError('배경 이미지가 올바르지 않거나 너무 커.')
+  }
   if (input.reasoningEffort && !isCodexReasoningEffort(input.reasoningEffort)) {
     throw new ChatProfileError('추론 강도 값이 올바르지 않아.')
   }
@@ -288,6 +301,8 @@ function toColumns(input: ChatProfileInput) {
     summary_provider_name: text(input.summaryProviderName, 200) || null,
     summary_model: text(input.summaryModel, MODEL_MAX_LENGTH) || null,
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
+    chat_style: JSON.stringify(normalizeChatStyle(input.style)),
+    background_image: background,
     is_enabled: input.isEnabled === false ? 0 : 1,
     sort_order: optionalNumber(input.sortOrder, { min: -1_000_000, max: 1_000_000 }, true) ?? 0,
   }

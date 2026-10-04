@@ -101,11 +101,85 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 }
 
-/** A reply as Markdown (GitHub flavour: tables, task lists, strikethrough). Raw HTML is not rendered; fence it to preview. */
-export function ChatMarkdown({ text }: { text: string }) {
+type HastNode = { type: string; tagName?: string; value?: string; children?: HastNode[]; properties?: Record<string, unknown> }
+
+const DIALOGUE_CLASS = 'text-(--chat-rp-dialogue)'
+const THOUGHT_CLASS = 'italic text-(--chat-rp-thought)'
+const OPEN_QUOTES = new Set(['"', '“'])
+const CLOSE_QUOTES = new Set(['"', '”'])
+/** 'Thought' / ‘thought’, not an apostrophe inside a word (don't, it's). */
+const THOUGHT_PATTERN = /((?<![\p{L}\p{N}])'[^'\n]+?'(?![\p{L}\p{N}])|‘[^’\n]+?’)/u
+const SKIPPED_TAGS = new Set(['code', 'pre'])
+const BLOCK_TAGS = new Set(['p', 'li', 'td', 'th', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+
+function span(className: string, value: string): HastNode {
+  return { type: 'element', tagName: 'span', properties: { className: [className] }, children: [{ type: 'text', value }] }
+}
+
+function splitThoughts(value: string): HastNode[] {
+  // split() with one capture group: odd entries are the thoughts.
+  return value.split(THOUGHT_PATTERN).flatMap((part, index): HastNode[] => {
+    if (!part) return []
+    return [index % 2 === 1 ? span(THOUGHT_CLASS, part) : { type: 'text', value: part }]
+  })
+}
+
+/**
+ * Marks "dialogue" and 'thoughts' in a block's text; *narration* is already emphasis. The open-quote state runs across
+ * the block's inline nodes, so a line like "Hi *waves* there" stays one piece of dialogue.
+ */
+function markRoleplayInline(children: HastNode[], state: { inDialogue: boolean }): HastNode[] {
+  return children.flatMap((child): HastNode[] => {
+    if (child.type === 'element') {
+      if (SKIPPED_TAGS.has(child.tagName ?? '')) return [child]
+      return [{ ...child, children: markRoleplayInline(child.children ?? [], state) }]
+    }
+    if (child.type !== 'text' || !child.value) return [child]
+    const out: HastNode[] = []
+    let buffer = ''
+    const flush = () => {
+      if (!buffer) return
+      out.push(...(state.inDialogue ? [span(DIALOGUE_CLASS, buffer)] : splitThoughts(buffer)))
+      buffer = ''
+    }
+    for (const char of child.value) {
+      if (!state.inDialogue && OPEN_QUOTES.has(char)) {
+        flush()
+        state.inDialogue = true
+        buffer = char
+      } else if (state.inDialogue && CLOSE_QUOTES.has(char)) {
+        buffer += char
+        flush()
+        state.inDialogue = false
+      } else {
+        buffer += char
+      }
+    }
+    flush()
+    return out
+  })
+}
+
+function rehypeRoleplay() {
+  const walk = (node: HastNode) => {
+    if (node.type === 'element' && SKIPPED_TAGS.has(node.tagName ?? '')) return
+    if (node.type === 'element' && BLOCK_TAGS.has(node.tagName ?? '')) {
+      node.children = markRoleplayInline(node.children ?? [], { inDialogue: false })
+      return
+    }
+    node.children?.forEach(walk)
+  }
+  return (tree: HastNode) => walk(tree)
+}
+
+/**
+ * A reply as Markdown (GitHub flavour: tables, task lists, strikethrough). Raw HTML is not rendered; fence it to preview.
+ * `roleplay` colours "dialogue", *narration* and 'thoughts' with the profile's colours (CSS variables on the transcript).
+ */
+export function ChatMarkdown({ text, roleplay = false }: { text: string; roleplay?: boolean }) {
   return (
-    <div className="chat-markdown break-words text-foreground">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+    <div className={cn('chat-markdown break-words text-foreground', roleplay && '[&_em]:text-(--chat-rp-narration)')}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={roleplay ? [rehypeRoleplay] : []} components={MARKDOWN_COMPONENTS}>
         {fenceBareHtml(text)}
       </ReactMarkdown>
     </div>

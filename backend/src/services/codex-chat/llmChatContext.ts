@@ -1,4 +1,5 @@
 import { resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
+import { buildChatStyleGuidance } from './chatStyle'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 
@@ -218,6 +219,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     examples.length > 0 ? EXAMPLE_NOTE : '',
     withTools ? TOOL_GUIDANCE : '',
     REPLY_FORMAT_GUIDANCE,
+    buildChatStyleGuidance(profile.style),
   ].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
   if (config.summaryEnabled && thread?.summary?.trim()) {

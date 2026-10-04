@@ -11,6 +11,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import {
   CHAT_PROFILES_QUERY_KEY,
+  chatProfileBackgroundUrl,
   deleteCodexChatThread,
   getCodexChatThread,
   listChatProfiles,
@@ -59,6 +60,20 @@ export function CodexChatView(props: CodexChatViewProps) {
 }
 
 /** "+": pick the profile of a new chat. */
+/** The profile's picture behind the transcript, dimmed (and optionally blurred) so the text stays readable. */
+function ChatBackground({ url, dim, blur }: { url: string; dim: number; blur: number }) {
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        // Scaled a little when blurred, so the soft edge stays outside the frame.
+        style={{ backgroundImage: `url("${url}")`, filter: blur > 0 ? `blur(${blur}px)` : undefined, transform: blur > 0 ? 'scale(1.06)' : undefined }}
+      />
+      <div className="absolute inset-0 bg-background" style={{ opacity: dim / 100 }} />
+    </div>
+  )
+}
+
 function NewChatMenu({ profiles, disabled, onPick }: { profiles: ChatProfileSummary[]; disabled: boolean; onPick: (profileId: number) => void }) {
   const { t } = useI18n()
   const usable = profiles.filter((profile) => profile.usable)
@@ -161,7 +176,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : null
   const isCodexThread = thread?.engine !== 'llm'
   const { appearance } = useChatAppearance()
-  const speaker: ChatSpeaker | null = profile ? { name: profile.name, avatar: profile.avatar, engine: profile.engine } : null
+  const speaker: ChatSpeaker | null = profile ? { name: profile.name, avatar: profile.avatar, engine: profile.engine, roleplay: profile.style?.roleplay ?? false } : null
+  const backgroundUrl = appearance.showBackground && profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
 
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && thread !== null })
   const codexStatus = codexStatusQuery.data?.data ?? null
@@ -286,8 +302,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const headerAvatar = speaker ? <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} engine={speaker.engine} size="sm" /> : null
 
   const transcript = (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-      <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')} style={chatTranscriptStyle(appearance)}>
+    <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
+      <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')} style={chatTranscriptStyle(appearance, profile?.style)}>
         {messages.map((message) => (
           <div
             key={message.id}
@@ -319,9 +335,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       : null
 
   const composer = (
-    <div className={cn('w-full shrink-0 pb-4 pt-2', layout === 'page' ? 'mx-auto max-w-3xl px-4 sm:px-6' : 'px-3')}>
+    <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? 'mx-auto max-w-3xl px-4 sm:px-6' : 'px-3')}>
       {warning ? <p className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : null}
-      <div className="flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55">
+      <div className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm')}>
         <textarea
           ref={composerRef}
           value={draft}
@@ -353,7 +369,13 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   } else if (activeView === 'context') {
     body = <CodexChatContextView thread={thread} profileTurns={profile?.contextTurns ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} />
   } else {
-    body = <>{transcript}{composer}</>
+    body = backgroundUrl && profile ? (
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <ChatBackground url={backgroundUrl} dim={profile.style.backgroundDim} blur={profile.style.backgroundBlur} />
+        {transcript}
+        {composer}
+      </div>
+    ) : <>{transcript}{composer}</>
   }
 
   const viewTitle = activeView === 'gallery'

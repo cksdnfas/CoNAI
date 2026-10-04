@@ -255,7 +255,7 @@ function ActivityLine({ toolCalls }: { toolCalls: CodexChatToolCall[] }) {
 }
 
 /** Who answers in a chat: the thread's profile. */
-export type ChatSpeaker = { name: string; avatar: string | null; engine: ChatEngine }
+export type ChatSpeaker = { name: string; avatar: string | null; engine: ChatEngine; roleplay?: boolean }
 
 /** The model's reasoning while it streams, folded by default (never stored). */
 function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
@@ -313,7 +313,7 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
       ) : null}
       {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
       <CodexChatToolMedia calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} media={media} />
-      {content ? <ChatMarkdown text={content} /> : null}
+      {content ? <ChatMarkdown text={content} roleplay={speaker?.roleplay} /> : null}
       {streaming ? <ActivityLine toolCalls={toolCalls} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}

@@ -5,6 +5,7 @@ import { requireAdmin } from '../middleware/authMiddleware'
 import type { McpRequester } from '../mcp/context'
 import { CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
 import { CHAT_SCOPES, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
+import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
 import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
@@ -72,6 +73,11 @@ function requireChatAccess(req: Request, res: Response, next: NextFunction) {
 }
 
 /** What a chat user sees of a profile: enough to pick it and show who is talking. */
+/** Changes whenever the background does, so the image URL can be cached for good. Null: no background. */
+function backgroundVersionOf(profile: ChatProfile) {
+  return profile.background ? `${profile.id}-${Date.parse(profile.updatedDate) || 0}` : null
+}
+
 function toPublicProfile(profile: ChatProfile) {
   return {
     id: profile.id,
@@ -81,7 +87,16 @@ function toPublicProfile(profile: ChatProfile) {
     isEnabled: profile.isEnabled,
     contextTurns: profile.contextTurns,
     summaryEnabled: profile.summaryEnabled,
+    style: profile.style,
+    backgroundVersion: backgroundVersionOf(profile),
   }
+}
+
+/** Admin view of a profile: everything but the background image itself (served by its own route). */
+function toAdminProfile(profile: ChatProfile | null) {
+  if (!profile) return null
+  const { background: _background, ...rest } = profile
+  return { ...rest, backgroundVersion: backgroundVersionOf(profile) }
 }
 
 /** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear, and which engines. */
@@ -112,6 +127,19 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
       usable: profile.isEnabled && (profile.engine === 'codex' ? access.codex : access.llm),
     })),
   })
+})
+
+/** GET /api/codex-chat/profiles/:profileId/background — the chat background image (`?v=` busts the cache). */
+router.get('/profiles/:profileId/background', requireChatAccess, (req: Request, res: Response) => {
+  const profileId = parseId(req.params.profileId)
+  const match = profileId === null ? null : /^data:(image\/[a-z]+);base64,(.+)$/.exec(ChatProfileStore.find(profileId)?.background ?? '')
+  if (!match) {
+    res.status(404).json({ success: false, error: 'No background' })
+    return
+  }
+  res.setHeader('Content-Type', match[1])
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  res.send(Buffer.from(match[2], 'base64'))
 })
 
 router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
@@ -203,11 +231,11 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
 
 /** Values the profile editor fills in for a new profile, and the scopes it may offer. */
 router.get('/admin/profile-defaults', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, summaryPrompt: DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES } })
+  res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, summaryPrompt: DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
 })
 
 router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ChatProfileStore.list() })
+  res.json({ success: true, data: ChatProfileStore.list().map(toAdminProfile) })
 })
 
 /** A Codex profile's effort must be one its model supports (when the CLI catalog lists the model). */
@@ -226,7 +254,7 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
   try {
     const input = (req.body ?? {}) as ChatProfileInput
     await assertCodexEffortSupported(input)
-    res.status(201).json({ success: true, data: ChatProfileStore.create(input) })
+    res.status(201).json({ success: true, data: toAdminProfile(ChatProfileStore.create(input)) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -246,7 +274,7 @@ router.put('/admin/profiles/:profileId', requireAdmin, asyncHandler(async (req: 
     }
     const patch = (req.body ?? {}) as ChatProfileInput
     await assertCodexEffortSupported({ ...current, ...patch })
-    res.json({ success: true, data: ChatProfileStore.update(profileId, patch) })
+    res.json({ success: true, data: toAdminProfile(ChatProfileStore.update(profileId, patch)) })
   } catch (error) {
     sendChatError(res, error)
   }

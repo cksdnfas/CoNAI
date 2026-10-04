@@ -24,6 +24,7 @@ import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   CHAT_SCOPES,
+  chatProfileBackgroundUrl,
   createChatProfile,
   deleteChatProfile,
   listChatConnectionModels,
@@ -31,18 +32,24 @@ import {
   type ChatProfile,
   type ChatProfileDefaults,
   type ChatProfileInput,
+  type ChatStyle,
 } from '@/lib/api-codex-chat'
 import { getExternalApiProviders } from '@/lib/api-external-api'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 
+import { ChatProfileLook } from './chat-profile-look'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
 import { ChatProfileToolsAdvanced } from './chat-profile-tools'
 
 const AVATAR_SIZE_PX = 128
 
-type Draft = Required<Omit<ChatProfileInput, 'sortOrder'>> & { sortOrder: number }
+/** `background` stays undefined until the image is changed or removed, so saving does not resend it. */
+type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background'>> & { sortOrder: number; background?: string | null }
+
+/** Shown until the server's defaults load (new profiles only). */
+const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0 }
 
 function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults | undefined): Draft {
   return {
@@ -69,6 +76,7 @@ function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults |
     summaryProviderName: profile?.summaryProviderName ?? null,
     summaryModel: profile?.summaryModel ?? '',
     maxToolRounds: profile?.maxToolRounds ?? defaults?.maxToolRounds ?? 8,
+    style: profile?.style ?? defaults?.style ?? FALLBACK_STYLE,
     isEnabled: profile?.isEnabled ?? true,
     sortOrder: profile?.sortOrder ?? 0,
   }
@@ -203,6 +211,9 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
 
   const connectionDefault = t({ ko: '연결 기본값', en: 'Connection default' })
   const models = modelsQuery.data?.models ?? []
+  const backgroundUrl = draft.background !== undefined
+    ? draft.background
+    : profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
   const canSave = draft.name.trim().length > 0 && (!isLlm || draft.providerName.length > 0) && !saveMutation.isPending
 
   return (
@@ -296,6 +307,16 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
               <Textarea variant="settings" rows={3} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
             </CollapsibleRow>
           </div>
+        </Section>
+
+        <Section title={t({ ko: '꾸미기', en: 'Look' })}>
+          <ChatProfileLook
+            style={draft.style}
+            defaults={defaults?.style}
+            backgroundUrl={backgroundUrl}
+            onStyleChange={(style) => patch({ style })}
+            onBackgroundChange={(background) => patch({ background })}
+          />
         </Section>
 
         <Section title={t({ ko: '도구', en: 'Tools' })}>
