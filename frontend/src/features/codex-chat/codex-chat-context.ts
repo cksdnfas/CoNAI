@@ -17,6 +17,7 @@ export type CodexChatView = 'chat' | 'gallery' | 'context'
 
 /** The turn being streamed: the thread only refetches after it ends, so the UI shows it from here meanwhile. */
 export type CodexChatLiveTurn = {
+  replacingMessageId?: number
   attachments: StoredFileEntry[]
   threadId: number
   userText: string
@@ -50,6 +51,8 @@ export interface CodexChatApi {
   uploadAttachments: (files: File[]) => Promise<void>
   /** Send `draft` to `threadId` and stream the reply. */
   send: (threadId: number) => Promise<void>
+  regenerate: (threadId: number, messageId: number) => Promise<boolean>
+  editMessage: (threadId: number, messageId: number, content: string) => Promise<boolean>
   stop: (threadId: number) => void
   /** A message the chat view should scroll to and flash (from the gallery's "go to message"). */
   messageFocus: { messageId: number; nonce: number } | null

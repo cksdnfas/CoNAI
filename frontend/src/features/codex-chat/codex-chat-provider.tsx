@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, streamCodexChatMessage } from '@/lib/api-codex-chat'
+import { createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, streamCodexChatMessage, streamChatRewrite, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
@@ -108,24 +108,26 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     }
   }, [queryClient, showSnackbar, t])
 
-  const send = useCallback(async (threadId: number) => {
-    const text = draftRef.current.trim()
-    const attachments = attachmentsRef.current
-    if ((!text && attachments.length === 0) || streamAbortRef.current || uploadBusyRef.current) {
-      return
+  const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string }) => {
+    const text = rewrite ? '' : draftRef.current.trim()
+    const attachments = rewrite ? [] : attachmentsRef.current
+    if ((!rewrite && !text && attachments.length === 0) || streamAbortRef.current || uploadBusyRef.current) {
+      return false
     }
 
     const sentThreadId = threadId
     const controller = new AbortController()
     streamAbortRef.current = controller
-    setDraft('')
-    setDraftAttachments([])
-    attachmentsRef.current = []
+    if (!rewrite) {
+      setDraft('')
+      setDraftAttachments([])
+      attachmentsRef.current = []
+    }
     setLiveTurn({ threadId: sentThreadId, userText: text, attachments, text: '', reasoning: '', toolCalls: new Map() })
     let accepted = false
 
     try {
-      await streamCodexChatMessage(sentThreadId, text, (event) => {
+      const onEvent = (event: CodexChatStreamEvent) => {
         if (event.type === 'delta') {
           setLiveTurn((current) => (current ? { ...current, text: current.text + event.text } : current))
         } else if (event.type === 'reasoning') {
@@ -141,15 +143,28 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           accepted = true
           // The server titles a new thread from its first message.
           void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+        } else if (event.type === 'rewind') {
+          accepted = true
+          queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => current ? {
+            ...current,
+            messages: event.mode === 'edit'
+              ? current.messages.filter((message) => message.id <= event.message.id).map((message) => message.id === event.message.id ? event.message : message)
+              : current.messages.filter((message) => message.id !== event.message.id),
+          } : current)
+          setLiveTurn((current) => current ? { ...current, replacingMessageId: event.mode === 'regenerate' ? event.message.id : undefined } : current)
+        } else if (event.type === 'done') {
+          setLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, userText: '', attachments: [] } : current)
         } else if (event.type === 'error') {
           // The full text stays on the failed message (its error chip); the toast only names the reason.
           showSnackbar({ message: summarizeChatError(event.message, t), tone: 'error' })
         }
-      }, controller.signal, attachments.map((file) => file.id))
+      }
+      if (rewrite) await streamChatRewrite(sentThreadId, rewrite.messageId, rewrite.content, onEvent, controller.signal)
+      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id))
     } catch (error) {
       if (!controller.signal.aborted) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
-        if (!accepted) {
+        if (!accepted && !rewrite) {
           setDraft((current) => current || text)
           setDraftAttachments(attachments)
         }
@@ -163,7 +178,12 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       ])
       setLiveTurn(null)
     }
+    return accepted
   }, [queryClient, showSnackbar, t])
+
+  const send = useCallback(async (threadId: number) => { await reply(threadId) }, [reply])
+  const regenerate = useCallback((threadId: number, messageId: number) => reply(threadId, { messageId }), [reply])
+  const editMessage = useCallback((threadId: number, messageId: number, content: string) => reply(threadId, { messageId, content }), [reply])
 
   const stop = useCallback((threadId: number) => {
     void interruptCodexChatThread(threadId).catch((error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '중단 실패', en: 'Stop failed' })), tone: 'error' }))
@@ -198,11 +218,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     removeAttachment,
     uploadAttachments,
     send,
+    regenerate,
+    editMessage,
     stop,
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [canUse, clearMessageFocus, closePanel, draft, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, selectThread, selectedThreadId, send, startChat, stop, view, draftAttachments, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [canUse, clearMessageFocus, closePanel, draft, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, selectThread, selectedThreadId, send, regenerate, editMessage, startChat, stop, view, draftAttachments, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   return <CodexChatContext.Provider value={api}>{children}</CodexChatContext.Provider>
 }

@@ -18,6 +18,7 @@ import {
   getCodexChatThread,
   listChatProfiles,
   listCodexChatThreads,
+  selectChatAlternative,
   type ChatProfileSummary,
   type CodexChatMessage,
   type CodexChatThread,
@@ -160,10 +161,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const [flashMessageId, setFlashMessageId] = useState<number | null>(null)
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [historyWindow, setHistoryWindow] = useState<{ threadId: number | null; firstId: number | null }>({ threadId: null, firstId: null })
   const prependHeightRef = useRef<number | null>(null)
   const followBottomRef = useRef(true)
-  const { liveTurn, selectedThreadId, selectThread, draft, setDraft, view, setView, messageFocus, clearMessageFocus, startChat, isStartingChat } = chat
+  const { liveTurn, selectedThreadId, selectThread, draft, setDraft, view, setView, messageFocus, clearMessageFocus, startChat, isStartingChat, editMessage, regenerate } = chat
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
@@ -206,8 +208,17 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const isStreaming = liveTurn !== null
   const serverRunning = Boolean(threadQuery.data?.running) && !isStreaming
-  const isBusy = isStreaming || serverRunning
-  const messages: CodexChatMessage[] = useMemo(() => threadQuery.data?.messages ?? [], [threadQuery.data?.messages])
+  const alternativeMutation = useMutation({
+    mutationFn: ({ id, index }: { id: number; index: number }) => selectChatAlternative(activeThreadId as number, id, index),
+    onSuccess: async (detail) => {
+      queryClient.setQueryData(codexChatThreadQueryKey(detail.thread.id), detail)
+      await queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(detail.thread.id) })
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '답변 전환 실패', en: 'Could not switch answer' })), tone: 'error' }),
+  })
+  const isBusy = isStreaming || serverRunning || alternativeMutation.isPending
+  const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
+  const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
   const firstIndex = historyWindow.threadId === activeThreadId ? messages.findIndex((message) => message.id === historyWindow.firstId) : -1
   const visibleCount = firstIndex >= 0 ? messages.length - firstIndex : MESSAGE_PAGE_SIZE
   const focusIndex = messageFocus ? messages.findIndex((message) => message.id === messageFocus.messageId) : -1
@@ -217,6 +228,22 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const runningFromServer = serverRunning ? threadQuery.data?.running ?? null : null
   const activeView = activeThreadId === null ? 'chat' : view === 'context' && isCodexThread ? 'chat' : view
   const isTranscript = activeView === 'chat'
+
+  const handleEdit = useCallback(async (id: number, content: string) => {
+    if (activeThreadId === null || isBusy) return false
+    if (messages.some((message) => message.role === 'user' && message.id > id)) {
+      if (!await confirm({ title: t({ ko: '메시지 수정', en: 'Edit message' }), description: t({ ko: '이 메시지 뒤의 대화를 지우고 다시 답할까?', en: 'Remove the following conversation and answer again?' }), confirmLabel: t({ ko: '수정', en: 'Edit' }), tone: 'destructive' })) return false
+    }
+    return editMessage(activeThreadId, id, content)
+  }, [activeThreadId, editMessage, confirm, isBusy, messages, t])
+  const handleRegenerate = useCallback((id: number) => {
+    if (activeThreadId !== null && !isBusy) void regenerate(activeThreadId, id)
+  }, [activeThreadId, regenerate, isBusy])
+  const chooseAlternative = alternativeMutation.mutate
+  const handleAlternative = useCallback((id: number, index: number) => { if (!isBusy) chooseAlternative({ id, index }) }, [chooseAlternative, isBusy])
+  const lastMessage = messages[messages.length - 1]
+  const lastReplyId = lastMessage?.role === 'assistant' && messages.some((message) => message.role === 'user') ? lastMessage.id : null
+  const messageActions = useMemo(() => ({ busy: isBusy, canRewrite: !isCodexThread, lastReplyId, editingId: editingMessageId, onEditingChange: setEditingMessageId, onEdit: handleEdit, onRegenerate: handleRegenerate, onAlternative: handleAlternative }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative])
 
   const deleteMutation = useMutation({
     mutationFn: deleteCodexChatThread,
@@ -238,6 +265,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   useLayoutEffect(() => {
     followBottomRef.current = true
+    setEditingMessageId(null)
     prependHeightRef.current = null
     scrollToBottom()
   }, [activeThreadId, isTranscript, scrollToBottom])
@@ -359,7 +387,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }}>
       <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')} style={chatTranscriptStyle(appearance, profile?.style)}>
         {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
-        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} media={media} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
+        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} media={media} actions={messageActions} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <ChatLiveMessage turn={liveTurn} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
         ) : null}

@@ -193,6 +193,8 @@ export interface CodexChatThread {
 }
 
 export interface CodexChatMessage {
+  alternatives: Array<{ content: string; tool_calls: CodexChatToolCall[]; created_at: string; status: 'completed' | 'failed' | 'interrupted'; error: string | null }>
+  active_alternative: number
   attachments?: StoredFileEntry[]
   id: number
   thread_id: number
@@ -218,7 +220,7 @@ export interface CodexChatThreadDetail {
   /** Generation jobs this chat started that are still running (results attach as they land). */
   pendingJobs: number
   /** Partial reply of a turn still running on the server (after a reload). */
-  running: { text: string; toolCalls: CodexChatToolCall[] } | null
+  running: { text: string; toolCalls: CodexChatToolCall[]; replacingMessageId?: number } | null
 }
 
 /** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */
@@ -235,6 +237,7 @@ export interface CodexChatMediaItem {
 
 export type CodexChatStreamEvent =
   | { type: 'user'; message: CodexChatMessage }
+  | { type: 'rewind'; mode: 'regenerate' | 'edit'; message: CodexChatMessage }
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
   | { type: 'tool'; call: CodexChatToolCall }
@@ -313,6 +316,14 @@ export function summarizeCodexChatThread(threadId: number) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/summarize`, { method: 'POST' })
 }
 
+export function clearCodexChatThread(threadId: number) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/clear`, { method: 'POST' })
+}
+
+export function selectChatAlternative(threadId: number, messageId: number, index: number) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/alternative`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ index }) })
+}
+
 export function listCodexChatThreads() {
   return requestApiData<CodexChatThread[]>('/api/codex-chat/threads', { cache: 'no-store' })
 }
@@ -342,12 +353,20 @@ export function interruptCodexChatThread(threadId: number) {
  * Aborting only stops reading; the server finishes and stores the reply.
  */
 export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = []) {
-  const response = await fetch(buildApiUrl(`/api/codex-chat/threads/${threadId}/messages`), {
-    method: 'POST',
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds }, onEvent, signal)
+}
+
+export function streamChatRewrite(threadId: number, messageId: number, content: string | undefined, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages/${messageId}${content === undefined ? '/regenerate' : ''}`, content === undefined ? 'POST' : 'PATCH', content === undefined ? {} : { content }, onEvent, signal)
+}
+
+async function streamChatOperation(path: string, method: 'POST' | 'PATCH', body: unknown, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {
+  const response = await fetch(buildApiUrl(path), {
+    method,
     credentials: 'include',
     cache: 'no-store',
     headers: { ...JSON_HEADERS, Accept: 'application/x-ndjson' },
-    body: JSON.stringify({ text, fileIds }),
+    body: JSON.stringify(body),
     signal,
   })
 
