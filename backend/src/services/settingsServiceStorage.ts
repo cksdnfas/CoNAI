@@ -384,6 +384,7 @@ export function normalizeLlmSettings(rawLlmSettings: unknown): AppSettings['llm'
       normalizeLlmPresets(record.structuredOutputJsonPresets, 'json'),
       normalizeLegacyLlmPresets(record.presets, 'structuredOutputJson', 'json'),
     ),
+    ...(typeof record.builtinSeedVersion === 'number' ? { builtinSeedVersion: record.builtinSeedVersion } : {}),
   };
 }
 

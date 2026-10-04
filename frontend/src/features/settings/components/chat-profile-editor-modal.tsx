@@ -44,6 +44,7 @@ import { ChatCastEditor } from './chat-profile-cast'
 import { ChatEmoticonGroupPicker } from './chat-profile-emoticons'
 import { readAvatarFile } from './chat-profile-images'
 import { ChatProfileLook } from './chat-profile-look'
+import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
 import { ChatProfileToolsAdvanced } from './chat-profile-tools'
@@ -213,6 +214,18 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
     }
   }
 
+  const applySystemPromptPreset = async (content: string) => {
+    if (draft.systemPrompt.trim() && draft.systemPrompt.trim() !== content.trim()) {
+      const confirmed = await confirm({
+        title: t({ ko: '시스템 프롬프트 바꾸기', en: 'Replace system prompt' }),
+        description: t({ ko: '지금 시스템 프롬프트를 프리셋 내용으로 바꿀까?', en: 'Replace the current system prompt with the preset?' }),
+        confirmLabel: t({ ko: '바꾸기', en: 'Replace' }),
+      })
+      if (!confirmed) return
+    }
+    patch({ systemPrompt: content })
+  }
+
   const handleDelete = async () => {
     const confirmed = await confirm({
       title: t({ ko: '프로필 삭제', en: 'Delete profile' }),
@@ -341,9 +354,16 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
         <Section
           title={t({ ko: '프롬프트', en: 'Prompt' })}
           actions={(
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setPreviewOpen(true)} label={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })}>
-              <Eye />
-            </IconButton>
+            <div className="flex items-center gap-0.5">
+              <ChatProfilePresetMenu
+                open={open}
+                onSystemPrompt={(preset) => void applySystemPromptPreset(preset.content)}
+                onSection={(preset) => patch({ promptSections: [...draft.promptSections, { id: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: preset.name, content: preset.content, kind: 'text', enabled: true }] })}
+              />
+              <IconButton size="icon-sm" variant="ghost" onClick={() => setPreviewOpen(true)} label={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })}>
+                <Eye />
+              </IconButton>
+            </div>
           )}
         >
           <Field label={t({ ko: '시스템 프롬프트', en: 'System prompt' })}>

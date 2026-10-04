@@ -19,6 +19,7 @@ import {
   SupportedLanguage,
 } from '@conai/shared';
 import { cleanupUnusedAppearanceFontFiles } from './appearanceFontAssetService';
+import { withBuiltinLlmPresets } from './llmBuiltinPresets';
 import {
   SETTINGS_FILE_PATH,
   getDefaultSettingsFromEnvironment,
@@ -105,6 +106,12 @@ class SettingsService {
     } catch (error) {
       console.error('[SettingsService] Error loading settings:', error);
       this.settings = this.getDefaultSettings();
+    }
+
+    // Starter LLM presets join the user's list once (they stay the user's to edit or delete).
+    const seededLlm = this.settings ? withBuiltinLlmPresets(this.settings.llm) : null;
+    if (this.settings && seededLlm) {
+      this.saveSettings({ ...this.settings, llm: seededLlm });
     }
 
     // TypeScript guard: this.settings should never be null at this point
@@ -257,7 +264,7 @@ class SettingsService {
   /**
    * Find one LLM preset by kind and name
    */
-  findLlmPresetByName(kind: keyof LlmSettings, name: string): LlmPresetRecord | null {
+  findLlmPresetByName(kind: 'systemPromptPresets' | 'promptPresets' | 'structuredOutputJsonPresets', name: string): LlmPresetRecord | null {
     const normalizedName = name.trim().toLowerCase();
     if (!normalizedName) {
       return null;

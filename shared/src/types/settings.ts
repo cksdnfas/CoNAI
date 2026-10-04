@@ -311,6 +311,8 @@ export interface LlmSettings {
   systemPromptPresets: LlmPresetRecord[];
   promptPresets: LlmPresetRecord[];
   structuredOutputJsonPresets: LlmPresetRecord[];
+  /** Which set of starter presets was already added (they are added once, then belong to the user). */
+  builtinSeedVersion?: number;
 }
 
 export type McpHttpScope = 'read' | 'generate' | 'organize' | 'backup' | 'restore';

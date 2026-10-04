@@ -174,6 +174,8 @@ const ROLEPLAY_GUIDANCE = [
   '- "Spoken lines" go in double quotes.',
   "- 'Inner thoughts' go in single quotes.",
   'Do not use asterisks for bold or other emphasis in roleplay replies.',
+  'Every reply mixes at least one narration part and one spoken line, in this shape:',
+  "*She looks up from the sketchbook and smiles.* \"Oh, you made it!\" 'A bit late, though…'",
 ].join('\n')
 
 function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
