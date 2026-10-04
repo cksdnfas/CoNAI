@@ -10,18 +10,23 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
   createCodexChatThread,
+  CODEX_CHAT_SETTINGS_QUERY_KEY,
   deleteCodexChatThread,
+  getCodexChatSettings,
   getCodexChatThread,
   interruptCodexChatThread,
   listCodexChatThreads,
   streamCodexChatMessage,
+  updateCodexChatSettings,
   type CodexChatMessage,
   type CodexChatToolCall,
 } from '@/lib/api-codex-chat'
-import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
+import { getCodexGenerationModels, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
 import { CodexChatAssistantMessage, CodexChatUserMessage } from './codex-chat-message'
+import { CodexModelSelect } from './codex-model-select'
+import { CodexReasoningSelect } from './codex-reasoning-select'
 import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
 
 const THREADS_QUERY_KEY = ['codex-chat-threads'] as const
@@ -55,6 +60,14 @@ export function CodexChatPanel({ statusPortalTargetId, isWideLayout }: { statusP
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000 })
   const codexStatus = codexStatusQuery.data?.data ?? null
   const statusPortalTarget = usePortalTargetById(statusPortalTargetId)
+  const settingsQuery = useQuery({ queryKey: CODEX_CHAT_SETTINGS_QUERY_KEY, queryFn: getCodexChatSettings })
+  const modelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000 })
+  const settingsUpdate = useMutation({
+    mutationFn: updateCodexChatSettings,
+    onSuccess: (settings) => queryClient.setQueryData(CODEX_CHAT_SETTINGS_QUERY_KEY, settings),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '설정을 저장하지 못했어.', en: 'Could not save settings.' })), tone: 'error' }),
+  })
+  const settings = settingsQuery.data
 
   const threadsQuery = useQuery({ queryKey: THREADS_QUERY_KEY, queryFn: listCodexChatThreads })
   const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
@@ -107,7 +120,7 @@ export function CodexChatPanel({ statusPortalTargetId, isWideLayout }: { statusP
 
   const handleSend = async () => {
     const text = draft.trim()
-    if (!text || isBusy) {
+    if (!text || isBusy || settingsUpdate.isPending || !codexStatus?.available) {
       return
     }
 
@@ -275,6 +288,34 @@ export function CodexChatPanel({ statusPortalTargetId, isWideLayout }: { statusP
         </div>
 
         <div className="mx-auto w-full max-w-3xl shrink-0 pt-2">
+          {settings ? (
+            <div className="mb-2 grid grid-cols-2 items-end gap-2">
+              <label className="min-w-0 space-y-1 text-xs text-muted-foreground">
+                <span>{t({ ko: '실행 모델', en: 'Agent model' })}</span>
+                <CodexModelSelect
+                  value={settings.model}
+                  models={modelsQuery.data?.data.models}
+                  onChange={(model) => settingsUpdate.mutate({ model })}
+                  disabled={isBusy || settingsUpdate.isPending}
+                  aria-label={t({ ko: '실행 모델', en: 'Agent model' })}
+                  className="min-w-0"
+                />
+              </label>
+              <label className="min-w-0 space-y-1 text-xs text-muted-foreground">
+                <span>{t({ ko: '추론 강도', en: 'Reasoning effort' })}</span>
+                <CodexReasoningSelect
+                  value={settings.reasoningEffort}
+                  model={settings.model}
+                  models={modelsQuery.data?.data.models}
+                  onChange={(reasoningEffort) => settingsUpdate.mutate({ reasoningEffort })}
+                  disabled={isBusy || settingsUpdate.isPending}
+                  className="min-w-0"
+                />
+              </label>
+              <span className="col-span-2 text-xs text-muted-foreground">{t({ ko: '서버 공통 설정 · 변경하면 진행 중인 다른 채팅도 중단돼.', en: 'Server-wide settings · changes also stop other running chats.' })}</span>
+            </div>
+          ) : null}
+          {settingsQuery.isError ? <p className="mb-2 text-xs text-destructive">{t({ ko: '채팅 설정을 불러오지 못했어.', en: 'Could not load chat settings.' })}</p> : null}
           <div className="flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55">
             <textarea
               ref={composerRef}
@@ -291,7 +332,7 @@ export function CodexChatPanel({ statusPortalTargetId, isWideLayout }: { statusP
                 <Square />
               </IconButton>
             ) : (
-              <IconButton variant="default" size="icon-sm" onClick={() => void handleSend()} disabled={!draft.trim() || !codexStatus?.available} label={t({ ko: '보내기', en: 'Send' })}>
+              <IconButton variant="default" size="icon-sm" onClick={() => void handleSend()} disabled={!draft.trim() || !codexStatus?.available || settingsUpdate.isPending} label={t({ ko: '보내기', en: 'Send' })}>
                 <ArrowUp />
               </IconButton>
             )}

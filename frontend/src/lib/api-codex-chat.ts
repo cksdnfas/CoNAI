@@ -1,5 +1,8 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
+import type { CodexReasoningEffort } from '@conai/shared'
+
+export const CODEX_CHAT_SETTINGS_QUERY_KEY = ['codex-chat-settings'] as const
 
 export type CodexChatScope = 'read' | 'generate' | 'organize'
 
@@ -7,6 +10,7 @@ export interface CodexChatSettings {
   enabled: boolean
   scopes: CodexChatScope[]
   model: string
+  reasoningEffort: CodexReasoningEffort | ''
   availableScopes: CodexChatScope[]
 }
 
@@ -68,7 +72,7 @@ export function getCodexChatSettings() {
   return requestApiData<CodexChatSettings>('/api/codex-chat/settings', { cache: 'no-store' })
 }
 
-export function updateCodexChatSettings(patch: Partial<Pick<CodexChatSettings, 'enabled' | 'scopes' | 'model'>>) {
+export function updateCodexChatSettings(patch: Partial<Pick<CodexChatSettings, 'enabled' | 'scopes' | 'model' | 'reasoningEffort'>>) {
   return requestApiData<CodexChatSettings>('/api/codex-chat/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

@@ -1,4 +1,6 @@
 import express, { type Request, type Response } from 'express'
+import { isCodexReasoningEffort } from '@conai/shared'
+import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import type { McpRequester } from '../mcp/context'
@@ -43,7 +45,7 @@ router.get('/settings', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: { ...loadCodexChatSettings(), availableScopes: CODEX_CHAT_SCOPES } })
 })
 
-router.put('/settings', requireAdmin, (req: Request, res: Response) => {
+router.put('/settings', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as Record<string, unknown>
   if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
     sendRouteBadRequest(res, 'enabled must be a boolean')
@@ -57,9 +59,28 @@ router.put('/settings', requireAdmin, (req: Request, res: Response) => {
     sendRouteBadRequest(res, 'model must be a string')
     return
   }
-  const settings = updateCodexChatSettings({ enabled: body.enabled, scopes: body.scopes, model: body.model })
+  if (body.reasoningEffort !== undefined && body.reasoningEffort !== '' && !isCodexReasoningEffort(body.reasoningEffort)) {
+    sendRouteBadRequest(res, 'Invalid reasoningEffort')
+    return
+  }
+  const catalog = body.model !== undefined || body.reasoningEffort !== undefined ? await getCodexModelSuggestions() : null
+  // Read after the catalog lookup so concurrent setting updates are not overwritten with an old effort.
+  const current = loadCodexChatSettings()
+  const model = typeof body.model === 'string' ? body.model.trim() : current.model
+  let reasoningEffort = body.reasoningEffort ?? current.reasoningEffort
+  if (reasoningEffort && catalog) {
+    const supported = catalog.models.find((entry) => model ? entry.id === model : entry.isDefault)?.supportedReasoningEfforts
+    if (supported && !supported.some((effort) => effort === reasoningEffort)) {
+      if (body.reasoningEffort !== undefined) {
+        sendRouteBadRequest(res, '선택한 모델에서 지원하지 않는 추론 강도야.')
+        return
+      }
+      reasoningEffort = ''
+    }
+  }
+  const settings = updateCodexChatSettings({ enabled: body.enabled, scopes: body.scopes, model: body.model, reasoningEffort })
   res.json({ success: true, data: { ...settings, availableScopes: CODEX_CHAT_SCOPES } })
-})
+}))
 
 router.get('/threads', requireAdmin, (req: Request, res: Response) => {
   res.json({ success: true, data: CodexChatService.listThreads(requesterFrom(req)) })

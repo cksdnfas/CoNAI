@@ -1,11 +1,12 @@
 import fs from 'fs'
 import path from 'path'
 import { spawn } from 'child_process'
-import { PORTS } from '@conai/shared'
+import { PORTS, isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 import type { McpRequester } from '../../mcp/context'
 import { onBeforeCodexCliUpdate, isCodexCliUpdating } from '../codexCliMaintenance'
 import { resolveCodexCommand } from '../codexGenerationExecutor'
+import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import { CodexAppServerClient, type CodexAppServerNotification } from './codexAppServerClient'
 import { isCodexChatAdmin, issueCodexChatMcpToken, revokeCodexChatMcpToken } from './codexChatAccess'
 import { loadCodexChatSettings, onCodexChatSettingsChange } from './codexChatSettings'
@@ -80,6 +81,8 @@ type Session = {
   requester: McpRequester
   client: CodexAppServerClient
   token: string
+  model: string | null
+  reasoningEffort: CodexReasoningEffort | null
   loadedThreads: Set<string>
   activeTurns: Map<string, TurnState>
   idleTimer: NodeJS.Timeout | null
@@ -176,10 +179,10 @@ function buildAppServerArgs(knownFeatures: Set<string>, mcpServers: string[]) {
   ]
 }
 
-function threadOverrides() {
-  const settings = loadCodexChatSettings()
+function threadOverrides(session: Session) {
   return {
-    model: settings.model || null,
+    model: session.model,
+    ...(session.reasoningEffort ? { config: { model_reasoning_effort: session.reasoningEffort } } : {}),
     cwd: chatWorkDir(),
     approvalPolicy: 'never',
     sandbox: 'read-only',
@@ -371,14 +374,35 @@ async function startSession(requester: McpRequester): Promise<Session> {
   const { knownFeatures, mcpServers } = await probeCodexCli()
   const args = buildAppServerArgs(knownFeatures, mcpServers)
   const token = issueCodexChatMcpToken(requester)
-  let client: CodexAppServerClient
+  let client: CodexAppServerClient | undefined
+  let model: string | null = null
+  let reasoningEffort: CodexReasoningEffort | null = null
   try {
     client = await CodexAppServerClient.start({
       args,
       cwd: chatWorkDir(),
       env: { ...process.env, NO_COLOR: '1', [MCP_TOKEN_ENV]: token },
     })
+    const [{ config }, catalog] = await Promise.all([
+      client.request<{ config: { model?: string | null; model_reasoning_effort?: unknown } }>('config/read', { includeLayers: false }),
+      getCodexModelSuggestions(),
+    ])
+    const settings = loadCodexChatSettings()
+    assertChatAvailable(requester)
+    model = settings.model || config.model || null
+    const selectedModel = model ? catalog.models.find((entry) => entry.id === model) : catalog.models.find((entry) => entry.isDefault)
+    const supported = selectedModel?.supportedReasoningEfforts
+    if (settings.reasoningEffort && supported && !supported.includes(settings.reasoningEffort)) {
+      throw new CodexChatError('선택한 모델에서 지원하지 않는 추론 강도야. 채팅 설정에서 바꿔줘.')
+    }
+    const configuredEffort = isCodexReasoningEffort(config.model_reasoning_effort) ? config.model_reasoning_effort : null
+    // Resolve "default" again for each session so resuming a thread cannot retain a previous explicit effort.
+    reasoningEffort = settings.reasoningEffort
+      || (configuredEffort && (!supported || supported.includes(configuredEffort)) ? configuredEffort : null)
+      || selectedModel?.defaultReasoningEffort
+      || null
   } catch (error) {
+    client?.close()
     revokeCodexChatMcpToken(token)
     throw error
   }
@@ -388,6 +412,8 @@ async function startSession(requester: McpRequester): Promise<Session> {
     requester,
     client,
     token,
+    model,
+    reasoningEffort,
     loadedThreads: new Set(),
     activeTurns: new Map(),
     idleTimer: null,
@@ -442,7 +468,7 @@ async function ensureCodexThread(session: Session, chatThreadId: number, codexTh
 
   if (codexThreadId) {
     try {
-      await session.client.request('thread/resume', { threadId: codexThreadId, ...threadOverrides() }, THREAD_REQUEST_TIMEOUT_MS)
+      await session.client.request('thread/resume', { threadId: codexThreadId, ...threadOverrides(session) }, THREAD_REQUEST_TIMEOUT_MS)
       session.loadedThreads.add(codexThreadId)
       return codexThreadId
     } catch {
@@ -451,7 +477,7 @@ async function ensureCodexThread(session: Session, chatThreadId: number, codexTh
   }
 
   const started = await session.client.request<{ thread: { id: string } }>('thread/start', {
-    ...threadOverrides(),
+    ...threadOverrides(session),
     serviceName: 'conai',
   }, THREAD_REQUEST_TIMEOUT_MS)
   CodexChatStore.setCodexThreadId(chatThreadId, started.thread.id)
@@ -553,6 +579,8 @@ export const CodexChatService = {
     try {
       const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
         threadId: codexThreadId,
+        model: session.model,
+        effort: session.reasoningEffort,
         input: [{ type: 'text', text: trimmed, text_elements: [] }],
       }, THREAD_REQUEST_TIMEOUT_MS)
       turn.turnId = response.turn.id
@@ -582,6 +610,6 @@ export const CodexChatService = {
   },
 }
 
-// Scope/model/enable changes apply to the next session; a CLI update must not replace binaries under a running process.
+// Settings (including reasoning effort) apply to the next session; a CLI update must not replace binaries under a running process.
 onCodexChatSettingsChange(() => void CodexChatService.stopAllSessions('설정 변경'))
 onBeforeCodexCliUpdate(() => CodexChatService.stopAllSessions('CLI 업데이트'))

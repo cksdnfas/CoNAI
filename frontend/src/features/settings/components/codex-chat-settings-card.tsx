@@ -5,14 +5,13 @@ import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { getCodexChatSettings, updateCodexChatSettings, type CodexChatScope, type CodexChatSettings } from '@/lib/api-codex-chat'
+import { CODEX_CHAT_SETTINGS_QUERY_KEY, getCodexChatSettings, updateCodexChatSettings, type CodexChatScope, type CodexChatSettings } from '@/lib/api-codex-chat'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
+import { CodexReasoningSelect } from '@/features/image-generation/components/codex-reasoning-select'
 import { SettingsSwitchRow } from './settings-switch-row'
 import { InstantApplyHint } from './settings-section-status'
 import { SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
-
-const QUERY_KEY = ['codex-chat-settings'] as const
 
 type TranslateFn = ReturnType<typeof useI18n>['t']
 
@@ -32,13 +31,13 @@ export function CodexChatSettingsCard() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const query = useQuery({ queryKey: QUERY_KEY, queryFn: getCodexChatSettings })
+  const query = useQuery({ queryKey: CODEX_CHAT_SETTINGS_QUERY_KEY, queryFn: getCodexChatSettings })
   const modelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000 })
 
   const update = useMutation({
     mutationFn: updateCodexChatSettings,
     onSuccess: (settings: CodexChatSettings) => {
-      queryClient.setQueryData(QUERY_KEY, settings)
+      queryClient.setQueryData(CODEX_CHAT_SETTINGS_QUERY_KEY, settings)
       void queryClient.invalidateQueries({ queryKey: ['codex-chat-status'] })
     },
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '저장하지 못했어.', en: 'Could not save.' }), tone: 'error' }),
@@ -50,7 +49,7 @@ export function CodexChatSettingsCard() {
 
   return (
     <RowGroup heading={t({ ko: 'Codex 채팅', en: 'Codex chat' })} actions={<InstantApplyHint />}>
-      {query.isLoading ? <SettingsRowsSkeleton rows={3} /> : null}
+      {query.isLoading ? <SettingsRowsSkeleton rows={4} /> : null}
       {query.isError ? <p className="py-3 text-sm text-destructive">{query.error instanceof Error ? query.error.message : t({ ko: '설정을 불러오지 못했어.', en: 'Could not load settings.' })}</p> : null}
       {settings ? (
         <>
@@ -90,6 +89,21 @@ export function CodexChatSettingsCard() {
               models={modelsQuery.data?.data.models}
               disabled={update.isPending}
               aria-label={modelLabel}
+              className="min-w-0 flex-1"
+            />
+          </SettingRow>
+          <SettingRow
+            label={t({ ko: '추론 강도', en: 'Reasoning effort' })}
+            description={t({ ko: '높을수록 더 깊게 추론하며 응답 시간과 사용량이 늘어날 수 있어.', en: 'Higher effort can improve reasoning but takes more time and usage.' })}
+            controlClassName={SETTINGS_WIDE_CONTROL_CLASS}
+          >
+            <CodexReasoningSelect
+              variant="settings"
+              value={settings.reasoningEffort}
+              model={settings.model}
+              models={modelsQuery.data?.data.models}
+              onChange={(reasoningEffort) => update.mutate({ reasoningEffort })}
+              disabled={update.isPending}
               className="min-w-0 flex-1"
             />
           </SettingRow>

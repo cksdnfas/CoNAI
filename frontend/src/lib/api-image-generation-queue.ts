@@ -1,4 +1,5 @@
 import { requestJson } from './api-image-generation-request'
+import type { CodexModelOption } from '@conai/shared'
 import type { CodexCliVersionInfo, CodexDeviceLoginState, CodexGenerationStatus, CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus } from './api-image-generation-types'
 
 interface GenerationQueueListResponse {
@@ -88,7 +89,7 @@ export async function updateCodexCli() {
   return requestJson<{ success: boolean; data: CodexCliVersionInfo }>('/api/generation-queue/codex/cli/update', { method: 'POST' })
 }
 
-export type CodexModelOption = { id: string; label: string; isDefault?: boolean }
+export type { CodexModelOption } from '@conai/shared'
 
 /** Models the server's Codex CLI offers; custom model IDs remain supported when the list is unavailable. */
 export async function getCodexGenerationModels() {

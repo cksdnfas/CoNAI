@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import type { McpHttpScope } from '@conai/shared'
+import { isCodexReasoningEffort, type CodexReasoningEffort, type McpHttpScope } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 
 const CODEX_CHAT_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'codex-chat.json')
@@ -15,12 +15,15 @@ export type CodexChatSettings = {
   scopes: CodexChatScope[]
   /** Codex agent model override; empty uses the CLI default. */
   model: string
+  /** Empty uses the server CLI/model default. */
+  reasoningEffort: CodexReasoningEffort | ''
 }
 
 const DEFAULT_SETTINGS: CodexChatSettings = {
   enabled: false,
   scopes: [...CODEX_CHAT_SCOPES],
   model: '',
+  reasoningEffort: '',
 }
 
 function normalizeScopes(value: unknown, fallback: CodexChatScope[]): CodexChatScope[] {
@@ -36,6 +39,7 @@ function normalizeSettings(value: unknown): CodexChatSettings {
     enabled: typeof record.enabled === 'boolean' ? record.enabled : DEFAULT_SETTINGS.enabled,
     scopes: normalizeScopes(record.scopes, DEFAULT_SETTINGS.scopes),
     model: typeof record.model === 'string' ? record.model.trim().slice(0, MODEL_MAX_LENGTH) : DEFAULT_SETTINGS.model,
+    reasoningEffort: isCodexReasoningEffort(record.reasoningEffort) ? record.reasoningEffort : DEFAULT_SETTINGS.reasoningEffort,
   }
 }
 
@@ -62,6 +66,7 @@ export function updateCodexChatSettings(patch: Partial<Record<keyof CodexChatSet
     enabled: patch.enabled ?? current.enabled,
     scopes: patch.scopes ?? current.scopes,
     model: patch.model ?? current.model,
+    reasoningEffort: patch.reasoningEffort ?? current.reasoningEffort,
   })
 
   fs.mkdirSync(path.dirname(CODEX_CHAT_SETTINGS_FILE_PATH), { recursive: true })

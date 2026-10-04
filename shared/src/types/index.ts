@@ -11,3 +11,4 @@ export * from './rating';
 export * from './settings';
 export * from './generationHistory';
 export * from './filter';
+export * from './codex';
