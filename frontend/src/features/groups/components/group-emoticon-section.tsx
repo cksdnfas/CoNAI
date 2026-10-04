@@ -27,6 +27,27 @@ function parseKeywords(value: string) {
   })
 }
 
+const UPLOAD_BATCH_FILES = 20
+const UPLOAD_BATCH_BYTES = 900 * 1024 * 1024
+
+/** Splits files into requests the upload endpoint accepts (20 files, under 1 GB). */
+function uploadBatches(files: File[]) {
+  const batches: File[][] = []
+  let current: File[] = []
+  let bytes = 0
+  for (const file of files) {
+    if (current.length >= UPLOAD_BATCH_FILES || (current.length > 0 && bytes + file.size > UPLOAD_BATCH_BYTES)) {
+      batches.push(current)
+      current = []
+      bytes = 0
+    }
+    current.push(file)
+    bytes += file.size
+  }
+  if (current.length > 0) batches.push(current)
+  return batches
+}
+
 /** Animated images play from the original; stills use the thumbnail. */
 function emoticonSrc(entry: EmoticonEntry) {
   const animated = entry.mimeType === 'image/gif' || entry.mimeType === 'image/apng'
@@ -125,21 +146,38 @@ export function GroupEmoticonSection({ group }: { group: GroupRecord }) {
     onSettled: () => setSavingHash(null),
   })
 
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
   const uploadMutation = useMutation({
     mutationFn: async (files: File[]) => {
-      // Saved as-is (no format rewrite) so animated GIFs stay animated; keywords default to the file names.
-      const outcome = await uploadMultipleImages(files, {}, { enabled: false })
-      const hashes = outcome.uploaded.flatMap((item) => (item.composite_hash ? [item.composite_hash] : []))
-      if (hashes.length > 0) await addGroupEmoticons(group.id, hashes.map((compositeHash) => ({ compositeHash })))
-      return { added: hashes.length, failed: outcome.failed.length }
+      // The upload endpoint takes 20 files (and 1 GB) per request, so big drops go up in batches; each batch joins the
+      // group right away, so a failure later on keeps what already landed.
+      let added = 0
+      let failed = 0
+      // The library keys images by how they look, so a file that looks like one already here joins that image
+      // instead of becoming a new emoticon.
+      const known = new Set(entries.map((entry) => entry.compositeHash))
+      let merged = 0
+      setUploadProgress({ done: 0, total: files.length })
+      for (const batch of uploadBatches(files)) {
+        // Saved as-is (no format rewrite) so animated GIFs stay animated; keywords default to the file names.
+        const outcome = await uploadMultipleImages(batch, {}, { enabled: false })
+        const hashes = outcome.uploaded.flatMap((item) => (item.composite_hash ? [item.composite_hash] : []))
+        const fresh = hashes.filter((hash) => !known.has(hash))
+        merged += hashes.length - new Set(fresh).size
+        for (const hash of fresh) known.add(hash)
+        if (fresh.length > 0) await addGroupEmoticons(group.id, [...new Set(fresh)].map((compositeHash) => ({ compositeHash })))
+        added += new Set(fresh).size
+        failed += batch.length - hashes.length
+        setUploadProgress((current) => (current ? { ...current, done: current.done + batch.length } : current))
+      }
+      return { added, failed, merged }
     },
-    onSuccess: async ({ added, failed }) => {
-      showSnackbar({
-        tone: failed > 0 ? 'error' : undefined,
-        message: failed > 0
-          ? t({ ko: '{added}개 추가, {failed}개 실패', en: '{added} added, {failed} failed' }, { added, failed })
-          : t({ ko: '{added}개 추가했어', en: 'Added {added}' }, { added }),
-      })
+    onSettled: () => setUploadProgress(null),
+    onSuccess: async ({ added, failed, merged }) => {
+      const parts = [t({ ko: '{count}개 추가', en: '{count} added' }, { count: added })]
+      if (merged > 0) parts.push(t({ ko: '{count}개는 이미 있는 이미지와 같아서 합쳐짐', en: '{count} matched existing images' }, { count: merged }))
+      if (failed > 0) parts.push(t({ ko: '{count}개 실패', en: '{count} failed' }, { count: failed }))
+      showSnackbar({ tone: failed > 0 ? 'error' : undefined, message: parts.join(' · ') })
       await refresh()
     },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '업로드하지 못했어.', en: 'Upload failed.' })) }),
@@ -193,7 +231,12 @@ export function GroupEmoticonSection({ group }: { group: GroupRecord }) {
             {keywordedCount} / {budget}
           </span>
         </Tip>
-        {uploadMutation.isPending ? <Spinner size="sm" label={t({ ko: '업로드 중', en: 'Uploading' })} /> : null}
+        {uploadMutation.isPending ? (
+          <span className="inline-flex items-center gap-1.5 text-xs tabular-nums text-muted-foreground" role="status">
+            <Spinner size="sm" />
+            {uploadProgress ? `${uploadProgress.done} / ${uploadProgress.total}` : null}
+          </span>
+        ) : null}
         <IconButton variant="ghost" size="icon-sm" disabled={saveMutation.isPending || !entries.some((entry) => entry.explicit)} onClick={() => void resetToFileNames()} label={t({ ko: '파일명으로 다시 채우기', en: 'Reset to file names' })}>
           <RotateCcw />
         </IconButton>
