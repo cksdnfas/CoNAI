@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import type { FileStoreListing, StoredFileEntry, StoredFileText } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
-import { ensureFileStoreDirectories, storedFilePath } from './fileStorePaths';
+import { ensureFileStoreDirectories, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
 
 export class FileStoreError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -210,7 +210,10 @@ export const FileStoreService = {
     const rows = db.prepare(`SELECT id, kind FROM stored_file_entries WHERE deleted_at IS NOT NULL LIMIT 200`).all() as Array<{ id: string; kind: string }>;
     for (const row of rows) {
       try {
-        if (row.kind === 'file') fs.rmSync(storedFilePath(row.id), { force: true });
+        if (row.kind === 'file') {
+          fs.rmSync(storedFilePath(row.id), { force: true });
+          fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
+        }
         db.prepare('DELETE FROM stored_file_entries WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stored_file_entries WHERE parent_id = ?)').run(row.id, row.id);
       } catch (error) {
         console.warn('[file-store] Deletion will retry:', row.id, error instanceof Error ? error.message : error);

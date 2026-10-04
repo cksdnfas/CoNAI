@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Download, File, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, Music, Pencil, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { ChevronRight, Download, File, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Trash2, Upload } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -19,7 +20,7 @@ import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFiles, listStoredFolders, moveStoredFiles, readStoredFileText, renameStoredFile, storedFileDownloadUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFiles, listStoredFolders, moveStoredFiles, readStoredFileText, renameStoredFile, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 
@@ -51,11 +52,77 @@ function mediaKind(entry: StoredFileEntry) {
   return 'other'
 }
 
-function EntryIcon({ entry }: { entry: StoredFileEntry }) {
-  if (entry.kind === 'folder') return <Folder className="size-4 shrink-0 text-warning" />
+function EntryIcon({ entry, className = 'size-4' }: { entry: StoredFileEntry; className?: string }) {
+  if (entry.kind === 'folder') return <Folder className={cn('shrink-0 text-warning', className)} />
   const kind = mediaKind(entry)
   const Icon = kind === 'image' ? ImageIcon : kind === 'video' ? Film : kind === 'audio' ? Music : (entry.mimeType ?? '').startsWith('text/') ? FileText : File
-  return <Icon className="size-4 shrink-0 text-muted-foreground" />
+  return <Icon className={cn('shrink-0 text-muted-foreground', className)} />
+}
+
+type FileViewMode = 'grid' | 'list'
+const VIEW_MODE_STORAGE_KEY = 'conai.files.view'
+
+function readViewMode(): FileViewMode {
+  try {
+    return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
+
+/** Extension in capitals under the icon, so PDF / ZIP / TXT read at a glance. */
+function extensionOf(name: string) {
+  const match = /\.([a-z0-9]{1,6})$/i.exec(name)
+  return match ? match[1].toUpperCase() : null
+}
+
+/** One file or folder as a tile: image files show a thumbnail, everything else a type icon. */
+function FileTile({ entry, selected, showCheckbox, canSelect, draggable, onOpen, onToggle, onDragStart, onDragOver, onDrop }: {
+  entry: StoredFileEntry
+  selected: boolean
+  /** Checkboxes stay visible once anything is selected (and on hover otherwise). */
+  showCheckbox: boolean
+  canSelect: boolean
+  draggable: boolean
+  onOpen: () => void
+  onToggle: (checked: boolean) => void
+  onDragStart: (event: DragEvent) => void
+  onDragOver?: (event: DragEvent) => void
+  onDrop?: (event: DragEvent) => void
+}) {
+  const { t } = useI18n()
+  const [thumbFailed, setThumbFailed] = useState(false)
+  const showThumb = entry.kind === 'file' && mediaKind(entry) === 'image' && entry.mimeType !== 'image/svg+xml' && !thumbFailed
+  const extension = entry.kind === 'file' ? extensionOf(entry.name) : null
+
+  return (
+    <div className="group relative min-w-0" draggable={draggable} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}>
+      <Button
+        variant="ghost"
+        onClick={onOpen}
+        title={entry.name}
+        className={cn('flex h-auto w-full flex-col items-stretch gap-1.5 whitespace-normal p-1.5 text-left font-normal', selected && 'bg-primary/10 hover:bg-primary/15')}
+      >
+        <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-sm bg-surface-low">
+          {showThumb ? (
+            <img src={storedFileThumbnailUrl(entry.id)} alt="" loading="lazy" draggable={false} onError={() => setThumbFailed(true)} className="size-full object-cover" />
+          ) : (
+            <span className="flex flex-col items-center gap-1">
+              <EntryIcon entry={entry} className="size-9" />
+              {extension ? <span className="text-2xs font-semibold tracking-wide text-muted-foreground">{extension}</span> : null}
+            </span>
+          )}
+        </span>
+        <span className="line-clamp-2 break-all px-0.5 text-xs leading-snug text-foreground">{entry.name}</span>
+        {entry.kind === 'file' ? <span className="px-0.5 text-2xs text-muted-foreground">{formatFileSize(entry.size)}</span> : null}
+      </Button>
+      {canSelect ? (
+        <span className={cn('absolute left-2.5 top-2.5 rounded-sm bg-background/80 p-0.5 transition-opacity', selected || showCheckbox ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
+          <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: entry.name })} checked={selected} onCheckedChange={(checked) => onToggle(checked === true)} />
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 /**
@@ -81,6 +148,15 @@ export function FileBrowser({ parentId, onNavigate, onPick }: {
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTarget, setMoveTarget] = useState('')
   const [preview, setPreview] = useState<StoredFileEntry | null>(null)
+  const [viewMode, setViewMode] = useState<FileViewMode>(readViewMode)
+  const changeViewMode = (mode: FileViewMode) => {
+    setViewMode(mode)
+    try {
+      window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode)
+    } catch {
+      // Storage blocked: the choice lasts for this page only.
+    }
+  }
   const uploadInput = useRef<HTMLInputElement>(null)
   const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'list', parentId, offset], queryFn: () => listStoredFiles(parentId, offset) })
   const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'folders'], queryFn: listStoredFolders })
@@ -144,6 +220,16 @@ export function FileBrowser({ parentId, onNavigate, onPick }: {
 
   const actions = (
     <>
+      <SegmentedControl
+        size="xs"
+        value={viewMode}
+        onChange={(value) => changeViewMode(value === 'list' ? 'list' : 'grid')}
+        ariaLabel={t({ ko: '보기', en: 'View' })}
+        items={[
+          { value: 'grid', label: <LayoutGrid className="size-3.5" />, ariaLabel: t({ ko: '아이콘 보기', en: 'Icons' }) },
+          { value: 'list', label: <List className="size-3.5" />, ariaLabel: t({ ko: '자세히 보기', en: 'Details' }) },
+        ]}
+      />
       <IconButton variant="ghost" label={t({ ko: '새로고침', en: 'Refresh' })} onClick={() => void refresh()} disabled={busy}>
         <RefreshCw />
       </IconButton>
@@ -193,6 +279,39 @@ export function FileBrowser({ parentId, onNavigate, onPick }: {
     list = <ErrorState title={t({ ko: '파일을 불러오지 못했어.', en: 'Could not load files.' })} error={query.error} onRetry={() => void query.refetch()} />
   } else if (entries.length === 0) {
     list = <EmptyState icon={Folder} title={t({ ko: '빈 폴더야', en: 'This folder is empty' })} />
+  } else if (viewMode === 'grid') {
+    // Folders first, as in a file manager; images show their thumbnail.
+    const ordered = [...entries].sort((left, right) => (left.kind === right.kind ? 0 : left.kind === 'folder' ? -1 : 1))
+    list = (
+      <div className={cn('grid gap-1.5', isPicker ? 'grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))]')}>
+        {ordered.map((entry) => {
+          const isSelected = selected.includes(entry.id)
+          const canSelect = !isPicker || entry.kind === 'file'
+          return (
+            <FileTile
+              key={entry.id}
+              entry={entry}
+              selected={isSelected}
+              showCheckbox={selected.length > 0}
+              canSelect={canSelect}
+              draggable={canManage && !busy && !isPicker}
+              onOpen={() => {
+                if (entry.kind === 'folder') navigate(entry.id)
+                else if (isPicker || selected.length > 0) toggle(entry.id, !isSelected)
+                else setPreview(entry)
+              }}
+              onToggle={(checked) => toggle(entry.id, checked)}
+              onDragStart={(event) => {
+                event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
+                event.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={entry.kind === 'folder' ? dragOver : undefined}
+              onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
+            />
+          )
+        })}
+      </div>
+    )
   } else {
     const allSelected = selectable.length > 0 && selectable.every((entry) => selected.includes(entry.id))
     list = (

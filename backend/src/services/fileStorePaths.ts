@@ -35,3 +35,9 @@ export function storedFilePath(id: string): string {
   if (fs.existsSync(target) && fs.lstatSync(target).isSymbolicLink()) throw new Error('Stored file cannot be a link');
   return target;
 }
+
+/** Cached preview of an image file (regenerated when the file is newer). */
+export function fileStoreThumbnailPath(id: string): string {
+  if (!/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid stored file ID');
+  return path.join(fileStoreRoot, '.thumbs', `${id}.webp`);
+}

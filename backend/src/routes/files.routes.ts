@@ -1,11 +1,13 @@
 import fs from 'fs';
+import path from 'path';
+import sharp from 'sharp';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
 import { requirePermission } from '../middleware/authMiddleware';
 import { createUploadStorage, wrapUploadMiddleware, MAX_UPLOAD_FILE_SIZE_BYTES, MAX_MULTIPLE_UPLOAD_FILES, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, fileOwnerKey, parseFileId } from '../services/fileStoreService';
-import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
+import { ensureFileStoreDirectories, fileStoreIncoming, fileStoreThumbnailPath } from '../services/fileStorePaths';
 import { getRequesterAccountId } from './requester-session-helpers';
 
 const router = Router();
@@ -59,6 +61,23 @@ router.get('/:id', (req, res) => res.json({ success: true, data: FileStoreServic
 router.get('/:id/text', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, data: await FileStoreService.readText(owner(req), id(req), Number(req.query.offset ?? 0), Number(req.query.limit ?? 16000)) });
+}));
+/** GET /api/files/:id/thumbnail — a small WebP of an image file (cached), for the icon view and the picker. */
+router.get('/:id/thumbnail', asyncHandler(async (req, res) => {
+  const { entry, filePath } = FileStoreService.resolveFile(owner(req), id(req));
+  if (!entry.mimeType?.startsWith('image/') || entry.mimeType === 'image/svg+xml') {
+    res.status(404).json({ success: false, error: 'No thumbnail' });
+    return;
+  }
+  const cached = fileStoreThumbnailPath(entry.id);
+  if (!fs.existsSync(cached) || fs.statSync(cached).mtimeMs < fs.statSync(filePath).mtimeMs) {
+    fs.mkdirSync(path.dirname(cached), { recursive: true });
+    await sharp(filePath, { animated: false }).rotate().resize(320, 320, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }).toFile(cached);
+  }
+  res.setHeader('Content-Type', 'image/webp');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.sendFile(cached, { dotfiles: 'allow' });
 }));
 router.get('/:id/download', (req, res, next) => {
   const { entry, filePath } = FileStoreService.resolveFile(owner(req), id(req));
