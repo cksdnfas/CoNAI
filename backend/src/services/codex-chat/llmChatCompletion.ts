@@ -1,6 +1,7 @@
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
+import { LlmRequestError } from '../llmRequestRetry'
 
 export type ChatCompletionToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 
@@ -203,11 +204,11 @@ export async function streamChatCompletion(params: {
       if (signal.aborted) throw error
       // Node's fetch only says "fetch failed"; the cause (ECONNREFUSED, ENOTFOUND…) is what the user can act on.
       const cause = (error as { cause?: { code?: string; message?: string } })?.cause
-      throw new Error(`LLM 서버에 연결하지 못했어: ${params.target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`)
+      throw new LlmRequestError(`LLM 서버에 연결하지 못했어: ${params.target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`, undefined, { cause: error })
     })
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
-      throw new Error(`LLM 요청 실패 (${response.status}): ${errorText.slice(0, 500) || response.statusText}`)
+      throw new LlmRequestError(`LLM 요청 실패 (${response.status}): ${errorText.slice(0, 500) || response.statusText}`, response.status)
     }
     if (!response.body || !(response.headers.get('content-type') ?? '').includes('text/event-stream')) {
       return readJsonCompletion(await response.json())
@@ -233,8 +234,9 @@ export async function streamChatCompletion(params: {
       }
       promptTokens = readPromptTokens(json) ?? promptTokens
       if (json.error) {
-        const error = json.error as { message?: string }
-        throw new Error(`LLM 오류: ${error.message ?? JSON.stringify(json.error)}`)
+        const error = json.error as { message?: string; code?: unknown; status?: unknown }
+        const status = Number(error.status ?? error.code)
+        throw new LlmRequestError(`LLM 오류: ${error.message ?? JSON.stringify(json.error)}`, Number.isInteger(status) && status >= 400 && status <= 599 ? status : undefined)
       }
       const choice = (json.choices as Array<Record<string, unknown>> | undefined)?.[0]
       if (!choice) {

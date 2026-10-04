@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from 'react'
 import { ALargeSmall, RotateCcw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
@@ -120,10 +120,12 @@ function AppearanceRow({ label, children }: { label: string; children: ReactNode
 export function ChatAppearanceButton() {
   const { t } = useI18n()
   const { appearance, update, reset } = useChatAppearance()
+  const [open, setOpen] = useState(false)
+  const backgroundId = useId()
   const isDefault = JSON.stringify(appearance) === JSON.stringify(DEFAULT_CHAT_APPEARANCE)
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <Tip content={t({ ko: '채팅 모양', en: 'Chat appearance' })}>
         <PopoverTrigger asChild>
           <IconButton variant="ghost" size="icon-sm" label={t({ ko: '채팅 모양', en: 'Chat appearance' })} tooltip={false}>
@@ -131,7 +133,14 @@ export function ChatAppearanceButton() {
           </IconButton>
         </PopoverTrigger>
       </Tip>
-      <PopoverContent align="end" className="w-72 space-y-3">
+      <PopoverContent align="end" className="w-72 space-y-3" onKeyDownCapture={(event) => {
+        // A nested tooltip can consume Radix's document Escape handler before the popover sees it.
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+          setOpen(false)
+        }
+      }}>
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold">{t({ ko: '채팅 모양', en: 'Chat appearance' })}</span>
           <IconButton size="icon-xs" variant="ghost" disabled={isDefault} onClick={reset} label={t({ ko: '기본값으로', en: 'Reset' })}>
@@ -173,10 +182,10 @@ export function ChatAppearanceButton() {
             ]}
           />
         </AppearanceRow>
-        <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-muted-foreground">
-          {t({ ko: '배경 이미지', en: 'Background image' })}
-          <Switch checked={appearance.showBackground} onCheckedChange={(showBackground) => update({ showBackground })} />
-        </label>
+        <div className="flex items-center justify-between gap-3 text-xs font-semibold text-muted-foreground">
+          <label htmlFor={backgroundId} className="flex-1 cursor-pointer">{t({ ko: '배경 이미지', en: 'Background image' })}</label>
+          <Switch id={backgroundId} checked={appearance.showBackground} onCheckedChange={(showBackground) => update({ showBackground })} />
+        </div>
       </PopoverContent>
     </Popover>
   )

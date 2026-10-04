@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, Save, Trash2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -107,11 +107,12 @@ function Section({ title, actions, children }: { title: string; actions?: ReactN
 }
 
 function SwitchLine({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  const id = useId()
   return (
-    <label className="flex min-h-10 cursor-pointer items-center justify-between gap-3 text-sm">
-      <span>{label}</span>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
-    </label>
+    <div className="flex min-h-10 items-center justify-between gap-3 text-sm">
+      <label htmlFor={id} className="flex-1 cursor-pointer">{label}</label>
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
   )
 }
 

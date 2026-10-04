@@ -15,7 +15,8 @@ const FOCUS_TARGET_SELECTOR = [
 const BUTTON_INPUT_TYPES = new Set(['button', 'submit', 'reset', 'image'])
 
 function isButtonLikeControl(control: HTMLElement | null) {
-  if (control instanceof HTMLButtonElement) return true
+  // Radix switches are buttons, but label activation is their intended on/off action.
+  if (control instanceof HTMLButtonElement) return control.getAttribute('role') !== 'switch'
   return control instanceof HTMLInputElement && BUTTON_INPUT_TYPES.has(control.type)
 }
 

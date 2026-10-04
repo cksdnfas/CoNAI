@@ -2,7 +2,7 @@
  * Dev-only catalog of the shared UI kit (components/ui + segmented controls).
  * Registered in router.tsx behind `import.meta.env.DEV`, so it never reaches production bundles.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import { ArrowDownWideNarrow, Bookmark, CircleCheck, Copy, Download, Folder, Image as ImageIcon, ImageOff, Inbox, Layers, Library, Lock, MoreHorizontal, Pencil, Plus, Search, Server, Settings, SlidersHorizontal, Trash2, TriangleAlert, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -159,6 +159,7 @@ function useCatalogTheme(choice: ThemeChoice) {
 }
 
 export function UiCatalogPage() {
+  const switchId = useId()
   const confirm = useConfirm()
   const [theme, setTheme] = useState<ThemeChoice>('app')
   const [modalOpen, setModalOpen] = useState(false)
@@ -432,11 +433,11 @@ export function UiCatalogPage() {
             <label className="flex items-center gap-2 text-sm"><Checkbox aria-invalid />Invalid</label>
           </Row>
           <Row label="Switch">
-            <label className="flex items-center gap-2 text-sm"><Switch checked={switchOn} onCheckedChange={setSwitchOn} />Default ({switchOn ? 'on' : 'off'})</label>
-            <label className="flex items-center gap-2 text-sm"><Switch size="sm" defaultChecked />Small</label>
-            <label className="flex items-center gap-2 text-sm"><Switch disabled />Disabled</label>
-            <label className="flex items-center gap-2 text-sm"><Switch disabled defaultChecked />Disabled on</label>
-            <label className="flex items-center gap-2 text-sm"><Switch aria-invalid />Invalid</label>
+            <div className="flex items-center gap-2 text-sm"><Switch id={`${switchId}-default`} checked={switchOn} onCheckedChange={setSwitchOn} /><label htmlFor={`${switchId}-default`}>Default ({switchOn ? 'on' : 'off'})</label></div>
+            <div className="flex items-center gap-2 text-sm"><Switch id={`${switchId}-small`} size="sm" defaultChecked /><label htmlFor={`${switchId}-small`}>Small</label></div>
+            <div className="flex items-center gap-2 text-sm"><Switch id={`${switchId}-disabled`} disabled /><label htmlFor={`${switchId}-disabled`}>Disabled</label></div>
+            <div className="flex items-center gap-2 text-sm"><Switch id={`${switchId}-disabled-on`} disabled defaultChecked /><label htmlFor={`${switchId}-disabled-on`}>Disabled on</label></div>
+            <div className="flex items-center gap-2 text-sm"><Switch id={`${switchId}-invalid`} aria-invalid /><label htmlFor={`${switchId}-invalid`}>Invalid</label></div>
           </Row>
           <div className="grid gap-6 md:grid-cols-3">
             <div className="space-y-2">

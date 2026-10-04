@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field } from '@/components/ui/field'
@@ -28,6 +29,7 @@ export function ChatProfileToolsAdvanced({ open, scopes, allowlist, isLlm, maxTo
   onChange: (patch: { toolAllowlist?: string[] | null; maxToolRounds?: number; toolOutputLimit?: number }) => void
 }) {
   const { t } = useI18n()
+  const allToolsId = useId()
   const toolsQuery = useQuery({ queryKey: ['codex-chat-admin-tools'], queryFn: listChatTools, enabled: open, staleTime: 5 * 60 * 1000 })
   const tools = (toolsQuery.data ?? []).filter((tool) => tool.scope !== null && scopes.includes(tool.scope as ChatScope))
   const selected = allowlist === null ? tools.map((tool) => tool.name) : allowlist.filter((name) => tools.some((tool) => tool.name === name))
@@ -42,10 +44,10 @@ export function ChatProfileToolsAdvanced({ open, scopes, allowlist, isLlm, maxTo
       title={t({ ko: '고급 설정', en: 'Advanced' })}
       meta={allowlist !== null ? t({ ko: '도구 {count}개 선택', en: '{count} tools picked' }, { count: selected.length }) : null}
     >
-      <label className="flex min-h-10 cursor-pointer items-center justify-between gap-3 text-sm">
-        <span>{t({ ko: '권한 안의 모든 도구 사용', en: 'Use every tool in the scopes' })}</span>
-        <Switch checked={allowlist === null} onCheckedChange={(all) => onChange({ toolAllowlist: all ? null : tools.map((tool) => tool.name) })} />
-      </label>
+      <div className="flex min-h-10 items-center justify-between gap-3 text-sm">
+        <label htmlFor={allToolsId} className="flex-1 cursor-pointer">{t({ ko: '권한 안의 모든 도구 사용', en: 'Use every tool in the scopes' })}</label>
+        <Switch id={allToolsId} checked={allowlist === null} onCheckedChange={(all) => onChange({ toolAllowlist: all ? null : tools.map((tool) => tool.name) })} />
+      </div>
       {allowlist !== null ? (
         <div className="space-y-3">
           {scopes.map((scope) => {

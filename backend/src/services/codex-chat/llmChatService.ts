@@ -1,4 +1,5 @@
 import type { McpRequester } from '../../mcp/context'
+import { retryLlmRequest } from '../llmRequestRetry'
 import { profileGenerationOptions } from './chatProfiles'
 import { validateChatAttachments } from './chatAttachments'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
@@ -145,7 +146,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       const tools = bridge && round <= profile.maxToolRounds ? offeredTools : []
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
       let separated = turn.text.length === 0
-      const result = await streamChatCompletion({
+      const result = await retryLlmRequest(() => streamChatCompletion({
         target,
         messages,
         tools,
@@ -160,7 +161,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
           turn.reasoning += text
           emit(turn, { type: 'reasoning', text })
         },
-      })
+      }), { signal: turn.controller.signal, canRetry: () => turn.text.length === 0 && turn.reasoning.length === 0 })
 
       if (round === 1 && result.promptTokens) {
         recordPromptUsage(profile.id, rawEstimate, result.promptTokens)

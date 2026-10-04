@@ -413,6 +413,7 @@ function NaiSwitchField({ label, checked, onCheckedChange }: { label: string, ch
 function NaiSeedField({ seed, onSeedChange }: { seed: string, onSeedChange: (value: string) => void }) {
   const { t } = useI18n()
   const labelId = useId()
+  const randomId = useId()
   const isRandom = seed.trim().length === 0
   // Remember the last fixed seed so switching "random" off restores it instead of rolling a new one.
   const [lastFixedSeed, setLastFixedSeed] = useState<string | null>(isRandom ? null : seed)
@@ -426,14 +427,15 @@ function NaiSeedField({ seed, onSeedChange }: { seed: string, onSeedChange: (val
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <span id={labelId} className="shrink-0 text-sm font-medium whitespace-nowrap text-foreground">{seedLabel}</span>
-        <label className="inline-flex cursor-pointer items-center gap-2 text-xs whitespace-nowrap text-muted-foreground">
-          {t({ ko: '매번 랜덤', en: 'Random each time' })}
+        <div className="inline-flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground">
+          <label htmlFor={randomId} className="cursor-pointer">{t({ ko: '매번 랜덤', en: 'Random each time' })}</label>
           <Switch
+            id={randomId}
             size="sm"
             checked={isRandom}
             onCheckedChange={(checked) => onSeedChange(checked ? '' : (lastFixedSeed ?? rollNaiSeed()))}
           />
-        </label>
+        </div>
       </div>
       <div className="flex items-stretch gap-2">
         <NumberStepperInput

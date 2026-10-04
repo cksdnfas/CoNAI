@@ -3,6 +3,7 @@ import { buildOllamaGenerationFields, buildOpenAiGenerationFields, readLlmConnec
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { normalizeOptionalString } from '../utils/valueNormalization'
 import type { ProviderType } from '../types/externalApi'
+import { LlmRequestError, retryLlmRequest } from './llmRequestRetry'
 
 type LlmResponseMode = 'text' | 'json'
 type LlmJsonParseStrategy = 'none' | 'strict' | 'markdown_fence' | 'embedded_json' | 'invalid_escape_repaired'
@@ -354,12 +355,12 @@ async function executeOpenAiCompatibleRequest(params: {
         body: JSON.stringify(buildBody('raw_base64')),
       }, params.timeoutMs, params.signal)
     } else {
-      throw new Error(`OpenAI-compatible provider request failed (${response.status}): ${response.bodyText || response.statusText}`)
+      throw new LlmRequestError(`OpenAI-compatible provider request failed (${response.status}): ${response.bodyText || response.statusText}`, response.status)
     }
   }
 
   if (!response.ok) {
-    throw new Error(`OpenAI-compatible provider request failed (${response.status}): ${response.bodyText || response.statusText}`)
+    throw new LlmRequestError(`OpenAI-compatible provider request failed (${response.status}): ${response.bodyText || response.statusText}`, response.status)
   }
 
   const responseJson = parseJsonResponseText(response.bodyText)
@@ -413,7 +414,7 @@ async function executeOllamaRequest(params: {
   }, params.timeoutMs, params.signal)
 
   if (!response.ok) {
-    throw new Error(`Ollama request failed (${response.status}): ${response.bodyText || response.statusText}`)
+    throw new LlmRequestError(`Ollama request failed (${response.status}): ${response.bodyText || response.statusText}`, response.status)
   }
 
   const responseJson = parseJsonResponseText(response.bodyText)
@@ -694,7 +695,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
 
   let result: Awaited<ReturnType<typeof executeOpenAiCompatibleRequest>> | Awaited<ReturnType<typeof executeOllamaRequest>>
   if (provider.provider_type === 'llm_ollama') {
-    result = await executeOllamaRequest({
+    result = await retryLlmRequest(() => executeOllamaRequest({
       baseUrl,
       model,
       prompt,
@@ -706,9 +707,9 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       structuredOutputJson,
       timeoutMs,
       signal: request.signal,
-    })
+    }), { signal: request.signal })
   } else if (provider.provider_type === 'llm_openai_compatible') {
-    result = await executeOpenAiCompatibleRequest({
+    result = await retryLlmRequest(() => executeOpenAiCompatibleRequest({
       baseUrl,
       apiKey,
       model,
@@ -721,7 +722,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       structuredOutputJson,
       timeoutMs,
       signal: request.signal,
-    })
+    }), { signal: request.signal })
   } else {
     throw new Error(`이 연결은 LLM 실행용 타입이 아니야: ${provider.display_name}`)
   }

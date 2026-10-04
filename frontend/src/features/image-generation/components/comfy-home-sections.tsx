@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { Copy, ListTree, Pencil, Plus, RotateCcw, Save, Server, Trash2, Upload } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
@@ -162,6 +162,7 @@ type ServerListSectionProps = {
 }
 
 export function ComfyServerListSection({ servers, activeServerCount, serverTests, onOpenCreateServer, onEditServer, onDeleteServer, onTestServer, onToggleServerActive }: ServerListSectionProps) {
+  const activeId = useId()
   const { t, formatNumber } = useI18n()
   const inactiveServerCount = Math.max(0, servers.length - activeServerCount)
 
@@ -237,14 +238,15 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-2">
-                    <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                      {t({ ko: '활성', en: 'Active' })}
+                    <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                      <label htmlFor={`${activeId}-${server.id}`} className="cursor-pointer">{t({ ko: '활성', en: 'Active' })}</label>
                       <Switch
+                        id={`${activeId}-${server.id}`}
                         size="sm"
                         checked={isActive}
                         onCheckedChange={(checked) => onToggleServerActive(server.id, checked)}
                       />
-                    </label>
+                    </div>
                     <Button
                       type="button"
                       size="sm"

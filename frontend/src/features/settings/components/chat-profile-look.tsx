@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent, type ReactNode } from 'react'
+import { useId, useRef, type ChangeEvent, type ReactNode } from 'react'
 import { ImagePlus, RotateCcw, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
@@ -60,6 +60,7 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const roleplayId = useId()
   const patch = (next: Partial<ChatStyle>) => onStyleChange({ ...style, ...next })
   const setColor = (key: ColorKey, value: string) => patch({ colors: { ...style.colors, [key]: value } })
 
@@ -129,10 +130,10 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
         ) : null}
       </div>
 
-      <label className="flex min-h-10 cursor-pointer items-center justify-between gap-3 text-sm">
-        <span>{t({ ko: '롤플레이 글자색', en: 'Roleplay text colours' })}</span>
-        <Switch checked={style.roleplay} onCheckedChange={(roleplay) => patch({ roleplay })} />
-      </label>
+      <div className="flex min-h-10 items-center justify-between gap-3 text-sm">
+        <label htmlFor={roleplayId} className="flex-1 cursor-pointer">{t({ ko: '롤플레이 글자색', en: 'Roleplay text colours' })}</label>
+        <Switch id={roleplayId} checked={style.roleplay} onCheckedChange={(roleplay) => patch({ roleplay })} />
+      </div>
       {style.roleplay ? (
         <div className="grid gap-3 md:grid-cols-3">
           <ColorField label={t({ ko: '"대사"', en: '"Dialogue"' })} value={style.colors.dialogue} fallback="#ffffff" onChange={(value) => setColor('dialogue', value)} />
