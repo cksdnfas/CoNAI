@@ -22,6 +22,7 @@ import {
 import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
+import { ChatAppearanceButton, chatTranscriptStyle, useChatAppearance } from './chat-appearance'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
@@ -159,6 +160,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const thread = threadQuery.data?.thread ?? activeThread
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : null
   const isCodexThread = thread?.engine !== 'llm'
+  const { appearance } = useChatAppearance()
   const speaker: ChatSpeaker | null = profile ? { name: profile.name, avatar: profile.avatar, engine: profile.engine } : null
 
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && thread !== null })
@@ -274,6 +276,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <LayoutGrid />
     </IconButton>
   ) : null
+  const appearanceButton = thread && activeView === 'chat' ? <ChatAppearanceButton /> : null
   const newChatButton = <NewChatMenu profiles={profiles} disabled={isBusy || isStartingChat} onPick={pickProfile} />
   const deleteButton = (
     <IconButton variant="ghost" size="icon-sm" onClick={() => void handleDelete()} disabled={activeThreadId === null || isBusy || deleteMutation.isPending} label={t({ ko: '채팅 삭제', en: 'Delete chat' })}>
@@ -284,7 +287,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const transcript = (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-      <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')}>
+      <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')} style={chatTranscriptStyle(appearance)}>
         {messages.map((message) => (
           <div
             key={message.id}
@@ -293,16 +296,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           >
             {message.role === 'user'
               ? <CodexChatUserMessage content={message.content} />
-              : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} largeThumbnails={layout === 'page'} speaker={speaker} media={media} />}
+              : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} media={media} />}
           </div>
         ))}
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <>
             <CodexChatUserMessage content={liveTurn.userText} />
-            <CodexChatAssistantMessage content={liveTurn.text} toolCalls={[...liveTurn.toolCalls.values()]} reasoning={liveTurn.reasoning} streaming largeThumbnails={layout === 'page'} speaker={speaker} />
+            <CodexChatAssistantMessage content={liveTurn.text} toolCalls={[...liveTurn.toolCalls.values()]} reasoning={liveTurn.reasoning} streaming largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
           </>
         ) : null}
-        {runningFromServer ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming largeThumbnails={layout === 'page'} speaker={speaker} /> : null}
+        {runningFromServer ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} /> : null}
       </div>
     </div>
   )
@@ -392,6 +395,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             </span>
             {contextButton}
             {galleryButton}
+            {appearanceButton}
             <span className="md:hidden">{newChatButton}</span>
             {onCollapse ? (
               <IconButton variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={onCollapse} label={t({ ko: '패널로 접기', en: 'Fold into panel' })}>
@@ -413,6 +417,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         <ThreadSelect threads={threads} activeThreadId={activeThreadId} disabled={isBusy} onSelect={selectThread} />
         {contextButton}
         {galleryButton}
+        {appearanceButton}
         {newChatButton}
         {deleteButton}
         {onExpand ? (

@@ -12,7 +12,7 @@ import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken } from './codexChatAccess'
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
-import { buildPersonaPrompt, fillCharacterPlaceholders } from './llmChatContext'
+import { buildPersonaPrompt, fillCharacterPlaceholders, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
 import { LlmChatService } from './llmChatService'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
@@ -57,6 +57,7 @@ const DEVELOPER_INSTRUCTIONS = [
   'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
   'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
   'Ask for confirmation before bulk or destructive changes such as moving many images between groups.',
+  REPLY_FORMAT_GUIDANCE,
 ].join('\n')
 
 export type CodexChatStreamEvent =

@@ -18,6 +18,14 @@ const TOOL_GUIDANCE = [
   'Ask for confirmation before bulk or destructive changes such as moving many images between groups.',
 ].join('\n')
 
+/** What the chat window renders, for both engines; conversation stays plain prose unless formatting helps. */
+export const REPLY_FORMAT_GUIDANCE = [
+  'The chat window renders GitHub-flavoured Markdown: headings, bold/italic, lists, tables, links, blockquotes, inline code and fenced code blocks.',
+  'Use formatting only when it helps (code, steps, comparisons); ordinary conversation stays plain prose.',
+  'Always put code in a fenced block with a language tag (```python, ```json, ...); the user gets a copy button.',
+  'Raw HTML outside a code block is shown as text, not rendered. To show a web page, widget or SVG, write the complete document in a ```html (or ```svg) block: the user can open it in a sandboxed live preview where scripts run but nothing can reach the app, the network session or other pages.',
+].join('\n')
+
 export type LlmChatContextConfig = {
   contextTurns: number
   /** Token budget for the whole request (null: turns only). */
@@ -209,6 +217,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     buildPersonaPrompt(profile),
     examples.length > 0 ? EXAMPLE_NOTE : '',
     withTools ? TOOL_GUIDANCE : '',
+    REPLY_FORMAT_GUIDANCE,
   ].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
   if (config.summaryEnabled && thread?.summary?.trim()) {

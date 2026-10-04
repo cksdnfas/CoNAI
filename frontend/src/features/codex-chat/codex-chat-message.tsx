@@ -1,10 +1,10 @@
-import { Fragment, useState, type ReactNode } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronRight, ImageOff, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { Spinner } from '@/components/ui/loading-state'
-import { Tip } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
@@ -14,41 +14,12 @@ import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import type { ImageRecord } from '@/types/image'
+import type { ChatAvatarSize } from './chat-appearance'
 import { ChatErrorChip } from './chat-error-chip'
+import { ChatMarkdown } from './chat-markdown'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 
 const HISTORY_POLL_MS = 3000
-const CODE_FENCE_PATTERN = /```[^\n]*\n?([\s\S]*?)```/g
-const INLINE_PATTERN = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g
-
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
-  return text.split(INLINE_PATTERN).map((part, index) => {
-    const key = `${keyPrefix}-${index}`
-    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-      return <strong key={key} className="font-semibold">{part.slice(2, -2)}</strong>
-    }
-    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
-      return <code key={key} className="rounded-sm bg-surface-high px-1 py-0.5 font-mono text-[0.85em]">{part.slice(1, -1)}</code>
-    }
-    return <Fragment key={key}>{part}</Fragment>
-  })
-}
-
-/** Just enough Markdown for chat replies: fenced code blocks, **bold** and `inline code`; the rest stays plain text. */
-function ChatText({ text }: { text: string }) {
-  const nodes: ReactNode[] = []
-  let cursor = 0
-  for (const match of text.matchAll(CODE_FENCE_PATTERN)) {
-    const start = match.index ?? 0
-    nodes.push(...renderInline(text.slice(cursor, start), `t${start}`))
-    nodes.push(
-      <pre key={`c${start}`} className="my-2 overflow-x-auto rounded-sm bg-surface-high p-3 font-mono text-xs leading-relaxed">{match[1]}</pre>,
-    )
-    cursor = start + match[0].length
-  }
-  nodes.push(...renderInline(text.slice(cursor), 'end'))
-  return <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{nodes}</div>
-}
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
 const THUMB_SIZE_CLASS = { regular: 'h-28 max-w-[14rem]', large: 'h-40 max-w-[20rem]' } as const
 const THUMB_PLACEHOLDER_CLASS = { regular: 'h-28 w-28', large: 'h-40 w-40' } as const
@@ -147,28 +118,77 @@ function groupToolCalls(calls: CodexChatToolCall[]): ToolCallGroup[] {
   return [...groups.values()]
 }
 
-function ToolCallRow({ group }: { group: ToolCallGroup }) {
-  const icon = group.status === 'running'
-    ? <Spinner size="sm" />
-    : group.status === 'failed'
-      ? <X className="size-3.5 text-destructive" />
-      : <Check className="size-3.5" />
-
-  const row = (
-    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <Wrench className="size-3.5 shrink-0" />
-      <span className="truncate font-mono">{group.tool}</span>
-      {group.count > 1 ? <span className="tabular-nums">×{group.count}</span> : null}
-      {icon}
-    </div>
-  )
-
-  return group.summary
-    ? <Tip content={<span className="whitespace-pre-wrap break-words font-mono text-xs">{group.summary}</span>} side="bottom" align="start">{row}</Tip>
-    : row
+function ToolStatusIcon({ status }: { status: CodexChatToolCall['status'] }) {
+  if (status === 'running') {
+    return <Spinner size="sm" />
+  }
+  return status === 'failed' ? <X className="size-3.5 text-destructive" /> : <Check className="size-3.5" />
 }
 
-export function CodexChatToolCalls({ calls, size = 'regular', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; media?: Record<string, CodexChatMediaInfo> }) {
+const HOVER_DELAY_MS = 120
+
+/** The tools a reply used, as one wrench + count; hovering (or tapping) it lists them. */
+function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const timerRef = useRef<number | null>(null)
+  const groups = groupToolCalls(calls)
+  const status: CodexChatToolCall['status'] = calls.some((call) => call.status === 'running')
+    ? 'running'
+    : calls.some((call) => call.status === 'failed') ? 'failed' : 'completed'
+  // Hover opens it on PC; touch has no hover, so a tap toggles it instead.
+  const hoverTo = (next: boolean) => (event: ReactPointerEvent) => {
+    if (event.pointerType !== 'mouse') {
+      return
+    }
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+    }
+    timerRef.current = window.setTimeout(() => setOpen(next), HOVER_DELAY_MS)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="gap-1 px-1.5 font-normal text-muted-foreground"
+          aria-label={t({ ko: '사용한 도구 {count}개', en: '{count} tool calls' }, { count: calls.length })}
+          onPointerEnter={hoverTo(true)}
+          onPointerLeave={hoverTo(false)}
+        >
+          <Wrench />
+          <span className="tabular-nums">{calls.length}</span>
+          {status !== 'completed' ? <ToolStatusIcon status={status} /> : null}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-auto min-w-48 max-w-[min(22rem,90vw)] p-1.5"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onPointerEnter={hoverTo(true)}
+        onPointerLeave={hoverTo(false)}
+      >
+        <ul className="space-y-0.5">
+          {groups.map((group) => (
+            <li key={group.tool} className="rounded-sm px-2 py-1 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="min-w-0 flex-1 truncate font-mono">{group.tool}</span>
+                {group.count > 1 ? <span className="tabular-nums text-muted-foreground">×{group.count}</span> : null}
+                <span className="text-muted-foreground"><ToolStatusIcon status={group.status} /></span>
+              </div>
+              {group.summary ? <p className="mt-0.5 line-clamp-2 break-words font-mono text-2xs text-muted-foreground">{group.summary}</p> : null}
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** Images and videos the reply's tools produced or found. */
+function CodexChatToolMedia({ calls, size = 'regular', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; media?: Record<string, CodexChatMediaInfo> }) {
   const { t } = useI18n()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const historyIds = [...new Set(calls.flatMap((call) => call.historyIds))]
@@ -191,36 +211,31 @@ export function CodexChatToolCalls({ calls, size = 'regular', media }: { calls: 
     setLightboxIndex(index >= 0 ? index : null)
   }
 
-  if (calls.length === 0) {
+  if (historyIds.length === 0 && compositeHashes.length === 0 && pendingJobIds.length === 0) {
     return null
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {groupToolCalls(calls).map((group) => <ToolCallRow key={group.tool} group={group} />)}
+    <>
+      <div className="flex flex-wrap gap-2">
+        {pendingJobIds.map((jobId) => (
+          <div key={`j${jobId}`} className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-sm bg-surface-high text-xs text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
+            <Spinner size="md" />
+            {t({ ko: '생성 대기 중', en: 'Queued' })}
+          </div>
+        ))}
+        {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} media={media} onOpen={openLightbox} />)}
+        {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={size} onOpen={() => openLightbox(hash)} />)}
       </div>
-      {historyIds.length > 0 || compositeHashes.length > 0 || pendingJobIds.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {pendingJobIds.map((jobId) => (
-            <div key={`j${jobId}`} className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-sm bg-surface-high text-xs text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
-              <Spinner size="md" />
-              {t({ ko: '생성 대기 중', en: 'Queued' })}
-            </div>
-          ))}
-          {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} media={media} onOpen={openLightbox} />)}
-          {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={size} onOpen={() => openLightbox(hash)} />)}
-        </div>
-      ) : null}
       <MediaLightbox items={lightboxItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
-    </div>
+    </>
   )
 }
 
 export function CodexChatUserMessage({ content }: { content: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-sm text-foreground">{content}</div>
+      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground">{content}</div>
     </div>
   )
 }
@@ -257,7 +272,10 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
   )
 }
 
-export function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, largeThumbnails = false, speaker = null, media }: {
+/** Appearance setting → avatar size; small keeps the name line compact, larger sizes sit in a column beside the reply. */
+const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
+
+export function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, largeThumbnails = false, speaker = null, media, avatarSize = 'md' }: {
   content: string
   toolCalls: CodexChatToolCall[]
   status?: CodexChatMessage['status']
@@ -269,23 +287,43 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
   speaker?: ChatSpeaker | null
   /** Media kind of the images the thread references (videos play inline). */
   media?: Record<string, CodexChatMediaInfo>
+  avatarSize?: ChatAvatarSize
 }) {
   const { t } = useI18n()
+  const avatarBeside = speaker !== null && avatarSize !== 'sm'
+  const avatar = speaker ? (
+    <ChatProfileAvatar
+      name={speaker.name}
+      avatar={speaker.avatar}
+      engine={speaker.engine}
+      size={AVATAR_SIZE[avatarSize]}
+      className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined}
+    />
+  ) : null
+  const toolBadge = toolCalls.length > 0 ? <ToolCallsBadge calls={toolCalls} /> : null
 
-  return (
-    <div className="space-y-2">
-      {speaker ? (
-        <div className="flex items-center gap-2">
-          <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} engine={speaker.engine} size="xs" />
-          <span className="text-xs font-semibold text-muted-foreground">{speaker.name}</span>
+  const reply = (
+    <div className="min-w-0 flex-1 space-y-2">
+      {speaker || toolBadge ? (
+        <div className="flex min-h-6 items-center gap-1.5">
+          {avatarBeside ? null : avatar}
+          {speaker ? <span className="truncate text-xs font-semibold text-muted-foreground">{speaker.name}</span> : null}
+          {toolBadge}
         </div>
       ) : null}
       {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
-      <CodexChatToolCalls calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} media={media} />
-      {content ? <ChatText text={content} /> : null}
+      <CodexChatToolMedia calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} media={media} />
+      {content ? <ChatMarkdown text={content} /> : null}
       {streaming ? <ActivityLine toolCalls={toolCalls} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}
     </div>
   )
+
+  return avatarBeside ? (
+    <div className="flex items-start gap-3">
+      {avatar}
+      {reply}
+    </div>
+  ) : reply
 }
