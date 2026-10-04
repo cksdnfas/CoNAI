@@ -22,7 +22,6 @@ import {
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileEditorModal } from './chat-profile-editor-modal'
-import { LlmConnectionsTab } from './llm-connections-tab'
 import { InstantApplyHint } from './settings-section-status'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { SettingsSwitchRow } from './settings-switch-row'
@@ -119,8 +118,6 @@ export function ChatSettingsTab() {
         ))}
         {profilesQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(profilesQuery.error, t({ ko: '프로필을 불러오지 못했어.', en: 'Could not load profiles.' }))}</p> : null}
       </RowGroup>
-
-      <LlmConnectionsTab />
 
       <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
     </div>

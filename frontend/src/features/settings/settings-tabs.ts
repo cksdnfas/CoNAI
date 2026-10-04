@@ -1,6 +1,6 @@
 import type { TranslationDictionary } from '@/i18n'
 
-export type SettingsTab = 'general' | 'library' | 'media' | 'auto' | 'generation' | 'chat' | 'accounts' | 'system' | 'maintenance'
+export type SettingsTab = 'general' | 'library' | 'media' | 'auto' | 'generation' | 'chat' | 'llm' | 'accounts' | 'system' | 'maintenance'
 
 export type SettingsTabGroup = 'personalization' | 'library' | 'services' | 'administration'
 
@@ -16,6 +16,7 @@ export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'auto', group: 'services' },
   { value: 'generation', group: 'services' },
   { value: 'chat', group: 'services' },
+  { value: 'llm', group: 'services' },
   { value: 'accounts', group: 'administration' },
   { value: 'system', group: 'administration' },
   { value: 'maintenance', group: 'administration' },
@@ -29,6 +30,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
   auto: { ko: '자동화 및 분석', en: 'Automation and analysis' },
   generation: { ko: '생성 및 AI', en: 'Generation and AI' },
   chat: { ko: '채팅', en: 'Chat' },
+  llm: { ko: 'LLM', en: 'LLM' },
   accounts: { ko: '계정·권한', en: 'Accounts and access' },
   system: { ko: '시스템', en: 'System' },
   maintenance: { ko: '유지보수', en: 'Maintenance' },
@@ -45,7 +47,7 @@ const LEGACY_SETTINGS_TAB_MAP: Record<string, SettingsTab> = {
   metadata: 'library',
   security: 'accounts',
   'image-save': 'media',
-  'llm-connections': 'chat',
+  'llm-connections': 'llm',
 }
 
 /** Resolve current and legacy settings links to the canonical section. */
