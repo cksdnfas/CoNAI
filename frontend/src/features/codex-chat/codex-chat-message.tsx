@@ -14,6 +14,7 @@ import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import type { ImageRecord } from '@/types/image'
+import { ChatErrorChip } from './chat-error-chip'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 
 const HISTORY_POLL_MS = 3000
@@ -168,8 +169,10 @@ function ToolCallRow({ group }: { group: ToolCallGroup }) {
 }
 
 export function CodexChatToolCalls({ calls, size = 'regular', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; media?: Record<string, CodexChatMediaInfo> }) {
+  const { t } = useI18n()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const historyIds = [...new Set(calls.flatMap((call) => call.historyIds))]
+  const pendingJobIds = [...new Set(calls.flatMap((call) => call.pendingJobIds ?? []))]
   // History rows resolve to library images too; skip hashes a history thumbnail already shows.
   const historyQueries = useQueries({ queries: historyIds.map((historyId) => historyQueryOptions(historyId)) })
   const historyHashes = new Set(historyQueries.map((query) => resolveHistoryHash(query.data?.record)).filter(Boolean))
@@ -197,8 +200,14 @@ export function CodexChatToolCalls({ calls, size = 'regular', media }: { calls: 
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {groupToolCalls(calls).map((group) => <ToolCallRow key={group.tool} group={group} />)}
       </div>
-      {historyIds.length > 0 || compositeHashes.length > 0 ? (
+      {historyIds.length > 0 || compositeHashes.length > 0 || pendingJobIds.length > 0 ? (
         <div className="flex flex-wrap gap-2">
+          {pendingJobIds.map((jobId) => (
+            <div key={`j${jobId}`} className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-sm bg-surface-high text-xs text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
+              <Spinner size="md" />
+              {t({ ko: '생성 대기 중', en: 'Queued' })}
+            </div>
+          ))}
           {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} media={media} onOpen={openLightbox} />)}
           {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={size} onOpen={() => openLightbox(hash)} />)}
         </div>
@@ -212,6 +221,20 @@ export function CodexChatUserMessage({ content }: { content: string }) {
   return (
     <div className="flex justify-end">
       <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-sm text-foreground">{content}</div>
+    </div>
+  )
+}
+
+/** While a reply is in progress: what it is doing right now, so a long chain of tool calls never looks finished. */
+function ActivityLine({ toolCalls }: { toolCalls: CodexChatToolCall[] }) {
+  const { t } = useI18n()
+  const runningTool = [...toolCalls].reverse().find((call) => call.status === 'running')
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+      <Spinner size="sm" />
+      <span className="truncate">
+        {runningTool ? t({ ko: '도구 실행 중: {tool}', en: 'Running tool: {tool}' }, { tool: runningTool.tool }) : t({ ko: '작업 중…', en: 'Working…' })}
+      </span>
     </div>
   )
 }
@@ -260,9 +283,9 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
       {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
       <CodexChatToolCalls calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} media={media} />
       {content ? <ChatText text={content} /> : null}
-      {streaming && !content && !reasoning ? <Spinner size="sm" className="text-muted-foreground" /> : null}
+      {streaming ? <ActivityLine toolCalls={toolCalls} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
-      {status === 'failed' ? <p className="whitespace-pre-wrap break-words text-xs text-destructive">{error || t({ ko: '응답 실패', en: 'Reply failed' })}</p> : null}
+      {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}
     </div>
   )
 }

@@ -3,6 +3,16 @@ const MAX_REFERENCES_PER_CALL = 24
 
 type McpToolResult = { content?: unknown[]; structuredContent?: unknown } | null | undefined
 
+/** Tools whose result is one generation queue job (its `id`). */
+const JOB_RESULT_TOOLS = new Set(['submit_generation_job', 'get_generation_job', 'wait_generation_job', 'get_generation_artifacts'])
+
+function readJobId(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const id = record.job_id ?? record.id
+  return typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
 export function truncateToolSummary(value: string) {
   return value.length > TOOL_SUMMARY_LENGTH ? `${value.slice(0, TOOL_SUMMARY_LENGTH)}…` : value
 }
@@ -35,11 +45,16 @@ function collectReferences(value: unknown, historyIds: Set<number>, compositeHas
   }
 }
 
-/** The text parts of an MCP tool result plus the history ids / composite hashes it mentions (JSON text or structured content). */
-export function readMcpToolResult(result: McpToolResult) {
+/**
+ * The text parts of an MCP tool result plus the history ids / composite hashes it mentions (JSON text or structured
+ * content), and for generation-job tools the job id, so results can be attached later when the job finishes.
+ */
+export function readMcpToolResult(result: McpToolResult, toolName?: string) {
   const historyIds = new Set<number>()
   const compositeHashes = new Set<string>()
+  const jobIds = new Set<number>()
   const texts: string[] = []
+  const readsJob = toolName !== undefined && JOB_RESULT_TOOLS.has(toolName)
 
   for (const content of result?.content ?? []) {
     const text = content && typeof content === 'object' ? (content as { text?: unknown }).text : undefined
@@ -48,7 +63,10 @@ export function readMcpToolResult(result: McpToolResult) {
     }
     texts.push(text)
     try {
-      collectReferences(JSON.parse(text), historyIds, compositeHashes)
+      const parsed = JSON.parse(text)
+      collectReferences(parsed, historyIds, compositeHashes)
+      const jobId = readsJob ? readJobId(parsed) : null
+      if (jobId !== null) jobIds.add(jobId)
     } catch {
       // Plain-text tool output carries no references.
     }
@@ -57,5 +75,5 @@ export function readMcpToolResult(result: McpToolResult) {
     collectReferences(result.structuredContent, historyIds, compositeHashes)
   }
 
-  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes] }
+  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds] }
 }

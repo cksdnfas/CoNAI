@@ -46,6 +46,9 @@ function resolveIdempotencyScope(context: McpRequestContext) {
   return context.keyId ? `mcp-key:${context.keyId}` : 'mcp-local';
 }
 
+const WAIT_POLL_MS = 1000;
+const WAIT_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+
 async function describeJob(jobId: number, context: McpRequestContext) {
   const job = GenerationQueueModel.findListRecordById(jobId);
   if (!job) return null;
@@ -93,14 +96,14 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.tool(
     'submit_generation_job',
-    'Submit a durable asynchronous generation job and return immediately with a job ID. For Codex, get_codex_generation_options documents all UI-equivalent parameters including model, reference generation, editing, masks and save options. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.',
+    'Submit a durable asynchronous generation job and return immediately with a job ID. For NovelAI (service_type="novelai") pass request_payload directly, no lookups needed: { prompt (required; comma-separated Danbooru-style tags), negative_prompt, model (default "nai-diffusion-4-5-curated"; also nai-diffusion-4-5-full, nai-diffusion-5-curated, nai-diffusion-5-full), width/height (multiples of 64: 832x1216 portrait, 1216x832 landscape, 1024x1024 square), steps (default 28), scale (default 5), sampler (default k_euler_ancestral), seed, n_samples (keep 1), characters: [{ prompt, uc, center_x, center_y }] for per-character prompts }. After submitting, call wait_generation_job with the returned job id instead of polling get_generation_job. For Codex, get_codex_generation_options documents all UI-equivalent parameters including model, reference generation, editing, masks and save options. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.',
     {
       service_type: z.enum(['comfyui', 'novelai', 'codex']),
       workflow_id: z.number().int().positive().optional(),
       server_id: z.number().int().positive().optional().describe('ComfyUI only. Target one active workflow-eligible server. Cannot be combined with server_tag.'),
       server_tag: z.string().trim().min(1).max(64).optional().describe('ComfyUI only. Route to an active workflow-eligible server with this exact normalized tag. Cannot be combined with server_id.'),
       inputs: z.record(z.string(), z.unknown()).optional().describe('ComfyUI marked-field inputs, or a NovelAI/Codex payload alias'),
-      request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters. get_codex_generation_options returns the Codex schema: model (real CLI agent-model override), prompt, negative_prompt, operation, image, mask, size, count and imageSaveOptions.'),
+      request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters. NovelAI: prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples (1), characters. Codex (see get_codex_generation_options): model (real CLI agent-model override), prompt, negative_prompt, operation, image, mask, size, count and imageSaveOptions.'),
       group_id: z.number().int().positive().optional(),
       group_path: mcpGroupPathSchema,
       priority: z.number().int().min(0).max(100000).default(100),
@@ -288,6 +291,30 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       return job
         ? { content: [{ type: 'text' as const, text: JSON.stringify(job, null, 2) }] }
         : { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
+    },
+  );
+
+  server.tool(
+    'wait_generation_job',
+    'Wait until a generation job finishes (completed, failed or cancelled) or the timeout passes, then return it with its history IDs. Use this after submit_generation_job instead of calling get_generation_job repeatedly; call it again if finished is false.',
+    {
+      job_id: z.number().int().positive(),
+      timeout_seconds: z.number().int().min(5).max(180).default(90).describe('Longest wait before returning an unfinished job'),
+    },
+    async ({ job_id, timeout_seconds }) => {
+      const deadline = Date.now() + timeout_seconds * 1000;
+      for (;;) {
+        const record = GenerationQueueModel.findListRecordById(job_id);
+        if (!record) {
+          return { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
+        }
+        const finished = WAIT_TERMINAL_STATUSES.has(record.status);
+        if (finished || Date.now() >= deadline) {
+          const job = await describeJob(job_id, context);
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ finished, ...job }, null, 2) }] };
+        }
+        await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS));
+      }
     },
   );
 

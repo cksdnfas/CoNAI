@@ -13,6 +13,10 @@ export type CodexChatToolCall = {
   compositeHashes: string[]
   /** LLM chats only: the tool result text (truncated) replayed to the model in later turns. */
   output?: string
+  /** Generation queue jobs the call submitted or read; their results are attached when the thread is read. */
+  jobIds?: number[]
+  /** Read-only, set when the thread is read: jobs still running that have no history row yet (shown as placeholders). */
+  pendingJobIds?: number[]
 }
 
 export type ChatEngine = 'codex' | 'llm'

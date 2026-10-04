@@ -60,6 +60,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   search_custom_dropdown_items: 'read',
   search_wildcards: 'read',
   get_generation_job: 'read',
+  wait_generation_job: 'read',
   get_generation_artifacts: 'read',
   refresh_artifact_download: 'read',
   generate_comfyui: 'generate',

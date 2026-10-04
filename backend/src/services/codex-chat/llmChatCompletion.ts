@@ -207,6 +207,11 @@ export async function streamChatCompletion(params: {
       headers: buildHeaders(params.target),
       body: JSON.stringify(buildBody(params.target, params.messages, params.tools ?? [], true)),
       signal,
+    }).catch((error: unknown) => {
+      if (signal.aborted) throw error
+      // Node's fetch only says "fetch failed"; the cause (ECONNREFUSED, ENOTFOUND…) is what the user can act on.
+      const cause = (error as { cause?: { code?: string; message?: string } })?.cause
+      throw new Error(`LLM 서버에 연결하지 못했어: ${params.target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`)
     })
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')

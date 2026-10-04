@@ -5,6 +5,7 @@ import { useI18n } from '@/i18n'
 import { createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, streamCodexChatMessage } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
+import { summarizeChatError } from './chat-error-chip'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   CodexChatContext,
@@ -88,12 +89,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           // The server titles a new thread from its first message.
           void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
         } else if (event.type === 'error') {
-          showSnackbar({ message: event.message, tone: 'error' })
+          // The full text stays on the failed message (its error chip); the toast only names the reason.
+          showSnackbar({ message: summarizeChatError(event.message, t), tone: 'error' })
         }
       }, controller.signal)
     } catch (error) {
       if (!controller.signal.aborted) {
-        showSnackbar({ message: getErrorMessage(error, t({ ko: 'Codex 응답 실패', en: 'Codex reply failed' })), tone: 'error' })
+        showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
         setDraft((current) => current || text)
       }
     } finally {

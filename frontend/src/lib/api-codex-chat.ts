@@ -95,6 +95,9 @@ export interface CodexChatToolCall {
   summary: string | null
   historyIds: number[]
   compositeHashes: string[]
+  jobIds?: number[]
+  /** Set by the server: jobs still queued with no result yet. */
+  pendingJobIds?: number[]
 }
 
 export interface CodexChatThread {
@@ -135,6 +138,8 @@ export interface CodexChatThreadDetail {
   thread: CodexChatThread
   messages: CodexChatMessage[]
   media: Record<string, CodexChatMediaInfo>
+  /** Generation jobs this chat started that are still running (results attach as they land). */
+  pendingJobs: number
   /** Partial reply of a turn still running on the server (after a reload). */
   running: { text: string; toolCalls: CodexChatToolCall[] } | null
 }

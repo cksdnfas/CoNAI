@@ -22,6 +22,7 @@ export type CodexChatMediaItem = {
 const GENERATION_TOOLS = new Set([
   'submit_generation_job',
   'get_generation_job',
+  'wait_generation_job',
   'get_generation_artifacts',
   'generate_nai',
   'generate_comfyui',
@@ -41,6 +42,62 @@ function chunked<T>(values: T[]) {
     chunks.push(values.slice(start, start + LOOKUP_CHUNK_SIZE))
   }
   return chunks
+}
+
+const FINISHED_JOB_STATUSES = new Set(['completed', 'failed', 'cancelled'])
+const JOB_TOOLS = new Set(['submit_generation_job', 'get_generation_job', 'wait_generation_job', 'get_generation_artifacts'])
+
+/** The job ids of a call; calls stored before ids were recorded fall back to the job JSON in their result text. */
+function jobIdsOf(call: CodexChatMessageRecord['tool_calls'][number]) {
+  if (call.jobIds) return call.jobIds
+  if (!JOB_TOOLS.has(call.tool)) return []
+  const match = /"(?:job_)?id"\s*:\s*(\d+)/.exec(call.output ?? call.summary ?? '')
+  return match ? [Number(match[1])] : []
+}
+
+/**
+ * Generation jobs finish after the reply that started them, often after the agent stopped checking. Attach each
+ * referenced job's history rows to the tool call (read-only, not stored) and count the jobs still running, so the chat
+ * shows results as they land without waiting for another message.
+ */
+export function attachJobResults(messages: CodexChatMessageRecord[]) {
+  const jobIds = [...new Set(messages.flatMap((message) => message.tool_calls.flatMap(jobIdsOf)))]
+  if (jobIds.length === 0) {
+    return { messages, pendingJobs: 0 }
+  }
+
+  const db = getUserSettingsDb()
+  const historiesByJob = new Map<number, number[]>()
+  const pendingJobIds = new Set<number>()
+  for (const chunk of chunked(jobIds)) {
+    const placeholders = chunk.map(() => '?').join(',')
+    const histories = db.prepare(`SELECT id, queue_job_id FROM api_generation_history WHERE queue_job_id IN (${placeholders}) ORDER BY id`).all(...chunk) as Array<{ id: number; queue_job_id: number }>
+    histories.forEach((row) => historiesByJob.set(row.queue_job_id, [...(historiesByJob.get(row.queue_job_id) ?? []), row.id]))
+    const jobs = db.prepare(`SELECT id, status FROM generation_queue_jobs WHERE id IN (${placeholders})`).all(...chunk) as Array<{ id: number; status: string }>
+    jobs.filter((job) => !FINISHED_JOB_STATUSES.has(job.status)).forEach((job) => pendingJobIds.add(job.id))
+  }
+
+  // A job shows once in the transcript: as its history rows, or as a placeholder on its last mention while queued.
+  const lastMention = new Map<number, string>()
+  messages.forEach((message) => message.tool_calls.forEach((call) => jobIdsOf(call).forEach((jobId) => lastMention.set(jobId, `${message.id}:${call.id}`))))
+
+  return {
+    pendingJobs: pendingJobIds.size,
+    messages: messages.map((message) => ({
+      ...message,
+      tool_calls: message.tool_calls.map((call) => {
+        const ids = jobIdsOf(call)
+        const attached = ids.flatMap((jobId) => historiesByJob.get(jobId) ?? [])
+        const placeholders = ids.filter((jobId) => pendingJobIds.has(jobId) && !historiesByJob.has(jobId) && lastMention.get(jobId) === `${message.id}:${call.id}`)
+        if (attached.length === 0 && placeholders.length === 0) return call
+        return {
+          ...call,
+          historyIds: [...new Set([...call.historyIds, ...attached])],
+          ...(placeholders.length > 0 ? { pendingJobIds: placeholders } : {}),
+        }
+      }),
+    })),
+  }
 }
 
 /** Completed history rows → their result image hash. Failed, pending or deleted rows drop out. */

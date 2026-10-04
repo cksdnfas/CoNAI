@@ -11,7 +11,7 @@ import { CodexAppServerClient, type CodexAppServerNotification } from './codexAp
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken } from './codexChatAccess'
-import { collectCodexChatMedia } from './codexChatMedia'
+import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { buildPersonaPrompt, fillCharacterPlaceholders } from './llmChatContext'
 import { LlmChatService } from './llmChatService'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -53,7 +53,8 @@ const DEVELOPER_INSTRUCTIONS = [
   `You act only through the "${MCP_SERVER_NAME}" MCP tools: searching images and prompts, reading metadata, generating with NovelAI/ComfyUI/Codex, running workflows and organizing groups.`,
   'You cannot run shell commands, read or edit files, or browse the web. Do not try.',
   'Reply in the language the user writes in. For Korean, use casual 반말. Keep replies short.',
-  'For generation, prefer submit_generation_job, then poll get_generation_job until it finishes, and mention the resulting history ids.',
+  'To generate, call submit_generation_job right away with the parameters it documents; do not search the library, list workflows or read past history first unless the user asks to reuse existing images or settings.',
+  'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
   'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
   'Ask for confirmation before bulk or destructive changes such as moving many images between groups.',
 ].join('\n')
@@ -246,7 +247,7 @@ function closeSession(session: Session, reason: string) {
   clearIdleTimer(session)
   revokeCodexChatMcpToken(session.token)
   for (const turn of session.activeTurns.values()) {
-    finishTurn(session, turn, 'failed', `Codex 채팅이 종료됐어 (${reason}).`)
+    finishTurn(session, turn, 'failed', `Codex 세션이 종료됐어 (${reason}).`)
   }
   session.client.close()
 }
@@ -265,7 +266,8 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
   const status = item.status === 'completed' ? 'completed' : item.status === 'failed' ? 'failed' : 'running'
   const result = item.result as { content?: unknown[]; structuredContent?: unknown } | null | undefined
   const error = item.error as { message?: string } | null | undefined
-  const { texts, historyIds, compositeHashes } = readMcpToolResult(result)
+  const tool = String(item.tool ?? '')
+  const { texts, historyIds, compositeHashes, jobIds } = readMcpToolResult(result, tool)
 
   return {
     id: String(item.id ?? ''),
@@ -275,6 +277,7 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
     summary: error?.message ? truncateToolSummary(error.message) : texts.length > 0 ? truncateToolSummary(texts.join('\n')) : null,
     historyIds,
     compositeHashes,
+    ...(jobIds.length > 0 ? { jobIds } : {}),
   }
 }
 
@@ -421,7 +424,7 @@ function assertChatAvailable(requester: McpRequester) {
     throw new CodexChatError('채팅이 꺼져 있어.', 403)
   }
   if (!resolveChatAccess(requester.accountId).codex) {
-    throw new CodexChatError('Codex 채팅 권한이 없어.', 403)
+    throw new CodexChatError('Codex 프로필로 채팅할 권한이 없어.', 403)
   }
   if (isCodexCliUpdating()) {
     throw new CodexChatError('Codex CLI 업데이트 중이야. 끝난 뒤 다시 보내줘.', 409)
@@ -507,16 +510,17 @@ export const CodexChatService = {
   /** The transcript, a reply still running, and the media kind of every image it references (for players). */
   getThread(requester: McpRequester, threadId: number) {
     const thread = requireThread(requester, threadId)
-    const messages = CodexChatStore.listMessages(threadId)
+    const { messages, pendingJobs } = attachJobResults(CodexChatStore.listMessages(threadId))
     const media = Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height }]))
     if (thread.engine === 'llm') {
-      return { thread, messages, media, running: LlmChatService.running(threadId) }
+      return { thread, messages, media, pendingJobs, running: LlmChatService.running(threadId) }
     }
     const active = findActiveTurn(threadId)
     return {
       thread,
       messages,
       media,
+      pendingJobs,
       running: active
         ? {
             text: [...active.turn.agentMessages.values()].join('\n\n'),
@@ -529,7 +533,7 @@ export const CodexChatService = {
   /** Images the chat's transcript references, for the chat's image gallery. */
   listThreadMedia(requester: McpRequester, threadId: number) {
     requireThread(requester, threadId)
-    return collectCodexChatMedia(CodexChatStore.listMessages(threadId))
+    return collectCodexChatMedia(attachJobResults(CodexChatStore.listMessages(threadId)).messages)
   },
 
   async deleteThread(requester: McpRequester, threadId: number) {

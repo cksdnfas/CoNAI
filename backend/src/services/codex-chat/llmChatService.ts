@@ -87,11 +87,12 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     record.arguments = parseArguments(call.function.arguments)
     emit(turn, { type: 'tool', call: { ...record } })
     const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>)
-    const { texts, historyIds, compositeHashes } = readMcpToolResult(result)
+    const { texts, historyIds, compositeHashes, jobIds } = readMcpToolResult(result, record.tool)
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
     record.status = result.isError ? 'failed' : 'completed'
     record.historyIds = historyIds
     record.compositeHashes = compositeHashes
+    if (jobIds.length > 0) record.jobIds = jobIds
   } catch (error) {
     output = `Error: ${error instanceof Error ? error.message : String(error)}`
     record.status = 'failed'

@@ -47,7 +47,7 @@ export function CodexCliUpdateButton({ onUpdated }: { onUpdated: () => void }) {
     const confirmed = await confirm({
       title: t({ ko: 'Codex 업데이트', en: 'Update Codex' }),
       description: t({
-        ko: `${info.current} → ${info.latest}. 업데이트하는 동안 Codex 채팅이 끊겨.`,
+        ko: `${info.current} → ${info.latest}. 업데이트하는 동안 Codex 프로필 채팅이 끊겨.`,
         en: `${info.current} → ${info.latest}. Codex chat disconnects during the update.`,
       }),
       confirmLabel: t({ ko: '업데이트', en: 'Update' }),

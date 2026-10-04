@@ -12,7 +12,8 @@ const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은
 
 const TOOL_GUIDANCE = [
   'You can act on CoNAI, a local app for managing and generating AI images, only through the provided tools.',
-  'For generation, prefer submit_generation_job, then poll get_generation_job until it finishes, and mention the resulting history ids.',
+  'To generate, call submit_generation_job right away with the parameters it documents; do not search the library, list workflows or read past history first unless the user asks to reuse existing images or settings.',
+  'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
   'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
   'Ask for confirmation before bulk or destructive changes such as moving many images between groups.',
 ].join('\n')

@@ -35,6 +35,7 @@ import { CodexChatGallery } from './codex-chat-gallery'
 import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker } from './codex-chat-message'
 
 const RUNNING_POLL_MS = 2000
+const PENDING_JOB_POLL_MS = 3000
 const COMPOSER_MAX_HEIGHT_PX = 220
 const MESSAGE_FLASH_MS = 1600
 
@@ -151,8 +152,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     queryKey: codexChatThreadQueryKey(activeThreadId),
     queryFn: () => getCodexChatThread(activeThreadId as number),
     enabled: activeThreadId !== null,
-    // A turn started before a reload keeps running on the server; poll until it is stored.
-    refetchInterval: (query) => (query.state.data?.running && !liveTurn ? RUNNING_POLL_MS : false),
+    // A turn started before a reload keeps running on the server, and generation jobs finish after the reply that
+    // started them: poll until the turn is stored and every job has landed.
+    refetchInterval: (query) => (query.state.data?.running && !liveTurn ? RUNNING_POLL_MS : query.state.data?.pendingJobs ? PENDING_JOB_POLL_MS : false),
   })
   const thread = threadQuery.data?.thread ?? activeThread
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : null
