@@ -1,14 +1,17 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { Check, ImageOff, Wrench, X } from 'lucide-react'
+import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { Spinner } from '@/components/ui/loading-state'
 import { Tip } from '@/components/ui/tooltip'
+import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
 import type { CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
 import { requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
+import { cn } from '@/lib/utils'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
+import type { ImageRecord } from '@/types/image'
 
 const HISTORY_POLL_MS = 3000
 const CODE_FENCE_PATTERN = /```[^\n]*\n?([\s\S]*?)```/g
@@ -42,13 +45,46 @@ function ChatText({ text }: { text: string }) {
   nodes.push(...renderInline(text.slice(cursor), 'end'))
   return <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{nodes}</div>
 }
-const THUMB_CLASS = 'h-28 w-auto max-w-[14rem] rounded-sm object-cover'
+const THUMB_CLASS = 'w-auto rounded-sm object-cover'
+const THUMB_SIZE_CLASS = { regular: 'h-28 max-w-[14rem]', large: 'h-40 max-w-[20rem]' } as const
+const THUMB_PLACEHOLDER_CLASS = { regular: 'h-28 w-28', large: 'h-40 w-40' } as const
 
-function LibraryThumb({ compositeHash }: { compositeHash: string }) {
+type ThumbSize = keyof typeof THUMB_SIZE_CLASS
+
+/** A library image as the lightbox needs it; history rows add the mime type and size they know. */
+export function buildChatImageRecord(compositeHash: string, record?: GenerationHistoryRecord): ImageRecord {
+  return {
+    id: compositeHash,
+    composite_hash: compositeHash,
+    thumbnail_url: buildApiUrl(`/api/images/${compositeHash}/thumbnail`),
+    image_url: buildApiUrl(`/api/images/${compositeHash}/file`),
+    mime_type: record?.actual_mime_type ?? null,
+    width: record?.actual_width ?? record?.width ?? null,
+    height: record?.actual_height ?? record?.height ?? null,
+  }
+}
+
+/** Click opens the lightbox; on PC a short hover shows a larger preview beside it. */
+function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: ThumbSize; onOpen: () => void }) {
+  const { t } = useI18n()
+  const thumbnailUrl = image.thumbnail_url ?? ''
+  const isVideo = image.mime_type?.startsWith('video/') === true
+  const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url } : null)
+
   return (
-    <Link to={`/images/${compositeHash}`} className="shrink-0">
-      <img src={buildApiUrl(`/api/images/${compositeHash}/thumbnail`)} alt="" loading="lazy" className={THUMB_CLASS} />
-    </Link>
+    <>
+      {/* eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control; Button padding/height would crop it */}
+      <button
+        type="button"
+        aria-label={t({ ko: '크게 보기', en: 'View larger' })}
+        className="shrink-0 cursor-zoom-in rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        onClick={onOpen}
+        {...hoverPreview.triggerProps}
+      >
+        <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
+      </button>
+      {hoverPreview.preview}
+    </>
   )
 }
 
@@ -68,18 +104,18 @@ function resolveHistoryHash(record: GenerationHistoryRecord | undefined) {
   return record?.actual_composite_hash ?? record?.composite_hash ?? null
 }
 
-/** A generation result: polls the history row until its image lands, then links to the library image. */
-function HistoryThumb({ historyId }: { historyId: number }) {
+/** A generation result: polls the history row until its image lands, then shows it like any library image. */
+function HistoryThumb({ historyId, size, onOpen }: { historyId: number; size: ThumbSize; onOpen: (compositeHash: string) => void }) {
   const historyQuery = useQuery(historyQueryOptions(historyId))
   const record = historyQuery.data?.record
   const compositeHash = resolveHistoryHash(record)
 
   if (record?.generation_status === 'completed' && compositeHash) {
-    return <LibraryThumb compositeHash={compositeHash} />
+    return <ChatImageThumb image={buildChatImageRecord(compositeHash, record)} size={size} onOpen={() => onOpen(compositeHash)} />
   }
 
   return (
-    <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-sm bg-surface-high text-muted-foreground">
+    <div className={cn('flex shrink-0 items-center justify-center rounded-sm bg-surface-high text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
       {historyQuery.isError || record?.generation_status === 'failed' ? <ImageOff className="size-5" /> : <Spinner size="md" />}
     </div>
   )
@@ -123,12 +159,26 @@ function ToolCallRow({ group }: { group: ToolCallGroup }) {
     : row
 }
 
-export function CodexChatToolCalls({ calls }: { calls: CodexChatToolCall[] }) {
+export function CodexChatToolCalls({ calls, size = 'regular' }: { calls: CodexChatToolCall[]; size?: ThumbSize }) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const historyIds = [...new Set(calls.flatMap((call) => call.historyIds))]
   // History rows resolve to library images too; skip hashes a history thumbnail already shows.
   const historyQueries = useQueries({ queries: historyIds.map((historyId) => historyQueryOptions(historyId)) })
   const historyHashes = new Set(historyQueries.map((query) => resolveHistoryHash(query.data?.record)).filter(Boolean))
   const compositeHashes = [...new Set(calls.flatMap((call) => call.compositeHashes))].filter((hash) => !historyHashes.has(hash))
+  // The lightbox pages through this message's images only, in the order the thumbnails show them.
+  const lightboxItems: ImageRecord[] = [
+    ...historyQueries.flatMap((query) => {
+      const record = query.data?.record
+      const hash = record?.generation_status === 'completed' ? resolveHistoryHash(record) : null
+      return hash ? [buildChatImageRecord(hash, record)] : []
+    }),
+    ...compositeHashes.map((hash) => buildChatImageRecord(hash)),
+  ]
+  const openLightbox = (compositeHash: string) => {
+    const index = lightboxItems.findIndex((item) => item.composite_hash === compositeHash)
+    setLightboxIndex(index >= 0 ? index : null)
+  }
 
   if (calls.length === 0) {
     return null
@@ -141,10 +191,11 @@ export function CodexChatToolCalls({ calls }: { calls: CodexChatToolCall[] }) {
       </div>
       {historyIds.length > 0 || compositeHashes.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} />)}
-          {compositeHashes.map((hash) => <LibraryThumb key={hash} compositeHash={hash} />)}
+          {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} onOpen={openLightbox} />)}
+          {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash)} size={size} onOpen={() => openLightbox(hash)} />)}
         </div>
       ) : null}
+      <MediaLightbox items={lightboxItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
     </div>
   )
 }
@@ -157,18 +208,19 @@ export function CodexChatUserMessage({ content }: { content: string }) {
   )
 }
 
-export function CodexChatAssistantMessage({ content, toolCalls, status, error, streaming = false }: {
+export function CodexChatAssistantMessage({ content, toolCalls, status, error, streaming = false, largeThumbnails = false }: {
   content: string
   toolCalls: CodexChatToolCall[]
   status?: CodexChatMessage['status']
   error?: string | null
   streaming?: boolean
+  largeThumbnails?: boolean
 }) {
   const { t } = useI18n()
 
   return (
     <div className="space-y-2">
-      <CodexChatToolCalls calls={toolCalls} />
+      <CodexChatToolCalls calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} />
       {content ? <ChatText text={content} /> : null}
       {streaming && !content ? <Spinner size="sm" className="text-muted-foreground" /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}

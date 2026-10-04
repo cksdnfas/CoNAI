@@ -4,6 +4,7 @@ import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
 import { RequireAuthPermission } from '@/features/auth/require-auth-permission'
 import {
   AccessOverviewRoute,
+  CodexChatRoute,
   GroupRoute,
   HomeRoute,
   ImageDetailRoute,
@@ -91,6 +92,11 @@ export const appRouter = createHashRouter([
       {
         path: 'wildcards',
         element: <RequireAuthPermission permissionKey="page.wildcards.view"><WildcardRoute /></RequireAuthPermission>,
+      },
+      {
+        // Admin-only; the page itself checks chat availability (no page permission key exists for it).
+        path: 'chat',
+        element: <CodexChatRoute />,
       },
       {
         path: 'public/workflows/:slug',

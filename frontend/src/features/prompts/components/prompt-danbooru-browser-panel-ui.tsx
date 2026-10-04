@@ -1,6 +1,6 @@
-import { type MouseEvent, type RefObject, useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { type RefObject, useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink, Languages, RotateCcw } from 'lucide-react'
+import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
 import { IconButton } from '@/components/ui/icon-button'
@@ -345,28 +345,19 @@ export function CharacterRelatedTagOptionsPopup({
 
 export function CharacterImageCell({ item }: { item: DanbooruBrowserCharacterRecord }) {
   const [imageIndex, setImageIndex] = useState(0)
-  const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null)
   const images = item.images ?? []
   const activeIndex = imageIndex % Math.max(1, images.length)
   const activeImage = images[activeIndex]
-  const hoverPreviewStyle = hoverPosition
-    ? {
-        left: Math.min(hoverPosition.x + 18, Math.max(16, window.innerWidth - 336)),
-        top: Math.min(hoverPosition.y + 18, Math.max(16, window.innerHeight - 392)),
-      }
-    : undefined
+  const hoverPreview = useMediaHoverPreview(activeImage ? { src: activeImage.url, caption: activeImage.fileName } : null)
+  const hideHoverPreview = hoverPreview.hide
 
   useEffect(() => {
     setImageIndex(0)
-    setHoverPosition(null)
-  }, [item.tagId, images.length])
+    hideHoverPreview()
+  }, [item.tagId, images.length, hideHoverPreview])
 
   if (!activeImage) {
     return <div className="h-24 w-[72px]" />
-  }
-
-  const updateHoverPreview = (event: MouseEvent) => {
-    setHoverPosition({ x: event.clientX, y: event.clientY })
   }
 
   return (
@@ -376,9 +367,7 @@ export function CharacterImageCell({ item }: { item: DanbooruBrowserCharacterRec
         type="button"
         className="relative h-24 w-[72px] cursor-pointer overflow-hidden rounded-sm bg-transparent focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
         onClick={() => setImageIndex((current) => (current + 1) % images.length)}
-        onMouseEnter={updateHoverPreview}
-        onMouseMove={updateHoverPreview}
-        onMouseLeave={() => setHoverPosition(null)}
+        {...hoverPreview.triggerProps}
         title={item.name}
       >
         <img src={activeImage.url} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -387,16 +376,7 @@ export function CharacterImageCell({ item }: { item: DanbooruBrowserCharacterRec
         </span>
       </button>
 
-      {hoverPosition && hoverPreviewStyle ? createPortal(
-        <div
-          className="pointer-events-none fixed z-popover w-80 rounded-md bg-surface-high p-2 text-foreground shadow-elevation-2"
-          style={hoverPreviewStyle}
-        >
-          <img src={activeImage.url} alt="" className="max-h-80 w-full rounded-sm object-contain" />
-          <div className="mt-2 truncate text-xs text-muted-foreground">{activeImage.fileName}</div>
-        </div>,
-        document.body,
-      ) : null}
+      {hoverPreview.preview}
     </>
   )
 }

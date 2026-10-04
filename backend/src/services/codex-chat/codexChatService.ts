@@ -10,6 +10,7 @@ import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import { CodexAppServerClient, type CodexAppServerNotification } from './codexAppServerClient'
 import { isCodexChatAdmin, issueCodexChatMcpToken, revokeCodexChatMcpToken } from './codexChatAccess'
 import { loadCodexChatSettings, onCodexChatSettingsChange } from './codexChatSettings'
+import { collectCodexChatMedia } from './codexChatMedia'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
 
 const SESSION_IDLE_MS = 15 * 60 * 1000
@@ -520,6 +521,12 @@ export const CodexChatService = {
           }
         : null,
     }
+  },
+
+  /** Images the chat's transcript references, for the chat's image gallery. */
+  listThreadMedia(requester: McpRequester, threadId: number) {
+    requireThread(requester, threadId)
+    return collectCodexChatMedia(CodexChatStore.listMessages(threadId))
   },
 
   async deleteThread(requester: McpRequester, threadId: number) {

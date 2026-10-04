@@ -26,7 +26,7 @@ function getScopeCopy(scope: CodexChatScope, t: TranslateFn) {
   }
 }
 
-/** Admin settings for the Codex chat tab. Applies immediately; changing them restarts running chat sessions. */
+/** Admin settings for the Codex chat. Applies immediately; changing them restarts running chat sessions. */
 export function CodexChatSettingsCard() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()

@@ -1,0 +1,142 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
+import { createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, streamCodexChatMessage } from '@/lib/api-codex-chat'
+import { getErrorMessage } from '@/lib/error-message'
+import {
+  CODEX_CHAT_THREADS_QUERY_KEY,
+  CodexChatContext,
+  codexChatMediaQueryKey,
+  codexChatThreadQueryKey,
+  type CodexChatApi,
+  type CodexChatLiveTurn,
+  type CodexChatView,
+} from './codex-chat-context'
+
+/**
+ * Chat state shared by the side panel and the /chat page, kept above the routes so a reply keeps streaming while the
+ * user moves between pages or switches panel ↔ page.
+ */
+export function CodexChatProvider({ children }: PropsWithChildren) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [view, setView] = useState<CodexChatView>('chat')
+  const [selectedThreadId, setSelectedThreadId] = useState<number | null | undefined>(undefined)
+  const [draft, setDraft] = useState('')
+  const [liveTurn, setLiveTurn] = useState<CodexChatLiveTurn | null>(null)
+  const [messageFocus, setMessageFocus] = useState<CodexChatApi['messageFocus']>(null)
+  const draftRef = useRef(draft)
+  const streamAbortRef = useRef<AbortController | null>(null)
+
+  draftRef.current = draft
+
+  const statusQuery = useQuery({ queryKey: ['codex-chat-status'], queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
+  const canUse = statusQuery.data?.canUse === true
+
+  useEffect(() => () => streamAbortRef.current?.abort(), [])
+
+  const selectThread = useCallback((threadId: number | null | undefined) => {
+    setSelectedThreadId(threadId)
+    setView('chat')
+  }, [])
+
+  const send = useCallback(async (threadId: number | null) => {
+    const text = draftRef.current.trim()
+    if (!text || streamAbortRef.current) {
+      return
+    }
+
+    let targetThreadId = threadId
+    try {
+      if (targetThreadId === null) {
+        const thread = await createCodexChatThread()
+        targetThreadId = thread.id
+        setSelectedThreadId(thread.id)
+        await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      }
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
+      return
+    }
+
+    if (targetThreadId === null) {
+      return
+    }
+
+    const sentThreadId = targetThreadId
+    const controller = new AbortController()
+    streamAbortRef.current = controller
+    setDraft('')
+    setLiveTurn({ threadId: sentThreadId, userText: text, text: '', toolCalls: new Map() })
+
+    try {
+      await streamCodexChatMessage(sentThreadId, text, (event) => {
+        if (event.type === 'delta') {
+          setLiveTurn((current) => (current ? { ...current, text: current.text + event.text } : current))
+        } else if (event.type === 'tool') {
+          setLiveTurn((current) => {
+            if (!current) return current
+            const toolCalls = new Map(current.toolCalls)
+            toolCalls.set(event.call.id, event.call)
+            return { ...current, toolCalls }
+          })
+        } else if (event.type === 'user') {
+          // The server titles a new thread from its first message.
+          void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+        } else if (event.type === 'error') {
+          showSnackbar({ message: event.message, tone: 'error' })
+        }
+      }, controller.signal)
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        showSnackbar({ message: getErrorMessage(error, t({ ko: 'Codex 응답 실패', en: 'Codex reply failed' })), tone: 'error' })
+        setDraft((current) => current || text)
+      }
+    } finally {
+      streamAbortRef.current = null
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) }),
+        queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(sentThreadId) }),
+        queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
+      ])
+      setLiveTurn(null)
+    }
+  }, [queryClient, showSnackbar, t])
+
+  const stop = useCallback((threadId: number) => {
+    void interruptCodexChatThread(threadId).catch((error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '중단 실패', en: 'Stop failed' })), tone: 'error' }))
+  }, [showSnackbar, t])
+
+  const focusMessage = useCallback((messageId: number) => {
+    setView('chat')
+    setMessageFocus((current) => ({ messageId, nonce: (current?.nonce ?? 0) + 1 }))
+  }, [])
+
+  const clearMessageFocus = useCallback(() => setMessageFocus(null), [])
+  const openPanel = useCallback(() => setIsPanelOpen(true), [])
+  const closePanel = useCallback(() => setIsPanelOpen(false), [])
+
+  const api = useMemo<CodexChatApi>(() => ({
+    canUse,
+    isPanelOpen,
+    openPanel,
+    closePanel,
+    view,
+    setView,
+    selectedThreadId,
+    selectThread,
+    draft,
+    setDraft,
+    liveTurn,
+    send,
+    stop,
+    messageFocus,
+    focusMessage,
+    clearMessageFocus,
+  }), [canUse, clearMessageFocus, closePanel, draft, focusMessage, isPanelOpen, liveTurn, messageFocus, openPanel, selectThread, selectedThreadId, send, stop, view])
+
+  return <CodexChatContext.Provider value={api}>{children}</CodexChatContext.Provider>
+}

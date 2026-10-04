@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
-import { CalendarClock, MessagesSquare, Workflow } from 'lucide-react'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import { CalendarClock, Workflow } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SidebarToggle } from '@/components/common/page-toolbar'
 import { ProviderIcon } from '@/components/common/provider-icons'
@@ -10,7 +10,6 @@ import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
-import { getCodexChatStatus } from '@/lib/api-codex-chat'
 import { formatCountDisplay, countStateFromQuery } from '@/lib/count-display'
 import type { GenerationResultView } from './components/generation-result-area'
 import { GENERATION_TOOLBAR_STATUS_SLOT_ID } from './components/generation-toolbar-status'
@@ -54,11 +53,6 @@ const ModuleWorkflowWorkspaceLazy = lazy(async () => {
   return { default: module.ModuleWorkflowWorkspace }
 })
 
-const CodexChatPanelLazy = lazy(async () => {
-  const module = await import('./components/codex-chat-panel')
-  return { default: module.CodexChatPanel }
-})
-
 const WorkflowReservationsPanelLazy = lazy(async () => {
   const module = await import('./components/workflow-reservations-panel')
   return { default: module.WorkflowReservationsPanel }
@@ -85,7 +79,13 @@ function PanelFallback() {
   return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
 }
 
+/** Codex chat moved out of the generation tabs into its own panel and page; old `?tab=chat` links land there. */
 export function ImageGenerationPage() {
+  const [searchParams] = useSearchParams()
+  return searchParams.get('tab') === 'chat' ? <Navigate to="/chat" replace /> : <ImageGenerationPageContent />
+}
+
+function ImageGenerationPageContent() {
   const { t, formatNumber } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
@@ -93,11 +93,7 @@ export function ImageGenerationPage() {
   const [narrowView, setNarrowView] = useState<NarrowView>('edit')
   const isWideLayout = useDesktopPageLayout()
   const rawTab = searchParams.get('tab')
-  // Codex 채팅 탭은 설정에서 켜고 관리자일 때만 보인다. 상태를 모르는 동안은 탭을 그대로 두고, 쓸 수 없으면 기본 탭으로 돌린다.
-  const codexChatStatusQuery = useQuery({ queryKey: ['codex-chat-status'], queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
-  const canUseCodexChat = codexChatStatusQuery.data?.canUse === true
-  const parsedTab = parseImageGenerationTab(rawTab)
-  const activeTab: ImageGenerationTab = parsedTab === 'chat' && !codexChatStatusQuery.isPending && !canUseCodexChat ? 'nai' : parsedTab
+  const activeTab = parseImageGenerationTab(rawTab)
   const isProviderTab = PROVIDER_TABS.includes(activeTab)
   // 선택한 ComfyUI 워크플로우는 URL 에 둔다. 새로고침/뒤로가기에도 같은 워크플로우로 돌아온다.
   const requestedComfyWorkflowId = parseImageGenerationWorkflowId(searchParams.get(IMAGE_GENERATION_WORKFLOW_PARAM))
@@ -270,9 +266,6 @@ export function ImageGenerationPage() {
     })),
     { value: 'workflows', label: <Workflow className="size-4" />, ariaLabel: getImageGenerationTabLabel('workflows', t) },
     { value: 'reservations', label: <CalendarClock className="size-4" />, ariaLabel: getImageGenerationTabLabel('reservations', t) },
-    ...(canUseCodexChat || activeTab === 'chat'
-      ? [{ value: 'chat', label: <MessagesSquare className="size-4" />, ariaLabel: getImageGenerationTabLabel('chat', t) }]
-      : []),
   ]
   const historyTotal = historyFeed.historyQuery.data?.pages[0]?.total
   const resultCountLabel = shouldShowHistory && historyTotal !== undefined
@@ -294,7 +287,7 @@ export function ImageGenerationPage() {
       {/* 폰 폭에서는 연결 상태를 탭 아랫줄로 내린다. 비어 있으면(워크플로우·예약작업) 줄을 차지하지 않는다. */}
       <div
         id={GENERATION_TOOLBAR_STATUS_SLOT_ID}
-        className={cn('flex min-w-0 flex-1 items-center overflow-hidden max-sm:basis-full max-sm:empty:hidden', !isProviderTab && activeTab !== 'chat' && 'invisible')}
+        className={cn('flex min-w-0 flex-1 items-center overflow-hidden max-sm:basis-full max-sm:empty:hidden', !isProviderTab && 'invisible')}
       />
     </div>
   )
@@ -308,26 +301,19 @@ export function ImageGenerationPage() {
     )
   }
 
-  // 채팅은 입력창을 화면 아래에 두려고 분할 화면과 같은 고정 높이 레이아웃을 쓴다.
-  const useFixedHeightLayout = useWideSplitPaneScroll || activeTab === 'chat'
+  const useFixedHeightLayout = useWideSplitPaneScroll
 
   return (
     <div
       className={cn(
         'space-y-4',
-        useNarrowTabs && narrowView === 'edit' ? 'pb-28' : isWideLayout || activeTab === 'chat' ? 'pb-0' : 'pb-6',
+        useNarrowTabs && narrowView === 'edit' ? 'pb-28' : isWideLayout ? 'pb-0' : 'pb-6',
         useFixedHeightLayout && 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
       )}
     >
       <div className={cn(useFixedHeightLayout && 'shrink-0 pb-2')}>
         {toolbar}
       </div>
-
-      {activeTab === 'chat' && canUseCodexChat ? (
-        <Suspense fallback={<PanelFallback />}>
-          <CodexChatPanelLazy statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID} isWideLayout={isWideLayout} />
-        </Suspense>
-      ) : null}
 
       {activeTab === 'reservations' ? (
         <Suspense fallback={<PanelFallback />}>

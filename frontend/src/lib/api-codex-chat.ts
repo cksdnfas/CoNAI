@@ -55,6 +55,18 @@ export interface CodexChatThreadDetail {
   running: { text: string; toolCalls: CodexChatToolCall[] } | null
 }
 
+/** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */
+export interface CodexChatMediaItem {
+  compositeHash: string
+  messageId: number
+  /** SQLite UTC timestamp of that message. */
+  createdDate: string
+  source: 'generated' | 'found'
+  mimeType: string | null
+  width: number | null
+  height: number | null
+}
+
 export type CodexChatStreamEvent =
   | { type: 'user'; message: CodexChatMessage }
   | { type: 'delta'; text: string }
@@ -86,6 +98,10 @@ export function createCodexChatThread() {
 
 export function getCodexChatThread(threadId: number) {
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}`, { cache: 'no-store' })
+}
+
+export function getCodexChatThreadMedia(threadId: number) {
+  return requestApiData<CodexChatMediaItem[]>(`/api/codex-chat/threads/${threadId}/media`, { cache: 'no-store' })
 }
 
 export function deleteCodexChatThread(threadId: number) {

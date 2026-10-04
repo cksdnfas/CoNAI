@@ -35,7 +35,7 @@ function sendChatError(res: Response, error: unknown) {
   res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Codex chat failed' })
 }
 
-/** GET /api/codex-chat/status — whether the chat tab should appear for this session. */
+/** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear for this session. */
 router.get('/status', (req: Request, res: Response) => {
   const settings = loadCodexChatSettings()
   res.json({ success: true, data: { enabled: settings.enabled, canUse: settings.enabled && isCodexChatAdmin(getRequesterAccountId(req)) } })
@@ -99,6 +99,17 @@ router.get('/threads/:threadId', requireAdmin, (req: Request, res: Response) => 
   if (threadId === null) return
   try {
     res.json({ success: true, data: CodexChatService.getThread(requesterFrom(req), threadId) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+/** GET /api/codex-chat/threads/:threadId/media — images the chat generated or looked up, newest first. */
+router.get('/threads/:threadId/media', requireAdmin, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    res.json({ success: true, data: CodexChatService.listThreadMedia(requesterFrom(req), threadId) })
   } catch (error) {
     sendChatError(res, error)
   }

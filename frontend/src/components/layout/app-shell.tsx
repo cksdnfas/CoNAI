@@ -9,6 +9,8 @@ import { HeaderAccountMenu } from '@/features/auth/header-account-menu'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { CodexChatProvider } from '@/features/codex-chat/codex-chat-provider'
+import { CodexChatDock, CodexChatHeaderButton, useCodexChatDockVisible } from '@/features/codex-chat/codex-chat-shell'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { registerTranslationCatalog, useI18n } from '@/i18n'
 import { getPublicHeaderNavigationSettings } from '@/lib/api-settings-general'
@@ -71,7 +73,9 @@ export function AppShell() {
   return (
     <HomeSearchProvider>
       <ImageViewModalProvider>
-        <AppShellLayout />
+        <CodexChatProvider>
+          <AppShellLayout />
+        </CodexChatProvider>
       </ImageViewModalProvider>
     </HomeSearchProvider>
   )
@@ -97,6 +101,7 @@ function AppShellLayout() {
   const shouldShowHeaderSearch = headerNavigation.search !== false && !isAnonymousSession
   const shouldShowAccountMenu = headerNavigation.account !== false
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
+  const isCodexChatDockVisible = useCodexChatDockVisible()
   const {
     scrollRef: navScrollRef,
     canScrollLeft: canScrollNavLeft,
@@ -197,14 +202,19 @@ function AppShellLayout() {
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             {shouldShowGenerationQueueWidget ? <DeferredGenerationQueueHeaderWidget /> : null}
             <HomeSearchHeaderBox active={shouldShowHeaderSearch} />
+            <CodexChatHeaderButton />
             {shouldShowAccountMenu ? <HeaderAccountMenu /> : null}
           </div>
         </div>
       </header>
 
-      <main className="theme-shell-main mx-auto w-full max-w-[1680px]">
-        <Outlet />
-      </main>
+      {/* The docked chat panel takes the right edge from lg up; the page keeps the rest. */}
+      <div className={cn(isCodexChatDockVisible && 'lg:pr-[420px]')}>
+        <main className="theme-shell-main mx-auto w-full max-w-[1680px]">
+          <Outlet />
+        </main>
+      </div>
+      <CodexChatDock />
 
       <HomeSearchDrawer active={shouldShowHeaderSearch} />
       {shouldUseGlobalScrollRestoration ? <ScrollRestoration getKey={(location) => `${location.pathname}${location.search}`} /> : null}
