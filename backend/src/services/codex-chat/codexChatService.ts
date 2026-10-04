@@ -66,6 +66,7 @@ const DEVELOPER_INSTRUCTIONS = [
 
 export type CodexChatStreamEvent =
   | { type: 'user'; message: CodexChatMessageRecord }
+  | { type: 'rewind'; mode: 'regenerate' | 'edit'; message: CodexChatMessageRecord }
   | { type: 'delta'; text: string }
   /** LLM chats: the model's reasoning, shown while it streams and not stored. */
   | { type: 'reasoning'; text: string }
@@ -111,6 +112,7 @@ export class CodexChatError extends Error {
 
 const sessions = new Map<string, Session>()
 const startingSessions = new Map<string, Promise<Session>>()
+const startingThreads = new Set<number>()
 
 /** MCP grants are per process (token), so processes are keyed by account + scopes + tool allowlist. */
 function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null) {
@@ -492,6 +494,37 @@ function findActiveTurn(chatThreadId: number) {
 }
 
 export const CodexChatService = {
+  isRunning(threadId: number) {
+    return startingThreads.has(threadId) || Boolean(findActiveTurn(threadId)) || LlmChatService.isRunning(threadId)
+  },
+
+  clearThread(requester: McpRequester, threadId: number) {
+    const thread = requireThread(requester, threadId)
+    if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
+    CodexChatStore.clearThread(threadId, profile?.greeting ? fillCharacterPlaceholders(profile.greeting, profile) : '')
+    return CodexChatService.getThread(requester, threadId)
+  },
+
+  rewriteMessage(requester: McpRequester, threadId: number, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
+    const thread = requireThread(requester, threadId)
+    if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (thread.engine !== 'llm') throw new CodexChatError('메시지 수정과 다시 생성은 API LLM 채팅에서만 가능해.', 409)
+    return LlmChatService.rewriteMessage(requester, thread, messageId, content, listener)
+  },
+
+  selectAlternative(requester: McpRequester, threadId: number, messageId: number, index: number) {
+    const thread = requireThread(requester, threadId)
+    if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (thread.engine !== 'llm') throw new CodexChatError('답변 전환은 API LLM 채팅에서만 가능해.', 409)
+    const messages = CodexChatStore.listMessages(threadId)
+    const message = messages[messages.length - 1]
+    if (!message || message.id !== messageId || message.role !== 'assistant') throw new CodexChatError('마지막 답변만 전환할 수 있어.', 409)
+    if (!Number.isSafeInteger(index) || index < 0 || !message.alternatives[index]) throw new CodexChatError('답변 번호를 확인해줘.')
+    CodexChatStore.selectAlternative(threadId, messageId, index)
+    return CodexChatService.getThread(requester, threadId)
+  },
+
   listThreads(requester: McpRequester) {
     return CodexChatStore.listThreads(requester.accountId)
   },
@@ -570,54 +603,59 @@ export const CodexChatService = {
     if (!trimmed && attachments.length === 0) {
       throw new CodexChatError('메시지를 입력해줘.')
     }
-    if (findActiveTurn(threadId)) {
+    if (CodexChatService.isRunning(threadId)) {
       throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     }
 
-    const profile = requireCodexProfile(thread.profile_id)
-    const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-    const session = await ensureSession(requester, scopes, profile.toolAllowlist)
-    const run = resolveCodexRun(session, profile)
-    const codexThreadId = await ensureCodexThread(session, threadId, thread.codex_thread_id, profile)
-
-    let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
-    const finished = new Promise<CodexChatMessageRecord>((resolve) => {
-      resolveFinished = resolve
-    })
-    const turn: TurnState = {
-      chatThreadId: threadId,
-      codexThreadId,
-      turnId: null,
-      agentMessages: new Map(),
-      commentaryItems: new Set(),
-      toolCalls: new Map(),
-      listeners: new Set([listener]),
-      lastError: null,
-      finished,
-      resolveFinished,
-    }
-    const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null }, attachments.map((file) => file.id))
-    session.activeTurns.set(codexThreadId, turn)
-    clearIdleTimer(session)
-    if (!thread.title) {
-      CodexChatStore.renameThread(threadId, (trimmed || attachments[0]?.name || '').replace(/\s+/g, ' '))
-    }
-    const userMessage = CodexChatStore.listMessages(threadId).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord
-    emit(turn, { type: 'user', message: userMessage })
-
+    startingThreads.add(threadId)
     try {
-      const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
-        threadId: codexThreadId,
-        model: run.model,
-        effort: run.effort,
-        input: [{ type: 'text', text: chatContentWithAttachments(trimmed, attachments), text_elements: [] }],
-      }, THREAD_REQUEST_TIMEOUT_MS)
-      turn.turnId = response.turn.id
-    } catch (error) {
-      finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
-    }
+      const profile = requireCodexProfile(thread.profile_id)
+      const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
+      const session = await ensureSession(requester, scopes, profile.toolAllowlist)
+      const run = resolveCodexRun(session, profile)
+      const codexThreadId = await ensureCodexThread(session, threadId, thread.codex_thread_id, profile)
 
-    return turn.finished
+      let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
+      const finished = new Promise<CodexChatMessageRecord>((resolve) => {
+        resolveFinished = resolve
+      })
+      const turn: TurnState = {
+        chatThreadId: threadId,
+        codexThreadId,
+        turnId: null,
+        agentMessages: new Map(),
+        commentaryItems: new Set(),
+        toolCalls: new Map(),
+        listeners: new Set([listener]),
+        lastError: null,
+        finished,
+        resolveFinished,
+      }
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null }, attachments.map((file) => file.id))
+      session.activeTurns.set(codexThreadId, turn)
+      clearIdleTimer(session)
+      if (!thread.title) {
+        CodexChatStore.renameThread(threadId, (trimmed || attachments[0]?.name || '').replace(/\s+/g, ' '))
+      }
+      const userMessage = CodexChatStore.listMessages(threadId).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord
+      emit(turn, { type: 'user', message: userMessage })
+
+      try {
+        const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
+          threadId: codexThreadId,
+          model: run.model,
+          effort: run.effort,
+          input: [{ type: 'text', text: chatContentWithAttachments(trimmed, attachments), text_elements: [] }],
+        }, THREAD_REQUEST_TIMEOUT_MS)
+        turn.turnId = response.turn.id
+      } catch (error) {
+        finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
+      }
+
+      return await turn.finished
+    } finally {
+      startingThreads.delete(threadId)
+    }
   },
 
   async interrupt(requester: McpRequester, threadId: number) {

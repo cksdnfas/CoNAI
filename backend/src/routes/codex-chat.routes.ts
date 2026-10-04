@@ -200,6 +200,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
   const body = (req.body ?? {}) as Record<string, unknown>
   try {
     const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
+    if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (thread.engine !== 'llm') {
       sendRouteBadRequest(res, 'Only LLM chats have context settings')
       return
@@ -432,6 +433,67 @@ router.post('/threads/:threadId/interrupt', requireChatAccess, asyncHandler(asyn
   }
 }))
 
+router.post('/threads/:threadId/clear', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    res.json({ success: true, data: CodexChatService.clearThread(requesterFrom(req), threadId) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.post('/threads/:threadId/messages/:messageId/alternative', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  const messageId = parseId(req.params.messageId)
+  if (threadId === null) return
+  if (messageId === null || !Number.isSafeInteger(req.body?.index) || req.body.index < 0) {
+    sendRouteBadRequest(res, '메시지와 답변 번호를 확인해줘.')
+    return
+  }
+  try {
+    res.json({ success: true, data: CodexChatService.selectAlternative(requesterFrom(req), threadId, messageId, req.body.index) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+async function rewriteMessage(req: Request, res: Response, edit: boolean) {
+  const threadId = parseThreadId(req, res)
+  const messageId = parseId(req.params.messageId)
+  if (threadId === null) return
+  if (messageId === null || (edit && (typeof req.body?.content !== 'string' || req.body.content.length > MESSAGE_MAX_LENGTH))) {
+    sendRouteBadRequest(res, '메시지 내용을 확인해줘.')
+    return
+  }
+  await streamChatReply(res, (write) => CodexChatService.rewriteMessage(requesterFrom(req), threadId, messageId, edit ? req.body.content : undefined, write))
+}
+
+router.post('/threads/:threadId/messages/:messageId/regenerate', requireChatAccess, asyncHandler((req, res) => rewriteMessage(req, res, false)))
+router.patch('/threads/:threadId/messages/:messageId', requireChatAccess, asyncHandler((req, res) => rewriteMessage(req, res, true)))
+
+/** A rejected operation retains its HTTP status until the first NDJSON event is accepted. */
+async function streamChatReply(res: Response, run: (write: (event: CodexChatStreamEvent) => void) => Promise<unknown>) {
+  let streaming = false
+  const write = (event: CodexChatStreamEvent) => {
+    if (res.destroyed || res.writableEnded) return
+    if (!streaming) {
+      streaming = true
+      res.status(200)
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('X-Accel-Buffering', 'no')
+      res.flushHeaders()
+    }
+    res.write(`${JSON.stringify(event)}\n`)
+  }
+  try {
+    await run(write)
+    if (!res.destroyed && !res.writableEnded) res.end()
+  } catch (error) {
+    if (res.destroyed || res.writableEnded) return
+    if (!streaming) { sendChatError(res, error); return }
+    write({ type: 'error', message: error instanceof Error ? error.message : 'Chat failed' })
+    res.end()
+  }
+}
+
 /**
  * POST /api/codex-chat/threads/:threadId/messages
  * Streams the turn as NDJSON (`user`, `delta`, `reasoning`, `tool`, then `done` or `error`). Closing the response
@@ -446,34 +508,7 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
     return
   }
 
-  let streaming = false
-  const write = (event: CodexChatStreamEvent) => {
-    if (!streaming) {
-      streaming = true
-      res.status(200)
-      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-      res.setHeader('Cache-Control', 'no-store')
-      res.setHeader('X-Accel-Buffering', 'no')
-      res.flushHeaders()
-    }
-    if (!res.writableEnded) {
-      res.write(`${JSON.stringify(event)}\n`)
-    }
-  }
-
-  try {
-    await CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds)
-    if (!res.writableEnded) {
-      res.end()
-    }
-  } catch (error) {
-    if (!streaming) {
-      sendChatError(res, error)
-      return
-    }
-    write({ type: 'error', message: error instanceof Error ? error.message : 'Chat failed' })
-    res.end()
-  }
+  await streamChatReply(res, (write) => CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds))
 }))
 
 export default router

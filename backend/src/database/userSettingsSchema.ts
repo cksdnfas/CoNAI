@@ -499,10 +499,19 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['summary', 'TEXT'],
     ['summary_until_message_id', 'INTEGER'],
     ['summary_updated_date', 'DATETIME'],
+    ['context_revision', 'INTEGER NOT NULL DEFAULT 0'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {
       db.exec(`ALTER TABLE codex_chat_threads ADD COLUMN ${columnName} ${definition}`);
+    }
+  }
+  for (const [columnName, definition] of [
+    ['alternatives', 'TEXT'],
+    ['active_alternative', 'INTEGER NOT NULL DEFAULT 0'],
+  ]) {
+    if (!hasColumn('codex_chat_messages', columnName)) {
+      db.exec(`ALTER TABLE codex_chat_messages ADD COLUMN ${columnName} ${definition}`);
     }
   }
   const chatProfileColumns: Array<[string, string]> = [

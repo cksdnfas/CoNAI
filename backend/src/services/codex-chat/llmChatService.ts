@@ -24,6 +24,7 @@ export class LlmChatError extends Error {
 
 type LlmTurn = {
   threadId: number
+  replacingMessageId?: number
   controller: AbortController
   /** Reply text across tool rounds, separated by blank lines. */
   text: string
@@ -135,7 +136,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const messages: ChatCompletionMessage[] = buildChatMessages({
       profile,
       thread,
-      messages: CodexChatStore.listMessages(thread.id),
+      messages: CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId),
       config: resolveContextConfig(thread, profile),
       tools: bridge?.tools ?? [],
     })
@@ -189,20 +190,60 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
 }
 
 function finishTurn(turn: LlmTurn, status: CodexChatMessageRecord['status'], error: string | null) {
-  activeTurns.delete(turn.threadId)
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  const messageId = CodexChatStore.addMessage({
+  const content = stripThinking(turn.text).trim()
+  const messageId = turn.replacingMessageId ?? CodexChatStore.addMessage({
     thread_id: turn.threadId,
     role: 'assistant',
-    content: stripThinking(turn.text).trim(),
+    content,
     tool_calls: toolCalls,
     status,
     error,
   })
+  if (turn.replacingMessageId) {
+    // A connection failure must not replace a usable answer with an empty failed alternative.
+    if (status === 'completed' || content || toolCalls.length) {
+      CodexChatStore.addAlternative(turn.threadId, messageId, { content, tool_calls: toolCalls, status, error, created_at: new Date().toISOString() })
+    } else if (error) {
+      emit(turn, { type: 'error', message: error })
+    }
+  }
   const message = CodexChatStore.listMessages(turn.threadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
+  activeTurns.delete(turn.threadId)
   emit(turn, { type: 'done', message })
   turn.listeners.clear()
   return message
+}
+
+/** All validation and rewrites happen synchronously while this thread is reserved. */
+function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
+  prepare: () => CodexChatStreamEvent, replacingMessageId?: number) {
+  if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+  let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
+  const turn: LlmTurn = {
+    threadId: thread.id, replacingMessageId, controller: new AbortController(), text: '', reasoning: '', toolCalls: new Map(),
+    listeners: new Set([listener]), finished: new Promise((resolve) => { resolveFinished = resolve }),
+  }
+  activeTurns.set(thread.id, turn)
+  try {
+    emit(turn, prepare())
+  } catch (error) {
+    activeTurns.delete(thread.id)
+    throw error
+  }
+  const updatedThread = CodexChatStore.findThreadById(thread.id) as CodexChatThreadRecord
+  void runReply(turn, requester, updatedThread, profile)
+    .then(() => resolveFinished(finishTurn(turn, turn.controller.signal.aborted ? 'interrupted' : 'completed', null)))
+    .catch((error: unknown) => {
+      const aborted = turn.controller.signal.aborted
+      resolveFinished(finishTurn(turn, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error)))
+    })
+    .finally(() => {
+      updateThreadSummary(thread.id, profile).catch((error: unknown) => {
+        console.warn('[llm-chat] summary update failed:', error instanceof Error ? error.message : error)
+      })
+    })
+  return turn.finished
 }
 
 export const LlmChatService = {
@@ -218,7 +259,7 @@ export const LlmChatService = {
 
   running(threadId: number) {
     const turn = activeTurns.get(threadId)
-    return turn ? { text: turn.text, toolCalls: [...turn.toolCalls.values()] } : null
+    return turn ? { text: turn.text, toolCalls: [...turn.toolCalls.values()], replacingMessageId: turn.replacingMessageId } : null
   },
 
   isRunning(threadId: number) {
@@ -237,42 +278,32 @@ export const LlmChatService = {
     if (!trimmed && attachments.length === 0) {
       throw new LlmChatError('메시지를 입력해줘.')
     }
-    if (activeTurns.has(thread.id)) {
-      throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
-    }
+    return startReply(requester, thread, profile, listener, () => {
+      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null }, attachments.map((file) => file.id))
+      if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || '').replace(/\s+/g, ' '))
+      return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }
+    })
+  },
 
-    let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
-    const turn: LlmTurn = {
-      threadId: thread.id,
-      controller: new AbortController(),
-      text: '',
-      reasoning: '',
-      toolCalls: new Map(),
-      listeners: new Set([listener]),
-      finished: new Promise((resolve) => {
-        resolveFinished = resolve
-      }),
+  rewriteMessage(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
+    assertLlmChatAvailable(requester)
+    const profile = requireUsableProfile(thread.profile_id)
+    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+    const messages = CodexChatStore.listMessages(thread.id)
+    const message = messages.find((entry) => entry.id === messageId)
+    if (!message) throw new LlmChatError('메시지를 찾을 수 없어.', 404)
+    const regenerate = content === undefined
+    if (regenerate ? message.role !== 'assistant' || messages[messages.length - 1].id !== messageId || !messages.some((entry) => entry.role === 'user') : message.role !== 'user') {
+      throw new LlmChatError(regenerate ? '마지막 답변만 다시 생성할 수 있어.' : '내 메시지만 수정할 수 있어.', 409)
     }
-    const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null }, attachments.map((file) => file.id))
-    activeTurns.set(thread.id, turn)
-    if (!thread.title) {
-      CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || '').replace(/\s+/g, ' '))
-    }
-    emit(turn, { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord })
-
-    void runReply(turn, requester, thread, profile)
-      .then(() => resolveFinished(finishTurn(turn, turn.controller.signal.aborted ? 'interrupted' : 'completed', null)))
-      .catch((error: unknown) => {
-        const aborted = turn.controller.signal.aborted
-        resolveFinished(finishTurn(turn, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error)))
-      })
-      .finally(() => {
-        updateThreadSummary(thread.id, profile).catch((error: unknown) => {
-          console.warn('[llm-chat] summary update failed:', error instanceof Error ? error.message : error)
-        })
-      })
-
-    return turn.finished
+    if (!regenerate && !content.trim() && !message.attachments?.length) throw new LlmChatError('메시지를 입력해줘.')
+    // Resolve configuration before deleting any later messages.
+    resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: profileGenerationOptions(profile) })
+    return startReply(requester, thread, profile, listener, () => {
+      if (regenerate) CodexChatStore.prepareRegeneration(thread.id, messageId)
+      else CodexChatStore.editUserMessage(thread.id, messageId, content.trim())
+      return { type: 'rewind', mode: regenerate ? 'regenerate' : 'edit', message: { ...message, content: regenerate ? message.content : content.trim() } }
+    }, regenerate ? messageId : undefined)
   },
 
   interrupt(threadId: number) {
@@ -292,6 +323,7 @@ export const LlmChatService = {
   async summarize(requester: McpRequester, thread: CodexChatThreadRecord) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id)
+    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const summary = await updateThreadSummary(thread.id, profile, { force: true })
     if (summary === null) {
       throw new LlmChatError('요약할 새 대화가 없거나 이미 요약 중이야.', 409)

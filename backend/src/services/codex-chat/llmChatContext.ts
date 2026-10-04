@@ -304,8 +304,7 @@ export async function updateThreadSummary(threadId: number, profile: ChatProfile
     if (!summary) {
       throw new Error('요약 결과가 비어 있어.')
     }
-    CodexChatStore.setSummary(threadId, summary, pending[pending.length - 1].id)
-    return summary
+    return CodexChatStore.setSummary(threadId, summary, pending[pending.length - 1].id, thread.context_revision) ? summary : null
   } finally {
     summarizing.delete(threadId)
   }

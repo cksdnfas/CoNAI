@@ -37,11 +37,14 @@ export type CodexChatThreadRecord = {
   /** The last message folded into `summary`. */
   summary_until_message_id: number | null
   summary_updated_date: string | null
+  context_revision: number
   created_date: string
   updated_date: string
 }
 
 export type CodexChatMessageRecord = {
+  alternatives: ChatMessageAlternative[]
+  active_alternative: number
   attachments?: StoredFileEntry[]
   id: number
   thread_id: number
@@ -53,7 +56,15 @@ export type CodexChatMessageRecord = {
   created_date: string
 }
 
-type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls'> & { tool_calls: string | null }
+export type ChatMessageAlternative = {
+  content: string
+  tool_calls: CodexChatToolCall[]
+  created_at: string
+  status: CodexChatMessageRecord['status']
+  error: string | null
+}
+
+type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives'> & { tool_calls: string | null; alternatives: string | null }
 
 const TITLE_MAX_LENGTH = 60
 
@@ -67,6 +78,31 @@ function parseToolCalls(value: string | null): CodexChatToolCall[] {
   } catch {
     return []
   }
+}
+
+function parseAlternatives(value: string | null): ChatMessageAlternative[] {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/** Any history rewrite invalidates summaries being computed from the old history. */
+function invalidateContext(threadId: number, changedMessageId: number) {
+  getUserSettingsDb().prepare(`UPDATE codex_chat_threads SET
+    summary = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary END,
+    summary_updated_date = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary_updated_date END,
+    summary_until_message_id = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary_until_message_id END,
+    codex_thread_id = NULL, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?
+  `).run(changedMessageId, changedMessageId, changedMessageId, threadId)
+}
+
+function removeMessagesAfter(threadId: number, messageId: number) {
+  const db = getUserSettingsDb()
+  db.prepare('DELETE FROM chat_file_attachments WHERE message_id IN (SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id > ?)').run(threadId, messageId)
+  db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ? AND id > ?').run(threadId, messageId)
 }
 
 export const CodexChatStore = {
@@ -103,10 +139,11 @@ export const CodexChatStore = {
     }
   },
 
-  setSummary(threadId: number, summary: string | null, untilMessageId: number | null) {
-    getUserSettingsDb().prepare(`
-      UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ?, summary_updated_date = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(summary, untilMessageId, threadId)
+  setSummary(threadId: number, summary: string | null, untilMessageId: number | null, expectedRevision?: number) {
+    return getUserSettingsDb().prepare(`
+      UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ?, summary_updated_date = CURRENT_TIMESTAMP,
+      context_revision = context_revision + 1 WHERE id = ? ${expectedRevision === undefined ? '' : 'AND context_revision = ?'}
+    `).run(summary, untilMessageId, threadId, ...(expectedRevision === undefined ? [] : [expectedRevision])).changes > 0
   },
 
   setCodexThreadId(threadId: number, codexThreadId: string) {
@@ -138,7 +175,66 @@ export const CodexChatStore = {
     const rows = getUserSettingsDb().prepare(`
       SELECT * FROM codex_chat_messages WHERE thread_id = ? ORDER BY id
     `).all(threadId) as StoredMessageRow[]
-    return rows.map((row) => ({ ...row, tool_calls: parseToolCalls(row.tool_calls), attachments: attachments.get(row.id) ?? [] }))
+    return rows.map((row) => ({ ...row, tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives), attachments: attachments.get(row.id) ?? [] }))
+  },
+
+  truncateAfter(threadId: number, messageId: number) {
+    const db = getUserSettingsDb()
+    db.transaction(() => {
+      if (!db.prepare('SELECT 1 FROM codex_chat_messages WHERE thread_id = ? AND id = ?').get(threadId, messageId)) throw new Error('Message not found')
+      removeMessagesAfter(threadId, messageId)
+      invalidateContext(threadId, messageId + 1)
+    }).immediate()
+  },
+
+  prepareRegeneration(threadId: number, messageId: number) {
+    invalidateContext(threadId, messageId)
+  },
+
+  editUserMessage(threadId: number, messageId: number, content: string) {
+    const db = getUserSettingsDb()
+    db.transaction(() => {
+      const updated = db.prepare("UPDATE codex_chat_messages SET content = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, threadId, messageId)
+      if (!updated.changes) throw new Error('User message not found')
+      removeMessagesAfter(threadId, messageId)
+      invalidateContext(threadId, messageId)
+    }).immediate()
+  },
+
+  clearThread(threadId: number, greeting: string) {
+    const db = getUserSettingsDb()
+    db.transaction(() => {
+      removeMessagesAfter(threadId, 0)
+      db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL,
+        codex_thread_id = NULL, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
+      if (greeting) CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: greeting, tool_calls: [], status: 'completed', error: null })
+    }).immediate()
+  },
+
+  addAlternative(threadId: number, messageId: number, alternative: ChatMessageAlternative) {
+    const db = getUserSettingsDb()
+    db.transaction(() => {
+      const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
+      if (!row) throw new Error('Assistant message not found')
+      const alternatives = parseAlternatives(row.alternatives)
+      if (!alternatives.length) alternatives.push({ content: row.content, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error })
+      alternatives.push(alternative)
+      db.prepare(`UPDATE codex_chat_messages SET alternatives = ?, active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ? WHERE id = ?`)
+        .run(JSON.stringify(alternatives), alternatives.length - 1, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, messageId)
+      invalidateContext(threadId, messageId)
+    }).immediate()
+  },
+
+  selectAlternative(threadId: number, messageId: number, index: number) {
+    const db = getUserSettingsDb()
+    db.transaction(() => {
+      const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
+      const alternative = row ? parseAlternatives(row.alternatives)[index] : undefined
+      if (!alternative) throw new Error('Alternative not found')
+      db.prepare('UPDATE codex_chat_messages SET active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ? WHERE id = ?')
+        .run(index, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, messageId)
+      invalidateContext(threadId, messageId)
+    }).immediate()
   },
 
   addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error'>, fileIds: string[] = []) {
