@@ -23,6 +23,19 @@ export interface CodexChatStatus {
 
 export type ChatTypeface = 'sans' | 'serif' | 'mono'
 
+/** A designed card: the model writes ```key + JSON values, the chat fills `template` ({{field}} slots) styled by `css`. */
+export interface ChatDisplayBlock {
+  id: string
+  key: string
+  /** When the model should use it (sent in the system prompt). */
+  instruction: string
+  /** Example JSON values: the format shown to the model, and the editor preview's data. */
+  example: string
+  template: string
+  css: string
+  enabled: boolean
+}
+
 /** How a profile's chats look. Colours are `#rrggbb`, or empty for the theme's text colour. */
 export interface ChatStyle {
   typeface: ChatTypeface
@@ -32,6 +45,7 @@ export interface ChatStyle {
   /** Background dimming 0–90 (%) and blur 0–20 (px). */
   backgroundDim: number
   backgroundBlur: number
+  blocks: ChatDisplayBlock[]
 }
 
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */

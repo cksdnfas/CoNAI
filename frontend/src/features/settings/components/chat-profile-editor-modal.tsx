@@ -38,6 +38,7 @@ import { getExternalApiProviders } from '@/lib/api-external-api'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 
+import { ChatDisplayBlocksEditor } from './chat-profile-blocks'
 import { ChatProfileLook } from './chat-profile-look'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
@@ -49,7 +50,7 @@ const AVATAR_SIZE_PX = 128
 type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background'>> & { sortOrder: number; background?: string | null }
 
 /** Shown until the server's defaults load (new profiles only). */
-const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0 }
+const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [] }
 
 function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults | undefined): Draft {
   return {
@@ -317,6 +318,10 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
             onStyleChange={(style) => patch({ style })}
             onBackgroundChange={(background) => patch({ background })}
           />
+          <div className="space-y-2 border-t border-line pt-3">
+            <h4 className="text-xs font-semibold text-muted-foreground">{t({ ko: '표시 블록', en: 'Display blocks' })}</h4>
+            <ChatDisplayBlocksEditor blocks={draft.style.blocks} characterName={draft.name} onChange={(blocks) => patch({ style: { ...draft.style, blocks } })} />
+          </div>
         </Section>
 
         <Section title={t({ ko: '도구', en: 'Tools' })}>

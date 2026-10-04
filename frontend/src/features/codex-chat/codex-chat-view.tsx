@@ -176,7 +176,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : null
   const isCodexThread = thread?.engine !== 'llm'
   const { appearance } = useChatAppearance()
-  const speaker: ChatSpeaker | null = profile ? { name: profile.name, avatar: profile.avatar, engine: profile.engine, roleplay: profile.style?.roleplay ?? false } : null
+  const speaker: ChatSpeaker | null = profile ? { name: profile.name, avatar: profile.avatar, engine: profile.engine, roleplay: profile.style?.roleplay ?? false, blocks: profile.style?.blocks } : null
   const backgroundUrl = appearance.showBackground && profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
 
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && thread !== null })

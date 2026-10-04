@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
-import type { ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatDisplayBlock, ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
 import { requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
@@ -255,7 +255,7 @@ function ActivityLine({ toolCalls }: { toolCalls: CodexChatToolCall[] }) {
 }
 
 /** Who answers in a chat: the thread's profile. */
-export type ChatSpeaker = { name: string; avatar: string | null; engine: ChatEngine; roleplay?: boolean }
+export type ChatSpeaker = { name: string; avatar: string | null; engine: ChatEngine; roleplay?: boolean; blocks?: ChatDisplayBlock[] }
 
 /** The model's reasoning while it streams, folded by default (never stored). */
 function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
@@ -313,7 +313,7 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
       ) : null}
       {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
       <CodexChatToolMedia calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} media={media} />
-      {content ? <ChatMarkdown text={content} roleplay={speaker?.roleplay} /> : null}
+      {content ? <ChatMarkdown text={content} roleplay={speaker?.roleplay} blocks={speaker?.blocks} /> : null}
       {streaming ? <ActivityLine toolCalls={toolCalls} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}

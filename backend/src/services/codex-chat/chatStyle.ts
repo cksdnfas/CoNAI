@@ -13,6 +13,24 @@ export type ChatStyleColors = {
   thought: string
 }
 
+/**
+ * A designed card the model fills in: it writes a ```key fenced block of JSON values, and the chat renders `template`
+ * (HTML with {{field}} slots, styled by `css`) with them. The template is the profile author's; the model only supplies
+ * values, which are inserted as text.
+ */
+export type ChatDisplayBlock = {
+  id: string
+  /** Fence language the model writes, e.g. `status`. */
+  key: string
+  /** When and how the model should use the block; goes into the system prompt. */
+  instruction: string
+  /** Example JSON values: shown to the model as the format, and used for the editor preview. */
+  example: string
+  template: string
+  css: string
+  enabled: boolean
+}
+
 export type ChatStyle = {
   typeface: ChatTypeface
   /** Colour dialogue / narration / thoughts and tell the model to mark them. */
@@ -22,6 +40,7 @@ export type ChatStyle = {
   backgroundDim: number
   /** Background image blur, 0–20 (px). */
   backgroundBlur: number
+  blocks: ChatDisplayBlock[]
 }
 
 export const DEFAULT_CHAT_STYLE: ChatStyle = {
@@ -30,7 +49,12 @@ export const DEFAULT_CHAT_STYLE: ChatStyle = {
   colors: { dialogue: '', narration: '#e8c872', thought: '#9aa4b2' },
   backgroundDim: 55,
   backgroundBlur: 0,
+  blocks: [],
 }
+
+const MAX_BLOCKS = 12
+const BLOCK_KEY_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/
+const BLOCK_TEXT_LIMITS = { instruction: 2000, example: 4000, template: 20_000, css: 20_000 } as const
 
 /** Large enough for a ~1600px WebP; resized in the browser before upload. */
 export const BACKGROUND_MAX_LENGTH = 4_000_000
@@ -46,6 +70,31 @@ function color(value: unknown, fallback: string) {
 function bounded(value: unknown, min: number, max: number, fallback: number) {
   const number = Number(value)
   return value === null || value === undefined || value === '' || !Number.isFinite(number) ? fallback : Math.round(Math.min(max, Math.max(min, number)))
+}
+
+function normalizeBlocks(value: unknown): ChatDisplayBlock[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const seen = new Set<string>()
+  return value.slice(0, MAX_BLOCKS).flatMap((entry, index) => {
+    if (!entry || typeof entry !== 'object') return []
+    const record = entry as Record<string, unknown>
+    const key = typeof record.key === 'string' ? record.key.trim().toLowerCase() : ''
+    // An unnamed block is kept (being written in the editor) but never offered to the model.
+    if (key && (!BLOCK_KEY_PATTERN.test(key) || seen.has(key))) return []
+    if (key) seen.add(key)
+    const field = (name: keyof typeof BLOCK_TEXT_LIMITS) => (typeof record[name] === 'string' ? (record[name] as string).slice(0, BLOCK_TEXT_LIMITS[name]) : '')
+    return [{
+      id: typeof record.id === 'string' && record.id ? record.id.slice(0, 40) : `b${index}-${Date.now().toString(36)}`,
+      key,
+      instruction: field('instruction').trim(),
+      example: field('example').trim(),
+      template: field('template'),
+      css: field('css'),
+      enabled: record.enabled !== false,
+    }]
+  })
 }
 
 export function normalizeChatStyle(value: unknown): ChatStyle {
@@ -69,6 +118,7 @@ export function normalizeChatStyle(value: unknown): ChatStyle {
     },
     backgroundDim: bounded(record.backgroundDim, 0, 90, DEFAULT_CHAT_STYLE.backgroundDim),
     backgroundBlur: bounded(record.backgroundBlur, 0, 20, DEFAULT_CHAT_STYLE.backgroundBlur),
+    blocks: normalizeBlocks(record.blocks),
   }
 }
 
@@ -80,7 +130,24 @@ const ROLEPLAY_GUIDANCE = [
   'Do not use asterisks for bold or other emphasis in roleplay replies.',
 ].join('\n')
 
+function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
+  const usable = blocks.filter((block) => block.enabled && block.key && block.template.trim())
+  if (usable.length === 0) {
+    return ''
+  }
+  const fence = '```'
+  return [
+    'Display blocks: the chat renders these fenced blocks as designed cards. Write one exactly in this form (the fence name, then a single JSON object with the same fields), only where its instruction says. Values are plain text; never put HTML or Markdown in them.',
+    ...usable.map((block) => [
+      `- ${block.key}: ${block.instruction || 'use when it fits'}`,
+      `${fence}${block.key}`,
+      block.example || '{}',
+      fence,
+    ].join('\n')),
+  ].join('\n')
+}
+
 /** The part of the system prompt that tells the model about the profile's display conventions. */
 export function buildChatStyleGuidance(style: ChatStyle) {
-  return style.roleplay ? ROLEPLAY_GUIDANCE : ''
+  return [style.roleplay ? ROLEPLAY_GUIDANCE : '', buildBlocksGuidance(style.blocks)].filter(Boolean).join('\n\n')
 }

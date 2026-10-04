@@ -1,11 +1,13 @@
-import { useState, type ComponentProps, type ReactNode } from 'react'
+import { useMemo, useState, type ComponentProps, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Check, Copy, Eye } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
+import type { ChatDisplayBlock } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
+import { ChatDisplayBlockView, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 
 const PREVIEWABLE_LANGUAGES = new Set(['html', 'htm', 'svg', 'xml'])
 
@@ -70,6 +72,13 @@ function CodeBlock({ language, code }: { language: string | null; code: string }
   )
 }
 
+/** A fenced block: the profile's display block when its name matches and the values parse, else plain code. */
+function FencedBlock({ language, code }: { language: string | null; code: string }) {
+  const block = useChatDisplayBlock(language)
+  const data = block ? parseBlockPayload(code) : null
+  return block && data ? <ChatDisplayBlockView block={block} data={data} /> : <CodeBlock language={language} code={code} />
+}
+
 const MARKDOWN_COMPONENTS: Components = {
   p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
   a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>,
@@ -93,7 +102,7 @@ const MARKDOWN_COMPONENTS: Components = {
     const child = Array.isArray(children) ? children[0] : children
     const className = (child && typeof child === 'object' && 'props' in child ? (child as { props: { className?: string } }).props.className : undefined) ?? ''
     const language = /language-([\w+-]+)/.exec(className)?.[1]?.toLowerCase() ?? null
-    return <CodeBlock language={language} code={textOf(child).replace(/\n$/, '')} />
+    return <FencedBlock language={language} code={textOf(child).replace(/\n$/, '')} />
   },
   code: ({ children, className }: ComponentProps<'code'>) => (
     // Fenced blocks are rendered by `pre`; this is inline code.
@@ -176,12 +185,15 @@ function rehypeRoleplay() {
  * A reply as Markdown (GitHub flavour: tables, task lists, strikethrough). Raw HTML is not rendered; fence it to preview.
  * `roleplay` colours "dialogue", *narration* and 'thoughts' with the profile's colours (CSS variables on the transcript).
  */
-export function ChatMarkdown({ text, roleplay = false }: { text: string; roleplay?: boolean }) {
+export function ChatMarkdown({ text, roleplay = false, blocks }: { text: string; roleplay?: boolean; blocks?: ChatDisplayBlock[] }) {
+  const blocksByKey = useMemo(() => new Map((blocks ?? []).filter((block) => block.enabled && block.key).map((block) => [block.key, block])), [blocks])
   return (
-    <div className={cn('chat-markdown break-words text-foreground', roleplay && '[&_em]:text-(--chat-rp-narration)')}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={roleplay ? [rehypeRoleplay] : []} components={MARKDOWN_COMPONENTS}>
-        {fenceBareHtml(text)}
-      </ReactMarkdown>
-    </div>
+    <ChatDisplayBlocksContext.Provider value={blocksByKey}>
+      <div className={cn('chat-markdown break-words text-foreground', roleplay && '[&_em]:text-(--chat-rp-narration)')}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={roleplay ? [rehypeRoleplay] : []} components={MARKDOWN_COMPONENTS}>
+          {fenceBareHtml(text)}
+        </ReactMarkdown>
+      </div>
+    </ChatDisplayBlocksContext.Provider>
   )
 }
