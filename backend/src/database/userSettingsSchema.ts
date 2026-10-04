@@ -516,6 +516,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
   }
   const chatProfileColumns: Array<[string, string]> = [
     ['tagline', "TEXT NOT NULL DEFAULT ''"],
+    ['lorebook', 'TEXT'],
+    ['lore_scan_depth', 'INTEGER NOT NULL DEFAULT 4'],
+    ['lore_token_budget', 'INTEGER NOT NULL DEFAULT 1024'],
     ['engine', "TEXT NOT NULL DEFAULT 'llm'"],
     ['reasoning_effort', 'TEXT'],
     ['context_tokens', 'INTEGER'],

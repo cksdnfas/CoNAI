@@ -14,7 +14,8 @@ import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
-import { buildLeadingMessages, estimateTokens } from '../services/codex-chat/llmChatContext'
+import { buildLeadingMessages, estimateTokens, fillCharacterPlaceholders } from '../services/codex-chat/llmChatContext'
+import { buildLorebookText } from '../services/codex-chat/chatLorebook'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
@@ -359,6 +360,10 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
       const messages = profile.engine === 'codex'
         ? [{ role: 'developer', content: buildCodexInstructions(profile) }]
         : buildLeadingMessages(profile, null, { summaryEnabled: false }, tools.length > 0)
+      if (profile.engine === 'codex') {
+        const lore = buildLorebookText(profile, undefined, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile))
+        if (lore) messages.push({ role: 'user', content: `[참고 설정]\n${lore}\n[/참고 설정]` })
+      }
       const promptTokens = estimateTokens(profileId, JSON.stringify(messages))
       const toolTokens = tools.length > 0 ? estimateTokens(profileId, JSON.stringify(tools)) : 0
       res.json({

@@ -3,6 +3,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
 import { isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type ChatStyle } from './chatStyle'
+import { normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
 
 const NAME_MAX_LENGTH = 60
 const MODEL_MAX_LENGTH = 200
@@ -19,6 +20,8 @@ export const CHAT_PROFILE_LIMITS = {
 } as const
 
 export const CHAT_PROFILE_DEFAULTS = {
+  loreScanDepth: 4,
+  loreTokenBudget: 1024,
   contextTurns: 20,
   summaryTriggerTurns: 6,
   maxToolRounds: 8,
@@ -55,6 +58,9 @@ export type ChatProfile = {
   id: number
   name: string
   tagline: string
+  lorebook: ChatLoreEntry[]
+  loreScanDepth: number
+  loreTokenBudget: number
   /** Small data URL (resized in the browser). */
   avatar: string | null
   engine: ChatProfileEngine
@@ -111,6 +117,9 @@ type ProfileRow = {
   id: number
   name: string
   tagline: string
+  lorebook: string | null
+  lore_scan_depth: number
+  lore_token_budget: number
   avatar: string | null
   engine: string | null
   provider_name: string
@@ -209,6 +218,9 @@ function toProfile(row: ProfileRow): ChatProfile {
     id: row.id,
     name: row.name,
     tagline: row.tagline ?? '',
+    lorebook: normalizeLorebook(row.lorebook),
+    loreScanDepth: row.lore_scan_depth ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
+    loreTokenBudget: row.lore_token_budget ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     avatar: row.avatar,
     engine: row.engine === 'codex' ? 'codex' : 'llm',
     providerName: row.provider_name,
@@ -316,6 +328,9 @@ function toColumns(input: ChatProfileInput) {
   return {
     name,
     tagline: text(input.tagline, 200),
+    lorebook: JSON.stringify(normalizeLorebook(input.lorebook)),
+    lore_scan_depth: optionalNumber(input.loreScanDepth, { min: 1, max: 100 }, true) ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
+    lore_token_budget: optionalNumber(input.loreTokenBudget, { min: 0, max: 32768 }, true) ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     avatar,
     engine,
     provider_name: providerName,

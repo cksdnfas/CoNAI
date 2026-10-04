@@ -44,6 +44,7 @@ import { ChatCastEditor } from './chat-profile-cast'
 import { ChatEmoticonGroupPicker } from './chat-profile-emoticons'
 import { readAvatarFile } from './chat-profile-images'
 import { ChatProfileLook } from './chat-profile-look'
+import { ChatLorebookEditor } from './chat-profile-lorebook'
 import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
@@ -59,6 +60,9 @@ function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults |
   return {
     name: profile?.name ?? '',
     tagline: profile?.tagline ?? '',
+    lorebook: profile?.lorebook ?? [],
+    loreScanDepth: profile?.loreScanDepth ?? defaults?.loreScanDepth ?? 4,
+    loreTokenBudget: profile?.loreTokenBudget ?? defaults?.loreTokenBudget ?? 1024,
     avatar: profile?.avatar ?? null,
     engine: profile?.engine ?? 'llm',
     providerName: profile?.providerName ?? '',
@@ -380,6 +384,18 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
               <Textarea variant="settings" rows={3} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
             </CollapsibleRow>
           </div>
+        </Section>
+
+        <Section title={t({ ko: '로어북', en: 'Lorebook' })}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label={t({ ko: '최근 메시지 수', en: 'Recent messages' })}>
+              <NumberStepperInput variant="settings" min={1} max={100} value={draft.loreScanDepth} onValueCommit={(value) => patch({ loreScanDepth: numberOrNull(value) ?? 4 })} />
+            </Field>
+            <Field label={t({ ko: '토큰 상한', en: 'Token budget' })}>
+              <NumberStepperInput variant="settings" min={0} max={32768} step={128} value={draft.loreTokenBudget} onValueCommit={(value) => patch({ loreTokenBudget: numberOrNull(value) ?? 1024 })} />
+            </Field>
+          </div>
+          <ChatLorebookEditor entries={draft.lorebook} onChange={(lorebook) => patch({ lorebook })} />
         </Section>
 
         <Section title={t({ ko: '꾸미기', en: 'Look' })}>

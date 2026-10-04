@@ -111,7 +111,20 @@ export interface ChatPromptSection {
 }
 
 /** A full chat profile (admin). */
+export interface ChatLoreEntry {
+  id: string
+  keys: string[]
+  content: string
+  enabled: boolean
+  constant: boolean
+  order: number
+  caseSensitive: boolean
+}
+
 export interface ChatProfile {
+  lorebook: ChatLoreEntry[]
+  loreScanDepth: number
+  loreTokenBudget: number
   tagline: string
   id: number
   name: string
@@ -157,6 +170,8 @@ export interface ChatProfile {
 export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion'>> & { background?: string | null }
 
 export interface ChatProfileDefaults {
+  loreScanDepth: number
+  loreTokenBudget: number
   contextTurns: number
   summaryTriggerTurns: number
   maxToolRounds: number

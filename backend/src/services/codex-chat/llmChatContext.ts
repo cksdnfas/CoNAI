@@ -3,6 +3,7 @@ import { profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
+import { buildLorebookText } from './chatLorebook'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 
@@ -216,7 +217,7 @@ function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], conf
  * rolling summary, then example turns. Chat templates often allow system messages only at the start, so the note that
  * the examples are not real lives in the system prompt rather than around them.
  */
-export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean) {
+export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, messages?: ReadonlyArray<{ content: string }>) {
   const examples = buildExampleMessages(profile)
   const systemPrompt = [
     buildPersonaPrompt(profile),
@@ -230,6 +231,8 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
   if (config.summaryEnabled && thread?.summary?.trim()) {
     result.push({ role: 'system', content: `## 지금까지의 대화 요약\n${thread.summary.trim()}` })
   }
+  const lore = buildLorebookText(profile, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile))
+  if (lore) result.push({ role: 'system', content: `## 관련 설정\n${lore}` })
   return [...result, ...examples]
 }
 
@@ -249,7 +252,7 @@ export function buildChatMessages(params: {
   tools: ChatCompletionTool[]
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const system = buildLeadingMessages(profile, thread, config, tools.length > 0)
+  const system = buildLeadingMessages(profile, thread, config, tools.length > 0, params.messages)
   const window = selectWindow(profile.id, splitTurns(sendableMessages(params.messages)), config, estimateMessagesTokens(profile.id, system, tools))
   return [...system, ...window.flat().flatMap(toCompletionMessages)]
 }
@@ -281,8 +284,9 @@ export async function updateThreadSummary(threadId: number, profile: ChatProfile
     return null
   }
 
-  const turns = splitTurns(sendableMessages(CodexChatStore.listMessages(threadId)))
-  const windowSize = selectWindow(profile.id, turns, config, estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled))).length
+  const messages = CodexChatStore.listMessages(threadId)
+  const turns = splitTurns(sendableMessages(messages))
+  const windowSize = selectWindow(profile.id, turns, config, estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled, messages))).length
   const candidates = (options.force ? turns : turns.slice(0, Math.max(0, turns.length - windowSize))).flat()
   const pending = candidates.filter((message) => message.id > (thread.summary_until_message_id ?? 0))
   const pendingTurns = pending.filter((message) => message.role === 'user').length

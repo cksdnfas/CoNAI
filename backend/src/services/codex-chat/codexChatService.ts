@@ -15,7 +15,8 @@ import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeC
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
-import { buildPersonaPrompt, fillCharacterPlaceholders, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
+import { buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
+import { buildLorebookText } from './chatLorebook'
 import { LlmChatService } from './llmChatService'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
@@ -641,11 +642,13 @@ export const CodexChatService = {
       emit(turn, { type: 'user', message: userMessage })
 
       try {
+        const lore = buildLorebookText(profile, CodexChatStore.listMessages(threadId), (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile))
+        const input = chatContentWithAttachments(trimmed, attachments)
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: chatContentWithAttachments(trimmed, attachments), text_elements: [] }],
+          input: [{ type: 'text', text: lore ? `[참고 설정]\n${lore}\n[/참고 설정]\n\n${input}` : input, text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
       } catch (error) {
