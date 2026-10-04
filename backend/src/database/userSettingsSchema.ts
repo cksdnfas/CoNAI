@@ -410,6 +410,34 @@ export function createUserSettingsSchema(db: Database.Database): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_codex_chat_threads_account ON codex_chat_threads(account_id, updated_date DESC)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_codex_chat_messages_thread ON codex_chat_messages(thread_id, id)');
 
+  // LLM chat profiles: an API LLM connection + model with a persona; chat threads with engine 'llm' point at one.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_chat_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      avatar TEXT,
+      provider_name TEXT NOT NULL,
+      model TEXT,
+      system_prompt TEXT NOT NULL DEFAULT '',
+      character_description TEXT NOT NULL DEFAULT '',
+      example_dialogue TEXT NOT NULL DEFAULT '',
+      user_persona TEXT NOT NULL DEFAULT '',
+      greeting TEXT NOT NULL DEFAULT '',
+      temperature REAL,
+      max_tokens INTEGER,
+      mcp_enabled INTEGER NOT NULL DEFAULT 0,
+      mcp_scopes TEXT NOT NULL DEFAULT '["read"]',
+      context_turns INTEGER,
+      summary_enabled INTEGER,
+      summary_provider_name TEXT,
+      summary_model TEXT,
+      is_enabled INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // 19. Generic long-running runtime jobs (thumbnail regenerate / group rematch / folder scan ...)
   // 진행률·취소·재시작 복구의 정본. images.db 는 스캔이 두들기는 hot DB 라 하트비트 쓰기를 얹지 않는다.
   db.exec(`
@@ -451,6 +479,22 @@ export function createUserSettingsSchema(db: Database.Database): void {
     const pragma = db.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
     return pragma.some((col: any) => col.name === columnName);
   };
+
+  // Codex chat threads also host LLM chats: engine, profile, and per-thread context (turn window + rolling summary).
+  const codexChatThreadColumns: Array<[string, string]> = [
+    ['engine', "TEXT NOT NULL DEFAULT 'codex'"],
+    ['profile_id', 'INTEGER'],
+    ['context_turns', 'INTEGER'],
+    ['summary_enabled', 'INTEGER'],
+    ['summary', 'TEXT'],
+    ['summary_until_message_id', 'INTEGER'],
+    ['summary_updated_date', 'DATETIME'],
+  ];
+  for (const [columnName, definition] of codexChatThreadColumns) {
+    if (!hasColumn('codex_chat_threads', columnName)) {
+      db.exec(`ALTER TABLE codex_chat_threads ADD COLUMN ${columnName} ${definition}`);
+    }
+  }
 
   // Migrate workflows table
   if (!hasColumn('workflows', 'is_public_page')) {

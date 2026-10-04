@@ -1,11 +1,16 @@
-import express, { type Request, type Response } from 'express'
+import express, { type NextFunction, type Request, type Response } from 'express'
 import { isCodexReasoningEffort } from '@conai/shared'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import type { McpRequester } from '../mcp/context'
-import { isCodexChatAdmin } from '../services/codex-chat/codexChatAccess'
+import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
+import { CodexChatStore } from '../services/codex-chat/codexChatStore'
+import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
+import { LlmChatProfileError, LlmChatProfileStore, type LlmChatProfile } from '../services/codex-chat/llmChatProfiles'
+import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
+import { DEFAULT_LLM_CHAT_SUMMARY_PROMPT, loadLlmChatSettings, updateLlmChatSettings } from '../services/codex-chat/llmChatSettings'
 import { CODEX_CHAT_SCOPES, loadCodexChatSettings, updateCodexChatSettings } from '../services/codex-chat/codexChatSettings'
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
@@ -28,17 +33,54 @@ function parseThreadId(req: Request, res: Response) {
 }
 
 function sendChatError(res: Response, error: unknown) {
-  if (error instanceof CodexChatError) {
+  if (error instanceof CodexChatError || error instanceof LlmChatError) {
     res.status(error.status).json({ success: false, error: error.message })
+    return
+  }
+  if (error instanceof LlmChatProfileError) {
+    res.status(400).json({ success: false, error: error.message })
     return
   }
   res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Codex chat failed' })
 }
 
-/** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear for this session. */
+/** Codex or LLM chat, whichever this session may use (each send re-checks its own engine). */
+function canUseAnyChat(req: Request) {
+  const access = resolveChatAccess(getRequesterAccountId(req))
+  return {
+    codex: loadCodexChatSettings().enabled && access.codex,
+    llm: loadLlmChatSettings().enabled && access.llm,
+    scopes: access.scopes,
+  }
+}
+
+function requireChatAccess(req: Request, res: Response, next: NextFunction) {
+  const access = canUseAnyChat(req)
+  if (!access.codex && !access.llm) {
+    res.status(403).json({ success: false, error: '채팅 권한이 없어.' })
+    return
+  }
+  next()
+}
+
+/** What a chat user sees of a profile: enough to pick it and show who is talking. */
+function toPublicProfile(profile: LlmChatProfile) {
+  return { id: profile.id, name: profile.name, avatar: profile.avatar, isEnabled: profile.isEnabled }
+}
+
+/** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear, and which engines. */
 router.get('/status', (req: Request, res: Response) => {
-  const settings = loadCodexChatSettings()
-  res.json({ success: true, data: { enabled: settings.enabled, canUse: settings.enabled && isCodexChatAdmin(getRequesterAccountId(req)) } })
+  const access = canUseAnyChat(req)
+  res.json({
+    success: true,
+    data: {
+      enabled: loadCodexChatSettings().enabled || loadLlmChatSettings().enabled,
+      canUse: access.codex || access.llm,
+      codex: { canUse: access.codex },
+      llm: { canUse: access.llm },
+      scopes: access.scopes,
+    },
+  })
 })
 
 router.get('/settings', requireAdmin, (_req: Request, res: Response) => {
@@ -82,19 +124,169 @@ router.put('/settings', requireAdmin, asyncHandler(async (req: Request, res: Res
   res.json({ success: true, data: { ...settings, availableScopes: CODEX_CHAT_SCOPES } })
 }))
 
-router.get('/threads', requireAdmin, (req: Request, res: Response) => {
+/** GET /api/codex-chat/profiles — enabled LLM chat profiles to start a chat with (plus any a thread still uses). */
+router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
+  if (!canUseAnyChat(req).llm) {
+    res.json({ success: true, data: [] })
+    return
+  }
+  res.json({ success: true, data: LlmChatProfileStore.list().map(toPublicProfile) })
+})
+
+router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   res.json({ success: true, data: CodexChatService.listThreads(requesterFrom(req)) })
 })
 
-router.post('/threads', requireAdmin, (req: Request, res: Response) => {
+/** POST /api/codex-chat/threads — `{ profileId }` starts an LLM chat with that profile; no body starts a Codex chat. */
+router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
+  const rawProfileId = req.body?.profileId
+  const profileId = rawProfileId === undefined || rawProfileId === null ? null : Number(rawProfileId)
+  if (profileId !== null && (!Number.isSafeInteger(profileId) || profileId <= 0)) {
+    sendRouteBadRequest(res, 'Invalid profile id')
+    return
+  }
   try {
-    res.status(201).json({ success: true, data: CodexChatService.createThread(requesterFrom(req)) })
+    res.status(201).json({ success: true, data: CodexChatService.createThread(requesterFrom(req), profileId) })
   } catch (error) {
     sendChatError(res, error)
   }
 })
 
-router.get('/threads/:threadId', requireAdmin, (req: Request, res: Response) => {
+/** PATCH /api/codex-chat/threads/:threadId/context — LLM chats: turn window, summary on/off (null inherits), summary text. */
+router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  const body = (req.body ?? {}) as Record<string, unknown>
+  try {
+    const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
+    if (thread.engine !== 'llm') {
+      sendRouteBadRequest(res, 'Only LLM chats have context settings')
+      return
+    }
+    let contextTurns: number | null | undefined
+    if (body.contextTurns !== undefined) {
+      contextTurns = body.contextTurns === null ? null : Number(body.contextTurns)
+      if (contextTurns !== null && (!Number.isSafeInteger(contextTurns) || contextTurns < 1 || contextTurns > 200)) {
+        sendRouteBadRequest(res, 'contextTurns must be 1-200 or null')
+        return
+      }
+    }
+    if (body.summaryEnabled !== undefined && body.summaryEnabled !== null && typeof body.summaryEnabled !== 'boolean') {
+      sendRouteBadRequest(res, 'summaryEnabled must be a boolean or null')
+      return
+    }
+    if (body.summary !== undefined && body.summary !== null && typeof body.summary !== 'string') {
+      sendRouteBadRequest(res, 'summary must be a string or null')
+      return
+    }
+    CodexChatStore.updateThreadContext(threadId, { contextTurns, summaryEnabled: body.summaryEnabled as boolean | null | undefined })
+    if (body.summary !== undefined) {
+      const summary = typeof body.summary === 'string' ? body.summary.trim().slice(0, 20000) : ''
+      CodexChatStore.setSummary(threadId, summary || null, summary ? thread.summary_until_message_id : null)
+    }
+    res.json({ success: true, data: CodexChatService.getThread(requesterFrom(req), threadId).thread })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+/** POST /api/codex-chat/threads/:threadId/summarize — fold everything not yet summarized into the summary now. */
+router.post('/threads/:threadId/summarize', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
+    if (thread.engine !== 'llm') {
+      sendRouteBadRequest(res, 'Only LLM chats can be summarized')
+      return
+    }
+    await LlmChatService.summarize(requesterFrom(req), thread)
+    res.json({ success: true, data: CodexChatService.getThread(requesterFrom(req), threadId).thread })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+}))
+
+/** Admin: LLM chat defaults (context window, summary, tool rounds). */
+router.get('/llm/settings', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: { ...loadLlmChatSettings(), defaultSummaryPrompt: DEFAULT_LLM_CHAT_SUMMARY_PROMPT } })
+})
+
+router.put('/llm/settings', requireAdmin, (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>
+  if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
+    sendRouteBadRequest(res, 'enabled must be a boolean')
+    return
+  }
+  const settings = updateLlmChatSettings({
+    enabled: body.enabled,
+    contextTurns: body.contextTurns,
+    summaryEnabled: typeof body.summaryEnabled === 'boolean' ? body.summaryEnabled : undefined,
+    summaryTriggerTurns: body.summaryTriggerTurns,
+    summaryPrompt: body.summaryPrompt,
+    maxToolRounds: body.maxToolRounds,
+  })
+  res.json({ success: true, data: { ...settings, defaultSummaryPrompt: DEFAULT_LLM_CHAT_SUMMARY_PROMPT } })
+})
+
+/** Admin: full LLM chat profiles. */
+router.get('/llm/profiles', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: LlmChatProfileStore.list() })
+})
+
+router.post('/llm/profiles', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.status(201).json({ success: true, data: LlmChatProfileStore.create(req.body ?? {}) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+function parseProfileId(req: Request, res: Response) {
+  const profileId = Number(req.params.profileId)
+  if (!Number.isSafeInteger(profileId) || profileId <= 0) {
+    sendRouteBadRequest(res, 'Invalid profile id')
+    return null
+  }
+  return profileId
+}
+
+router.put('/llm/profiles/:profileId', requireAdmin, (req: Request, res: Response) => {
+  const profileId = parseProfileId(req, res)
+  if (profileId === null) return
+  try {
+    const profile = LlmChatProfileStore.update(profileId, req.body ?? {})
+    if (!profile) {
+      res.status(404).json({ success: false, error: '프로필을 찾을 수 없어.' })
+      return
+    }
+    res.json({ success: true, data: profile })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+router.delete('/llm/profiles/:profileId', requireAdmin, (req: Request, res: Response) => {
+  const profileId = parseProfileId(req, res)
+  if (profileId === null) return
+  res.json({ success: true, data: { deleted: LlmChatProfileStore.delete(profileId) } })
+})
+
+/** Admin: model ids an LLM connection offers (`GET {base}/models`), for the profile editor. */
+router.get('/llm/models', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const providerName = typeof req.query.providerName === 'string' ? req.query.providerName : ''
+  if (!providerName) {
+    sendRouteBadRequest(res, 'providerName is required')
+    return
+  }
+  try {
+    res.json({ success: true, data: await listChatCompletionModels(providerName) })
+  } catch (error) {
+    res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'Could not list models' })
+  }
+}))
+
+router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
@@ -105,7 +297,7 @@ router.get('/threads/:threadId', requireAdmin, (req: Request, res: Response) => 
 })
 
 /** GET /api/codex-chat/threads/:threadId/media — images the chat generated or looked up, newest first. */
-router.get('/threads/:threadId/media', requireAdmin, (req: Request, res: Response) => {
+router.get('/threads/:threadId/media', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
@@ -115,7 +307,7 @@ router.get('/threads/:threadId/media', requireAdmin, (req: Request, res: Respons
   }
 })
 
-router.delete('/threads/:threadId', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/threads/:threadId', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
@@ -126,7 +318,7 @@ router.delete('/threads/:threadId', requireAdmin, asyncHandler(async (req: Reque
   }
 }))
 
-router.post('/threads/:threadId/interrupt', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/threads/:threadId/interrupt', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
@@ -142,7 +334,7 @@ router.post('/threads/:threadId/interrupt', requireAdmin, asyncHandler(async (re
  * Streams the turn as NDJSON (`user`, `delta`, `tool`, then `done` or `error`). Closing the response does not stop
  * the turn; the reply is stored and shows up on the next thread load.
  */
-router.post('/threads/:threadId/messages', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   const text = typeof req.body?.text === 'string' ? req.body.text : ''

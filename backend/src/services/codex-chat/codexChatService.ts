@@ -8,16 +8,16 @@ import { onBeforeCodexCliUpdate, isCodexCliUpdating } from '../codexCliMaintenan
 import { resolveCodexCommand } from '../codexGenerationExecutor'
 import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import { CodexAppServerClient, type CodexAppServerNotification } from './codexAppServerClient'
-import { isCodexChatAdmin, issueCodexChatMcpToken, revokeCodexChatMcpToken } from './codexChatAccess'
+import { issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken } from './codexChatAccess'
 import { loadCodexChatSettings, onCodexChatSettingsChange } from './codexChatSettings'
 import { collectCodexChatMedia } from './codexChatMedia'
+import { LlmChatService } from './llmChatService'
+import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
 
 const SESSION_IDLE_MS = 15 * 60 * 1000
 const THREAD_REQUEST_TIMEOUT_MS = 2 * 60 * 1000
 const CLI_PROBE_TIMEOUT_MS = 20 * 1000
-const TOOL_SUMMARY_LENGTH = 600
-const MAX_REFERENCES_PER_CALL = 24
 const MCP_SERVER_NAME = 'conai'
 const MCP_TOKEN_ENV = 'CONAI_CHAT_MCP_TOKEN'
 
@@ -59,6 +59,8 @@ const DEVELOPER_INSTRUCTIONS = [
 export type CodexChatStreamEvent =
   | { type: 'user'; message: CodexChatMessageRecord }
   | { type: 'delta'; text: string }
+  /** LLM chats: the model's reasoning, shown while it streams and not stored. */
+  | { type: 'reasoning'; text: string }
   | { type: 'tool'; call: CodexChatToolCall }
   | { type: 'done'; message: CodexChatMessageRecord }
   | { type: 'error'; message: string }
@@ -229,70 +231,20 @@ function emit(turn: TurnState, event: CodexChatStreamEvent) {
   }
 }
 
-function truncate(value: string) {
-  return value.length > TOOL_SUMMARY_LENGTH ? `${value.slice(0, TOOL_SUMMARY_LENGTH)}…` : value
-}
-
-/** Pull history ids and composite hashes out of a tool result so the UI can show thumbnails. */
-function collectReferences(value: unknown, historyIds: Set<number>, compositeHashes: Set<string>, depth = 0) {
-  if (depth > 8 || value === null || typeof value !== 'object') {
-    return
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectReferences(item, historyIds, compositeHashes, depth + 1))
-    return
-  }
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (/^history_?ids?$/i.test(key)) {
-      for (const id of Array.isArray(entry) ? entry : [entry]) {
-        if (typeof id === 'number' && Number.isSafeInteger(id) && id > 0 && historyIds.size < MAX_REFERENCES_PER_CALL) {
-          historyIds.add(id)
-        }
-      }
-    } else if (/^composite_?hash(es)?$/i.test(key)) {
-      for (const hash of Array.isArray(entry) ? entry : [entry]) {
-        if (typeof hash === 'string' && /^[0-9a-f]{16,128}$/i.test(hash) && compositeHashes.size < MAX_REFERENCES_PER_CALL) {
-          compositeHashes.add(hash)
-        }
-      }
-    } else {
-      collectReferences(entry, historyIds, compositeHashes, depth + 1)
-    }
-  }
-}
-
 function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
   const status = item.status === 'completed' ? 'completed' : item.status === 'failed' ? 'failed' : 'running'
   const result = item.result as { content?: unknown[]; structuredContent?: unknown } | null | undefined
   const error = item.error as { message?: string } | null | undefined
-  const historyIds = new Set<number>()
-  const compositeHashes = new Set<string>()
-  const texts: string[] = []
-
-  for (const content of result?.content ?? []) {
-    const text = content && typeof content === 'object' ? (content as { text?: unknown }).text : undefined
-    if (typeof text !== 'string') {
-      continue
-    }
-    texts.push(text)
-    try {
-      collectReferences(JSON.parse(text), historyIds, compositeHashes)
-    } catch {
-      // Plain-text tool output carries no references.
-    }
-  }
-  if (result?.structuredContent) {
-    collectReferences(result.structuredContent, historyIds, compositeHashes)
-  }
+  const { texts, historyIds, compositeHashes } = readMcpToolResult(result)
 
   return {
     id: String(item.id ?? ''),
     tool: String(item.tool ?? ''),
     status,
     arguments: item.arguments ?? null,
-    summary: error?.message ? truncate(error.message) : texts.length > 0 ? truncate(texts.join('\n')) : null,
-    historyIds: [...historyIds],
-    compositeHashes: [...compositeHashes],
+    summary: error?.message ? truncateToolSummary(error.message) : texts.length > 0 ? truncateToolSummary(texts.join('\n')) : null,
+    historyIds,
+    compositeHashes,
   }
 }
 
@@ -445,8 +397,8 @@ function assertChatAvailable(requester: McpRequester) {
   if (!loadCodexChatSettings().enabled) {
     throw new CodexChatError('Codex 채팅이 꺼져 있어.', 403)
   }
-  if (!isCodexChatAdmin(requester.accountId)) {
-    throw new CodexChatError('Codex 채팅은 관리자만 쓸 수 있어.', 403)
+  if (!resolveChatAccess(requester.accountId).codex) {
+    throw new CodexChatError('Codex 채팅 권한이 없어.', 403)
   }
   if (isCodexCliUpdating()) {
     throw new CodexChatError('Codex CLI 업데이트 중이야. 끝난 뒤 다시 보내줘.', 409)
@@ -502,7 +454,11 @@ export const CodexChatService = {
     return CodexChatStore.listThreads(requester.accountId)
   },
 
-  createThread(requester: McpRequester) {
+  /** A Codex chat, or with `profileId` an LLM chat with that profile (its greeting becomes the first message). */
+  createThread(requester: McpRequester, profileId: number | null = null) {
+    if (profileId !== null) {
+      return requireThread(requester, LlmChatService.createThread(requester, profileId))
+    }
     assertChatAvailable(requester)
     const id = CodexChatStore.createThread(requester.accountId, '')
     return requireThread(requester, id)
@@ -510,6 +466,9 @@ export const CodexChatService = {
 
   getThread(requester: McpRequester, threadId: number) {
     const thread = requireThread(requester, threadId)
+    if (thread.engine === 'llm') {
+      return { thread, messages: CodexChatStore.listMessages(threadId), running: LlmChatService.running(threadId) }
+    }
     const active = findActiveTurn(threadId)
     return {
       thread,
@@ -530,7 +489,12 @@ export const CodexChatService = {
   },
 
   async deleteThread(requester: McpRequester, threadId: number) {
-    requireThread(requester, threadId)
+    const thread = requireThread(requester, threadId)
+    if (thread.engine === 'llm') {
+      await LlmChatService.stop(threadId)
+      CodexChatStore.deleteThread(threadId)
+      return
+    }
     const active = findActiveTurn(threadId)
     if (active) {
       await CodexChatService.interrupt(requester, threadId).catch(() => undefined)
@@ -544,8 +508,11 @@ export const CodexChatService = {
    * The turn keeps running (and is stored) when the listener goes away, e.g. the browser closes the stream.
    */
   async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void) {
-    assertChatAvailable(requester)
     const thread = requireThread(requester, threadId)
+    if (thread.engine === 'llm') {
+      return LlmChatService.sendMessage(requester, thread, text, listener)
+    }
+    assertChatAvailable(requester)
     const trimmed = text.trim()
     if (!trimmed) {
       throw new CodexChatError('메시지를 입력해줘.')
@@ -599,7 +566,11 @@ export const CodexChatService = {
   },
 
   async interrupt(requester: McpRequester, threadId: number) {
-    requireThread(requester, threadId)
+    const thread = requireThread(requester, threadId)
+    if (thread.engine === 'llm') {
+      LlmChatService.interrupt(threadId)
+      return
+    }
     const active = findActiveTurn(threadId)
     if (!active?.turn.turnId) {
       return

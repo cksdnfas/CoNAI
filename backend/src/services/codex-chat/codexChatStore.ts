@@ -11,13 +11,26 @@ export type CodexChatToolCall = {
   historyIds: number[]
   /** Library images the call returned. */
   compositeHashes: string[]
+  /** LLM chats only: the tool result text (truncated) replayed to the model in later turns. */
+  output?: string
 }
+
+export type ChatEngine = 'codex' | 'llm'
 
 export type CodexChatThreadRecord = {
   id: number
   account_id: number | null
   codex_thread_id: string | null
   title: string
+  engine: ChatEngine
+  profile_id: number | null
+  /** Per-thread overrides (null inherits the profile, then the global LLM chat settings). */
+  context_turns: number | null
+  summary_enabled: 0 | 1 | null
+  summary: string | null
+  /** The last message folded into `summary`. */
+  summary_until_message_id: number | null
+  summary_updated_date: string | null
   created_date: string
   updated_date: string
 }
@@ -62,11 +75,31 @@ export const CodexChatStore = {
     `).get(threadId, accountId) as CodexChatThreadRecord | undefined
   },
 
-  createThread(accountId: number | null, title: string) {
+  findThreadById(threadId: number) {
+    return getUserSettingsDb().prepare('SELECT * FROM codex_chat_threads WHERE id = ?').get(threadId) as CodexChatThreadRecord | undefined
+  },
+
+  createThread(accountId: number | null, title: string, engine: ChatEngine = 'codex', profileId: number | null = null) {
     const result = getUserSettingsDb().prepare(`
-      INSERT INTO codex_chat_threads (account_id, title) VALUES (?, ?)
-    `).run(accountId, title.slice(0, TITLE_MAX_LENGTH))
+      INSERT INTO codex_chat_threads (account_id, title, engine, profile_id) VALUES (?, ?, ?, ?)
+    `).run(accountId, title.slice(0, TITLE_MAX_LENGTH), engine, profileId)
     return Number(result.lastInsertRowid)
+  },
+
+  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null }) {
+    const db = getUserSettingsDb()
+    if (patch.contextTurns !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET context_turns = ? WHERE id = ?').run(patch.contextTurns, threadId)
+    }
+    if (patch.summaryEnabled !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET summary_enabled = ? WHERE id = ?').run(patch.summaryEnabled === null ? null : patch.summaryEnabled ? 1 : 0, threadId)
+    }
+  },
+
+  setSummary(threadId: number, summary: string | null, untilMessageId: number | null) {
+    getUserSettingsDb().prepare(`
+      UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ?, summary_updated_date = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(summary, untilMessageId, threadId)
   },
 
   setCodexThreadId(threadId: number, codexThreadId: string) {

@@ -13,14 +13,18 @@ export interface McpRequestContext {
   keyName?: string;
   baseUrl?: string;
   requester?: McpRequester;
-  /** `codex-chat`: an agent acting inside the app on a user's behalf. */
-  source?: 'http' | 'codex-chat';
+  /** `codex-chat` / `llm-chat`: an agent acting inside the app on a user's behalf. */
+  source?: 'http' | 'codex-chat' | 'llm-chat';
 }
 
-/** Codex chat must not spend paid NovelAI multi-sample generations on its own; one image per request is free. */
+export function isChatMcpSource(source: McpRequestContext['source']) {
+  return source === 'codex-chat' || source === 'llm-chat';
+}
+
+/** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */
 export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: unknown) {
-  if (context.source === 'codex-chat' && typeof nSamples === 'number' && nSamples > 1) {
-    throw new Error('n_samples must be 1 in Codex chat (2+ samples cost Anlas). Submit separate requests for more images.');
+  if (isChatMcpSource(context.source) && typeof nSamples === 'number' && nSamples > 1) {
+    throw new Error('n_samples must be 1 in chat (2+ samples cost Anlas). Submit separate requests for more images.');
   }
 }
 

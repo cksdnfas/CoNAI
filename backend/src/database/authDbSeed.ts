@@ -228,6 +228,36 @@ const DEFAULT_PERMISSION_CATALOG = [
     action: 'manage',
     description: 'Manage security, accounts, and permissions.',
   },
+  {
+    permissionKey: 'chat.codex.use',
+    resource: 'chat.codex',
+    action: 'use',
+    description: 'Chat with the server Codex agent (shares the server Codex account usage).',
+  },
+  {
+    permissionKey: 'chat.llm.use',
+    resource: 'chat.llm',
+    action: 'use',
+    description: 'Chat with configured LLM chat profiles.',
+  },
+  {
+    permissionKey: 'chat.tools.read',
+    resource: 'chat.tools',
+    action: 'read',
+    description: 'Let chat agents search and read images, prompts and workflows for this account.',
+  },
+  {
+    permissionKey: 'chat.tools.generate',
+    resource: 'chat.tools',
+    action: 'generate',
+    description: 'Let chat agents run generation jobs and workflows for this account.',
+  },
+  {
+    permissionKey: 'chat.tools.organize',
+    resource: 'chat.tools',
+    action: 'organize',
+    description: 'Let chat agents create groups and move images and prompts for this account.',
+  },
 ] as const;
 
 /** Seed built-in permission groups and the initial permission catalog. */

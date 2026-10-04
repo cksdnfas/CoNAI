@@ -33,6 +33,11 @@ const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
   'prompts.update',
   'prompts.delete',
   'workflows.update',
+  'chat.codex.use',
+  'chat.llm.use',
+  'chat.tools.read',
+  'chat.tools.generate',
+  'chat.tools.organize',
 ] as const;
 
 /** Public guest signup only makes sense on the built-in anonymous/guest groups. */

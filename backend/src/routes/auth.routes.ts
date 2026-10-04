@@ -108,6 +108,11 @@ const ACTION_PERMISSION_LABELS: Readonly<Record<string, string>> = {
   'prompts.update': 'Preset Edit',
   'prompts.delete': 'Preset Delete',
   'workflows.update': 'Workflow Edit',
+  'chat.codex.use': 'Codex Chat',
+  'chat.llm.use': 'LLM Chat',
+  'chat.tools.read': 'Chat Tools: Read',
+  'chat.tools.generate': 'Chat Tools: Generate',
+  'chat.tools.organize': 'Chat Tools: Organize',
 };
 
 /** Format one editable built-in permission into the current UI label shape. */
