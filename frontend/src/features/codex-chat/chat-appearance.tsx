@@ -21,12 +21,22 @@ export type ChatAppearance = {
   fontSize: ChatFontSize
   lineHeight: ChatLineHeight
   showBackground: boolean
+  /** Emoticons inside a sentence; larger ones open up their line, by choice. */
+  emoticonSize: ChatEmoticonSize
+  /** Emoticons on a line of their own. */
+  stickerSize: ChatStickerSize
 }
+
+export type ChatEmoticonSize = 'sm' | 'md' | 'lg' | 'xl'
+export type ChatStickerSize = 'sm' | 'md' | 'lg'
+
+const EMOTICON_SIZE_EM: Record<ChatEmoticonSize, number> = { sm: 1.3, md: 1.6, lg: 2.2, xl: 3 }
+const STICKER_SIZE_PX: Record<ChatStickerSize, number> = { sm: 96, md: 128, lg: 192 }
 
 const STORAGE_KEY = 'conai.chat.appearance'
 const CHANGED_EVENT = 'conai:chat-appearance-changed'
 
-export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = { avatarSize: 'md', fontSize: 'md', lineHeight: 'normal', showBackground: true }
+export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = { avatarSize: 'md', fontSize: 'md', lineHeight: 'normal', showBackground: true, emoticonSize: 'md', stickerSize: 'md' }
 
 const FONT_SIZE_PX: Record<ChatFontSize, number> = { sm: 13, md: 14, lg: 16, xl: 18 }
 const LINE_HEIGHT: Record<ChatLineHeight, number> = { tight: 1.5, normal: 1.7, relaxed: 1.9 }
@@ -47,6 +57,8 @@ function normalize(value: unknown): ChatAppearance {
     fontSize: pick(raw.fontSize, ['sm', 'md', 'lg', 'xl'], DEFAULT_CHAT_APPEARANCE.fontSize),
     lineHeight: pick(raw.lineHeight, ['tight', 'normal', 'relaxed'], DEFAULT_CHAT_APPEARANCE.lineHeight),
     showBackground: raw.showBackground !== false,
+    emoticonSize: pick(raw.emoticonSize, ['sm', 'md', 'lg', 'xl'], DEFAULT_CHAT_APPEARANCE.emoticonSize),
+    stickerSize: pick(raw.stickerSize, ['sm', 'md', 'lg'], DEFAULT_CHAT_APPEARANCE.stickerSize),
   }
 }
 
@@ -101,6 +113,8 @@ export function chatTranscriptStyle(appearance: ChatAppearance, style: ChatStyle
     fontSize: `${FONT_SIZE_PX[appearance.fontSize]}px`,
     lineHeight: LINE_HEIGHT[appearance.lineHeight],
     fontFamily: style ? CHAT_TYPEFACE_FAMILY[style.typeface] : undefined,
+    '--chat-emoticon-size': `${EMOTICON_SIZE_EM[appearance.emoticonSize]}em`,
+    '--chat-sticker-size': `${STICKER_SIZE_PX[appearance.stickerSize]}px`,
     ...(colors?.dialogue ? { '--chat-rp-dialogue': colors.dialogue } : {}),
     ...(colors?.narration ? { '--chat-rp-narration': colors.narration } : {}),
     ...(colors?.thought ? { '--chat-rp-thought': colors.thought } : {}),
@@ -179,6 +193,33 @@ export function ChatAppearanceButton() {
               { value: 'tight', label: t({ ko: '좁게', en: 'Tight' }) },
               { value: 'normal', label: t({ ko: '보통', en: 'Normal' }) },
               { value: 'relaxed', label: t({ ko: '넓게', en: 'Relaxed' }) },
+            ]}
+          />
+        </AppearanceRow>
+        <AppearanceRow label={t({ ko: '문장 속 이모티콘', en: 'Inline emoticons' })}>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            value={appearance.emoticonSize}
+            onChange={(value) => update({ emoticonSize: value as ChatEmoticonSize })}
+            items={[
+              { value: 'sm', label: t({ ko: '작게', en: 'Small' }) },
+              { value: 'md', label: t({ ko: '보통', en: 'Medium' }) },
+              { value: 'lg', label: t({ ko: '크게', en: 'Large' }) },
+              { value: 'xl', label: t({ ko: '아주 크게', en: 'Huge' }) },
+            ]}
+          />
+        </AppearanceRow>
+        <AppearanceRow label={t({ ko: '스티커', en: 'Stickers' })}>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            value={appearance.stickerSize}
+            onChange={(value) => update({ stickerSize: value as ChatStickerSize })}
+            items={[
+              { value: 'sm', label: t({ ko: '작게', en: 'Small' }) },
+              { value: 'md', label: t({ ko: '보통', en: 'Medium' }) },
+              { value: 'lg', label: t({ ko: '크게', en: 'Large' }) },
             ]}
           />
         </AppearanceRow>

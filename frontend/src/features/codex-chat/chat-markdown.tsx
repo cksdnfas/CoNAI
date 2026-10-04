@@ -130,7 +130,9 @@ function MarkdownImage({ src, alt }: ComponentProps<'img'>) {
         alt={alt ?? ''}
         title={alt ?? undefined}
         draggable={false}
-        className={sticker ? 'my-1 block max-h-32 max-w-[min(100%,10rem)] object-contain' : 'inline-block h-[1.6em] w-auto align-text-bottom'}
+        // Sizes come from the reader's chat appearance (CSS variables on the transcript); a tall inline emoticon
+        // simply makes its line taller instead of overlapping the line above.
+        className={sticker ? 'my-1 block h-auto max-h-(--chat-sticker-size,128px) w-auto max-w-full object-contain' : 'inline-block h-(--chat-emoticon-size,1.6em) w-auto align-text-bottom'}
       />
     )
   }
