@@ -80,14 +80,9 @@ const IntegrationToolsTabLazy = lazy(async () => {
   return { default: module.IntegrationToolsTab }
 })
 
-const CodexChatSettingsCardLazy = lazy(async () => {
-  const module = await import('./components/codex-chat-settings-card')
-  return { default: module.CodexChatSettingsCard }
-})
-
-const LlmConnectionsTabLazy = lazy(async () => {
-  const module = await import('./components/llm-connections-tab')
-  return { default: module.LlmConnectionsTab }
+const ChatSettingsTabLazy = lazy(async () => {
+  const module = await import('./components/chat-settings-tab')
+  return { default: module.ChatSettingsTab }
 })
 
 type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
@@ -564,11 +559,11 @@ export function SettingsPage() {
                 {...imageSaveTabProps}
                 showMediaSettings={false}
               />
-              <LlmConnectionsTabLazy />
-              <CodexChatSettingsCardLazy />
               <IntegrationToolsTabLazy />
             </div>
           ) : null}
+
+          {activeTab === 'chat' ? <ChatSettingsTabLazy /> : null}
 
           {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
 

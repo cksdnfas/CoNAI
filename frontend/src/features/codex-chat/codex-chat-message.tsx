@@ -1,17 +1,19 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { Check, ImageOff, Wrench, X } from 'lucide-react'
+import { Check, ChevronRight, ImageOff, Wrench, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { Spinner } from '@/components/ui/loading-state'
 import { Tip } from '@/components/ui/tooltip'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
-import type { CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatEngine, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
 import { requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import type { ImageRecord } from '@/types/image'
+import { ChatProfileAvatar } from './chat-profile-avatar'
 
 const HISTORY_POLL_MS = 3000
 const CODE_FENCE_PATTERN = /```[^\n]*\n?([\s\S]*?)```/g
@@ -208,21 +210,49 @@ export function CodexChatUserMessage({ content }: { content: string }) {
   )
 }
 
-export function CodexChatAssistantMessage({ content, toolCalls, status, error, streaming = false, largeThumbnails = false }: {
+/** Who answers in a chat: the thread's profile. */
+export type ChatSpeaker = { name: string; avatar: string | null; engine: ChatEngine }
+
+/** The model's reasoning while it streams, folded by default (never stored). */
+function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="text-xs text-muted-foreground">
+      <Button variant="ghost" size="xs" className="-ml-2 gap-1 text-muted-foreground" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <ChevronRight className={cn('transition-transform', open && 'rotate-90')} />
+        {active ? t({ ko: '생각하는 중…', en: 'Thinking…' }) : t({ ko: '생각한 과정', en: 'Reasoning' })}
+      </Button>
+      {open ? <div className="mt-1 max-h-60 overflow-y-auto whitespace-pre-wrap break-words border-l border-line pl-3 leading-relaxed">{text}</div> : null}
+    </div>
+  )
+}
+
+export function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, largeThumbnails = false, speaker = null }: {
   content: string
   toolCalls: CodexChatToolCall[]
   status?: CodexChatMessage['status']
   error?: string | null
+  /** Live reasoning text of a streaming LLM reply. */
+  reasoning?: string
   streaming?: boolean
   largeThumbnails?: boolean
+  speaker?: ChatSpeaker | null
 }) {
   const { t } = useI18n()
 
   return (
     <div className="space-y-2">
+      {speaker ? (
+        <div className="flex items-center gap-2">
+          <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} engine={speaker.engine} size="xs" />
+          <span className="text-xs font-semibold text-muted-foreground">{speaker.name}</span>
+        </div>
+      ) : null}
+      {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
       <CodexChatToolCalls calls={toolCalls} size={largeThumbnails ? 'large' : 'regular'} />
       {content ? <ChatText text={content} /> : null}
-      {streaming && !content ? <Spinner size="sm" className="text-muted-foreground" /> : null}
+      {streaming && !content && !reasoning ? <Spinner size="sm" className="text-muted-foreground" /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <p className="whitespace-pre-wrap break-words text-xs text-destructive">{error || t({ ko: '응답 실패', en: 'Reply failed' })}</p> : null}
     </div>

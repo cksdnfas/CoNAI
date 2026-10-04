@@ -1,4 +1,4 @@
-import { Bot, Image, Library, Server, SlidersHorizontal, Users, WandSparkles, Wrench, type LucideIcon } from 'lucide-react'
+import { Bot, Image, Library, MessageSquare, Server, SlidersHorizontal, Users, WandSparkles, Wrench, type LucideIcon } from 'lucide-react'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { type TranslationDictionary, useI18n } from '@/i18n'
 import { SETTINGS_TAB_ITEMS, SETTINGS_TAB_LABELS, type SettingsTab, type SettingsTabGroup } from '../settings-tabs'
@@ -14,6 +14,7 @@ const SETTINGS_TAB_ICONS: Record<SettingsTab, LucideIcon> = {
   media: Image,
   auto: Bot,
   generation: WandSparkles,
+  chat: MessageSquare,
   accounts: Users,
   system: Server,
   maintenance: Wrench,

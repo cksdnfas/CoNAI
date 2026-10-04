@@ -74,6 +74,17 @@ const PERMISSION_CATALOG: PermissionCatalogSection[] = [
     ],
   },
   {
+    id: 'chat',
+    label: { ko: '채팅', en: 'Chat' },
+    entries: [
+      { key: 'chat.codex.use', label: { ko: 'Codex 프로필로 채팅 (서버 Codex 사용량 공유)', en: 'Chat with Codex profiles (shares server Codex usage)' } },
+      { key: 'chat.llm.use', label: { ko: 'API LLM 프로필로 채팅', en: 'Chat with API LLM profiles' } },
+      { key: 'chat.tools.read', label: { ko: '채팅 도구: 조회', en: 'Chat tools: read' } },
+      { key: 'chat.tools.generate', label: { ko: '채팅 도구: 생성', en: 'Chat tools: generate' } },
+      { key: 'chat.tools.organize', label: { ko: '채팅 도구: 정리', en: 'Chat tools: organize' } },
+    ],
+  },
+  {
     id: 'wallpaper',
     label: { ko: '월페이퍼', en: 'Wallpaper' },
     entries: [

@@ -4,6 +4,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, streamCodexChatMessage } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   CodexChatContext,
@@ -28,12 +29,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [draft, setDraft] = useState('')
   const [liveTurn, setLiveTurn] = useState<CodexChatLiveTurn | null>(null)
   const [messageFocus, setMessageFocus] = useState<CodexChatApi['messageFocus']>(null)
+  const [isStartingChat, setIsStartingChat] = useState(false)
   const draftRef = useRef(draft)
   const streamAbortRef = useRef<AbortController | null>(null)
 
   draftRef.current = draft
 
-  const statusQuery = useQuery({ queryKey: ['codex-chat-status'], queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
+  const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
   const canUse = statusQuery.data?.canUse === true
 
   useEffect(() => () => streamAbortRef.current?.abort(), [])
@@ -43,39 +45,38 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setView('chat')
   }, [])
 
-  const send = useCallback(async (threadId: number | null) => {
+  const startChat = useCallback(async (profileId: number) => {
+    setIsStartingChat(true)
+    try {
+      const thread = await createCodexChatThread(profileId)
+      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      setSelectedThreadId(thread.id)
+      setView('chat')
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
+    } finally {
+      setIsStartingChat(false)
+    }
+  }, [queryClient, showSnackbar, t])
+
+  const send = useCallback(async (threadId: number) => {
     const text = draftRef.current.trim()
     if (!text || streamAbortRef.current) {
       return
     }
 
-    let targetThreadId = threadId
-    try {
-      if (targetThreadId === null) {
-        const thread = await createCodexChatThread()
-        targetThreadId = thread.id
-        setSelectedThreadId(thread.id)
-        await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
-      }
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
-      return
-    }
-
-    if (targetThreadId === null) {
-      return
-    }
-
-    const sentThreadId = targetThreadId
+    const sentThreadId = threadId
     const controller = new AbortController()
     streamAbortRef.current = controller
     setDraft('')
-    setLiveTurn({ threadId: sentThreadId, userText: text, text: '', toolCalls: new Map() })
+    setLiveTurn({ threadId: sentThreadId, userText: text, text: '', reasoning: '', toolCalls: new Map() })
 
     try {
       await streamCodexChatMessage(sentThreadId, text, (event) => {
         if (event.type === 'delta') {
           setLiveTurn((current) => (current ? { ...current, text: current.text + event.text } : current))
+        } else if (event.type === 'reasoning') {
+          setLiveTurn((current) => (current ? { ...current, reasoning: current.reasoning + event.text } : current))
         } else if (event.type === 'tool') {
           setLiveTurn((current) => {
             if (!current) return current
@@ -128,6 +129,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setView,
     selectedThreadId,
     selectThread,
+    startChat,
+    isStartingChat,
     draft,
     setDraft,
     liveTurn,
@@ -136,7 +139,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [canUse, clearMessageFocus, closePanel, draft, focusMessage, isPanelOpen, liveTurn, messageFocus, openPanel, selectThread, selectedThreadId, send, stop, view])
+  }), [canUse, clearMessageFocus, closePanel, draft, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, selectThread, selectedThreadId, send, startChat, stop, view])
 
   return <CodexChatContext.Provider value={api}>{children}</CodexChatContext.Provider>
 }

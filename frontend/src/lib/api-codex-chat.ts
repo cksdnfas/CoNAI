@@ -2,21 +2,78 @@ import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import type { CodexReasoningEffort } from '@conai/shared'
 
-export const CODEX_CHAT_SETTINGS_QUERY_KEY = ['codex-chat-settings'] as const
+export type ChatScope = 'read' | 'generate' | 'organize'
+export type ChatEngine = 'llm' | 'codex'
 
-export type CodexChatScope = 'read' | 'generate' | 'organize'
-
-export interface CodexChatSettings {
-  enabled: boolean
-  scopes: CodexChatScope[]
-  model: string
-  reasoningEffort: CodexReasoningEffort | ''
-  availableScopes: CodexChatScope[]
-}
+export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize']
+export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
+export const CHAT_ADMIN_PROFILES_QUERY_KEY = ['codex-chat-admin-profiles'] as const
+export const CHAT_ADMIN_SETTINGS_QUERY_KEY = ['codex-chat-admin-settings'] as const
+export const CHAT_STATUS_QUERY_KEY = ['codex-chat-status'] as const
 
 export interface CodexChatStatus {
+  /** The chat master switch. */
   enabled: boolean
+  /** This session can use at least one engine. */
   canUse: boolean
+  codex: { canUse: boolean }
+  llm: { canUse: boolean }
+  scopes: ChatScope[]
+}
+
+/** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */
+export interface ChatProfileSummary {
+  id: number
+  name: string
+  avatar: string | null
+  engine: ChatEngine
+  isEnabled: boolean
+  usable: boolean
+  /** Context defaults a chat can override (LLM profiles). */
+  contextTurns: number
+  summaryEnabled: boolean
+}
+
+/** A full chat profile (admin). */
+export interface ChatProfile {
+  id: number
+  name: string
+  avatar: string | null
+  engine: ChatEngine
+  providerName: string
+  model: string
+  reasoningEffort: CodexReasoningEffort | ''
+  systemPrompt: string
+  characterDescription: string
+  exampleDialogue: string
+  userPersona: string
+  greeting: string
+  temperature: number | null
+  maxTokens: number | null
+  mcpEnabled: boolean
+  mcpScopes: ChatScope[]
+  contextTurns: number
+  contextTokens: number | null
+  summaryEnabled: boolean
+  summaryTriggerTurns: number
+  summaryPrompt: string
+  summaryProviderName: string | null
+  summaryModel: string
+  maxToolRounds: number
+  isEnabled: boolean
+  sortOrder: number
+  createdDate: string
+  updatedDate: string
+}
+
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate'>>
+
+export interface ChatProfileDefaults {
+  contextTurns: number
+  summaryTriggerTurns: number
+  maxToolRounds: number
+  summaryPrompt: string
+  scopes: ChatScope[]
 }
 
 export interface CodexChatToolCall {
@@ -33,6 +90,14 @@ export interface CodexChatThread {
   id: number
   codex_thread_id: string | null
   title: string
+  engine: ChatEngine
+  profile_id: number | null
+  /** Overrides of the profile (null follows it). */
+  context_turns: number | null
+  summary_enabled: 0 | 1 | null
+  summary: string | null
+  summary_until_message_id: number | null
+  summary_updated_date: string | null
   created_date: string
   updated_date: string
 }
@@ -70,6 +135,7 @@ export interface CodexChatMediaItem {
 export type CodexChatStreamEvent =
   | { type: 'user'; message: CodexChatMessage }
   | { type: 'delta'; text: string }
+  | { type: 'reasoning'; text: string }
   | { type: 'tool'; call: CodexChatToolCall }
   | { type: 'done'; message: CodexChatMessage }
   | { type: 'error'; message: string }
@@ -80,20 +146,56 @@ export function getCodexChatStatus() {
   return requestApiData<CodexChatStatus>('/api/codex-chat/status', { cache: 'no-store' })
 }
 
-export function getCodexChatSettings() {
-  return requestApiData<CodexChatSettings>('/api/codex-chat/settings', { cache: 'no-store' })
+export function listChatProfiles() {
+  return requestApiData<ChatProfileSummary[]>('/api/codex-chat/profiles', { cache: 'no-store' })
 }
 
-export function updateCodexChatSettings(patch: Partial<Pick<CodexChatSettings, 'enabled' | 'scopes' | 'model' | 'reasoningEffort'>>) {
-  return requestApiData<CodexChatSettings>('/api/codex-chat/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function getChatAdminSettings() {
+  return requestApiData<{ enabled: boolean }>('/api/codex-chat/admin/settings', { cache: 'no-store' })
+}
+
+export function updateChatAdminSettings(patch: { enabled: boolean }) {
+  return requestApiData<{ enabled: boolean }>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function getChatProfileDefaults() {
+  return requestApiData<ChatProfileDefaults>('/api/codex-chat/admin/profile-defaults', { cache: 'no-store' })
+}
+
+export function listChatAdminProfiles() {
+  return requestApiData<ChatProfile[]>('/api/codex-chat/admin/profiles', { cache: 'no-store' })
+}
+
+export function createChatProfile(input: ChatProfileInput) {
+  return requestApiData<ChatProfile>('/api/codex-chat/admin/profiles', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function updateChatProfile(profileId: number, patch: ChatProfileInput) {
+  return requestApiData<ChatProfile>(`/api/codex-chat/admin/profiles/${profileId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function deleteChatProfile(profileId: number) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/profiles/${profileId}`, { method: 'DELETE' })
+}
+
+export function listChatConnectionModels(providerName: string) {
+  return requestApiData<{ models: string[]; defaultModel: string | null }>(`/api/codex-chat/admin/models?providerName=${encodeURIComponent(providerName)}`, { cache: 'no-store' })
+}
+
+export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; summary?: string | null }) {
+  return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function summarizeCodexChatThread(threadId: number) {
+  return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/summarize`, { method: 'POST' })
 }
 
 export function listCodexChatThreads() {
   return requestApiData<CodexChatThread[]>('/api/codex-chat/threads', { cache: 'no-store' })
 }
 
-export function createCodexChatThread() {
-  return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST' })
+export function createCodexChatThread(profileId: number) {
+  return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId }) })
 }
 
 export function getCodexChatThread(threadId: number) {

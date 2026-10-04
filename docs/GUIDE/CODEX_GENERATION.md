@@ -232,6 +232,6 @@ Codex가 이미지를 만들지 못하면 실패 메시지에 Codex 마지막 �
 ## 함께 보기
 
 - [이미지 생성 개요](./GENERATION_OVERVIEW.md)
-- [Codex 채팅](./CODEX_CHAT.md)
+- [채팅 (Codex · API LLM)](./CHAT.md)
 - [ComfyUI 생성](./COMFYUI_GENERATION.md)
 - [설정 전체 지도](./SETTINGS_OVERVIEW.md)

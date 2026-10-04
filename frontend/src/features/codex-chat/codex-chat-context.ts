@@ -12,13 +12,15 @@ export function codexChatMediaQueryKey(threadId: number | null) {
   return ['codex-chat-media', threadId] as const
 }
 
-export type CodexChatView = 'chat' | 'gallery'
+export type CodexChatView = 'chat' | 'gallery' | 'context'
 
 /** The turn being streamed: the thread only refetches after it ends, so the UI shows it from here meanwhile. */
 export type CodexChatLiveTurn = {
   threadId: number
   userText: string
   text: string
+  /** LLM chats: the model's reasoning so far (shown folded, never stored). */
+  reasoning: string
   toolCalls: Map<string, CodexChatToolCall>
 }
 
@@ -30,14 +32,17 @@ export interface CodexChatApi {
   closePanel: () => void
   view: CodexChatView
   setView: (view: CodexChatView) => void
-  /** `undefined` follows the latest saved chat; `null` deliberately starts an empty one. */
+  /** `undefined` follows the latest saved chat. */
   selectedThreadId: number | null | undefined
   selectThread: (threadId: number | null | undefined) => void
+  /** Create a chat with a profile (its greeting arrives as the first message) and open it. */
+  startChat: (profileId: number) => Promise<void>
+  isStartingChat: boolean
   draft: string
   setDraft: (draft: string | ((current: string) => string)) => void
   liveTurn: CodexChatLiveTurn | null
-  /** Send `draft` to `threadId` (a new chat when `null`) and stream the reply. */
-  send: (threadId: number | null) => Promise<void>
+  /** Send `draft` to `threadId` and stream the reply. */
+  send: (threadId: number) => Promise<void>
   stop: (threadId: number) => void
   /** A message the chat view should scroll to and flash (from the gallery's "go to message"). */
   messageFocus: { messageId: number; nonce: number } | null

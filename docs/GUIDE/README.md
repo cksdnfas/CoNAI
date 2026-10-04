@@ -25,7 +25,7 @@ CoNAI 사용과 연동에 필요한 가이드를 모아둔 섹션입니다.
 - [이미지 생성 개요](./GENERATION_OVERVIEW.md)
 - [NAI 생성](./NAI_GENERATION.md)
 - [Codex 생성](./CODEX_GENERATION.md)
-- [Codex 채팅](./CODEX_CHAT.md)
+- [채팅 (Codex · API LLM)](./CHAT.md)
 - [ComfyUI 생성](./COMFYUI_GENERATION.md)
 - [워크플로우 편집](./WORKFLOW_EDITOR.md)
 - [MCP 가이드](./MCP_GUIDE.md)

@@ -70,7 +70,15 @@ function requireChatAccess(req: Request, res: Response, next: NextFunction) {
 
 /** What a chat user sees of a profile: enough to pick it and show who is talking. */
 function toPublicProfile(profile: ChatProfile) {
-  return { id: profile.id, name: profile.name, avatar: profile.avatar, engine: profile.engine, isEnabled: profile.isEnabled }
+  return {
+    id: profile.id,
+    name: profile.name,
+    avatar: profile.avatar,
+    engine: profile.engine,
+    isEnabled: profile.isEnabled,
+    contextTurns: profile.contextTurns,
+    summaryEnabled: profile.summaryEnabled,
+  }
 }
 
 /** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear, and which engines. */
