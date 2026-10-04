@@ -17,7 +17,9 @@ import { GroupSubgroupStrip } from './components/group-subgroup-strip'
 import { GroupViewHeader } from './components/group-view-header'
 import { GroupEditorModal } from './components/group-editor-modal'
 import { GroupAssignModal } from './components/group-assign-modal'
+import { GroupEmoticonSection } from './components/group-emoticon-section'
 import { GroupImageSection } from './components/group-image-section'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { GroupDownloadModal } from './components/group-download-modal'
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
@@ -54,6 +56,8 @@ export function GroupPage() {
   const selectedSource = groupSources[selectedSourceKey]
   const selectedGroupId = groupId ? Number(groupId) : undefined
   const isCustomSource = selectedSource.key === 'custom'
+  // Emoticon groups open on their keyword sheet; the usual image list stays one switch away.
+  const [emoticonView, setEmoticonView] = useState<'keywords' | 'images'>('keywords')
   const rootLabel = isCustomSource ? t({ ko: '모든 그룹', en: 'All groups' }) : t({ ko: '감시폴더', en: 'Watched folders' })
 
   const {
@@ -309,7 +313,22 @@ export function GroupPage() {
                 onOpenGroup={handleOpenGroup}
               />
 
-              <GroupImageSection
+              {isCustomSource && selectedGroupQuery.data.emoticon_enabled ? (
+                <SegmentedControl
+                  size="xs"
+                  value={emoticonView}
+                  onChange={(value) => setEmoticonView(value === 'images' ? 'images' : 'keywords')}
+                  items={[
+                    { value: 'keywords', label: t({ ko: '이모티콘 키워드', en: 'Emoticon keywords' }) },
+                    { value: 'images', label: t({ ko: '이미지', en: 'Images' }) },
+                  ]}
+                  ariaLabel={t({ ko: '보기', en: 'View' })}
+                />
+              ) : null}
+
+              {isCustomSource && selectedGroupQuery.data.emoticon_enabled && emoticonView === 'keywords' ? (
+                <GroupEmoticonSection group={selectedGroupQuery.data} />
+              ) : <GroupImageSection
                 group={selectedGroupQuery.data}
                 groupImages={groupImages}
                 resetKey={groupImageListResetKey}
@@ -348,7 +367,7 @@ export function GroupPage() {
                 onCollectionFilterChange={isCustomSource ? setGroupImageCollectionFilter : undefined}
                 collectionFilterCounts={isCustomSource ? collectionFilterTotals : undefined}
                 onItemDragStart={isCustomSource && isWideLayout ? handleImageDragStart : undefined}
-              />
+              />}
             </>
           ) : null}
         </section>

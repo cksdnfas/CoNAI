@@ -87,6 +87,8 @@ export type ChatProfile = {
   summaryModel: string
   /** Model ↔ tool round trips allowed in one reply. */
   maxToolRounds: number
+  /** LLM: the model can look at images (view_images results are sent to it). */
+  visionEnabled: boolean
   /** Typeface, roleplay colours, background dimming. */
   style: ChatStyle
   /** Chat background as a data URL; served on its own route, never inside profile lists. */
@@ -129,6 +131,7 @@ type ProfileRow = {
   max_tool_rounds: number | null
   chat_style: string | null
   background_image: string | null
+  vision_enabled: number | null
   is_enabled: number
   sort_order: number
   created_date: string
@@ -218,6 +221,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     summaryProviderName: row.summary_provider_name,
     summaryModel: row.summary_model ?? '',
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
+    visionEnabled: row.vision_enabled === 1,
     style: normalizeChatStyle(row.chat_style),
     background: row.background_image,
     isEnabled: row.is_enabled === 1,
@@ -301,6 +305,7 @@ function toColumns(input: ChatProfileInput) {
     summary_provider_name: text(input.summaryProviderName, 200) || null,
     summary_model: text(input.summaryModel, MODEL_MAX_LENGTH) || null,
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
+    vision_enabled: input.visionEnabled ? 1 : 0,
     chat_style: JSON.stringify(normalizeChatStyle(input.style)),
     background_image: background,
     is_enabled: input.isEnabled === false ? 0 : 1,

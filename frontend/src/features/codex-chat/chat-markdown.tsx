@@ -1,11 +1,11 @@
-import { useMemo, useState, type ComponentProps, type ReactNode } from 'react'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import { createContext, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
+import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Check, Copy, Eye } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
-import type { ChatDisplayBlock } from '@/lib/api-codex-chat'
+import { chatEmoticonUrl, type ChatDisplayBlock } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { ChatDisplayBlockView, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 
@@ -79,7 +79,66 @@ function FencedBlock({ language, code }: { language: string | null; code: string
   return block && data ? <ChatDisplayBlockView block={block} data={data} /> : <CodeBlock language={language} code={code} />
 }
 
+/** The profile's emoticons for this reply: keyword (lower case) → image, and whose emoticon route serves them. */
+export type ChatEmoticonMap = { profileId: number; byKeyword: Map<string, string> }
+
+const ChatEmoticonsContext = createContext<ChatEmoticonMap | null>(null)
+
+const EMOTE_TOKEN_PATTERN = /&\*([^*&\n]{1,40})\*&/g
+const EMOTE_LINE_PATTERN = /^\s*&\*([^*&\n]{1,40})\*&\s*$/
+const EMOTE_SCHEME = 'emote:'
+const STICKER_SCHEME = 'emote-sticker:'
+
+/**
+ * `&*keyword*&` → an image reference the `img` component draws: alone on a line it is a sticker, inside text an
+ * inline emoticon. Unknown keywords stay visible as typed (escaped so Markdown does not turn them into emphasis).
+ * Code fences are left alone.
+ */
+function injectEmoticons(text: string, emoticons: ChatEmoticonMap | null) {
+  if (!text.includes('&*')) return text
+  let inFence = false
+  return text.split('\n').map((line) => {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+    const solo = EMOTE_LINE_PATTERN.exec(line)
+    const soloHash = solo ? emoticons?.byKeyword.get(solo[1].trim().toLowerCase()) : undefined
+    if (solo && soloHash) return `![${solo[1].trim()}](${STICKER_SCHEME}${soloHash})`
+    return line.replace(EMOTE_TOKEN_PATTERN, (token, keyword: string) => {
+      const hash = emoticons?.byKeyword.get(keyword.trim().toLowerCase())
+      return hash ? `![${keyword.trim()}](${EMOTE_SCHEME}${hash})` : token.replace(/\*/g, '\\*')
+    })
+  }).join('\n')
+}
+
+/** Lets the emoticon schemes through; everything else gets react-markdown's safe default. */
+function urlTransform(url: string) {
+  return url.startsWith(EMOTE_SCHEME) || url.startsWith(STICKER_SCHEME) ? url : defaultUrlTransform(url)
+}
+
+function MarkdownImage({ src, alt }: ComponentProps<'img'>) {
+  const emoticons = useContext(ChatEmoticonsContext)
+  const source = typeof src === 'string' ? src : ''
+  const sticker = source.startsWith(STICKER_SCHEME)
+  if (emoticons && (sticker || source.startsWith(EMOTE_SCHEME))) {
+    const hash = source.slice(sticker ? STICKER_SCHEME.length : EMOTE_SCHEME.length)
+    return (
+      <img
+        src={chatEmoticonUrl(emoticons.profileId, hash)}
+        alt={alt ?? ''}
+        title={alt ?? undefined}
+        draggable={false}
+        className={sticker ? 'my-1 block max-h-32 max-w-[min(100%,10rem)] object-contain' : 'inline-block h-[1.6em] w-auto align-text-bottom'}
+      />
+    )
+  }
+  return <img src={source} alt={alt ?? ''} loading="lazy" className="my-2 max-h-80 max-w-full rounded-sm" />
+}
+
 const MARKDOWN_COMPONENTS: Components = {
+  img: MarkdownImage,
   p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
   a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>,
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5">{children}</ul>,
@@ -185,15 +244,17 @@ function rehypeRoleplay() {
  * A reply as Markdown (GitHub flavour: tables, task lists, strikethrough). Raw HTML is not rendered; fence it to preview.
  * `roleplay` colours "dialogue", *narration* and 'thoughts' with the profile's colours (CSS variables on the transcript).
  */
-export function ChatMarkdown({ text, roleplay = false, blocks }: { text: string; roleplay?: boolean; blocks?: ChatDisplayBlock[] }) {
+export function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null }: { text: string; roleplay?: boolean; blocks?: ChatDisplayBlock[]; emoticons?: ChatEmoticonMap | null }) {
   const blocksByKey = useMemo(() => new Map((blocks ?? []).filter((block) => block.enabled && block.key).map((block) => [block.key, block])), [blocks])
   return (
-    <ChatDisplayBlocksContext.Provider value={blocksByKey}>
-      <div className={cn('chat-markdown break-words text-foreground', roleplay && '[&_em]:text-(--chat-rp-narration)')}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={roleplay ? [rehypeRoleplay] : []} components={MARKDOWN_COMPONENTS}>
-          {fenceBareHtml(text)}
-        </ReactMarkdown>
-      </div>
-    </ChatDisplayBlocksContext.Provider>
+    <ChatEmoticonsContext.Provider value={emoticons}>
+      <ChatDisplayBlocksContext.Provider value={blocksByKey}>
+        <div className={cn('chat-markdown break-words text-foreground', roleplay && '[&_em]:text-(--chat-rp-narration)')}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={roleplay ? [rehypeRoleplay] : []} components={MARKDOWN_COMPONENTS} urlTransform={urlTransform}>
+            {injectEmoticons(fenceBareHtml(text), emoticons)}
+          </ReactMarkdown>
+        </div>
+      </ChatDisplayBlocksContext.Provider>
+    </ChatEmoticonsContext.Provider>
   )
 }

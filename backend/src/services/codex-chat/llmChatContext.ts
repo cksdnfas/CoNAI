@@ -1,4 +1,5 @@
 import { resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
+import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
@@ -18,6 +19,7 @@ const TOOL_GUIDANCE = [
   'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
   'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
   'Ask for confirmation before bulk or destructive changes such as moving many images between groups.',
+  'To set up an emoticon group: list_emoticons for the group, view_images in small batches when available (otherwise judge from file names and tags), then set_emoticon_keywords with a few short keywords per image.',
 ].join('\n')
 
 /** What the chat window renders, for both engines; conversation stays plain prose unless formatting helps. */
@@ -221,6 +223,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     withTools ? TOOL_GUIDANCE : '',
     REPLY_FORMAT_GUIDANCE,
     buildChatStyleGuidance(profile.style, profile.name),
+    buildEmoticonGuidance(profile.style),
   ].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
   if (config.summaryEnabled && thread?.summary?.trim()) {

@@ -17,3 +17,13 @@ export function requireFileStoreOwner(requester: McpRequester | undefined): stri
   }
   return fileOwnerKey(id);
 }
+
+/** Owner key for changes (folders, rename, move, delete): also needs `files.manage`. */
+export function requireFileStoreManager(requester: McpRequester | undefined): string {
+  const owner = requireFileStoreOwner(requester);
+  const id = requester?.accountId ?? null;
+  if (id !== null && !AuthAccessControlService.hasPermission(id, 'files.manage')) {
+    throw new FileStoreError('파일을 정리할 권한이 없어.', 403);
+  }
+  return owner;
+}

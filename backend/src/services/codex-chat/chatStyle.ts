@@ -53,6 +53,8 @@ export type ChatStyle = {
   blocks: ChatDisplayBlock[]
   /** Characters besides the profile itself; replies switch speaker with `[Name]` lines. */
   cast: ChatCastMember[]
+  /** Linked emoticon groups (custom groups with `emoticon_enabled`), in priority order. */
+  emoticonGroupIds: number[]
 }
 
 export const DEFAULT_CHAT_STYLE: ChatStyle = {
@@ -63,7 +65,10 @@ export const DEFAULT_CHAT_STYLE: ChatStyle = {
   backgroundBlur: 0,
   blocks: [],
   cast: [],
+  emoticonGroupIds: [],
 }
+
+const MAX_EMOTICON_GROUPS = 10
 
 const MAX_CAST = 8
 const CAST_NAME_MAX_LENGTH = 40
@@ -157,6 +162,9 @@ export function normalizeChatStyle(value: unknown): ChatStyle {
     backgroundBlur: bounded(record.backgroundBlur, 0, 20, DEFAULT_CHAT_STYLE.backgroundBlur),
     blocks: normalizeBlocks(record.blocks),
     cast: normalizeCast(record.cast),
+    emoticonGroupIds: Array.isArray(record.emoticonGroupIds)
+      ? [...new Set(record.emoticonGroupIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))].slice(0, MAX_EMOTICON_GROUPS)
+      : [],
   }
 }
 

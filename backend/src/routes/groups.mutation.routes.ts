@@ -74,7 +74,7 @@ function requireCompositeHashes(res: Response, compositeHashes: unknown): compos
 }
 
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
+  const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions, emoticon_enabled } = req.body;
 
   if (typeof name !== 'string' || !name.trim()) {
     return sendRouteBadRequest(res, 'Group name is required');
@@ -100,7 +100,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       color,
       parent_id,
       auto_collect_enabled,
-      auto_collect_conditions
+      auto_collect_conditions,
+      emoticon_enabled: emoticon_enabled === true,
     };
 
     const groupId = await GroupModel.create(groupData);
@@ -134,7 +135,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = parseRouteId(req.params.id);
-    const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
+    const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions, emoticon_enabled } = req.body;
 
     if (parent_id !== undefined) {
       const hierarchyService = getGroupHierarchyService();
@@ -155,7 +156,8 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       color,
       parent_id,
       auto_collect_enabled,
-      auto_collect_conditions
+      auto_collect_conditions,
+      emoticon_enabled: typeof emoticon_enabled === 'boolean' ? emoticon_enabled : undefined,
     };
 
     const updated = await GroupModel.update(id, groupData);

@@ -40,6 +40,7 @@ import { getErrorMessage } from '@/lib/error-message'
 
 import { ChatDisplayBlocksEditor } from './chat-profile-blocks'
 import { ChatCastEditor } from './chat-profile-cast'
+import { ChatEmoticonGroupPicker } from './chat-profile-emoticons'
 import { readAvatarFile } from './chat-profile-images'
 import { ChatProfileLook } from './chat-profile-look'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
@@ -50,7 +51,7 @@ import { ChatProfileToolsAdvanced } from './chat-profile-tools'
 type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background'>> & { sortOrder: number; background?: string | null }
 
 /** Shown until the server's defaults load (new profiles only). */
-const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [], cast: [] }
+const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [], cast: [], emoticonGroupIds: [] }
 
 function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults | undefined): Draft {
   return {
@@ -77,7 +78,8 @@ function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults |
     summaryProviderName: profile?.summaryProviderName ?? null,
     summaryModel: profile?.summaryModel ?? '',
     maxToolRounds: profile?.maxToolRounds ?? defaults?.maxToolRounds ?? 8,
-    style: profile?.style ?? defaults?.style ?? FALLBACK_STYLE,
+    visionEnabled: profile?.visionEnabled ?? false,
+    style: { ...FALLBACK_STYLE, ...(profile?.style ?? defaults?.style) },
     isEnabled: profile?.isEnabled ?? true,
     sortOrder: profile?.sortOrder ?? 0,
   }
@@ -267,6 +269,9 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
               </Field>
             </div>
           )}
+          {isLlm ? (
+            <SwitchLine label={t({ ko: '이미지를 볼 수 있는 모델', en: 'Model can see images' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
+          ) : null}
         </Section>
 
         <Section
@@ -296,6 +301,10 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
             onStyleChange={(style) => patch({ style })}
             onBackgroundChange={(background) => patch({ background })}
           />
+          <div className="space-y-2 border-t border-line pt-3">
+            <h4 className="text-xs font-semibold text-muted-foreground">{t({ ko: '이모티콘 그룹', en: 'Emoticon groups' })}</h4>
+            <ChatEmoticonGroupPicker selected={draft.style.emoticonGroupIds} onChange={(emoticonGroupIds) => patch({ style: { ...draft.style, emoticonGroupIds } })} />
+          </div>
           <div className="space-y-2 border-t border-line pt-3">
             <h4 className="text-xs font-semibold text-muted-foreground">{t({ ko: '등장인물', en: 'Characters' })}</h4>
             <ChatCastEditor cast={draft.style.cast} onChange={(cast) => patch({ style: { ...draft.style, cast } })} />

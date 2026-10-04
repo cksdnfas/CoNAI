@@ -52,6 +52,7 @@ export function GroupEditorModal({
   const [color, setColor] = useState('')
   const [parentValue, setParentValue] = useState('root')
   const [autoCollectEnabled, setAutoCollectEnabled] = useState(false)
+  const [emoticonEnabled, setEmoticonEnabled] = useState(false)
   const [autoCollectEditorState, setAutoCollectEditorState] = useState<AutoCollectEditorState>({
     mode: 'chip',
     parsedValue: undefined,
@@ -70,6 +71,7 @@ export function GroupEditorModal({
     setColor(group?.color ?? '')
     setParentValue(String(group?.parent_id ?? defaultParentId ?? 'root'))
     setAutoCollectEnabled(Boolean(group?.auto_collect_enabled))
+    setEmoticonEnabled(Boolean(group?.emoticon_enabled))
     setAutoCollectInitialText(getInitialAutoCollectText(group))
     setAutoCollectEditorState({
       mode: 'chip',
@@ -126,6 +128,7 @@ export function GroupEditorModal({
       parent_id: parentValue === 'root' ? null : Number(parentValue),
       auto_collect_enabled: autoCollectEnabled,
       auto_collect_conditions: autoCollectEditorState.parsedValue,
+      emoticon_enabled: emoticonEnabled,
     }
 
     setFormError(null)
@@ -184,6 +187,11 @@ export function GroupEditorModal({
 
               {autoCollectEnabled ? <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} /> : null}
             </div>
+
+            <ToggleRow className="justify-between">
+              <p className="text-sm font-medium text-foreground">{t({ ko: 'LLM 이모티콘 그룹', en: 'LLM emoticon group' })}</p>
+              <Switch checked={emoticonEnabled} onCheckedChange={setEmoticonEnabled} aria-label={t({ ko: 'LLM 이모티콘 그룹', en: 'LLM emoticon group' })} />
+            </ToggleRow>
 
             <Field label={t('groups.components.group.editor.modal.accent.color')}>
               <Input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#7c3aed" />

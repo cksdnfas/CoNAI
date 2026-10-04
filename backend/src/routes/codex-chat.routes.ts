@@ -1,3 +1,4 @@
+import fs from 'fs'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
@@ -6,6 +7,9 @@ import type { McpRequester } from '../mcp/context'
 import { CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
 import { CHAT_SCOPES, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
+import { listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
+import { EmoticonService } from '../services/emoticonService'
+import { streamCacheableFile } from './images/query-file-helpers'
 import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
@@ -143,6 +147,33 @@ router.get('/profiles/:profileId/background', requireChatAccess, (req: Request, 
   res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
   res.send(Buffer.from(match[2], 'base64'))
 })
+
+/** GET /api/codex-chat/profiles/:profileId/emoticons — keyword → image of the profile's linked emoticon groups. */
+router.get('/profiles/:profileId/emoticons', requireChatAccess, (req: Request, res: Response) => {
+  const profileId = parseId(req.params.profileId)
+  const profile = profileId === null ? null : ChatProfileStore.find(profileId)
+  if (!profile) {
+    res.status(404).json({ success: false, error: '프로필을 찾을 수 없어.' })
+    return
+  }
+  res.json({ success: true, data: listProfileEmoticons(profile.style) })
+})
+
+/**
+ * GET /api/codex-chat/profiles/:profileId/emoticons/:hash — the emoticon image. Served here (not /api/images) so chat
+ * users without library access still see it; only images of the profile's linked emoticon groups are served.
+ */
+router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const profileId = parseId(req.params.profileId)
+  const profile = profileId === null ? null : ChatProfileStore.find(profileId)
+  const compositeHash = String(req.params.compositeHash ?? '')
+  const file = profile && EmoticonService.isInGroups(compositeHash, profile.style.emoticonGroupIds) ? EmoticonService.activeFile(compositeHash) : null
+  if (!file || !fs.existsSync(file.path)) {
+    res.status(404).json({ success: false, error: 'Not found' })
+    return
+  }
+  await streamCacheableFile(req, res, file.path, file.mimeType ?? 'application/octet-stream')
+}))
 
 router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   res.json({ success: true, data: CodexChatService.listThreads(requesterFrom(req)) })

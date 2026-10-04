@@ -516,6 +516,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['tool_output_limit', 'INTEGER'],
     ['chat_style', 'TEXT'],
     ['background_image', 'TEXT'],
+    ['vision_enabled', 'INTEGER'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

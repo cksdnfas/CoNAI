@@ -13,6 +13,7 @@ import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken } from './codexChatAccess'
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
+import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { buildPersonaPrompt, fillCharacterPlaceholders, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
 import { LlmChatService } from './llmChatService'
@@ -59,6 +60,7 @@ const DEVELOPER_INSTRUCTIONS = [
   'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
   'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
   'Ask for confirmation before bulk or destructive changes such as moving many images between groups.',
+  'To set up an emoticon group: list_emoticons for the group, view_images in small batches (judge from file names and tags if you cannot see them), then set_emoticon_keywords with a few short keywords per image.',
   REPLY_FORMAT_GUIDANCE,
 ].join('\n')
 
@@ -211,7 +213,7 @@ function buildAppServerArgs(knownFeatures: Set<string>, mcpServers: string[]) {
 
 /** What a Codex profile's chats get as developer instructions: the fixed tool rules, then the profile's prompt. */
 export function buildCodexInstructions(profile: ChatProfile) {
-  return [DEVELOPER_INSTRUCTIONS, buildChatStyleGuidance(profile.style, profile.name), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
+  return [DEVELOPER_INSTRUCTIONS, buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
 }
 
 function threadOverrides(session: Session, profile: ChatProfile) {

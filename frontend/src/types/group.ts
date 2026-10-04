@@ -11,6 +11,8 @@ export interface GroupRecord {
   auto_collect_enabled?: boolean
   auto_collect_conditions?: string | null
   auto_collect_last_run?: string | null
+  /** Chat emoticon group (0/1 from the API). */
+  emoticon_enabled?: boolean | number
   image_count: number
   auto_collected_count?: number
   manual_added_count?: number
@@ -55,6 +57,26 @@ export interface GroupMutationInput {
   parent_id?: number | null
   auto_collect_enabled?: boolean
   auto_collect_conditions?: unknown
+  emoticon_enabled?: boolean
+}
+
+/** One image of an emoticon group with the keywords that call it up (`&*keyword*&` in chat). */
+export interface EmoticonEntry {
+  compositeHash: string
+  /** Keywords in effect: the stored ones, or the file name when none were set. */
+  keywords: string[]
+  /** False while the keyword is the file name. */
+  explicit: boolean
+  fileName: string | null
+  mimeType: string | null
+  width: number | null
+  height: number | null
+}
+
+export interface EmoticonKeywordResult {
+  updated: number
+  conflicts: Array<{ compositeHash: string; keyword: string; usedBy: string[] }>
+  missing: string[]
 }
 
 export interface GroupMutationResult {

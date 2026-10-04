@@ -10,6 +10,7 @@ import { ALL_MCP_HTTP_SCOPES, isMcpToolAllowed, type McpRequestContext } from '.
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
+import { registerEmoticonTools } from './tools/emoticonTools';
 
 /**
  * MCP 서버 팩토리
@@ -38,6 +39,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerImageTools(server, context);
   registerFileStoreTools(server, context);
   registerImageGroupTools(server);
+  registerEmoticonTools(server, context);
   registerResourceTools(server);
   registerPromptOrganizationTools(server);
   registerWorkflowTransferTools(server);

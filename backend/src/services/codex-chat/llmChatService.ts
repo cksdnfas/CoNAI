@@ -71,7 +71,17 @@ function parseArguments(raw: string): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
-async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: string; function: { name: string; arguments: string } }, outputLimit: number) {
+/** Image parts of an MCP result (e.g. view_images), as data URLs. */
+function readToolImages(result: { content?: unknown[] }) {
+  return (result.content ?? []).flatMap((part) => {
+    const record = part as { type?: unknown; data?: unknown; mimeType?: unknown } | null
+    return record?.type === 'image' && typeof record.data === 'string' && typeof record.mimeType === 'string'
+      ? [`data:${record.mimeType};base64,${record.data}`]
+      : []
+  })
+}
+
+async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: string; function: { name: string; arguments: string } }, outputLimit: number, images: string[]) {
   const record: CodexChatToolCall = {
     id: call.id,
     tool: call.function.name,
@@ -90,6 +100,11 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>)
     const { texts, historyIds, compositeHashes, jobIds } = readMcpToolResult(result, record.tool)
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
+    const found = readToolImages(result)
+    if (found.length > 0) {
+      images.push(...found)
+      output = `${output}\n(${found.length} image(s) follow in the next message.)`
+    }
     record.status = result.isError ? 'failed' : 'completed'
     record.historyIds = historyIds
     record.compositeHashes = compositeHashes
@@ -123,8 +138,10 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       tools: bridge?.tools ?? [],
     })
 
+    // Image viewing is only offered to models the profile says can see images.
+    const offeredTools = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
     for (let round = 1; ; round += 1) {
-      const tools = bridge && round <= profile.maxToolRounds ? bridge.tools : []
+      const tools = bridge && round <= profile.maxToolRounds ? offeredTools : []
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
       let separated = turn.text.length === 0
       const result = await streamChatCompletion({
@@ -152,11 +169,16 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       }
 
       messages.push({ role: 'assistant', content: result.content || null, tool_calls: result.toolCalls })
+      const images: string[] = []
       for (const call of result.toolCalls) {
         if (turn.controller.signal.aborted) {
           return
         }
-        messages.push({ role: 'tool', tool_call_id: call.id, content: await runToolCall(turn, bridge, call, profile.toolOutputLimit) })
+        messages.push({ role: 'tool', tool_call_id: call.id, content: await runToolCall(turn, bridge, call, profile.toolOutputLimit, images) })
+      }
+      // Tool messages carry text only, so images ride in a user message right after them (this request only).
+      if (images.length > 0 && profile.visionEnabled) {
+        messages.push({ role: 'user', content: [{ type: 'text', text: 'Images returned by the tools above, in order:' }, ...images.map((url) => ({ type: 'image_url' as const, image_url: { url } }))] })
       }
     }
   } finally {

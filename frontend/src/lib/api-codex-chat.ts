@@ -56,6 +56,25 @@ export interface ChatStyle {
   backgroundBlur: number
   blocks: ChatDisplayBlock[]
   cast: ChatCastMember[]
+  /** Linked emoticon groups, in priority order (first wins on a shared keyword). */
+  emoticonGroupIds: number[]
+}
+
+/** One emoticon a profile's chats can show: the model writes &*keyword*&. */
+export interface ChatEmoticon {
+  compositeHash: string
+  keywords: string[]
+  mimeType: string | null
+}
+
+export const chatProfileEmoticonsQueryKey = (profileId: number) => ['codex-chat-profile-emoticons', profileId] as const
+
+export function listChatProfileEmoticons(profileId: number) {
+  return requestApiData<ChatEmoticon[]>(`/api/codex-chat/profiles/${profileId}/emoticons`)
+}
+
+export function chatEmoticonUrl(profileId: number, compositeHash: string) {
+  return buildApiUrl(`/api/codex-chat/profiles/${profileId}/emoticons/${compositeHash}`)
 }
 
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */
@@ -116,6 +135,8 @@ export interface ChatProfile {
   summaryProviderName: string | null
   summaryModel: string
   maxToolRounds: number
+  /** LLM: the model can look at images (view_images). */
+  visionEnabled: boolean
   style: ChatStyle
   backgroundVersion: string | null
   isEnabled: boolean

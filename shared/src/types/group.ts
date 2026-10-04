@@ -18,6 +18,9 @@ export interface GroupRecord {
   auto_collect_enabled: boolean;
   auto_collect_conditions?: string;  // JSON string (legacy format or ComplexFilter)
   auto_collect_last_run?: string;
+
+  /** Chat emoticon group: its images carry keywords a chat profile can use (`&*keyword*&`). */
+  emoticon_enabled?: boolean | number;
 }
 
 export interface ImageGroupRecord {
@@ -66,6 +69,7 @@ export interface GroupCreateData {
   parent_id?: number | null;
   auto_collect_enabled?: boolean;
   auto_collect_conditions?: AutoCollectCondition[] | ComplexFilter;  // Support both formats
+  emoticon_enabled?: boolean;
 }
 
 export interface GroupUpdateData {
@@ -75,6 +79,20 @@ export interface GroupUpdateData {
   parent_id?: number | null;
   auto_collect_enabled?: boolean;
   auto_collect_conditions?: AutoCollectCondition[] | ComplexFilter;  // Support both formats
+  emoticon_enabled?: boolean;
+}
+
+/** One image of an emoticon group with the keywords that call it up. */
+export interface EmoticonEntry {
+  compositeHash: string;
+  /** Keywords in effect: the stored ones, or the file name when none were set. */
+  keywords: string[];
+  /** False when the keywords come from the file name. */
+  explicit: boolean;
+  fileName: string | null;
+  mimeType: string | null;
+  width: number | null;
+  height: number | null;
 }
 
 export interface GroupWithStats extends GroupRecord {

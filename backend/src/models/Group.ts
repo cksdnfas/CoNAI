@@ -25,15 +25,16 @@ export class GroupModel {
     const info = db.prepare(`
       INSERT INTO groups (
         name, description, color, parent_id,
-        auto_collect_enabled, auto_collect_conditions
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        auto_collect_enabled, auto_collect_conditions, emoticon_enabled
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       groupData.name.trim(),
       groupData.description || null,
       groupData.color || null,
       groupData.parent_id || null,
       groupData.auto_collect_enabled ? 1 : 0,
-      conditionsJson
+      conditionsJson,
+      groupData.emoticon_enabled ? 1 : 0
     );
 
     return info.lastInsertRowid as number;
@@ -92,6 +93,9 @@ export class GroupModel {
         : undefined,
       auto_collect_conditions: groupData.auto_collect_conditions !== undefined
         ? (groupData.auto_collect_conditions ? JSON.stringify(groupData.auto_collect_conditions) : null)
+        : undefined,
+      emoticon_enabled: groupData.emoticon_enabled !== undefined
+        ? (groupData.emoticon_enabled ? 1 : 0)
         : undefined,
       updated_date: sqlLiteral('CURRENT_TIMESTAMP'), // SQL 함수 사용
     });

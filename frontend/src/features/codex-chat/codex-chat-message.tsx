@@ -16,7 +16,7 @@ import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import type { ImageRecord } from '@/types/image'
 import type { ChatAvatarSize } from './chat-appearance'
 import { ChatErrorChip } from './chat-error-chip'
-import { ChatMarkdown } from './chat-markdown'
+import { ChatMarkdown, type ChatEmoticonMap } from './chat-markdown'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 
 const HISTORY_POLL_MS = 3000
@@ -265,6 +265,8 @@ export type ChatSpeaker = {
   roleplay?: boolean
   blocks?: ChatDisplayBlock[]
   cast?: ChatCastSpeaker[]
+  /** The profile's emoticons (`&*keyword*&`). */
+  emoticons?: ChatEmoticonMap | null
 }
 
 /** A `[Name]` line (or line start) switching the speaker; only names of the profile or its cast count. */
@@ -328,7 +330,7 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
   const { t } = useI18n()
   const avatarBeside = speaker !== null && avatarSize !== 'sm'
   const toolBadge = toolCalls.length > 0 ? <ToolCallsBadge calls={toolCalls} /> : null
-  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} />
+  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} />
   const avatarOf = (who: { name: string; avatar: string | null }, engine: ChatEngine) => (
     <ChatProfileAvatar name={who.name} avatar={who.avatar} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
   )

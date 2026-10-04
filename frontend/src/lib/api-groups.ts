@@ -4,6 +4,8 @@ import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
 import { getDownloadFileName, prepareDownloadTarget, readDownloadBlob, saveDownloadBlob } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
 import type {
+  EmoticonEntry,
+  EmoticonKeywordResult,
   GroupAutoCollectAllResult,
   GroupAutoCollectResult,
   GroupBreadcrumbItem,
@@ -307,3 +309,38 @@ export async function downloadGroupArchive(
   }
 }
 
+
+export const groupEmoticonsQueryKey = (groupId: number) => ['group-emoticons', groupId] as const
+
+export async function getGroupEmoticons(groupId: number) {
+  const response = await fetchJson<ApiResponse<{ entries: EmoticonEntry[]; promptBudget: number }>>(`/api/groups/${groupId}/emoticons`)
+  if (!response.success || !response.data) {
+    throw createApiFallbackError(response.error, 'groups.images.load')
+  }
+  return response.data
+}
+
+/** `keywords: null` puts an image back on its file-name keyword. */
+export async function setGroupEmoticonKeywords(groupId: number, items: Array<{ compositeHash: string; keywords: string[] | null }>) {
+  const response = await fetchJson<ApiResponse<EmoticonKeywordResult>>(`/api/groups/${groupId}/emoticons/keywords`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: items.map((item) => ({ composite_hash: item.compositeHash, keywords: item.keywords })) }),
+  })
+  if (!response.success || !response.data) {
+    throw createApiFallbackError(response.error, 'groups.update')
+  }
+  return response.data
+}
+
+export async function addGroupEmoticons(groupId: number, items: Array<{ compositeHash: string; keywords?: string[] }>) {
+  const response = await fetchJson<ApiResponse<{ added: number; missing: string[]; conflicts: EmoticonKeywordResult['conflicts'] }>>(`/api/groups/${groupId}/emoticons`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: items.map((item) => ({ composite_hash: item.compositeHash, keywords: item.keywords })) }),
+  })
+  if (!response.success || !response.data) {
+    throw createApiFallbackError(response.error, 'groups.image.add')
+  }
+  return response.data
+}

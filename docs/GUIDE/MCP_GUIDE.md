@@ -247,6 +247,36 @@ stdio:
 }
 ```
 
+### 이모티콘 그룹
+
+채팅 이모티콘으로 쓰는 그룹(커스텀 그룹에서 **LLM 이모티콘 그룹**을 켠 것)의 키워드를 관리합니다.
+
+| Tool | 용도 | HTTP MCP 키 권한 |
+| --- | --- | --- |
+| `list_emoticon_groups` | 이모티콘 그룹과 이미지·키워드 수 조회 | `read` |
+| `list_emoticons` | 그룹의 이미지별 키워드, 파일명, 상위 태그 조회 (`explicit: false`는 파일명 키워드) | `read` |
+| `view_images` | 이미지(composite hash) 또는 파일 보관함 이미지(file id)를 최대 6개까지 작은 미리보기로 받아 보기 | `read` |
+| `set_emoticon_keywords` | 이미지별 키워드 지정 (`null`은 파일명으로 되돌림, `[]`은 키워드 없음). 겹치는 키워드는 건너뛰고 `conflicts`로 알림 | `organize` |
+| `set_emoticon_group` | 커스텀 그룹을 이모티콘 그룹으로 켜고 끄기 | `organize` |
+
+- 채팅에서 `view_images`는 프로필에 **이미지를 볼 수 있는 모델**이 켜져 있을 때만 API LLM에 제공됩니다. 꺼져 있으면 모델은 파일명과 태그로 판단합니다.
+
+### 파일 보관함
+
+계정별 개인 파일 보관함입니다. 이미지 라이브러리와 따로 저장됩니다. 계정과 연결되지 않은 HTTP 키에는 제공되지 않습니다.
+
+| Tool | 용도 | HTTP MCP 키 권한 |
+| --- | --- | --- |
+| `list_files` | 폴더 내용 조회 | `read` |
+| `get_file_info` | 파일·폴더 정보 조회 | `read` |
+| `read_file_text` | UTF-8 텍스트 파일을 나눠 읽기 | `read` |
+| `create_file_folder` | 폴더 만들기 | `organize` |
+| `rename_file` | 이름 바꾸기 | `organize` |
+| `move_files` | 폴더로 옮기기 (폴더는 내용과 함께) | `organize` |
+| `delete_files` | 파일·빈 폴더 삭제 (채팅에 첨부된 파일은 보호) | `organize` |
+
+- 정리 도구는 계정에 `files.manage`(업로드·폴더 정리·삭제) 권한도 있어야 합니다.
+
 ### 리소스 조회
 
 | Tool | 용도 |
