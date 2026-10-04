@@ -54,6 +54,7 @@ export type ChatProfileEngine = 'llm' | 'codex'
 export type ChatProfile = {
   id: number
   name: string
+  tagline: string
   /** Small data URL (resized in the browser). */
   avatar: string | null
   engine: ChatProfileEngine
@@ -109,6 +110,7 @@ export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 
 type ProfileRow = {
   id: number
   name: string
+  tagline: string
   avatar: string | null
   engine: string | null
   provider_name: string
@@ -206,6 +208,7 @@ function toProfile(row: ProfileRow): ChatProfile {
   return {
     id: row.id,
     name: row.name,
+    tagline: row.tagline ?? '',
     avatar: row.avatar,
     engine: row.engine === 'codex' ? 'codex' : 'llm',
     providerName: row.provider_name,
@@ -312,6 +315,7 @@ function toColumns(input: ChatProfileInput) {
 
   return {
     name,
+    tagline: text(input.tagline, 200),
     avatar,
     engine,
     provider_name: providerName,

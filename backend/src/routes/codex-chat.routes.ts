@@ -22,6 +22,8 @@ import { getRequesterAccountId, getRequesterAccountType } from './requester-sess
 import { sendRouteBadRequest } from './routeValidation'
 import { FileStoreError } from '../services/fileStoreService'
 import { exportChatMarkdown } from '../services/codex-chat/chatExport'
+import { ExternalApiProvider } from '../models/ExternalApiProvider'
+import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -88,6 +90,8 @@ function toPublicProfile(profile: ChatProfile) {
   return {
     id: profile.id,
     name: profile.name,
+    tagline: profile.tagline,
+    model: profile.model || (profile.engine === 'llm' ? readLlmConnectionConfig(ExternalApiProvider.findByName(profile.providerName)?.additional_config).defaultModel ?? '' : ''),
     avatar: profile.avatar,
     engine: profile.engine,
     isEnabled: profile.isEnabled,

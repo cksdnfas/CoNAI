@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowUp, Archive, Download, Eraser, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Trash2, TriangleAlert, X } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Archive, ChevronDown, Download, Eraser, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -33,6 +33,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatAppearanceButton, chatTranscriptStyle, useChatAppearance } from './chat-appearance'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
@@ -89,50 +90,33 @@ function ChatBackground({ url, dim, blur }: { url: string; dim: number; blur: nu
 }
 
 /** "+": pick the profile of a new chat. */
-function NewChatMenu({ profiles, disabled, onPick }: { profiles: ChatProfileSummary[]; disabled: boolean; onPick: (profileId: number) => void }) {
+function NewChatMenu({ profiles, threads, disabled, onPick, onOpen }: { profiles: ChatProfileSummary[]; threads: CodexChatThread[]; disabled: boolean; onPick: (profileId: number) => void; onOpen: () => void }) {
   const { t } = useI18n()
-  const usable = profiles.filter((profile) => profile.usable)
+  const byId = new Map(profiles.filter((profile) => profile.usable).map((profile) => [profile.id, profile]))
+  const recent = [...new Set(threads.map((thread) => thread.profile_id))].flatMap((id) => id !== null && byId.has(id) ? [byId.get(id) as ChatProfileSummary] : []).slice(0, 3)
   return (
+    <div className="flex shrink-0 items-center">
+      <IconButton variant="ghost" size="icon-sm" disabled={disabled} onClick={onOpen} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
     <DropdownMenu>
-      <Tip content={t({ ko: '새 채팅', en: 'New chat' })}>
+      <Tip content={t({ ko: '최근 프로필', en: 'Recent profiles' })}>
         <DropdownMenuTrigger asChild>
-          <IconButton variant="ghost" size="icon-sm" disabled={disabled || usable.length === 0} label={t({ ko: '새 채팅', en: 'New chat' })} tooltip={false}>
-            <Plus />
+          <IconButton variant="ghost" size="icon-xs" className="w-4" disabled={disabled} label={t({ ko: '최근 프로필', en: 'Recent profiles' })} tooltip={false}>
+            <ChevronDown />
           </IconButton>
         </DropdownMenuTrigger>
       </Tip>
       <DropdownMenuContent align="end" className="min-w-56">
-        <DropdownMenuLabel>{t({ ko: '새 채팅', en: 'New chat' })}</DropdownMenuLabel>
-        {usable.map((profile) => (
+        <DropdownMenuLabel>{t({ ko: '최근 프로필', en: 'Recent profiles' })}</DropdownMenuLabel>
+        {recent.map((profile) => (
           <DropdownMenuItem key={profile.id} onSelect={() => onPick(profile.id)}>
             <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="sm" />
             <span className="truncate">{profile.name}</span>
           </DropdownMenuItem>
         ))}
+        {recent.length > 0 ? <DropdownMenuSeparator /> : null}
+        <DropdownMenuItem onSelect={onOpen}><LayoutGrid />{t({ ko: '전체 보기', en: 'All profiles' })}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-/** No chat yet: the usable profiles as big choices. */
-function ProfilePicker({ profiles, disabled, onPick }: { profiles: ChatProfileSummary[]; disabled: boolean; onPick: (profileId: number) => void }) {
-  const { t } = useI18n()
-  const usable = profiles.filter((profile) => profile.usable)
-  return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6">
-      <p className="text-sm text-muted-foreground">
-        {usable.length > 0 ? t({ ko: '누구랑 이야기할까?', en: 'Who do you want to talk to?' }) : t({ ko: '쓸 수 있는 채팅 프로필이 없어.', en: 'No chat profile you can use.' })}
-      </p>
-      <div className="flex w-full max-w-sm flex-col gap-1">
-        {usable.map((profile) => (
-          <ListRow key={profile.id} asChild interactive>
-            <button type="button" disabled={disabled} onClick={() => onPick(profile.id)} className="w-full gap-3 disabled:opacity-50">
-              <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="md" />
-              <span className="truncate font-medium">{profile.name}</span>
-            </button>
-          </ListRow>
-        ))}
-      </div>
     </div>
   )
 }
@@ -453,7 +437,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const untitled = t({ ko: '새 채팅', en: 'New chat' })
   const pickProfile = (profileId: number) => void startChat(profileId)
 
-  const newChatButton = <NewChatMenu profiles={profiles} disabled={isBusy || isStartingChat} onPick={pickProfile} />
+  const newChatButton = <NewChatMenu profiles={profiles} threads={threads} disabled={isBusy || isStartingChat} onPick={pickProfile} onOpen={() => selectThread(null)} />
   const chatMenu = <DropdownMenu>
     <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
@@ -532,7 +516,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   let body: ReactNode
   if (activeThreadId === null || !thread) {
-    body = threadsQuery.isPending ? null : <ProfilePicker profiles={profiles} disabled={isStartingChat} onPick={pickProfile} />
+    body = threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || isBusy} onPick={pickProfile} onRecent={selectThread} />
   } else if (activeView === 'gallery') {
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {

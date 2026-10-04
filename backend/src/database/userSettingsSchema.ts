@@ -515,6 +515,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     }
   }
   const chatProfileColumns: Array<[string, string]> = [
+    ['tagline', "TEXT NOT NULL DEFAULT ''"],
     ['engine', "TEXT NOT NULL DEFAULT 'llm'"],
     ['reasoning_effort', 'TEXT'],
     ['context_tokens', 'INTEGER'],

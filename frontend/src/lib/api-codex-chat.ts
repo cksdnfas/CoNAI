@@ -79,6 +79,8 @@ export function chatEmoticonUrl(profileId: number, compositeHash: string) {
 
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */
 export interface ChatProfileSummary {
+  tagline: string
+  model: string
   canReadFileText: boolean
   id: number
   name: string
@@ -110,6 +112,7 @@ export interface ChatPromptSection {
 
 /** A full chat profile (admin). */
 export interface ChatProfile {
+  tagline: string
   id: number
   name: string
   avatar: string | null

@@ -58,6 +58,7 @@ const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: {
 function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults | undefined): Draft {
   return {
     name: profile?.name ?? '',
+    tagline: profile?.tagline ?? '',
     avatar: profile?.avatar ?? null,
     engine: profile?.engine ?? 'llm',
     providerName: profile?.providerName ?? '',
@@ -276,6 +277,9 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
           {draft.avatar ? (
             <Button variant="link" size="xs" className="px-0 text-muted-foreground" onClick={() => patch({ avatar: null })}>{t({ ko: '아바타 지우기', en: 'Remove avatar' })}</Button>
           ) : null}
+          <Field label={t({ ko: '짧은 소개', en: 'Tagline' })}>
+            <Input variant="settings" value={draft.tagline} maxLength={200} onChange={(event) => patch({ tagline: event.target.value })} />
+          </Field>
         </Section>
 
         <Section title={t({ ko: '모델', en: 'Model' })}>
