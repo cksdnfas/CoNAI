@@ -56,7 +56,7 @@ type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background'>> & { so
 /** Shown until the server's defaults load (new profiles only). */
 const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [], cast: [], emoticonGroupIds: [] }
 
-function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults | undefined): Draft {
+function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefaults | undefined): Draft {
   return {
     name: profile?.name ?? '',
     tagline: profile?.tagline ?? '',
@@ -73,6 +73,7 @@ function buildDraft(profile: ChatProfile | null, defaults: ChatProfileDefaults |
     systemPrompt: profile?.systemPrompt ?? '',
     promptSections: profile?.promptSections ?? [],
     greeting: profile?.greeting ?? '',
+    alternateGreetings: profile?.alternateGreetings ?? [],
     temperature: profile?.temperature ?? null,
     maxTokens: profile?.maxTokens ?? null,
     mcpEnabled: profile?.mcpEnabled ?? false,
@@ -145,9 +146,10 @@ function ConnectionModelSelect({ value, models, defaultModel, emptyLabel, onChan
 }
 
 /** Create or edit one chat profile (engine, model, persona, tools, context). */
-export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
+export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, onClose }: {
   open: boolean
   profile: ChatProfile | null
+  initialDraft?: ChatProfileInput
   defaults: ChatProfileDefaults | undefined
   onClose: () => void
 }) {
@@ -156,14 +158,14 @@ export function ChatProfileEditorModal({ open, profile, defaults, onClose }: {
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [draft, setDraft] = useState<Draft>(() => buildDraft(profile, defaults))
+  const [draft, setDraft] = useState<Draft>(() => buildDraft(profile ?? initialDraft ?? null, defaults))
   const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
     if (open) {
-      setDraft(buildDraft(profile, defaults))
+      setDraft(buildDraft(profile ?? initialDraft ?? null, defaults))
     }
-  }, [defaults, open, profile])
+  }, [defaults, initialDraft, open, profile])
 
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }))
   const isLlm = draft.engine === 'llm'

@@ -9,6 +9,46 @@ import { logger } from '../../../utils/logger';
 import { StandardMetadataExtractor } from './standardMetadataExtractor';
 
 export class PngExtractor {
+  /** Bounded text extraction for uploaded character cards; unrelated chunks are never inflated. */
+  static extractTextChunks(buffer: Buffer, keywords: readonly string[], maxTextBytes = 4 * 1024 * 1024): Record<string, string> {
+    if (buffer.length < 8 || !buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('Invalid PNG');
+    const result: Record<string, string> = Object.create(null);
+    let remaining = maxTextBytes;
+    for (let offset = 8; offset + 12 <= buffer.length;) {
+      const length = buffer.readUInt32BE(offset);
+      if (length > buffer.length - offset - 12) throw new Error('Truncated PNG');
+      const type = buffer.toString('ascii', offset + 4, offset + 8);
+      const data = buffer.subarray(offset + 8, offset + 8 + length);
+      offset += length + 12;
+      if (type === 'IEND') break;
+      if (type !== 'tEXt' && type !== 'zTXt' && type !== 'iTXt') continue;
+      const separator = data.indexOf(0);
+      if (separator < 1 || separator > 79) continue;
+      const key = data.toString('utf8', 0, separator);
+      if (!keywords.includes(key)) continue;
+      let content = data.subarray(separator + 1);
+      let compressed = false;
+      if (type === 'zTXt') {
+        if (content[0] !== 0) throw new Error('Invalid PNG compression');
+        compressed = true;
+        content = content.subarray(1);
+      } else if (type === 'iTXt') {
+        if (content.length < 4 || content[0] > 1 || content[1] !== 0) throw new Error('Invalid PNG text');
+        compressed = content[0] === 1;
+        const languageEnd = content.indexOf(0, 2);
+        const translatedEnd = languageEnd >= 0 ? content.indexOf(0, languageEnd + 1) : -1;
+        if (translatedEnd < 0) throw new Error('Invalid PNG text');
+        content = content.subarray(translatedEnd + 1);
+      }
+      if (remaining <= 0) throw new Error('PNG text too large');
+      if (compressed) content = zlib.inflateSync(content, { maxOutputLength: remaining });
+      if (content.length > remaining) throw new Error('PNG text too large');
+      remaining -= content.length;
+      result[key] = content.toString('utf8');
+    }
+    return result;
+  }
+
   /**
    * Extract metadata from PNG buffer and optional file-backed metadata carriers.
    */

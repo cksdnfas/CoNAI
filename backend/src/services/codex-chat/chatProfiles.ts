@@ -78,6 +78,7 @@ export type ChatProfile = {
   promptSections: ChatPromptSection[]
   /** Stored as the first assistant message of a new chat. */
   greeting: string
+  alternateGreetings: string[]
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
@@ -135,6 +136,7 @@ type ProfileRow = {
   example_dialogue: string
   user_persona: string
   greeting: string
+  alternate_greetings: string | null
   temperature: number | null
   max_tokens: number | null
   mcp_enabled: number
@@ -180,6 +182,10 @@ function parseJsonArray(value: string | null): unknown[] | null {
   } catch {
     return null
   }
+}
+
+export function normalizeAlternateGreetings(value: unknown): string[] {
+  return Array.isArray(value) ? value.slice(0, 100).filter((item): item is string => typeof item === 'string').map((item) => item.trim().slice(0, TEXT_MAX_LENGTH)).filter(Boolean) : []
 }
 
 function normalizeSections(value: unknown): ChatPromptSection[] {
@@ -231,6 +237,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     systemPrompt: row.system_prompt,
     promptSections: storedSections ? normalizeSections(storedSections) : legacySections(row),
     greeting: row.greeting,
+    alternateGreetings: normalizeAlternateGreetings(parseJsonArray(row.alternate_greetings)),
     temperature: row.temperature,
     maxTokens: row.max_tokens,
     mcpEnabled: row.mcp_enabled === 1,
@@ -345,6 +352,7 @@ function toColumns(input: ChatProfileInput) {
     example_dialogue: '',
     user_persona: '',
     greeting: text(input.greeting, TEXT_MAX_LENGTH),
+    alternate_greetings: JSON.stringify(normalizeAlternateGreetings(input.alternateGreetings)),
     temperature: optionalNumber(input.temperature, { min: 0, max: 2 }, false),
     max_tokens: optionalNumber(input.maxTokens, { min: 1, max: 1_000_000 }, true),
     mcp_enabled: input.mcpEnabled ? 1 : 0,

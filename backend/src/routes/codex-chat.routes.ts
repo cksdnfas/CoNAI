@@ -1,4 +1,5 @@
 import fs from 'fs'
+import multer from 'multer'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
@@ -25,6 +26,7 @@ import { FileStoreError } from '../services/fileStoreService'
 import { exportChatMarkdown } from '../services/codex-chat/chatExport'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
+import { CHAT_CARD_MAX_BYTES, importChatCard } from '../services/codex-chat/chatCardImport'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -289,6 +291,20 @@ async function assertCodexEffortSupported(input: ChatProfileInput) {
     throw new ChatProfileError('선택한 모델에서 지원하지 않는 추론 강도야.')
   }
 }
+
+const cardUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: CHAT_CARD_MAX_BYTES, files: 1, fields: 0, parts: 2 } }).single('file')
+router.post('/admin/profiles/import-card', requireAdmin, (req, res, next) => {
+  cardUpload(req, res, (error) => {
+    if (error) { res.status(400).json({ success: false, error: 'PNG 또는 JSON 카드 한 장을 골라줘. 최대 8MB야.' }); return }
+    next()
+  })
+}, asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) throw new ChatProfileError('카드를 골라줘.')
+    const providerName = ExternalApiProvider.findEnabledLlmOptions()[0]?.provider_name ?? ''
+    res.json({ success: true, data: await importChatCard(req.file.buffer, providerName) })
+  } catch (error) { sendChatError(res, error) }
+}))
 
 router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {

@@ -141,6 +141,7 @@ export interface ChatProfile {
   systemPrompt: string
   promptSections: ChatPromptSection[]
   greeting: string
+  alternateGreetings: string[]
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
@@ -290,6 +291,12 @@ export function listChatAdminProfiles() {
 
 export function createChatProfile(input: ChatProfileInput) {
   return requestApiData<ChatProfile>('/api/codex-chat/admin/profiles', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function importChatProfileCard(file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return requestApiData<ChatProfileInput>('/api/codex-chat/admin/profiles/import-card', { method: 'POST', body })
 }
 
 export function updateChatProfile(profileId: number, patch: ChatProfileInput) {

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus } from 'lucide-react'
+import { FileUp, Pencil, Plus } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -15,10 +15,12 @@ import {
   CHAT_STATUS_QUERY_KEY,
   getChatAdminSettings,
   getChatProfileDefaults,
+  importChatProfileCard,
   listChatAdminProfiles,
   updateChatAdminSettings,
   updateChatProfile,
   type ChatProfile,
+  type ChatProfileInput,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileEditorModal } from './chat-profile-editor-modal'
@@ -36,13 +38,19 @@ export function ChatSettingsTab() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const [editor, setEditor] = useState<{ profile: ChatProfile | null } | null>(null)
+  const [editor, setEditor] = useState<{ profile: ChatProfile | null; draft?: ChatProfileInput } | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
 
   const settingsQuery = useQuery({ queryKey: CHAT_ADMIN_SETTINGS_QUERY_KEY, queryFn: getChatAdminSettings })
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const defaultsQuery = useQuery({ queryKey: ['codex-chat-profile-defaults'], queryFn: getChatProfileDefaults, staleTime: Infinity })
 
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
+  const importMutation = useMutation({
+    mutationFn: importChatProfileCard,
+    onSuccess: (draft) => setEditor({ profile: null, draft }),
+    onError,
+  })
   const settingsMutation = useMutation({
     mutationFn: updateChatAdminSettings,
     onSuccess: (settings) => {
@@ -84,9 +92,17 @@ export function ChatSettingsTab() {
       <RowGroup
         heading={t({ ko: '채팅 프로필', en: 'Chat profiles' })}
         actions={(
+          <div className="flex items-center gap-1">
+          <input ref={importRef} type="file" accept=".png,.json,image/png,application/json" className="hidden" aria-label={t({ ko: '캐릭터 카드 파일', en: 'Character card file' })} onChange={(event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            if (file) importMutation.mutate(file)
+          }} />
+          <IconButton size="icon-sm" variant="ghost" disabled={importMutation.isPending} onClick={() => importRef.current?.click()} label={t({ ko: '캐릭터 카드 가져오기', en: 'Import character card' })}><FileUp /></IconButton>
           <IconButton size="icon-sm" variant="ghost" onClick={() => setEditor({ profile: null })} label={t({ ko: '프로필 추가', en: 'Add profile' })}>
             <Plus />
           </IconButton>
+          </div>
         )}
       >
         {profilesQuery.isLoading ? <SettingsRowsSkeleton rows={2} /> : null}
@@ -119,7 +135,7 @@ export function ChatSettingsTab() {
         {profilesQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(profilesQuery.error, t({ ko: '프로필을 불러오지 못했어.', en: 'Could not load profiles.' }))}</p> : null}
       </RowGroup>
 
-      <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
+      <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} initialDraft={editor?.draft} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
     </div>
   )
 }
