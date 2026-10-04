@@ -153,8 +153,7 @@ export function GroupEmoticonSection({ group }: { group: GroupRecord }) {
       // group right away, so a failure later on keeps what already landed.
       let added = 0
       let failed = 0
-      // The library keys images by how they look, so a file that looks like one already here joins that image
-      // instead of becoming a new emoticon.
+      // A file with exactly the same pixels as an image already here joins that image instead of becoming a new one.
       const known = new Set(entries.map((entry) => entry.compositeHash))
       let merged = 0
       setUploadProgress({ done: 0, total: files.length })

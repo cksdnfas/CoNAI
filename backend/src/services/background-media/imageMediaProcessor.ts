@@ -1,4 +1,5 @@
 import path from 'path';
+import { recordPixelHash, resolveImageIdentity } from '../imageIdentityService';
 import { db } from '../../database/init';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
 import { AutoCollectionService } from '../autoCollectionService';
@@ -63,7 +64,19 @@ export class ImageMediaProcessor {
       return stoppedFileProcessing(failedStage('image-hash', error, true), stages, { cause: error });
     }
 
-    const { hashes, colorHistogram, metadata: imageInfo } = generated;
+    const { colorHistogram, metadata: imageInfo } = generated;
+    // Identity is pixel-exact; the perceptual hashes stay on the row for similarity search.
+    let identity: Awaited<ReturnType<typeof resolveImageIdentity>>;
+    try {
+      identity = await resolveImageIdentity({
+        filePath: file.original_file_path,
+        perceptualCompositeHash: generated.hashes.compositeHash,
+        source: sourceImage,
+      });
+    } catch (error) {
+      return stoppedFileProcessing(failedStage('image-hash', error, true), stages, { cause: error });
+    }
+    const hashes = { ...generated.hashes, compositeHash: identity.compositeHash };
     let existing;
     try {
       existing = findExistingMediaMetadataSummary(hashes.compositeHash);
@@ -77,6 +90,7 @@ export class ImageMediaProcessor {
     if (existing) {
       try {
         linkMediaFileToHash(file.id, hashes.compositeHash);
+        recordPixelHash(hashes.compositeHash, identity.pixelHash);
         stages.push(completedStage('duplicate-link'));
       } catch (error) {
         return stoppedFileProcessing(failedStage('duplicate-link', error, true), stages, {
@@ -144,6 +158,7 @@ export class ImageMediaProcessor {
         imageInfo.height,
         thumbnailPath,
       );
+      recordPixelHash(hashes.compositeHash, identity.pixelHash);
       stages.push(completedStage('metadata-row'));
     } catch (error) {
       return stoppedFileProcessing(failedStage('metadata-row', error, true), stages, {

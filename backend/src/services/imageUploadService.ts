@@ -1,4 +1,5 @@
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
+import { recordPixelHash, resolveImageIdentity } from './imageIdentityService';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 import { ImageSimilarityService } from './imageSimilarity';
 import { ImageMetadataRecord, FileType } from '../types/image';
@@ -50,7 +51,8 @@ export class ImageUploadService {
   ): Promise<string> {
     // 1. 복합 해시 생성
     const hashes = await ImageSimilarityService.generateCompositeHash(imagePath);
-    const { compositeHash, perceptualHash, dHash, aHash } = hashes;
+    const { perceptualHash, dHash, aHash } = hashes;
+    const { compositeHash, pixelHash } = await resolveImageIdentity({ filePath: imagePath, perceptualCompositeHash: hashes.compositeHash });
 
     // 2. 색상 히스토그램 생성
     let colorHistogramJson: string | null = null;
@@ -102,6 +104,7 @@ export class ImageUploadService {
       };
 
       MediaMetadataModel.create(metadataRecord);
+      recordPixelHash(compositeHash, pixelHash);
       console.log(`✅ 신규 메타데이터 생성: ${compositeHash.substring(0, 16)}...`);
     } else {
       console.log(`♻️  기존 메타데이터 재사용: ${compositeHash.substring(0, 16)}...`);

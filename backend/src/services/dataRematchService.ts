@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { resolveImageIdentity } from './imageIdentityService';
 import path from 'path';
 import sharp from 'sharp';
 import { db } from '../database/init';
@@ -565,7 +566,9 @@ export class DataRematchService {
       };
     }
 
-    const { hashes, colorHistogram } = await ImageSimilarityService.generateHashAndHistogram(fullPath);
+    const { hashes: perceptual, colorHistogram } = await ImageSimilarityService.generateHashAndHistogram(fullPath);
+    const { compositeHash: identityHash } = await resolveImageIdentity({ filePath: fullPath, perceptualCompositeHash: perceptual.compositeHash });
+    const hashes = { ...perceptual, compositeHash: identityHash };
     const thumbnailPath = await ThumbnailGenerator.generateThumbnail(fullPath, hashes.compositeHash);
     return {
       compositeHash: hashes.compositeHash,

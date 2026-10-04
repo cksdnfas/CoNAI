@@ -1,4 +1,5 @@
 import path from 'path';
+import { resolveImageIdentity } from '../services/imageIdentityService';
 import fs from 'fs';
 import sharp from 'sharp';
 import { ImageSimilarityService } from '../services/imageSimilarity';
@@ -160,7 +161,7 @@ export class FileSaver {
       await fs.promises.writeFile(fullPath, outputBuffer);
 
       const { hashes } = await ImageSimilarityService.generateHashAndHistogram(fullPath);
-      const compositeHash = hashes.compositeHash;
+      const { compositeHash } = await resolveImageIdentity({ filePath: fullPath, perceptualCompositeHash: hashes.compositeHash });
 
       const stats = await fs.promises.stat(fullPath);
       const relativePath = normalizeRelativePath(fullPath, runtimePaths.uploadsDir);
