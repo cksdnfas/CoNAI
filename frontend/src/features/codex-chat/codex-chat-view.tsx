@@ -5,7 +5,6 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
-import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { Modal, ModalBody } from '@/components/ui/modal'
@@ -121,8 +120,10 @@ function NewChatMenu({ profiles, threads, disabled, onPick, onOpen }: { profiles
   )
 }
 
-function ThreadSelect({ threads, activeThreadId, disabled, onSelect, className }: {
+/** The chat switcher of the panel header: each chat with the face of the profile it talks to. */
+function ThreadSelect({ threads, profilesById, activeThreadId, disabled, onSelect, className }: {
   threads: CodexChatThread[]
+  profilesById: Map<number, ChatProfileSummary>
   activeThreadId: number | null
   disabled: boolean
   onSelect: (threadId: number) => void
@@ -130,17 +131,32 @@ function ThreadSelect({ threads, activeThreadId, disabled, onSelect, className }
 }) {
   const { t } = useI18n()
   const untitled = t({ ko: '새 채팅', en: 'New chat' })
+  const activeTitle = threads.find((thread) => thread.id === activeThreadId)?.title || untitled
   return (
-    <Select
-      value={activeThreadId ?? ''}
-      onChange={(event) => event.target.value && onSelect(Number(event.target.value))}
-      disabled={disabled}
-      className={cn('min-w-0 flex-1 truncate border-transparent bg-transparent px-2 font-semibold hover:bg-fill', className)}
-      aria-label={t({ ko: '채팅 목록', en: 'Chats' })}
-    >
-      {activeThreadId === null ? <option value="">{untitled}</option> : null}
-      {threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || untitled}</option>)}
-    </Select>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          disabled={disabled}
+          className={cn('h-9 min-w-0 flex-1 shrink justify-start gap-1 px-2 font-semibold text-foreground', className)}
+          aria-label={t({ ko: '채팅 목록', en: 'Chats' })}
+        >
+          <span className="min-w-0 flex-1 truncate text-left">{activeTitle}</span>
+          <ChevronDown className="text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56 overflow-y-auto">
+        {threads.map((thread) => {
+          const profile = thread.profile_id ? profilesById.get(thread.profile_id) : undefined
+          return (
+            <DropdownMenuItem key={thread.id} onSelect={() => onSelect(thread.id)} className={cn(thread.id === activeThreadId && 'bg-fill font-semibold')}>
+              {profile ? <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="sm" /> : null}
+              <span className="truncate">{thread.title || untitled}</span>
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -572,7 +588,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex h-12 shrink-0 items-center gap-1 pl-4 sm:pl-6">
             <span className="md:hidden">{headerAvatar}</span>
-            <ThreadSelect className="md:hidden" threads={threads} activeThreadId={activeThreadId} disabled={isBusy} onSelect={selectThread} />
+            <ThreadSelect className="md:hidden" threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} disabled={isBusy} onSelect={selectThread} />
             <span className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
               {headerAvatar}
               <span className="truncate text-sm font-semibold">{viewTitle}</span>
@@ -596,7 +612,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {dialogs}
       <div className="flex h-12 shrink-0 items-center gap-0.5 border-b border-line pl-2.5 pr-1.5">
         {headerAvatar}
-        <ThreadSelect threads={threads} activeThreadId={activeThreadId} disabled={isBusy} onSelect={selectThread} />
+        <ThreadSelect threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} disabled={isBusy} onSelect={selectThread} />
         {newChatButton}
         {chatMenu}
         {onExpand ? (
