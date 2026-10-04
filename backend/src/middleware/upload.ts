@@ -92,6 +92,8 @@ export function createUploadStorage(maxRequestBytes: number, directory = runtime
 }
 
 const uploadSingleConfig = multer({
+  // Browsers send multipart file names as UTF-8; multer's latin1 default turns Korean names into mojibake.
+  defParamCharset: 'utf8',
   storage: createUploadStorage(MAX_UPLOAD_FILE_SIZE_BYTES),
   limits: {
     fileSize: MAX_UPLOAD_FILE_SIZE_BYTES,
@@ -103,6 +105,8 @@ const uploadSingleConfig = multer({
 });
 
 const uploadMultipleConfig = multer({
+  // Browsers send multipart file names as UTF-8; multer's latin1 default turns Korean names into mojibake.
+  defParamCharset: 'utf8',
   storage: createUploadStorage(MAX_MULTIPLE_UPLOAD_TOTAL_BYTES),
   limits: {
     fileSize: MAX_UPLOAD_FILE_SIZE_BYTES,
