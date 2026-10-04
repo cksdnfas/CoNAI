@@ -31,3 +31,4 @@ export * from './constants/index';
 export const VERSION = '26.9.29';
 
 export * from './utils/minimaxDirectorResolution';
+export * from './types/fileStore';

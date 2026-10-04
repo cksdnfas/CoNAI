@@ -30,6 +30,8 @@ const DEFAULT_PERMISSION_GROUPS = [
 ] as const;
 
 const DEFAULT_PERMISSION_CATALOG = [
+  { permissionKey: 'page.files.view', resource: 'page.files', action: 'view', description: 'Browse and read your private file store.' },
+  { permissionKey: 'files.manage', resource: 'files', action: 'manage', description: 'Upload, organize, rename and delete your private files.' },
   {
     permissionKey: 'auth.guest.create',
     resource: 'auth',

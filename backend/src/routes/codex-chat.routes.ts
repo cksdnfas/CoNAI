@@ -16,6 +16,7 @@ import { listChatCompletionModels } from '../services/codex-chat/llmChatCompleti
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
+import { FileStoreError } from '../services/fileStoreService'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -45,7 +46,7 @@ function parseThreadId(req: Request, res: Response) {
 }
 
 function sendChatError(res: Response, error: unknown) {
-  if (error instanceof CodexChatError || error instanceof LlmChatError) {
+  if (error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -125,6 +126,7 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
     data: ChatProfileStore.list().map((profile) => ({
       ...toPublicProfile(profile),
       usable: profile.isEnabled && (profile.engine === 'codex' ? access.codex : access.llm),
+      canReadFileText: profile.mcpEnabled && profile.mcpScopes.includes('read') && access.scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('read_file_text')),
     })),
   })
 })
@@ -429,7 +431,7 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
   }
 
   try {
-    await CodexChatService.sendMessage(requesterFrom(req), threadId, text, write)
+    await CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds)
     if (!res.writableEnded) {
       res.end()
     }

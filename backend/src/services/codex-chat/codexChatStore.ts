@@ -1,4 +1,6 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import type { StoredFileEntry } from '@conai/shared'
+import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 
 export type CodexChatToolCall = {
   id: string
@@ -40,6 +42,7 @@ export type CodexChatThreadRecord = {
 }
 
 export type CodexChatMessageRecord = {
+  attachments?: StoredFileEntry[]
   id: number
   thread_id: number
   role: 'user' | 'assistant'
@@ -131,24 +134,32 @@ export const CodexChatStore = {
   },
 
   listMessages(threadId: number) {
+    const attachments = FileStoreService.attachmentsForThread(threadId)
     const rows = getUserSettingsDb().prepare(`
       SELECT * FROM codex_chat_messages WHERE thread_id = ? ORDER BY id
     `).all(threadId) as StoredMessageRow[]
-    return rows.map((row) => ({ ...row, tool_calls: parseToolCalls(row.tool_calls) }))
+    return rows.map((row) => ({ ...row, tool_calls: parseToolCalls(row.tool_calls), attachments: attachments.get(row.id) ?? [] }))
   },
 
-  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error'>) {
-    const result = getUserSettingsDb().prepare(`
-      INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      message.thread_id,
-      message.role,
-      message.content,
-      message.tool_calls.length > 0 ? JSON.stringify(message.tool_calls) : null,
-      message.status,
-      message.error,
-    )
-    CodexChatStore.touchThread(message.thread_id)
-    return Number(result.lastInsertRowid)
+  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error'>, fileIds: string[] = []) {
+    const db = getUserSettingsDb()
+    return db.transaction(() => {
+      const thread = CodexChatStore.findThreadById(message.thread_id)
+      if (!thread) throw new Error('Chat thread not found')
+      const attachments = FileStoreService.validateAttachments(fileOwnerKey(thread.account_id), fileIds)
+      const result = db.prepare(`
+        INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        message.thread_id,
+        message.role,
+        message.content,
+        message.tool_calls.length > 0 ? JSON.stringify(message.tool_calls) : null,
+        message.status,
+        message.error,
+      )
+      for (const file of attachments) db.prepare('INSERT INTO chat_file_attachments (message_id, file_id) VALUES (?, ?)').run(result.lastInsertRowid, file.id)
+      CodexChatStore.touchThread(message.thread_id)
+      return Number(result.lastInsertRowid)
+    }).immediate()
   },
 }

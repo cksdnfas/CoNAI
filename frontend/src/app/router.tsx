@@ -16,6 +16,7 @@ import {
   NotFoundRoute,
   PromptRoute,
   SettingsRoute,
+  FilesRoute,
   UploadRoute,
   WallpaperEditorRoute,
   WallpaperRuntimeRoute,
@@ -117,6 +118,10 @@ export const appRouter = createHashRouter([
       {
         path: 'upload',
         element: <RequireAuthPermission permissionKey="page.upload.view"><UploadRoute /></RequireAuthPermission>,
+      },
+      {
+        path: 'files',
+        element: <RequireAuthPermission permissionKey="page.files.view"><FilesRoute /></RequireAuthPermission>,
       },
       {
         path: 'settings',

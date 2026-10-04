@@ -14,6 +14,7 @@ export const HEADER_NAVIGATION_ITEM_KEYS = [
   'prompts',
   'generation',
   'upload',
+  'files',
   'wallpaper',
   'settings',
   'search',

@@ -1,4 +1,5 @@
 import path from 'path';
+import { isFileStorePath } from '../fileStorePaths';
 import fg from 'fast-glob';
 import { ALL_SUPPORTED_EXTENSIONS, shouldProcessFileExtension } from '../../constants/supportedExtensions';
 import { normalizeWindowsDriveLetter } from '../../utils/pathResolver';
@@ -79,6 +80,7 @@ export class FileDiscoveryService {
       const { normalizePath } = require('../../utils/pathResolver');
       const filteredFiles = allFiles
         .filter(file => {
+          if (isFileStorePath(file)) return false;
           const ext = path.extname(file).toLowerCase();
           return shouldProcessFileExtension(ext, options.excludeExtensions);
         })

@@ -38,15 +38,15 @@ type UploadRequestWithByteCount = Request & {
 };
 
 /** Stream one multipart file to disk while enforcing a request-wide byte budget. */
-function createUploadStorage(maxRequestBytes: number): multer.StorageEngine {
+export function createUploadStorage(maxRequestBytes: number, directory = runtimePaths.tempDir, keepExtension = true): multer.StorageEngine {
   return {
     _handleFile(req, file, cb) {
       const uploadRequest = req as UploadRequestWithByteCount;
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 10);
-      const ext = path.extname(file.originalname);
+      const ext = keepExtension ? path.extname(file.originalname) : '.part';
       const filename = `temp-upload-${timestamp}-${random}${ext}`;
-      const filePath = path.join(runtimePaths.tempDir, filename);
+      const filePath = path.join(directory, filename);
       const output = fs.createWriteStream(filePath, { flags: 'wx' });
 
       const quota = new Transform({
@@ -71,7 +71,7 @@ function createUploadStorage(maxRequestBytes: number): multer.StorageEngine {
         }
 
         cb(null, {
-          destination: runtimePaths.tempDir,
+          destination: directory,
           filename,
           path: filePath,
           size: output.bytesWritten,
@@ -114,7 +114,7 @@ const uploadMultipleConfig = multer({
 });
 
 /** Convert Multer parser failures into bounded client errors instead of generic 500s. */
-function wrapUploadMiddleware(handler: RequestHandler): RequestHandler {
+export function wrapUploadMiddleware(handler: RequestHandler): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     handler(req, res, (error?: unknown) => {
       if (!error) {

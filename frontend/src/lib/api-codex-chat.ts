@@ -1,6 +1,6 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
-import type { CodexReasoningEffort } from '@conai/shared'
+import type { CodexReasoningEffort, StoredFileEntry } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize'
 export type ChatEngine = 'llm' | 'codex'
@@ -60,6 +60,7 @@ export interface ChatStyle {
 
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */
 export interface ChatProfileSummary {
+  canReadFileText: boolean
   id: number
   name: string
   avatar: string | null
@@ -166,6 +167,7 @@ export interface CodexChatThread {
 }
 
 export interface CodexChatMessage {
+  attachments?: StoredFileEntry[]
   id: number
   thread_id: number
   role: 'user' | 'assistant'
@@ -313,13 +315,13 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = []) {
   const response = await fetch(buildApiUrl(`/api/codex-chat/threads/${threadId}/messages`), {
     method: 'POST',
     credentials: 'include',
     cache: 'no-store',
     headers: { ...JSON_HEADERS, Accept: 'application/x-ndjson' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, fileIds }),
     signal,
   })
 

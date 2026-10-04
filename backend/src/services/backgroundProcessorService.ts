@@ -1,4 +1,5 @@
 import os from 'os';
+import { isFileStorePath } from './fileStorePaths';
 import path from 'path';
 import pLimit from 'p-limit';
 import { db } from '../database/init';
@@ -74,6 +75,7 @@ export class BackgroundProcessorService {
     filePath: string,
     options: SavedMediaProcessingOptions = {},
   ): Promise<SavedMediaProcessingResult> {
+    if (isFileStorePath(filePath)) throw new Error('Private stored files cannot be registered in the image library');
     return SavedMediaOrchestrator.process(filePath, options);
   }
 

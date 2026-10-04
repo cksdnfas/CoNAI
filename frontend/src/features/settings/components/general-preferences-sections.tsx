@@ -1,4 +1,4 @@
-import { CircleUserRound, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquareText, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
+import { Archive, CircleUserRound, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquareText, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -31,6 +31,7 @@ const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; icon: Luc
   { key: 'prompts', icon: MessageSquareText, label: { ko: '프롬프트', en: 'Prompts' } },
   { key: 'generation', icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
   { key: 'upload', icon: Upload, label: { ko: '업로드', en: 'Upload' } },
+  { key: 'files', icon: Archive, label: { ko: '파일 보관함', en: 'Files' } },
   { key: 'wallpaper', icon: LayoutGrid, label: { ko: '월페이퍼', en: 'Wallpaper' } },
   { key: 'settings', icon: Settings2, label: { ko: '설정', en: 'Settings' } },
   { key: 'search', icon: Search, label: { ko: '검색', en: 'Search' } },

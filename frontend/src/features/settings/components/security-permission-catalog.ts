@@ -93,6 +93,12 @@ const PERMISSION_CATALOG: PermissionCatalogSection[] = [
     ],
   },
   {
+    id: 'files',
+    label: { ko: '파일 보관함', en: 'Files' },
+    entries: [{ key: 'page.files.view', label: { ko: '내 파일 조회·다운로드', en: 'Browse and download own files' },
+      children: [{ key: 'files.manage', label: { ko: '업로드·폴더 정리·삭제', en: 'Upload, organize and delete' } }] }],
+  },
+  {
     id: 'administration',
     label: { ko: '관리', en: 'Administration' },
     entries: [

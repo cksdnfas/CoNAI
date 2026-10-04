@@ -30,13 +30,14 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
   return { default: module.GenerationQueueHeaderWidget }
 })
 
-const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', '/upload', '/wallpaper', '/settings'] as const
+const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', '/upload', '/files', '/wallpaper', '/settings'] as const
 const PRIMARY_NAV_ITEM_IDS: Record<typeof PRIMARY_NAV_ORDER[number], HeaderNavigationItemKey> = {
   '/': 'home',
   '/groups': 'groups',
   '/prompts': 'prompts',
   '/generation': 'generation',
   '/upload': 'upload',
+  '/files': 'files',
   '/wallpaper': 'wallpaper',
   '/settings': 'settings',
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { StoredFileEntry } from '@conai/shared'
 
 export const CODEX_CHAT_ROUTE = '/chat'
 export const CODEX_CHAT_THREADS_QUERY_KEY = ['codex-chat-threads'] as const
@@ -16,6 +17,7 @@ export type CodexChatView = 'chat' | 'gallery' | 'context'
 
 /** The turn being streamed: the thread only refetches after it ends, so the UI shows it from here meanwhile. */
 export type CodexChatLiveTurn = {
+  attachments: StoredFileEntry[]
   threadId: number
   userText: string
   text: string
@@ -41,6 +43,11 @@ export interface CodexChatApi {
   draft: string
   setDraft: (draft: string | ((current: string) => string)) => void
   liveTurn: CodexChatLiveTurn | null
+  draftAttachments: StoredFileEntry[]
+  attachmentsUploading: boolean
+  addAttachments: (files: StoredFileEntry[]) => void
+  removeAttachment: (id: string) => void
+  uploadAttachments: (files: File[]) => Promise<void>
   /** Send `draft` to `threadId` and stream the reply. */
   send: (threadId: number) => Promise<void>
   stop: (threadId: number) => void

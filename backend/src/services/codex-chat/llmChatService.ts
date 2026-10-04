@@ -1,4 +1,5 @@
 import type { McpRequester } from '../../mcp/context'
+import { validateChatAttachments } from './chatAttachments'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
@@ -204,11 +205,12 @@ export const LlmChatService = {
    * Send one user message and stream the reply to `listener`. Resolves with the stored assistant message; the reply
    * keeps running (and is stored) when the listener goes away.
    */
-  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void) {
+  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id)
+    const attachments = validateChatAttachments(requester, fileIds)
     const trimmed = text.trim()
-    if (!trimmed) {
+    if (!trimmed && attachments.length === 0) {
       throw new LlmChatError('메시지를 입력해줘.')
     }
     if (activeTurns.has(thread.id)) {
@@ -227,11 +229,10 @@ export const LlmChatService = {
         resolveFinished = resolve
       }),
     }
+    const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null }, attachments.map((file) => file.id))
     activeTurns.set(thread.id, turn)
-
-    const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null })
     if (!thread.title) {
-      CodexChatStore.renameThread(thread.id, trimmed.replace(/\s+/g, ' '))
+      CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || '').replace(/\s+/g, ' '))
     }
     emit(turn, { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord })
 

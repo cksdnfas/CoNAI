@@ -1,5 +1,6 @@
 import { resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
 import { buildChatStyleGuidance } from './chatStyle'
+import { chatContentWithAttachments } from './chatAttachments'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 
@@ -164,7 +165,7 @@ export function rawMessagesEstimate(messages: ChatCompletionMessage[], tools: Ch
 
 function toCompletionMessages(message: CodexChatMessageRecord): ChatCompletionMessage[] {
   if (message.role === 'user') {
-    return [{ role: 'user', content: message.content }]
+    return [{ role: 'user', content: chatContentWithAttachments(message.content, message.attachments) }]
   }
 
   const calls = message.tool_calls.filter((call) => call.id && call.tool)

@@ -33,6 +33,9 @@ export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: u
 export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore'];
 
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
+  list_files: 'read',
+  get_file_info: 'read',
+  read_file_text: 'read',
   list_workflows: 'read',
   list_comfyui_servers: 'read',
   get_generation_routing_options: 'read',

@@ -1,5 +1,6 @@
 /** Resolve the page-view permission key that matches one app pathname. */
 export function resolveRoutePermissionKey(pathname: string) {
+  if (pathname === '/files') return 'page.files.view'
   if (pathname === '/') {
     return 'page.home.view'
   }

@@ -25,6 +25,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatAppearanceButton, chatTranscriptStyle, useChatAppearance } from './chat-appearance'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { ChatAttachButton, ChatDraftAttachments, ChatFileLinks } from './chat-attachments'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   codexChatMediaQueryKey,
@@ -59,7 +60,6 @@ export function CodexChatView(props: CodexChatViewProps) {
   return chat ? <CodexChatViewContent chat={chat} {...props} /> : null
 }
 
-/** "+": pick the profile of a new chat. */
 /** The profile's picture behind the transcript, dimmed (and optionally blurred) so the text stays readable. */
 function ChatBackground({ url, dim, blur }: { url: string; dim: number; blur: number }) {
   return (
@@ -74,6 +74,7 @@ function ChatBackground({ url, dim, blur }: { url: string; dim: number; blur: nu
   )
 }
 
+/** "+": pick the profile of a new chat. */
 function NewChatMenu({ profiles, disabled, onPick }: { profiles: ChatProfileSummary[]; disabled: boolean; onPick: (profileId: number) => void }) {
   const { t } = useI18n()
   const usable = profiles.filter((profile) => profile.usable)
@@ -248,7 +249,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const profileMissing = thread !== null && (!profile || !profile.isEnabled)
   const codexUnavailable = isCodexThread && !codexStatus?.available
-  const canSend = activeThreadId !== null && Boolean(draft.trim()) && !isBusy && !profileMissing && !codexUnavailable
+  const canSend = activeThreadId !== null && (Boolean(draft.trim()) || chat.draftAttachments.length > 0) && !chat.attachmentsUploading && !isBusy && !profileMissing && !codexUnavailable
 
   const handleSend = () => {
     if (canSend && activeThreadId !== null) {
@@ -311,13 +312,14 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             className={cn('-mx-2 rounded-md px-2 transition-colors duration-500', flashMessageId === message.id && 'bg-primary/10')}
           >
             {message.role === 'user'
-              ? <CodexChatUserMessage content={message.content} />
+              ? <>{message.content && <CodexChatUserMessage content={message.content} />}<ChatFileLinks files={message.attachments} /></>
               : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} media={media} />}
           </div>
         ))}
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <>
-            <CodexChatUserMessage content={liveTurn.userText} />
+            {liveTurn.userText && <CodexChatUserMessage content={liveTurn.userText} />}
+            <ChatFileLinks files={liveTurn.attachments} />
             <CodexChatAssistantMessage content={liveTurn.text} toolCalls={[...liveTurn.toolCalls.values()]} reasoning={liveTurn.reasoning} streaming largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
           </>
         ) : null}
@@ -337,7 +339,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const composer = (
     <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? 'mx-auto max-w-3xl px-4 sm:px-6' : 'px-3')}>
       {warning ? <p className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : null}
+      <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
       <div className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm')}>
+        <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
         <textarea
           ref={composerRef}
           value={draft}

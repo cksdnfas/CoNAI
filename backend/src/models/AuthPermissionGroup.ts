@@ -13,6 +13,8 @@ export interface PagePermissionRecord {
 
 /** Permissions the settings UI can grant; anything else stays admin-only through the seeded admin grant. */
 const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
+  'page.files.view',
+  'files.manage',
   'auth.guest.create',
   'page.home.view',
   'page.groups.view',
