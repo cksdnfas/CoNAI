@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowUp, LayoutGrid, Maximize2, Minimize2, Plus, SlidersHorizontal, Square, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -27,7 +27,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatAppearanceButton, chatTranscriptStyle, useChatAppearance } from './chat-appearance'
 import { ChatProfileAvatar } from './chat-profile-avatar'
-import { ChatAttachButton, ChatDraftAttachments, ChatFileLinks } from './chat-attachments'
+import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   codexChatMediaQueryKey,
@@ -35,14 +35,18 @@ import {
   useCodexChat,
   type CodexChatApi,
 } from './codex-chat-context'
-import { CodexChatContextView } from './codex-chat-context-view'
-import { CodexChatGallery } from './codex-chat-gallery'
-import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker } from './codex-chat-message'
+import { CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
+import { ChatLiveMessage, ChatSavedMessages } from './chat-transcript'
+import { Button } from '@/components/ui/button'
+
+const CodexChatContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexChatContextView }))
+const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
 
 const RUNNING_POLL_MS = 2000
 const PENDING_JOB_POLL_MS = 3000
 const COMPOSER_MAX_HEIGHT_PX = 220
 const MESSAGE_FLASH_MS = 1600
+const MESSAGE_PAGE_SIZE = 80
 
 type CodexChatLayout = 'panel' | 'page'
 
@@ -156,6 +160,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const [flashMessageId, setFlashMessageId] = useState<number | null>(null)
+  const [historyWindow, setHistoryWindow] = useState<{ threadId: number | null; firstId: number | null }>({ threadId: null, firstId: null })
+  const prependHeightRef = useRef<number | null>(null)
+  const followBottomRef = useRef(true)
   const { liveTurn, selectedThreadId, selectThread, draft, setDraft, view, setView, messageFocus, clearMessageFocus, startChat, isStartingChat } = chat
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
@@ -191,7 +198,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     for (const emoticon of emoticonsQuery.data) for (const keyword of emoticon.keywords) byKeyword.set(keyword.toLowerCase(), emoticon.compositeHash)
     return { profileId: profile.id, byKeyword }
   }, [emoticonsQuery.data, profile])
-  const speaker: ChatSpeaker | null = profile ? { name: profile.name, avatar: profile.avatar, engine: profile.engine, roleplay: profile.style?.roleplay ?? false, blocks: profile.style?.blocks, cast: profile.style?.cast, emoticons } : null
+  const speaker = useMemo<ChatSpeaker | null>(() => profile ? { name: profile.name, avatar: profile.avatar, engine: profile.engine, roleplay: profile.style?.roleplay ?? false, blocks: profile.style?.blocks, cast: profile.style?.cast, emoticons } : null, [profile, emoticons])
   const backgroundUrl = appearance.showBackground && profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
 
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && thread !== null })
@@ -201,6 +208,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const serverRunning = Boolean(threadQuery.data?.running) && !isStreaming
   const isBusy = isStreaming || serverRunning
   const messages: CodexChatMessage[] = useMemo(() => threadQuery.data?.messages ?? [], [threadQuery.data?.messages])
+  const firstIndex = historyWindow.threadId === activeThreadId ? messages.findIndex((message) => message.id === historyWindow.firstId) : -1
+  const visibleCount = firstIndex >= 0 ? messages.length - firstIndex : MESSAGE_PAGE_SIZE
+  const focusIndex = messageFocus ? messages.findIndex((message) => message.id === messageFocus.messageId) : -1
+  const windowCount = focusIndex >= 0 ? Math.max(visibleCount, messages.length - focusIndex) : visibleCount
+  const visibleMessages = useMemo(() => messages.slice(-windowCount), [messages, windowCount])
   const media = threadQuery.data?.media
   const runningFromServer = serverRunning ? threadQuery.data?.running ?? null : null
   const activeView = activeThreadId === null ? 'chat' : view === 'context' && isCodexThread ? 'chat' : view
@@ -224,11 +236,32 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }
   }, [])
 
+  useLayoutEffect(() => {
+    followBottomRef.current = true
+    prependHeightRef.current = null
+    scrollToBottom()
+  }, [activeThreadId, isTranscript, scrollToBottom])
+
+  const showEarlierMessages = () => {
+    if (visibleCount >= messages.length || prependHeightRef.current !== null) return
+    prependHeightRef.current = scrollRef.current?.scrollHeight ?? null
+    followBottomRef.current = false
+    setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - visibleCount - MESSAGE_PAGE_SIZE)]?.id ?? null })
+  }
+
+  useLayoutEffect(() => {
+    const node = scrollRef.current
+    if (node && prependHeightRef.current !== null) {
+      node.scrollTop += node.scrollHeight - prependHeightRef.current
+      prependHeightRef.current = null
+    }
+  }, [visibleMessages])
+
   useEffect(() => {
-    if (isTranscript) {
+    if (isTranscript && followBottomRef.current && !messageFocus) {
       scrollToBottom()
     }
-  }, [isTranscript, messages.length, liveTurn?.text, liveTurn?.toolCalls.size, threadQuery.data?.running?.text, scrollToBottom])
+  }, [isTranscript, messages.length, liveTurn?.text, liveTurn?.toolCalls.size, threadQuery.data?.running?.text, messageFocus, scrollToBottom])
 
   // "Go to message" from the gallery: once the transcript is back, centre that message and flash it.
   useEffect(() => {
@@ -240,9 +273,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       return
     }
     node.scrollIntoView({ block: 'center' })
+    followBottomRef.current = false
+    setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - windowCount)]?.id ?? null })
     setFlashMessageId(messageFocus.messageId)
     clearMessageFocus()
-  }, [clearMessageFocus, isTranscript, messageFocus, messages])
+  }, [activeThreadId, clearMessageFocus, isTranscript, messageFocus, messages, windowCount])
 
   useEffect(() => {
     if (flashMessageId === null) {
@@ -317,25 +352,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const headerAvatar = speaker ? <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} engine={speaker.engine} size="sm" /> : null
 
   const transcript = (
-    <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto">
+    <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={(event) => {
+      const node = event.currentTarget
+      followBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
+      if (node.scrollTop < 80) showEarlierMessages()
+    }}>
       <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')} style={chatTranscriptStyle(appearance, profile?.style)}>
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            data-message-id={message.id}
-            className={cn('-mx-2 rounded-md px-2 transition-colors duration-500', flashMessageId === message.id && 'bg-primary/10')}
-          >
-            {message.role === 'user'
-              ? <>{message.content && <CodexChatUserMessage content={message.content} />}<ChatFileLinks files={message.attachments} /></>
-              : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} media={media} />}
-          </div>
-        ))}
+        {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
+        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} media={media} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
         {liveTurn && liveTurn.threadId === activeThreadId ? (
-          <>
-            {liveTurn.userText && <CodexChatUserMessage content={liveTurn.userText} />}
-            <ChatFileLinks files={liveTurn.attachments} />
-            <CodexChatAssistantMessage content={liveTurn.text} toolCalls={[...liveTurn.toolCalls.values()]} reasoning={liveTurn.reasoning} streaming largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
-          </>
+          <ChatLiveMessage turn={liveTurn} largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} />
         ) : null}
         {runningFromServer ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming largeThumbnails={layout === 'page'} speaker={speaker} avatarSize={appearance.avatarSize} /> : null}
       </div>
@@ -383,9 +409,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   if (activeThreadId === null || !thread) {
     body = threadsQuery.isPending ? null : <ProfilePicker profiles={profiles} disabled={isStartingChat} onPick={pickProfile} />
   } else if (activeView === 'gallery') {
-    body = <CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} />
+    body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {
-    body = <CodexChatContextView thread={thread} profileTurns={profile?.contextTurns ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} />
+    body = <Suspense fallback={null}><CodexChatContextView thread={thread} profileTurns={profile?.contextTurns ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} /></Suspense>
   } else {
     body = backgroundUrl && profile ? (
       <div className="relative flex min-h-0 flex-1 flex-col">

@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { memo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronRight, ImageOff, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -232,13 +232,13 @@ function CodexChatToolMedia({ calls, size = 'regular', media }: { calls: CodexCh
   )
 }
 
-export function CodexChatUserMessage({ content }: { content: string }) {
+export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content }: { content: string }) {
   return (
     <div className="flex justify-end">
       <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground">{content}</div>
     </div>
   )
-}
+})
 
 /** While a reply is in progress: what it is doing right now, so a long chain of tool calls never looks finished. */
 function ActivityLine({ toolCalls }: { toolCalls: CodexChatToolCall[] }) {
@@ -313,7 +313,7 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
 /** Appearance setting → avatar size; small keeps the name line compact, larger sizes sit in a column beside the reply. */
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 
-export function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, largeThumbnails = false, speaker = null, media, avatarSize = 'md' }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, largeThumbnails = false, speaker = null, media, avatarSize = 'md' }: {
   content: string
   toolCalls: CodexChatToolCall[]
   status?: CodexChatMessage['status']
@@ -386,4 +386,4 @@ export function CodexChatAssistantMessage({ content, toolCalls, status, error, r
       <div className={cn('space-y-2', avatarBeside && (avatarSize === 'lg' ? 'pl-17' : 'pl-13'))}>{footer}</div>
     </div>
   )
-}
+})

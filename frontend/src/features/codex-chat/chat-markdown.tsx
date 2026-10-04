@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
+import { createContext, memo, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Check, Copy, Eye } from 'lucide-react'
@@ -244,7 +244,7 @@ function rehypeRoleplay() {
  * A reply as Markdown (GitHub flavour: tables, task lists, strikethrough). Raw HTML is not rendered; fence it to preview.
  * `roleplay` colours "dialogue", *narration* and 'thoughts' with the profile's colours (CSS variables on the transcript).
  */
-export function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null }: { text: string; roleplay?: boolean; blocks?: ChatDisplayBlock[]; emoticons?: ChatEmoticonMap | null }) {
+export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null }: { text: string; roleplay?: boolean; blocks?: ChatDisplayBlock[]; emoticons?: ChatEmoticonMap | null }) {
   const blocksByKey = useMemo(() => new Map((blocks ?? []).filter((block) => block.enabled && block.key).map((block) => [block.key, block])), [blocks])
   return (
     <ChatEmoticonsContext.Provider value={emoticons}>
@@ -257,4 +257,4 @@ export function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null 
       </ChatDisplayBlocksContext.Provider>
     </ChatEmoticonsContext.Provider>
   )
-}
+})
