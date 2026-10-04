@@ -6,6 +6,8 @@ export interface MediaHoverPreviewSource {
   src: string
   /** Swapped in once it has loaded, e.g. the original file. */
   fullSrc?: string | null
+  /** A video to play (muted, looped) instead of the still; `src` is its poster while it loads. */
+  videoSrc?: string | null
   /** Line under the media. Defaults to the pixel size once `fullSrc` has loaded. */
   caption?: ReactNode
 }
@@ -40,6 +42,20 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
   const [fullSize, setFullSize] = useState<Size | null>(null)
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
   const fullSrc = source.fullSrc && source.fullSrc !== source.src ? source.fullSrc : null
+  const videoSrc = source.videoSrc ?? null
+
+  // A video's box is sized from its poster first, so the card can show before the stream's metadata arrives.
+  useEffect(() => {
+    if (!videoSrc) {
+      return
+    }
+    const poster = new Image()
+    poster.onload = () => setAspectSize((current) => current ?? { width: poster.naturalWidth, height: poster.naturalHeight })
+    poster.src = source.src
+    return () => {
+      poster.onload = null
+    }
+  }, [source.src, videoSrc])
 
   useEffect(() => {
     if (!fullSrc) {
@@ -84,18 +100,38 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
       className="pointer-events-none fixed z-popover rounded-md bg-surface-high p-2 text-foreground shadow-elevation-2"
       style={{ left: position?.left ?? 0, top: position?.top ?? 0, visibility: position && fittedSize ? 'visible' : 'hidden' }}
     >
-      <img
-        src={fullSize && fullSrc ? fullSrc : source.src}
-        alt=""
-        className="block rounded-sm object-contain"
-        style={fittedSize ?? { width: 1, height: 1 }}
-        onLoad={(event) => {
-          const { naturalWidth, naturalHeight } = event.currentTarget
-          if (naturalWidth > 0 && naturalHeight > 0) {
-            setAspectSize((current) => current ?? { width: naturalWidth, height: naturalHeight })
-          }
-        }}
-      />
+      {videoSrc ? (
+        <video
+          src={videoSrc}
+          poster={source.src}
+          muted
+          loop
+          autoPlay
+          playsInline
+          disablePictureInPicture
+          className="block rounded-sm bg-black object-contain"
+          style={fittedSize ?? { width: 1, height: 1 }}
+          onLoadedMetadata={(event) => {
+            const { videoWidth, videoHeight } = event.currentTarget
+            if (videoWidth > 0 && videoHeight > 0) {
+              setFullSize({ width: videoWidth, height: videoHeight })
+            }
+          }}
+        />
+      ) : (
+        <img
+          src={fullSize && fullSrc ? fullSrc : source.src}
+          alt=""
+          className="block rounded-sm object-contain"
+          style={fittedSize ?? { width: 1, height: 1 }}
+          onLoad={(event) => {
+            const { naturalWidth, naturalHeight } = event.currentTarget
+            if (naturalWidth > 0 && naturalHeight > 0) {
+              setAspectSize((current) => current ?? { width: naturalWidth, height: naturalHeight })
+            }
+          }}
+        />
+      )}
       {caption ? <div className="mt-2 max-w-full truncate text-xs tabular-nums text-muted-foreground" style={{ width: fittedSize?.width }}>{caption}</div> : null}
     </div>,
     document.body,

@@ -42,7 +42,7 @@ function GalleryTile({ entry, showFoundMark, onOpen }: { entry: GalleryEntry; sh
   const { media, image } = entry
   const thumbnailUrl = image.thumbnail_url ?? ''
   const isVideo = media.mimeType?.startsWith('video/') === true
-  const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url } : null)
+  const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
   const aspectRatio = media.width && media.height ? `${media.width} / ${media.height}` : undefined
 
   return (

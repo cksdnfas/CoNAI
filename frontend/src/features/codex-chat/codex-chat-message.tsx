@@ -72,7 +72,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
   const { t } = useI18n()
   const thumbnailUrl = image.thumbnail_url ?? ''
   const isVideo = image.mime_type?.startsWith('video/') === true
-  const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url } : null)
+  const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
 
   return (
     <>
