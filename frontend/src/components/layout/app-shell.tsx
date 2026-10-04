@@ -209,7 +209,7 @@ function AppShellLayout() {
       </header>
 
       {/* The docked chat panel takes the right edge from lg up; the page keeps the rest. */}
-      <div className={cn(isCodexChatDockVisible && 'lg:pr-[420px]')}>
+      <div className={cn(isCodexChatDockVisible && 'lg:pr-(--chat-dock-width)')}>
         <main className="theme-shell-main mx-auto w-full max-w-[1680px]">
           <Outlet />
         </main>
