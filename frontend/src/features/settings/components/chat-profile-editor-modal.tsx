@@ -9,11 +9,13 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
+  CHAT_BLOCKS_QUERY_KEY,
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   chatProfileBackgroundUrl,
   createChatProfile,
   deleteChatProfile,
+  listChatBlocks,
   listChatConnectionModels,
   listChatLorebooks,
   localizeChatImages,
@@ -43,6 +45,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     name: profile?.name ?? '',
     tagline: profile?.tagline ?? '',
     lorebookIds: profile?.lorebookIds ?? [],
+    blockIds: profile?.blockIds ?? [],
     loreScanDepth: profile?.loreScanDepth ?? defaults?.loreScanDepth ?? 4,
     loreTokenBudget: profile?.loreTokenBudget ?? defaults?.loreTokenBudget ?? 1024,
     loreDepth: profile?.loreDepth ?? defaults?.loreDepth ?? 4,
@@ -140,6 +143,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     staleTime: 60_000,
   })
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: open })
+  const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks, enabled: open })
   const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && !isLlm })
 
   // Fields start on real values, not on a "choose" or "connection default" entry: the first connection, then the
@@ -268,7 +272,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             codexModels={codexModelsQuery.data?.data.models}
           />
         ) : null}
-        {tab === 'look' ? <ChatProfileLookPanel draft={draft} patch={patch} defaults={defaults?.style} backgroundUrl={backgroundUrl} /> : null}
+        {tab === 'look' ? <ChatProfileLookPanel draft={draft} patch={patch} defaults={defaults?.style} backgroundUrl={backgroundUrl} blocks={blocksQuery.data} /> : null}
         {tab === 'tools' ? <ChatProfileToolsPanel open={open} draft={draft} patch={patch} defaults={defaults} /> : null}
       </ModalBody>
       <ModalFooter>

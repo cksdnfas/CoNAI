@@ -10,6 +10,7 @@ export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
 export const CHAT_ADMIN_PROFILES_QUERY_KEY = ['codex-chat-admin-profiles'] as const
 export const CHAT_ADMIN_SETTINGS_QUERY_KEY = ['codex-chat-admin-settings'] as const
 export const CHAT_LOREBOOKS_QUERY_KEY = ['codex-chat-lorebooks'] as const
+export const CHAT_BLOCKS_QUERY_KEY = ['codex-chat-blocks'] as const
 export const CHAT_STATUS_QUERY_KEY = ['codex-chat-status'] as const
 
 export interface CodexChatStatus {
@@ -180,9 +181,24 @@ export interface ChatLorebook {
   updatedDate: string
 }
 
+/** A shared display block (status card); profiles link it by id, so editing it reaches every linked profile. */
+export interface ChatSharedBlock {
+  id: number
+  name: string
+  block: ChatDisplayBlock
+  profiles: Array<{ id: number; name: string }>
+  createdDate: string
+  updatedDate: string
+}
+
+/** The file a block exports as; import also takes a bare block or an array of either. */
+export const CHAT_BLOCK_FILE_MARK = 'conai_display_block'
+
 export interface ChatProfile {
   /** Linked shared lorebooks, in priority order. */
   lorebookIds: number[]
+  /** Linked shared display blocks, in display order; the server fills `style.blocks` from them. */
+  blockIds: number[]
   loreScanDepth: number
   loreTokenBudget: number
   /** API LLM: keyword lore is merged in this many turns before the end (0: the latest message). */
@@ -434,6 +450,27 @@ export function updateChatLorebook(lorebookId: number, patch: { name?: string; e
 
 export function deleteChatLorebook(lorebookId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'DELETE' })
+}
+
+export function listChatBlocks() {
+  return requestApiData<ChatSharedBlock[]>('/api/codex-chat/admin/blocks')
+}
+
+export function createChatBlock(input: { name: string; block: ChatDisplayBlock }) {
+  return requestApiData<ChatSharedBlock>('/api/codex-chat/admin/blocks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+/** The parsed contents of a block JSON file; every block in it becomes a shared block. */
+export function importChatBlocks(contents: unknown) {
+  return requestApiData<ChatSharedBlock[]>('/api/codex-chat/admin/blocks/import', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(contents) })
+}
+
+export function updateChatBlock(blockId: number, patch: { name?: string; block?: ChatDisplayBlock }) {
+  return requestApiData<ChatSharedBlock>(`/api/codex-chat/admin/blocks/${blockId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function deleteChatBlock(blockId: number) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/blocks/${blockId}`, { method: 'DELETE' })
 }
 
 export const CHAT_USER_PROFILES_QUERY_KEY = ['codex-chat-user-profiles'] as const

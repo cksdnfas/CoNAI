@@ -346,7 +346,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // `<profileId>:<key>` so two members' `status` blocks stay apart; chips keep the plain key (a message has one speaker).
   const blocksState = threadQuery.data?.blocks ?? null
   const memberBlocks = threadQuery.data?.memberBlocks ?? null
-  const usableBlock = (block: ChatDisplayBlock) => block.enabled && block.key && block.template.trim()
+  // A block without a template still shows, as a plain field list.
+  const usableBlock = (block: ChatDisplayBlock) => block.enabled && block.key
   const statusBlocks = useMemo<ChatStatusBlock[]>(() => {
     if (isGroup) return memberProfiles.flatMap((member) => (member.style?.blocks ?? []).filter(usableBlock).map((block) => ({ ...block, key: `${member.id}:${block.key}`, label: memberProfiles.length > 1 ? `${member.name} · ${block.key}` : block.key })))
     return (profile?.style?.blocks ?? []).filter(usableBlock)

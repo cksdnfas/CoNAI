@@ -373,6 +373,16 @@ function parseSet(spec: string): BlockAction | null {
 }
 
 /** One filled-in block, isolated in a shadow root. `picked` marks `data-pick` elements with the `picked` class. */
+const DEFAULT_BLOCK_CSS = '.dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:.9em}.dl dt{opacity:.65}.dl dd{margin:0;overflow-wrap:anywhere}'
+
+/**
+ * A block without a template shows every field as a plain label / value list. The template language cannot walk an
+ * object's keys, so the list is built from the data at hand and rendered through the same sanitizer.
+ */
+export function defaultBlockTemplate(data: Record<string, unknown>) {
+  return `<dl class="dl">${Object.keys(data).map((field) => `<dt>${escapeHtml(field)}</dt><dd>{{${field}}}</dd>`).join('')}</dl>`
+}
+
 export function ChatDisplayBlockView({ block, data, onAction, picked }: {
   block: Pick<ChatDisplayBlock, 'template' | 'css'>
   data: Record<string, unknown>
@@ -380,7 +390,9 @@ export function ChatDisplayBlockView({ block, data, onAction, picked }: {
   picked?: ReadonlySet<string>
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const html = renderNodes(parseTemplate(block.template), [data])
+  const plain = !block.template.trim()
+  const html = renderNodes(parseTemplate(plain ? defaultBlockTemplate(data) : block.template), [data])
+  const css = plain ? DEFAULT_BLOCK_CSS + block.css : block.css
 
   useLayoutEffect(() => {
     const host = hostRef.current
@@ -388,13 +400,13 @@ export function ChatDisplayBlockView({ block, data, onAction, picked }: {
     const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
     const style = document.createElement('style')
     // Built as a text node, so a stray "</style>" in the CSS cannot open markup.
-    style.textContent = `:host{display:block}*{box-sizing:border-box}[data-pick],[data-set]{cursor:pointer}${block.css}`
+    style.textContent = `:host{display:block}*{box-sizing:border-box}[data-pick],[data-set]{cursor:pointer}${css}`
     const nodes = sanitizeInto(html).map((node) => document.importNode(node, true))
     root.replaceChildren(style, ...nodes)
     for (const element of Array.from(root.querySelectorAll<HTMLElement>('[data-pick]'))) {
       element.classList.toggle('picked', picked?.has(pickLabel(element)) ?? false)
     }
-  }, [block.css, html, picked])
+  }, [css, html, picked])
 
   const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!onAction) return

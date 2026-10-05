@@ -4,6 +4,8 @@ import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chat
 import { isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type ChatStyle } from './chatStyle'
 import { ChatLorebookStore, normalizeLorebookIds } from './chatLorebook'
+import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
+import { ChatProfileError } from './chatProfileError'
 
 const NAME_MAX_LENGTH = 60
 const MODEL_MAX_LENGTH = 200
@@ -63,6 +65,8 @@ export type ChatProfile = {
   tagline: string
   /** Shared lorebooks (chat_lorebooks) this profile uses, in priority order. */
   lorebookIds: number[]
+  /** Shared display blocks (chat_display_blocks) this profile shows; resolved into `style.blocks` when read. */
+  blockIds: number[]
   loreScanDepth: number
   loreTokenBudget: number
   /** API LLM: keyword lore goes this many turns before the end of the conversation. */
@@ -127,6 +131,7 @@ type ProfileRow = {
   name: string
   tagline: string
   lorebook_ids: string | null
+  block_ids: string | null
   lore_scan_depth: number
   lore_token_budget: number
   lore_depth: number | null
@@ -168,7 +173,7 @@ type ProfileRow = {
   updated_date: string
 }
 
-export class ChatProfileError extends Error {}
+export { ChatProfileError }
 
 function parseScopes(value: unknown): ChatScope[] {
   let list: unknown = value
@@ -236,11 +241,13 @@ function legacySections(row: ProfileRow): ChatPromptSection[] {
 function toProfile(row: ProfileRow): ChatProfile {
   const storedSections = parseJsonArray(row.prompt_sections)
   const allowlist = parseJsonArray(row.tool_allowlist)
+  const blockIds = normalizeBlockIds(row.block_ids)
   return {
     id: row.id,
     name: row.name,
     tagline: row.tagline ?? '',
     lorebookIds: normalizeLorebookIds(row.lorebook_ids),
+    blockIds,
     loreScanDepth: row.lore_scan_depth ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
     loreTokenBudget: row.lore_token_budget ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     loreDepth: row.lore_depth ?? CHAT_PROFILE_DEFAULTS.loreDepth,
@@ -271,7 +278,8 @@ function toProfile(row: ProfileRow): ChatProfile {
     summaryModel: row.summary_model ?? '',
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     visionEnabled: row.vision_enabled === 1,
-    style: normalizeChatStyle(row.chat_style),
+    // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
+    style: { ...normalizeChatStyle(row.chat_style), blocks: ChatSharedBlockStore.blocksOf(blockIds) },
     background: row.background_image,
     isEnabled: row.is_enabled === 1,
     sortOrder: row.sort_order,
@@ -354,6 +362,7 @@ function toColumns(input: ChatProfileInput) {
     name,
     tagline: text(input.tagline, 200),
     lorebook_ids: JSON.stringify(ChatLorebookStore.existing(normalizeLorebookIds(input.lorebookIds))),
+    block_ids: JSON.stringify(ChatSharedBlockStore.existing(normalizeBlockIds(input.blockIds))),
     lore_scan_depth: optionalNumber(input.loreScanDepth, { min: 1, max: 100 }, true) ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
     lore_token_budget: optionalNumber(input.loreTokenBudget, { min: 0, max: 32768 }, true) ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     lore_depth: optionalNumber(input.loreDepth, { min: 0, max: 20 }, true) ?? CHAT_PROFILE_DEFAULTS.loreDepth,
@@ -390,7 +399,7 @@ function toColumns(input: ChatProfileInput) {
     summary_model: text(input.summaryModel, MODEL_MAX_LENGTH) || null,
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     vision_enabled: input.visionEnabled ? 1 : 0,
-    chat_style: JSON.stringify(normalizeChatStyle(input.style)),
+    chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),
     background_image: background,
     is_enabled: input.isEnabled === false ? 0 : 1,
     sort_order: optionalNumber(input.sortOrder, { min: -1_000_000, max: 1_000_000 }, true) ?? 0,

@@ -479,6 +479,17 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Shared display blocks (status cards): chat profiles link them by id (llm_chat_profiles.block_ids), like lorebooks.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_display_blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      block TEXT NOT NULL DEFAULT '{}',
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Chat flags: an account's own instructions, switched on per chat and added to the messages sent while on.
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_flags (
@@ -613,6 +624,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
   const chatProfileColumns: Array<[string, string]> = [
     ['tagline', "TEXT NOT NULL DEFAULT ''"],
     ['lorebook_ids', 'TEXT'],
+    // JSON ids of the shared display blocks the profile shows (null: not yet moved out of chat_style).
+    ['block_ids', 'TEXT'],
     ['alternate_greetings', 'TEXT'],
     ['lore_scan_depth', 'INTEGER NOT NULL DEFAULT 4'],
     ['lore_token_budget', 'INTEGER NOT NULL DEFAULT 1024'],
@@ -639,6 +652,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE llm_chat_profiles ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  migrateProfileBlocksToSharedTable(db);
 
   // Migrate workflows table
   if (!hasColumn('workflows', 'is_public_page')) {
@@ -1161,4 +1175,44 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   console.log('  ✅ User settings tables created (19 tables + indexes)');
 
+}
+
+/**
+ * One-time move of display blocks out of each profile's chat_style JSON into chat_display_blocks, linked back by
+ * block_ids. A profile whose block_ids is already set is left alone; the style's own list is emptied afterwards so
+ * it is never read as legacy again.
+ */
+function migrateProfileBlocksToSharedTable(db: Database.Database): void {
+  const rows = db.prepare('SELECT id, chat_style FROM llm_chat_profiles WHERE block_ids IS NULL').all() as Array<{ id: number; chat_style: string | null }>;
+  if (rows.length === 0) {
+    return;
+  }
+  const insert = db.prepare('INSERT INTO chat_display_blocks (name, block) VALUES (?, ?)');
+  const update = db.prepare('UPDATE llm_chat_profiles SET block_ids = ?, chat_style = ? WHERE id = ?');
+  const keyPattern = /^[a-z][a-z0-9_-]{0,31}$/;
+  db.transaction(() => {
+    for (const row of rows) {
+      let style: Record<string, unknown> = {};
+      try {
+        const parsed: unknown = row.chat_style ? JSON.parse(row.chat_style) : null;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) style = parsed as Record<string, unknown>;
+      } catch {
+        style = {};
+      }
+      const blocks = Array.isArray(style.blocks) ? style.blocks : [];
+      const linked: number[] = [];
+      for (const entry of blocks) {
+        if (!entry || typeof entry !== 'object') continue;
+        const block = entry as Record<string, unknown>;
+        const key = typeof block.key === 'string' ? block.key.trim().toLowerCase() : '';
+        if (!keyPattern.test(key)) continue;
+        const id = Number(insert.run(key, JSON.stringify({ ...block, key, enabled: true })).lastInsertRowid);
+        if (block.enabled !== false) linked.push(id);
+      }
+      update.run(JSON.stringify(linked), JSON.stringify({ ...style, blocks: [] }), row.id);
+    }
+  })();
+  if (rows.some((row) => row.chat_style?.includes('"blocks":[{'))) {
+    console.log(`  Migrating chat profiles: display blocks moved to chat_display_blocks (${rows.length} profiles checked)`);
+  }
 }

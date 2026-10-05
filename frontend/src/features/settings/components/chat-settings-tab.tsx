@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, FileUp, Pencil, Plus, RefreshCw } from 'lucide-react'
+import { BookOpen, Copy, Download, FileUp, LayoutTemplate, Pencil, Plus, RefreshCw } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -14,26 +14,33 @@ import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_ADMIN_SETTINGS_QUERY_KEY,
+  CHAT_BLOCKS_QUERY_KEY,
   CHAT_FLAG_LIMITS,
   CHAT_USER_PROFILE_LIMITS,
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   CHAT_STATUS_QUERY_KEY,
+  createChatBlock,
   getChatAdminSettings,
   getChatProfileDefaults,
+  importChatBlocks,
   importChatLorebook,
   importChatProfileCard,
   listChatAdminProfiles,
+  listChatBlocks,
   listChatLorebooks,
   updateChatAdminSettings,
   updateChatProfile,
   type ChatFlag,
+  type ChatSharedBlock,
   type ChatUserProfile,
   type ChatLorebook,
   type ChatProfile,
   type ChatProfileInput,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { ChatBlockEditorModal } from './chat-block-editor-modal'
+import { downloadChatBlockFile, readChatBlockFile } from './chat-block-file'
 import { ChatLorebookEditorModal } from './chat-lorebook-editor-modal'
 import { ChatProfileEditorModal } from './chat-profile-editor-modal'
 import { InstantApplyHint } from './settings-section-status'
@@ -58,10 +65,13 @@ export function ChatSettingsTab() {
   const lorebookTargetRef = useRef<number | null>(null)
   const [flagEditor, setFlagEditor] = useState<{ flag: ChatFlag | null } | null>(null)
   const [userProfileEditor, setUserProfileEditor] = useState<{ profile: ChatUserProfile | null } | null>(null)
+  const [blockEditor, setBlockEditor] = useState<{ shared: ChatSharedBlock | null } | null>(null)
+  const blockImportRef = useRef<HTMLInputElement>(null)
 
   const settingsQuery = useQuery({ queryKey: CHAT_ADMIN_SETTINGS_QUERY_KEY, queryFn: getChatAdminSettings })
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks })
+  const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks })
   const flagsQuery = useChatFlags()
   const userProfilesQuery = useChatUserProfiles()
   const defaultsQuery = useQuery({ queryKey: ['codex-chat-profile-defaults'], queryFn: getChatProfileDefaults, staleTime: Infinity })
@@ -93,6 +103,27 @@ export function ChatSettingsTab() {
     lorebookTargetRef.current = lorebookId
     lorebookImportRef.current?.click()
   }
+  const refreshBlocks = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: CHAT_BLOCKS_QUERY_KEY }),
+    queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
+  ])
+  const blockImportMutation = useMutation({
+    mutationFn: async (file: File) => importChatBlocks(await readChatBlockFile(file)),
+    onSuccess: async (created) => {
+      await refreshBlocks()
+      showSnackbar({ message: t({ ko: '표시 블록 {count}개 가져왔어.', en: 'Imported {count} display blocks.' }, { count: created.length }), tone: 'info' })
+    },
+    onError: (error) => showSnackbar({ message: error instanceof SyntaxError ? t({ ko: 'JSON 파일을 읽지 못했어.', en: 'Could not read the JSON file.' }) : getErrorMessage(error, t({ ko: '가져오지 못했어.', en: 'Could not import.' })), tone: 'error' }),
+  })
+  /** A copy next to the original, to change the key or the design without touching the profiles that use it. */
+  const blockDuplicateMutation = useMutation({
+    mutationFn: (shared: ChatSharedBlock) => createChatBlock({ name: t({ ko: '{name} 복사', en: '{name} copy' }, { name: shared.name }), block: shared.block }),
+    onSuccess: async (created) => {
+      await refreshBlocks()
+      setBlockEditor({ shared: created })
+    },
+    onError,
+  })
   const settingsMutation = useMutation({
     mutationFn: updateChatAdminSettings,
     onSuccess: (settings) => {
@@ -114,6 +145,7 @@ export function ChatSettingsTab() {
 
   const profiles = profilesQuery.data ?? []
   const lorebooks = lorebooksQuery.data ?? []
+  const blocks = blocksQuery.data ?? []
   const flags = flagsQuery.data ?? []
   const userProfiles = userProfilesQuery.data ?? []
 
@@ -209,6 +241,47 @@ export function ChatSettingsTab() {
       </RowGroup>
 
       <RowGroup
+        heading={t({ ko: '표시 블록', en: 'Display blocks' })}
+        actions={(
+          <div className="flex items-center gap-1">
+            <input ref={blockImportRef} type="file" accept=".json,application/json" className="hidden" aria-label={t({ ko: '표시 블록 파일', en: 'Display block file' })} onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) blockImportMutation.mutate(file)
+            }} />
+            <IconButton size="icon-sm" variant="ghost" disabled={blockImportMutation.isPending} onClick={() => blockImportRef.current?.click()} label={t({ ko: 'JSON에서 가져오기', en: 'Import from JSON' })}><FileUp /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setBlockEditor({ shared: null })} label={t({ ko: '표시 블록 추가', en: 'Add display block' })}><Plus /></IconButton>
+          </div>
+        )}
+      >
+        {blocksQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
+        {blocksQuery.isSuccess && blocks.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 표시 블록이 없어.', en: 'No display blocks yet.' })}</SettingsEmptyRow> : null}
+        {blocks.map((shared) => (
+          <div key={shared.id} className="flex min-h-14 items-center gap-3 border-t border-line py-2.5 first:border-t-0">
+            <LayoutTemplate className="size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold">{shared.name}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                <span className="font-mono">{shared.block.key}</span>
+                {' · '}
+                {t({ ko: '필드 {count}개', en: '{count} fields' }, { count: shared.block.fields.length })}
+                {' · '}
+                {shared.profiles.length > 0 ? (
+                  <Tip content={shared.profiles.map((profile) => profile.name).join(', ')}>
+                    <span>{t({ ko: '프로필 {count}개', en: '{count} profiles' }, { count: shared.profiles.length })}</span>
+                  </Tip>
+                ) : t({ ko: '연결 없음', en: 'Not linked' })}
+              </div>
+            </div>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => downloadChatBlockFile(shared.name, shared.block)} label={t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' })}><Download /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" disabled={blockDuplicateMutation.isPending} onClick={() => blockDuplicateMutation.mutate(shared)} label={t({ ko: '복제', en: 'Duplicate' })}><Copy /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setBlockEditor({ shared })} label={t({ ko: '편집', en: 'Edit' })}><Pencil /></IconButton>
+          </div>
+        ))}
+        {blocksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(blocksQuery.error, t({ ko: '표시 블록을 불러오지 못했어.', en: 'Could not load display blocks.' }))}</p> : null}
+      </RowGroup>
+
+      <RowGroup
         heading={t({ ko: '로어북', en: 'Lorebooks' })}
         actions={(
           <div className="flex items-center gap-1">
@@ -249,6 +322,7 @@ export function ChatSettingsTab() {
       <ChatFlagEditorModal open={flagEditor !== null} flag={flagEditor?.flag ?? null} onClose={() => setFlagEditor(null)} />
       <ChatUserProfileEditorModal open={userProfileEditor !== null} profile={userProfileEditor?.profile ?? null} onClose={() => setUserProfileEditor(null)} />
       <ChatLorebookEditorModal open={lorebookEditor !== null} lorebook={lorebookEditor?.lorebook ?? null} onClose={() => setLorebookEditor(null)} />
+      <ChatBlockEditorModal open={blockEditor !== null} shared={blockEditor?.shared ?? null} onClose={() => setBlockEditor(null)} />
       <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} initialDraft={editor?.draft} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
     </div>
   )

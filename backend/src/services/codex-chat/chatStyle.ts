@@ -161,31 +161,43 @@ export function fieldRuleLines(block: Pick<ChatDisplayBlock, 'fields'>) {
   return block.fields.map(fieldRuleText).filter(Boolean)
 }
 
+/**
+ * One block as stored. The key is lowercased; an invalid key empties it (an unnamed block is kept while it is being
+ * written in the editor but never offered to the model). Null for anything that is not an object.
+ */
+export function normalizeBlock(value: unknown, index = 0): ChatDisplayBlock | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const rawKey = typeof record.key === 'string' ? record.key.trim().toLowerCase() : ''
+  const key = BLOCK_KEY_PATTERN.test(rawKey) ? rawKey : ''
+  const field = (name: keyof typeof BLOCK_TEXT_LIMITS) => (typeof record[name] === 'string' ? (record[name] as string).slice(0, BLOCK_TEXT_LIMITS[name]) : '')
+  return {
+    id: typeof record.id === 'string' && record.id ? record.id.slice(0, 40) : `b${index}-${Date.now().toString(36)}`,
+    key,
+    instruction: field('instruction').trim(),
+    example: field('example').trim(),
+    template: field('template'),
+    css: field('css'),
+    rules: field('rules').trim(),
+    summary: field('summary').trim(),
+    fields: normalizeFields(record.fields),
+    enabled: record.enabled !== false,
+  }
+}
+
 function normalizeBlocks(value: unknown): ChatDisplayBlock[] {
   if (!Array.isArray(value)) {
     return []
   }
   const seen = new Set<string>()
   return value.slice(0, MAX_BLOCKS).flatMap((entry, index) => {
-    if (!entry || typeof entry !== 'object') return []
-    const record = entry as Record<string, unknown>
-    const key = typeof record.key === 'string' ? record.key.trim().toLowerCase() : ''
-    // An unnamed block is kept (being written in the editor) but never offered to the model.
-    if (key && (!BLOCK_KEY_PATTERN.test(key) || seen.has(key))) return []
-    if (key) seen.add(key)
-    const field = (name: keyof typeof BLOCK_TEXT_LIMITS) => (typeof record[name] === 'string' ? (record[name] as string).slice(0, BLOCK_TEXT_LIMITS[name]) : '')
-    return [{
-      id: typeof record.id === 'string' && record.id ? record.id.slice(0, 40) : `b${index}-${Date.now().toString(36)}`,
-      key,
-      instruction: field('instruction').trim(),
-      example: field('example').trim(),
-      template: field('template'),
-      css: field('css'),
-      rules: field('rules').trim(),
-      summary: field('summary').trim(),
-      fields: normalizeFields(record.fields),
-      enabled: record.enabled !== false,
-    }]
+    const block = normalizeBlock(entry, index)
+    if (!block) return []
+    // A key the pattern rejects is dropped here (the shared store refuses it instead); a repeated key keeps the first.
+    const rawKey = typeof (entry as Record<string, unknown>).key === 'string' ? ((entry as Record<string, unknown>).key as string).trim() : ''
+    if (rawKey && (!block.key || seen.has(block.key))) return []
+    if (block.key) seen.add(block.key)
+    return [block]
   })
 }
 
@@ -248,7 +260,8 @@ const ROLEPLAY_GUIDANCE = [
 ].join('\n')
 
 function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
-  const usable = blocks.filter((block) => block.enabled && block.key && block.template.trim())
+  // A block without a template still shows (as a plain list of its fields), so it is offered to the model too.
+  const usable = blocks.filter((block) => block.enabled && block.key)
   if (usable.length === 0) {
     return ''
   }

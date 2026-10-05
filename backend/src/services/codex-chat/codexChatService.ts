@@ -17,7 +17,7 @@ import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeC
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
-import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseBlockEdits } from './chatBlockState'
+import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseBlockEdits, usableBlocks } from './chatBlockState'
 import { authorNoteText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
 import { selectLoreEntries } from './chatLorebook'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
@@ -847,7 +847,7 @@ export const CodexChatService = {
     const ownerId = isGroup ? profileId ?? null : thread.profile_id
     const member = isGroup && ownerId !== null ? ChatGroupStore.member(threadId, ownerId) : null
     const profile = ownerId !== null && (!isGroup || member) ? ChatProfileStore.find(ownerId) : null
-    if (!profile || !profile.style.blocks.some((block) => block.enabled && block.key === key && block.template.trim())) {
+    if (!profile || !usableBlocks(profile.style.blocks).some((block) => block.key === key)) {
       throw new CodexChatError('이 채팅에는 그런 표시 블록이 없어.', 404)
     }
     const edits = parseBlockEdits(thread.block_edits)

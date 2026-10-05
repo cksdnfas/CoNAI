@@ -37,9 +37,9 @@ export type ChatBlocksState = {
 export const BLOCK_EDITS_MAX = 500
 export const BLOCK_DATA_MAX_LENGTH = 8000
 
-/** The blocks the model is told about and the panel shows. */
+/** The blocks the model is told about and the panel shows (a block without a template shows as a plain field list). */
 export function usableBlocks(blocks: ChatDisplayBlock[]) {
-  return blocks.filter((block) => block.enabled && block.key && block.template.trim())
+  return blocks.filter((block) => block.enabled && block.key)
 }
 
 /** Values the model wrote: JSON, or `field: value` lines when it slipped. Null when nothing usable was written. */

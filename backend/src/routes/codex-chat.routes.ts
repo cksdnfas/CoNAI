@@ -18,6 +18,7 @@ import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
 import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders } from '../services/codex-chat/llmChatContext'
 import { buildLorebookText, ChatLorebookStore } from '../services/codex-chat/chatLorebook'
+import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
@@ -576,6 +577,43 @@ router.delete('/admin/lorebooks/:lorebookId', requireAdmin, (req: Request, res: 
   const lorebookId = parseId(req.params.lorebookId)
   if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
   res.json({ success: true, data: { deleted: ChatLorebookStore.delete(lorebookId) } })
+})
+
+/** Shared display blocks (status cards). Profiles link them by id, so an edit reaches every linked profile at once. */
+router.get('/admin/blocks', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ChatSharedBlockStore.list() })
+})
+
+router.post('/admin/blocks', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as { name?: unknown; block?: unknown }
+    res.status(201).json({ success: true, data: ChatSharedBlockStore.create(body) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /admin/blocks/import — the parsed contents of a block JSON file (one block, an export, or an array); each becomes a shared block. */
+router.post('/admin/blocks/import', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const created = readBlockFile(req.body).map((item) => ChatSharedBlockStore.create(item))
+    res.status(201).json({ success: true, data: created })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.put('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Response) => {
+  const blockId = parseId(req.params.blockId)
+  if (blockId === null) { sendRouteBadRequest(res, 'Invalid block id'); return }
+  try {
+    const body = (req.body ?? {}) as { name?: unknown; block?: unknown }
+    const updated = ChatSharedBlockStore.update(blockId, { name: body.name, block: body.block })
+    if (!updated) { res.status(404).json({ success: false, error: '표시 블록을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Response) => {
+  const blockId = parseId(req.params.blockId)
+  if (blockId === null) { sendRouteBadRequest(res, 'Invalid block id'); return }
+  res.json({ success: true, data: { deleted: ChatSharedBlockStore.delete(blockId) } })
 })
 
 /**
