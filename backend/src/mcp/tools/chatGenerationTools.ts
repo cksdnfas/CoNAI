@@ -20,7 +20,7 @@ function describe(preset: ChatGenerationPreset, body: string) {
   return [
     `Generate an image with the preset "${preset.name}"${preset.instruction ? `: ${preset.instruction}` : ''}.`,
     body,
-    'The server adds the preset\'s fixed settings. Then call wait_generation_job with the returned job id; the app shows the result by itself.',
+    'The server adds the preset\'s fixed settings and the app attaches the finished image to your reply by itself: do not wait for or poll the job, just continue your reply.',
   ].join(' ');
 }
 

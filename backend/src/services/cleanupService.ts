@@ -3,7 +3,12 @@ import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepo
 import type { GenerationHistoryRecord, GenerationStatus } from '../types/generationHistory';
 import { HistoryCommandService } from './historyCommandService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
+import { getUserSettingsDb } from '../database/userSettingsDb';
+import { externalizeStoredQueuePayloads } from './generation-queue/queueInputStore';
 import { requestGenerationResultRetentionPrune } from './generationResultRetentionService';
+
+/** Reclaim the file space only when the backfill freed enough to be worth a full rewrite of user.db. */
+const QUEUE_PAYLOAD_VACUUM_THRESHOLD_BYTES = 256 * 1024 * 1024;
 
 export interface CleanupDetail {
   id: number;
@@ -54,6 +59,30 @@ function cleanupDetailForRecord(
 export class CleanupService {
   private static periodicCleanupTimer: NodeJS.Timeout | null = null;
   private static cleanupInProgress = false;
+
+  /**
+   * Move inline base64 inputs still sitting in stored queue payloads to the queue input store, then
+   * give the freed pages back to the file system when the backlog was large. Runs once per start; after
+   * the first pass it finds nothing and only costs the scan.
+   */
+  private static externalizeQueuePayloadInputs(): void {
+    try {
+      const report = externalizeStoredQueuePayloads();
+      if (report.rewritten === 0) {
+        return;
+      }
+      console.log(`🧹 Generation queue payload inputs externalized: ${report.rewritten} rows rewritten, ${(report.savedBytes / 1048576).toFixed(1)}MB freed${report.skipped > 0 ? `, ${report.skipped} unreadable rows skipped` : ''}`);
+      if (report.savedBytes >= QUEUE_PAYLOAD_VACUUM_THRESHOLD_BYTES) {
+        const startedAt = Date.now();
+        console.log('🧹 Compacting user.db (VACUUM) to reclaim the freed space...');
+        getUserSettingsDb().exec('VACUUM');
+        getUserSettingsDb().pragma('wal_checkpoint(TRUNCATE)');
+        console.log(`🧹 user.db compacted in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+      }
+    } catch (error) {
+      console.warn('⚠️  Generation queue payload externalization failed:', error instanceof Error ? error.message : error);
+    }
+  }
 
   /** Compact old completed/failed/cancelled queue payloads without deleting queue rows. */
   private static pruneOldGenerationQueuePayloads(): number {
@@ -246,6 +275,7 @@ export class CleanupService {
   static async runStartupCleanup(): Promise<void> {
     console.log('🚀 Running startup cleanup for generation history...');
 
+    this.externalizeQueuePayloadInputs();
     const report = await this.executeCleanup({ dryRun: false });
 
     if (report.deleted > 0 || report.updated > 0) {

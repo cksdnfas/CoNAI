@@ -47,6 +47,12 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
   return source === 'codex-chat' || source === 'llm-chat';
 }
 
+/**
+ * Withheld from chat agents: a chat reply must not block on a generation job (Codex jobs can run for minutes).
+ * The job is linked to the reply at submission and the app attaches the result when it lands.
+ */
+export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job']);
+
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */
 export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: unknown) {
   if (isChatMcpSource(context.source) && typeof nSamples === 'number' && nSamples > 1) {

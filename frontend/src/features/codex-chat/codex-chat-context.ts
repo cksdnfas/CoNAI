@@ -22,6 +22,8 @@ export type CodexChatLiveReply = {
   text: string
   reasoning: string
   toolCalls: Map<string, CodexChatToolCall>
+  /** The reply is written and being translated for display. */
+  translating?: boolean
 }
 
 /** The turn being streamed: the thread only refetches after it ends, so the UI shows it from here meanwhile. */
@@ -40,6 +42,8 @@ export type CodexChatLiveTurn = {
   /** LLM chats: the model's reasoning so far (shown folded, never stored). */
   reasoning: string
   toolCalls: Map<string, CodexChatToolCall>
+  /** Direct chats: the reply is written and being translated for display. */
+  translating?: boolean
   /** Group rooms: members answering now, in the order they started (several when their connection allows). */
   replies?: CodexChatLiveReply[]
   /** Group rooms: who answers after them. */

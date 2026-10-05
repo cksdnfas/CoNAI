@@ -245,6 +245,55 @@ export function registerQueueInputRefs(jobId: number, refs: QueueInputRef[]) {
 }
 
 /**
+ * Backfill for rows enqueued before the whole payload was externalized: PAYLOAD-3 only walked
+ * `prompt_data`, and the MCP enqueue path used to copy the raw node inputs (inline media included)
+ * next to it, so a MiniMax director job could keep 3MB of base64 in a row that was never read.
+ * Every stored job whose payload still carries a large inline data URL anywhere gets the same
+ * treatment a new enqueue gets, with its claims registered. Idempotent: once nothing is left, the
+ * scan matches no rows and costs one LIKE pass.
+ */
+export function externalizeStoredQueuePayloads() {
+  const db = getUserSettingsDb()
+  const ids = (db.prepare(`
+    SELECT id FROM generation_queue_jobs WHERE request_payload LIKE '%;base64,%' ORDER BY id
+  `).all() as Array<{ id: number }>).map((row) => row.id)
+  const read = db.prepare('SELECT request_payload FROM generation_queue_jobs WHERE id = ?')
+  const write = db.prepare('UPDATE generation_queue_jobs SET request_payload = ? WHERE id = ?')
+  const apply = db.transaction((jobId: number, payload: string, refs: QueueInputRef[]) => {
+    write.run(payload, jobId)
+    registerQueueInputRefs(jobId, refs)
+  })
+
+  let rewritten = 0
+  let savedBytes = 0
+  let skipped = 0
+  // One row at a time: the backlog this exists for is gigabytes of JSON.
+  for (const jobId of ids) {
+    const row = read.get(jobId) as { request_payload: string } | undefined
+    if (!row) {
+      continue
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(row.request_payload)
+    } catch {
+      skipped += 1
+      continue
+    }
+    const { value, refs } = externalizeQueueInputDataUrls(parsed)
+    if (refs.length === 0) {
+      continue
+    }
+    const payload = JSON.stringify(value)
+    apply(jobId, payload, refs)
+    rewritten += 1
+    savedBytes += Buffer.byteLength(row.request_payload) - Buffer.byteLength(payload)
+  }
+
+  return { scanned: ids.length, rewritten, savedBytes, skipped }
+}
+
+/**
  * Drop the given jobs' claims and delete any input that nobody references any more.
  *
  * Callers must only pass jobs whose payload has just been compacted. That is the point where a

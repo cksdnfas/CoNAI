@@ -76,6 +76,8 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     summaryPrompt: profile?.summaryPrompt ?? '',
     summaryProviderName: profile?.summaryProviderName ?? null,
     summaryModel: profile?.summaryModel ?? '',
+    translationProviderName: profile?.translationProviderName ?? null,
+    translationModel: profile?.translationModel ?? '',
     maxToolRounds: profile?.maxToolRounds ?? defaults?.maxToolRounds ?? 8,
     visionEnabled: profile?.visionEnabled ?? false,
     style: { ...FALLBACK_STYLE, ...(profile?.style ?? defaults?.style) },
@@ -144,6 +146,13 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     retry: false,
     staleTime: 60_000,
   })
+  const translationModelsQuery = useQuery({
+    queryKey: ['codex-chat-connection-models', draft.translationProviderName],
+    queryFn: () => listChatConnectionModels(draft.translationProviderName as string),
+    enabled: open && Boolean(draft.translationProviderName),
+    retry: false,
+    staleTime: 60_000,
+  })
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: open })
   const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks, enabled: open })
   const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && !isLlm })
@@ -168,6 +177,12 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     if (!open || !fill) return
     setDraft((current) => (!current.summaryProviderName || current.summaryModel ? current : { ...current, summaryModel: fill }))
   }, [open, summaryModelsQuery.data])
+  useEffect(() => {
+    const data = translationModelsQuery.data
+    const fill = data?.defaultModel || data?.models[0]
+    if (!open || !fill) return
+    setDraft((current) => (!current.translationProviderName || current.translationModel ? current : { ...current, translationModel: fill }))
+  }, [open, translationModelsQuery.data])
 
   const refresh = async () => {
     await Promise.all([
@@ -271,6 +286,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             providersLoaded={providersQuery.isSuccess}
             connectionModels={modelsQuery.data}
             summaryModels={summaryModelsQuery.data}
+            translationModels={translationModelsQuery.data}
             codexModels={codexModelsQuery.data?.data.models}
           />
         ) : null}

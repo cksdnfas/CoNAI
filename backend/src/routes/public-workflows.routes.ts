@@ -496,12 +496,11 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
   try {
     // PAYLOAD-3: store base64 image inputs once and keep only references in the payload.
     // This route already expands one request into up to 32 jobs, so the shared-input win is direct.
-    normalizedRequestPayload = {
+    // The whole payload is walked, not just prompt_data: a client may send base64 beside it as well.
+    normalizedRequestPayload = externalizeQueueInputDataUrls({
       ...request_payload,
-      prompt_data: externalizeQueueInputDataUrls(
-        normalizeWorkflowNumericPromptValues(parseMarkedFields(workflow.marked_fields), promptData as Record<string, unknown>),
-      ).value,
-    };
+      prompt_data: normalizeWorkflowNumericPromptValues(parseMarkedFields(workflow.marked_fields), promptData as Record<string, unknown>),
+    }).value;
   } catch (error) {
     if (error instanceof WorkflowNumericFieldValidationError) {
       res.status(400).json({ success: false, error: error.message });

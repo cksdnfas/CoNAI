@@ -9,6 +9,7 @@ import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { translateReply, translateUserInput, translatorOf } from './chatTranslation'
 import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
@@ -182,10 +183,10 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     if (event.type === 'done') return
     if (event.type === 'delta') active.text += event.text
     if (event.type === 'tool') active.toolCalls.set(event.call.id, event.call)
-    emit(run, event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool' || event.type === 'routing' ? { ...event, profileId: profile.id } : event)
+    emit(run, event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool' || event.type === 'routing' || event.type === 'translating' ? { ...event, profileId: profile.id } : event)
   }
   const others = [userPersonaForThread(thread).name, ...members.filter((member) => member.id !== profile.id).map((member) => member.name)]
-  const persist = (raw: GroupReplyResult) => {
+  const persist = async (raw: GroupReplyResult) => {
     // Keep the reply as written when cutting other speakers' lines would leave nothing; an empty reply is a failure
     // the user can see (and regenerate), not a blank message.
     const reply = !raw.content.trim() && raw.tool_calls.length === 0 && raw.status === 'completed'
@@ -199,16 +200,22 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       try { reserve(recipients) } catch (error) { emit(run, { type: 'notice', message: error instanceof Error ? error.message : String(error) }) }
     }
     if (reply.status !== 'completed') run.reserved.delete(replyId)
+    // The member's own translation model gives the reader its reply in Korean.
+    let displayContent: string | null = null
+    if (reply.status === 'completed' && content && profile.translationProviderName) {
+      emit(run, { type: 'translating', profileId: profile.id })
+      displayContent = await translateReply(profile, content, controller.signal)
+    }
     if (replacingMessageId) {
       // A connection failure must not replace a usable answer with an empty failed alternative.
       if (reply.status === 'completed' || content || reply.tool_calls.length) {
-        CodexChatStore.addAlternative(run.threadId, replacingMessageId, { ...reply, content, routing: active.routing, created_at: new Date().toISOString() })
+        CodexChatStore.addAlternative(run.threadId, replacingMessageId, { ...reply, content, display_content: displayContent, routing: active.routing, created_at: new Date().toISOString() })
       } else if (reply.error) {
         emit(run, { type: 'error', message: reply.error })
       }
       return findMessage(run.threadId, replacingMessageId)
     }
-    const id = CodexChatStore.addMessage({ thread_id: run.threadId, role: 'assistant', ...reply, content, routing: active.routing, speaker_profile_id: profile.id })
+    const id = CodexChatStore.addMessage({ thread_id: run.threadId, role: 'assistant', ...reply, content, display_content: displayContent, routing: active.routing, speaker_profile_id: profile.id })
     return findMessage(run.threadId, id)
   }
 
@@ -228,7 +235,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       })
     } else {
       const maxTokens = ChatGroupStore.member(run.threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
-      message = persist(await generateLlmGroupReply({
+      message = await persist(await generateLlmGroupReply({
         requester,
         threadId: run.threadId,
         profile,
@@ -244,7 +251,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     }
   } catch (error) {
     // Could not start at all (permission, Codex process): keep the reason on a failed reply of that member.
-    message = persist({ content: '', tool_calls: [], status: controller.signal.aborted ? 'interrupted' : 'failed', error: controller.signal.aborted ? null : error instanceof Error ? error.message : String(error) })
+    message = await persist({ content: '', tool_calls: [], status: controller.signal.aborted ? 'interrupted' : 'failed', error: controller.signal.aborted ? null : error instanceof Error ? error.message : String(error) })
   } finally {
     unregister()
     run.active.delete(profile.id)
@@ -418,11 +425,13 @@ export const GroupChatService = {
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
     const routing = userReplyRouting(thread, replyToMessageId)
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
+    // The members read the message in English; the reader keeps their own words.
+    const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed)
     await GroupChatService.stop(threadId)
 
     await startRun(threadId, listener, async (run) => {
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       emit(run, { type: 'user', message: findMessage(threadId, userMessageId) })
       run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: userMessageId }))
@@ -466,11 +475,13 @@ export const GroupChatService = {
     if (!trimmed && !message.attachments?.length && !message.mediaAttachments?.length) throw new CodexChatError('메시지를 입력해줘.')
     const routing = message.routing ?? { replyTo: null, recipients: [] }
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
+    const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed)
+    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     await startRun(threadId, listener, async (run) => {
-      CodexChatStore.editUserMessage(threadId, messageId, trimmed)
+      CodexChatStore.editUserMessage(threadId, messageId, modelText ?? trimmed, modelText ? trimmed : null)
       CodexChatStore.setMessageRouting(threadId, messageId, routing)
       resetCodexMemory(requester, threadId)
-      emit(run, { type: 'rewind', mode: 'edit', message: { ...message, content: trimmed, routing } })
+      emit(run, { type: 'rewind', mode: 'edit', message: { ...message, content: modelText ?? trimmed, display_content: modelText ? trimmed : null, routing } })
       run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: messageId }))
       await processQueue(run, requester, { chain: true })
     })

@@ -57,3 +57,5 @@ export type ChatStreamEvent<Message> =
   | { type: 'queue'; speakers: number[]; queue: number[] }
   | { type: 'notice'; message: string }
   | { type: 'routing'; routing: ChatMessageRouting; profileId?: number }
+  /** The reply is written; its translation for display is being made before it is stored. */
+  | { type: 'translating'; profileId?: number }

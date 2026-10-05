@@ -40,7 +40,7 @@ export function quoteMessage(thread: CodexChatThreadRecord, message: CodexChatMe
   }
   return {
     messageId: message.id, role: message.role, speakerProfileId: profileId, speakerName,
-    excerpt: message.content.trim().slice(0, 400) || message.attachments?.map((file) => file.name).join(', ').slice(0, 400) || (media ? '이미지' : '도구 결과'),
+    excerpt: (message.display_content ?? message.content).trim().slice(0, 400) || message.attachments?.map((file) => file.name).join(', ').slice(0, 400) || (media ? '이미지' : '도구 결과'),
     alternative: message.active_alternative ?? 0,
     ...(media ? { media } : {}),
   }

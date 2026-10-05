@@ -27,7 +27,8 @@ export function exportChatMarkdown(thread: CodexChatThreadRecord, messages: Code
         lines.push('')
       }
     }
-    lines.push(message.content, '')
+    lines.push(message.display_content ?? message.content, '')
+    if (message.display_content) lines.push('<details><summary>원문</summary>', '', message.content, '', '</details>', '')
     for (const file of message.attachments ?? []) lines.push(`- [${label(file.name)}](${origin}/api/files/${encodeURIComponent(file.id)}/download)`)
     for (const item of message.mediaAttachments ?? []) lines.push(`- [${label(item.name)}](${origin}/api/images/${encodeURIComponent(item.compositeHash)}/file)`)
     for (const item of byMessage.get(message.id) ?? []) lines.push(`- [${item.source === 'generated' ? '생성 이미지' : '이미지'}](${origin}/api/images/${encodeURIComponent(item.compositeHash)}/file)`)

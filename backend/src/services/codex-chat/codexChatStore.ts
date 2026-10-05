@@ -63,7 +63,10 @@ export type CodexChatMessageRecord = {
   id: number
   thread_id: number
   role: 'user' | 'assistant'
+  /** What the model sees (English in chats with a translation model). */
   content: string
+  /** Chats with a translation model: what the reader sees (the user's own words, or the reply translated). */
+  display_content?: string | null
   /** Group rooms: the profile that wrote this reply. Null for the user and in direct chats. */
   speaker_profile_id: number | null
   tool_calls: CodexChatToolCall[]
@@ -79,6 +82,7 @@ export type CodexChatMessageRecord = {
 export type ChatMessageAlternative = {
   routing?: ChatMessageRouting | null
   content: string
+  display_content?: string | null
   tool_calls: CodexChatToolCall[]
   created_at: string
   status: CodexChatMessageRecord['status']
@@ -147,10 +151,14 @@ function removeMessagesAfter(threadId: number, messageId: number) {
 export const CodexChatStore = {
   searchMessages(accountId: number | null, query: string) {
     return getUserSettingsDb().prepare(`SELECT m.id AS messageId, m.thread_id AS threadId, t.title, t.profile_id AS profileId,
-      m.role, m.created_date AS createdDate, substr(m.content, MAX(1, instr(lower(m.content), lower(?)) - 60), 220) AS excerpt
+      m.role, m.created_date AS createdDate,
+      CASE WHEN instr(lower(COALESCE(m.display_content, '')), lower(?)) > 0
+        THEN substr(m.display_content, MAX(1, instr(lower(m.display_content), lower(?)) - 60), 220)
+        ELSE substr(m.content, MAX(1, instr(lower(m.content), lower(?)) - 60), 220) END AS excerpt
       FROM codex_chat_messages m JOIN codex_chat_threads t ON t.id = m.thread_id
-      WHERE t.account_id IS ? AND instr(lower(m.content), lower(?)) > 0 ORDER BY m.id DESC LIMIT 50
-    `).all(query, accountId, query) as Array<{ messageId: number; threadId: number; title: string; profileId: number | null; role: 'user' | 'assistant'; createdDate: string; excerpt: string }>
+      WHERE t.account_id IS ? AND (instr(lower(m.content), lower(?)) > 0 OR instr(lower(COALESCE(m.display_content, '')), lower(?)) > 0)
+      ORDER BY m.id DESC LIMIT 50
+    `).all(query, query, query, accountId, query, query) as Array<{ messageId: number; threadId: number; title: string; profileId: number | null; role: 'user' | 'assistant'; createdDate: string; excerpt: string }>
   },
 
   listThreads(accountId: number | null) {
@@ -287,10 +295,10 @@ export const CodexChatStore = {
     invalidateContext(threadId, messageId)
   },
 
-  editUserMessage(threadId: number, messageId: number, content: string) {
+  editUserMessage(threadId: number, messageId: number, content: string, displayContent: string | null = null) {
     const db = getUserSettingsDb()
     db.transaction(() => {
-      const updated = db.prepare("UPDATE codex_chat_messages SET content = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, threadId, messageId)
+      const updated = db.prepare("UPDATE codex_chat_messages SET content = ?, display_content = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, displayContent, threadId, messageId)
       if (!updated.changes) throw new Error('User message not found')
       removeMessagesAfter(threadId, messageId)
       invalidateContext(threadId, messageId)
@@ -314,10 +322,10 @@ export const CodexChatStore = {
       const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
       if (!row) throw new Error('Assistant message not found')
       const alternatives = parseAlternatives(row.alternatives)
-      if (!alternatives.length) alternatives.push({ content: row.content, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error, finish_reason: row.finish_reason ?? null, routing: parseMessageRouting(row.routing) })
+      if (!alternatives.length) alternatives.push({ content: row.content, display_content: row.display_content ?? null, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error, finish_reason: row.finish_reason ?? null, routing: parseMessageRouting(row.routing) })
       alternatives.push(alternative)
-      db.prepare(`UPDATE codex_chat_messages SET alternatives = ?, active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?`)
-        .run(JSON.stringify(alternatives), alternatives.length - 1, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
+      db.prepare(`UPDATE codex_chat_messages SET alternatives = ?, active_alternative = ?, content = ?, display_content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?`)
+        .run(JSON.stringify(alternatives), alternatives.length - 1, alternative.content, alternative.display_content ?? null, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
       invalidateContext(threadId, messageId)
       if (alternative.routing !== undefined) CodexChatStore.setMessageRouting(threadId, messageId, alternative.routing)
     }).immediate()
@@ -329,8 +337,8 @@ export const CodexChatStore = {
       const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
       const alternative = row ? parseAlternatives(row.alternatives)[index] : undefined
       if (!alternative) throw new Error('Alternative not found')
-      db.prepare('UPDATE codex_chat_messages SET active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?')
-        .run(index, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
+      db.prepare('UPDATE codex_chat_messages SET active_alternative = ?, content = ?, display_content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?')
+        .run(index, alternative.content, alternative.display_content ?? null, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
       invalidateContext(threadId, messageId)
       CodexChatStore.setMessageRouting(threadId, messageId, alternative.routing ?? null)
     }).immediate()
@@ -342,18 +350,19 @@ export const CodexChatStore = {
     if (routing?.replyId) db.prepare('UPDATE chat_generation_links SET message_id = ? WHERE thread_id = ? AND reply_id = ?').run(messageId, threadId, routing.replyId)
   },
 
-  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = []) {
+  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'display_content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = []) {
     const db = getUserSettingsDb()
     return db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
       if (!thread) throw new Error('Chat thread not found')
       const attachments = FileStoreService.validateAttachments(fileOwnerKey(thread.account_id), fileIds)
       const result = db.prepare(`
-        INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error, speaker_profile_id, flags, finish_reason, media_attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO codex_chat_messages (thread_id, role, content, display_content, tool_calls, status, error, speaker_profile_id, flags, finish_reason, media_attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         message.thread_id,
         message.role,
         message.content,
+        message.display_content ?? null,
         message.tool_calls.length > 0 ? JSON.stringify(message.tool_calls) : null,
         message.status,
         message.error,

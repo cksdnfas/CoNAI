@@ -22,16 +22,22 @@ export const DEFAULT_REPLY_RESERVE_TOKENS = 2048
 
 const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 실제 대화는 그 다음부터야.'
 
-/** How to generate: free-form through the queue, or through the profile's generation presets only. */
+/**
+ * How to generate: free-form through the queue, or through the profile's generation presets only.
+ * Generation runs in the background: the job is linked to the reply at submission and the app attaches the finished
+ * image to the message by itself, so the model answers right away instead of blocking on wait_generation_job.
+ */
+const GENERATION_ASYNC_GUIDANCE = 'Do not wait for the job and do not poll it: the app attaches the finished image to this reply by itself, even after you finish. Write your reply right away in the same turn, without ids or links; you may say the image is on its way, but never describe it as finished or describe what it looks like.'
+
 export const GENERATION_GUIDANCE = {
   freeform: [
     'To generate, call submit_generation_job right away with the parameters it documents; do not search the library, list workflows or read past history first unless the user asks to reuse existing images or settings.',
-    'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
+    GENERATION_ASYNC_GUIDANCE,
     'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
   ],
   preset: [
     'To generate, call a generate_image tool right away (one tool per preset; pick by its description) and fill only the fields it asks for: the preset already holds the model, sizes, quality and style tags and the negative prompt, so never repeat those.',
-    'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
+    GENERATION_ASYNC_GUIDANCE,
     'No other generation route or workflow lookup is available to you.',
   ],
 }

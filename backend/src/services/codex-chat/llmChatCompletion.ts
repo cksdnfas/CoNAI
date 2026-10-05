@@ -87,9 +87,15 @@ function resolveConnection(providerName: string) {
   return {
     provider,
     config: parseConfig(provider.additional_config),
-    apiBase: provider.provider_type === 'llm_ollama' ? `${baseUrl.replace(/\/(api|v1)$/, '')}/v1` : baseUrl,
+    apiBase: toOpenAiApiBase(provider.provider_type, baseUrl),
     apiKey: ExternalApiProvider.getDecryptedKey(provider.provider_name, true),
   }
+}
+
+/** The OpenAI-compatible API base of a connection: Ollama serves it under `/v1`, the rest at the URL itself. */
+export function toOpenAiApiBase(providerType: string, baseUrl: string) {
+  const trimmed = baseUrl.trim().replace(/\/+$/, '')
+  return providerType === 'llm_ollama' ? `${trimmed.replace(/\/(api|v1)$/, '')}/v1` : trimmed
 }
 
 /**
@@ -120,6 +126,11 @@ export function resolveChatCompletionTarget(providerName: string, overrides: { m
 /** Model ids the connection lists at `GET {base}/models`, plus its default model. */
 export async function listChatCompletionModels(providerName: string) {
   const { config, apiBase, apiKey } = resolveConnection(providerName)
+  return { models: await fetchOpenAiCompatibleModels(apiBase, apiKey), defaultModel: readLlmConnectionConfig(config).defaultModel }
+}
+
+/** Model ids an OpenAI-compatible server lists at `{apiBase}/models`; for unsaved or edited connections too. */
+export async function fetchOpenAiCompatibleModels(apiBase: string, apiKey: string | null | undefined) {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (apiKey?.trim()) {
     headers.Authorization = `Bearer ${apiKey.trim()}`
@@ -130,7 +141,7 @@ export async function listChatCompletionModels(providerName: string) {
   }
   const json = await response.json() as { data?: Array<{ id?: unknown }> }
   const ids = (json.data ?? []).map((entry) => (typeof entry.id === 'string' ? entry.id : '')).filter(Boolean)
-  return { models: [...new Set(ids)], defaultModel: readLlmConnectionConfig(config).defaultModel }
+  return [...new Set(ids)]
 }
 
 function buildHeaders(target: ChatCompletionTarget) {

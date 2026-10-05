@@ -12,7 +12,7 @@ import { buildGenerationHistoryRequestSnapshot } from '../../services/generation
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
-import { assertChatNaiSampleCount, type McpRequestContext } from '../context';
+import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
 import { normalizeMcpWorkflowInputs, parseMcpMarkedFields } from './mcpComfyWorkflowService';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import {
@@ -128,7 +128,9 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
   }
 
   let workflowName: string | null = null;
-  let payload = request_payload ?? inputs ?? {};
+  // ComfyUI jobs keep `inputs` only as the source of `prompt_data`: spreading the raw inputs into the payload
+  // used to copy every node input (with its inline base64 media) next to the externalized prompt_data.
+  let payload = request_payload ?? (service_type === 'comfyui' ? {} : inputs ?? {});
   let routing: ReturnType<typeof resolveMcpGenerationRoutingInput>;
   if (service_type === 'comfyui') {
     if (!workflow_id) throw new Error('workflow_id is required for ComfyUI jobs');
@@ -152,12 +154,11 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
       markedFields,
       rawInputs,
     );
-    payload = {
+    // Externalized as a whole: a caller's request_payload may carry base64 outside prompt_data too.
+    payload = externalizeQueueInputDataUrls({
       ...payload,
-      prompt_data: externalizeQueueInputDataUrls(
-        normalizeMcpWorkflowInputs(markedFields, suppliedInputs),
-      ).value,
-    };
+      prompt_data: normalizeMcpWorkflowInputs(markedFields, suppliedInputs),
+    }).value;
   } else {
     routing = resolveMcpGenerationRoutingInput({
       serviceType: service_type,
@@ -236,7 +237,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.tool(
     'submit_generation_job',
-    'Submit a durable asynchronous generation job and return immediately with a job ID. For NovelAI (service_type="novelai") pass request_payload directly, no lookups needed: { prompt (required; comma-separated Danbooru-style tags), negative_prompt, model (default "nai-diffusion-4-5-curated"; also nai-diffusion-4-5-full, nai-diffusion-5-curated, nai-diffusion-5-full), width/height (multiples of 64: 832x1216 portrait, 1216x832 landscape, 1024x1024 square), steps (default 28), scale (default 5), sampler (default k_euler_ancestral), seed, n_samples (keep 1), characters: [{ prompt, uc, center_x, center_y }] for per-character prompts }. After submitting, call wait_generation_job with the returned job id instead of polling get_generation_job. For Codex, get_codex_generation_options documents all UI-equivalent parameters including model, reference generation, editing, masks and save options. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.',
+    `Submit a durable asynchronous generation job and return immediately with a job ID. For NovelAI (service_type="novelai") pass request_payload directly, no lookups needed: { prompt (required; comma-separated Danbooru-style tags), negative_prompt, model (default "nai-diffusion-4-5-curated"; also nai-diffusion-4-5-full, nai-diffusion-5-curated, nai-diffusion-5-full), width/height (multiples of 64: 832x1216 portrait, 1216x832 landscape, 1024x1024 square), steps (default 28), scale (default 5), sampler (default k_euler_ancestral), seed, n_samples (keep 1), characters: [{ prompt, uc, center_x, center_y }] for per-character prompts }. ${isChatMcpSource(context.source) ? 'The app attaches the result to your reply by itself; do not wait for or poll the job. ' : 'After submitting, call wait_generation_job with the returned job id instead of polling get_generation_job. '}For Codex, get_codex_generation_options documents all UI-equivalent parameters including model, reference generation, editing, masks and save options. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.`,
     {
       service_type: z.enum(['comfyui', 'novelai', 'codex']),
       workflow_id: z.number().int().positive().optional(),

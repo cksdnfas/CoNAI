@@ -6,7 +6,7 @@ import { registerImageGroupTools } from './tools/imageGroupTools';
 import { registerResourceTools } from './tools/resourceTools';
 import { registerPromptOrganizationTools } from './tools/promptOrganizationTools';
 import { registerGraphWorkflowTools } from './tools/graphWorkflowTools';
-import { ALL_MCP_HTTP_SCOPES, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, isChatGenerationTool, isMcpToolAllowed, type McpRequestContext } from './context';
+import { ALL_MCP_HTTP_SCOPES, CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, isChatGenerationTool, isChatMcpSource, isMcpToolAllowed, type McpRequestContext } from './context';
 import { registerChatGenerationTools } from './tools/chatGenerationTools';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
@@ -36,7 +36,8 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
         ? presetMode && context.scopes.includes('generate')
         : isMcpToolAllowed(toolName, context.scopes)
           && (!context.toolAllowlist || context.toolAllowlist.includes(toolName))
-          && !(presetMode && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName));
+          && !(presetMode && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName))
+          && !(isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName));
     if (!allowed) {
       return undefined;
     }

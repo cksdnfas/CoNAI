@@ -118,6 +118,12 @@ export type ChatProfile = {
   /** Null summarizes with the chat's own connection/model. */
   summaryProviderName: string | null
   summaryModel: string
+  /**
+   * Translation model: user messages go to the chat model in English and replies are shown in Korean, with the
+   * other text kept for the reader. Null: no translation. Empty model uses the connection's default.
+   */
+  translationProviderName: string | null
+  translationModel: string
   /** Model ↔ tool round trips allowed in one reply. */
   maxToolRounds: number
   /** LLM: the model can look at images (view_images results are sent to it). */
@@ -173,6 +179,8 @@ type ProfileRow = {
   summary_prompt: string | null
   summary_provider_name: string | null
   summary_model: string | null
+  translation_provider_name: string | null
+  translation_model: string | null
   max_tool_rounds: number | null
   chat_style: string | null
   background_image: string | null
@@ -291,6 +299,8 @@ function toProfile(row: ProfileRow): ChatProfile {
     summaryPrompt: row.summary_prompt ?? '',
     summaryProviderName: row.summary_provider_name,
     summaryModel: row.summary_model ?? '',
+    translationProviderName: row.translation_provider_name,
+    translationModel: row.translation_model ?? '',
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     visionEnabled: row.vision_enabled === 1,
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
@@ -414,6 +424,8 @@ function toColumns(input: ChatProfileInput) {
     summary_prompt: text(input.summaryPrompt, 4000),
     summary_provider_name: text(input.summaryProviderName, 200) || null,
     summary_model: text(input.summaryModel, MODEL_MAX_LENGTH) || null,
+    translation_provider_name: text(input.translationProviderName, 200) || null,
+    translation_model: text(input.translationModel, MODEL_MAX_LENGTH) || null,
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     vision_enabled: input.visionEnabled ? 1 : 0,
     chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),

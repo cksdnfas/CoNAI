@@ -638,6 +638,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // User messages: validated references to existing library media (no file copies).
     ['media_attachments', 'TEXT'],
     ['routing', 'TEXT'],
+    // Chats with a translation model: what the reader sees (the user's own words, or the reply translated).
+    // `content` stays what the model sees. Null: shown as `content`.
+    ['display_content', 'TEXT'],
   ]) {
     if (!hasColumn('codex_chat_messages', columnName)) {
       db.exec(`ALTER TABLE codex_chat_messages ADD COLUMN ${columnName} ${definition}`);
@@ -681,6 +684,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['vision_enabled', 'INTEGER'],
     ['reasoning_budget_tokens', 'INTEGER'],
     ['extra_params', 'TEXT'],
+    // Translation model (user input → English for the model, replies → Korean for display); null: no translation.
+    ['translation_provider_name', 'TEXT'],
+    ['translation_model', 'TEXT'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

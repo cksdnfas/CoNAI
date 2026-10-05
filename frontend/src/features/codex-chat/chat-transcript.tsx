@@ -1,5 +1,5 @@
 import { Fragment, memo, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Pencil, Reply, RotateCcw, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Languages, Pencil, Reply, RotateCcw, X } from 'lucide-react'
 import type { ChatMessageRouting } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
@@ -42,7 +42,7 @@ function ChatMessageEditor({ message, busy, onSave, onCancel }: {
   message: CodexChatMessage; busy: boolean; onSave: (id: number, content: string) => Promise<boolean>; onCancel: () => void
 }) {
   const { t } = useI18n()
-  const [content, setContent] = useState(message.content)
+  const [content, setContent] = useState(message.display_content ?? message.content)
   const save = () => { if (!busy && (content.trim() || message.attachments?.length || message.mediaAttachments?.length)) void onSave(message.id, content).then((accepted) => { if (accepted) onCancel() }) }
   return <div className="ml-auto w-full max-w-[85%] space-y-1">
     <Textarea autoFocus value={content} disabled={busy} rows={4} aria-label={t({ ko: '메시지 수정', en: 'Edit message' })} onChange={(event) => setContent(event.target.value)} onKeyDown={(event) => {
@@ -62,6 +62,10 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
 }) {
   const { t } = useI18n()
   const [tapped, setTapped] = useState(false)
+  // Chats with a translation model keep both texts; the reader's (display_content) shows first.
+  const [showOriginal, setShowOriginal] = useState(false)
+  const translated = typeof message.display_content === 'string' && message.display_content.length > 0
+  const content = translated && !showOriginal ? (message.display_content as string) : message.content
   const isUser = message.role === 'user'
   const lastReply = message.id === actions.lastReplyId
   const alternatives = message.alternatives ?? []
@@ -70,10 +74,11 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : (message.content || message.routing?.replyTo) && <CodexChatUserMessage content={message.content} routing={message.routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
-      : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={message.content} routing={message.routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
+        : (content || message.routing?.replyTo) && <CodexChatUserMessage content={content} routing={message.routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
+      : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={message.routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
     <div className={cn('mt-1 flex opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
+      {translated ? <IconButton size="icon-xs" variant="ghost" aria-pressed={showOriginal} className={cn(showOriginal && 'text-primary')} label={showOriginal ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })} onClick={() => setShowOriginal((current) => !current)}><Languages /></IconButton> : null}
     </div>
     {actions.canRewrite && (isUser || lastReply) && actions.editingId !== message.id ? (
       <div className={cn('mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
@@ -121,7 +126,7 @@ export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, 
     <ChatMessageFlags flags={turn.flags} />
     {/* Group rooms: one bubble per member answering now; none between members. */}
     {turn.replies
-      ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} recipientLabel={recipients(reply.routing)} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
-      : <CodexChatAssistantMessage content={turn.text} routing={turn.routing} recipientLabel={recipients(turn.routing)} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming {...look} />}
+      ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} recipientLabel={recipients(reply.routing)} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming translating={reply.translating} {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
+      : <CodexChatAssistantMessage content={turn.text} routing={turn.routing} recipientLabel={recipients(turn.routing)} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming translating={turn.translating} {...look} />}
   </>
 })

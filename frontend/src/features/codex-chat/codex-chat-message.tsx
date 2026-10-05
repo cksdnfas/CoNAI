@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, ImageOff, Scissors, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, withChatGenerationProgress } from '@conai/shared'
@@ -16,6 +16,7 @@ import type { ChatDisplayBlock, ChatEngine, CodexChatMediaInfo, CodexChatMessage
 import { requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
+import { getGenerationHistory } from '@/lib/api-image-generation-history'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import type { ImageRecord } from '@/types/image'
 import { DEFAULT_CHAT_APPEARANCE, type ChatAppearance, type ChatImageLayout } from './chat-appearance'
@@ -263,6 +264,32 @@ function HistoryThumb({ historyId, size, media, onOpen }: { historyId: number; s
   )
 }
 
+/**
+ * A job the reply submitted that has no history row yet (still queued, or the reply ended before it started). Keyed
+ * under the history prefix so the runtime event bridge refetches it the moment the queue or history changes; polling
+ * covers the stream fallback. Once the row exists the parent takes it over as an ordinary history result.
+ */
+function PendingJobThumb({ jobId, size, onResolved }: { jobId: number; size: ThumbSize; onResolved: (jobId: number, historyId: number) => void }) {
+  const { t } = useI18n()
+  const jobQuery = useQuery({
+    queryKey: ['image-generation-history', 'codex-chat-job', jobId] as const,
+    queryFn: () => getGenerationHistory(undefined, { queueJobId: jobId, limit: 1 }),
+    refetchInterval: (query: { state: { data?: { records: GenerationHistoryRecord[] } } }) => (query.state.data?.records.length ? false : HISTORY_POLL_MS),
+    retry: false,
+  })
+  const historyId = jobQuery.data?.records[0]?.id
+  useEffect(() => {
+    if (historyId !== undefined) onResolved(jobId, historyId)
+  }, [historyId, jobId, onResolved])
+
+  return (
+    <div className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-sm bg-surface-high text-xs text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
+      <Spinner size="md" />
+      {t({ ko: '생성 대기 중', en: 'Queued' })}
+    </div>
+  )
+}
+
 type ToolCallGroup = { tool: string; count: number; status: CodexChatToolCall['status']; summary: string | null }
 
 /** Agents poll (`get_generation_job` ×N); one row per tool keeps the reply readable. The last call speaks for the group. */
@@ -354,14 +381,16 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
  * another) followed by the ones it only looked up (a compact paged grid). An image in both groups shows large only.
  */
 function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; layout?: ChatImageLayout; media?: Record<string, CodexChatMediaInfo> }) {
-  const { t } = useI18n()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  // Jobs that were still queued when the message was stored, resolved to their history row on this client.
+  const [resolvedJobs, setResolvedJobs] = useState<Record<number, number>>({})
+  const resolveJob = useCallback((jobId: number, historyId: number) => setResolvedJobs((current) => (current[jobId] === historyId ? current : { ...current, [jobId]: historyId })), [])
   const resolvedCalls = withChatGenerationProgress(calls)
   const generatedCalls = resolvedCalls.filter((call) => call.generated ?? isCodexChatGenerationTool(call.tool))
   const foundCalls = resolvedCalls.filter((call) => !(call.generated ?? isCodexChatGenerationTool(call.tool)))
-  const historyIds = [...new Set(generatedCalls.flatMap((call) => call.historyIds))]
+  const pendingJobIds = [...new Set(generatedCalls.flatMap((call) => call.pendingJobIds ?? []))].filter((jobId) => resolvedJobs[jobId] === undefined)
+  const historyIds = [...new Set([...generatedCalls.flatMap((call) => call.historyIds), ...generatedCalls.flatMap((call) => (call.pendingJobIds ?? []).flatMap((jobId) => (resolvedJobs[jobId] !== undefined ? [resolvedJobs[jobId]] : [])))])]
   const foundHistoryIds = [...new Set(foundCalls.flatMap((call) => call.historyIds))].filter((historyId) => !historyIds.includes(historyId))
-  const pendingJobIds = [...new Set(generatedCalls.flatMap((call) => call.pendingJobIds ?? []))]
   // History rows resolve to library images too; skip hashes a history thumbnail already shows.
   const historyQueries = useQueries({ queries: historyIds.map((historyId) => historyQueryOptions(historyId)) })
   const foundHistoryQueries = useQueries({ queries: foundHistoryIds.map((historyId) => historyQueryOptions(historyId)) })
@@ -403,12 +432,7 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
         'gap-2',
         layout === 'column' ? 'flex flex-col items-start' : size === 'full' && count > 1 ? 'grid grid-cols-2' : 'flex flex-wrap',
       )}>
-        {pendingJobIds.map((jobId) => (
-          <div key={`j${jobId}`} className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-sm bg-surface-high text-xs text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
-            <Spinner size="md" />
-            {t({ ko: '생성 대기 중', en: 'Queued' })}
-          </div>
-        ))}
+        {pendingJobIds.map((jobId) => <PendingJobThumb key={`j${jobId}`} jobId={jobId} size={size} onResolved={resolveJob} />)}
         {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} media={media} onOpen={openLightbox} />)}
         {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={size} onOpen={() => openLightbox(hash)} />)}
       </div> : null}
@@ -481,14 +505,14 @@ export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content
 })
 
 /** While a reply is in progress: what it is doing right now, so a long chain of tool calls never looks finished. */
-function ActivityLine({ toolCalls }: { toolCalls: CodexChatToolCall[] }) {
+function ActivityLine({ toolCalls, translating = false }: { toolCalls: CodexChatToolCall[]; translating?: boolean }) {
   const { t } = useI18n()
   const runningTool = [...toolCalls].reverse().find((call) => call.status === 'running')
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
       <Spinner size="sm" />
       <span className="truncate">
-        {runningTool ? t({ ko: '도구 실행 중: {tool}', en: 'Running tool: {tool}' }, { tool: runningTool.tool }) : t({ ko: '작업 중…', en: 'Working…' })}
+        {translating ? t({ ko: '번역 중…', en: 'Translating…' }) : runningTool ? t({ ko: '도구 실행 중: {tool}', en: 'Running tool: {tool}' }, { tool: runningTool.tool }) : t({ ko: '작업 중…', en: 'Working…' })}
       </span>
     </div>
   )
@@ -558,7 +582,7 @@ const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 const AVATAR_COLUMN_PAD = { md: 'pl-13', lg: 'pl-17' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, finishReason = null, reasoning, streaming = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel }: {
   routing?: ChatMessageRouting | null
   recipientLabel?: string
   content: string
@@ -570,6 +594,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   /** Live reasoning text of a streaming LLM reply. */
   reasoning?: string
   streaming?: boolean
+  /** Streaming: the reply is written and being translated for display. */
+  translating?: boolean
   speaker?: ChatSpeaker | null
   /** Media kind of the images the thread references (videos play inline). */
   media?: Record<string, CodexChatMediaInfo>
@@ -631,7 +657,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const truncated = !streaming && status === 'completed' && finishReason === 'length'
   const footer = streaming || status === 'interrupted' || status === 'failed' || truncated ? (
     <div className="space-y-2">
-      {streaming ? <ActivityLine toolCalls={toolCalls} /> : null}
+      {streaming ? <ActivityLine toolCalls={toolCalls} translating={translating} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}
       {truncated ? (

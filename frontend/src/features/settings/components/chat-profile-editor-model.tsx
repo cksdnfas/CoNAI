@@ -17,7 +17,7 @@ import { CollapsibleRow } from './chat-profile-sections'
 export type ConnectionModels = { models: string[]; defaultModel: string | null }
 
 /** The engine and its knobs: connection, model, sampling, reasoning; then how much of the chat and the lore it is sent. */
-export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, connectionModels, summaryModels, codexModels }: {
+export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, connectionModels, summaryModels, translationModels, codexModels }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
@@ -25,6 +25,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   providersLoaded: boolean
   connectionModels: ConnectionModels | undefined
   summaryModels: ConnectionModels | undefined
+  translationModels: ConnectionModels | undefined
   codexModels: CodexModelOption[] | undefined
 }) {
   const { t } = useI18n()
@@ -138,6 +139,27 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
             </Field>
           </div>
         )}
+      </EditorGroup>
+
+      <EditorGroup label={t({ ko: '번역', en: 'Translation' })}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label={t({ ko: '번역 연결', en: 'Translation connection' })}>
+            <Select variant="settings" value={draft.translationProviderName ?? ''} onChange={(event) => patch({ translationProviderName: event.target.value || null, translationModel: '' })}>
+              <option value="">{t({ ko: '번역 안 함', en: 'No translation' })}</option>
+              {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
+            </Select>
+          </Field>
+          {draft.translationProviderName ? (
+            <Field label={t({ ko: '번역 모델', en: 'Translation model' })}>
+              <ConnectionModelSelect
+                value={draft.translationModel}
+                models={translationModels?.models ?? []}
+                defaultModel={translationModels?.defaultModel ?? null}
+                onChange={(translationModel) => patch({ translationModel })}
+              />
+            </Field>
+          ) : null}
+        </div>
       </EditorGroup>
 
       <EditorGroup label={t({ ko: '컨텍스트', en: 'Context' })}>

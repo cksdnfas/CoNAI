@@ -296,13 +296,14 @@ export function createGenerationQueueActionRoutes() {
         // PAYLOAD-3: base64 image inputs are written once to the content-addressed store and the
         // payload keeps only a reference. With `enqueue_count` up to 32, this turns "32 × 5MB in
         // the request body and in 32 rows" into "one 5MB file and 32 small rows".
-        normalizedRequestPayload = {
+        // The whole payload is walked, not just prompt_data: a client may send base64 beside it as well.
+        normalizedRequestPayload = externalizeQueueInputDataUrls({
 
           ...request_payload,
 
-          prompt_data: externalizeQueueInputDataUrls(normalizeWorkflowNumericPromptValues(workflowMarkedFields, promptData)).value,
+          prompt_data: normalizeWorkflowNumericPromptValues(workflowMarkedFields, promptData),
 
-        }
+        }).value
 
       } catch (error) {
 

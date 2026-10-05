@@ -313,6 +313,9 @@ export interface ChatProfile {
   summaryPrompt: string
   summaryProviderName: string | null
   summaryModel: string
+  /** Translation model: messages go to the chat model in English, replies are shown in Korean. Null: none. */
+  translationProviderName: string | null
+  translationModel: string
   maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
@@ -384,14 +387,17 @@ export interface CodexChatThread {
 
 export interface CodexChatMessage {
   routing?: ChatMessageRouting | null
-  alternatives: Array<{ content: string; tool_calls: CodexChatToolCall[]; created_at: string; status: 'completed' | 'failed' | 'interrupted'; error: string | null; finish_reason?: string | null }>
+  alternatives: Array<{ content: string; display_content?: string | null; tool_calls: CodexChatToolCall[]; created_at: string; status: 'completed' | 'failed' | 'interrupted'; error: string | null; finish_reason?: string | null }>
   active_alternative: number
   attachments?: StoredFileEntry[]
   mediaAttachments?: ChatMediaAttachment[]
   id: number
   thread_id: number
   role: 'user' | 'assistant'
+  /** What the model saw (English in chats with a translation model). */
   content: string
+  /** Chats with a translation model: what the reader sees (their own words, or the reply in Korean); shown first. */
+  display_content?: string | null
   /** Group rooms: the profile that wrote this reply. */
   speaker_profile_id: number | null
   tool_calls: CodexChatToolCall[]

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { FlaskConical, LoaderCircle, Save, Trash2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { IconButton } from '@/components/ui/icon-button'
@@ -10,6 +10,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   createExternalApiProvider,
   deleteExternalApiProvider,
+  listExternalApiLlmModels,
   testExternalApiProvider,
   updateExternalApiProvider,
   type ExternalApiProviderRecord,
@@ -22,6 +23,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { SettingsSwitchRow } from './settings-switch-row'
+import { ConnectionModelSelect } from './chat-profile-editor-fields'
 import { SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
 import {
   LLM_CONNECTIONS_TABLE_GRID,
@@ -111,15 +113,29 @@ export function LlmPresetListItem({
   )
 }
 
+const EMPTY_MODELS: string[] = []
+
+/** `value` after it has stayed unchanged for `delayMs`, so typing a URL does not probe the server on every keystroke. */
+function useSettledValue<T>(value: T, delayMs: number) {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSettled(value), delayMs)
+    return () => window.clearTimeout(timer)
+  }, [delayMs, value])
+  return settled
+}
+
 function LlmConnectionFormFields({
   draft,
   mode,
   apiKeyMasked,
+  models,
   onChange,
 }: {
   draft: LlmConnectionDraft
   mode: 'create' | 'edit'
   apiKeyMasked?: string
+  models: string[]
   onChange: (patch: Partial<LlmConnectionDraft>) => void
 }) {
   const { t } = useI18n()
@@ -150,11 +166,11 @@ function LlmConnectionFormFields({
       </Field>
 
       <Field label={t('llmConnectionsTab.defaultModel')}>
-        <Input
-          variant="settings"
+        <ConnectionModelSelect
           value={draft.defaultModel}
-          onChange={(event) => onChange({ defaultModel: event.target.value })}
-          placeholder={draft.providerType === 'llm_ollama' ? t({ ko: '예: qwen2.5:7b', en: 'e.g. qwen2.5:7b' }) : t({ ko: '예: gpt-4.1-mini, local-model', en: 'e.g. gpt-4.1-mini, local-model' })}
+          models={models}
+          defaultModel={draft.providerType === 'llm_ollama' ? t({ ko: '예: qwen2.5:7b', en: 'e.g. qwen2.5:7b' }) : t({ ko: '예: gpt-4.1-mini, local-model', en: 'e.g. gpt-4.1-mini, local-model' })}
+          onChange={(defaultModel) => onChange({ defaultModel })}
         />
       </Field>
 
@@ -286,6 +302,31 @@ export function LlmConnectionEditorModal({
     setDraft(provider ? buildProviderDraft(provider) : buildEmptyDraft())
   }, [isOpen, provider])
 
+  // The server's model list follows the URL, key and type being edited; a saved key is reused when none is typed.
+  const probe = useSettledValue(
+    { providerType: draft.providerType, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey, providerName: provider?.provider_name ?? '' },
+    600,
+  )
+  const modelsQuery = useQuery({
+    queryKey: ['llm-connection-models', probe.providerType, probe.baseUrl, probe.apiKey, probe.providerName],
+    queryFn: () => listExternalApiLlmModels({
+      provider_type: probe.providerType,
+      base_url: probe.baseUrl,
+      api_key: probe.apiKey || undefined,
+      provider_name: probe.providerName || undefined,
+    }),
+    enabled: isOpen && probe.providerType !== 'general' && probe.baseUrl.length > 0,
+    retry: false,
+    staleTime: 60_000,
+  })
+  const models = modelsQuery.data ?? EMPTY_MODELS
+
+  // A connection without a default model takes the first listed one, as the profile editor does for its fields.
+  useEffect(() => {
+    if (!isOpen || models.length === 0) return
+    setDraft((current) => (current.defaultModel ? current : { ...current, defaultModel: models[0] }))
+  }, [isOpen, models])
+
   const createMutation = useMutation({
     mutationFn: async () => {
       await createExternalApiProvider({
@@ -394,6 +435,7 @@ export function LlmConnectionEditorModal({
           draft={draft}
           mode={isEditMode ? 'edit' : 'create'}
           apiKeyMasked={provider?.api_key_masked}
+          models={models}
           onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
         />
       </ModalBody>

@@ -3,6 +3,7 @@ import { routeParam } from './routeParam';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ExternalApiService } from '../services/externalApiService';
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
+import { fetchOpenAiCompatibleModels, toOpenAiApiBase } from '../services/codex-chat/llmChatCompletion';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth, requirePermission } from '../middleware/authMiddleware';
 import { hasConfiguredAuth } from './auth-route-helpers';
@@ -283,6 +284,29 @@ router.patch('/providers/:name/toggle', asyncHandler(async (req: Request, res: R
     data: updatedProvider,
     message: `Provider ${is_enabled ? 'enabled' : 'disabled'} successfully`
   });
+}));
+
+/**
+ * Model ids an LLM server lists, from the connection editor's current (possibly unsaved) values.
+ * POST /api/external-api/llm-models
+ * Body: { provider_type, base_url, api_key?, provider_name? } — without api_key, the stored key of provider_name is used.
+ */
+router.post('/llm-models', requirePermission('page.settings.view'), asyncHandler(async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { provider_type?: unknown; base_url?: unknown; api_key?: unknown; provider_name?: unknown };
+  const providerType = body.provider_type;
+  const baseUrl = typeof body.base_url === 'string' ? body.base_url.trim() : '';
+  if ((providerType !== 'llm_openai_compatible' && providerType !== 'llm_ollama') || !baseUrl) {
+    res.status(400).json({ success: false, error: 'provider_type (llm) and base_url are required' });
+    return;
+  }
+  const typedKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
+  const providerName = typeof body.provider_name === 'string' ? body.provider_name.trim() : '';
+  const apiKey = typedKey || (providerName ? ExternalApiProvider.getDecryptedKey(providerName, true) : null);
+  try {
+    res.json({ success: true, data: { models: await fetchOpenAiCompatibleModels(toOpenAiApiBase(providerType, baseUrl), apiKey) } });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'Could not list models' });
+  }
 }));
 
 /**

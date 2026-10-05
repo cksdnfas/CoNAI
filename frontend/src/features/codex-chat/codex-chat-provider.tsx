@@ -255,6 +255,9 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         } else if (event.type === 'routing') {
           if (event.profileId !== undefined) updateReply(event.profileId, (reply) => ({ ...reply, routing: event.routing }))
           else setLiveTurn((current) => current ? { ...current, routing: event.routing } : current)
+        } else if (event.type === 'translating') {
+          if (event.profileId !== undefined) updateReply(event.profileId, (reply) => ({ ...reply, translating: true }))
+          else setLiveTurn((current) => current ? { ...current, translating: true } : current)
         } else if (isGroup && event.type === 'done') {
           putMessage(event.message)
           // New jobs can finish while other members are still answering.

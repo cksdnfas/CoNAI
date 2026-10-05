@@ -11,6 +11,7 @@ import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, pickChatGreeting, type ChatProfile } from './chatProfiles'
+import { translateReply, translateUserInput } from './chatTranslation'
 import { ChatUserProfileStore, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
@@ -218,14 +219,21 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   }
 }
 
-function finishTurn(turn: LlmTurn, status: CodexChatMessageRecord['status'], error: string | null) {
+/** Stores the reply (translated for the reader first, while the turn still counts as running) and announces it. */
+async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChatMessageRecord['status'], error: string | null) {
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
   const content = stripThinking(turn.text).trim()
   const finishReason = status === 'completed' ? turn.finishReason : null
+  let displayContent: string | null = null
+  if (status === 'completed' && content && profile.translationProviderName) {
+    emit(turn, { type: 'translating' })
+    displayContent = await translateReply(profile, content, turn.controller.signal)
+  }
   const messageId = turn.replacingMessageId ?? CodexChatStore.addMessage({
     thread_id: turn.threadId,
     role: 'assistant',
     content,
+    display_content: displayContent,
     tool_calls: toolCalls,
     status,
     error,
@@ -235,7 +243,7 @@ function finishTurn(turn: LlmTurn, status: CodexChatMessageRecord['status'], err
   if (turn.replacingMessageId) {
     // A connection failure must not replace a usable answer with an empty failed alternative.
     if (status === 'completed' || content || toolCalls.length) {
-      CodexChatStore.addAlternative(turn.threadId, messageId, { content, tool_calls: toolCalls, status, error, finish_reason: finishReason, routing: turn.delivery?.routing, created_at: new Date().toISOString() })
+      CodexChatStore.addAlternative(turn.threadId, messageId, { content, display_content: displayContent, tool_calls: toolCalls, status, error, finish_reason: finishReason, routing: turn.delivery?.routing, created_at: new Date().toISOString() })
     } else if (error) {
       emit(turn, { type: 'error', message: error })
     }
@@ -268,9 +276,9 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   const history = CodexChatStore.listMessages(thread.id).filter((entry) => entry.id !== replacingMessageId)
   turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }))
   void runReply(turn, requester, updatedThread, profile)
-    .then(() => finishTurn(turn, turn.controller.signal.aborted ? 'interrupted' : 'completed', null), (error: unknown) => {
+    .then(() => finishTurn(turn, profile, turn.controller.signal.aborted ? 'interrupted' : 'completed', null), (error: unknown) => {
       const aborted = turn.controller.signal.aborted
-      return finishTurn(turn, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error))
+      return finishTurn(turn, profile, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error))
     })
     .then(resolveFinished, rejectFinished)
     .finally(() => {
@@ -368,15 +376,18 @@ export const LlmChatService = {
       throw new LlmChatError('메시지를 입력해줘.')
     }
     const routing = userReplyRouting(thread, replyToMessageId)
+    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+    // The model reads the message in English; the reader keeps their own words.
+    const modelText = await translateUserInput(profile, trimmed)
     return startReply(requester, thread, profile, listener, () => {
-      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }
     })
   },
 
-  rewriteMessage(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
+  async rewriteMessage(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
@@ -390,10 +401,13 @@ export const LlmChatService = {
     if (!regenerate && !content.trim() && !message.attachments?.length && !message.mediaAttachments?.length) throw new LlmChatError('메시지를 입력해줘.')
     // Resolve configuration before deleting any later messages.
     resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: profileGenerationOptions(profile) })
+    const edited = regenerate ? null : content.trim()
+    const modelText = edited ? await translateUserInput(profile, edited) : null
+    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     return startReply(requester, thread, profile, listener, () => {
       if (regenerate) CodexChatStore.prepareRegeneration(thread.id, messageId)
-      else CodexChatStore.editUserMessage(thread.id, messageId, content.trim())
-      return { type: 'rewind', mode: regenerate ? 'regenerate' : 'edit', message: { ...message, content: regenerate ? message.content : content.trim() } }
+      else CodexChatStore.editUserMessage(thread.id, messageId, modelText ?? (edited as string), modelText ? edited : null)
+      return { type: 'rewind', mode: regenerate ? 'regenerate' : 'edit', message: regenerate ? message : { ...message, content: modelText ?? (edited as string), display_content: modelText ? edited : null } }
     }, regenerate ? messageId : undefined)
   },
 

@@ -107,6 +107,16 @@ export async function deleteExternalApiProvider(providerName: string) {
   })
 }
 
+/** Model ids the LLM server at these (possibly unsaved) connection values lists. */
+export async function listExternalApiLlmModels(input: { provider_type: ExternalApiProviderType; base_url: string; api_key?: string; provider_name?: string }) {
+  const response = await fetchJson<{ success: boolean; data: { models: string[] } }>('/api/external-api/llm-models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return response.data.models
+}
+
 export async function testExternalApiProvider(providerName: string) {
   return await fetchJson<ExternalApiConnectionTestResponse>(`/api/external-api/providers/${encodeURIComponent(providerName)}/test`, {
     method: 'POST',

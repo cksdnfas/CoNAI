@@ -24,6 +24,7 @@ import { buildChatStyleGuidance } from './chatStyle'
 import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseBlockEdits, usableBlocks } from './chatBlockState'
 import { authorNoteText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE } from './llmChatContext'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
+import { translateReply, translateUserInput } from './chatTranslation'
 import { selectLoreEntries } from './chatLorebook'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
@@ -111,7 +112,11 @@ type TurnState = {
   finished: Promise<CodexChatMessageRecord>
   resolveFinished: (message: CodexChatMessageRecord) => void
   /** Group rooms: stores the reply with its speaker. Direct chats store it as the thread's reply. */
-  persist?: (reply: GroupReplyResult) => CodexChatMessageRecord
+  persist?: (reply: GroupReplyResult) => Promise<CodexChatMessageRecord>
+  /** Direct chats with a translation model: the reply translated for the reader (null keeps it as written). */
+  translate?: (content: string) => Promise<string | null>
+  /** Set once the turn is being stored, so a second completion signal does not store it twice. */
+  finishing?: boolean
 }
 
 type Session = {
@@ -286,7 +291,7 @@ function closeSession(session: Session, reason: string) {
   clearIdleTimer(session)
   revokeCodexChatMcpToken(session.token)
   for (const turn of session.activeTurns.values()) {
-    finishTurn(session, turn, 'failed', `Codex 세션이 종료됐어 (${reason}).`)
+    void finishTurn(session, turn, 'failed', `Codex 세션이 종료됐어 (${reason}).`)
   }
   session.client.close()
 }
@@ -321,11 +326,15 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
   }
 }
 
-function finishTurn(session: Session, turn: TurnState, status: CodexChatMessageRecord['status'], error: string | null) {
-  if (session.activeTurns.get(turn.codexThreadId) !== turn) {
+/**
+ * Stores the turn's reply and announces it. The reply is translated for the reader first (while the turn still
+ * counts as running, so nothing else starts on the thread meanwhile).
+ */
+async function finishTurn(session: Session, turn: TurnState, status: CodexChatMessageRecord['status'], error: string | null) {
+  if (session.activeTurns.get(turn.codexThreadId) !== turn || turn.finishing) {
     return
   }
-  session.activeTurns.delete(turn.codexThreadId)
+  turn.finishing = true
 
   const finalTexts = [...turn.agentMessages.entries()].filter(([itemId]) => !turn.commentaryItems.has(itemId)).map(([, text]) => text)
   const content = (finalTexts.length > 0 ? finalTexts : [...turn.agentMessages.values()])
@@ -334,10 +343,19 @@ function finishTurn(session: Session, turn: TurnState, status: CodexChatMessageR
     .join('\n\n')
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
   const reply = { content, tool_calls: toolCalls, status, error }
-  const message = turn.persist ? turn.persist(reply) : (() => {
-    const messageId = CodexChatStore.addMessage({ thread_id: turn.chatThreadId, role: 'assistant', ...reply, routing: turn.delivery?.routing })
-    return CodexChatStore.listMessages(turn.chatThreadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
-  })()
+  let message: CodexChatMessageRecord
+  if (turn.persist) {
+    message = await turn.persist(reply)
+  } else {
+    let displayContent: string | null = null
+    if (status === 'completed' && content && turn.translate) {
+      emit(turn, { type: 'translating' })
+      displayContent = await turn.translate(content)
+    }
+    const messageId = CodexChatStore.addMessage({ thread_id: turn.chatThreadId, role: 'assistant', ...reply, display_content: displayContent, routing: turn.delivery?.routing })
+    message = CodexChatStore.listMessages(turn.chatThreadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
+  }
+  session.activeTurns.delete(turn.codexThreadId)
   turn.delivery?.close()
   turn.controller?.abort()
   emit(turn, { type: 'done', message })
@@ -438,7 +456,7 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
   if (method === 'turn/completed') {
     const completed = (params.turn ?? {}) as { status?: string; error?: { message?: string } | null }
     const status = completed.status === 'interrupted' ? 'interrupted' : completed.status === 'failed' ? 'failed' : 'completed'
-    finishTurn(session, turn, status, status === 'failed' ? completed.error?.message ?? turn.lastError ?? 'Codex turn failed' : null)
+    void finishTurn(session, turn, status, status === 'failed' ? completed.error?.message ?? turn.lastError ?? 'Codex turn failed' : null)
   }
 }
 
@@ -658,7 +676,7 @@ export async function runCodexGroupReply(params: {
   buildInput: (lore: string) => string
   signal: AbortSignal
   emit: (event: CodexChatStreamEvent) => void
-  persist: (reply: GroupReplyResult) => CodexChatMessageRecord
+  persist: (reply: GroupReplyResult) => Promise<CodexChatMessageRecord>
 }): Promise<CodexChatMessageRecord> {
   const { requester, threadId, profile } = params
   assertChatAvailable(requester)
@@ -693,7 +711,7 @@ export async function runCodexGroupReply(params: {
   params.signal.addEventListener('abort', interrupt, { once: true })
   try {
     if (params.signal.aborted) {
-      finishTurn(session, turn, 'interrupted', null)
+      void finishTurn(session, turn, 'interrupted', null)
     } else {
       try {
         // Read after ensureCodexThread: a new Codex thread starts with no lore in its memory.
@@ -715,7 +733,7 @@ export async function runCodexGroupReply(params: {
         if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
         if (params.signal.aborted) interrupt()
       } catch (error) {
-        finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
+        void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
       }
     }
     return await turn.finished
@@ -894,7 +912,7 @@ export const CodexChatService = {
     const active = findActiveTurn(threadId)
     if (active) {
       await CodexChatService.interrupt(requester, threadId).catch(() => undefined)
-      finishTurn(active.session, active.turn, 'interrupted', null)
+      void finishTurn(active.session, active.turn, 'interrupted', null)
     }
     CodexChatStore.deleteThread(threadId)
     deleteCodexRollout(requester, thread.codex_thread_id)
@@ -948,9 +966,13 @@ export const CodexChatService = {
         resolveFinished,
       }
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      // The model reads the message in English; the reader keeps their own words.
+      const modelText = await translateUserInput(profile, trimmed)
+      if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       turn.userMessageId = userMessageId
+      if (profile.translationProviderName) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal)
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {
@@ -975,7 +997,7 @@ export const CodexChatService = {
         const state = pendingBlockState(current, profile, history, sent)
         const directive = buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user))
         const reference = referenceBlock([persona.text, lore.text, note.text, state.text])
-        const input = [reference, `${REPLY_GUIDANCE}\nCurrent room_id: ${threadId}.`, buildReplyContext(history, routing), chatContentWithAttachments(trimmed, attachments, mediaAttachments), directive].filter(Boolean).join('\n\n')
+        const input = [reference, `${REPLY_GUIDANCE}\nCurrent room_id: ${threadId}.`, buildReplyContext(history, routing), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
@@ -986,7 +1008,7 @@ export const CodexChatService = {
         const keys = [...persona.keys, ...lore.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
       } catch (error) {
-        finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
+        void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
       }
 
       return await turn.finished
