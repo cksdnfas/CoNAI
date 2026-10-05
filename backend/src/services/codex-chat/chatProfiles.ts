@@ -6,6 +6,8 @@ import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type Cha
 import { ChatLorebookStore, normalizeLorebookIds } from './chatLorebook'
 import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
 import { ChatProfileError } from './chatProfileError'
+import { ChatToolPresetStore } from './chatToolPresets'
+import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
 
 const NAME_MAX_LENGTH = 60
 const MODEL_MAX_LENGTH = 200
@@ -94,9 +96,15 @@ export type ChatProfile = {
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
+  /** The shared tool preset (chat_tool_presets) whose scopes and allowlist apply; null keeps the profile's own below. */
+  toolPresetId: number | null
+  /** Read-only: the linked preset's name (a preset that went missing reads as null and the profile's own grant applies). */
+  toolPresetName?: string | null
   mcpScopes: ChatScope[]
   /** Only these tools (within the scopes); null offers every tool the scopes allow. */
   toolAllowlist: string[] | null
+  /** Generation presets (chat_generation_presets) the profile draws with; any linked withholds free-form generation. */
+  generationPresetIds: number[]
   /** LLM: characters of one tool result the model sees within a reply. */
   toolOutputLimit: number
   /** LLM context: recent turns sent with each request, capped by `contextTokens` when set. */
@@ -156,6 +164,8 @@ type ProfileRow = {
   max_tokens: number | null
   mcp_enabled: number
   mcp_scopes: string
+  tool_preset_id: number | null
+  generation_preset_ids: string | null
   context_turns: number | null
   context_tokens: number | null
   summary_enabled: number | null
@@ -242,6 +252,8 @@ function toProfile(row: ProfileRow): ChatProfile {
   const storedSections = parseJsonArray(row.prompt_sections)
   const allowlist = parseJsonArray(row.tool_allowlist)
   const blockIds = normalizeBlockIds(row.block_ids)
+  // A linked preset's grant replaces the profile's own columns; a preset that no longer exists leaves them in force.
+  const preset = row.tool_preset_id === null ? null : ChatToolPresetStore.find(row.tool_preset_id)
   return {
     id: row.id,
     name: row.name,
@@ -266,9 +278,12 @@ function toProfile(row: ProfileRow): ChatProfile {
     temperature: row.temperature,
     maxTokens: row.max_tokens,
     mcpEnabled: row.mcp_enabled === 1,
-    mcpScopes: parseScopes(row.mcp_scopes),
-    toolAllowlist: allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
+    toolPresetId: preset ? preset.id : null,
+    toolPresetName: preset ? preset.name : null,
+    mcpScopes: preset ? preset.scopes : parseScopes(row.mcp_scopes),
+    toolAllowlist: preset ? preset.toolAllowlist : allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
     toolOutputLimit: row.tool_output_limit ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
+    generationPresetIds: ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(row.generation_preset_ids)),
     contextTurns: row.context_turns ?? CHAT_PROFILE_DEFAULTS.contextTurns,
     contextTokens: row.context_tokens,
     summaryEnabled: row.summary_enabled === 1,
@@ -385,11 +400,13 @@ function toColumns(input: ChatProfileInput) {
     temperature: optionalNumber(input.temperature, { min: 0, max: 2 }, false),
     max_tokens: optionalNumber(input.maxTokens, { min: 1, max: 1_000_000 }, true),
     mcp_enabled: input.mcpEnabled ? 1 : 0,
+    tool_preset_id: input.toolPresetId === null || input.toolPresetId === undefined ? null : ChatToolPresetStore.existing(input.toolPresetId),
     mcp_scopes: JSON.stringify(parseScopes(input.mcpScopes ?? ['read'])),
     tool_allowlist: Array.isArray(input.toolAllowlist)
       ? JSON.stringify([...new Set(input.toolAllowlist.filter((name): name is string => typeof name === 'string' && /^[a-z0-9_]{1,64}$/.test(name)))])
       : null,
     tool_output_limit: optionalNumber(input.toolOutputLimit, CHAT_PROFILE_LIMITS.toolOutputLimit, true) ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
+    generation_preset_ids: JSON.stringify(ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(input.generationPresetIds))),
     context_turns: optionalNumber(input.contextTurns, CHAT_PROFILE_LIMITS.contextTurns, true) ?? CHAT_PROFILE_DEFAULTS.contextTurns,
     context_tokens: optionalNumber(input.contextTokens, CHAT_PROFILE_LIMITS.contextTokens, true),
     summary_enabled: input.summaryEnabled ? 1 : 0,

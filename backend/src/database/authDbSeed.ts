@@ -31,7 +31,11 @@ const DEFAULT_PERMISSION_GROUPS = [
 
 const DEFAULT_PERMISSION_CATALOG = [
   { permissionKey: 'page.files.view', resource: 'page.files', action: 'view', description: 'Browse and read your private file store.' },
-  { permissionKey: 'files.manage', resource: 'files', action: 'manage', description: 'Upload, organize, rename and delete your private files.' },
+  { permissionKey: 'files.upload', resource: 'files', action: 'upload', description: 'Upload text, image, video, audio and document files into your private file store.' },
+  { permissionKey: 'files.organize', resource: 'files', action: 'organize', description: 'Create folders, rename and move your private files.' },
+  { permissionKey: 'files.delete', resource: 'files', action: 'delete', description: 'Delete your private files and folders.' },
+  { permissionKey: 'files.upload.any', resource: 'files', action: 'upload.any', description: 'Upload executables and other restricted file types.' },
+  { permissionKey: 'files.browse.all', resource: 'files', action: 'browse.all', description: 'Browse and manage every account\'s file store.' },
   {
     permissionKey: 'auth.guest.create',
     resource: 'auth',
@@ -313,8 +317,41 @@ export function seedAccessControlDefaults(db: Database.Database): void {
     );
   }
 
+  splitLegacyFilesManagePermission(db);
   grantAllCatalogPermissionsToAdminGroup(db);
   applyAnonymousGuestSignupDefault(db);
+}
+
+const FILES_MANAGE_SPLIT_SEED_KEY = 'files_manage_split_v1';
+
+/**
+ * `files.manage` used to cover upload, organize and delete at once. Every group that held it keeps
+ * all three abilities through the split keys, then the legacy key is removed from the catalog.
+ */
+function splitLegacyFilesManagePermission(db: Database.Database): void {
+  const alreadyApplied = db.prepare('SELECT seed_key FROM auth_seed_state WHERE seed_key = ?').get(FILES_MANAGE_SPLIT_SEED_KEY);
+  if (alreadyApplied) {
+    return;
+  }
+  const legacy = db.prepare('SELECT id FROM auth_permissions WHERE permission_key = ?').get('files.manage') as { id: number } | undefined;
+  const replacements = db.prepare(`SELECT id FROM auth_permissions WHERE permission_key IN ('files.upload', 'files.organize', 'files.delete')`).all() as Array<{ id: number }>;
+  const apply = db.transaction(() => {
+    if (legacy) {
+      const groups = db.prepare('SELECT group_id FROM auth_group_permissions WHERE permission_id = ? AND allowed = 1').all(legacy.id) as Array<{ group_id: number }>;
+      const grant = db.prepare(`
+        INSERT INTO auth_group_permissions (group_id, permission_id, allowed, created_at, updated_at)
+        VALUES (?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(group_id, permission_id) DO UPDATE SET allowed = 1, updated_at = CURRENT_TIMESTAMP
+      `);
+      for (const group of groups) {
+        for (const permission of replacements) grant.run(group.group_id, permission.id);
+      }
+      db.prepare('DELETE FROM auth_group_permissions WHERE permission_id = ?').run(legacy.id);
+      db.prepare('DELETE FROM auth_permissions WHERE id = ?').run(legacy.id);
+    }
+    db.prepare('INSERT OR IGNORE INTO auth_seed_state (seed_key, applied_at) VALUES (?, CURRENT_TIMESTAMP)').run(FILES_MANAGE_SPLIT_SEED_KEY);
+  });
+  apply();
 }
 
 /**

@@ -1,4 +1,7 @@
 import type { ChatProfile } from './chatProfiles'
+import type { ChatMessageRouting } from '@conai/shared'
+import { buildReplyContext } from './chatReplyContext'
+import { messageAddress } from './chatReplies'
 import { chatContentWithAttachments } from './chatAttachments'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
@@ -9,65 +12,10 @@ import { DEFAULT_USER_NAME, userPersonaForThread, type ChatUserPersona } from '.
 
 /** @deprecated the chat's user profile names the user; see `userPersonaForThread`. */
 export const USER_SPEAKER_NAME = DEFAULT_USER_NAME
-const EVERYONE_WORDS = ['모두', 'all', 'everyone']
 const OTHER_TOOL_NOTE_LENGTH = 200
-
 type Member = Pick<ChatProfile, 'id' | 'name'>
-
-/** Fenced and inline code, and quoted lines, are not addressed to anyone. */
-function addressableText(text: string) {
-  return text
-    .replace(/```[\s\S]*?(```|$)/g, ' ')
-    .replace(/`[^`\n]*`/g, ' ')
-    .split('\n')
-    .filter((line) => !/^\s*>/.test(line))
-    .join('\n')
-}
-
-/**
- * Names a member answers to: its full name, and for a name of several words its first word when no other member
- * shares it (`@Ochako` for "Ochako Uraraka"). Lower case.
- */
-function memberAliases(members: Member[]) {
-  const aliases: Array<{ alias: string; id: number }> = members.filter((member) => member.name.trim()).map((member) => ({ alias: member.name.trim().toLowerCase(), id: member.id }))
-  const firstWords = new Map<string, number[]>()
-  for (const member of members) {
-    const words = member.name.trim().toLowerCase().split(/\s+/)
-    if (words.length > 1 && words[0].length >= 2) firstWords.set(words[0], [...(firstWords.get(words[0]) ?? []), member.id])
-  }
-  for (const [word, ids] of firstWords) {
-    if (ids.length === 1 && !aliases.some((entry) => entry.alias === word)) aliases.push({ alias: word, id: ids[0] })
-  }
-  return aliases.sort((a, b) => b.alias.length - a.alias.length)
-}
-
-/** The member a name (with or without `@`) means, by the same aliases as mentions. */
-export function resolveMemberName(name: string, members: Member[]) {
-  const wanted = name.trim().replace(/^@/, '').toLowerCase()
-  return memberAliases(members).find((entry) => entry.alias === wanted)?.id ?? null
-}
-
-/**
- * Members addressed with `@name`, in the order they appear; `@모두` (`@all`) adds every member in room order. The
- * longest matching name wins, and a name must not run into more ASCII word characters (`@카이야` still names 카이,
- * Korean particles follow names directly). `exclude` (the writer) is never returned.
- */
-export function parseMentions(text: string, members: Member[], exclude?: number) {
-  const source = addressableText(text)
-  const aliases = memberAliases(members)
-  const result: number[] = []
-  const add = (id: number) => { if (id !== exclude && !result.includes(id)) result.push(id) }
-  for (let index = source.indexOf('@'); index >= 0; index = source.indexOf('@', index + 1)) {
-    if (index > 0 && /[A-Za-z0-9_.]/.test(source[index - 1])) continue // e-mail addresses
-    const rest = source.slice(index + 1)
-    const lower = rest.toLowerCase()
-    const everyone = EVERYONE_WORDS.find((word) => lower.startsWith(word) && !/^[A-Za-z0-9_]/.test(rest.slice(word.length)))
-    const member = aliases.find((entry) => lower.startsWith(entry.alias) && !/^[A-Za-z0-9_]/.test(rest.slice(entry.alias.length)))
-    if (member) add(member.id)
-    else if (everyone) members.forEach((entry) => add(entry.id))
-  }
-  return result
-}
+export { parseMentions, resolveMemberName } from '@conai/shared'
+import { memberAliases } from '@conai/shared'
 
 function speakerName(message: CodexChatMessageRecord, names: Map<number, string>, user: ChatUserPersona) {
   if (message.role === 'user') return user.name
@@ -78,7 +26,7 @@ function speakerName(message: CodexChatMessageRecord, names: Map<number, string>
 function transcriptLine(message: CodexChatMessageRecord, names: Map<number, string>, user: ChatUserPersona) {
   const text = message.role === 'user' ? chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments) : message.content
   const tools = message.tool_calls.map((call) => `(도구 ${call.tool}${call.summary ? `: ${call.summary.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`)
-  return [`[${speakerName(message, names, user)}] ${text}`.trim(), ...tools].join('\n')
+  return [`[${speakerName(message, names, user)}; ${messageAddress(message)}] ${text}`.trim(), ...tools].join('\n')
 }
 
 /** The `@handles` that wake `member` (its full name, and its first word when that is unique), exactly as parsed. */
@@ -97,8 +45,8 @@ function memberList(thread: CodexChatThreadRecord, members: Member[], self: Memb
     `- ${user.name}: the human user (shown as \`[${user.name}]\`). Never @-mention.`,
     ...members.map((member) => {
       const role = member.id === thread.profile_id ? ' (representative)' : ''
-      if (member.id === self.id) return `- ${member.name}${role}: you.`
-      return `- ${member.name}${role}: mention as ${mentionHandles(member, members).join(' or ')}`
+      if (member.id === self.id) return `- ${member.name}${role} (profile_id ${member.id}): you.`
+      return `- ${member.name}${role} (profile_id ${member.id}): mention as ${mentionHandles(member, members).join(' or ')}`
     }),
   ].join('\n')
 }
@@ -120,6 +68,8 @@ export function buildGroupHeader(params: { thread: CodexChatThreadRecord; member
   const others = members.some((member) => member.id !== self.id)
   const rules = [
     `- Speak only as ${self.name}. Never write lines for the other members or the user, and never start your reply with a \`[Name]\` or \`Name:\` header.`,
+    '- Your reply is automatically addressed to the sender of the message you are answering. A character recipient answers after you finish, without another @mention. To finish the exchange, call chat_reply_to with to:["user"] to report to the human, or to:["room"] for a closing announcement. Do not bounce acknowledgements back and forth.',
+    '- Use chat_reply_to(message_id, to:[profile_id]) to quote an earlier message and choose recipients. Explicit tool recipients override mentions. Never forge From/To headers in the body. Calls are subject to the room chain limit; if rejected, tell the user instead of claiming the member will answer.',
     ...(others
       ? [
         '- @-mention another member only when you need them to reply. Write the mention handle exactly as listed above, character for character: no translation, transliteration, nickname or spacing change. A handle written any other way calls nobody.',
@@ -152,6 +102,7 @@ export function hiddenHistoryNote(thread: Pick<CodexChatThreadRecord, 'id'>, hid
  * user turns before the end.
  */
 type GroupLlmContext = {
+  routing?: ChatMessageRouting
   profile: ChatProfile
   thread: CodexChatThreadRecord
   members: Member[]
@@ -203,7 +154,8 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   // The flags the user had on for the message this run answers reach every member answering it; the request ends
   // with the exact handles, where small models actually look before writing a mention.
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id))
-  const directive = [hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
+  const reference = buildReplyContext(params.messages, params.routing, { group: true, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })
+  const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
   return appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], directive)
 }
 
@@ -212,6 +164,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
  * its own memory), at most `windowLimit` messages; older parts are reachable with the room history tools.
  */
 export function buildGroupCodexInput(params: {
+  routing?: ChatMessageRouting
   thread: CodexChatThreadRecord
   members: Member[]
   self: Member
@@ -231,6 +184,7 @@ export function buildGroupCodexInput(params: {
   return [
     buildGroupHeader({ thread, members, self, user }),
     hiddenHistoryNote(thread, missed.length - shown.length),
+    buildReplyContext(params.messages, params.routing, { group: true, visibleIds: new Set(shown.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) }),
     lore ? `[참고 설정]\n${lore}\n[/참고 설정]` : '',
     `[${lastSeenMessageId === null ? '지금까지의 대화' : '네가 마지막으로 말한 뒤의 대화'}]\n${shown.map((message) => transcriptLine(message, names, user)).join('\n\n')}`,
     directive,

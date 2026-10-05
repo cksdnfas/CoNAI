@@ -48,6 +48,7 @@ frontend/.playwright-dev.log
 !backend/test/
 backend/test/*
 !backend/test/chat-regressions.test.ts
+!backend/test/chat-replies.test.ts
 
 # Uploaded images
 uploads/

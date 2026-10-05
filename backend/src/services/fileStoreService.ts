@@ -1,9 +1,10 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import type { FileStoreListing, StoredFileEntry, StoredFileText } from '@conai/shared';
+import type { FileStoreListing, StoredFileEntry, StoredFileOwner, StoredFileText } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
-import { ensureFileStoreDirectories, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
+import { AuthAccount } from '../models/AuthAccount';
+import { ensureFileOwnerDirectory, ensureFileStoreDirectories, migrateFileStoreLayout, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
 
 export class FileStoreError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -15,11 +16,37 @@ type FileRow = {
 };
 
 export const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.json', '.jsonl', '.csv', '.tsv', '.yaml', '.yml', '.xml', '.html', '.htm', '.svg', '.css', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.py', '.sh', '.sql', '.log', '.ini', '.toml', '.srt', '.vtt']);
+/** Extensions anyone with `files.upload` may store. Everything else (executables, archives, unknown) needs `files.upload.any`. */
+export const DEFAULT_UPLOAD_EXTENSIONS: ReadonlySet<string> = new Set([
+  ...TEXT_EXTENSIONS,
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.bmp', '.tif', '.tiff', '.heic', '.heif', '.ico', '.psd',
+  '.mp4', '.m4v', '.mov', '.webm', '.mkv', '.avi', '.wmv', '.ogv',
+  '.mp3', '.wav', '.flac', '.ogg', '.oga', '.opus', '.m4a', '.aac', '.weba',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.hwp', '.hwpx', '.odt', '.ods', '.odp', '.rtf', '.epub',
+]);
 const MAX_DEPTH = 64;
 export const MAX_CHAT_ATTACHMENTS = 20;
 
 export function fileOwnerKey(accountId: number | null): string {
   return accountId === null ? 'bootstrap' : `account:${accountId}`;
+}
+
+/** Owner keys travel in query strings for cross-account browsing; only the two canonical shapes are accepted. */
+export function parseOwnerKey(value: unknown): string {
+  if (typeof value !== 'string' || !/^(bootstrap|account:[1-9]\d{0,9})$/.test(value)) throw new FileStoreError('잘못된 계정 키야.');
+  return value;
+}
+
+/** Judged by extension only; the uploader's MIME is never trusted. A missing extension counts as restricted. */
+export function isRestrictedFileName(name: string): boolean {
+  const extension = path.extname(name).toLowerCase();
+  return !extension || !DEFAULT_UPLOAD_EXTENSIONS.has(extension);
+}
+
+export function assertFileTypeAllowed(name: string, allowAnyType: boolean): void {
+  if (!allowAnyType && isRestrictedFileName(name)) {
+    throw new FileStoreError(`이 형식은 올릴 수 없어: ${name}. 텍스트·이미지·영상·오디오·문서만 가능하고, 그 외는 별도 권한이 필요해.`, 403);
+  }
 }
 
 function toEntry(row: FileRow): StoredFileEntry {
@@ -144,16 +171,18 @@ export const FileStoreService = {
   },
 
   /** The caller owns staged files; failed transactions remove all newly allocated blobs. */
-  upload(owner: string, parentId: string | null, files: Express.Multer.File[]) {
+  upload(owner: string, parentId: string | null, files: Express.Multer.File[], allowAnyType = false) {
     ensureFileStoreDirectories();
+    ensureFileOwnerDirectory(owner);
     const allocated: string[] = [];
     try {
       return getUserSettingsDb().transaction(() => files.map((file) => {
         const name = uploadedName(file.originalname);
+        assertFileTypeAllowed(name, allowAnyType);
         const id = crypto.randomBytes(16).toString('hex');
         const entry = insert(owner, parentId, name, 'file', id, file.size,
           /^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+$/.test(file.mimetype) ? file.mimetype : 'application/octet-stream');
-        const target = storedFilePath(id);
+        const target = storedFilePath(owner, id);
         // The DB ID is reserved in this transaction, and staging shares the destination volume.
         if (fs.existsSync(target)) throw new FileStoreError('파일 저장 ID가 충돌했어. 다시 시도해줘.', 409);
         fs.renameSync(file.path, target);
@@ -166,10 +195,12 @@ export const FileStoreService = {
     }
   },
 
-  rename(owner: string, id: string, value: unknown) {
+  /** Renaming is the other way a restricted extension could appear, so files obey the same type policy as uploads. */
+  rename(owner: string, id: string, value: unknown, allowAnyType = false) {
     const name = normalizeName(value);
     return getUserSettingsDb().transaction(() => {
       const row = requireRow(owner, id);
+      if (row.kind === 'file' && name.toLowerCase() !== row.name_key) assertFileTypeAllowed(name, allowAnyType);
       assertUnique(owner, row.parent_id, name, id);
       getUserSettingsDb().prepare('UPDATE stored_file_entries SET name = ?, name_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(name, name.toLowerCase(), id);
       return toEntry(requireRow(owner, id));
@@ -221,11 +252,11 @@ export const FileStoreService = {
   /** Tombstones make interrupted filesystem deletion retryable without reviving a half-deleted file. */
   purgeDeleted() {
     const db = getUserSettingsDb();
-    const rows = db.prepare(`SELECT id, kind FROM stored_file_entries WHERE deleted_at IS NOT NULL LIMIT 200`).all() as Array<{ id: string; kind: string }>;
+    const rows = db.prepare(`SELECT id, kind, owner_key FROM stored_file_entries WHERE deleted_at IS NOT NULL LIMIT 200`).all() as Array<{ id: string; kind: string; owner_key: string }>;
     for (const row of rows) {
       try {
         if (row.kind === 'file') {
-          fs.rmSync(storedFilePath(row.id), { force: true });
+          fs.rmSync(storedFilePath(row.owner_key, row.id), { force: true });
           fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
         }
         db.prepare('DELETE FROM stored_file_entries WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stored_file_entries WHERE parent_id = ?)').run(row.id, row.id);
@@ -239,9 +270,38 @@ export const FileStoreService = {
     const entry = this.get(owner, id);
     if (entry.kind !== 'file') throw new FileStoreError('파일을 선택해줘.');
     ensureFileStoreDirectories();
-    const filePath = storedFilePath(id);
+    const filePath = storedFilePath(owner, id);
     if (!fs.existsSync(filePath)) throw new FileStoreError('원본 파일을 찾을 수 없어.', 404);
     return { entry, filePath };
+  },
+
+  /** Every account plus any owner key that still holds files (deleted accounts, bootstrap), for cross-account browsing. */
+  owners(selfOwner: string): StoredFileOwner[] {
+    const usage = new Map((getUserSettingsDb().prepare(`SELECT owner_key, SUM(kind = 'file') AS files, COALESCE(SUM(size), 0) AS bytes
+      FROM stored_file_entries WHERE deleted_at IS NULL GROUP BY owner_key`).all() as Array<{ owner_key: string; files: number; bytes: number }>)
+      .map((row) => [row.owner_key, row]));
+    const result: StoredFileOwner[] = [];
+    const seen = new Set<string>();
+    const push = (ownerKey: string, account: { id: number; username: string; account_type: 'admin' | 'guest'; status: 'active' | 'disabled' } | null) => {
+      if (seen.has(ownerKey)) return;
+      seen.add(ownerKey);
+      const used = usage.get(ownerKey);
+      result.push({
+        ownerKey, accountId: account?.id ?? null, username: account?.username ?? null, accountType: account?.account_type ?? null,
+        status: account ? account.status : ownerKey === 'bootstrap' ? 'bootstrap' : 'deleted',
+        fileCount: used?.files ?? 0, totalSize: used?.bytes ?? 0, self: ownerKey === selfOwner,
+      });
+    };
+    for (const account of AuthAccount.listAll()) push(fileOwnerKey(account.id), account);
+    for (const ownerKey of usage.keys()) push(ownerKey, null);
+    if (selfOwner === 'bootstrap') push('bootstrap', null);
+    return result.sort((left, right) => Number(right.self) - Number(left.self) || (left.username ?? '').localeCompare(right.username ?? '') || left.ownerKey.localeCompare(right.ownerKey));
+  },
+
+  /** One-time move from the flat blob layout into per-owner directories; safe to run on every boot. */
+  migrateLayout() {
+    const lookup = getUserSettingsDb().prepare('SELECT owner_key FROM stored_file_entries WHERE id = ?');
+    return migrateFileStoreLayout((id) => (lookup.get(id) as { owner_key: string } | undefined)?.owner_key ?? null);
   },
 
   async readText(owner: string, id: string, offset = 0, limit = 16000): Promise<StoredFileText> {

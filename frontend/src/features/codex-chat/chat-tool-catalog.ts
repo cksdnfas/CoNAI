@@ -1,0 +1,140 @@
+import type { useI18n } from '@/i18n'
+import type { ChatScope, ChatToolInfo } from '@/lib/api-codex-chat'
+
+type TranslateFn = ReturnType<typeof useI18n>['t']
+type Copy = { ko: string; en: string }
+
+/**
+ * How the tool picker shows the MCP tools: one group level under each scope, a plain label per tool and a
+ * description in the UI language. Tools the server adds later land in a scope's "other" group with their server
+ * description, so nothing is hidden by an outdated catalog.
+ */
+export type ChatToolGroupId =
+  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'backups'
+  | 'image-gen' | 'workflow-run'
+  | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops'
+  | 'other'
+
+const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
+  { id: 'images', scope: 'read', label: { ko: '이미지 보기', en: 'Images' } },
+  { id: 'history', scope: 'read', label: { ko: '생성 기록·작업', en: 'History and jobs' } },
+  { id: 'prompts', scope: 'read', label: { ko: '프롬프트', en: 'Prompts' } },
+  { id: 'workflows', scope: 'read', label: { ko: '워크플로·서버', en: 'Workflows and servers' } },
+  { id: 'files', scope: 'read', label: { ko: '파일 보관함', en: 'File store' } },
+  { id: 'emoticons', scope: 'read', label: { ko: '이모티콘', en: 'Emoticons' } },
+  { id: 'backups', scope: 'read', label: { ko: '백업', en: 'Backups' } },
+  { id: 'image-gen', scope: 'generate', label: { ko: '이미지 생성', en: 'Image generation' } },
+  { id: 'workflow-run', scope: 'generate', label: { ko: '워크플로 실행', en: 'Workflow runs' } },
+  { id: 'image-groups', scope: 'organize', label: { ko: '이미지 그룹', en: 'Image groups' } },
+  { id: 'prompt-groups', scope: 'organize', label: { ko: '프롬프트 정리', en: 'Prompt organizing' } },
+  { id: 'file-ops', scope: 'organize', label: { ko: '파일 변경', en: 'File changes' } },
+  { id: 'emoticon-ops', scope: 'organize', label: { ko: '이모티콘 설정', en: 'Emoticon setup' } },
+]
+
+const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }> = {
+  search_images: { group: 'images', label: { ko: '이미지 검색', en: 'Search images' }, ko: '프롬프트 글, 도구, 모델, 크기, 날짜, 그룹으로 이미지·영상을 찾아.' },
+  search_images_by_tags: { group: 'images', label: { ko: '태그로 이미지 검색', en: 'Search by tags' }, ko: '자동 태그(WD Tagger)로 이미지를 찾아. 캐릭터·등급 필터도 돼.' },
+  get_image_metadata: { group: 'images', label: { ko: '이미지 정보', en: 'Image metadata' }, ko: '이미지 하나의 프롬프트·모델·크기 같은 상세 정보를 읽어.' },
+  view_images: { group: 'images', label: { ko: '이미지 보기', en: 'View images' }, ko: '이미지나 보관함 파일을 작은 미리보기로 실제로 봐. 비전 모델에서만 의미 있어.' },
+  list_image_groups: { group: 'images', label: { ko: '이미지 그룹 목록', en: 'List image groups' }, ko: '라이브러리의 그룹(폴더)과 경로, 이미지 수를 나열해.' },
+  get_image_groups: { group: 'images', label: { ko: '이미지가 속한 그룹', en: 'Groups of an image' }, ko: '이미지 하나가 어느 그룹에 들어 있는지 알려줘.' },
+  get_generation_history: { group: 'history', label: { ko: '생성 기록', en: 'Generation history' }, ko: '이미지 생성 기록을 서비스·상태로 걸러 읽어.' },
+  get_generation_history_request: { group: 'history', label: { ko: '생성 요청 내용', en: 'History request' }, ko: '생성 결과 뒤에 저장된 프롬프트·모델·설정을 그대로 읽어.' },
+  get_generation_job: { group: 'history', label: { ko: '작업 상태', en: 'Job status' }, ko: '생성 작업 하나의 상태와 결과 기록을 읽어.' },
+  wait_generation_job: { group: 'history', label: { ko: '작업 완료 대기', en: 'Wait for a job' }, ko: '생성 작업이 끝날 때까지 기다렸다가 결과를 돌려줘.' },
+  get_generation_artifacts: { group: 'history', label: { ko: '결과물 받기', en: 'Job artifacts' }, ko: '생성 작업의 결과 파일과 다운로드 링크를 받아.' },
+  refresh_artifact_download: { group: 'history', label: { ko: '다운로드 링크 갱신', en: 'Refresh download link' }, ko: '결과물의 다운로드 링크를 새로 발급해.' },
+  search_prompts: { group: 'prompts', label: { ko: '프롬프트 검색', en: 'Search prompts' }, ko: '저장된 프롬프트를 글로 찾아.' },
+  get_most_used_prompts: { group: 'prompts', label: { ko: '자주 쓴 프롬프트', en: 'Most used prompts' }, ko: '사용 횟수가 많은 프롬프트를 순서대로 읽어.' },
+  list_prompt_groups: { group: 'prompts', label: { ko: '프롬프트 그룹 목록', en: 'List prompt groups' }, ko: '프롬프트 그룹과 각 그룹의 개수를 나열해.' },
+  get_prompt_group_structure: { group: 'prompts', label: { ko: '프롬프트 그룹 구조', en: 'Prompt group tree' }, ko: '프롬프트 그룹의 전체 계층과 미분류 개수를 읽어.' },
+  get_unclassified_prompts: { group: 'prompts', label: { ko: '미분류 프롬프트', en: 'Unclassified prompts' }, ko: '아직 그룹에 안 들어간 프롬프트를 묶음으로 읽어.' },
+  get_prompts_in_group: { group: 'prompts', label: { ko: '그룹의 프롬프트', en: 'Prompts in a group' }, ko: '특정 그룹에 든 프롬프트를 모두 읽어.' },
+  list_prompt_presets: { group: 'prompts', label: { ko: '프롬프트 프리셋', en: 'Prompt presets' }, ko: '저장된 프롬프트 프리셋과 전체 글을 읽어.' },
+  search_wildcards: { group: 'prompts', label: { ko: '와일드카드 검색', en: 'Search wildcards' }, ko: '와일드카드를 이름으로 찾거나 계층을 둘러봐.' },
+  list_custom_dropdown_lists: { group: 'prompts', label: { ko: '드롭다운 목록', en: 'Dropdown lists' }, ko: 'LoRA·체크포인트 같은 사용자 목록의 이름과 개수를 읽어.' },
+  search_custom_dropdown_items: { group: 'prompts', label: { ko: '드롭다운 항목 검색', en: 'Search dropdown items' }, ko: '사용자 목록 안에서 LoRA·체크포인트 같은 항목을 찾아.' },
+  list_workflows: { group: 'workflows', label: { ko: 'ComfyUI 워크플로 목록', en: 'ComfyUI workflows' }, ko: '등록된 ComfyUI 워크플로를 나열해.' },
+  get_workflow_details: { group: 'workflows', label: { ko: 'ComfyUI 워크플로 상세', en: 'ComfyUI workflow details' }, ko: '워크플로 하나의 입력 항목과 설정을 읽어.' },
+  list_graph_workflows: { group: 'workflows', label: { ko: '그래프 워크플로 목록', en: 'Graph workflows' }, ko: '생성 탭에서 직접 만든 워크플로를 나열해.' },
+  get_graph_workflow_details: { group: 'workflows', label: { ko: '그래프 워크플로 상세', en: 'Graph workflow details' }, ko: '직접 만든 워크플로의 입력 형식을 읽어.' },
+  get_graph_workflow_execution: { group: 'workflows', label: { ko: '그래프 워크플로 결과', en: 'Graph workflow run' }, ko: '직접 만든 워크플로 실행의 상태와 결과를 읽어.' },
+  list_comfyui_servers: { group: 'workflows', label: { ko: 'ComfyUI 서버 목록', en: 'ComfyUI servers' }, ko: '설정된 ComfyUI 서버와 상태, 라우팅 태그를 나열해.' },
+  get_generation_routing_options: { group: 'workflows', label: { ko: '생성 라우팅 옵션', en: 'Routing options' }, ko: '어느 서버로 생성이 가는지와 고를 수 있는 대상을 설명해.' },
+  get_codex_generation_options: { group: 'workflows', label: { ko: 'Codex 생성 옵션', en: 'Codex generation options' }, ko: 'Codex 이미지 생성의 요청 형식과 모델을 읽어.' },
+  list_files: { group: 'files', label: { ko: '파일 목록', en: 'List files' }, ko: '채팅 파일 보관함의 폴더와 파일을 둘러봐.' },
+  get_file_info: { group: 'files', label: { ko: '파일 정보', en: 'File info' }, ko: '보관함 파일 하나의 이름·크기·종류를 읽어.' },
+  read_file_text: { group: 'files', label: { ko: '파일 내용 읽기', en: 'Read file text' }, ko: '보관함의 텍스트 파일을 잘라 가며 읽어.' },
+  list_emoticon_groups: { group: 'emoticons', label: { ko: '이모티콘 그룹 목록', en: 'Emoticon groups' }, ko: '이모티콘 그룹과 이미지·키워드 수를 나열해.' },
+  list_emoticons: { group: 'emoticons', label: { ko: '이모티콘 목록', en: 'List emoticons' }, ko: '그룹 안의 이모티콘 이미지와 키워드를 읽어.' },
+  list_backups: { group: 'backups', label: { ko: '백업 목록', en: 'List backups' }, ko: '프롬프트 백업 파일을 나열해.' },
+  submit_generation_job: { group: 'image-gen', label: { ko: '생성 작업 접수', en: 'Submit generation job' }, ko: 'NovelAI·ComfyUI·Codex 생성을 백그라운드 작업으로 접수해. 생성의 기본 도구야.' },
+  generate_nai: { group: 'image-gen', label: { ko: 'NovelAI 바로 생성', en: 'Generate with NovelAI' }, ko: 'NovelAI로 바로 생성하고 끝날 때까지 기다려. 한 번에 한 장만.' },
+  generate_comfyui: { group: 'image-gen', label: { ko: 'ComfyUI 바로 생성', en: 'Generate with ComfyUI' }, ko: 'ComfyUI 워크플로로 바로 생성하고 끝날 때까지 기다려.' },
+  generate_comfyui_all_servers: { group: 'image-gen', label: { ko: '모든 서버에서 생성', en: 'Generate on all servers' }, ko: '활성 ComfyUI 서버 전부에서 한 번씩 생성해.' },
+  cancel_generation_job: { group: 'image-gen', label: { ko: '생성 작업 취소', en: 'Cancel generation job' }, ko: '진행 중인 생성 작업을 취소해.' },
+  execute_graph_workflow: { group: 'workflow-run', label: { ko: '그래프 워크플로 실행', en: 'Run graph workflow' }, ko: '직접 만든 워크플로를 실행하고 결과를 기다려.' },
+  resolve_image_group_path: { group: 'image-groups', label: { ko: '그룹 경로 찾기·만들기', en: 'Resolve group path' }, ko: '"프로젝트/효과" 같은 경로를 그룹으로 바꿔. 없으면 만들 수도 있어.' },
+  add_images_to_group: { group: 'image-groups', label: { ko: '그룹에 이미지 추가', en: 'Add images to group' }, ko: '이미지를 그룹에 넣어. 다른 그룹 소속은 그대로 둬.' },
+  move_images_between_groups: { group: 'image-groups', label: { ko: '그룹 간 이미지 이동', en: 'Move images between groups' }, ko: '이미지를 한 그룹에서 다른 그룹으로 옮겨.' },
+  remove_images_from_group: { group: 'image-groups', label: { ko: '그룹에서 이미지 빼기', en: 'Remove images from group' }, ko: '그룹 소속만 풀어. 파일은 지우지 않아.' },
+  create_prompt_group: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 만들기', en: 'Create prompt group' }, ko: '프롬프트 그룹을 하나 만들어. 하위 그룹도 돼.' },
+  batch_create_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 여러 개 만들기', en: 'Create prompt groups' }, ko: '프롬프트 그룹을 한 번에 여러 개 만들어.' },
+  create_prompt_preset: { group: 'prompt-groups', label: { ko: '프롬프트 프리셋 저장', en: 'Save prompt preset' }, ko: '프롬프트를 이름 붙여 프리셋으로 저장해. 같은 이름은 덮어쓰지 않아.' },
+  assign_prompts_to_group: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 지정', en: 'Assign prompts to group' }, ko: '프롬프트를 그룹에 넣거나 미분류로 되돌려.' },
+  move_prompts_between_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 이동', en: 'Move prompts between groups' }, ko: '프롬프트를 한 그룹에서 다른 그룹으로 옮겨.' },
+  create_file_folder: { group: 'file-ops', label: { ko: '폴더 만들기', en: 'Create folder' }, ko: '파일 보관함에 폴더를 만들어.' },
+  rename_file: { group: 'file-ops', label: { ko: '이름 바꾸기', en: 'Rename file' }, ko: '보관함의 파일이나 폴더 이름을 바꿔.' },
+  move_files: { group: 'file-ops', label: { ko: '파일 이동', en: 'Move files' }, ko: '보관함의 파일·폴더를 다른 폴더로 옮겨.' },
+  delete_files: { group: 'file-ops', label: { ko: '파일 삭제', en: 'Delete files' }, ko: '보관함의 파일이나 빈 폴더를 영구히 지워. 채팅에 붙은 파일은 보호돼.' },
+  set_emoticon_keywords: { group: 'emoticon-ops', label: { ko: '이모티콘 키워드 설정', en: 'Set emoticon keywords' }, ko: '그룹 안 이미지의 이모티콘 키워드를 정해.' },
+  set_emoticon_group: { group: 'emoticon-ops', label: { ko: '이모티콘 그룹 지정', en: 'Set emoticon group' }, ko: '그룹을 이모티콘 그룹으로 만들거나 되돌려.' },
+}
+
+export type ChatToolEntry = {
+  name: string
+  scope: ChatScope
+  /** What the picker shows in place of the tool name. */
+  label: string
+  /** Tooltip, in the UI language (English falls back to the server's own description). */
+  description: string
+}
+
+export type ChatToolGroup = { id: ChatToolGroupId; scope: ChatScope; label: string; tools: ChatToolEntry[] }
+
+/** The server's tools (chat scopes only) as groups under each scope, in catalog order; unknown tools close each scope. */
+export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolGroup[] {
+  const groups = new Map<string, ChatToolGroup>()
+  for (const group of GROUPS) groups.set(group.id, { id: group.id, scope: group.scope, label: t(group.label), tools: [] })
+  const other = new Map<ChatScope, ChatToolGroup>()
+  for (const tool of tools) {
+    if (tool.scope === null) continue
+    const entry = TOOLS[tool.name]
+    const label = entry ? t(entry.label) : tool.name
+    const description = entry ? t({ ko: entry.ko, en: tool.description || entry.label.en }) : tool.description
+    const target = entry && groups.get(entry.group)?.scope === tool.scope ? groups.get(entry.group) : null
+    if (target) {
+      target.tools.push({ name: tool.name, scope: tool.scope, label, description })
+      continue
+    }
+    let fallback = other.get(tool.scope)
+    if (!fallback) {
+      fallback = { id: 'other', scope: tool.scope, label: t({ ko: '기타', en: 'Other' }), tools: [] }
+      other.set(tool.scope, fallback)
+    }
+    fallback.tools.push({ name: tool.name, scope: tool.scope, label, description })
+  }
+  const ordered: ChatToolGroup[] = []
+  for (const scope of ['read', 'generate', 'organize'] as ChatScope[]) {
+    for (const group of groups.values()) if (group.scope === scope && group.tools.length > 0) ordered.push(group)
+    const fallback = other.get(scope)
+    if (fallback) ordered.push(fallback)
+  }
+  return ordered
+}
+
+/** The picker label of one tool, for summaries outside the picker. */
+export function chatToolLabel(name: string, t: TranslateFn) {
+  const entry = TOOLS[name]
+  return entry ? t(entry.label) : name
+}

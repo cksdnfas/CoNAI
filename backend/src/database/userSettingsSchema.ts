@@ -490,6 +490,31 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Tool presets: a named MCP scope + tool allowlist; chat profiles link one by id (llm_chat_profiles.tool_preset_id).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_tool_presets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      scopes TEXT NOT NULL DEFAULT '["read"]',
+      tool_allowlist TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Generation presets: a fixed NAI setup or ComfyUI workflow whose remaining fields the chat model fills; profiles link them by id.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_generation_presets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      instruction TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL DEFAULT 'nai',
+      config TEXT NOT NULL DEFAULT '{}',
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Chat flags: an account's own instructions, switched on per chat and added to the messages sent while on.
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_flags (
@@ -612,11 +637,19 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['finish_reason', 'TEXT'],
     // User messages: validated references to existing library media (no file copies).
     ['media_attachments', 'TEXT'],
+    ['routing', 'TEXT'],
   ]) {
     if (!hasColumn('codex_chat_messages', columnName)) {
       db.exec(`ALTER TABLE codex_chat_messages ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_generation_links (
+    job_id INTEGER PRIMARY KEY,
+    thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+    reply_id TEXT NOT NULL,
+    message_id INTEGER REFERENCES codex_chat_messages(id) ON DELETE CASCADE
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_generation_reply ON chat_generation_links(thread_id, reply_id)');
   // Group members: this member's reply token cap in the room (null: the room's cap, then the profile's).
   if (!hasColumn('chat_group_members', 'max_tokens')) {
     db.exec('ALTER TABLE chat_group_members ADD COLUMN max_tokens INTEGER');
@@ -641,6 +674,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['prompt_sections', 'TEXT'],
     ['tool_allowlist', 'TEXT'],
     ['tool_output_limit', 'INTEGER'],
+    // JSON ids of the generation presets (chat_generation_presets) the profile draws with.
+    ['generation_preset_ids', 'TEXT'],
     ['chat_style', 'TEXT'],
     ['background_image', 'TEXT'],
     ['vision_enabled', 'INTEGER'],
@@ -653,6 +688,11 @@ export function createUserSettingsSchema(db: Database.Database): void {
     }
   }
   migrateProfileBlocksToSharedTable(db);
+  // The preset column arriving is the one-time signal to fold existing per-profile tool grants into shared presets.
+  if (!hasColumn('llm_chat_profiles', 'tool_preset_id')) {
+    db.exec('ALTER TABLE llm_chat_profiles ADD COLUMN tool_preset_id INTEGER');
+    migrateProfileToolsToPresets(db);
+  }
 
   // Migrate workflows table
   if (!hasColumn('workflows', 'is_public_page')) {
@@ -1175,6 +1215,52 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   console.log('  ✅ User settings tables created (19 tables + indexes)');
 
+}
+
+/**
+ * One-time fold of each MCP-enabled profile's scopes + tool allowlist into chat_tool_presets: profiles sharing a
+ * combination share one preset, a combination matching a starter preset links that, and the three starter presets
+ * exist afterwards whether or not a profile used them. Runs when the tool_preset_id column is first added.
+ */
+function migrateProfileToolsToPresets(db: Database.Database): void {
+  const starters: Array<{ name: string; scopes: string[]; tools: string[] | null }> = [
+    { name: '검색만', scopes: ['read'], tools: ['search_images', 'search_images_by_tags', 'get_image_metadata', 'view_images', 'list_image_groups', 'search_prompts', 'list_prompt_presets'] },
+    { name: '그림 그리기', scopes: ['read', 'generate'], tools: ['search_images', 'view_images', 'list_prompt_presets', 'search_wildcards', 'list_workflows', 'get_workflow_details', 'get_generation_routing_options', 'submit_generation_job', 'wait_generation_job', 'get_generation_job', 'get_generation_artifacts', 'generate_nai', 'cancel_generation_job'] },
+    { name: '전부', scopes: ['read', 'generate', 'organize'], tools: null },
+  ];
+  const keyOf = (scopes: string[], tools: string[] | null) => `${[...scopes].sort().join(',')}|${tools ? [...new Set(tools)].sort().join(',') : '*'}`;
+  const parseList = (text: string | null): string[] | null => {
+    if (!text) return null;
+    try {
+      const parsed: unknown = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : null;
+    } catch {
+      return null;
+    }
+  };
+  const insert = db.prepare('INSERT INTO chat_tool_presets (name, scopes, tool_allowlist) VALUES (?, ?, ?)');
+  const link = db.prepare('UPDATE llm_chat_profiles SET tool_preset_id = ? WHERE id = ?');
+  const rows = db.prepare('SELECT id, name, mcp_scopes, tool_allowlist FROM llm_chat_profiles WHERE mcp_enabled = 1 ORDER BY sort_order ASC, id ASC').all() as Array<{ id: number; name: string; mcp_scopes: string; tool_allowlist: string | null }>;
+  db.transaction(() => {
+    const presetByKey = new Map<string, number>();
+    for (const starter of starters) {
+      const id = Number(insert.run(starter.name, JSON.stringify(starter.scopes), starter.tools ? JSON.stringify(starter.tools) : null).lastInsertRowid);
+      presetByKey.set(keyOf(starter.scopes, starter.tools), id);
+    }
+    for (const row of rows) {
+      const scopes = (parseList(row.mcp_scopes) ?? ['read']).filter((scope) => ['read', 'generate', 'organize'].includes(scope));
+      if (scopes.length === 0) continue;
+      const tools = parseList(row.tool_allowlist);
+      const key = keyOf(scopes, tools);
+      let presetId = presetByKey.get(key);
+      if (presetId === undefined) {
+        presetId = Number(insert.run(row.name, JSON.stringify(scopes), tools ? JSON.stringify(tools) : null).lastInsertRowid);
+        presetByKey.set(key, presetId);
+      }
+      link.run(presetId, row.id);
+    }
+  })();
+  console.log(`  Migrating chat profiles: tool grants folded into chat_tool_presets (${rows.length} profiles linked)`);
 }
 
 /**

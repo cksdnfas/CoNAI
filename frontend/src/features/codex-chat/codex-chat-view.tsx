@@ -10,6 +10,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import {
+  CHAT_APPEARANCE_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   chatProfileBackgroundUrl,
   chatProfileEmoticonsQueryKey,
@@ -21,6 +22,7 @@ import {
   listCodexChatThreads,
   selectChatAlternative,
   clearCodexChatThread,
+  createGroupChat,
   editChatBlock,
   summarizeCodexChatThread,
   updateCodexChatThreadContext,
@@ -61,6 +63,8 @@ import { CHAT_COMMANDS, ChatCommandList, type ChatCommand } from './chat-command
 import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
 import { GROUP_MEMBER_MAX, GroupAvatarStack, GroupInviteDialog, GroupMembersPopover, GroupTurnStatus, MentionList, mentionOptions, type GroupInviteMode, type MentionOption } from './chat-group'
 import { mentionQueryAt } from './chat-mentions'
+import { parseMentions } from '@conai/shared'
+import { ChatReplyPreview } from './chat-reply'
 import type { ChatEmoticonMap } from './chat-markdown'
 
 const CodexChatContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexChatContextView }))
@@ -170,8 +174,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [flagTrayOpen, setFlagTrayOpen] = useState(false)
   const [flagManagerOpen, setFlagManagerOpen] = useState(false)
   const [userProfileManagerOpen, setUserProfileManagerOpen] = useState(false)
-  /** A new chat waiting for the user to say who they are in it (several user profiles, no default). */
-  const [pendingStart, setPendingStart] = useState<number | null>(null)
+  /** A new chat (one profile) or room (several, the first representing it) waiting for the user to say who they are in it. */
+  const [pendingStart, setPendingStart] = useState<number[] | null>(null)
   const flagButtonRef = useRef<HTMLButtonElement | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -200,11 +204,30 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const profilesById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles])
   const userProfilesQuery = useChatUserProfiles()
   const userProfiles = useMemo(() => userProfilesQuery.data ?? [], [userProfilesQuery.data])
-  /** Start a chat with `profileId`, asking who the user is first when that is not settled by the user profiles. */
-  const beginChat = useCallback(async (profileId: number) => {
-    if (newChatUserProfile(userProfiles).kind === 'pick') setPendingStart(profileId)
-    else await startChat(profileId)
-  }, [startChat, userProfiles])
+  // A room picked straight from the profile list: named after its members, represented by the first one picked.
+  const createGroupMutation = useMutation({
+    mutationFn: ({ profileIds, userProfileId }: { profileIds: number[]; userProfileId?: number | null }) => createGroupChat({
+      profileIds,
+      representativeId: profileIds[0],
+      title: profileIds.flatMap((id) => profilesById.get(id)?.name ?? []).join(', ').slice(0, 60).trim() || undefined,
+      userProfileId: userProfileId ?? null,
+    }),
+    onSuccess: async (created) => {
+      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
+      selectThread(created.id)
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '그룹을 만들지 못했어.', en: 'Could not create the group.' })), tone: 'error' }),
+  })
+  const startWith = useCallback(async (profileIds: number[], userProfileId?: number | null) => {
+    if (profileIds.length === 1) await startChat(profileIds[0], userProfileId)
+    else if (profileIds.length > 1) await createGroupMutation.mutateAsync({ profileIds, userProfileId })
+  }, [createGroupMutation, startChat])
+  /** Start a chat or room, asking who the user is first when that is not settled by the user profiles. */
+  const beginChat = useCallback(async (profileIds: number[]) => {
+    if (newChatUserProfile(userProfiles).kind === 'pick') setPendingStart(profileIds)
+    else await startWith(profileIds)
+  }, [startWith, userProfiles])
 
   const threadsQuery = useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads })
   const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
@@ -336,11 +359,19 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [activeThreadId, regenerate, isBusy])
   const chooseAlternative = alternativeMutation.mutate
   const handleAlternative = useCallback((id: number, index: number) => { if (!isBusy) chooseAlternative({ id, index }) }, [chooseAlternative, isBusy])
+  const setDraftReply = chat.setDraftReply
+  const handleReply = useCallback((message: CodexChatMessage) => {
+    const name = message.role === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : (message.speaker_profile_id ? profilesById.get(message.speaker_profile_id)?.name : profile?.name) ?? t({ ko: '나간 참가자', en: 'Former member' })
+    const hash = message.tool_calls.flatMap((call) => call.compositeHashes)[0]
+    const media = message.mediaAttachments?.[0] ?? (hash ? { compositeHash: hash, name: t({ ko: '이미지', en: 'Image' }), mimeType: null } : undefined)
+    setDraftReply({ threadId: message.thread_id, quote: { messageId: message.id, role: message.role, speakerProfileId: message.speaker_profile_id ?? (message.role === 'assistant' ? profile?.id ?? null : null), speakerName: name, excerpt: message.content.trim().slice(0, 400) || message.attachments?.map((file) => file.name).join(', ') || t({ ko: '이미지·도구 결과', en: 'Image / tool result' }), alternative: message.active_alternative, media } })
+    composerRef.current?.focus()
+  }, [setDraftReply, userSpeaker, profilesById, profile, t])
   const lastMessage = messages[messages.length - 1]
   // Group rooms: only API LLM members' replies can be regenerated.
   const lastReplyByCodex = isGroup && lastMessage?.speaker_profile_id != null && profilesById.get(lastMessage.speaker_profile_id)?.engine !== 'llm'
   const lastReplyId = lastMessage?.role === 'assistant' && messages.some((message) => message.role === 'user') && !lastReplyByCodex ? lastMessage.id : null
-  const messageActions = useMemo(() => ({ busy: isBusy, canRewrite: !isCodexThread, lastReplyId, editingId: editingMessageId, onEditingChange: setEditingMessageId, onEdit: handleEdit, onRegenerate: handleRegenerate, onAlternative: handleAlternative }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative])
+  const messageActions = useMemo(() => ({ busy: isBusy, canRewrite: !isCodexThread, lastReplyId, editingId: editingMessageId, onEditingChange: setEditingMessageId, onEdit: handleEdit, onRegenerate: handleRegenerate, onAlternative: handleAlternative, onReply: handleReply }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative, handleReply])
 
   // Display block state: the panel's data and the chips in replies. A room lists every member's blocks, keyed
   // `<profileId>:<key>` so two members' `status` blocks stay apart; chips keep the plain key (a message has one speaker).
@@ -524,7 +555,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       if (name === 'new') {
         const chosen = argument ? profiles.find((entry) => entry.usable && entry.name.toLowerCase() === argument.toLowerCase()) : profile
         if (!chosen?.usable) throw new Error(t({ ko: '쓸 수 있는 프로필 이름을 입력해줘.', en: 'Enter a usable profile name.' }))
-        await beginChat(chosen.id)
+        await beginChat([chosen.id])
       } else if (name === 'search') { setSearchText(argument); setSearchOpen(true) }
       else if (name === 'export') setExportOpen(true)
       else if (activeThreadId !== null) {
@@ -632,7 +663,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }
 
   const untitled = t({ ko: '새 채팅', en: 'New chat' })
-  const pickProfile = (profileId: number) => void beginChat(profileId)
+  const pickProfile = (profileId: number) => void beginChat([profileId])
+  const pickGroup = (profileIds: number[]) => void beginChat(profileIds)
 
   // "+" opens the profile picker, which lists the most recently used profiles first.
   const newChatButton = <IconButton variant="ghost" size="icon-sm" disabled={isBusy || isStartingChat} onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
@@ -688,10 +720,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         ) : null}
-        {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
+        {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} routing={runningFromServer.routing} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
         {serverReplies.map((reply) => {
           const replySpeaker = speakerOf(reply.profileId)
-          return replySpeaker ? <CodexChatAssistantMessage key={reply.profileId} content={reply.text} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null
+          return replySpeaker ? <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null
         })}
       </div>
     </div></ChatBlockChangesContext.Provider>
@@ -716,11 +748,21 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         : t({ ko: 'Codex가 설치돼 있지 않아.', en: 'Codex is not installed.' })
       : null
 
+  const draftQuote = chat.draftReply?.threadId === activeThreadId ? chat.draftReply.quote : null
+  const draftMembers = speakerProfiles.filter((entry) => threadQuery.data?.group?.memberIds.includes(entry.id))
+  const draftMentioned = isGroup ? parseMentions(draft, draftMembers) : []
+  const draftTarget = draftQuote ? messages.find((message) => message.id === draftQuote.messageId) : null
+  const draftRecipients = draftMentioned.length ? draftMentioned : draftTarget?.role === 'user' ? draftTarget.routing?.recipients ?? [] : draftQuote?.speakerProfileId ? [draftQuote.speakerProfileId] : []
+  const draftRecipientLabel = isGroup ? draftRecipients.map((id) => typeof id === 'number' ? profilesById.get(id)?.name : null).filter(Boolean).join(', ') || profile?.name : profile?.name
   const composer = (
     <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? cn('mx-auto px-4 sm:px-6', CHAT_WIDTH_CLASS[appearance.width]) : 'px-3')}>
       {showCommands ? <ChatCommandList id={commandListId} commands={matchingCommands} selected={selectedCommand} onSelect={pickCommand} /> : null}
       {showMentions ? <MentionList id={mentionListId} options={mentionMatches} selected={selectedMention} onSelect={pickMention} /> : null}
       {turnStatus}
+      {draftQuote ? <div className="flex items-start gap-1" role="region" aria-label={t({ ko: '답장 대상', en: 'Reply target' })}>
+        <ChatReplyPreview quote={draftQuote} recipientLabel={draftRecipientLabel} className="flex-1" />
+        <IconButton variant="ghost" size="icon-xs" label={t({ ko: '답장 취소', en: 'Cancel reply' })} onClick={() => setDraftReply(null)}><X /></IconButton>
+      </div> : null}
       {warning ? <p className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : null}
       <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
       {picks.length > 0 ? (
@@ -780,7 +822,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   let body: ReactNode
   if (activeThreadId === null || !thread) {
-    body = threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || isBusy} onPick={pickProfile} onRecent={selectThread} />
+    body = threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onRecent={selectThread} />
   } else if (activeView === 'gallery') {
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {
@@ -810,7 +852,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <ChatExportDialog threadId={activeThreadId} open={exportOpen} onClose={() => setExportOpen(false)} />
     <ChatFlagManagerModal open={flagManagerOpen} onClose={() => setFlagManagerOpen(false)} />
     <ChatUserProfileManagerModal open={userProfileManagerOpen} onClose={() => setUserProfileManagerOpen(false)} />
-    <ChatUserProfilePickModal open={pendingStart !== null} profiles={userProfiles} onClose={() => setPendingStart(null)} onPick={(userProfileId) => { const profileId = pendingStart; setPendingStart(null); if (profileId !== null) void startChat(profileId, userProfileId) }} />
+    <ChatUserProfilePickModal open={pendingStart !== null} profiles={userProfiles} onClose={() => setPendingStart(null)} onPick={(userProfileId) => { const profileIds = pendingStart; setPendingStart(null); if (profileIds !== null) void startWith(profileIds, userProfileId) }} />
     <GroupInviteDialog open={invite !== null} mode={invite} profiles={profiles} userProfiles={userProfiles} onClose={() => setInvite(null)} onCreated={(threadId) => selectThread(threadId)} />
     <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={t({ ko: '채팅 검색', en: 'Search chats' })} widthClassName="max-w-lg">
       <ModalBody><ChatSearchInput value={searchText} onChange={setSearchText} /><ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} /></ModalBody>

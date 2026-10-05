@@ -15,6 +15,11 @@ import {
   clampNaiSampleCount,
   getErrorMessage,
   parseNumberInput,
+  NAI_RESOLUTION_PRESETS,
+  buildNaiCharacterPromptPayload,
+  buildNaiCharacterReferencePayload,
+  buildNaiVibePayload,
+  supportsNaiTransparentBackground,
 } from '../image-generation-shared'
 import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
 import {
@@ -35,6 +40,9 @@ import { useNaiAuthController } from './use-nai-auth-controller'
 import { useNaiGenerationActions } from './use-nai-generation-actions'
 import { useNaiImageEditorBridge } from './use-nai-image-editor-bridge'
 import { useNaiFormController } from './use-nai-form-controller'
+import { ChatGenerationPresetSaveModal } from '@/features/settings/components/chat-generation-preset-save-modal'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 
@@ -326,6 +334,36 @@ export function NaiGenerationPanel({
 
   const statusPortalTarget = usePortalTargetById(statusPortalTargetId)
 
+  const [isChatPresetModalOpen, setIsChatPresetModalOpen] = useState(false)
+  const canSaveChatPreset = useAuthStatusQuery().data?.isAdmin === true
+  const chatPresetSizeLabel = NAI_RESOLUTION_PRESETS.find((preset) => preset.key === naiForm.resolutionPreset)?.label ?? `${naiForm.width}×${naiForm.height}`
+  /** The form as a chat generation preset: the prompt becomes the fixed prefix and the model writes only the scene. */
+  const buildChatPreset = async () => {
+    const encodedVibes = await ensureEncodedVibes()
+    if (!encodedVibes) return null
+    return {
+      kind: 'nai' as const,
+      comfyui: null,
+      nai: {
+        model: naiForm.model,
+        sampler: naiForm.sampler,
+        noiseSchedule: naiForm.scheduler,
+        steps: Number(naiForm.steps) || 28,
+        scale: Number(naiForm.scale) || 5,
+        varietyPlus: naiForm.varietyPlus,
+        transparentBackground: naiForm.transparentBackground && supportsNaiTransparentBackground(naiForm.model),
+        promptPrefix: normalizeTextSegmentSpreadsheetText(naiForm.prompt).trim(),
+        promptSuffix: '',
+        negativePrompt: normalizeTextSegmentSpreadsheetText(naiForm.negativePrompt).trim(),
+        sizes: [{ label: chatPresetSizeLabel, width: Number(naiForm.width), height: Number(naiForm.height) }],
+        characters: supportsCharacterPrompts ? buildNaiCharacterPromptPayload(naiForm.characters) : [],
+        useCoords: useCharacterPositions,
+        vibes: buildNaiVibePayload(encodedVibes),
+        characterRefs: buildNaiCharacterReferencePayload(naiForm.characterReferences),
+      },
+    }
+  }
+
   const sharedActionSectionProps = {
     canUpscale: naiForm.action !== 'generate' && Boolean(naiForm.sourceImage),
     isUpscaling,
@@ -337,6 +375,7 @@ export function NaiGenerationPanel({
     onUpscale: handleUpscale,
     onReset: () => void resetNaiForm(),
     onGenerate: handleNaiGenerate,
+    onSaveChatPreset: canSaveChatPreset ? () => setIsChatPresetModalOpen(true) : undefined,
   } satisfies Omit<Parameters<typeof NaiActionSection>[0], 'variant'>
 
   const actionSection = (
@@ -459,6 +498,13 @@ export function NaiGenerationPanel({
         {/* 생성 버튼·결과 그룹은 편집 영역 아래에 고정해 스크롤 위치와 상관없이 바로 누를 수 있게 한다. */}
         {useInlineActionBar && !useDrawerCompactChrome ? <GenerateActionDock>{actionSection}</GenerateActionDock> : null}
       </div>
+
+      <ChatGenerationPresetSaveModal
+        open={isChatPresetModalOpen}
+        build={buildChatPreset}
+        summary={t({ ko: '모델 {model}, {size}, 스텝 {steps}, CFG {scale}와 지금 프롬프트·네거티브·바이브·캐릭터 레퍼런스가 고정돼. 모델은 상황 프롬프트만 써.', en: 'Model {model}, {size}, {steps} steps, CFG {scale} and the current prompt, negative, vibes and character references are fixed. The model writes only the scene.' }, { model: naiForm.model, size: chatPresetSizeLabel, steps: naiForm.steps, scale: naiForm.scale })}
+        onClose={() => setIsChatPresetModalOpen(false)}
+      />
 
       <NaiAuthModal
         open={isNaiAuthModalOpen}

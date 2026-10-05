@@ -127,9 +127,12 @@ export function wrapUploadMiddleware(handler: RequestHandler): RequestHandler {
       }
 
       const message = error instanceof Error ? error.message : 'Upload parsing failed';
+      // A filter may reject with its own client status (e.g. 403 for a restricted file type).
+      const ownStatus = (error as { status?: unknown })?.status;
       const statusCode = error instanceof multer.MulterError
         ? (error.code === 'LIMIT_UNEXPECTED_FILE' ? 400 : 413)
-        : message.startsWith('Unsupported file type:') ? 415 : 400;
+        : typeof ownStatus === 'number' && ownStatus >= 400 && ownStatus < 500 ? ownStatus
+          : message.startsWith('Unsupported file type:') ? 415 : 400;
 
       res.status(statusCode).json({
         success: false,

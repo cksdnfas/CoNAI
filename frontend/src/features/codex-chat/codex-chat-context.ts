@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { ChatFlagSnapshot, ChatMediaAttachment, CodexChatToolCall } from '@/lib/api-codex-chat'
-import type { StoredFileEntry } from '@conai/shared'
+import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote } from '@conai/shared'
 
 export const CODEX_CHAT_ROUTE = '/chat'
 export const CODEX_CHAT_THREADS_QUERY_KEY = ['codex-chat-threads'] as const
@@ -17,6 +17,7 @@ export type CodexChatView = 'chat' | 'gallery' | 'context'
 
 /** One group member's reply while it streams. */
 export type CodexChatLiveReply = {
+  routing?: ChatMessageRouting
   profileId: number
   text: string
   reasoning: string
@@ -25,6 +26,8 @@ export type CodexChatLiveReply = {
 
 /** The turn being streamed: the thread only refetches after it ends, so the UI shows it from here meanwhile. */
 export type CodexChatLiveTurn = {
+  routing?: ChatMessageRouting
+  userRouting?: ChatMessageRouting
   replacingMessageId?: number
   attachments: StoredFileEntry[]
   mediaAttachments: ChatMediaAttachment[]
@@ -44,6 +47,8 @@ export type CodexChatLiveTurn = {
 }
 
 export interface CodexChatApi {
+  draftReply: { threadId: number; quote: ChatReplyQuote } | null
+  setDraftReply: (reply: { threadId: number; quote: ChatReplyQuote } | null) => void
   /** Chat is on in settings and this account may use it (admin). */
   canUse: boolean
   isPanelOpen: boolean

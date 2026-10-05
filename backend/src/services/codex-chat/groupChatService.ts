@@ -1,4 +1,8 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
+import { randomUUID } from 'crypto'
+import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient } from '@conai/shared'
+import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget, userReplyRouting } from './chatReplies'
+import { registerChatReply } from './chatReplyRegistry'
 import type { McpRequester } from '../../mcp/context'
 import { validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
@@ -11,7 +15,6 @@ import { resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { buildGroupCodexInput, buildGroupLlmMessages, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
-import { registerGroupWake } from './groupWakeRegistry'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { flagDirectiveFor, sendableMessages } from './llmChatContext'
 import { generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
@@ -26,7 +29,10 @@ type ActiveReply = {
   controller: AbortController
   text: string
   toolCalls: Map<string, CodexChatToolCall>
+  routing: ChatMessageRouting
 }
+
+type Delivery = { profileId: number; sourceMessageId: number }
 
 /**
  * A group room working through its reply queue. Members on the same LLM connection answer together up to the
@@ -38,9 +44,11 @@ type GroupRun = {
   stopped: boolean
   /** Members answering now, in the order they started. */
   active: Map<number, ActiveReply>
-  queue: number[]
-  /** Members called with the room_call_member tool; they join the queue when the next reply ends. */
-  called: number[]
+  queue: Delivery[]
+  chain: boolean
+  chainLimit: number
+  chainUsed: number
+  reserved: Map<string, number[]>
   listeners: Set<(event: CodexChatStreamEvent) => void>
   finished: Promise<void>
 }
@@ -108,6 +116,20 @@ function findMessage(threadId: number, messageId: number) {
   return CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
 }
 
+function userRecipients(requester: McpRequester, thread: CodexChatThreadRecord, text: string, routing: ChatMessageRouting) {
+  const members = memberProfiles(thread.id)
+  const mentioned = parseMentions(text, members)
+  const target = routing.replyTo ? requireReplyTarget(thread.id, routing.replyTo.messageId) : null
+  const addressed = target?.role === 'assistant' ? [target.speaker_profile_id] : target?.routing?.recipients.filter((id): id is number => typeof id === 'number') ?? []
+  const ids = mentioned.length ? mentioned : addressed.length ? addressed : thread.profile_id ? [thread.profile_id] : []
+  const access = assertGroupChatAvailable(requester)
+  for (const id of ids) {
+    const member = members.find((entry) => entry.id === id)
+    if (!member?.isEnabled || !(member.engine === 'codex' ? access.codex : access.llm)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어. 수신자를 다시 지정해줘.', 409)
+  }
+  return ids as number[]
+}
+
 /** Forget every Codex member's memory of the room (its history was rewritten or cleared). */
 function resetCodexMemory(requester: McpRequester, threadId: number) {
   for (const codexThreadId of ChatGroupStore.resetCodexMemory(threadId)) deleteCodexRollout(requester, codexThreadId)
@@ -118,21 +140,49 @@ function resetCodexMemory(requester: McpRequester, threadId: number) {
  * get what they missed since their last reply in their own Codex thread. Stored with its speaker; replaces the
  * message `replacingMessageId` as a new alternative when regenerating.
  */
-async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProfile, replacingMessageId?: number): Promise<CodexChatMessageRecord> {
+async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProfile, sourceMessageId: number, replacingMessageId?: number): Promise<CodexChatMessageRecord> {
   const thread = CodexChatStore.findThreadById(run.threadId) as CodexChatThreadRecord
   const members = memberProfiles(run.threadId)
   const limits = groupLimitsOf(thread)
   const controller = new AbortController()
-  const active: ActiveReply = { controller, text: '', toolCalls: new Map() }
+  const messages = CodexChatStore.listMessages(run.threadId).filter((message) => message.id !== replacingMessageId)
+  const source = messages.find((message) => message.id === sourceMessageId) ?? null
+  const replyId = randomUUID()
+  const context: ChatExecutionContext = { threadId: run.threadId, profileId: profile.id, kind: 'group', replyId }
+  const active: ActiveReply = { controller, text: '', toolCalls: new Map(), routing: automaticReplyRouting(thread, source, replyId) }
+  let explicitlyRouted = false
   run.active.set(profile.id, active)
   if (run.stopped) controller.abort()
+
+  const reserve = (recipients: ChatRecipient[]) => {
+    if (run.stopped || controller.signal.aborted) throw new CodexChatError('중단된 답변에서는 참가자를 부를 수 없어.', 409)
+    const next = [...new Set(recipients)].filter((id): id is number => typeof id === 'number')
+    const access = resolveChatAccess(requester.accountId)
+    for (const id of next) {
+      const member = memberProfiles(run.threadId).find((entry) => entry.id === id)
+      if (id === profile.id) throw new CodexChatError('자기 자신에게는 자동 답장을 보낼 수 없어.')
+      if (!member?.isEnabled || !(member.engine === 'codex' ? access.codex : access.llm)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어.', 409)
+    }
+    const others = [...run.reserved].reduce((sum, [id, targets]) => sum + (id === replyId ? 0 : targets.length), 0)
+    if (next.length && (!run.chain || run.chainUsed + others + next.length > run.chainLimit)) throw new CodexChatError('이어 말하기 한도에 도달해서 참가자를 부르지 못했어. 사용자 차례로 돌아갈게.', 409)
+    run.reserved.set(replyId, next)
+  }
+  const unregister = registerChatReply(context, controller.signal, (input) => {
+    const target = input.messageId === undefined ? null : requireReplyTarget(thread.id, input.messageId, messages)
+    const recipients = input.recipients ?? (target ? [messageSender(target, thread)] : active.routing.recipients)
+    reserve(recipients)
+    active.routing = { replyId, replyTo: target ? quoteMessage(thread, target) : active.routing.replyTo, recipients: [...new Set(recipients)] }
+    explicitlyRouted = true
+    emit(run, { type: 'routing', profileId: profile.id, routing: active.routing })
+    return active.routing
+  })
 
   const forward = (event: CodexChatStreamEvent) => {
     // The room announces each stored reply itself, once it carries its speaker.
     if (event.type === 'done') return
     if (event.type === 'delta') active.text += event.text
     if (event.type === 'tool') active.toolCalls.set(event.call.id, event.call)
-    emit(run, event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool' ? { ...event, profileId: profile.id } : event)
+    emit(run, event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool' || event.type === 'routing' ? { ...event, profileId: profile.id } : event)
   }
   const others = [userPersonaForThread(thread).name, ...members.filter((member) => member.id !== profile.id).map((member) => member.name)]
   const persist = (raw: GroupReplyResult) => {
@@ -142,19 +192,25 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       ? { ...raw, status: 'failed' as const, error: '빈 답변이 왔어. 다시 생성해봐.' }
       : raw
     const content = trimForeignSpeakerLines(reply.content, profile.name, others) || reply.content.trim()
+    if (reply.status === 'completed' && !explicitlyRouted && run.chain) {
+      const mentioned = parseMentions(content, members, profile.id)
+      const recipients = mentioned.length ? mentioned : active.routing.recipients.filter((id) => id !== profile.id)
+      active.routing = { ...active.routing, recipients }
+      try { reserve(recipients) } catch (error) { emit(run, { type: 'notice', message: error instanceof Error ? error.message : String(error) }) }
+    }
+    if (reply.status !== 'completed') run.reserved.delete(replyId)
     if (replacingMessageId) {
       // A connection failure must not replace a usable answer with an empty failed alternative.
       if (reply.status === 'completed' || content || reply.tool_calls.length) {
-        CodexChatStore.addAlternative(run.threadId, replacingMessageId, { ...reply, content, created_at: new Date().toISOString() })
+        CodexChatStore.addAlternative(run.threadId, replacingMessageId, { ...reply, content, routing: active.routing, created_at: new Date().toISOString() })
       } else if (reply.error) {
         emit(run, { type: 'error', message: reply.error })
       }
       return findMessage(run.threadId, replacingMessageId)
     }
-    const id = CodexChatStore.addMessage({ thread_id: run.threadId, role: 'assistant', ...reply, content, speaker_profile_id: profile.id })
+    const id = CodexChatStore.addMessage({ thread_id: run.threadId, role: 'assistant', ...reply, content, routing: active.routing, speaker_profile_id: profile.id })
     return findMessage(run.threadId, id)
   }
-  const messages = CodexChatStore.listMessages(run.threadId).filter((message) => message.id !== replacingMessageId)
 
   let message: CodexChatMessageRecord
   try {
@@ -163,8 +219,9 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         requester,
         threadId: run.threadId,
         profile,
+        chatContext: context,
         messages,
-        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: flagDirectiveFor(messages, profile, userPersonaForThread(thread)) }),
+        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, routing: active.routing, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: flagDirectiveFor(messages, profile, userPersonaForThread(thread)) }),
         signal: controller.signal,
         emit: forward,
         persist,
@@ -176,7 +233,8 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         threadId: run.threadId,
         profile,
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
-        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)) }),
+        chatContext: context,
+        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)) }),
         roomTools: sendableMessages(messages).length > limits.window || profile.contextTokens !== null ? 'all' : 'call',
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },
@@ -188,9 +246,10 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     // Could not start at all (permission, Codex process): keep the reason on a failed reply of that member.
     message = persist({ content: '', tool_calls: [], status: controller.signal.aborted ? 'interrupted' : 'failed', error: controller.signal.aborted ? null : error instanceof Error ? error.message : String(error) })
   } finally {
+    unregister()
     run.active.delete(profile.id)
   }
-  if (message.status !== 'failed') ChatGroupStore.setLastSeen(run.threadId, profile.id, message.id)
+  if (message.status === 'completed') ChatGroupStore.setLastSeen(run.threadId, profile.id, messages.at(-1)?.id ?? 0)
   return message
 }
 
@@ -202,7 +261,7 @@ function concurrencyOf(profile: ChatProfile) {
 }
 
 function emitQueue(run: GroupRun) {
-  emit(run, { type: 'queue', speakers: [...run.active.keys()], queue: [...run.queue] })
+  emit(run, { type: 'queue', speakers: [...run.active.keys()], queue: run.queue.map((item) => item.profileId) })
 }
 
 /**
@@ -211,14 +270,14 @@ function emitQueue(run: GroupRun) {
  * other talking. A member that starts later sees the replies that ended before it.
  */
 async function processQueue(run: GroupRun, requester: McpRequester, options: { chain: boolean }) {
-  let wakes = 0
+  run.chain = options.chain
   const used = new Map<string, number>()
   const inFlight = new Map<number, Promise<{ profileId: number; key: string; message: CodexChatMessageRecord | null }>>()
 
   const startReady = () => {
     const members = memberProfiles(run.threadId)
     for (let index = 0; index < run.queue.length && !run.stopped;) {
-      const profileId = run.queue[index]
+      const { profileId, sourceMessageId } = run.queue[index]
       const profile = members.find((member) => member.id === profileId)
       if (!profile) { run.queue.splice(index, 1); continue }
       if (!profile.isEnabled) {
@@ -231,8 +290,10 @@ async function processQueue(run: GroupRun, requester: McpRequester, options: { c
       if (run.active.has(profileId) || inFlight.has(profileId) || (used.get(key) ?? 0) >= limit) { index += 1; continue }
       run.queue.splice(index, 1)
       used.set(key, (used.get(key) ?? 0) + 1)
-      const reply = replyAs(run, requester, profile)
-      emit(run, { type: 'speaker', profileId, speakers: [...run.active.keys()], queue: [...run.queue] })
+      const reply = replyAs(run, requester, profile, sourceMessageId)
+      emit(run, { type: 'speaker', profileId, speakers: [...run.active.keys()], queue: run.queue.map((item) => item.profileId) })
+      const routing = run.active.get(profileId)?.routing
+      if (routing) emit(run, { type: 'routing', profileId, routing })
       inFlight.set(profileId, reply.then(
         (message) => ({ profileId, key, message }),
         () => ({ profileId, key, message: null }),
@@ -247,15 +308,11 @@ async function processQueue(run: GroupRun, requester: McpRequester, options: { c
     used.set(key, (used.get(key) ?? 1) - 1)
     if (message) emit(run, { type: 'done', message })
     if (message && options.chain && message.status === 'completed' && !run.stopped) {
-      const members = memberProfiles(run.threadId)
-      const chainLimit = groupLimitsOf(CodexChatStore.findThreadById(run.threadId) as CodexChatThreadRecord).chain
-      const called = run.called
-      run.called = []
-      for (const next of [...called, ...parseMentions(message.content, members, profileId)]) {
-        if (wakes >= chainLimit) break
-        if (run.queue.includes(next)) continue
-        run.queue.push(next)
-        wakes += 1
+      const called = run.reserved.get(message.routing?.replyId ?? '') ?? []
+      run.reserved.delete(message.routing?.replyId ?? '')
+      for (const next of called) {
+        run.queue.push({ profileId: next, sourceMessageId: message.id })
+        run.chainUsed += 1
       }
     }
     startReady()
@@ -268,30 +325,14 @@ async function startRun(threadId: number, listener: (event: CodexChatStreamEvent
   if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: () => void = () => {}
   const run: GroupRun = {
-    threadId, stopped: false, active: new Map(), queue: [], called: [],
+    threadId, stopped: false, active: new Map(), queue: [], chain: true,
+    chainLimit: groupLimitsOf(CodexChatStore.findThreadById(threadId)!).chain, chainUsed: 0, reserved: new Map(),
     listeners: new Set([listener]), finished: new Promise((resolve) => { resolveFinished = resolve }),
   }
   runs.set(threadId, run)
-  // room_call_member: a member answering now asks for others by name. The tool does not say who calls, so with
-  // several members answering, only the ones answering are kept from calling themselves.
-  const unregister = registerGroupWake(threadId, (names) => {
-    if (run.active.size === 0) return { error: 'Nobody is answering in this room right now.' }
-    const caller = run.active.size === 1 ? [...run.active.keys()][0] : null
-    const members = memberProfiles(threadId)
-    const woken: string[] = []
-    const unknown: string[] = []
-    for (const name of names) {
-      const id = resolveMemberName(name, members)
-      if (id === null || id === caller) { unknown.push(name); continue }
-      if (!run.called.includes(id)) run.called.push(id)
-      woken.push(members.find((member) => member.id === id)?.name ?? name)
-    }
-    return { woken, unknown, members: members.filter((member) => member.id !== caller).map((member) => member.name) }
-  })
   try {
     await work(run)
   } finally {
-    unregister()
     runs.delete(threadId)
     run.listeners.clear()
     resolveFinished()
@@ -334,8 +375,8 @@ export const GroupChatService = {
     requireGroup(requester, threadId)
     const run = runs.get(threadId)
     if (!run) return null
-    const replies = [...run.active].map(([profileId, reply]) => ({ profileId, text: reply.text, toolCalls: [...reply.toolCalls.values()] }))
-    return { text: replies[0]?.text ?? '', toolCalls: replies[0]?.toolCalls ?? [], speakerProfileId: replies[0]?.profileId ?? null, replies, queue: [...run.queue] }
+    const replies = [...run.active].map(([profileId, reply]) => ({ profileId, text: reply.text, toolCalls: [...reply.toolCalls.values()], routing: reply.routing }))
+    return { text: replies[0]?.text ?? '', toolCalls: replies[0]?.toolCalls ?? [], speakerProfileId: replies[0]?.profileId ?? null, replies, queue: run.queue.map((item) => item.profileId) }
   },
 
   /** The transcript plus the room: members, representative, limits, and the reply in progress with its queue. */
@@ -367,7 +408,7 @@ export const GroupChatService = {
    * A user message: stops whatever the room is still saying (the user cut in), then the addressed members answer
    * (together as far as their connections allow) — or the representative when no one is addressed.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown, replyToMessageId?: unknown) {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
@@ -375,14 +416,16 @@ export const GroupChatService = {
     const flags = [...ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
+    const routing = userReplyRouting(thread, replyToMessageId)
+    routing.recipients = userRecipients(requester, thread, trimmed, routing)
     await GroupChatService.stop(threadId)
 
     await startRun(threadId, listener, async (run) => {
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments }, attachments.map((file) => file.id))
+      if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       emit(run, { type: 'user', message: findMessage(threadId, userMessageId) })
-      const mentioned = parseMentions(trimmed, memberProfiles(threadId))
-      run.queue = mentioned.length > 0 ? mentioned : thread.profile_id ? [thread.profile_id] : []
+      run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: userMessageId }))
       await processQueue(run, requester, { chain: true })
     })
   },
@@ -405,10 +448,14 @@ export const GroupChatService = {
       if (!speaker || !memberProfiles(threadId).some((member) => member.id === speaker.id)) throw new CodexChatError('이 답변을 쓴 참가자가 방에 없어.', 409)
       if (speaker.engine !== 'llm') throw new CodexChatError('Codex 참가자의 답변은 다시 생성할 수 없어.', 409)
       await startRun(threadId, listener, async (run) => {
+        run.chain = false
         CodexChatStore.prepareRegeneration(threadId, messageId)
         emit(run, { type: 'rewind', mode: 'regenerate', message })
-        const reply = replyAs(run, requester, speaker, messageId)
+        const sourceId = message.routing?.replyTo?.messageId ?? [...messages].reverse().find((entry) => entry.role === 'user')?.id ?? 0
+        const reply = replyAs(run, requester, speaker, sourceId, messageId)
         emit(run, { type: 'speaker', profileId: speaker.id, speakers: [speaker.id], queue: [] })
+        const routing = run.active.get(speaker.id)?.routing
+        if (routing) emit(run, { type: 'routing', profileId: speaker.id, routing })
         emit(run, { type: 'done', message: await reply })
       })
       return
@@ -417,12 +464,14 @@ export const GroupChatService = {
     if (message.role !== 'user') throw new CodexChatError('내 메시지만 수정할 수 있어.', 409)
     const trimmed = content.trim()
     if (!trimmed && !message.attachments?.length && !message.mediaAttachments?.length) throw new CodexChatError('메시지를 입력해줘.')
+    const routing = message.routing ?? { replyTo: null, recipients: [] }
+    routing.recipients = userRecipients(requester, thread, trimmed, routing)
     await startRun(threadId, listener, async (run) => {
       CodexChatStore.editUserMessage(threadId, messageId, trimmed)
+      CodexChatStore.setMessageRouting(threadId, messageId, routing)
       resetCodexMemory(requester, threadId)
-      emit(run, { type: 'rewind', mode: 'edit', message: { ...message, content: trimmed } })
-      const mentioned = parseMentions(trimmed, memberProfiles(threadId))
-      run.queue = mentioned.length > 0 ? mentioned : thread.profile_id ? [thread.profile_id] : []
+      emit(run, { type: 'rewind', mode: 'edit', message: { ...message, content: trimmed, routing } })
+      run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: messageId }))
       await processQueue(run, requester, { chain: true })
     })
   },
@@ -433,6 +482,7 @@ export const GroupChatService = {
     if (!run) return
     run.stopped = true
     run.queue = []
+    run.reserved.clear()
     for (const reply of run.active.values()) reply.controller.abort()
     let timer: NodeJS.Timeout | undefined
     try {

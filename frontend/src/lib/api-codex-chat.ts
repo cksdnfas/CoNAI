@@ -1,6 +1,6 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
-import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry } from '@conai/shared'
+import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize'
 export type ChatEngine = 'llm' | 'codex'
@@ -11,6 +11,8 @@ export const CHAT_ADMIN_PROFILES_QUERY_KEY = ['codex-chat-admin-profiles'] as co
 export const CHAT_ADMIN_SETTINGS_QUERY_KEY = ['codex-chat-admin-settings'] as const
 export const CHAT_LOREBOOKS_QUERY_KEY = ['codex-chat-lorebooks'] as const
 export const CHAT_BLOCKS_QUERY_KEY = ['codex-chat-blocks'] as const
+export const CHAT_TOOL_PRESETS_QUERY_KEY = ['codex-chat-tool-presets'] as const
+export const CHAT_GENERATION_PRESETS_QUERY_KEY = ['codex-chat-generation-presets'] as const
 export const CHAT_STATUS_QUERY_KEY = ['codex-chat-status'] as const
 
 export interface CodexChatStatus {
@@ -194,6 +196,74 @@ export interface ChatSharedBlock {
 /** The file a block exports as; import also takes a bare block or an array of either. */
 export const CHAT_BLOCK_FILE_MARK = 'conai_display_block'
 
+/** A tool preset (MCP scopes + tool allowlist); profiles link one by id, so editing it reaches every linked profile. */
+export interface ChatToolPreset {
+  id: number
+  name: string
+  scopes: ChatScope[]
+  /** Only these tools; null offers every tool the scopes allow. */
+  toolAllowlist: string[] | null
+  profiles: Array<{ id: number; name: string }>
+  createdDate: string
+  updatedDate: string
+}
+
+export type ChatToolPresetInput = { name: string; scopes: ChatScope[]; toolAllowlist: string[] | null }
+
+/** The file a tool preset exports as; import also takes a bare preset or an array of either. */
+export const CHAT_TOOL_PRESET_FILE_MARK = 'conai_tool_preset'
+
+export type ChatNaiPresetSize = { label: string; width: number; height: number }
+
+/** The fixed NovelAI setup of a generation preset; the model fills only the scene prompt (and a size when several are allowed). */
+export interface ChatNaiPresetConfig {
+  model: string
+  sampler: string
+  noiseSchedule: string
+  steps: number
+  scale: number
+  varietyPlus: boolean
+  transparentBackground: boolean
+  promptPrefix: string
+  promptSuffix: string
+  negativePrompt: string
+  sizes: ChatNaiPresetSize[]
+  characters: Array<{ prompt: string; uc: string; center_x: number; center_y: number }>
+  useCoords: boolean
+  vibes: Array<{ encoded: string; strength: number; information_extracted: number }>
+  characterRefs: Array<{ image: string; type: string; strength: number; fidelity: number }>
+}
+
+/** One ComfyUI workflow with fixed inputs; the model fills the exposed marked fields. */
+export interface ChatComfyPresetConfig {
+  workflowId: number
+  serverId: number | null
+  serverTag: string | null
+  fixedInputs: Record<string, unknown>
+  exposedFieldIds: string[]
+}
+
+export type ChatGenerationPresetKind = 'nai' | 'comfyui'
+
+/** A generation preset; each one a profile links becomes a generate_image tool, and free-form generation is withheld. */
+export interface ChatGenerationPreset {
+  id: number
+  name: string
+  /** What the model is told the preset is for. */
+  instruction: string
+  kind: ChatGenerationPresetKind
+  nai: ChatNaiPresetConfig | null
+  comfyui: ChatComfyPresetConfig | null
+  profiles: Array<{ id: number; name: string }>
+  createdDate: string
+  updatedDate: string
+}
+
+export type ChatGenerationPresetInput = { name: string; instruction: string; kind: ChatGenerationPresetKind; nai: ChatNaiPresetConfig | null; comfyui: ChatComfyPresetConfig | null }
+
+/** The file a generation preset exports as; import also takes a bare preset or an array of either. */
+export const CHAT_GENERATION_PRESET_FILE_MARK = 'conai_generation_preset'
+
 export interface ChatProfile {
   /** Linked shared lorebooks, in priority order. */
   lorebookIds: number[]
@@ -225,9 +295,16 @@ export interface ChatProfile {
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
+  /** The shared tool preset whose scopes and tools apply; null keeps the profile's own scopes and allowlist. */
+  toolPresetId: number | null
+  /** Read-only: the linked preset's name. */
+  toolPresetName?: string | null
+  /** With a preset: the preset's scopes (read-only). Without: the profile's own. */
   mcpScopes: ChatScope[]
-  /** Only these tools; null offers every tool the scopes allow. */
+  /** Only these tools; null offers every tool the scopes allow. With a preset: the preset's list (read-only). */
   toolAllowlist: string[] | null
+  /** Generation presets the profile draws with; any linked withholds free-form generation and workflow lookups. */
+  generationPresetIds: number[]
   toolOutputLimit: number
   contextTurns: number
   contextTokens: number | null
@@ -306,6 +383,7 @@ export interface CodexChatThread {
 }
 
 export interface CodexChatMessage {
+  routing?: ChatMessageRouting | null
   alternatives: Array<{ content: string; tool_calls: CodexChatToolCall[]; created_at: string; status: 'completed' | 'failed' | 'interrupted'; error: string | null; finish_reason?: string | null }>
   active_alternative: number
   attachments?: StoredFileEntry[]
@@ -345,6 +423,7 @@ export interface CodexChatThreadDetail {
   memberBlocks?: Record<number, ChatBlocksState> | null
   /** Partial reply of a turn still running on the server (after a reload); group rooms add who answers and who is next. */
   running: {
+    routing?: ChatMessageRouting
     text: string
     toolCalls: CodexChatToolCall[]
     replacingMessageId?: number
@@ -359,6 +438,7 @@ export interface CodexChatThreadDetail {
 }
 
 export interface ChatGroupRunningReply {
+  routing?: ChatMessageRouting
   profileId: number
   text: string
   toolCalls: CodexChatToolCall[]
@@ -471,6 +551,48 @@ export function updateChatBlock(blockId: number, patch: { name?: string; block?:
 
 export function deleteChatBlock(blockId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/blocks/${blockId}`, { method: 'DELETE' })
+}
+
+export function listChatToolPresets() {
+  return requestApiData<ChatToolPreset[]>('/api/codex-chat/admin/tool-presets')
+}
+
+export function createChatToolPreset(input: ChatToolPresetInput) {
+  return requestApiData<ChatToolPreset>('/api/codex-chat/admin/tool-presets', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+/** The parsed contents of a preset JSON file; every preset in it becomes a tool preset. */
+export function importChatToolPresets(contents: unknown) {
+  return requestApiData<ChatToolPreset[]>('/api/codex-chat/admin/tool-presets/import', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(contents) })
+}
+
+export function updateChatToolPreset(presetId: number, patch: Partial<ChatToolPresetInput>) {
+  return requestApiData<ChatToolPreset>(`/api/codex-chat/admin/tool-presets/${presetId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function deleteChatToolPreset(presetId: number) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/tool-presets/${presetId}`, { method: 'DELETE' })
+}
+
+export function listChatGenerationPresets() {
+  return requestApiData<ChatGenerationPreset[]>('/api/codex-chat/admin/generation-presets')
+}
+
+export function createChatGenerationPreset(input: ChatGenerationPresetInput) {
+  return requestApiData<ChatGenerationPreset>('/api/codex-chat/admin/generation-presets', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+/** The parsed contents of a preset JSON file; every preset in it becomes a generation preset. */
+export function importChatGenerationPresets(contents: unknown) {
+  return requestApiData<ChatGenerationPreset[]>('/api/codex-chat/admin/generation-presets/import', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(contents) })
+}
+
+export function updateChatGenerationPreset(presetId: number, patch: Partial<ChatGenerationPresetInput>) {
+  return requestApiData<ChatGenerationPreset>(`/api/codex-chat/admin/generation-presets/${presetId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function deleteChatGenerationPreset(presetId: number) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/generation-presets/${presetId}`, { method: 'DELETE' })
 }
 
 export const CHAT_USER_PROFILES_QUERY_KEY = ['codex-chat-user-profiles'] as const
@@ -719,8 +841,8 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = []) {
-  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes }, onEvent, signal)
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId }, onEvent, signal)
 }
 
 export function streamChatRewrite(threadId: number, messageId: number, content: string | undefined, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {

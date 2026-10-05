@@ -48,6 +48,8 @@ router.post('/mcp', async (req: Request, res: Response) => {
       source: auth?.source ?? 'http',
       toolAllowlist: auth?.toolAllowlist ?? null,
       chatRoomTools: auth?.chatRoomTools ? 'all' : false,
+      generationPresetIds: auth?.generationPresetIds ?? [],
+      chatContext: auth?.chatContext,
     });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // Stateless 모드

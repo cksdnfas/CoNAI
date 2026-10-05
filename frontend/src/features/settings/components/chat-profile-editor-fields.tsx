@@ -6,7 +6,7 @@ import type { ChatProfileInput } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 
 /** `background` stays undefined until the image is changed or removed, so saving does not resend it. */
-export type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background'>> & { sortOrder: number; background?: string | null }
+export type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background' | 'toolPresetName'>> & { sortOrder: number; background?: string | null }
 export type PatchDraft = (next: Partial<Draft>) => void
 
 export function numberOrNull(value: string) {

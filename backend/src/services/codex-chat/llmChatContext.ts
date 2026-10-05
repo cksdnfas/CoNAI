@@ -1,4 +1,7 @@
 import { summaryGenerationOptions } from '../llmGenerationOptions'
+import { buildReplyContext } from './chatReplyContext'
+import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
+import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usableBlockKeys } from './chatBlockState'
 import { fillCharacterPlaceholders } from './chatPlaceholders'
 import { userPersonaForThread, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
@@ -19,14 +22,28 @@ export const DEFAULT_REPLY_RESERVE_TOKENS = 2048
 
 const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 실제 대화는 그 다음부터야.'
 
-const TOOL_GUIDANCE = [
-  'You can act on CoNAI, a local app for managing and generating AI images, only through the provided tools.',
-  'To generate, call submit_generation_job right away with the parameters it documents; do not search the library, list workflows or read past history first unless the user asks to reuse existing images or settings.',
-  'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
-  'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
-  'Ask for confirmation before bulk or destructive changes such as moving many images between groups.',
-  'To set up an emoticon group: list_emoticons for the group, view_images in small batches when available (otherwise judge from file names and tags), then set_emoticon_keywords with a few short keywords per image.',
-].join('\n')
+/** How to generate: free-form through the queue, or through the profile's generation presets only. */
+export const GENERATION_GUIDANCE = {
+  freeform: [
+    'To generate, call submit_generation_job right away with the parameters it documents; do not search the library, list workflows or read past history first unless the user asks to reuse existing images or settings.',
+    'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
+    'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
+  ],
+  preset: [
+    'To generate, call a generate_image tool right away (one tool per preset; pick by its description) and fill only the fields it asks for: the preset already holds the model, sizes, quality and style tags and the negative prompt, so never repeat those.',
+    'Then call wait_generation_job with the job id (again while finished is false). The app shows the resulting images by itself, so finish with one short sentence instead of listing ids or links.',
+    'No other generation route or workflow lookup is available to you.',
+  ],
+}
+
+function toolGuidance(presetMode: boolean) {
+  return [
+    'You can act on CoNAI, a local app for managing and generating AI images, only through the provided tools.',
+    ...GENERATION_GUIDANCE[presetMode ? 'preset' : 'freeform'],
+    'Ask for confirmation before bulk or destructive changes such as moving many images between groups.',
+    'To set up an emoticon group: list_emoticons for the group, view_images in small batches when available (otherwise judge from file names and tags), then set_emoticon_keywords with a few short keywords per image.',
+  ].join('\n')
+}
 
 /** What the chat window renders, for both engines; conversation stays plain prose unless formatting helps. */
 export const REPLY_FORMAT_GUIDANCE = [
@@ -190,7 +207,7 @@ const NO_BLOCKS: ReadonlySet<string> = new Set()
 /** `blockKeys`: display blocks whose fences are left out of replies (their values travel with the state instead). */
 export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys: ReadonlySet<string> = NO_BLOCKS): ChatCompletionMessage[] {
   if (message.role === 'user') {
-    return [{ role: 'user', content: chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments) }]
+    return [{ role: 'user', content: `[${messageAddress(message)}; from=user]\n${chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments)}` }]
   }
 
   const calls = message.tool_calls.filter((call) => call.id && call.tool)
@@ -207,7 +224,7 @@ export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys:
   }
   const text = stripBlockFences(message.content, blockKeys)
   if (text.trim()) {
-    result.push({ role: 'assistant', content: text })
+    result.push({ role: 'assistant', content: `[${messageAddress(message)}; from=${message.speaker_profile_id ?? 'assistant'}]\n${text}` })
   }
   return result
 }
@@ -270,8 +287,9 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     buildPersonaPrompt(profile, { user }),
     lore.constant ? `## 설정\n${lore.constant}` : '',
     examples.length > 0 ? EXAMPLE_NOTE : '',
-    withTools ? TOOL_GUIDANCE : '',
+    withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '',
     REPLY_FORMAT_GUIDANCE,
+    REPLY_GUIDANCE,
     buildChatStyleGuidance(profile.style, profile.name),
     buildEmoticonGuidance(profile.style),
   ].filter(Boolean).join('\n\n')
@@ -413,7 +431,7 @@ export function sendableMessages(messages: CodexChatMessageRecord[]) {
 function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'>, tools: ChatCompletionTool[]) {
   const user = userPersonaForThread(thread)
   const lore = selectChatLore(profile, messages, user)
-  const system = buildLeadingMessages(profile, thread, config, tools.length > 0, lore, user)
+  const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), lore, user)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages))
   const directive = flagDirectiveFor(messages, profile, user)
   const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks) + estimateTokens(profile.id, directive)
@@ -455,12 +473,16 @@ export function buildChatMessages(params: {
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
   const { system, blocks, directive, fixedTokens } = buildRequestContext(profile, thread, params.messages, config, tools)
+  const routing = [...params.messages].reverse().find((message) => message.role === 'user')?.routing
+  const maxChars = Math.max(256, Math.min(6000, Math.floor((config.contextTokens ?? 24000) / 4)))
+  const replyContext = buildReplyContext(params.messages, routing, { maxChars })
   const turns = splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config)))
-  const fit = selectWindow(profile, turns, config, fixedTokens).length
+  const fit = selectWindow(profile, turns, config, fixedTokens + estimateTokens(profile.id, replyContext) + 40).length
   const window = anchoredWindowFor(thread.id, turns, fit, (turn) => turn[0].id)
   const blockKeys = usableBlockKeys(profile.style.blocks)
   const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys)), blocks)
-  return appendUserDirective([...system, ...conversation], directive)
+  const reference = buildReplyContext(params.messages, routing, { maxChars, visibleIds: new Set(window.flat().map((message) => message.id)) })
+  return appendUserDirective([...system, ...conversation], [reference, params.messages.length ? `Current room_id: ${thread.id}.` : '', directive].filter(Boolean).join('\n\n'))
 }
 
 // ---- Summary --------------------------------------------------------------------------------------------------

@@ -95,7 +95,9 @@ test('image budget does not tokenize base64 transport bytes as text', () => {
 })
 
 test('multiple status fences share the reply-start value for turn limits', () => {
-  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', style: normalizeChatStyle({ blocks: [{ key: 'status', enabled: true, template: '{{hp}}', example: '{"hp":20}', fields: [{ name: 'hp', step: 5, min: 0, max: 100 }] }] }) })
+  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test' })
+  // Resolved profiles carry linked shared blocks; draft() no longer accepts inline blocks.
+  profile.style = normalizeChatStyle({ blocks: [{ key: 'status', enabled: true, template: '{{hp}}', example: '{"hp":20}', fields: [{ name: 'hp', step: 5, min: 0, max: 100 }] }] })
   const messages = [
     { id: 1, role: 'assistant' as const, content: '```status\n{"hp":100}\n```\n\n```status\n{"hp":100}\n```' },
     { id: 2, role: 'assistant' as const, content: '```status\n{"hp":0}\n```' },
@@ -146,7 +148,8 @@ test('group history fits the member token budget while retaining the latest mess
 })
 
 test('prompt preview uses the same author note and block state as a new direct request', () => {
-  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', authorNote: 'Keep the scene short.', style: normalizeChatStyle({ blocks: [{ key: 'status', enabled: true, template: '{{hp}}', example: '{"hp":20}' }] }) })
+  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', authorNote: 'Keep the scene short.' })
+  profile.style = normalizeChatStyle({ blocks: [{ key: 'status', enabled: true, template: '{{hp}}', example: '{"hp":20}' }] })
   const thread = { id: 789, account_id: null, user_profile_id: null, context_turns: null, max_tokens: null, summary_enabled: null, summary: null, summary_until_message_id: null, block_edits: null, author_note: null, author_note_depth: null } as CodexChatThreadRecord
   const preview = buildChatPromptPreview(profile, [])
   const actual = buildChatMessages({ profile, thread, messages: [], config: resolveContextConfig(thread, profile), tools: [] })

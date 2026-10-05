@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Map as MapIcon, MessageSquare, type LucideIcon } from 'lucide-react'
 import { matchPath, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -10,6 +10,7 @@ import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { CodexChatProvider } from '@/features/codex-chat/codex-chat-provider'
+import { CODEX_CHAT_ROUTE, useCodexChat } from '@/features/codex-chat/codex-chat-context'
 import { CodexChatDock, CodexChatHeaderButton, useCodexChatDockVisible } from '@/features/codex-chat/codex-chat-shell'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { registerTranslationCatalog, useI18n } from '@/i18n'
@@ -30,22 +31,27 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
   return { default: module.GenerationQueueHeaderWidget }
 })
 
-const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', '/upload', '/files', '/wallpaper', '/settings'] as const
+const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', CODEX_CHAT_ROUTE, '/upload', '/files', '/wallpaper', '/settings'] as const
 const PRIMARY_NAV_ITEM_IDS: Record<typeof PRIMARY_NAV_ORDER[number], HeaderNavigationItemKey> = {
   '/': 'home',
   '/groups': 'groups',
   '/prompts': 'prompts',
   '/generation': 'generation',
+  [CODEX_CHAT_ROUTE]: 'chat',
   '/upload': 'upload',
   '/files': 'files',
   '/wallpaper': 'wallpaper',
   '/settings': 'settings',
 }
 
+type NavItem = { id: HeaderNavigationItemKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }
+
 // "이용 가능 페이지" leads the header: it is the hub people use to reach every page they may open.
-const navItems: Array<{ id: HeaderNavigationItemKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }> = [
+const navItems: NavItem[] = [
   { id: 'access', to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null },
-  ...PRIMARY_NAV_ORDER.flatMap((path) => {
+  ...PRIMARY_NAV_ORDER.flatMap((path): NavItem[] => {
+    // The chat page has no page permission: it shows whenever the account can chat (checked at render).
+    if (path === CODEX_CHAT_ROUTE) return [{ id: 'chat', to: CODEX_CHAT_ROUTE, labelKey: 'appShell.chat', icon: MessageSquare, permissionKey: null }]
     const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
     return item ? [{ id: PRIMARY_NAV_ITEM_IDS[path], to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
   }),
@@ -95,7 +101,10 @@ function AppShellLayout() {
   const headerNavigation = headerNavigationQuery.data ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
+  const canUseChat = useCodexChat()?.canUse === true
+  const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false
+    && (item.id !== 'chat' || canUseChat)
+    && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
   const logoTarget = '/access'
   const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
   const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ChevronDown, RotateCcw, Save } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, ChevronDown, RotateCcw, Save } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
@@ -192,6 +192,8 @@ type ComfyWorkflowControllerPanelProps = {
   onRefreshDropdownLists?: () => Promise<void> | void
   onOpenModuleSave: () => void
   onResetDraft: () => void
+  /** Save this workflow and the current values as a chat generation preset (admins). */
+  onSaveChatPreset?: () => void
   onGenerateSelected: () => void
   /** Mark and focus the fields behind the readiness issues without submitting. */
   onRevealFieldIssues?: () => void
@@ -222,6 +224,7 @@ export function ComfyWorkflowControllerPanel({
   onRefreshDropdownLists,
   onOpenModuleSave,
   onResetDraft,
+  onSaveChatPreset,
   onGenerateSelected,
   onRevealFieldIssues,
 }: ComfyWorkflowControllerPanelProps) {
@@ -437,6 +440,11 @@ export function ComfyWorkflowControllerPanel({
       <IconButton variant="ghost" size="icon-sm" onClick={onOpenModuleSave} disabled={isGenerating} label={saveModuleLabel}>
         <Save />
       </IconButton>
+      {onSaveChatPreset ? (
+        <IconButton variant="ghost" size="icon-sm" onClick={onSaveChatPreset} disabled={isGenerating} label={t({ ko: '채팅 프리셋으로 저장', en: 'Save as chat preset' })}>
+          <BookmarkPlus />
+        </IconButton>
+      ) : null}
       <IconButton
         size="icon-sm"
         variant="ghost"

@@ -15,7 +15,19 @@ export function exportChatMarkdown(thread: CodexChatThreadRecord, messages: Code
   const userName = userPersonaForThread(thread).name
   for (const message of messages) {
     const speaker = message.role === 'user' ? userName : (message.speaker_profile_id !== null && speakers?.get(message.speaker_profile_id)) || name
-    lines.push(`## ${label(speaker)} · ${message.created_date} UTC`, '', message.content, '')
+    lines.push(`<a id="message-${message.id}"></a>`, `## ${label(speaker)} · ${message.created_date} UTC`, '')
+    const routing = message.routing
+    if (routing) {
+      const recipients = routing.recipients.map((id) => typeof id === 'number' ? speakers?.get(id) ?? name : id === 'user' ? userName : '방 전체')
+      if (recipients.length) lines.push(`받는 사람: ${recipients.map(label).join(', ')}`, '')
+      if (routing.replyTo) {
+        const quote = routing.replyTo
+        lines.push(`> ${label(quote.speakerName)}에게 답장 · ${quote.unavailable ? '삭제된 메시지' : `[원문](#message-${quote.messageId})`}`)
+        if (!quote.unavailable) lines.push(...quote.excerpt.split('\n').map((line) => `> ${line}`))
+        lines.push('')
+      }
+    }
+    lines.push(message.content, '')
     for (const file of message.attachments ?? []) lines.push(`- [${label(file.name)}](${origin}/api/files/${encodeURIComponent(file.id)}/download)`)
     for (const item of message.mediaAttachments ?? []) lines.push(`- [${label(item.name)}](${origin}/api/images/${encodeURIComponent(item.compositeHash)}/file)`)
     for (const item of byMessage.get(message.id) ?? []) lines.push(`- [${item.source === 'generated' ? '생성 이미지' : '이미지'}](${origin}/api/images/${encodeURIComponent(item.compositeHash)}/file)`)

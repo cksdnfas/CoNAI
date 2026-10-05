@@ -275,7 +275,8 @@ stdio:
 | `move_files` | 폴더로 옮기기 (폴더는 내용과 함께) | `organize` |
 | `delete_files` | 파일·빈 폴더 삭제 (채팅에 첨부된 파일은 보호) | `organize` |
 
-- 정리 도구는 계정에 `files.manage`(업로드·폴더 정리·삭제) 권한도 있어야 합니다.
+- 정리 도구는 계정에 권한이 추가로 필요합니다: `create_file_folder`·`rename_file`·`move_files`는 `files.organize`, `delete_files`는 `files.delete`. 이름 변경으로 실행파일 등 제한 확장자를 붙이려면 `files.upload.any`도 있어야 합니다.
+- MCP 도구는 항상 요청 계정 본인의 보관함만 다룹니다. 관리자의 다른 계정 보관함 탐색(`files.browse.all`)은 웹 UI·HTTP API(`?owner=`)에서만 됩니다.
 
 ### 리소스 조회
 

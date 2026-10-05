@@ -1,4 +1,4 @@
-import { isCodexChatGenerationTool } from '@conai/shared'
+import { isCodexChatGenerationTool, isCodexChatCreationTool } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import type { CodexChatMessageRecord } from './codexChatStore'
@@ -35,7 +35,7 @@ const JOB_TOOLS = new Set(['submit_generation_job', 'get_generation_job', 'wait_
 /** The job ids of a call; calls stored before ids were recorded fall back to the job JSON in their result text. */
 function jobIdsOf(call: CodexChatMessageRecord['tool_calls'][number]) {
   if (call.jobIds) return call.jobIds
-  if (!JOB_TOOLS.has(call.tool)) return []
+  if (!JOB_TOOLS.has(call.tool) && !/^generate_image(_\d+)?$/.test(call.tool)) return []
   const match = /"(?:job_)?id"\s*:\s*(\d+)/.exec(call.output ?? call.summary ?? '')
   return match ? [Number(match[1])] : []
 }
@@ -46,43 +46,67 @@ function jobIdsOf(call: CodexChatMessageRecord['tool_calls'][number]) {
  * shows results as they land without waiting for another message.
  */
 export function attachJobResults(messages: CodexChatMessageRecord[]) {
+  const db = getUserSettingsDb()
+  const owners = new Map<number, string>()
+  const links: Array<{ job_id: number; reply_id: string }> = []
+  for (const threadId of new Set(messages.map((message) => message.thread_id))) {
+    links.push(...db.prepare('SELECT job_id, reply_id FROM chat_generation_links WHERE thread_id = ?').all(threadId) as Array<{ job_id: number; reply_id: string }>)
+  }
+  links.forEach((link) => owners.set(link.job_id, link.reply_id))
+  messages = messages.map((message) => {
+    const ownJobs = links.filter((link) => link.reply_id === message.routing?.replyId)
+    const recorded = new Set(message.tool_calls.filter((call) => isCodexChatCreationTool(call.tool)).flatMap(jobIdsOf))
+    const missing = ownJobs.filter((link) => !recorded.has(link.job_id))
+    return missing.length ? { ...message, tool_calls: [...message.tool_calls, ...missing.map((link) => ({ id: `generation-${link.job_id}`, tool: 'generation_result', status: 'completed' as const, arguments: null, summary: null, historyIds: [], compositeHashes: [], jobIds: [link.job_id], generated: true }))] } : message
+  })
   const jobIds = [...new Set(messages.flatMap((message) => message.tool_calls.flatMap(jobIdsOf)))]
   if (jobIds.length === 0) {
     return { messages, pendingJobs: 0 }
   }
 
-  const db = getUserSettingsDb()
   const historiesByJob = new Map<number, number[]>()
   const pendingJobIds = new Set<number>()
   for (const chunk of chunked(jobIds)) {
     const placeholders = chunk.map(() => '?').join(',')
+    const linked = db.prepare(`SELECT job_id, reply_id FROM chat_generation_links WHERE job_id IN (${placeholders})`).all(...chunk) as Array<{ job_id: number; reply_id: string }>
+    linked.forEach((link) => owners.set(link.job_id, link.reply_id))
     const histories = db.prepare(`SELECT id, queue_job_id FROM api_generation_history WHERE queue_job_id IN (${placeholders}) ORDER BY id`).all(...chunk) as Array<{ id: number; queue_job_id: number }>
     histories.forEach((row) => historiesByJob.set(row.queue_job_id, [...(historiesByJob.get(row.queue_job_id) ?? []), row.id]))
     const jobs = db.prepare(`SELECT id, status FROM generation_queue_jobs WHERE id IN (${placeholders})`).all(...chunk) as Array<{ id: number; status: string }>
     jobs.filter((job) => !FINISHED_JOB_STATUSES.has(job.status)).forEach((job) => pendingJobIds.add(job.id))
   }
 
-  // A job shows once in the transcript: as its history rows, or as a placeholder on its last mention while queued.
-  const lastMention = new Map<number, string>()
-  messages.forEach((message) => message.tool_calls.forEach((call) => jobIdsOf(call).forEach((jobId) => lastMention.set(jobId, `${message.id}:${call.id}`))))
+  return { pendingJobs: pendingJobIds.size, messages: attachResolvedJobResults(messages, historiesByJob, pendingJobIds, owners) }
+}
 
-  return {
-    pendingJobs: pendingJobIds.size,
-    messages: messages.map((message) => ({
+/** Pure ownership resolution, also used by regression coverage. Old records prefer an actual submission. */
+export function attachResolvedJobResults(messages: CodexChatMessageRecord[], historiesByJob: ReadonlyMap<number, number[]>, pendingJobIds: ReadonlySet<number>, owners: ReadonlyMap<number, string> = new Map()) {
+  const creator = new Map<number, string>()
+  for (const message of messages) for (const call of message.tool_calls) {
+    if (!isCodexChatCreationTool(call.tool)) continue
+    for (const id of jobIdsOf(call)) {
+      if (owners.has(id) && owners.get(id) !== message.routing?.replyId) continue
+      if (!creator.has(id)) creator.set(id, `${message.id}:${call.id}`)
+    }
+  }
+  return messages.map((message) => ({
       ...message,
       tool_calls: message.tool_calls.map((call) => {
         const ids = jobIdsOf(call)
-        const attached = ids.flatMap((jobId) => historiesByJob.get(jobId) ?? [])
-        const placeholders = ids.filter((jobId) => pendingJobIds.has(jobId) && !historiesByJob.has(jobId) && lastMention.get(jobId) === `${message.id}:${call.id}`)
-        if (attached.length === 0 && placeholders.length === 0) return call
+        const ownIds = ids.filter((id) => creator.get(id) === `${message.id}:${call.id}`)
+        const attached = ownIds.flatMap((jobId) => historiesByJob.get(jobId) ?? [])
+        const placeholders = ownIds.filter((jobId) => pendingJobIds.has(jobId) && !(historiesByJob.get(jobId)?.length))
+        const generated = ids.length ? ownIds.length > 0 : call.generated ?? isCodexChatCreationTool(call.tool)
+        // A polling call in the creator's own message need not repeat the large result or its placeholder.
+        const duplicateIds = ids.filter((id) => creator.get(id)?.startsWith(`${message.id}:`) && !ownIds.includes(id)).flatMap((id) => historiesByJob.get(id) ?? [])
         return {
           ...call,
-          historyIds: [...new Set([...call.historyIds, ...attached])],
-          ...(placeholders.length > 0 ? { pendingJobIds: placeholders } : {}),
+          generated,
+          historyIds: [...new Set([...call.historyIds.filter((id) => !duplicateIds.includes(id)), ...attached])],
+          pendingJobIds: generated ? placeholders : undefined,
         }
       }),
-    })),
-  }
+    }))
 }
 
 /** Completed history rows → their result image hash. Failed, pending or deleted rows drop out. */
@@ -136,7 +160,7 @@ export function collectCodexChatMedia(messages: CodexChatMessageRecord[]): Codex
       const reference: MediaReference = {
         messageId: message.id,
         createdDate: message.created_date,
-        source: isCodexChatGenerationTool(call.tool) ? 'generated' : 'found',
+        source: (call.generated ?? isCodexChatGenerationTool(call.tool)) ? 'generated' : 'found',
       }
       const hashes = [
         ...(call.historyIds ?? []).map((historyId) => historyHashById.get(historyId)),

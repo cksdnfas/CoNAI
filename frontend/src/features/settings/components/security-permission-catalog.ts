@@ -96,7 +96,13 @@ const PERMISSION_CATALOG: PermissionCatalogSection[] = [
     id: 'files',
     label: { ko: '파일 보관함', en: 'Files' },
     entries: [{ key: 'page.files.view', label: { ko: '내 파일 조회·다운로드', en: 'Browse and download own files' },
-      children: [{ key: 'files.manage', label: { ko: '업로드·폴더 정리·삭제', en: 'Upload, organize and delete' } }] }],
+      children: [
+        { key: 'files.upload', label: { ko: '업로드 (텍스트·이미지·영상·오디오·문서)', en: 'Upload (text, image, video, audio, documents)' } },
+        { key: 'files.upload.any', label: { ko: '실행파일 등 제한 형식 업로드', en: 'Upload restricted types (executables etc.)' } },
+        { key: 'files.organize', label: { ko: '폴더 만들기·이름 변경·이동', en: 'Create folders, rename and move' } },
+        { key: 'files.delete', label: { ko: '삭제', en: 'Delete' } },
+        { key: 'files.browse.all', label: { ko: '모든 계정 파일 탐색·관리', en: 'Browse and manage every account\'s files' } },
+      ] }],
   },
   {
     id: 'administration',

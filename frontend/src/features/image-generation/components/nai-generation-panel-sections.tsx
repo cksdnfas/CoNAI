@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ArrowUp, ExternalLink, LogIn } from 'lucide-react'
+import { ArrowUp, BookmarkPlus, ExternalLink, LogIn } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
@@ -151,6 +151,8 @@ interface NaiActionSectionProps {
   onUpscale: () => void
   onReset: () => void
   onGenerate: () => void
+  /** Save the current setup as a chat generation preset (admins). */
+  onSaveChatPreset?: () => void
 }
 
 /** NAI wiring for the shared GenerateActionBar: upscale + reset secondary actions and the Anlas cost suffix. */
@@ -166,6 +168,7 @@ export function NaiActionSection({
   onUpscale,
   onReset,
   onGenerate,
+  onSaveChatPreset,
 }: NaiActionSectionProps) {
   const { t } = useI18n()
   const upscaleLabel = isUpscaling
@@ -182,10 +185,19 @@ export function NaiActionSection({
       isGenerating={isGenerating}
       onReset={onReset}
       resetLabel={t('image-generation.components.nai.generation.panel.sections.reset')}
-      secondaryActions={canUpscale ? (
-        <GenerateActionBarIconButton label={upscaleLabel} onClick={onUpscale} disabled={isUpscaling || isGenerating}>
-          <ArrowUp />
-        </GenerateActionBarIconButton>
+      secondaryActions={canUpscale || onSaveChatPreset ? (
+        <>
+          {onSaveChatPreset ? (
+            <GenerateActionBarIconButton label={t({ ko: '채팅 프리셋으로 저장', en: 'Save as chat preset' })} onClick={onSaveChatPreset} disabled={isGenerating}>
+              <BookmarkPlus />
+            </GenerateActionBarIconButton>
+          ) : null}
+          {canUpscale ? (
+            <GenerateActionBarIconButton label={upscaleLabel} onClick={onUpscale} disabled={isUpscaling || isGenerating}>
+              <ArrowUp />
+            </GenerateActionBarIconButton>
+          ) : null}
+        </>
       ) : null}
       targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
       message={costErrorMessage}

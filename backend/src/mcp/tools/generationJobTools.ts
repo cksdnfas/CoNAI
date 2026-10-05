@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { linkChatGeneration, requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
@@ -70,6 +71,145 @@ async function describeJob(jobId: number, context: McpRequestContext) {
   };
 }
 
+export type McpGenerationJobInput = {
+  service_type: 'comfyui' | 'novelai' | 'codex';
+  workflow_id?: number;
+  server_id?: number;
+  server_tag?: string;
+  inputs?: Record<string, unknown>;
+  request_payload?: Record<string, unknown>;
+  group_id?: number;
+  group_path?: string;
+  priority?: number;
+  idempotency_key?: string;
+  /** Shown in the queue; the default names the service. */
+  request_summary?: string;
+};
+
+/**
+ * Create one durable generation job for an MCP caller (submit_generation_job and the chat generation presets):
+ * routing, ComfyUI input normalization, idempotent retries and ownership. Returns the job as the tools describe it.
+ */
+export async function enqueueMcpGenerationJob(context: McpRequestContext, input: McpGenerationJobInput) {
+  if (context.chatContext) requireActiveChatReply(context.chatContext);
+  const { service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority = 100, idempotency_key, request_summary } = input;
+  const normalizedServerTag = parseGenerationQueueRoutingTag(server_tag, 'server_tag');
+  if (server_id != null && normalizedServerTag !== undefined) {
+    throw new Error('server_id and server_tag cannot be combined');
+  }
+  if (service_type !== 'comfyui' && (server_id != null || normalizedServerTag !== undefined)) {
+    throw new Error('server_id and server_tag are only valid for comfyui jobs');
+  }
+  const idempotencyScope = idempotency_key ? resolveIdempotencyScope(context) : null;
+  const requestHash = idempotency_key
+    ? buildIdempotencyRequestHash({
+        service_type,
+        workflow_id: workflow_id ?? null,
+        server_id: server_id ?? null,
+        server_tag: normalizedServerTag ?? null,
+        inputs: inputs ?? null,
+        request_payload: request_payload ?? null,
+        group_id: group_id ?? null,
+        ...(group_path ? { group_path } : {}),
+        priority,
+      })
+    : null;
+
+  if (idempotency_key && idempotencyScope && requestHash) {
+    const existing = GenerationQueueModel.findIdempotentJob(idempotencyScope, idempotency_key);
+    if (existing) {
+      if (existing.request_hash !== requestHash) {
+        throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
+      }
+      const job = await describeJob(existing.job_id, context);
+      if (!job) throw new Error(`Idempotent queue job ${existing.job_id} no longer exists`);
+      return { ...job, idempotency_key, idempotency_reused: true };
+    }
+  }
+
+  let workflowName: string | null = null;
+  let payload = request_payload ?? inputs ?? {};
+  let routing: ReturnType<typeof resolveMcpGenerationRoutingInput>;
+  if (service_type === 'comfyui') {
+    if (!workflow_id) throw new Error('workflow_id is required for ComfyUI jobs');
+    const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);
+    if (!workflow || workflow.deleted_at) {
+      const reference = HistoryQueryRepository.findWorkflowReference(workflow_id);
+      if (!workflow && !reference) throw new Error(`Workflow with ID ${workflow_id} not found`);
+      throw new Error(`삭제된 워크플로우(사용 불가): ${reference?.workflow_name ?? workflow?.name ?? `ID ${workflow_id}`}`);
+    }
+    if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
+    workflowName = workflow.name;
+    routing = resolveMcpGenerationRoutingInput({
+      serviceType: service_type,
+      workflowId: workflow_id,
+      serverId: server_id,
+      serverTag: normalizedServerTag,
+    });
+    const markedFields = parseMcpMarkedFields(workflow);
+    const rawInputs = (inputs ?? payload.prompt_data ?? {}) as Record<string, unknown>;
+    const suppliedInputs = normalizeWorkflowNumericPromptValues(
+      markedFields,
+      rawInputs,
+    );
+    payload = {
+      ...payload,
+      prompt_data: externalizeQueueInputDataUrls(
+        normalizeMcpWorkflowInputs(markedFields, suppliedInputs),
+      ).value,
+    };
+  } else {
+    routing = resolveMcpGenerationRoutingInput({
+      serviceType: service_type,
+      workflowId: workflow_id,
+      serverId: server_id,
+      serverTag: normalizedServerTag,
+    });
+    if (Object.keys(payload).length === 0) {
+      throw new Error('request_payload is required for NovelAI and Codex jobs');
+    }
+  }
+
+  if (service_type === 'codex') {
+    payload = parseCodexGenerationRequest(payload);
+  }
+  if (service_type === 'novelai') {
+    assertChatNaiSampleCount(context, (payload as Record<string, unknown>).n_samples);
+  }
+
+  // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.
+  const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
+
+  const createData = {
+    service_type,
+    priority,
+    workflow_id: workflow_id ?? null,
+    workflow_name: workflowName,
+    requested_group_id: targetGroupId ?? null,
+    requested_server_id: routing.requestedServerId,
+    requested_server_tag: routing.requestedServerTag,
+    request_payload: payload,
+    request_summary: request_summary ?? `MCP ${service_type} generation`,
+    requested_by_account_id: context.requester?.accountId ?? null,
+    requested_by_account_type: context.requester?.accountType ?? null,
+  };
+  const creation = idempotency_key && idempotencyScope && requestHash
+    ? GenerationQueueModel.createIdempotent(createData, {
+        scope: idempotencyScope,
+        key: idempotency_key,
+        requestHash,
+      })
+    : { jobId: GenerationQueueModel.create(createData), requestHash: null, reused: false };
+  if (requestHash && creation.requestHash !== requestHash) {
+    throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
+  }
+
+  if (!creation.reused) linkChatGeneration(context.chatContext, creation.jobId);
+  GenerationQueueService.requestDispatch();
+  const job = await describeJob(creation.jobId, context);
+  return idempotency_key ? { ...job, idempotency_key, idempotency_reused: creation.reused } : job;
+}
+
 export function registerGenerationJobTools(server: McpServer, context: McpRequestContext): void {
   server.tool(
     'get_codex_generation_options',
@@ -109,134 +249,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       priority: z.number().int().min(0).max(100000).default(100),
       idempotency_key: z.string().trim().min(1).max(200).optional().describe('Optional retry key. The same MCP key and request return the original job; a different request conflicts.'),
     },
-    async ({ service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority, idempotency_key }) => {
+    async (args) => {
       try {
-        const normalizedServerTag = parseGenerationQueueRoutingTag(server_tag, 'server_tag');
-        if (server_id != null && normalizedServerTag !== undefined) {
-          throw new Error('server_id and server_tag cannot be combined');
-        }
-        if (service_type !== 'comfyui' && (server_id != null || normalizedServerTag !== undefined)) {
-          throw new Error('server_id and server_tag are only valid for comfyui jobs');
-        }
-        const idempotencyScope = idempotency_key ? resolveIdempotencyScope(context) : null;
-        const requestHash = idempotency_key
-          ? buildIdempotencyRequestHash({
-              service_type,
-              workflow_id: workflow_id ?? null,
-              server_id: server_id ?? null,
-              server_tag: normalizedServerTag ?? null,
-              inputs: inputs ?? null,
-              request_payload: request_payload ?? null,
-              group_id: group_id ?? null,
-              ...(group_path ? { group_path } : {}),
-              priority,
-            })
-          : null;
-
-        if (idempotency_key && idempotencyScope && requestHash) {
-          const existing = GenerationQueueModel.findIdempotentJob(idempotencyScope, idempotency_key);
-          if (existing) {
-            if (existing.request_hash !== requestHash) {
-              throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
-            }
-            const job = await describeJob(existing.job_id, context);
-            if (!job) throw new Error(`Idempotent queue job ${existing.job_id} no longer exists`);
-            return {
-              content: [{
-                type: 'text' as const,
-                text: JSON.stringify({ ...job, idempotency_key, idempotency_reused: true }, null, 2),
-              }],
-            };
-          }
-        }
-
-        let workflowName: string | null = null;
-        let payload = request_payload ?? inputs ?? {};
-        let routing: ReturnType<typeof resolveMcpGenerationRoutingInput>;
-        if (service_type === 'comfyui') {
-          if (!workflow_id) throw new Error('workflow_id is required for ComfyUI jobs');
-          const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);
-          if (!workflow || workflow.deleted_at) {
-            const reference = HistoryQueryRepository.findWorkflowReference(workflow_id);
-            if (!workflow && !reference) throw new Error(`Workflow with ID ${workflow_id} not found`);
-            throw new Error(`삭제된 워크플로우(사용 불가): ${reference?.workflow_name ?? workflow?.name ?? `ID ${workflow_id}`}`);
-          }
-          if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
-          workflowName = workflow.name;
-          routing = resolveMcpGenerationRoutingInput({
-            serviceType: service_type,
-            workflowId: workflow_id,
-            serverId: server_id,
-            serverTag: normalizedServerTag,
-          });
-          const markedFields = parseMcpMarkedFields(workflow);
-          const rawInputs = (inputs ?? payload.prompt_data ?? {}) as Record<string, unknown>;
-          const suppliedInputs = normalizeWorkflowNumericPromptValues(
-            markedFields,
-            rawInputs,
-          );
-          payload = {
-            ...payload,
-            prompt_data: externalizeQueueInputDataUrls(
-              normalizeMcpWorkflowInputs(markedFields, suppliedInputs),
-            ).value,
-          };
-        } else {
-          routing = resolveMcpGenerationRoutingInput({
-            serviceType: service_type,
-            workflowId: workflow_id,
-            serverId: server_id,
-            serverTag: normalizedServerTag,
-          });
-          if (Object.keys(payload).length === 0) {
-            throw new Error('request_payload is required for NovelAI and Codex jobs');
-          }
-        }
-
-        if (service_type === 'codex') {
-          payload = parseCodexGenerationRequest(payload);
-        }
-        if (service_type === 'novelai') {
-          assertChatNaiSampleCount(context, (payload as Record<string, unknown>).n_samples);
-        }
-
-        // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.
-        const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
-
-        const createData = {
-          service_type,
-          priority,
-          workflow_id: workflow_id ?? null,
-          workflow_name: workflowName,
-          requested_group_id: targetGroupId ?? null,
-          requested_server_id: routing.requestedServerId,
-          requested_server_tag: routing.requestedServerTag,
-          request_payload: payload,
-          request_summary: `MCP ${service_type} generation`,
-          requested_by_account_id: context.requester?.accountId ?? null,
-          requested_by_account_type: context.requester?.accountType ?? null,
-        };
-        const creation = idempotency_key && idempotencyScope && requestHash
-          ? GenerationQueueModel.createIdempotent(createData, {
-              scope: idempotencyScope,
-              key: idempotency_key,
-              requestHash,
-            })
-          : { jobId: GenerationQueueModel.create(createData), requestHash: null, reused: false };
-        if (requestHash && creation.requestHash !== requestHash) {
-          throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
-        }
-
-        GenerationQueueService.requestDispatch();
-        const job = await describeJob(creation.jobId, context);
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify(idempotency_key
-              ? { ...job, idempotency_key, idempotency_reused: creation.reused }
-              : job, null, 2),
-          }],
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(await enqueueMcpGenerationJob(context, args), null, 2) }] };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Generation job error: ${(error as Error).message}` }] };
       }

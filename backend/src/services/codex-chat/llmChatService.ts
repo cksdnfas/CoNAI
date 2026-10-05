@@ -1,4 +1,7 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
+import type { ChatExecutionContext } from '@conai/shared'
+import { isCodexChatCreationTool } from '@conai/shared'
+import { beginDirectReply, userReplyRouting } from './chatReplies'
 import type { McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { retryLlmRequest } from '../llmRequestRetry'
@@ -27,6 +30,8 @@ export class LlmChatError extends Error {
 }
 
 type LlmTurn = {
+  chatContext?: ChatExecutionContext
+  delivery?: ReturnType<typeof beginDirectReply>
   threadId: number
   replacingMessageId?: number
   controller: AbortController
@@ -100,6 +105,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     summary: null,
     historyIds: [],
     compositeHashes: [],
+    generated: isCodexChatCreationTool(call.function.name),
   }
   turn.toolCalls.set(record.id, record)
 
@@ -108,7 +114,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     record.arguments = parseArguments(call.function.arguments)
     emit(turn, { type: 'tool', call: { ...record } })
     const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
-    const { texts, historyIds, compositeHashes, jobIds } = readMcpToolResult(result, record.tool)
+    const { texts, historyIds, compositeHashes, jobIds, pendingJobIds } = readMcpToolResult(result, record.tool)
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
     const found = readToolImages(result)
     if (found.length > 0) {
@@ -119,6 +125,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     record.historyIds = historyIds
     record.compositeHashes = compositeHashes
     if (jobIds.length > 0) record.jobIds = jobIds
+    if (jobIds.length > 0) record.pendingJobIds = pendingJobIds
   } catch (error) {
     output = `Error: ${error instanceof Error ? error.message : String(error)}`
     record.status = 'failed'
@@ -154,7 +161,8 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
 async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, roomTools: 'call' | 'all' | false = false, generation: Partial<LlmGenerationOptions> = {}) {
   const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: { ...profileGenerationOptions(profile), ...generation } })
   const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-  const bridge = scopes.length > 0 || roomTools ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist, { roomTools }) : null
+  const chatContext = turn.chatContext ?? turn.delivery?.context
+  const bridge = scopes.length > 0 || roomTools || chatContext ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist, { roomTools, generationPresetIds: profile.generationPresetIds, chatContext }) : null
 
   try {
     // Image viewing is only offered to models the profile says can see images.
@@ -222,11 +230,12 @@ function finishTurn(turn: LlmTurn, status: CodexChatMessageRecord['status'], err
     status,
     error,
     finish_reason: finishReason,
+    routing: turn.delivery?.routing,
   })
   if (turn.replacingMessageId) {
     // A connection failure must not replace a usable answer with an empty failed alternative.
     if (status === 'completed' || content || toolCalls.length) {
-      CodexChatStore.addAlternative(turn.threadId, messageId, { content, tool_calls: toolCalls, status, error, finish_reason: finishReason, created_at: new Date().toISOString() })
+      CodexChatStore.addAlternative(turn.threadId, messageId, { content, tool_calls: toolCalls, status, error, finish_reason: finishReason, routing: turn.delivery?.routing, created_at: new Date().toISOString() })
     } else if (error) {
       emit(turn, { type: 'error', message: error })
     }
@@ -256,6 +265,8 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
     throw error
   }
   const updatedThread = CodexChatStore.findThreadById(thread.id) as CodexChatThreadRecord
+  const history = CodexChatStore.listMessages(thread.id).filter((entry) => entry.id !== replacingMessageId)
+  turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }))
   void runReply(turn, requester, updatedThread, profile)
     .then(() => finishTurn(turn, turn.controller.signal.aborted ? 'interrupted' : 'completed', null), (error: unknown) => {
       const aborted = turn.controller.signal.aborted
@@ -263,6 +274,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
     })
     .then(resolveFinished, rejectFinished)
     .finally(() => {
+      turn.delivery?.close()
       if (activeTurns.get(thread.id) === turn) activeTurns.delete(thread.id)
       turn.listeners.clear()
       if (turn.controller.signal.aborted) return
@@ -280,6 +292,7 @@ export type GroupReplyResult = Pick<CodexChatMessageRecord, 'content' | 'tool_ca
  * `reasoning` and `tool` events to `emit`; `signal` stops it, leaving what was written as an interrupted reply.
  */
 export async function generateLlmGroupReply(params: {
+  chatContext: ChatExecutionContext
   requester: McpRequester
   threadId: number
   profile: ChatProfile
@@ -297,6 +310,7 @@ export async function generateLlmGroupReply(params: {
   if (params.signal.aborted) abort()
   params.signal.addEventListener('abort', abort, { once: true })
   const turn: LlmTurn = {
+    chatContext: params.chatContext,
     threadId: params.threadId, controller, text: '', reasoning: '', toolCalls: new Map(), finishReason: null,
     offeredTools: [], listeners: new Set([params.emit]), finished: Promise.resolve({} as CodexChatMessageRecord),
   }
@@ -332,7 +346,7 @@ export const LlmChatService = {
 
   running(threadId: number) {
     const turn = activeTurns.get(threadId)
-    return turn ? { text: turn.text, toolCalls: [...turn.toolCalls.values()], replacingMessageId: turn.replacingMessageId } : null
+    return turn ? { text: turn.text, toolCalls: [...turn.toolCalls.values()], replacingMessageId: turn.replacingMessageId, routing: turn.delivery?.routing } : null
   },
 
   isRunning(threadId: number) {
@@ -343,7 +357,7 @@ export const LlmChatService = {
    * Send one user message and stream the reply to `listener`. Resolves with the stored assistant message; the reply
    * keeps running (and is stored) when the listener goes away.
    */
-  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown) {
+  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id)
     const attachments = validateChatAttachments(requester, fileIds)
@@ -353,8 +367,9 @@ export const LlmChatService = {
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
       throw new LlmChatError('메시지를 입력해줘.')
     }
+    const routing = userReplyRouting(thread, replyToMessageId)
     return startReply(requester, thread, profile, listener, () => {
-      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }

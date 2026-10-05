@@ -4,40 +4,69 @@ import multer from 'multer';
 import { requirePermission } from '../middleware/authMiddleware';
 import { createUploadStorage, wrapUploadMiddleware, MAX_UPLOAD_FILE_SIZE_BYTES, MAX_MULTIPLE_UPLOAD_FILES, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { FileStoreError, FileStoreService, fileOwnerKey, parseFileId } from '../services/fileStoreService';
+import { FileStoreError, FileStoreService, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
+import { hasConfiguredAuth } from './auth-route-helpers';
 import { getRequesterAccountId } from './requester-session-helpers';
 
 const router = Router();
 router.use(requirePermission('page.files.view'));
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
-const owner = (req: Request) => fileOwnerKey(getRequesterAccountId(req));
+
+/** `requirePermission` refreshed the session's keys just before this, so they are current for the whole request. */
+const has = (req: Request, permissionKey: string) => req.session?.permissionKeys?.includes(permissionKey) === true;
+const selfOwner = (req: Request) => fileOwnerKey(getRequesterAccountId(req));
+/**
+ * The store being browsed. Every route defaults to the requester's own store; `?owner=` switches to
+ * another account's store and is honored only with `files.browse.all`, which then covers every action there.
+ */
+const owner = (req: Request) => {
+  const self = selfOwner(req);
+  const requested = req.query.owner;
+  if (requested === undefined || requested === '' || requested === self) return self;
+  const key = parseOwnerKey(requested);
+  if (!has(req, 'files.browse.all')) throw new FileStoreError('다른 계정의 파일을 볼 권한이 없어.', 403);
+  return key;
+};
 const id = (req: Request) => parseFileId(req.params.id) as string;
+/** Bootstrap (no credentials) is one local user and may store anything. */
+const allowAnyType = (req: Request) => (!hasConfiguredAuth() && getRequesterAccountId(req) === null) || has(req, 'files.upload.any');
 
 router.get('/', (req, res) => {
   res.json({ success: true, data: FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), Number(req.query.offset ?? 0), Number(req.query.limit ?? 100)) });
 });
+router.get('/owners', requirePermission('files.browse.all'), (req, res) => res.json({ success: true, data: FileStoreService.owners(selfOwner(req)) }));
 router.get('/folders', (req, res) => res.json({ success: true, data: FileStoreService.folders(owner(req)) }));
-router.post('/folders', requirePermission('files.manage'), (req, res) => {
+router.post('/folders', requirePermission('files.organize'), (req, res) => {
   res.status(201).json({ success: true, data: FileStoreService.createFolder(owner(req), parseFileId(req.body?.parentId, true), req.body?.name) });
 });
 
 const upload = wrapUploadMiddleware(multer({
   storage: createUploadStorage(MAX_MULTIPLE_UPLOAD_TOTAL_BYTES, fileStoreIncoming, false),
   limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: MAX_MULTIPLE_UPLOAD_FILES, fields: 0, parts: MAX_MULTIPLE_UPLOAD_FILES },
+  // Reject restricted extensions before their bytes are received; the service rechecks the decoded name on commit.
+  fileFilter: (req, file, callback) => {
+    try {
+      assertFileTypeAllowed(file.originalname, req.res?.locals.allowAnyType === true);
+      callback(null, true);
+    } catch (error) {
+      callback(error as Error);
+    }
+  },
 }).array('files', MAX_MULTIPLE_UPLOAD_FILES));
 
-router.post('/upload', requirePermission('files.manage'), (req, _res, next) => {
+router.post('/upload', requirePermission('files.upload'), (req, res, next) => {
   // Validate the destination before receiving bytes, then recheck it inside the commit transaction.
   FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), 0, 1);
   ensureFileStoreDirectories();
+  res.locals.allowAnyType = allowAnyType(req);
   next();
 }, upload, asyncHandler(async (req, res) => {
   const files = Array.isArray(req.files) ? req.files : [];
   try {
     if (files.length === 0) throw new FileStoreError('파일을 선택해줘.');
-    const data = FileStoreService.upload(owner(req), parseFileId(req.query.parentId, true), files);
+    const data = FileStoreService.upload(owner(req), parseFileId(req.query.parentId, true), files, res.locals.allowAnyType === true);
     FileStoreService.purgeDeleted();
     res.status(201).json({ success: true, data });
   } finally {
@@ -45,16 +74,16 @@ router.post('/upload', requirePermission('files.manage'), (req, _res, next) => {
   }
 }));
 
-router.post('/move', requirePermission('files.manage'), (req, res) => {
+router.post('/move', requirePermission('files.organize'), (req, res) => {
   FileStoreService.move(owner(req), req.body?.ids, parseFileId(req.body?.parentId, true));
   res.json({ success: true });
 });
-router.post('/delete', requirePermission('files.manage'), (req, res) => {
+router.post('/delete', requirePermission('files.delete'), (req, res) => {
   FileStoreService.delete(owner(req), req.body?.ids);
   res.json({ success: true });
 });
-router.patch('/:id', requirePermission('files.manage'), (req, res) => {
-  res.json({ success: true, data: FileStoreService.rename(owner(req), id(req), req.body?.name) });
+router.patch('/:id', requirePermission('files.organize'), (req, res) => {
+  res.json({ success: true, data: FileStoreService.rename(owner(req), id(req), req.body?.name, allowAnyType(req)) });
 });
 router.get('/:id', (req, res) => res.json({ success: true, data: FileStoreService.get(owner(req), id(req)) }));
 router.get('/:id/neighbors', (req, res) => res.json({ success: true, data: FileStoreService.neighbors(owner(req), id(req)) }));
@@ -81,8 +110,9 @@ router.get('/:id/view', asyncHandler(async (req, res, next) => {
 }));
 /** GET /api/files/:id/thumbnail — cached, bounded image/video WebP for the icon view and picker. */
 router.get('/:id/thumbnail', asyncHandler(async (req, res) => {
-  const { entry, filePath } = FileStoreService.resolveFile(owner(req), id(req));
-  const cached = await getFileThumbnail(owner(req), entry, filePath);
+  const store = owner(req);
+  const { entry, filePath } = FileStoreService.resolveFile(store, id(req));
+  const cached = await getFileThumbnail(store, entry, filePath);
   res.setHeader('Content-Type', 'image/webp');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, max-age=3600');

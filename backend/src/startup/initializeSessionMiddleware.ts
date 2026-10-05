@@ -3,6 +3,7 @@ import type { Express, RequestHandler } from 'express';
 import session, { type Store as SessionStore } from 'express-session';
 import { initializeAuthDb, getAuthDb } from '../database/authDb';
 import { initializeUserSettingsDb } from '../database/userSettingsDb';
+import { FileStoreService } from '../services/fileStoreService';
 import { resolveSessionSecret } from '../utils/sessionSecret';
 import { throttleSessionStoreTouch } from '../utils/sessionTouchThrottle';
 
@@ -46,6 +47,12 @@ export async function initializeSessionMiddleware(
 ): Promise<void> {
   initializeAuthDb();
   initializeUserSettingsDb();
+  try {
+    const { moved, orphaned } = FileStoreService.migrateLayout();
+    if (moved || orphaned) console.log(`[file-store] Moved ${moved} blob(s) into per-account directories; ${orphaned} orphan(s) set aside.`);
+  } catch (error) {
+    console.warn('[file-store] Layout migration will retry on next start:', error instanceof Error ? error.message : error);
+  }
 
   const SqliteStore = BetterSqlite3Store(session);
   const sessionSecret = resolveSessionSecret().secret;

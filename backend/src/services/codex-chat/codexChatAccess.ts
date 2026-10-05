@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import type { ChatExecutionContext } from '@conai/shared'
 import type { Request } from 'express'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
@@ -54,20 +55,26 @@ export function intersectChatScopes(configured: readonly ChatScope[], access: Ch
   return configured.filter((scope) => access.scopes.includes(scope))
 }
 
-const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; roomTools: boolean }>()
+const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; roomTools: boolean; generationPresetIds: number[]; chatContext?: ChatExecutionContext }>()
 
 /**
  * One token per chat app-server process; it lets that process reach `/mcp` as the chatting account with the
  * scopes its profiles were given (processes are keyed by account + scopes).
  */
-export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools = false) {
+export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools = false, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { requester, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, roomTools })
+  tokens.set(token, { requester, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, roomTools, generationPresetIds: [...generationPresetIds], chatContext })
   return token
 }
 
 export function revokeCodexChatMcpToken(token: string) {
   tokens.delete(token)
+}
+
+export function setCodexChatExecution(token: string, context: ChatExecutionContext) {
+  const grant = tokens.get(token)
+  if (!grant || grant.chatContext?.threadId !== context.threadId || grant.chatContext.profileId !== context.profileId) throw new Error('Codex chat binding mismatch')
+  grant.chatContext = { ...context }
 }
 
 /**
@@ -100,5 +107,7 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
     source: 'codex-chat',
     toolAllowlist: grant.toolAllowlist,
     chatRoomTools: grant.roomTools,
+    generationPresetIds: grant.generationPresetIds,
+    chatContext: grant.chatContext ? { ...grant.chatContext } : undefined,
   }
 }

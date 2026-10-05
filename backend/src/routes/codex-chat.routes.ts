@@ -19,6 +19,8 @@ import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChat
 import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders } from '../services/codex-chat/llmChatContext'
 import { buildLorebookText, ChatLorebookStore } from '../services/codex-chat/chatLorebook'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
+import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
+import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGenerationPresetInput } from '../services/codex-chat/chatGenerationPresets'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
@@ -32,6 +34,7 @@ import { CHAT_CARD_MAX_BYTES, importChatCard, readLorebookFile } from '../servic
 import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
 import { chatAssetFile, localizeImages, rewriteImageLinks, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
+import { ChatReplyError } from '../services/codex-chat/chatReplies'
 import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
 import { ChatUserProfileError, ChatUserProfileStore } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
@@ -70,7 +73,7 @@ function isGroupThread(req: Request, threadId: number) {
 }
 
 function sendChatError(res: Response, error: unknown) {
-  if (error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError) {
+  if (error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -616,6 +619,82 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
   res.json({ success: true, data: { deleted: ChatSharedBlockStore.delete(blockId) } })
 })
 
+/** Tool presets (MCP scopes + tool allowlist). Profiles link one by id, so an edit reaches every linked profile at once. */
+router.get('/admin/tool-presets', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ChatToolPresetStore.list() })
+})
+
+router.post('/admin/tool-presets', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as { name?: unknown; scopes?: unknown; toolAllowlist?: unknown }
+    res.status(201).json({ success: true, data: ChatToolPresetStore.create(body) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /admin/tool-presets/import — the parsed contents of a preset JSON file (one preset, an export, or an array); each becomes a preset. */
+router.post('/admin/tool-presets/import', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const created = readToolPresetFile(req.body).map((item) => ChatToolPresetStore.create(item))
+    res.status(201).json({ success: true, data: created })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.put('/admin/tool-presets/:presetId', requireAdmin, (req: Request, res: Response) => {
+  const presetId = parseId(req.params.presetId)
+  if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
+  try {
+    const body = (req.body ?? {}) as { name?: unknown; scopes?: unknown; toolAllowlist?: unknown }
+    const updated = ChatToolPresetStore.update(presetId, { name: body.name, scopes: body.scopes, toolAllowlist: body.toolAllowlist })
+    if (!updated) { res.status(404).json({ success: false, error: '도구 프리셋을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.delete('/admin/tool-presets/:presetId', requireAdmin, (req: Request, res: Response) => {
+  const presetId = parseId(req.params.presetId)
+  if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
+  try {
+    res.json({ success: true, data: { deleted: ChatToolPresetStore.delete(presetId) } })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** Generation presets (a fixed NAI setup or ComfyUI workflow the model fills in). Profiles link them by id. */
+router.get('/admin/generation-presets', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ChatGenerationPresetStore.list() })
+})
+
+router.post('/admin/generation-presets', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.status(201).json({ success: true, data: ChatGenerationPresetStore.create((req.body ?? {}) as ChatGenerationPresetInput) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /admin/generation-presets/import — the parsed contents of a preset JSON file (one preset, an export, or an array). */
+router.post('/admin/generation-presets/import', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const created = readGenerationPresetFile(req.body).map((item) => ChatGenerationPresetStore.create(item))
+    res.status(201).json({ success: true, data: created })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.put('/admin/generation-presets/:presetId', requireAdmin, (req: Request, res: Response) => {
+  const presetId = parseId(req.params.presetId)
+  if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
+  try {
+    const updated = ChatGenerationPresetStore.update(presetId, (req.body ?? {}) as ChatGenerationPresetInput)
+    if (!updated) { res.status(404).json({ success: false, error: '생성 프리셋을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.delete('/admin/generation-presets/:presetId', requireAdmin, (req: Request, res: Response) => {
+  const presetId = parseId(req.params.presetId)
+  if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
+  try {
+    res.json({ success: true, data: { deleted: ChatGenerationPresetStore.delete(presetId) } })
+  } catch (error) { sendChatError(res, error) }
+})
+
 /**
  * POST /admin/chat-assets/localize — `{ texts }`: copy the web images these texts show into CoNAI and return the texts
  * pointing at the copies (the profile editor applies them to its draft). Chat messages already showing those links
@@ -659,7 +738,7 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
     const profileId = parseId(body.id) ?? 0
     const profile = ChatProfileStore.draft(body, profileId)
     const bridge = profile.mcpEnabled && profile.mcpScopes.length > 0
-      ? await openChatMcpBridge(requesterFrom(req), profile.mcpScopes, profile.toolAllowlist)
+      ? await openChatMcpBridge(requesterFrom(req), profile.mcpScopes, profile.toolAllowlist, { generationPresetIds: profile.generationPresetIds })
       : null
     try {
       const tools = (bridge?.tools ?? []).filter((tool) => profile.engine === 'codex' || profile.visionEnabled || tool.function.name !== 'view_images')
@@ -877,8 +956,8 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
   }
 
   await streamChatReply(res, (write) => isGroupThread(req, threadId)
-    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks)
-    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes))
+    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId)
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId))
 }))
 
 // ---- Chat user profiles: who the account is in a chat (name, persona, avatar), one per chat ----------------------

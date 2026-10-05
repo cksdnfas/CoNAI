@@ -18,6 +18,19 @@ export interface FileStoreListing {
   limit: number;
 }
 
+/** One account's file store as seen by someone with `files.browse.all`. */
+export interface StoredFileOwner {
+  ownerKey: string;
+  accountId: number | null;
+  username: string | null;
+  accountType: 'admin' | 'guest' | null;
+  /** `deleted`: files remain for an account that no longer exists. `bootstrap`: the store used before any credentials were configured. */
+  status: 'active' | 'disabled' | 'deleted' | 'bootstrap';
+  fileCount: number;
+  totalSize: number;
+  self: boolean;
+}
+
 export interface StoredFileText {
   text: string;
   offset: number;

@@ -15,8 +15,11 @@ import {
 import { getAppSettings } from '@/lib/api-settings-general'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
+import { ChatGenerationPresetSaveModal } from '@/features/settings/components/chat-generation-preset-save-modal'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import {
   buildWorkflowDraft,
+  buildWorkflowPromptData,
   clearPersistedComfyWorkflowDraft,
   deleteComfyWorkflowDraftInputAssets,
   loadPersistedComfyWorkflowDraft,
@@ -94,6 +97,8 @@ export function ComfyGenerationPanel({
   const [workflowDraftOwnerId, setWorkflowDraftOwnerId] = useState<number | null>(null)
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
+  const [isChatPresetModalOpen, setIsChatPresetModalOpen] = useState(false)
+  const canSaveChatPreset = useAuthStatusQuery().data?.isAdmin === true
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
   const [isManagementOpen, setIsManagementOpen] = useState(false)
   const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
@@ -575,6 +580,7 @@ export function ComfyGenerationPanel({
             onImageChange={handleWorkflowImageChange}
             onRefreshDropdownLists={handleRefreshDropdownLists}
             onResetDraft={() => void handleResetWorkflowDraft()}
+            onSaveChatPreset={canSaveChatPreset ? () => setIsChatPresetModalOpen(true) : undefined}
             onOpenModuleSave={handleOpenSelectedModuleSave}
             onGenerateSelected={handleGenerateSelectedWorkflow}
             onRevealFieldIssues={revealComfyFieldIssues}
@@ -606,6 +612,19 @@ export function ComfyGenerationPanel({
       />
 
       <ComfyModuleSaveModal {...moduleSaveModalProps} />
+      <ChatGenerationPresetSaveModal
+        open={isChatPresetModalOpen}
+        build={async () => {
+          if (!selectedWorkflow) return null
+          // Text fields start as the model's; everything else keeps the panel's value. Adjust in settings › chat.
+          const promptData = buildWorkflowPromptData(selectedWorkflowFields, workflowDraft)
+          const exposedFieldIds = selectedWorkflowFields.filter((field) => field.type === 'text' || field.type === 'textarea').map((field) => field.id)
+          const fixedInputs = Object.fromEntries(Object.entries(promptData).filter(([key]) => !exposedFieldIds.includes(key)))
+          return { kind: 'comfyui' as const, nai: null, comfyui: { workflowId: selectedWorkflow.id, serverId: null, serverTag: null, fixedInputs, exposedFieldIds } }
+        }}
+        summary={selectedWorkflow ? t({ ko: '워크플로 "{name}"의 지금 값이 고정돼. 텍스트 필드는 모델이 쓰고, 어느 필드를 열어둘지는 설정 › 채팅에서 바꿔.', en: 'The current values of workflow "{name}" are fixed. Text fields go to the model; change which fields are exposed in settings › chat.' }, { name: selectedWorkflow.name ?? String(selectedWorkflow.id) }) : null}
+        onClose={() => setIsChatPresetModalOpen(false)}
+      />
     </>
   )
 }

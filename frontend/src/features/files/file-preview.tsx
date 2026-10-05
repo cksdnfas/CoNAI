@@ -35,11 +35,12 @@ function tableRows(text: string, delimiter: string, complete: boolean) {
   return rows
 }
 
-export function FilePreview({ entry, onClose, onNavigate }: { entry: StoredFileEntry; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void }) {
+/** `owner`: another account's store key when an admin browses it; null for the viewer's own store. */
+export function FilePreview({ entry, owner = null, onClose, onNavigate }: { entry: StoredFileEntry; owner?: string | null; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
-  const accountKey = auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')
-  const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id], queryFn: () => getStoredFileNeighbors(entry.id) })
+  const accountKey = `${auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')}:${owner ?? ''}`
+  const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id], queryFn: () => getStoredFileNeighbors(entry.id, owner) })
   useEffect(() => {
     const move = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
@@ -54,18 +55,18 @@ export function FilePreview({ entry, onClose, onNavigate }: { entry: StoredFileE
     <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이전 파일', en: 'Previous file' })} disabled={!neighbors.data?.previous} onClick={() => { if (neighbors.data?.previous) onNavigate(neighbors.data.previous) }}><ChevronLeft /></IconButton>
     <IconButton size="icon-sm" variant="ghost" label={t({ ko: '다음 파일', en: 'Next file' })} disabled={!neighbors.data?.next} onClick={() => { if (neighbors.data?.next) onNavigate(neighbors.data.next) }}><ChevronRight /></IconButton>
     <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
-    <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={storedFileDownloadUrl(entry.id)} download><Download /></a></IconButton>
-  </div>}><FilePreviewContent key={entry.id} entry={entry} accountKey={accountKey} /></Modal>
+    <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={storedFileDownloadUrl(entry.id, owner)} download><Download /></a></IconButton>
+  </div>}><FilePreviewContent key={entry.id} entry={entry} owner={owner} accountKey={accountKey} /></Modal>
 }
 
-function FilePreviewContent({ entry, accountKey }: { entry: StoredFileEntry; accountKey: string | number }) {
+function FilePreviewContent({ entry, owner, accountKey }: { entry: StoredFileEntry; owner: string | null; accountKey: string }) {
   const { t } = useI18n()
   const [offset, setOffset] = useState(0)
   const [firstLine, setFirstLine] = useState(1)
   const [wrap, setWrap] = useState(true)
   const [raw, setRaw] = useState(false)
   const extension = entry.name.split('.').at(-1)?.toLowerCase() ?? ''
-  const url = storedFileViewUrl(entry.id)
+  const url = storedFileViewUrl(entry.id, owner)
   const [mediaFailed, setMediaFailed] = useState(false)
   // The server determines the actual safe MIME; uploaded MIME and renames are not trusted.
   const mime = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'view-type', entry.id, entry.updatedAt], queryFn: async () => {
@@ -74,7 +75,7 @@ function FilePreviewContent({ entry, accountKey }: { entry: StoredFileEntry; acc
     return response.headers.get('Content-Type') ?? ''
   }, retry: false })
   const kind = mime.data?.startsWith('text/plain') ? 'text' : mime.data?.startsWith('image/') ? 'image' : mime.data?.startsWith('video/') ? 'video' : mime.data?.startsWith('audio/') ? 'audio' : mime.data === 'application/pdf' ? 'pdf' : null
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'text', entry.id, offset], queryFn: () => readStoredFileText(entry.id, offset), retry: false, enabled: kind === 'text' })
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'text', entry.id, offset], queryFn: () => readStoredFileText(entry.id, offset, owner), retry: false, enabled: kind === 'text' })
   const text = useMemo(() => {
     const source = query.data?.text ?? ''
     if (extension === 'json' && !raw && offset === 0 && query.data?.nextOffset === null) {

@@ -1,5 +1,6 @@
 import { Fragment, memo, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Pencil, RotateCcw, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Pencil, Reply, RotateCcw, X } from 'lucide-react'
+import type { ChatMessageRouting } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
@@ -26,6 +27,7 @@ type MessageLook = {
 }
 
 type MessageActions = {
+  onReply: (message: CodexChatMessage) => void
   busy: boolean
   canRewrite: boolean
   lastReplyId: number | null
@@ -63,12 +65,16 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
   const isUser = message.role === 'user'
   const lastReply = message.id === actions.lastReplyId
   const alternatives = message.alternatives ?? []
+  const recipientLabel = message.routing?.recipients.map((id) => typeof id === 'number' ? (speakerOf?.(id)?.name ?? look.speaker?.name ?? '') : id === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : t({ ko: '방 전체', en: 'Room' })).filter(Boolean).join(', ')
   return <div data-message-id={message.id} onPointerDown={(event) => { if (event.pointerType !== 'mouse') setTapped(true) }} className={cn('group/message -mx-2 rounded-md px-2 transition-colors duration-500', flash && 'bg-primary/10')}>
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : message.content && <CodexChatUserMessage content={message.content} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
-      : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
+        : (message.content || message.routing?.replyTo) && <CodexChatUserMessage content={message.content} routing={message.routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
+      : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={message.content} routing={message.routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
+    <div className={cn('mt-1 flex opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
+      <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
+    </div>
     {actions.canRewrite && (isUser || lastReply) && actions.editingId !== message.id ? (
       <div className={cn('mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
         {isUser
@@ -106,14 +112,16 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, fla
 })
 
 export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, mentions, userSpeaker = null, ...look }: MessageLook & { turn: CodexChatLiveTurn }) {
+  const { t } = useI18n()
+  const recipients = (routing?: ChatMessageRouting) => routing?.recipients.map((id) => typeof id === 'number' ? (speakerOf?.(id)?.name ?? look.speaker?.name ?? '') : id === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : t({ ko: '방 전체', en: 'Room' })).filter(Boolean).join(', ')
   return <>
-    {turn.userText && <CodexChatUserMessage content={turn.userText} mentions={mentions} appearance={look.appearance} speaker={userSpeaker} />}
+    {(turn.userText || turn.userRouting?.replyTo) && <CodexChatUserMessage content={turn.userText} routing={turn.userRouting} mentions={mentions} appearance={look.appearance} speaker={userSpeaker} />}
     <ChatFileLinks files={turn.attachments} />
     <ChatReferenceChips items={turn.mediaAttachments} threadId={turn.threadId} />
     <ChatMessageFlags flags={turn.flags} />
     {/* Group rooms: one bubble per member answering now; none between members. */}
     {turn.replies
-      ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.profileId} content={reply.text} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
-      : <CodexChatAssistantMessage content={turn.text} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming {...look} />}
+      ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} recipientLabel={recipients(reply.routing)} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
+      : <CodexChatAssistantMessage content={turn.text} routing={turn.routing} recipientLabel={recipients(turn.routing)} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming {...look} />}
   </>
 })

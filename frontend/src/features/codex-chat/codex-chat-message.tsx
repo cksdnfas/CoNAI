@@ -1,7 +1,9 @@
 import { memo, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, ImageOff, Scissors, Wrench, X } from 'lucide-react'
-import { isCodexChatGenerationTool } from '@conai/shared'
+import { isCodexChatGenerationTool, withChatGenerationProgress } from '@conai/shared'
+import type { ChatMessageRouting } from '@conai/shared'
+import { ChatMessageReply } from './chat-reply'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
@@ -354,8 +356,9 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
 function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; layout?: ChatImageLayout; media?: Record<string, CodexChatMediaInfo> }) {
   const { t } = useI18n()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const generatedCalls = calls.filter((call) => isCodexChatGenerationTool(call.tool))
-  const foundCalls = calls.filter((call) => !isCodexChatGenerationTool(call.tool))
+  const resolvedCalls = withChatGenerationProgress(calls)
+  const generatedCalls = resolvedCalls.filter((call) => call.generated ?? isCodexChatGenerationTool(call.tool))
+  const foundCalls = resolvedCalls.filter((call) => !(call.generated ?? isCodexChatGenerationTool(call.tool)))
   const historyIds = [...new Set(generatedCalls.flatMap((call) => call.historyIds))]
   const foundHistoryIds = [...new Set(foundCalls.flatMap((call) => call.historyIds))].filter((historyId) => !historyIds.includes(historyId))
   const pendingJobIds = [...new Set(generatedCalls.flatMap((call) => call.pendingJobIds ?? []))]
@@ -440,7 +443,9 @@ function MessageTime({ at, appearance, className }: { at: string | undefined; ap
 /** The chat's user profile as it shows on the user's own messages. */
 export type ChatUserSpeaker = { name: string; avatar: string | null }
 
-export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content, mentions, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, speaker = null }: {
+export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content, mentions, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, speaker = null, routing, recipientLabel }: {
+  routing?: ChatMessageRouting | null
+  recipientLabel?: string
   content: string; mentions?: readonly string[]; appearance?: ChatAppearance; createdAt?: string
   /** The chat's user profile (name and picture); null shows "Me" and no picture. */
   speaker?: ChatUserSpeaker | null
@@ -460,6 +465,7 @@ export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content
             <MessageTime at={createdAt} appearance={appearance} />
           </div>
         ) : null}
+        <ChatMessageReply routing={routing} recipientLabel={recipientLabel} />
         <div className="whitespace-pre-wrap break-words text-foreground">{text}</div>
       </div>
     )
@@ -468,7 +474,7 @@ export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content
   return (
     <div className={cn('flex items-end gap-2', right ? 'justify-end' : 'justify-start')}>
       {right ? <MessageTime at={createdAt} appearance={appearance} className="mb-1" /> : avatar}
-      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground">{text}</div>
+      <div className="min-w-0 max-w-[85%] break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground"><ChatMessageReply routing={routing} recipientLabel={recipientLabel} /><div className="whitespace-pre-wrap">{text}</div></div>
       {right ? avatar : <MessageTime at={createdAt} appearance={appearance} className="mb-1" />}
     </div>
   )
@@ -552,7 +558,9 @@ const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 const AVATAR_COLUMN_PAD = { md: 'pl-13', lg: 'pl-17' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, finishReason = null, reasoning, streaming = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, finishReason = null, reasoning, streaming = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel }: {
+  routing?: ChatMessageRouting | null
+  recipientLabel?: string
   content: string
   toolCalls: CodexChatToolCall[]
   status?: CodexChatMessage['status']
@@ -611,8 +619,9 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const castSegments = hasCast ? (segments ?? []).filter((segment, index) => !(index === 0 && segment.speaker === null)) : []
   const showReasoning = Boolean(reasoning) && appearance.showReasoning
   // A failed or empty reply has no body: nothing to draw a bubble around.
-  const ownParts = !ownText && !showReasoning && toolCalls.length === 0 ? null : (
+  const ownParts = !ownText && !showReasoning && toolCalls.length === 0 && !routing?.replyTo ? null : (
     <div className="space-y-2">
+      <ChatMessageReply routing={routing} recipientLabel={recipientLabel} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
       <CodexChatToolMedia calls={toolCalls} size={appearance.imageSize} layout={appearance.imageLayout} media={media} />
       {ownText ? markdown(ownText) : null}

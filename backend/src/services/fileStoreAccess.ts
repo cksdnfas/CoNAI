@@ -4,6 +4,20 @@ import { AuthAccessControlService } from './authAccessControlService';
 import { FileStoreError, fileOwnerKey } from './fileStoreService';
 import type { McpRequester } from '../mcp/context';
 
+export type FileStoreAction = 'upload' | 'organize' | 'delete';
+
+export const FILE_STORE_ACTION_PERMISSIONS: Record<FileStoreAction, string> = {
+  upload: 'files.upload',
+  organize: 'files.organize',
+  delete: 'files.delete',
+};
+
+const ACTION_DENIED: Record<FileStoreAction, string> = {
+  upload: '파일을 올릴 권한이 없어.',
+  organize: '파일을 정리할 권한이 없어.',
+  delete: '파일을 삭제할 권한이 없어.',
+};
+
 /** Shared by chat attachments and MCP. An unbound external key never means the bootstrap owner. */
 export function requireFileStoreOwner(requester: McpRequester | undefined): string {
   if (!requester) throw new FileStoreError('파일 접근에는 사용자 계정이 연결된 요청이 필요해.', 403);
@@ -18,12 +32,18 @@ export function requireFileStoreOwner(requester: McpRequester | undefined): stri
   return fileOwnerKey(id);
 }
 
-/** Owner key for changes (folders, rename, move, delete): also needs `files.manage`. */
-export function requireFileStoreManager(requester: McpRequester | undefined): string {
+/** Owner key for one kind of change; each action has its own permission so groups can upload without deleting. */
+export function requireFileStoreAction(requester: McpRequester | undefined, action: FileStoreAction): string {
   const owner = requireFileStoreOwner(requester);
   const id = requester?.accountId ?? null;
-  if (id !== null && !AuthAccessControlService.hasPermission(id, 'files.manage')) {
-    throw new FileStoreError('파일을 정리할 권한이 없어.', 403);
+  if (id !== null && !AuthAccessControlService.hasPermission(id, FILE_STORE_ACTION_PERMISSIONS[action])) {
+    throw new FileStoreError(ACTION_DENIED[action], 403);
   }
   return owner;
+}
+
+/** Bootstrap (no credentials configured) is a single local user and may store anything. */
+export function canStoreAnyFileType(requester: McpRequester | undefined): boolean {
+  const id = requester?.accountId ?? null;
+  return id === null ? !hasConfiguredAuth() : AuthAccessControlService.hasPermission(id, 'files.upload.any');
 }

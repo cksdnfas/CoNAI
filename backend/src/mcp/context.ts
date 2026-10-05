@@ -1,4 +1,4 @@
-import type { McpHttpScope } from '@conai/shared';
+import type { McpHttpScope, ChatExecutionContext } from '@conai/shared';
 import type { AuthAccountType } from '../types/authAccount';
 
 /** Account that owns the jobs and history a request creates (set for Codex chat sessions). */
@@ -8,6 +8,7 @@ export interface McpRequester {
 }
 
 export interface McpRequestContext {
+  chatContext?: ChatExecutionContext;
   scopes: McpHttpScope[];
   keyId?: string;
   keyName?: string;
@@ -19,7 +20,28 @@ export interface McpRequestContext {
   toolAllowlist?: string[] | null;
   /** Chat agents in group rooms: `call` offers room_call_member, `all` adds the history tools (room ownership is checked per call). */
   chatRoomTools?: 'call' | 'all' | false;
+  /**
+   * Chat profiles with generation presets: each becomes a `generate_image` tool, and the free-form generation and
+   * workflow discovery tools are withheld so the model draws only through the presets.
+   */
+  generationPresetIds?: number[];
 }
+
+/** The tool name of the n-th generation preset a chat profile links (generate_image, generate_image_2, …). */
+export function chatGenerationToolName(index: number) {
+  return index === 0 ? 'generate_image' : `generate_image_${index + 1}`;
+}
+
+export function isChatGenerationTool(toolName: string) {
+  return /^generate_image(_\d+)?$/.test(toolName);
+}
+
+/** Withheld while a chat profile has generation presets: free-form generation and everything that discovers other routes. */
+export const GENERATION_PRESET_BLOCKED_TOOLS = new Set([
+  'generate_nai', 'generate_comfyui', 'generate_comfyui_all_servers', 'submit_generation_job', 'execute_graph_workflow',
+  'list_workflows', 'get_workflow_details', 'list_graph_workflows', 'get_graph_workflow_details', 'get_graph_workflow_execution',
+  'list_comfyui_servers', 'get_generation_routing_options', 'get_codex_generation_options',
+]);
 
 export function isChatMcpSource(source: McpRequestContext['source']) {
   return source === 'codex-chat' || source === 'llm-chat';
@@ -100,7 +122,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
 };
 
 /** Read-only tools over the caller's own group chat rooms; offered to chat agents in group rooms regardless of scopes. */
-export const CHAT_ROOM_TOOLS = new Set(['room_call_member', 'room_history_search', 'room_history_read']);
+export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read']);
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {
   return TOOL_SCOPES[toolName] ?? null;

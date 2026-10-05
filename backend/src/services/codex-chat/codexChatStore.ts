@@ -1,5 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import type { StoredFileEntry } from '@conai/shared'
+import type { StoredFileEntry, ChatMessageRouting } from '@conai/shared'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
@@ -55,6 +55,7 @@ export type CodexChatThreadRecord = {
 }
 
 export type CodexChatMessageRecord = {
+  routing?: ChatMessageRouting | null
   alternatives: ChatMessageAlternative[]
   active_alternative: number
   attachments?: StoredFileEntry[]
@@ -76,6 +77,7 @@ export type CodexChatMessageRecord = {
 }
 
 export type ChatMessageAlternative = {
+  routing?: ChatMessageRouting | null
   content: string
   tool_calls: CodexChatToolCall[]
   created_at: string
@@ -84,7 +86,14 @@ export type ChatMessageAlternative = {
   finish_reason?: string | null
 }
 
-type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags'> & { tool_calls: string | null; alternatives: string | null; flags: string | null; media_attachments: string | null }
+type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags' | 'routing'> & { tool_calls: string | null; alternatives: string | null; flags: string | null; media_attachments: string | null; routing: string | null }
+
+export function parseMessageRouting(value: string | null): ChatMessageRouting | null {
+  try {
+    const parsed = JSON.parse(value || 'null') as ChatMessageRouting | null
+    return parsed && Array.isArray(parsed.recipients) ? parsed : null
+  } catch { return null }
+}
 
 const TITLE_MAX_LENGTH = 60
 
@@ -250,7 +259,14 @@ export const CodexChatStore = {
     const rows = getUserSettingsDb().prepare(`
       SELECT * FROM codex_chat_messages WHERE thread_id = ? ORDER BY id
     `).all(threadId) as StoredMessageRow[]
-    return rows.map(({ media_attachments, ...row }) => ({ ...row, mediaAttachments: parseChatMediaAttachments(media_attachments), tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives), flags: parseFlagSnapshots(row.flags), attachments: attachments.get(row.id) ?? [] }))
+    const ids = new Set(rows.map((row) => row.id))
+    return rows.map(({ media_attachments, routing: storedRouting, ...row }) => {
+      const routing = parseMessageRouting(storedRouting)
+      if (routing?.replyTo && !ids.has(routing.replyTo.messageId)) {
+        routing.replyTo = { ...routing.replyTo, excerpt: '', media: undefined, unavailable: true }
+      }
+      return { ...row, routing, mediaAttachments: parseChatMediaAttachments(media_attachments), tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives), flags: parseFlagSnapshots(row.flags), attachments: attachments.get(row.id) ?? [] }
+    })
   },
 
   latestMessageId(threadId: number) {
@@ -284,6 +300,7 @@ export const CodexChatStore = {
   clearThread(threadId: number, greeting: string) {
     const db = getUserSettingsDb()
     db.transaction(() => {
+      db.prepare('DELETE FROM chat_generation_links WHERE thread_id = ?').run(threadId)
       removeMessagesAfter(threadId, 0)
       db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL, block_edits = NULL,
         codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
@@ -297,11 +314,12 @@ export const CodexChatStore = {
       const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
       if (!row) throw new Error('Assistant message not found')
       const alternatives = parseAlternatives(row.alternatives)
-      if (!alternatives.length) alternatives.push({ content: row.content, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error, finish_reason: row.finish_reason ?? null })
+      if (!alternatives.length) alternatives.push({ content: row.content, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error, finish_reason: row.finish_reason ?? null, routing: parseMessageRouting(row.routing) })
       alternatives.push(alternative)
       db.prepare(`UPDATE codex_chat_messages SET alternatives = ?, active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?`)
         .run(JSON.stringify(alternatives), alternatives.length - 1, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
       invalidateContext(threadId, messageId)
+      if (alternative.routing !== undefined) CodexChatStore.setMessageRouting(threadId, messageId, alternative.routing)
     }).immediate()
   },
 
@@ -314,10 +332,17 @@ export const CodexChatStore = {
       db.prepare('UPDATE codex_chat_messages SET active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?')
         .run(index, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
       invalidateContext(threadId, messageId)
+      CodexChatStore.setMessageRouting(threadId, messageId, alternative.routing ?? null)
     }).immediate()
   },
 
-  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = []) {
+  setMessageRouting(threadId: number, messageId: number, routing: ChatMessageRouting | null) {
+    const db = getUserSettingsDb()
+    db.prepare('UPDATE codex_chat_messages SET routing = ? WHERE thread_id = ? AND id = ?').run(routing ? JSON.stringify(routing) : null, threadId, messageId)
+    if (routing?.replyId) db.prepare('UPDATE chat_generation_links SET message_id = ? WHERE thread_id = ? AND reply_id = ?').run(messageId, threadId, routing.replyId)
+  },
+
+  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = []) {
     const db = getUserSettingsDb()
     return db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
@@ -338,6 +363,7 @@ export const CodexChatStore = {
         message.mediaAttachments?.length ? JSON.stringify(message.mediaAttachments) : null,
       )
       for (const file of attachments) db.prepare('INSERT INTO chat_file_attachments (message_id, file_id) VALUES (?, ?)').run(result.lastInsertRowid, file.id)
+      if (message.routing) CodexChatStore.setMessageRouting(message.thread_id, Number(result.lastInsertRowid), message.routing)
       CodexChatStore.touchThread(message.thread_id)
       return Number(result.lastInsertRowid)
     }).immediate()

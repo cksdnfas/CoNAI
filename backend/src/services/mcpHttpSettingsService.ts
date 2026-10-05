@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import type { McpHttpApiKey, McpHttpScope, McpHttpSettings } from '@conai/shared';
+import type { McpHttpApiKey, McpHttpScope, McpHttpSettings, ChatExecutionContext } from '@conai/shared';
 import { runtimePaths } from '../config/runtimePaths';
 import type { McpRequester } from '../mcp/context';
 
@@ -15,6 +15,7 @@ type StoredMcpHttpSettings = McpHttpSettings & {
 };
 
 export interface McpHttpAuthentication {
+  chatContext?: ChatExecutionContext;
   keyId: string;
   keyName: string;
   scopes: McpHttpScope[];
@@ -23,6 +24,8 @@ export interface McpHttpAuthentication {
   toolAllowlist?: string[] | null;
   /** Codex chat sessions of group rooms: the room history tools. */
   chatRoomTools?: boolean;
+  /** Codex chat sessions: the profile's generation presets (each a generate_image tool; free-form generation withheld). */
+  generationPresetIds?: number[];
 }
 
 function generateApiKey(): string {

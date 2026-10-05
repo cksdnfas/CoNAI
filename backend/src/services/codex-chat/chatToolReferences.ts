@@ -53,8 +53,9 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
   const historyIds = new Set<number>()
   const compositeHashes = new Set<string>()
   const jobIds = new Set<number>()
+  const pendingJobIds = new Set<number>()
   const texts: string[] = []
-  const readsJob = toolName !== undefined && JOB_RESULT_TOOLS.has(toolName)
+  const readsJob = toolName !== undefined && (JOB_RESULT_TOOLS.has(toolName) || /^generate_image(_\d+)?$/.test(toolName))
 
   for (const content of result?.content ?? []) {
     const text = content && typeof content === 'object' ? (content as { text?: unknown }).text : undefined
@@ -66,14 +67,22 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
       const parsed = JSON.parse(text)
       collectReferences(parsed, historyIds, compositeHashes)
       const jobId = readsJob ? readJobId(parsed) : null
-      if (jobId !== null) jobIds.add(jobId)
+      if (jobId !== null) {
+        jobIds.add(jobId)
+        if (!['completed', 'failed', 'cancelled'].includes(parsed.status)) pendingJobIds.add(jobId)
+      }
     } catch {
       // Plain-text tool output carries no references.
     }
   }
   if (result?.structuredContent) {
     collectReferences(result.structuredContent, historyIds, compositeHashes)
+    const jobId = readsJob ? readJobId(result.structuredContent) : null
+    if (jobId !== null) {
+      jobIds.add(jobId)
+      if (!['completed', 'failed', 'cancelled'].includes((result.structuredContent as { status?: string }).status ?? '')) pendingJobIds.add(jobId)
+    }
   }
 
-  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds] }
+  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds], pendingJobIds: [...pendingJobIds] }
 }
