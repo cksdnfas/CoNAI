@@ -15,18 +15,28 @@ export function codexChatMediaQueryKey(threadId: number | null) {
 
 export type CodexChatView = 'chat' | 'gallery' | 'context'
 
+/** One group member's reply while it streams. */
+export type CodexChatLiveReply = {
+  profileId: number
+  text: string
+  reasoning: string
+  toolCalls: Map<string, CodexChatToolCall>
+}
+
 /** The turn being streamed: the thread only refetches after it ends, so the UI shows it from here meanwhile. */
 export type CodexChatLiveTurn = {
   replacingMessageId?: number
   attachments: StoredFileEntry[]
   threadId: number
   userText: string
+  /** Direct chats: the reply so far (group rooms stream into `replies`). */
   text: string
   /** LLM chats: the model's reasoning so far (shown folded, never stored). */
   reasoning: string
   toolCalls: Map<string, CodexChatToolCall>
-  /** Group rooms: the member answering now (null between members) and who answers after it. */
-  speakerProfileId?: number | null
+  /** Group rooms: members answering now, in the order they started (several when their connection allows). */
+  replies?: CodexChatLiveReply[]
+  /** Group rooms: who answers after them. */
   queue?: number[]
 }
 

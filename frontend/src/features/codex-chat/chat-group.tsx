@@ -259,17 +259,17 @@ export function MentionList({ id, options, selected, onSelect }: { id: string; o
   )
 }
 
-/** Above the composer while a room answers: who is answering, and who comes next. */
-export function GroupTurnStatus({ speaker, queue }: { speaker: ChatProfileSummary | null; queue: ChatProfileSummary[] }) {
+/** Above the composer while a room answers: who is answering (several at once when their connection allows), and who comes next. */
+export function GroupTurnStatus({ speakers, queue }: { speakers: ChatProfileSummary[]; queue: ChatProfileSummary[] }) {
   const { t } = useI18n()
-  if (!speaker && queue.length === 0) return null
+  if (speakers.length === 0 && queue.length === 0) return null
   return (
     <div role="status" className="mb-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
       <Spinner size="sm" />
-      {speaker ? <><span className="truncate font-semibold text-foreground">{speaker.name}</span><span className="shrink-0">{t({ ko: '답하는 중', en: 'is replying' })}</span></> : null}
+      {speakers.length > 0 ? <><span className="truncate font-semibold text-foreground">{speakers.map((speaker) => speaker.name).join(', ')}</span><span className="shrink-0">{t({ ko: '답하는 중', en: 'replying' })}</span></> : null}
       {queue.length > 0 ? (
         <>
-          {speaker ? <span aria-hidden="true" className="text-foreground/25">·</span> : null}
+          {speakers.length > 0 ? <span aria-hidden="true" className="text-foreground/25">·</span> : null}
           <span className="shrink-0">{t({ ko: '다음', en: 'Next' })}</span>
           <span className="flex items-center gap-1">
             {queue.map((profile, index) => <ChatProfileAvatar key={`${profile.id}-${index}`} name={profile.name} avatar={profile.avatar} engine={profile.engine} size="xs" className="size-4" />)}

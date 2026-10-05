@@ -189,6 +189,18 @@ function LlmConnectionFormFields({
         />
       </Field>
 
+      <Field label={t({ ko: '동시 요청 수', en: 'Concurrent requests' })}>
+        <NumberStepperInput
+          variant="settings"
+          step={1}
+          min={1}
+          max={8}
+          value={draft.concurrentRequests}
+          onValueCommit={(value) => onChange({ concurrentRequests: value })}
+          aria-label={t({ ko: '동시 요청 수', en: 'Concurrent requests' })}
+        />
+      </Field>
+
       <SettingsSwitchRow
         className="md:col-span-2"
         checked={draft.isEnabled}

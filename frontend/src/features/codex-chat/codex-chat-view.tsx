@@ -249,6 +249,14 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const visibleMessages = useMemo(() => messages.slice(-windowCount), [messages, windowCount])
   const media = threadQuery.data?.media
   const runningFromServer = serverRunning ? threadQuery.data?.running ?? null : null
+  // Group rooms: every member answering on the server (an older server sends only the first one).
+  const serverReplies = useMemo(() => {
+    if (!isGroup || !runningFromServer) return []
+    if (runningFromServer.replies) return runningFromServer.replies
+    return runningFromServer.speakerProfileId != null ? [{ profileId: runningFromServer.speakerProfileId, text: runningFromServer.text, toolCalls: runningFromServer.toolCalls }] : []
+  }, [isGroup, runningFromServer])
+  const liveReplyLength = (liveTurn?.replies ?? []).reduce((total, reply) => total + reply.text.length + reply.toolCalls.size, 0)
+    + serverReplies.reduce((total, reply) => total + reply.text.length + reply.toolCalls.length, 0)
   const activeView = activeThreadId === null ? 'chat' : view
   const isTranscript = activeView === 'chat'
 
@@ -314,7 +322,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     if (isTranscript && followBottomRef.current && !messageFocus) {
       scrollToBottom()
     }
-  }, [isTranscript, messages.length, liveTurn?.text, liveTurn?.toolCalls.size, threadQuery.data?.running?.text, messageFocus, scrollToBottom])
+  }, [isTranscript, messages.length, liveTurn?.text, liveTurn?.toolCalls.size, liveReplyLength, threadQuery.data?.running?.text, messageFocus, scrollToBottom])
 
   // "Go to message" from the gallery: once the transcript is back, centre that message and flash it.
   useEffect(() => {
@@ -532,11 +540,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const liveGroupTurn = isGroup && liveTurn?.threadId === activeThreadId ? liveTurn : null
   const turnStatus = isGroup && (liveGroupTurn || runningFromServer) ? (
     <GroupTurnStatus
-      speaker={(liveGroupTurn ? liveGroupTurn.speakerProfileId : runningFromServer?.speakerProfileId) != null ? profilesById.get((liveGroupTurn ? liveGroupTurn.speakerProfileId : runningFromServer?.speakerProfileId) as number) ?? null : null}
+      speakers={(liveGroupTurn ? (liveGroupTurn.replies ?? []).map((reply) => reply.profileId) : serverReplies.map((reply) => reply.profileId)).flatMap((id) => profilesById.get(id) ?? [])}
       queue={((liveGroupTurn ? liveGroupTurn.queue : runningFromServer?.queue) ?? []).flatMap((id) => profilesById.get(id) ?? [])}
     />
   ) : null
-  const runningSpeaker = isGroup ? speakerOf(runningFromServer?.speakerProfileId ?? null) : speaker
 
   const transcript = (
     <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={(event) => {
@@ -550,7 +557,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <ChatLiveMessage turn={liveTurn} imageSize={appearance.imageSize} speaker={speaker} avatarSize={appearance.avatarSize} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         ) : null}
-        {runningFromServer && runningSpeaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming imageSize={appearance.imageSize} speaker={runningSpeaker} avatarSize={appearance.avatarSize} /> : null}
+        {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming imageSize={appearance.imageSize} speaker={speaker} avatarSize={appearance.avatarSize} /> : null}
+        {serverReplies.map((reply) => {
+          const replySpeaker = speakerOf(reply.profileId)
+          return replySpeaker ? <CodexChatAssistantMessage key={reply.profileId} content={reply.text} toolCalls={reply.toolCalls} streaming imageSize={appearance.imageSize} speaker={replySpeaker} avatarSize={appearance.avatarSize} /> : null
+        })}
       </div>
     </div>
   )

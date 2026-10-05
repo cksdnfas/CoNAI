@@ -101,11 +101,12 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, fla
 })
 
 export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, mentions, ...look }: MessageLook & { turn: CodexChatLiveTurn }) {
-  // Group rooms: between two members nobody is replying yet.
-  const replying = turn.speakerProfileId !== null
   return <>
     {turn.userText && <CodexChatUserMessage content={turn.userText} mentions={mentions} />}
     <ChatFileLinks files={turn.attachments} />
-    {replying ? <CodexChatAssistantMessage content={turn.text} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming {...look} speaker={speakerOf && turn.speakerProfileId !== undefined ? speakerOf(turn.speakerProfileId) : look.speaker} /> : null}
+    {/* Group rooms: one bubble per member answering now; none between members. */}
+    {turn.replies
+      ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.profileId} content={reply.text} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
+      : <CodexChatAssistantMessage content={turn.text} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming {...look} />}
   </>
 })

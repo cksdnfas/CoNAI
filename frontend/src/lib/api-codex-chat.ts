@@ -278,10 +278,24 @@ export interface CodexChatThreadDetail {
   /** Generation jobs this chat started that are still running (results attach as they land). */
   pendingJobs: number
   /** Partial reply of a turn still running on the server (after a reload); group rooms add who answers and who is next. */
-  running: { text: string; toolCalls: CodexChatToolCall[]; replacingMessageId?: number; speakerProfileId?: number | null; queue?: number[] } | null
+  running: {
+    text: string
+    toolCalls: CodexChatToolCall[]
+    replacingMessageId?: number
+    speakerProfileId?: number | null
+    /** Group rooms: every member answering now (several when their connection takes requests at once). */
+    replies?: ChatGroupRunningReply[]
+    queue?: number[]
+  } | null
   /** Codex chats: Codex folds its memory once a request's input reaches this many tokens. */
   codexCompactTokens?: number
   group?: ChatGroupInfo
+}
+
+export interface ChatGroupRunningReply {
+  profileId: number
+  text: string
+  toolCalls: CodexChatToolCall[]
 }
 
 /** A group room: members in order, the representative (answers unaddressed messages) and its limits. */
@@ -310,14 +324,15 @@ export interface CodexChatMediaItem {
 export type CodexChatStreamEvent =
   | { type: 'user'; message: CodexChatMessage }
   | { type: 'rewind'; mode: 'regenerate' | 'edit'; message: CodexChatMessage }
-  | { type: 'delta'; text: string }
-  | { type: 'reasoning'; text: string }
-  | { type: 'tool'; call: CodexChatToolCall }
+  /** `profileId`: group rooms, the member whose reply this is (several may answer at once). */
+  | { type: 'delta'; text: string; profileId?: number }
+  | { type: 'reasoning'; text: string; profileId?: number }
+  | { type: 'tool'; call: CodexChatToolCall; profileId?: number }
   | { type: 'done'; message: CodexChatMessage }
   | { type: 'error'; message: string }
-  /** Group rooms: this member answers now, `queue` after it. */
-  | { type: 'speaker'; profileId: number; queue: number[] }
-  | { type: 'queue'; queue: number[] }
+  /** Group rooms: this member starts answering; `speakers` is everyone answering now, `queue` who answers after. */
+  | { type: 'speaker'; profileId: number; speakers: number[]; queue: number[] }
+  | { type: 'queue'; speakers: number[]; queue: number[] }
   | { type: 'notice'; message: string }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }

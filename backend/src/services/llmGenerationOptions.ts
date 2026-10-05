@@ -2,7 +2,7 @@
  * One place for what an LLM connection holds (how to reach it) and what a request asks for (how to generate). Chat and
  * the workflow LLM node both build their requests from here, so the same profile behaves the same in both.
  *
- * A connection keeps: default model, request timeout. Generation options (temperature, output limit, reasoning, extra
+ * A connection keeps: default model, request timeout, concurrent requests. Generation options (temperature, output limit, reasoning, extra
  * provider parameters) belong to the chat profile or the workflow node; an unset option is not sent at all, so the
  * server's own default applies.
  */
@@ -50,13 +50,18 @@ function parseConfig(additionalConfig: unknown): Record<string, unknown> {
   return {}
 }
 
+export const LLM_MAX_CONCURRENT_REQUESTS = 8
+
 /** What a connection says about itself, reading the older key names too. */
 export function readLlmConnectionConfig(additionalConfig: unknown) {
   const config = parseConfig(additionalConfig)
   const timeoutMs = optionalPositiveNumber(config.request_timeout_ms) ?? optionalPositiveNumber(config.timeout_ms)
+  const concurrent = optionalPositiveNumber(config.max_concurrent_requests)
   return {
     defaultModel: optionalString(config.default_model) ?? optionalString(config.model),
     timeoutMs: timeoutMs === null ? null : Math.floor(timeoutMs),
+    /** Requests the server answers at once (a proxy over several servers takes more); group rooms run that many members together. */
+    maxConcurrentRequests: concurrent === null ? 1 : Math.min(Math.floor(concurrent), LLM_MAX_CONCURRENT_REQUESTS),
   }
 }
 

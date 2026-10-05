@@ -11,6 +11,8 @@ export type LlmConnectionDraft = {
   defaultModel: string
   /** Request time limit in seconds; empty uses the server-wide default. */
   timeoutSeconds: string
+  /** Requests the server answers at once; group rooms let that many members on this connection answer together. */
+  concurrentRequests: string
   apiKey: string
   isEnabled: boolean
 }
@@ -121,6 +123,7 @@ export function buildEmptyDraft(): LlmConnectionDraft {
     baseUrl: '',
     defaultModel: '',
     timeoutSeconds: '',
+    concurrentRequests: '1',
     apiKey: '',
     isEnabled: true,
   }
@@ -134,6 +137,7 @@ export function buildProviderDraft(provider: ExternalApiProviderRecord): LlmConn
     baseUrl: normalizeOptionalString(provider.base_url) ?? '',
     defaultModel: normalizeOptionalString(provider.additional_config?.default_model ?? provider.additional_config?.model) ?? '',
     timeoutSeconds: readTimeoutSeconds(provider),
+    concurrentRequests: readConcurrentRequests(provider),
     apiKey: '',
     isEnabled: provider.is_enabled,
   }
@@ -157,6 +161,11 @@ function readTimeoutSeconds(provider: ExternalApiProviderRecord) {
   return Number.isFinite(ms) && ms > 0 ? String(Math.round(ms / 1000)) : ''
 }
 
+function readConcurrentRequests(provider: ExternalApiProviderRecord) {
+  const count = Number(provider.additional_config?.max_concurrent_requests)
+  return Number.isFinite(count) && count >= 1 ? String(Math.floor(count)) : '1'
+}
+
 export function getTimeoutSummary(provider: ExternalApiProviderRecord, defaultLabel: string) {
   const seconds = readTimeoutSeconds(provider)
   return seconds ? `${seconds}s` : defaultLabel
@@ -173,11 +182,13 @@ export function buildAdditionalConfig(draft: LlmConnectionDraft, baseConfig?: Re
     delete restConfig[key]
   }
   const seconds = Number(draft.timeoutSeconds)
+  const concurrent = Math.floor(Number(draft.concurrentRequests))
 
   return {
     ...restConfig,
     default_model: draft.defaultModel || undefined,
     request_timeout_ms: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : undefined,
+    max_concurrent_requests: Number.isFinite(concurrent) && concurrent > 1 ? concurrent : undefined,
   }
 }
 

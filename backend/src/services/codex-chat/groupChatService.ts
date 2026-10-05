@@ -11,21 +11,32 @@ import { registerGroupWake } from './groupWakeRegistry'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { sendableMessages } from './llmChatContext'
 import { generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
+import { ExternalApiProvider } from '../../models/ExternalApiProvider'
+import { readLlmConnectionConfig } from '../llmGenerationOptions'
 
 const STOP_WAIT_MS = 8000
 const TITLE_MAX_LENGTH = 60
 
-/** A group room working through its reply queue: one member answers at a time. */
+/** One member answering now. */
+type ActiveReply = {
+  controller: AbortController
+  text: string
+  toolCalls: Map<string, CodexChatToolCall>
+}
+
+/**
+ * A group room working through its reply queue. Members on the same LLM connection answer together up to the
+ * connection's concurrent requests (one by default); Codex members answer one at a time.
+ */
 type GroupRun = {
   threadId: number
   /** Set by stop(): no further member is woken. */
   stopped: boolean
-  current: { profileId: number; controller: AbortController } | null
+  /** Members answering now, in the order they started. */
+  active: Map<number, ActiveReply>
   queue: number[]
-  /** Members the current speaker called with the room_call_member tool; they join the queue after its reply. */
+  /** Members called with the room_call_member tool; they join the queue when the next reply ends. */
   called: number[]
-  text: string
-  toolCalls: Map<string, CodexChatToolCall>
   listeners: Set<(event: CodexChatStreamEvent) => void>
   finished: Promise<void>
 }
@@ -95,17 +106,16 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const members = memberProfiles(run.threadId)
   const limits = groupLimitsOf(thread)
   const controller = new AbortController()
-  run.current = { profileId: profile.id, controller }
-  run.text = ''
-  run.toolCalls = new Map()
+  const active: ActiveReply = { controller, text: '', toolCalls: new Map() }
+  run.active.set(profile.id, active)
   if (run.stopped) controller.abort()
 
   const forward = (event: CodexChatStreamEvent) => {
     // The room announces each stored reply itself, once it carries its speaker.
     if (event.type === 'done') return
-    if (event.type === 'delta') run.text += event.text
-    if (event.type === 'tool') run.toolCalls.set(event.call.id, event.call)
-    emit(run, event)
+    if (event.type === 'delta') active.text += event.text
+    if (event.type === 'tool') active.toolCalls.set(event.call.id, event.call)
+    emit(run, event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool' ? { ...event, profileId: profile.id } : event)
   }
   const others = members.filter((member) => member.id !== profile.id).map((member) => member.name)
   const persist = (raw: GroupReplyResult) => {
@@ -158,40 +168,78 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     // Could not start at all (permission, Codex process): keep the reason on a failed reply of that member.
     message = persist({ content: '', tool_calls: [], status: controller.signal.aborted ? 'interrupted' : 'failed', error: controller.signal.aborted ? null : error instanceof Error ? error.message : String(error) })
   } finally {
-    run.current = null
+    run.active.delete(profile.id)
   }
   if (message.status !== 'failed') ChatGroupStore.setLastSeen(run.threadId, profile.id, message.id)
   return message
 }
 
+/** Members sharing a key share its slots: one LLM connection, or Codex. */
+function concurrencyOf(profile: ChatProfile) {
+  if (profile.engine === 'codex') return { key: 'codex', limit: 1 }
+  const provider = ExternalApiProvider.findByName(profile.providerName)
+  return { key: `llm:${profile.providerName}`, limit: readLlmConnectionConfig(provider?.additional_config).maxConcurrentRequests }
+}
+
+function emitQueue(run: GroupRun) {
+  emit(run, { type: 'queue', speakers: [...run.active.keys()], queue: [...run.queue] })
+}
+
 /**
- * Work through the queue: each member answers in turn, and a reply's own `@mentions` wake more members — at most
- * `chain` bot-to-bot wakes per user message, so bots cannot keep each other talking.
+ * Work through the queue: members answer in queue order, together as far as their connection allows, and a reply's
+ * own `@mentions` wake more members — at most `chain` bot-to-bot wakes per user message, so bots cannot keep each
+ * other talking. A member that starts later sees the replies that ended before it.
  */
 async function processQueue(run: GroupRun, requester: McpRequester, options: { chain: boolean }) {
   let wakes = 0
-  while (run.queue.length > 0 && !run.stopped) {
-    const profileId = run.queue.shift() as number
+  const used = new Map<string, number>()
+  const inFlight = new Map<number, Promise<{ profileId: number; key: string; message: CodexChatMessageRecord | null }>>()
+
+  const startReady = () => {
     const members = memberProfiles(run.threadId)
-    const profile = members.find((member) => member.id === profileId)
-    if (!profile) continue
-    if (!profile.isEnabled) {
-      emit(run, { type: 'notice', message: `${profile.name} 프로필이 꺼져 있어서 건너뛰었어.` })
-      continue
+    for (let index = 0; index < run.queue.length && !run.stopped;) {
+      const profileId = run.queue[index]
+      const profile = members.find((member) => member.id === profileId)
+      if (!profile) { run.queue.splice(index, 1); continue }
+      if (!profile.isEnabled) {
+        run.queue.splice(index, 1)
+        emit(run, { type: 'notice', message: `${profile.name} 프로필이 꺼져 있어서 건너뛰었어.` })
+        continue
+      }
+      const { key, limit } = concurrencyOf(profile)
+      // A member already answering answers again after it; a full connection keeps its members waiting in order.
+      if (run.active.has(profileId) || inFlight.has(profileId) || (used.get(key) ?? 0) >= limit) { index += 1; continue }
+      run.queue.splice(index, 1)
+      used.set(key, (used.get(key) ?? 0) + 1)
+      const reply = replyAs(run, requester, profile)
+      emit(run, { type: 'speaker', profileId, speakers: [...run.active.keys()], queue: [...run.queue] })
+      inFlight.set(profileId, reply.then(
+        (message) => ({ profileId, key, message }),
+        () => ({ profileId, key, message: null }),
+      ))
     }
-    emit(run, { type: 'speaker', profileId, queue: [...run.queue] })
-    run.called = []
-    const message = await replyAs(run, requester, profile)
-    emit(run, { type: 'done', message })
-    if (!options.chain || message.status !== 'completed') continue
-    const chainLimit = groupLimitsOf(CodexChatStore.findThreadById(run.threadId) as CodexChatThreadRecord).chain
-    for (const next of [...run.called, ...parseMentions(message.content, members, profile.id)]) {
-      if (wakes >= chainLimit) break
-      if (run.queue.includes(next)) continue
-      run.queue.push(next)
-      wakes += 1
+  }
+
+  startReady()
+  while (inFlight.size > 0) {
+    const { profileId, key, message } = await Promise.race(inFlight.values())
+    inFlight.delete(profileId)
+    used.set(key, (used.get(key) ?? 1) - 1)
+    if (message) emit(run, { type: 'done', message })
+    if (message && options.chain && message.status === 'completed' && !run.stopped) {
+      const members = memberProfiles(run.threadId)
+      const chainLimit = groupLimitsOf(CodexChatStore.findThreadById(run.threadId) as CodexChatThreadRecord).chain
+      const called = run.called
+      run.called = []
+      for (const next of [...called, ...parseMentions(message.content, members, profileId)]) {
+        if (wakes >= chainLimit) break
+        if (run.queue.includes(next)) continue
+        run.queue.push(next)
+        wakes += 1
+      }
     }
-    if (run.queue.length > 0) emit(run, { type: 'queue', queue: [...run.queue] })
+    startReady()
+    emitQueue(run)
   }
 }
 
@@ -200,14 +248,15 @@ async function startRun(threadId: number, listener: (event: CodexChatStreamEvent
   if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: () => void = () => {}
   const run: GroupRun = {
-    threadId, stopped: false, current: null, queue: [], called: [], text: '', toolCalls: new Map(),
+    threadId, stopped: false, active: new Map(), queue: [], called: [],
     listeners: new Set([listener]), finished: new Promise((resolve) => { resolveFinished = resolve }),
   }
   runs.set(threadId, run)
-  // room_call_member: the member answering now asks for others by name.
+  // room_call_member: a member answering now asks for others by name. The tool does not say who calls, so with
+  // several members answering, only the ones answering are kept from calling themselves.
   const unregister = registerGroupWake(threadId, (names) => {
-    const caller = run.current?.profileId
-    if (caller === undefined) return { error: 'Nobody is answering in this room right now.' }
+    if (run.active.size === 0) return { error: 'Nobody is answering in this room right now.' }
+    const caller = run.active.size === 1 ? [...run.active.keys()][0] : null
     const members = memberProfiles(threadId)
     const woken: string[] = []
     const unknown: string[] = []
@@ -255,9 +304,17 @@ export const GroupChatService = {
     const detail = CodexChatService.getThread(requester, threadId)
     const run = runs.get(threadId)
     const limits = groupLimitsOf(thread)
+    const replies = run ? [...run.active].map(([profileId, reply]) => ({ profileId, text: reply.text, toolCalls: [...reply.toolCalls.values()] })) : []
     return {
       ...detail,
-      running: run ? { text: run.text, toolCalls: [...run.toolCalls.values()], speakerProfileId: run.current?.profileId ?? null, queue: [...run.queue] } : null,
+      // `text`/`toolCalls`/`speakerProfileId` are the first reply's, for readers that show one.
+      running: run ? {
+        text: replies[0]?.text ?? '',
+        toolCalls: replies[0]?.toolCalls ?? [],
+        speakerProfileId: replies[0]?.profileId ?? null,
+        replies,
+        queue: [...run.queue],
+      } : null,
       group: {
         memberIds: ChatGroupStore.members(threadId).map((member) => member.profile_id),
         representativeId: thread.profile_id,
@@ -270,7 +327,7 @@ export const GroupChatService = {
 
   /**
    * A user message: stops whatever the room is still saying (the user cut in), then the addressed members answer
-   * in turn — or the representative when no one is addressed.
+   * (together as far as their connections allow) — or the representative when no one is addressed.
    */
   async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown) {
     const thread = requireGroup(requester, threadId)
@@ -309,8 +366,9 @@ export const GroupChatService = {
       await startRun(threadId, listener, async (run) => {
         CodexChatStore.prepareRegeneration(threadId, messageId)
         emit(run, { type: 'rewind', mode: 'regenerate', message })
-        emit(run, { type: 'speaker', profileId: speaker.id, queue: [] })
-        emit(run, { type: 'done', message: await replyAs(run, requester, speaker, messageId) })
+        const reply = replyAs(run, requester, speaker, messageId)
+        emit(run, { type: 'speaker', profileId: speaker.id, speakers: [speaker.id], queue: [] })
+        emit(run, { type: 'done', message: await reply })
       })
       return
     }
@@ -328,13 +386,13 @@ export const GroupChatService = {
     })
   },
 
-  /** Stop the member answering now and drop the queue; waits (bounded) until the cut reply is stored. */
+  /** Stop the members answering now and drop the queue; waits (bounded) until the cut replies are stored. */
   async stop(threadId: number) {
     const run = runs.get(threadId)
     if (!run) return
     run.stopped = true
     run.queue = []
-    run.current?.controller.abort()
+    for (const reply of run.active.values()) reply.controller.abort()
     await Promise.race([run.finished, new Promise((resolve) => setTimeout(resolve, STOP_WAIT_MS))])
   },
 

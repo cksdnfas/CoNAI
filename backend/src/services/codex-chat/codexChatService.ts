@@ -84,16 +84,17 @@ const DEVELOPER_INSTRUCTIONS = [
 export type CodexChatStreamEvent =
   | { type: 'user'; message: CodexChatMessageRecord }
   | { type: 'rewind'; mode: 'regenerate' | 'edit'; message: CodexChatMessageRecord }
-  | { type: 'delta'; text: string }
+  /** `profileId`: group rooms, the member whose reply this is (several may answer at once). */
+  | { type: 'delta'; text: string; profileId?: number }
   /** LLM chats: the model's reasoning, shown while it streams and not stored. */
-  | { type: 'reasoning'; text: string }
-  | { type: 'tool'; call: CodexChatToolCall }
+  | { type: 'reasoning'; text: string; profileId?: number }
+  | { type: 'tool'; call: CodexChatToolCall; profileId?: number }
   | { type: 'done'; message: CodexChatMessageRecord }
   | { type: 'error'; message: string }
-  /** Group rooms: this member answers now; `queue` is who answers after it. */
-  | { type: 'speaker'; profileId: number; queue: number[] }
-  /** Group rooms: a reply woke more members. */
-  | { type: 'queue'; queue: number[] }
+  /** Group rooms: this member starts answering; `speakers` is everyone answering now, `queue` who answers after. */
+  | { type: 'speaker'; profileId: number; speakers: number[]; queue: number[] }
+  /** Group rooms: who is answering and waiting changed (a reply ended or woke more members). */
+  | { type: 'queue'; speakers: number[]; queue: number[] }
   /** Group rooms: something the user should know that is not an error of the reply (a member was skipped). */
   | { type: 'notice'; message: string }
 

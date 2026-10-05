@@ -14,6 +14,7 @@ import {
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
   type CodexChatApi,
+  type CodexChatLiveReply,
   type CodexChatLiveTurn,
   type CodexChatView,
 } from './codex-chat-context'
@@ -136,8 +137,27 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       setDraftAttachments([])
       attachmentsRef.current = []
     }
-    setLiveTurn({ threadId: sentThreadId, userText: text, attachments, text: '', reasoning: '', toolCalls: new Map() })
+    setLiveTurn({ threadId: sentThreadId, userText: text, attachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined })
     let accepted = false
+
+    /** Group rooms: change one member's streaming reply (added if its first event comes before `speaker`). */
+    const updateReply = (profileId: number, change: (reply: CodexChatLiveReply) => CodexChatLiveReply) => setLiveTurn((current) => {
+      if (!current) return current
+      const replies = current.replies ?? []
+      const existing = replies.find((reply) => reply.profileId === profileId)
+      return {
+        ...current,
+        replies: existing
+          ? replies.map((reply) => (reply === existing ? change(reply) : reply))
+          : [...replies, change({ profileId, text: '', reasoning: '', toolCalls: new Map() })],
+      }
+    })
+    /** Group rooms: keep only the replies of members still answering. */
+    const keepSpeakers = (speakers: number[], queue: number[]) => setLiveTurn((current) => current ? {
+      ...current,
+      replies: (current.replies ?? []).filter((reply) => speakers.includes(reply.profileId)),
+      queue,
+    } : current)
 
     /** Group rooms: a stored message joins the transcript right away, since more members keep the stream going. */
     const putMessage = (message: CodexChatMessage) => queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => current ? {
@@ -155,14 +175,26 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           setLiveTurn((current) => current ? { ...current, userText: '', attachments: [] } : current)
           void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
         } else if (event.type === 'speaker') {
-          setLiveTurn((current) => current ? { ...current, text: '', reasoning: '', toolCalls: new Map(), speakerProfileId: event.profileId, queue: event.queue } : current)
+          updateReply(event.profileId, () => ({ profileId: event.profileId, text: '', reasoning: '', toolCalls: new Map() }))
+          keepSpeakers(event.speakers, event.queue)
         } else if (event.type === 'queue') {
-          setLiveTurn((current) => current ? { ...current, queue: event.queue } : current)
+          keepSpeakers(event.speakers, event.queue)
         } else if (event.type === 'notice') {
           showSnackbar({ message: event.message })
         } else if (isGroup && event.type === 'done') {
           putMessage(event.message)
-          setLiveTurn((current) => current ? { ...current, text: '', reasoning: '', toolCalls: new Map(), speakerProfileId: null, replacingMessageId: undefined } : current)
+          setLiveTurn((current) => current ? {
+            ...current,
+            replies: (current.replies ?? []).filter((reply) => reply.profileId !== event.message.speaker_profile_id),
+            replacingMessageId: undefined,
+          } : current)
+        } else if ((event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool') && event.profileId !== undefined) {
+          const groupEvent = event
+          updateReply(event.profileId, (reply) => {
+            if (groupEvent.type === 'delta') return { ...reply, text: reply.text + groupEvent.text }
+            if (groupEvent.type === 'reasoning') return { ...reply, reasoning: reply.reasoning + groupEvent.text }
+            return { ...reply, toolCalls: new Map(reply.toolCalls).set(groupEvent.call.id, groupEvent.call) }
+          })
         } else if (event.type === 'delta') {
           setLiveTurn((current) => (current ? { ...current, text: current.text + event.text } : current))
         } else if (event.type === 'reasoning') {
