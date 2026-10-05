@@ -10,6 +10,7 @@ import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput, translatorOf } from './chatTranslation'
+import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
@@ -192,7 +193,8 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     const reply = !raw.content.trim() && raw.tool_calls.length === 0 && raw.status === 'completed'
       ? { ...raw, status: 'failed' as const, error: '빈 답변이 왔어. 다시 생성해봐.' }
       : raw
-    const content = trimForeignSpeakerLines(reply.content, profile.name, others) || reply.content.trim()
+    const written = stripEchoedAddresses(reply.content)
+    const content = trimForeignSpeakerLines(written, profile.name, others) || written.trim()
     if (reply.status === 'completed' && !explicitlyRouted && run.chain) {
       const mentioned = parseMentions(content, members, profile.id)
       const recipients = mentioned.length ? mentioned : active.routing.recipients.filter((id) => id !== profile.id)

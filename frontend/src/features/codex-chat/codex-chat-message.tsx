@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, ImageOff, Scissors, Wrench, X } from 'lucide-react'
-import { isCodexChatGenerationTool, withChatGenerationProgress } from '@conai/shared'
+import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
 import type { ChatMessageRouting } from '@conai/shared'
 import { ChatMessageReply } from './chat-reply'
 import { Button } from '@/components/ui/button'
@@ -582,7 +582,7 @@ const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 const AVATAR_COLUMN_PAD = { md: 'pl-13', lg: 'pl-17' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel }: {
   routing?: ChatMessageRouting | null
   recipientLabel?: string
   content: string
@@ -604,6 +604,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   createdAt?: string
 }) {
   const { t } = useI18n()
+  // Older stored replies and live streams may still carry the model's copy of the app's [message_id=...] label.
+  const content = stripEchoedAddresses(written)
   const { avatarSize } = appearance
   const avatarBeside = speaker !== null && (avatarSize === 'md' || avatarSize === 'lg')
   const toolBadge = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null

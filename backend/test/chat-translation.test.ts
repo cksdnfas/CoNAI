@@ -78,3 +78,14 @@ test('group rooms translate the user with the first member that has a translatio
   assert.equal(translator.translationProviderName, 'translator')
   assert.equal(translator.translationModel, 'small')
 })
+
+test('an address label the model copied from history is cut from its reply, so the translator sees only the text', async (t) => {
+  const { stripEchoedAddresses } = await import('@conai/shared')
+  assert.equal(stripEchoedAddresses('[message_id=759; to=["user"]; reply_to=758; from=assistant] The reply.'), 'The reply.')
+  assert.equal(stripEchoedAddresses('[message_id=12; to=["user"]; from=3]\n*smiles* Hi.\n\n[message_id=12; to=["user"]; from=3]\nMore.'), '*smiles* Hi.\n\nMore.')
+  assert.equal(stripEchoedAddresses('**[Mina; message_id=40; to=[3]]** Hello @Yuki'), 'Hello @Yuki')
+  assert.equal(stripEchoedAddresses('[Mina] Hi [id=3] there.\nSee [message_id=5] inline.'), '[Mina] Hi [id=3] there.\nSee [message_id=5] inline.')
+  const requests = mockTranslator(t, '답장이야.')
+  assert.equal(await translateReply(translating, stripEchoedAddresses('[message_id=759; to=["user"]; reply_to=758; from=assistant]\nThe reply.')), '답장이야.')
+  assert.equal(requests.length, 1)
+})

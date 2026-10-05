@@ -25,6 +25,7 @@ import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseB
 import { authorNoteText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE } from './llmChatContext'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
+import { stripEchoedAddresses } from '@conai/shared'
 import { selectLoreEntries } from './chatLorebook'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
@@ -338,7 +339,7 @@ async function finishTurn(session: Session, turn: TurnState, status: CodexChatMe
 
   const finalTexts = [...turn.agentMessages.entries()].filter(([itemId]) => !turn.commentaryItems.has(itemId)).map(([, text]) => text)
   const content = (finalTexts.length > 0 ? finalTexts : [...turn.agentMessages.values()])
-    .map((text) => text.trim())
+    .map((text) => stripEchoedAddresses(text).trim())
     .filter(Boolean)
     .join('\n\n')
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))

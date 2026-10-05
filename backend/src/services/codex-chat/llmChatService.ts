@@ -12,6 +12,7 @@ import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput } from './chatTranslation'
+import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
@@ -222,7 +223,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
 /** Stores the reply (translated for the reader first, while the turn still counts as running) and announces it. */
 async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChatMessageRecord['status'], error: string | null) {
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  const content = stripThinking(turn.text).trim()
+  const content = stripEchoedAddresses(stripThinking(turn.text)).trim()
   const finishReason = status === 'completed' ? turn.finishReason : null
   let displayContent: string | null = null
   if (status === 'completed' && content && profile.translationProviderName) {
@@ -334,7 +335,7 @@ export async function generateLlmGroupReply(params: {
     params.signal.removeEventListener('abort', abort)
   }
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  return { content: stripThinking(turn.text).trim(), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null }
+  return { content: stripEchoedAddresses(stripThinking(turn.text)).trim(), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null }
 }
 
 export const LlmChatService = {

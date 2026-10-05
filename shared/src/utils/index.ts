@@ -9,3 +9,4 @@ export * from './validators';
 export * from './responseHelpers';
 
 export * from './chatMentions';
+export * from './chatAddress';
