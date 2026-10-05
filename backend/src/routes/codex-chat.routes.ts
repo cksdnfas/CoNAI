@@ -1,4 +1,5 @@
 import fs from 'fs'
+import { getUserSettingsDb } from '../database/userSettingsDb'
 import multer from 'multer'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
@@ -15,7 +16,7 @@ import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
-import { buildLeadingMessages, estimateTokens, fillCharacterPlaceholders } from '../services/codex-chat/llmChatContext'
+import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders } from '../services/codex-chat/llmChatContext'
 import { buildLorebookText, ChatLorebookStore } from '../services/codex-chat/chatLorebook'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
@@ -31,7 +32,9 @@ import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
 import { chatAssetFile, localizeImages, rewriteImageLinks, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
 import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
+import { ChatUserProfileError, ChatUserProfileStore } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
+import { validateBlockData } from '../services/codex-chat/chatBlockState'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -74,7 +77,7 @@ function sendChatError(res: Response, error: unknown) {
     res.status(400).json({ success: false, error: error.message })
     return
   }
-  if (error instanceof ChatFlagError || error instanceof ChatAppearanceError) {
+  if (error instanceof ChatFlagError || error instanceof ChatAppearanceError || error instanceof ChatUserProfileError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -114,9 +117,11 @@ function toPublicProfile(profile: ChatProfile) {
     isEnabled: profile.isEnabled,
     contextTurns: profile.contextTurns,
     summaryEnabled: profile.summaryEnabled,
-    style: profile.style,
+    maxTokens: profile.maxTokens,
+    reasoningBudgetTokens: profile.reasoningBudgetTokens,
     loreDepth: profile.loreDepth,
     authorNote: profile.authorNote,
+    style: profile.style,
     backgroundVersion: backgroundVersionOf(profile),
   }
 }
@@ -216,11 +221,24 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   res.json({ success: true, data: threads.map((thread) => thread.kind === 'group' ? { ...thread, member_profile_ids: members.get(thread.id) ?? [] } : thread) })
 })
 
-/** POST /api/codex-chat/threads/group — `{ profileIds, representativeId, title? }`: a group room (empty, no greeting). */
+/**
+ * `userProfileId` in a request body: a number, null (the plain user), or undefined when absent (new chats then take
+ * the default profile). Anything else is 'invalid'.
+ */
+function parseUserProfileIdField(value: unknown): number | null | undefined | 'invalid' {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  const id = Number(value)
+  return Number.isSafeInteger(id) && id > 0 ? id : 'invalid'
+}
+
+/** POST /api/codex-chat/threads/group — `{ profileIds, representativeId, title?, userProfileId? }`: a group room (empty, no greeting). */
 router.post('/threads/group', requireChatAccess, (req: Request, res: Response) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
-    const created = GroupChatService.create(requesterFrom(req), { profileIds: body.profileIds, representativeId: body.representativeId, title: body.title })
+    const userProfileId = parseUserProfileIdField(body.userProfileId)
+    if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
+    const created = GroupChatService.create(requesterFrom(req), { profileIds: body.profileIds, representativeId: body.representativeId, title: body.title, userProfileId })
     ChatAppearanceStore.threadCreated(getRequesterAccountId(req), created.id)
     res.status(201).json({ success: true, data: created })
   } catch (error) {
@@ -234,7 +252,7 @@ router.patch('/threads/:threadId/group', requireChatAccess, (req: Request, res: 
   if (threadId === null) return
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
-    res.json({ success: true, data: GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit }) })
+    res.json({ success: true, data: GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit, maxTokens: body.maxTokens }) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -245,6 +263,20 @@ router.post('/threads/:threadId/members', requireChatAccess, (req: Request, res:
   if (threadId === null) return
   try {
     res.json({ success: true, data: GroupChatService.addMembers(requesterFrom(req), threadId, req.body?.profileIds) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+/** PATCH /api/codex-chat/threads/:threadId/members/:profileId — `{ maxTokens }`: this member's reply cap in the room (null follows the room, then the profile). */
+router.patch('/threads/:threadId/members/:profileId', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  const profileId = parseId(req.params.profileId)
+  if (threadId === null) return
+  if (profileId === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    res.json({ success: true, data: GroupChatService.updateMember(requesterFrom(req), threadId, profileId, { maxTokens: body.maxTokens }) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -263,14 +295,17 @@ router.delete('/threads/:threadId/members/:profileId', requireChatAccess, (req: 
 })
 
 /** POST /api/codex-chat/threads — `{ profileId }`: a new chat with that profile's engine and persona. */
+/** POST /api/codex-chat/threads — `{ profileId, userProfileId? }` (userProfileId absent: the default user profile, null: none). */
 router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
   const profileId = parseId(req.body?.profileId)
   if (profileId === null) {
     sendRouteBadRequest(res, 'profileId is required')
     return
   }
+  const userProfileId = parseUserProfileIdField(req.body?.userProfileId)
+  if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
   try {
-    const created = CodexChatService.createThread(requesterFrom(req), profileId)
+    const created = CodexChatService.createThread(requesterFrom(req), profileId, userProfileId)
     ChatAppearanceStore.threadCreated(getRequesterAccountId(req), created.id)
     res.status(201).json({ success: true, data: created })
   } catch (error) {
@@ -278,7 +313,7 @@ router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
   }
 })
 
-/** PATCH /api/codex-chat/threads/:threadId/context — LLM chats: turn window and summary on/off (null follows the profile), summary text. */
+/** PATCH /api/codex-chat/threads/:threadId/context — LLM chats: turn window, reply token cap and summary on/off (null follows the profile), summary text. */
 router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
@@ -286,6 +321,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
   try {
     const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     // The author's note applies to every kind of chat; the window and summary settings only to direct LLM chats.
     if (body.authorNote !== undefined && body.authorNote !== null && typeof body.authorNote !== 'string') {
       sendRouteBadRequest(res, 'authorNote must be a string or null')
@@ -299,11 +335,10 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         return
       }
     }
-    CodexChatStore.updateThreadContext(threadId, {
-      authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
-      authorNoteDepth,
-    })
-    const windowKeys = ['contextTurns', 'summaryEnabled', 'summary'] as const
+    // The user profile (who the user is) applies to every kind of chat; in a room its name must not read as a member's.
+    const userProfileId = parseUserProfileIdField(body.userProfileId)
+    if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
+    const windowKeys = ['contextTurns', 'summaryEnabled', 'summary', 'maxTokens'] as const
     if ((thread.engine !== 'llm' || thread.kind === 'group') && windowKeys.some((key) => body[key] !== undefined)) {
       sendRouteBadRequest(res, 'Only LLM chats have context settings')
       return
@@ -316,6 +351,14 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         return
       }
     }
+    let maxTokens: number | null | undefined
+    if (body.maxTokens !== undefined) {
+      maxTokens = body.maxTokens === null ? null : Number(body.maxTokens)
+      if (maxTokens !== null && (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 1_000_000)) {
+        sendRouteBadRequest(res, 'maxTokens must be 1-1000000 or null')
+        return
+      }
+    }
     if (body.summaryEnabled !== undefined && body.summaryEnabled !== null && typeof body.summaryEnabled !== 'boolean') {
       sendRouteBadRequest(res, 'summaryEnabled must be a boolean or null')
       return
@@ -324,12 +367,52 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       sendRouteBadRequest(res, 'summary must be a string or null')
       return
     }
-    CodexChatStore.updateThreadContext(threadId, { contextTurns, summaryEnabled: body.summaryEnabled as boolean | null | undefined })
-    if (body.summary !== undefined) {
-      const summary = typeof body.summary === 'string' ? body.summary.trim().slice(0, 20000) : ''
-      CodexChatStore.setSummary(threadId, summary || null, summary ? thread.summary_until_message_id : null)
-    }
+    getUserSettingsDb().transaction(() => {
+      if (userProfileId !== undefined) {
+        if (thread.kind === 'group') GroupChatService.setUserProfile(requesterFrom(req), threadId, userProfileId)
+        else ChatUserProfileStore.setThreadUserProfile(threadId, ChatUserProfileStore.requireOwn(getRequesterAccountId(req), userProfileId)?.id ?? null)
+      }
+      CodexChatStore.updateThreadContext(threadId, {
+        contextTurns, maxTokens, summaryEnabled: body.summaryEnabled as boolean | null | undefined,
+        authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
+        authorNoteDepth,
+      })
+      if (body.summary !== undefined) {
+        const summary = typeof body.summary === 'string' ? body.summary.trim().slice(0, 20000) : ''
+        CodexChatStore.setSummary(threadId, summary || null, summary ? thread.summary_until_message_id : null)
+      }
+    }).immediate()
     res.json({ success: true, data: CodexChatService.getThread(requesterFrom(req), threadId).thread })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+/**
+ * PATCH /api/codex-chat/threads/:threadId/blocks/:key — set a display block's values by hand (`data`: the whole
+ * object) or put them back to the block's starting values (`reset: true`). Returns the thread detail.
+ */
+router.patch('/threads/:threadId/blocks/:key', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  const key = String(req.params.key ?? '').toLowerCase()
+  const body = (req.body ?? {}) as { data?: unknown; reset?: unknown; profileId?: unknown }
+  const reset = body.reset === true
+  const reason = reset ? null : validateBlockData(body.data)
+  if (reason) {
+    sendRouteBadRequest(res, reason)
+    return
+  }
+  const profileId = body.profileId === undefined || body.profileId === null ? undefined : Number(body.profileId)
+  if (profileId !== undefined && !Number.isSafeInteger(profileId)) {
+    sendRouteBadRequest(res, 'profileId must be an integer')
+    return
+  }
+  try {
+    const group = isGroupThread(req, threadId)
+    if (group ? GroupChatService.isRunning(threadId) : CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    CodexChatService.editBlock(requesterFrom(req), threadId, key, reset ? null : body.data as Record<string, unknown>, profileId)
+    res.json({ success: true, data: group ? GroupChatService.getThread(requesterFrom(req), threadId) : CodexChatService.getThread(requesterFrom(req), threadId) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -541,10 +624,10 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
       ? await openChatMcpBridge(requesterFrom(req), profile.mcpScopes, profile.toolAllowlist)
       : null
     try {
-      const tools = bridge?.tools ?? []
+      const tools = (bridge?.tools ?? []).filter((tool) => profile.engine === 'codex' || profile.visionEnabled || tool.function.name !== 'view_images')
       const messages = profile.engine === 'codex'
         ? [{ role: 'developer', content: buildCodexInstructions(profile) }]
-        : buildLeadingMessages(profile, null, { summaryEnabled: false }, tools.length > 0)
+        : buildChatPromptPreview(profile, tools)
       if (profile.engine === 'codex') {
         const lore = buildLorebookText(profile, undefined, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile))
         if (lore) messages.push({ role: 'user', content: `[참고 설정]\n${lore}\n[/참고 설정]` })
@@ -611,6 +694,16 @@ router.get('/threads/:threadId/export', requireChatAccess, (req: Request, res: R
         : [])
       res.type('text/markdown').send(exportChatMarkdown(detail.thread, detail.messages, CodexChatService.listThreadMedia(requester, threadId), profile?.name ?? '어시스턴트', `${req.protocol}://${req.get('host')}`, speakers))
     }
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.get('/threads/:threadId/running', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    const requester = requesterFrom(req)
+    const running = isGroupThread(req, threadId) ? GroupChatService.getRunning(requester, threadId) : CodexChatService.getRunning(requester, threadId)
+    res.json({ success: true, data: { running, latestMessageId: CodexChatStore.latestMessageId(threadId) } })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -746,9 +839,43 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
   }
 
   await streamChatReply(res, (write) => isGroupThread(req, threadId)
-    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds)
-    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds))
+    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks)
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes))
 }))
+
+// ---- Chat user profiles: who the account is in a chat (name, persona, avatar), one per chat ----------------------
+
+router.get('/user-profiles', requireChatAccess, (req: Request, res: Response) => {
+  res.json({ success: true, data: ChatUserProfileStore.list(getRequesterAccountId(req)) })
+})
+
+router.post('/user-profiles', requireChatAccess, (req: Request, res: Response) => {
+  try {
+    res.status(201).json({ success: true, data: ChatUserProfileStore.create(getRequesterAccountId(req), (req.body ?? {}) as Record<string, unknown>) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** PUT /api/codex-chat/user-profiles/order — `{ ids }`: the account's user profiles in this order. */
+router.put('/user-profiles/order', requireChatAccess, (req: Request, res: Response) => {
+  res.json({ success: true, data: ChatUserProfileStore.reorder(getRequesterAccountId(req), parseFlagIds(req.body?.ids)) })
+})
+
+router.put('/user-profiles/:userProfileId', requireChatAccess, (req: Request, res: Response) => {
+  const userProfileId = parseId(req.params.userProfileId)
+  if (userProfileId === null) { sendRouteBadRequest(res, 'Invalid user profile id'); return }
+  try {
+    res.json({ success: true, data: ChatUserProfileStore.update(getRequesterAccountId(req), userProfileId, (req.body ?? {}) as Record<string, unknown>) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.delete('/user-profiles/:userProfileId', requireChatAccess, (req: Request, res: Response) => {
+  const userProfileId = parseId(req.params.userProfileId)
+  if (userProfileId === null) { sendRouteBadRequest(res, 'Invalid user profile id'); return }
+  try {
+    ChatUserProfileStore.delete(getRequesterAccountId(req), userProfileId)
+    res.json({ success: true })
+  } catch (error) { sendChatError(res, error) }
+})
 
 // ---- Chat flags: each account's own instructions, switched on per chat ----------------------------------------
 

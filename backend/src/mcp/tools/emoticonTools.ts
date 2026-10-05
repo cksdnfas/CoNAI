@@ -10,6 +10,7 @@ import { requireFileStoreOwner } from '../../services/fileStoreAccess';
 import { FileStoreService } from '../../services/fileStoreService';
 import { GroupPathService } from '../../services/groupPathService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
+import { ImageSafetyService } from '../../services/imageSafetyService';
 import type { McpRequestContext } from '../context';
 
 const VIEW_MAX_IMAGES = 6;
@@ -154,7 +155,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
       for (const hash of composite_hashes) {
         try {
           const metadata = MediaMetadataModel.findByHash(hash);
-          const file = metadata && MediaPostprocessVisibilityService.isReadyRecord(metadata) ? EmoticonService.activeFile(hash) : null;
+          const file = metadata && MediaPostprocessVisibilityService.isReadyRecord(metadata) && !ImageSafetyService.isHidden(metadata.rating_score) ? EmoticonService.activeFile(hash) : null;
           if (!file || !fs.existsSync(file.path) || file.mimeType?.startsWith('video/')) throw new Error('not an available image');
           content.push({ type: 'text', text: `composite_hash ${hash}:` });
           content.push({ type: 'image', data: await previewImage(file.path), mimeType: 'image/jpeg' });

@@ -22,6 +22,8 @@ export type ChatGroupMember = {
   codex_cached_input_tokens: number | null
   codex_output_tokens: number | null
   codex_lore_sent: string | null
+  /** This member's reply token cap in the room (null: the room's cap, then the profile's). */
+  max_tokens: number | null
   joined_date: string
 }
 
@@ -93,6 +95,11 @@ export const ChatGroupStore = {
     const db = getUserSettingsDb()
     if (limits.chain !== undefined) db.prepare('UPDATE codex_chat_threads SET group_chain_limit = ? WHERE id = ?').run(limits.chain, threadId)
     if (limits.window !== undefined) db.prepare('UPDATE codex_chat_threads SET group_window_limit = ? WHERE id = ?').run(limits.window, threadId)
+  },
+
+  /** One member's reply token cap in this room (null follows the room, then the profile). */
+  setMemberMaxTokens(threadId: number, profileId: number, maxTokens: number | null) {
+    getUserSettingsDb().prepare('UPDATE chat_group_members SET max_tokens = ? WHERE thread_id = ? AND profile_id = ?').run(maxTokens, threadId, profileId)
   },
 
   setLastSeen(threadId: number, profileId: number, messageId: number) {

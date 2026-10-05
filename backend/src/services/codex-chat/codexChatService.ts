@@ -1,3 +1,4 @@
+import { validateChatMediaAttachments } from './chatMediaAttachments'
 import fs from 'fs'
 import { createHash } from 'crypto'
 import { chatContentWithAttachments, validateChatAttachments } from './chatAttachments'
@@ -10,20 +11,23 @@ import { onBeforeCodexCliUpdate, isCodexCliUpdating } from '../codexCliMaintenan
 import { resolveCodexCommand } from '../codexGenerationExecutor'
 import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import { CodexAppServerClient, type CodexAppServerNotification } from './codexAppServerClient'
-import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken } from './codexChatAccess'
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
+import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseBlockEdits } from './chatBlockState'
 import { authorNoteText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
 import { selectLoreEntries } from './chatLorebook'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
-import { buildFlagDirective, ChatFlagStore, parseFlagIds } from './chatFlags'
+import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
+import { ChatUserProfileStore, userPersonaForThread, userPersonaOf, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { logger } from '../../utils/logger'
+import type { ChatStreamEvent } from '@conai/shared'
 
 const SESSION_IDLE_MS = 15 * 60 * 1000
 const THREAD_REQUEST_TIMEOUT_MS = 2 * 60 * 1000
@@ -83,22 +87,7 @@ const DEVELOPER_INSTRUCTIONS = [
   REPLY_FORMAT_GUIDANCE,
 ].join('\n')
 
-export type CodexChatStreamEvent =
-  | { type: 'user'; message: CodexChatMessageRecord }
-  | { type: 'rewind'; mode: 'regenerate' | 'edit'; message: CodexChatMessageRecord }
-  /** `profileId`: group rooms, the member whose reply this is (several may answer at once). */
-  | { type: 'delta'; text: string; profileId?: number }
-  /** LLM chats: the model's reasoning, shown while it streams and not stored. */
-  | { type: 'reasoning'; text: string; profileId?: number }
-  | { type: 'tool'; call: CodexChatToolCall; profileId?: number }
-  | { type: 'done'; message: CodexChatMessageRecord }
-  | { type: 'error'; message: string }
-  /** Group rooms: this member starts answering; `speakers` is everyone answering now, `queue` who answers after. */
-  | { type: 'speaker'; profileId: number; speakers: number[]; queue: number[] }
-  /** Group rooms: who is answering and waiting changed (a reply ended or woke more members). */
-  | { type: 'queue'; speakers: number[]; queue: number[] }
-  /** Group rooms: something the user should know that is not an error of the reply (a member was skipped). */
-  | { type: 'notice'; message: string }
+export type CodexChatStreamEvent = ChatStreamEvent<CodexChatMessageRecord>
 
 type TurnState = {
   chatThreadId: number
@@ -580,10 +569,33 @@ function readLoreSent(value: string | null) {
  * The author's note to put in this turn's input: Codex keeps every input in its memory, so the note goes in once and
  * again only when its text changes (or after a compaction clears the sent keys) — tracked like lore, as `note:<hash>`.
  */
-function pendingAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | 'author_note_depth'> | null, profile: ChatProfile, sent: Set<string>) {
-  const text = authorNoteText(resolveAuthorNote(thread, profile))
+function pendingAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | 'author_note_depth'> | null, profile: ChatProfile, sent: Set<string>, user: ChatUserPersona) {
+  const text = authorNoteText(resolveAuthorNote(thread, profile, user))
   if (!text) return { text: '', keys: [] as string[] }
   const key = `note:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
+  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
+}
+
+/**
+ * Who the user is (the chat's user profile), given to Codex the same way as the note: once, and again when the
+ * profile changes or after a compaction. Codex's fixed instructions are frozen at thread start, so it cannot go there.
+ */
+function pendingUserPersona(user: ChatUserPersona, sent: Set<string>) {
+  const text = userPersonaPrompt(user)
+  if (!text) return { text: '', keys: [] as string[] }
+  const key = `user:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
+  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
+}
+
+/**
+ * The display block state to put in this turn's input: given again only when it changed since it was last given
+ * (or after a compaction), tracked as `state:<hash>` beside the lore keys.
+ */
+function pendingBlockState(thread: Pick<CodexChatThreadRecord, 'block_edits'> | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, speakerId?: number) {
+  const folded = foldBlockState(profile, messages, parseBlockEdits(thread?.block_edits), speakerId)
+  const text = folded ? blockStateText(profile.style.blocks, folded.state) : ''
+  if (!text) return { text: '', keys: [] as string[] }
+  const key = `state:${blockStateHash(text)}`
   return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
 }
 
@@ -668,16 +680,20 @@ export async function runCodexGroupReply(params: {
       try {
         // Read after ensureCodexThread: a new Codex thread starts with no lore in its memory.
         const sent = readLoreSent(ChatGroupStore.member(threadId, profile.id)?.codex_lore_sent ?? null)
-        const lore = selectLoreEntries(profile, params.messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile), { skip: (key) => sent.has(key) })
-        const note = pendingAuthorNote(CodexChatStore.findThreadById(threadId) ?? null, profile, sent)
+        const room = CodexChatStore.findThreadById(threadId) ?? null
+        const user = userPersonaForThread(room)
+        const persona = pendingUserPersona(user, sent)
+        const lore = selectLoreEntries(profile, params.messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), { skip: (key) => sent.has(key) })
+        const note = pendingAuthorNote(room, profile, sent, user)
+        const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: params.buildInput([lore.text, note.text].filter(Boolean).join('\n\n')), text_elements: [] }],
+          input: [{ type: 'text', text: params.buildInput([persona.text, lore.text, note.text, state.text].filter(Boolean).join('\n\n')), text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...lore.keys, ...note.keys]
+        const keys = [...persona.keys, ...lore.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
         if (params.signal.aborted) interrupt()
       } catch (error) {
@@ -699,7 +715,7 @@ export const CodexChatService = {
     const thread = requireThread(requester, threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
-    CodexChatStore.clearThread(threadId, profile?.greeting ? fillCharacterPlaceholders(profile.greeting, profile) : '')
+    CodexChatStore.clearThread(threadId, profile ? fillCharacterPlaceholders(pickChatGreeting(profile), profile, userPersonaForThread(thread)) : '')
     deleteCodexRollout(requester, thread.codex_thread_id)
     return CodexChatService.getThread(requester, threadId)
   },
@@ -766,19 +782,36 @@ export const CodexChatService = {
     return CodexChatStore.listThreads(requester.accountId)
   },
 
-  /** A chat with the profile's engine; the profile's greeting becomes the first message. */
-  createThread(requester: McpRequester, profileId: number) {
+  /**
+   * A chat with the profile's engine; the profile's greeting becomes the first message. `userProfileId`: the
+   * account's user profile in it; undefined picks the default one (see ChatUserProfileStore.resolveNew), null none.
+   */
+  createThread(requester: McpRequester, profileId: number, userProfileId?: number | null) {
+    const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId === undefined ? ChatUserProfileStore.resolveNew(requester.accountId) : userProfileId)
     const profile = ChatProfileStore.find(profileId)
     if (profile?.engine !== 'codex') {
-      return requireThread(requester, LlmChatService.createThread(requester, profileId))
+      return requireThread(requester, LlmChatService.createThread(requester, profileId, user?.id ?? null))
     }
     assertChatAvailable(requester)
     requireCodexProfile(profile.id)
     const id = CodexChatStore.createThread(requester.accountId, '', 'codex', profile.id)
-    if (profile.greeting) {
-      CodexChatStore.addMessage({ thread_id: id, role: 'assistant', content: fillCharacterPlaceholders(profile.greeting, profile), tool_calls: [], status: 'completed', error: null })
+    if (user) ChatUserProfileStore.setThreadUserProfile(id, user.id)
+    const greeting = pickChatGreeting(profile)
+    if (greeting) {
+      CodexChatStore.addMessage({ thread_id: id, role: 'assistant', content: fillCharacterPlaceholders(greeting, profile, userPersonaOf(user)), tool_calls: [], status: 'completed', error: null })
     }
     return requireThread(requester, id)
+  },
+
+  /** Running state without loading the transcript, attachments, media or display blocks. */
+  getRunning(requester: McpRequester, threadId: number) {
+    const thread = requireThread(requester, threadId)
+    if (thread.engine === 'llm') return LlmChatService.running(threadId)
+    const active = findActiveTurn(threadId)
+    return active ? {
+      text: [...active.turn.agentMessages.values()].join('\n\n'),
+      toolCalls: [...active.turn.toolCalls.values()],
+    } : startingThreads.has(threadId) ? { text: '', toolCalls: [] } : null
   },
 
   /** The transcript, a reply still running, and the media kind of every image it references (for players). */
@@ -786,24 +819,43 @@ export const CodexChatService = {
     const thread = requireThread(requester, threadId)
     const { messages, pendingJobs } = attachJobResults(CodexChatStore.listMessages(threadId))
     const media = Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height }]))
-    if (thread.engine === 'llm') {
-      return { thread, messages, media, pendingJobs, running: LlmChatService.running(threadId) }
-    }
-    const active = findActiveTurn(threadId)
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
+    // Display block state: direct chats only (a room's members each have their own blocks; not folded yet).
+    const blocks = profile && thread.kind === 'direct' ? foldBlockState(profile, messages, parseBlockEdits(thread.block_edits)) : null
+    if (thread.engine === 'llm') {
+      return { thread, messages, media, pendingJobs, blocks, running: LlmChatService.running(threadId) }
+    }
     return {
       thread,
       messages,
       media,
       pendingJobs,
+      blocks,
       codexCompactTokens: profile ? codexCompactLimit(profile) : CODEX_COMPACT_TOKENS.default,
-      running: active
-        ? {
-            text: [...active.turn.agentMessages.values()].join('\n\n'),
-            toolCalls: [...active.turn.toolCalls.values()],
-          }
-        : null,
+      running: CodexChatService.getRunning(requester, threadId),
     }
+  },
+
+  /**
+   * Set a display block's values by hand (`data`), or put it back to its starting values (`null`). The edit is kept
+   * on the thread and applied after the last message, so the next reply (and the panel) sees it. Group rooms name
+   * the member (`profileId`) whose block it is.
+   */
+  editBlock(requester: McpRequester, threadId: number, key: string, data: Record<string, unknown> | null, profileId?: number) {
+    const thread = requireThread(requester, threadId)
+    const isGroup = thread.kind === 'group'
+    const ownerId = isGroup ? profileId ?? null : thread.profile_id
+    const member = isGroup && ownerId !== null ? ChatGroupStore.member(threadId, ownerId) : null
+    const profile = ownerId !== null && (!isGroup || member) ? ChatProfileStore.find(ownerId) : null
+    if (!profile || !profile.style.blocks.some((block) => block.enabled && block.key === key && block.template.trim())) {
+      throw new CodexChatError('이 채팅에는 그런 표시 블록이 없어.', 404)
+    }
+    const edits = parseBlockEdits(thread.block_edits)
+    if (edits.length >= BLOCK_EDITS_MAX) throw new CodexChatError('직접 고친 횟수가 너무 많아. 대화를 비우면 다시 고칠 수 있어.', 400)
+    const messages = CodexChatStore.listMessages(threadId)
+    const afterMessageId = messages.length > 0 ? messages[messages.length - 1].id : 0
+    const id = `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    CodexChatStore.setBlockEdits(threadId, [...edits, { id, key, afterMessageId, data, at: new Date().toISOString(), ...(isGroup ? { profileId: profile.id } : {}) }])
   },
 
   /** Images the chat's transcript references, for the chat's image gallery. */
@@ -816,6 +868,7 @@ export const CodexChatService = {
     const thread = requireThread(requester, threadId)
     if (thread.engine === 'llm') {
       await LlmChatService.stop(threadId)
+      if (LlmChatService.isRunning(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
       CodexChatStore.deleteThread(threadId)
       return
     }
@@ -832,16 +885,17 @@ export const CodexChatService = {
    * Send one user message and stream the turn to `listener`. Resolves with the stored assistant message.
    * The turn keeps running (and is stored) when the listener goes away, e.g. the browser closes the stream.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown) {
     const thread = requireThread(requester, threadId)
     if (thread.engine === 'llm') {
-      return LlmChatService.sendMessage(requester, thread, text, listener, fileIds, flagIds)
+      return LlmChatService.sendMessage(requester, thread, text, listener, fileIds, flagIds, picks, mediaHashes)
     }
     assertChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
-    const flags = ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds))
+    const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
+    const flags = [...ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()
-    if (!trimmed && attachments.length === 0) {
+    if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
       throw new CodexChatError('메시지를 입력해줘.')
     }
     if (CodexChatService.isRunning(threadId)) {
@@ -873,13 +927,13 @@ export const CodexChatService = {
         finished,
         resolveFinished,
       }
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags }, attachments.map((file) => file.id))
-      ChatFlagStore.setThreadFlags(threadId, flags.map((flag) => flag.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments }, attachments.map((file) => file.id))
+      ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       turn.userMessageId = userMessageId
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {
-        CodexChatStore.renameThread(threadId, (trimmed || attachments[0]?.name || '').replace(/\s+/g, ' '))
+        CodexChatStore.renameThread(threadId, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       }
       const userMessage = CodexChatStore.listMessages(threadId).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord
       emit(turn, { type: 'user', message: userMessage })
@@ -889,11 +943,15 @@ export const CodexChatService = {
         // same content) is not given again. Read after ensureCodexThread: a new Codex thread starts with none.
         const current = CodexChatStore.findThreadById(threadId) ?? null
         const sent = readLoreSent(current?.codex_lore_sent ?? null)
-        const lore = selectLoreEntries(profile, CodexChatStore.listMessages(threadId), (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile), { skip: (key) => sent.has(key) })
-        const note = pendingAuthorNote(current, profile, sent)
-        const directive = buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile))
-        const reference = referenceBlock([lore.text, note.text])
-        const input = [reference, chatContentWithAttachments(trimmed, attachments), directive].filter(Boolean).join('\n\n')
+        const user = userPersonaForThread(current)
+        const history = CodexChatStore.listMessages(threadId)
+        const persona = pendingUserPersona(user, sent)
+        const lore = selectLoreEntries(profile, history, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), { skip: (key) => sent.has(key) })
+        const note = pendingAuthorNote(current, profile, sent, user)
+        const state = pendingBlockState(current, profile, history, sent)
+        const directive = buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user))
+        const reference = referenceBlock([persona.text, lore.text, note.text, state.text])
+        const input = [reference, chatContentWithAttachments(trimmed, attachments, mediaAttachments), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
@@ -901,7 +959,7 @@ export const CodexChatService = {
           input: [{ type: 'text', text: input, text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...lore.keys, ...note.keys]
+        const keys = [...persona.keys, ...lore.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
       } catch (error) {
         finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')

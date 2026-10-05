@@ -84,7 +84,7 @@ export type ChatProfile = {
   extraParams: string
   systemPrompt: string
   promptSections: ChatPromptSection[]
-  /** Stored as the first assistant message of a new chat. */
+  /** Randomly selected with alternateGreetings as the first assistant message on chat creation/reset. */
   greeting: string
   alternateGreetings: string[]
   temperature: number | null
@@ -196,6 +196,12 @@ function parseJsonArray(value: string | null): unknown[] | null {
 
 export function normalizeAlternateGreetings(value: unknown): string[] {
   return Array.isArray(value) ? value.slice(0, 100).filter((item): item is string => typeof item === 'string').map((item) => item.trim().slice(0, TEXT_MAX_LENGTH)).filter(Boolean) : []
+}
+
+/** Choose uniformly from non-empty greetings; no greeting keeps the chat empty. */
+export function pickChatGreeting(profile: Pick<ChatProfile, 'greeting' | 'alternateGreetings'>): string {
+  const greetings = [profile.greeting, ...profile.alternateGreetings].filter((greeting) => greeting.trim().length > 0)
+  return greetings.length > 0 ? greetings[Math.floor(Math.random() * greetings.length)] : ''
 }
 
 function normalizeSections(value: unknown): ChatPromptSection[] {
@@ -425,6 +431,12 @@ export const ChatProfileStore = {
       return null
     }
     const columns = toColumns({ ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) })
+    if (columns.engine !== current.engine && getUserSettingsDb().prepare(`
+      SELECT 1 FROM codex_chat_threads WHERE profile_id = ?
+      UNION ALL SELECT 1 FROM chat_group_members WHERE profile_id = ? LIMIT 1
+    `).get(profileId, profileId)) {
+      throw new ChatProfileError('대화에서 사용 중인 프로필의 엔진은 바꿀 수 없어. 다른 엔진은 새 프로필로 만들어줘.')
+    }
     getUserSettingsDb().prepare(`
       UPDATE llm_chat_profiles SET ${Object.keys(columns).map((name) => `${name} = @${name}`).join(', ')}, updated_date = CURRENT_TIMESTAMP
       WHERE id = @id

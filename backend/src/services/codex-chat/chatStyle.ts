@@ -14,6 +14,21 @@ export type ChatStyleColors = {
 }
 
 /**
+ * A rule the server holds a block field to when the model writes it (hand edits are free): a number range, how far
+ * it may move in one reply, the values it may take, or that the model may not change it at all.
+ */
+export type ChatBlockField = {
+  name: string
+  min: number | null
+  max: number | null
+  /** Largest change per reply (numbers). */
+  step: number | null
+  /** Allowed values (any type is compared as text); empty: any. */
+  values: string[]
+  readonly: boolean
+}
+
+/**
  * A designed card the model fills in: it writes a ```key fenced block of JSON values, and the chat renders `template`
  * (HTML with {{field}} slots, styled by `css`) with them. The template is the profile author's; the model only supplies
  * values, which are inserted as text.
@@ -28,6 +43,12 @@ export type ChatDisplayBlock = {
   example: string
   template: string
   css: string
+  /** How the values move (e.g. "affinity moves by at most 5 a turn"); read by the model with the current values. */
+  rules: string
+  /** One-line template of the folded status strip, e.g. `{{place}} · HP {{hp}}`; empty picks the first scalar fields. */
+  summary: string
+  /** Rules the server enforces on the model's updates, by field. */
+  fields: ChatBlockField[]
   enabled: boolean
 }
 
@@ -76,8 +97,12 @@ const CAST_AVATAR_MAX_LENGTH = 120_000
 const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/
 
 const MAX_BLOCKS = 12
+const MAX_BLOCK_FIELDS = 40
+const BLOCK_FIELD_NAME_MAX_LENGTH = 60
+const BLOCK_FIELD_VALUE_MAX_LENGTH = 80
+const MAX_BLOCK_FIELD_VALUES = 40
 const BLOCK_KEY_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/
-const BLOCK_TEXT_LIMITS = { instruction: 2000, example: 4000, template: 20_000, css: 20_000 } as const
+const BLOCK_TEXT_LIMITS = { instruction: 2000, example: 4000, template: 20_000, css: 20_000, rules: 2000, summary: 300 } as const
 
 /** Large enough for a ~1600px WebP; resized in the browser before upload. */
 export const BACKGROUND_MAX_LENGTH = 4_000_000
@@ -93,6 +118,47 @@ function color(value: unknown, fallback: string) {
 function bounded(value: unknown, min: number, max: number, fallback: number) {
   const number = Number(value)
   return value === null || value === undefined || value === '' || !Number.isFinite(number) ? fallback : Math.round(Math.min(max, Math.max(min, number)))
+}
+
+function optionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function normalizeFields(value: unknown): ChatBlockField[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  return value.slice(0, MAX_BLOCK_FIELDS).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const record = entry as Record<string, unknown>
+    const name = typeof record.name === 'string' ? record.name.trim().slice(0, BLOCK_FIELD_NAME_MAX_LENGTH) : ''
+    // An unnamed rule is kept while it is being written in the editor; a repeated name keeps its first rule.
+    if (name && seen.has(name)) return []
+    if (name) seen.add(name)
+    const values = Array.isArray(record.values)
+      ? [...new Set(record.values.map((item) => (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean' ? String(item).trim().slice(0, BLOCK_FIELD_VALUE_MAX_LENGTH) : '')).filter(Boolean))].slice(0, MAX_BLOCK_FIELD_VALUES)
+      : []
+    const min = optionalNumber(record.min)
+    const max = optionalNumber(record.max)
+    const step = optionalNumber(record.step)
+    return [{ name, min, max: max !== null && min !== null && max < min ? min : max, step: step !== null && step < 0 ? null : step, values, readonly: record.readonly === true }]
+  })
+}
+
+/** A field's rule as one line for the model ('' when the rule says nothing), e.g. `affinity: 0~100, 한 번에 ±5까지`. */
+export function fieldRuleText(field: ChatBlockField) {
+  if (!field.name) return ''
+  if (field.readonly) return `${field.name}: 고정값, 바꾸지 마`
+  const parts: string[] = []
+  if (field.min !== null || field.max !== null) parts.push(`${field.min ?? ''}~${field.max ?? ''}`)
+  if (field.step !== null) parts.push(`한 번에 ±${field.step}까지`)
+  if (field.values.length > 0) parts.push(`${field.values.join(' | ')} 중 하나`)
+  return parts.length > 0 ? `${field.name}: ${parts.join(', ')}` : ''
+}
+
+export function fieldRuleLines(block: Pick<ChatDisplayBlock, 'fields'>) {
+  return block.fields.map(fieldRuleText).filter(Boolean)
 }
 
 function normalizeBlocks(value: unknown): ChatDisplayBlock[] {
@@ -115,6 +181,9 @@ function normalizeBlocks(value: unknown): ChatDisplayBlock[] {
       example: field('example').trim(),
       template: field('template'),
       css: field('css'),
+      rules: field('rules').trim(),
+      summary: field('summary').trim(),
+      fields: normalizeFields(record.fields),
       enabled: record.enabled !== false,
     }]
   })
@@ -185,13 +254,17 @@ function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
   }
   const fence = '```'
   return [
-    'Display blocks: the chat renders these fenced blocks as designed cards. Write one exactly in this form (the fence name, then a single JSON object with the same fields), only where its instruction says. Values are plain text; never put HTML or Markdown in them.',
+    'Status blocks: the chat keeps a running state for each block below and shows it in a status panel. The current values come with the conversation under "현재 상태" (inside [참고 설정]); treat them as the facts of the scene and act consistently with them.',
+    'To change values, write a fenced block (the fence name, then one JSON object) holding ONLY the fields that changed: leave unchanged fields out, set a field to null to remove it, write lists whole. Put it at the end of the reply, at most once per block, and leave it out when nothing changed. Values are plain text; never put HTML or Markdown in them.',
     ...usable.map((block) => [
-      `- ${block.key}: ${block.instruction || 'use when it fits'}`,
+      `- ${block.key}: ${block.instruction || 'update when the scene changes it'}`,
+      block.rules ? `  Rules: ${block.rules}` : '',
+      ...fieldRuleLines(block).map((line) => `  Field rule: ${line}`),
+      '  Fields (with their starting values):',
       `${fence}${block.key}`,
       block.example || '{}',
       fence,
-    ].join('\n')),
+    ].filter(Boolean).join('\n')),
   ].join('\n')
 }
 

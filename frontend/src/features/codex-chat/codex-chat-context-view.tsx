@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { summarizeCodexChatThread, updateCodexChatThreadContext, type CodexChatThread } from '@/lib/api-codex-chat'
+import { summarizeCodexChatThread, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
-import { codexChatThreadQueryKey } from './codex-chat-context'
+import { ChatProfileAvatar } from './chat-profile-avatar'
+import { ChatUserProfileRow } from './chat-user-profiles'
+import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
 
 type SummaryMode = 'profile' | 'on' | 'off'
 
@@ -89,19 +93,104 @@ export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread;
   )
 }
 
-/** A group room's context: only the room's author's note (members keep their own windows and memories). */
-export function GroupContextView({ thread }: { thread: CodexChatThread }) {
+/**
+ * A group room's context: the room's author's note and reply token caps — one for the room, then one per LLM member
+ * that overrides it (members keep their own windows and memories). A Codex member has no hard cap, so it is not listed.
+ */
+export function GroupContextView({ thread, group, profilesById }: {
+  thread: CodexChatThread
+  group: ChatGroupInfo | null
+  profilesById: Map<number, ChatProfileSummary>
+}) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const applied = (detail: CodexChatThreadDetail) => {
+    queryClient.setQueryData(codexChatThreadQueryKey(thread.id), detail)
+    void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+  }
+  const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
+  const roomMutation = useMutation({ mutationFn: (maxTokens: number | null) => updateGroupChat(thread.id, { maxTokens }), onSuccess: applied, onError })
+  const memberMutation = useMutation({
+    mutationFn: ({ profileId, maxTokens }: { profileId: number; maxTokens: number | null }) => updateGroupChatMember(thread.id, profileId, { maxTokens }),
+    onSuccess: applied,
+    onError,
+  })
+  const llmMembers = (group?.memberIds ?? []).flatMap((id) => profilesById.get(id) ?? []).filter((member) => member.engine === 'llm')
+  const roomLabel = t({ ko: '방', en: 'Room' })
+  const profileLabel = t({ ko: '프로필', en: 'Profile' })
+  const capLabel = t({ ko: '최대 출력 토큰', en: 'Max output tokens' })
+  const commit = (value: string) => (value.trim() === '' ? null : Number(value))
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+      <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
+      {group ? (
+        <>
+          <SettingRow label={capLabel}>
+            <NumberStepperInput
+              allowEmpty
+              step={128}
+              min={1}
+              max={1000000}
+              className="w-44"
+              value={group.maxTokens}
+              placeholder={profileLabel}
+              onValueCommit={(value) => roomMutation.mutate(commit(value))}
+              aria-label={t({ ko: '방 전체 최대 출력 토큰', en: 'Max output tokens for the room' })}
+            />
+          </SettingRow>
+          {llmMembers.map((member) => {
+            // What this member gets when its own box is empty: the room's cap, else its profile's.
+            const fallback = group.maxTokens ?? member.maxTokens
+            const fallbackLabel = group.maxTokens !== null ? roomLabel : profileLabel
+            const own = group.memberMaxTokens[String(member.id)] ?? null
+            const effective = own ?? fallback
+            return (
+              <SettingRow
+                key={member.id}
+                label={(
+                  <span className="flex items-center gap-2">
+                    <ChatProfileAvatar name={member.name} avatar={member.avatar} engine={member.engine} size="sm" />
+                    <span className="truncate">@{member.name}</span>
+                  </span>
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  {effective !== null && member.reasoningBudgetTokens !== null && effective <= member.reasoningBudgetTokens ? (
+                    <Tip content={t({ ko: '추론 토큰 예산({budget})보다 작아서 답변 없이 끊길 수 있어', en: 'At or under the reasoning budget ({budget}): the reply may be cut before it starts' }, { budget: member.reasoningBudgetTokens })} side="top">
+                      <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
+                    </Tip>
+                  ) : null}
+                  <NumberStepperInput
+                    allowEmpty
+                    step={128}
+                    min={1}
+                    max={1000000}
+                    className="w-44"
+                    value={own}
+                    placeholder={fallback !== null ? `${fallbackLabel} (${fallback})` : fallbackLabel}
+                    onValueCommit={(value) => memberMutation.mutate({ profileId: member.id, maxTokens: commit(value) })}
+                    aria-label={t({ ko: '{name}의 최대 출력 토큰', en: 'Max output tokens for {name}' }, { name: member.name })}
+                  />
+                </div>
+              </SettingRow>
+            )
+          })}
+        </>
+      ) : null}
     </div>
   )
 }
 
-/** One LLM chat's context: its author's note, turn window and summary switch (both can follow the profile), and the summary itself. */
-export function CodexChatContextView({ thread, profileTurns, profileSummaryEnabled, noteDefaults }: {
+/** One LLM chat's context: its author's note, turn window, reply token cap and summary switch (all can follow the profile), and the summary itself. */
+export function CodexChatContextView({ thread, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, noteDefaults }: {
   thread: CodexChatThread
   profileTurns: number | null
+  /** The profile's reply cap (null: the server's default) and reasoning budget, shown as the fallback and for the warning. */
+  profileMaxTokens: number | null
+  profileReasoningBudget: number | null
   profileSummaryEnabled: boolean | null
   noteDefaults: AuthorNoteDefaults
 }) {
@@ -130,9 +219,11 @@ export function CodexChatContextView({ thread, profileTurns, profileSummaryEnabl
   const summaryMode: SummaryMode = thread.summary_enabled === null ? 'profile' : thread.summary_enabled === 1 ? 'on' : 'off'
   const profileLabel = t({ ko: '프로필', en: 'Profile' })
   const summaryDirty = summaryDraft.trim() !== (thread.summary ?? '').trim()
+  const effectiveMaxTokens = thread.max_tokens ?? profileMaxTokens
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+      <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>
         <NumberStepperInput
@@ -146,6 +237,27 @@ export function CodexChatContextView({ thread, profileTurns, profileSummaryEnabl
           onValueCommit={(value) => contextMutation.mutate({ contextTurns: value.trim() === '' ? null : Number(value) })}
           aria-label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}
         />
+      </SettingRow>
+      <SettingRow label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}>
+        <div className="flex items-center gap-2">
+          {/* The cap covers reasoning too: at or under the reasoning budget, the model may run out before it answers. */}
+          {effectiveMaxTokens !== null && profileReasoningBudget !== null && effectiveMaxTokens <= profileReasoningBudget ? (
+            <Tip content={t({ ko: '추론 토큰 예산({budget})보다 작아서 답변 없이 끊길 수 있어', en: 'At or under the reasoning budget ({budget}): the reply may be cut before it starts' }, { budget: profileReasoningBudget })} side="top">
+              <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
+            </Tip>
+          ) : null}
+          <NumberStepperInput
+            allowEmpty
+            step={128}
+            min={1}
+            max={1000000}
+            className="w-44"
+            value={thread.max_tokens}
+            placeholder={profileMaxTokens !== null ? `${profileLabel} (${profileMaxTokens})` : profileLabel}
+            onValueCommit={(value) => contextMutation.mutate({ maxTokens: value.trim() === '' ? null : Number(value) })}
+            aria-label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
+          />
+        </div>
       </SettingRow>
       <SettingRow label={t({ ko: '대화 요약', en: 'Conversation summary' })}>
         <SegmentedControl
@@ -201,6 +313,7 @@ export function CodexEngineContextView({ thread, compactTokens, noteDefaults }: 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+      <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
         <span className="text-sm tabular-nums">{tokens(thread.codex_context_tokens)} / {tokens(compactTokens)}</span>

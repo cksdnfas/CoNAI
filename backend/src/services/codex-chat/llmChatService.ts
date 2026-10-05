@@ -1,17 +1,20 @@
+import { validateChatMediaAttachments } from './chatMediaAttachments'
 import type { McpRequester } from '../../mcp/context'
+import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { retryLlmRequest } from '../llmRequestRetry'
 import { profileGenerationOptions } from './chatProfiles'
 import { validateChatAttachments } from './chatAttachments'
-import { ChatFlagStore, parseFlagIds } from './chatFlags'
+import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
-import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, pickChatGreeting, type ChatProfile } from './chatProfiles'
+import { ChatUserProfileStore, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
-import { buildChatMessages, fillCharacterPlaceholders, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { assertChatContextFits, buildChatMessages, fillCharacterPlaceholders, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
 const STORED_TOOL_OUTPUT_LENGTH = 4000
@@ -31,6 +34,9 @@ type LlmTurn = {
   text: string
   reasoning: string
   toolCalls: Map<string, CodexChatToolCall>
+  offeredTools: ChatCompletionTool[]
+  /** The provider's finish_reason of the last round ('length': the token cap cut the reply). */
+  finishReason: string | null
   listeners: Set<(event: CodexChatStreamEvent) => void>
   finished: Promise<CodexChatMessageRecord>
 }
@@ -101,7 +107,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   try {
     record.arguments = parseArguments(call.function.arguments)
     emit(turn, { type: 'tool', call: { ...record } })
-    const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>)
+    const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
     const { texts, historyIds, compositeHashes, jobIds } = readMcpToolResult(result, record.tool)
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
     const found = readToolImages(result)
@@ -130,35 +136,35 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
 /** A direct chat's reply: the profile's prompt and the thread's context window (summarized first if it overflows). */
 async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
   const listMessages = () => CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId)
-  if (resolveContextConfig(thread, profile).summaryEnabled) {
-    await fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal)
-  }
-  const current = CodexChatStore.findThreadById(thread.id) ?? thread
-  return streamReply(turn, requester, profile, (tools) => buildChatMessages({
-    profile,
-    thread: current,
-    messages: listMessages(),
-    config: resolveContextConfig(current, profile),
-    tools,
-  }))
+  const config = resolveContextConfig(thread, profile)
+  return streamReply(turn, requester, profile, async (tools) => {
+    if (config.summaryEnabled) {
+      await fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal, tools)
+    }
+    const current = CodexChatStore.findThreadById(thread.id) ?? thread
+    return buildChatMessages({ profile, thread: current, messages: listMessages(), config, tools })
+  }, false, { maxTokens: config.maxTokens })
 }
 
 /**
  * Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer.
  * `roomTools` adds the group room history tools (offered even when the profile has no MCP scopes).
+ * `generation` overrides the profile's generation options (a direct chat's own reply cap).
  */
-async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[], roomTools: 'call' | 'all' | false = false) {
-  const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: profileGenerationOptions(profile) })
+async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, roomTools: 'call' | 'all' | false = false, generation: Partial<LlmGenerationOptions> = {}) {
+  const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: { ...profileGenerationOptions(profile), ...generation } })
   const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
   const bridge = scopes.length > 0 || roomTools ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist, { roomTools }) : null
 
   try {
-    const messages = buildMessages(bridge?.tools ?? [])
-
     // Image viewing is only offered to models the profile says can see images.
     const offeredTools = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
+    turn.offeredTools = offeredTools
+    const messages = await buildMessages(offeredTools)
     for (let round = 1; ; round += 1) {
+      turn.controller.signal.throwIfAborted()
       const tools = bridge && round <= profile.maxToolRounds ? offeredTools : []
+      assertChatContextFits(profile, messages, tools, target.generation.maxTokens)
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
       let separated = turn.text.length === 0
       const result = await retryLlmRequest(() => streamChatCompletion({
@@ -182,6 +188,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         recordPromptUsage(profile.id, rawEstimate, result.promptTokens)
       }
       if (!bridge || tools.length === 0 || result.toolCalls.length === 0) {
+        turn.finishReason = result.finishReason
         return
       }
 
@@ -206,6 +213,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
 function finishTurn(turn: LlmTurn, status: CodexChatMessageRecord['status'], error: string | null) {
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
   const content = stripThinking(turn.text).trim()
+  const finishReason = status === 'completed' ? turn.finishReason : null
   const messageId = turn.replacingMessageId ?? CodexChatStore.addMessage({
     thread_id: turn.threadId,
     role: 'assistant',
@@ -213,11 +221,12 @@ function finishTurn(turn: LlmTurn, status: CodexChatMessageRecord['status'], err
     tool_calls: toolCalls,
     status,
     error,
+    finish_reason: finishReason,
   })
   if (turn.replacingMessageId) {
     // A connection failure must not replace a usable answer with an empty failed alternative.
     if (status === 'completed' || content || toolCalls.length) {
-      CodexChatStore.addAlternative(turn.threadId, messageId, { content, tool_calls: toolCalls, status, error, created_at: new Date().toISOString() })
+      CodexChatStore.addAlternative(turn.threadId, messageId, { content, tool_calls: toolCalls, status, error, finish_reason: finishReason, created_at: new Date().toISOString() })
     } else if (error) {
       emit(turn, { type: 'error', message: error })
     }
@@ -234,9 +243,10 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   prepare: () => CodexChatStreamEvent, replacingMessageId?: number) {
   if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
+  let rejectFinished: (error: unknown) => void = () => {}
   const turn: LlmTurn = {
-    threadId: thread.id, replacingMessageId, controller: new AbortController(), text: '', reasoning: '', toolCalls: new Map(),
-    listeners: new Set([listener]), finished: new Promise((resolve) => { resolveFinished = resolve }),
+    threadId: thread.id, replacingMessageId, controller: new AbortController(), text: '', reasoning: '', toolCalls: new Map(), finishReason: null,
+    offeredTools: [], listeners: new Set([listener]), finished: new Promise((resolve, reject) => { resolveFinished = resolve; rejectFinished = reject }),
   }
   activeTurns.set(thread.id, turn)
   try {
@@ -247,20 +257,23 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   }
   const updatedThread = CodexChatStore.findThreadById(thread.id) as CodexChatThreadRecord
   void runReply(turn, requester, updatedThread, profile)
-    .then(() => resolveFinished(finishTurn(turn, turn.controller.signal.aborted ? 'interrupted' : 'completed', null)))
-    .catch((error: unknown) => {
+    .then(() => finishTurn(turn, turn.controller.signal.aborted ? 'interrupted' : 'completed', null), (error: unknown) => {
       const aborted = turn.controller.signal.aborted
-      resolveFinished(finishTurn(turn, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error)))
+      return finishTurn(turn, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error))
     })
+    .then(resolveFinished, rejectFinished)
     .finally(() => {
-      summarizeAhead(thread.id, profile).catch((error: unknown) => {
+      if (activeTurns.get(thread.id) === turn) activeTurns.delete(thread.id)
+      turn.listeners.clear()
+      if (turn.controller.signal.aborted) return
+      summarizeAhead(thread.id, profile, turn.offeredTools).catch((error: unknown) => {
         console.warn('[llm-chat] summary update failed:', error instanceof Error ? error.message : error)
       })
     })
   return turn.finished
 }
 
-export type GroupReplyResult = Pick<CodexChatMessageRecord, 'content' | 'tool_calls' | 'status' | 'error'>
+export type GroupReplyResult = Pick<CodexChatMessageRecord, 'content' | 'tool_calls' | 'status' | 'error'> & { finish_reason?: string | null }
 
 /**
  * One group room member's reply (not stored here: the room stores it with its speaker). Streams `delta`,
@@ -273,6 +286,8 @@ export async function generateLlmGroupReply(params: {
   buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[]
   /** Room tools offered: `call` (room_call_member), `all` adding history search when part of the room is not shown. */
   roomTools: 'call' | 'all'
+  /** Overrides of the profile's generation options (the member's or room's reply cap). */
+  generation?: Partial<LlmGenerationOptions>
   signal: AbortSignal
   emit: (event: CodexChatStreamEvent) => void
 }): Promise<GroupReplyResult> {
@@ -282,13 +297,13 @@ export async function generateLlmGroupReply(params: {
   if (params.signal.aborted) abort()
   params.signal.addEventListener('abort', abort, { once: true })
   const turn: LlmTurn = {
-    threadId: params.threadId, controller, text: '', reasoning: '', toolCalls: new Map(),
-    listeners: new Set([params.emit]), finished: Promise.resolve({} as CodexChatMessageRecord),
+    threadId: params.threadId, controller, text: '', reasoning: '', toolCalls: new Map(), finishReason: null,
+    offeredTools: [], listeners: new Set([params.emit]), finished: Promise.resolve({} as CodexChatMessageRecord),
   }
   let status: CodexChatMessageRecord['status'] = 'completed'
   let error: string | null = null
   try {
-    await streamReply(turn, params.requester, params.profile, params.buildMessages, params.roomTools)
+    await streamReply(turn, params.requester, params.profile, params.buildMessages, params.roomTools, params.generation ?? {})
     if (controller.signal.aborted) status = 'interrupted'
   } catch (caught) {
     status = controller.signal.aborted ? 'interrupted' : 'failed'
@@ -297,16 +312,20 @@ export async function generateLlmGroupReply(params: {
     params.signal.removeEventListener('abort', abort)
   }
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  return { content: stripThinking(turn.text).trim(), tool_calls: toolCalls, status, error }
+  return { content: stripThinking(turn.text).trim(), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null }
 }
 
 export const LlmChatService = {
-  createThread(requester: McpRequester, profileId: number) {
+  /** `userProfileId`: the account's user profile in the chat (already checked), null for the plain user. */
+  createThread(requester: McpRequester, profileId: number, userProfileId: number | null = null) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(profileId)
+    const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId)
     const threadId = CodexChatStore.createThread(requester.accountId, '', 'llm', profile.id)
-    if (profile.greeting) {
-      CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: fillCharacterPlaceholders(profile.greeting, profile), tool_calls: [], status: 'completed', error: null })
+    if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
+    const greeting = pickChatGreeting(profile)
+    if (greeting) {
+      CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: fillCharacterPlaceholders(greeting, profile, userPersonaOf(user)), tool_calls: [], status: 'completed', error: null })
     }
     return threadId
   },
@@ -324,19 +343,20 @@ export const LlmChatService = {
    * Send one user message and stream the reply to `listener`. Resolves with the stored assistant message; the reply
    * keeps running (and is stored) when the listener goes away.
    */
-  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown) {
+  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id)
     const attachments = validateChatAttachments(requester, fileIds)
-    const flags = ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds))
+    const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
+    const flags = [...ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()
-    if (!trimmed && attachments.length === 0) {
+    if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
       throw new LlmChatError('메시지를 입력해줘.')
     }
     return startReply(requester, thread, profile, listener, () => {
-      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags }, attachments.map((file) => file.id))
-      ChatFlagStore.setThreadFlags(thread.id, flags.map((flag) => flag.id))
-      if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || '').replace(/\s+/g, ' '))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments }, attachments.map((file) => file.id))
+      ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
+      if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }
     })
   },
@@ -352,7 +372,7 @@ export const LlmChatService = {
     if (regenerate ? message.role !== 'assistant' || messages[messages.length - 1].id !== messageId || !messages.some((entry) => entry.role === 'user') : message.role !== 'user') {
       throw new LlmChatError(regenerate ? '마지막 답변만 다시 생성할 수 있어.' : '내 메시지만 수정할 수 있어.', 409)
     }
-    if (!regenerate && !content.trim() && !message.attachments?.length) throw new LlmChatError('메시지를 입력해줘.')
+    if (!regenerate && !content.trim() && !message.attachments?.length && !message.mediaAttachments?.length) throw new LlmChatError('메시지를 입력해줘.')
     // Resolve configuration before deleting any later messages.
     resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: profileGenerationOptions(profile) })
     return startReply(requester, thread, profile, listener, () => {
@@ -373,7 +393,12 @@ export const LlmChatService = {
       return
     }
     turn.controller.abort()
-    await Promise.race([turn.finished, new Promise((resolve) => setTimeout(resolve, STOP_WAIT_MS))])
+    let timer: NodeJS.Timeout | undefined
+    try {
+      await Promise.race([turn.finished, new Promise((resolve) => { timer = setTimeout(resolve, STOP_WAIT_MS) })])
+    } finally {
+      clearTimeout(timer)
+    }
   },
 
   async summarize(requester: McpRequester, thread: CodexChatThreadRecord) {

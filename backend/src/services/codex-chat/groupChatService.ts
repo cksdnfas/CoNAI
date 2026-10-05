@@ -1,8 +1,11 @@
+import { validateChatMediaAttachments } from './chatMediaAttachments'
 import type { McpRequester } from '../../mcp/context'
 import { validateChatAttachments } from './chatAttachments'
-import { ChatFlagStore, parseFlagIds } from './chatFlags'
+import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
+import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
@@ -68,6 +71,14 @@ function requireGroup(requester: McpRequester, threadId: number) {
   return thread
 }
 
+/** A reply token cap from a request body: null clears it, otherwise a whole number of tokens. */
+function replyCapOf(value: unknown) {
+  if (value === null) return null
+  const number = Number(value)
+  if (!Number.isSafeInteger(number) || number < 1 || number > 1_000_000) throw new CodexChatError('최대 출력 토큰은 1~1000000 사이로 정해줘.')
+  return number
+}
+
 /** Member profiles that still exist, in room order. */
 function memberProfiles(threadId: number) {
   return ChatGroupStore.members(threadId).flatMap((member) => {
@@ -86,6 +97,11 @@ function assertJoinable(requester: McpRequester, profiles: ChatProfile[], existi
   if (all.length > GROUP_MEMBER_MAX) throw new CodexChatError(`참가자는 ${GROUP_MEMBER_MAX}명까지야.`)
   const names = all.map((profile) => profile.name.trim().toLowerCase())
   if (new Set(names).size !== names.length) throw new CodexChatError('같은 이름의 프로필은 한 방에 함께 넣을 수 없어.')
+}
+
+/** The user's name in a room must not read as a member's mention (full name or first-word alias). */
+function assertUserNameFree(user: ChatUserProfile | null, members: Pick<ChatProfile, 'id' | 'name'>[]) {
+  if (user && resolveMemberName(user.name, members) !== null) throw new CodexChatError(`사용자 프로필 이름 "${user.name}"이 참가자 이름과 겹쳐. 다른 사용자 프로필을 고르거나 이름을 바꿔줘.`, 409)
 }
 
 function findMessage(threadId: number, messageId: number) {
@@ -118,7 +134,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     if (event.type === 'tool') active.toolCalls.set(event.call.id, event.call)
     emit(run, event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool' ? { ...event, profileId: profile.id } : event)
   }
-  const others = members.filter((member) => member.id !== profile.id).map((member) => member.name)
+  const others = [userPersonaForThread(thread).name, ...members.filter((member) => member.id !== profile.id).map((member) => member.name)]
   const persist = (raw: GroupReplyResult) => {
     // Keep the reply as written when cutting other speakers' lines would leave nothing; an empty reply is a failure
     // the user can see (and regenerate), not a blank message.
@@ -148,19 +164,22 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         threadId: run.threadId,
         profile,
         messages,
-        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: flagDirectiveFor(messages, profile) }),
+        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: flagDirectiveFor(messages, profile, userPersonaForThread(thread)) }),
         signal: controller.signal,
         emit: forward,
         persist,
       })
     } else {
+      const maxTokens = ChatGroupStore.member(run.threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
       message = persist(await generateLlmGroupReply({
         requester,
         threadId: run.threadId,
         profile,
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
-        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, windowLimit: limits.window, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)) }),
-        roomTools: sendableMessages(messages).length > limits.window ? 'all' : 'call',
+        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)) }),
+        roomTools: sendableMessages(messages).length > limits.window || profile.contextTokens !== null ? 'all' : 'call',
+        // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
+        generation: { maxTokens },
         signal: controller.signal,
         emit: forward,
       }))
@@ -285,7 +304,8 @@ export const GroupChatService = {
   },
 
   /** A group room; the representative comes first and answers messages that address no one. */
-  create(requester: McpRequester, input: { profileIds: unknown; representativeId: unknown; title?: unknown }) {
+  /** `userProfileId`: the account's user profile in the room; undefined picks the default one (see ChatUserProfileStore.resolveNew), null none. */
+  create(requester: McpRequester, input: { profileIds: unknown; representativeId: unknown; title?: unknown; userProfileId?: number | null }) {
     const ids = Array.isArray(input.profileIds) ? [...new Set(input.profileIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))] : []
     const representativeId = Number(input.representativeId)
     if (ids.length < 2) throw new CodexChatError('참가자를 두 명 이상 골라줘.')
@@ -294,34 +314,51 @@ export const GroupChatService = {
     if (profiles.some((profile) => !profile)) throw new CodexChatError('없는 프로필이 있어.', 404)
     const ordered = [representativeId, ...ids.filter((id) => id !== representativeId)].map((id) => profiles.find((profile) => profile?.id === id) as ChatProfile)
     assertJoinable(requester, ordered)
+    const user = ChatUserProfileStore.requireOwn(requester.accountId, input.userProfileId === undefined ? ChatUserProfileStore.resolveNew(requester.accountId) : input.userProfileId)
+    assertUserNameFree(user, ordered)
     const title = (typeof input.title === 'string' ? input.title.trim() : '') || ordered.map((profile) => profile.name).join(', ')
     const threadId = ChatGroupStore.create(requester.accountId, title.slice(0, TITLE_MAX_LENGTH), ordered.map((profile) => profile.id), representativeId)
+    if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
     return requireGroup(requester, threadId)
+  },
+
+  /** Change who the user is in the room (null: the plain user); the name must not collide with a member's. */
+  setUserProfile(requester: McpRequester, threadId: number, userProfileId: number | null) {
+    const thread = requireGroup(requester, threadId)
+    const user = ChatUserProfileStore.requireOwn(thread.account_id, userProfileId)
+    assertUserNameFree(user, memberProfiles(threadId))
+    ChatUserProfileStore.setThreadUserProfile(threadId, user?.id ?? null)
+  },
+
+  getRunning(requester: McpRequester, threadId: number) {
+    requireGroup(requester, threadId)
+    const run = runs.get(threadId)
+    if (!run) return null
+    const replies = [...run.active].map(([profileId, reply]) => ({ profileId, text: reply.text, toolCalls: [...reply.toolCalls.values()] }))
+    return { text: replies[0]?.text ?? '', toolCalls: replies[0]?.toolCalls ?? [], speakerProfileId: replies[0]?.profileId ?? null, replies, queue: [...run.queue] }
   },
 
   /** The transcript plus the room: members, representative, limits, and the reply in progress with its queue. */
   getThread(requester: McpRequester, threadId: number) {
     const thread = requireGroup(requester, threadId)
     const detail = CodexChatService.getThread(requester, threadId)
-    const run = runs.get(threadId)
     const limits = groupLimitsOf(thread)
-    const replies = run ? [...run.active].map(([profileId, reply]) => ({ profileId, text: reply.text, toolCalls: [...reply.toolCalls.values()] })) : []
+    const memberProfiles = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
     return {
       ...detail,
+      // Each member's display blocks are its own: folded from its replies (and the edits made on them).
+      memberBlocks: foldGroupBlockState(memberProfiles, detail.messages, parseBlockEdits(thread.block_edits)),
       // `text`/`toolCalls`/`speakerProfileId` are the first reply's, for readers that show one.
-      running: run ? {
-        text: replies[0]?.text ?? '',
-        toolCalls: replies[0]?.toolCalls ?? [],
-        speakerProfileId: replies[0]?.profileId ?? null,
-        replies,
-        queue: [...run.queue],
-      } : null,
+      running: GroupChatService.getRunning(requester, threadId),
       group: {
         memberIds: ChatGroupStore.members(threadId).map((member) => member.profile_id),
         representativeId: thread.profile_id,
         chainLimit: limits.chain,
         windowLimit: limits.window,
         limits: GROUP_LIMITS,
+        // Reply token caps: the room's (null: each profile's own) and each member's override of it.
+        maxTokens: thread.max_tokens,
+        memberMaxTokens: Object.fromEntries(ChatGroupStore.members(threadId).map((member) => [member.profile_id, member.max_tokens])),
       },
     }
   },
@@ -330,18 +367,19 @@ export const GroupChatService = {
    * A user message: stops whatever the room is still saying (the user cut in), then the addressed members answer
    * (together as far as their connections allow) — or the representative when no one is addressed.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown) {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
-    const flags = ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds))
+    const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
+    const flags = [...ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()
-    if (!trimmed && attachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
+    if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
     await GroupChatService.stop(threadId)
 
     await startRun(threadId, listener, async (run) => {
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags }, attachments.map((file) => file.id))
-      ChatFlagStore.setThreadFlags(threadId, flags.map((flag) => flag.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments }, attachments.map((file) => file.id))
+      ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       emit(run, { type: 'user', message: findMessage(threadId, userMessageId) })
       const mentioned = parseMentions(trimmed, memberProfiles(threadId))
       run.queue = mentioned.length > 0 ? mentioned : thread.profile_id ? [thread.profile_id] : []
@@ -378,7 +416,7 @@ export const GroupChatService = {
 
     if (message.role !== 'user') throw new CodexChatError('내 메시지만 수정할 수 있어.', 409)
     const trimmed = content.trim()
-    if (!trimmed && !message.attachments?.length) throw new CodexChatError('메시지를 입력해줘.')
+    if (!trimmed && !message.attachments?.length && !message.mediaAttachments?.length) throw new CodexChatError('메시지를 입력해줘.')
     await startRun(threadId, listener, async (run) => {
       CodexChatStore.editUserMessage(threadId, messageId, trimmed)
       resetCodexMemory(requester, threadId)
@@ -396,7 +434,12 @@ export const GroupChatService = {
     run.stopped = true
     run.queue = []
     for (const reply of run.active.values()) reply.controller.abort()
-    await Promise.race([run.finished, new Promise((resolve) => setTimeout(resolve, STOP_WAIT_MS))])
+    let timer: NodeJS.Timeout | undefined
+    try {
+      await Promise.race([run.finished, new Promise((resolve) => { timer = setTimeout(resolve, STOP_WAIT_MS) })])
+    } finally {
+      clearTimeout(timer)
+    }
   },
 
   clearThread(requester: McpRequester, threadId: number) {
@@ -411,6 +454,7 @@ export const GroupChatService = {
     requireGroup(requester, threadId)
     await GroupChatService.stop(threadId)
     const codexThreadIds = ChatGroupStore.members(threadId).map((member) => member.codex_thread_id)
+    if (runs.has(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
     CodexChatStore.deleteThread(threadId)
     for (const codexThreadId of codexThreadIds) deleteCodexRollout(requester, codexThreadId)
   },
@@ -424,6 +468,7 @@ export const GroupChatService = {
     const profiles = ids.map((id) => ChatProfileStore.find(id))
     if (profiles.some((profile) => !profile)) throw new CodexChatError('없는 프로필이 있어.', 404)
     assertJoinable(requester, profiles as ChatProfile[], current)
+    assertUserNameFree(ChatUserProfileStore.forThread(CodexChatStore.findThreadById(threadId)), [...current, ...(profiles as ChatProfile[])])
     ChatGroupStore.addMembers(threadId, ids)
     return GroupChatService.getThread(requester, threadId)
   },
@@ -438,9 +483,22 @@ export const GroupChatService = {
     return GroupChatService.getThread(requester, threadId)
   },
 
-  /** Representative, title and the per-room limits (null restores a default). */
-  updateRoom(requester: McpRequester, threadId: number, patch: { representativeId?: unknown; title?: unknown; chainLimit?: unknown; windowLimit?: unknown }) {
+  /** One member's reply token cap in this room (null follows the room's cap, then the profile's). */
+  updateMember(requester: McpRequester, threadId: number, profileId: number, patch: { maxTokens?: unknown }) {
     requireGroup(requester, threadId)
+    if (!ChatGroupStore.member(threadId, profileId)) throw new CodexChatError('이 방의 참가자가 아니야.', 404)
+    if (patch.maxTokens !== undefined) {
+      ChatGroupStore.setMemberMaxTokens(threadId, profileId, replyCapOf(patch.maxTokens))
+    }
+    return GroupChatService.getThread(requester, threadId)
+  },
+
+  /** Representative, title, the per-room limits and the room's reply token cap (null restores a default). */
+  updateRoom(requester: McpRequester, threadId: number, patch: { representativeId?: unknown; title?: unknown; chainLimit?: unknown; windowLimit?: unknown; maxTokens?: unknown }) {
+    requireGroup(requester, threadId)
+    if (patch.maxTokens !== undefined) {
+      CodexChatStore.updateThreadContext(threadId, { maxTokens: replyCapOf(patch.maxTokens) })
+    }
     if (patch.representativeId !== undefined) {
       const id = Number(patch.representativeId)
       if (!ChatGroupStore.member(threadId, id)) throw new CodexChatError('대표자는 참가자 중에서 골라줘.')

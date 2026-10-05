@@ -1,4 +1,7 @@
 import { summaryGenerationOptions } from '../llmGenerationOptions'
+import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usableBlockKeys } from './chatBlockState'
+import { fillCharacterPlaceholders } from './chatPlaceholders'
+import { userPersonaForThread, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
@@ -12,7 +15,7 @@ import { completeChat, REFERENCE_BLOCK_START, resolveChatCompletionTarget, type 
 const REPLAYED_TOOL_OUTPUT_LENGTH = 4000
 const SUMMARY_TOOL_NOTE_LENGTH = 300
 /** Room kept for the reply when the profile sets no max tokens. */
-const DEFAULT_REPLY_RESERVE_TOKENS = 2048
+export const DEFAULT_REPLY_RESERVE_TOKENS = 2048
 
 const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 실제 대화는 그 다음부터야.'
 
@@ -38,17 +41,21 @@ export type LlmChatContextConfig = {
   /** Token budget for the whole request (null: turns only). */
   contextTokens: number | null
   replyReserveTokens: number
+  /** Reply length cap sent with each request (null: the server's default), also the reply's share of the token budget. */
+  maxTokens: number | null
   summaryEnabled: boolean
   summaryTriggerTurns: number
   summaryPrompt: string
 }
 
-/** The chat's own overrides (turn count, summary on/off), else the profile's settings. */
+/** The chat's own overrides (turn count, reply cap, summary on/off), else the profile's settings. */
 export function resolveContextConfig(thread: CodexChatThreadRecord, profile: ChatProfile): LlmChatContextConfig {
+  const maxTokens = thread.max_tokens ?? profile.maxTokens
   return {
     contextTurns: thread.context_turns ?? profile.contextTurns,
     contextTokens: profile.contextTokens,
-    replyReserveTokens: profile.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS,
+    replyReserveTokens: maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS,
+    maxTokens,
     summaryEnabled: thread.summary_enabled !== null ? thread.summary_enabled === 1 : profile.summaryEnabled,
     summaryTriggerTurns: profile.summaryTriggerTurns,
     summaryPrompt: resolveSummaryPrompt(profile),
@@ -60,10 +67,7 @@ export function stripThinking(text: string) {
   return text.replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, '').replace(/^\s*<think>[\s\S]*$/i, '')
 }
 
-/** `{{char}}` / `{{user}}` placeholders, as character cards write them. */
-export function fillCharacterPlaceholders(text: string, profile: ChatProfile) {
-  return text.replace(/\{\{\s*char\s*\}\}/gi, profile.name).replace(/\{\{\s*user\s*\}\}/gi, '사용자')
-}
+export { fillCharacterPlaceholders }
 
 const USER_SPEAKERS = /^(?:\{\{\s*user\s*\}\}|user|사용자|유저|나)\s*[:：]\s?/i
 const ASSISTANT_SPEAKERS = /^(?:\{\{\s*char\s*\}\}|char|assistant|ai|캐릭터)\s*[:：]\s?/i
@@ -72,7 +76,7 @@ const ASSISTANT_SPEAKERS = /^(?:\{\{\s*char\s*\}\}|char|assistant|ai|캐릭터)\
  * Example dialogue as user/assistant turns: each `사용자:` / `{{user}}:` or `{{char}}:` / `<name>:` line starts an
  * utterance and unlabelled lines continue it (`<START>` separators are dropped). Null unless both sides speak.
  */
-export function parseExampleDialogue(content: string, profile: ChatProfile): ChatCompletionMessage[] | null {
+export function parseExampleDialogue(content: string, profile: ChatProfile, user?: ChatUserPersona | null): ChatCompletionMessage[] | null {
   const namePattern = new RegExp(`^${profile.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[:：]\\s?`)
   const turns: Array<{ role: 'user' | 'assistant'; lines: string[] }> = []
   for (const rawLine of content.split(/\r?\n/)) {
@@ -91,28 +95,31 @@ export function parseExampleDialogue(content: string, profile: ChatProfile): Cha
   if (!turns.some((turn) => turn.role === 'user') || !turns.some((turn) => turn.role === 'assistant')) {
     return null
   }
-  return turns.map((turn) => ({ role: turn.role, content: fillCharacterPlaceholders(turn.lines.join('\n').trim(), profile) }))
+  return turns.map((turn) => ({ role: turn.role, content: fillCharacterPlaceholders(turn.lines.join('\n').trim(), profile, user) }))
 }
 
 /**
  * The system prompt and the enabled text sections (each under its title) as one block. Dialogue sections join it
  * as text only when `dialogueAsText` (Codex) or when their lines carry no speaker labels.
  */
-export function buildPersonaPrompt(profile: ChatProfile, options: { dialogueAsText?: boolean } = {}) {
+export function buildPersonaPrompt(profile: ChatProfile, options: { dialogueAsText?: boolean; user?: ChatUserPersona | null } = {}) {
   const blocks = [profile.systemPrompt]
   for (const section of profile.promptSections) {
     if (!section.enabled || !section.content.trim()) continue
-    if (section.kind === 'dialogue' && !options.dialogueAsText && parseExampleDialogue(section.content, profile)) continue
+    if (section.kind === 'dialogue' && !options.dialogueAsText && parseExampleDialogue(section.content, profile, options.user)) continue
+    // The chat's user profile describes the user; an old profile's own user persona gives way to it.
+    if (section.id === 'legacy-persona' && options.user?.persona) continue
     blocks.push(section.title ? `## ${section.title}\n${section.content}` : section.content)
   }
-  return fillCharacterPlaceholders(blocks.filter(Boolean).join('\n\n'), profile)
+  blocks.push(userPersonaPrompt(options.user))
+  return fillCharacterPlaceholders(blocks.filter(Boolean).join('\n\n'), profile, options.user)
 }
 
 /** Example turns from dialogue sections, sent right after the system messages. */
-function buildExampleMessages(profile: ChatProfile): ChatCompletionMessage[] {
+function buildExampleMessages(profile: ChatProfile, user?: ChatUserPersona | null): ChatCompletionMessage[] {
   return profile.promptSections
     .filter((section) => section.enabled && section.kind === 'dialogue')
-    .flatMap((section) => parseExampleDialogue(section.content, profile) ?? [])
+    .flatMap((section) => parseExampleDialogue(section.content, profile, user) ?? [])
 }
 
 /** A turn starts at a user message; a greeting before the first user message is a turn of its own. */
@@ -149,7 +156,7 @@ export function estimateTokens(profileId: number, text: string) {
 }
 
 export function estimateMessagesTokens(profileId: number, messages: ChatCompletionMessage[], tools: ChatCompletionTool[] = []) {
-  return estimateTokens(profileId, JSON.stringify(messages) + (tools.length > 0 ? JSON.stringify(tools) : ''))
+  return Math.ceil(rawMessagesEstimate(messages, tools) * (estimateRatios.get(profileId) ?? 1))
 }
 
 /** Feed back the prompt tokens a server reported for a request we estimated (smoothed, clamped to 0.4–2.5×). */
@@ -163,14 +170,27 @@ export function recordPromptUsage(profileId: number, rawEstimate: number, prompt
 }
 
 export function rawMessagesEstimate(messages: ChatCompletionMessage[], tools: ChatCompletionTool[] = []) {
-  return rawTokenEstimate(JSON.stringify(messages) + (tools.length > 0 ? JSON.stringify(tools) : ''))
+  // App tools supply <=512px previews. Reserve an approximate image allowance instead of
+  // counting their base64 transport encoding as text tokens; provider tokenizers differ.
+  let imageCount = 0
+  const textMessages = messages.map((message) => message.role === 'user' && Array.isArray(message.content)
+    ? { ...message, content: message.content.map((part) => {
+      if (part.type !== 'image_url') return part
+      imageCount += 1
+      return { type: 'image_url', image_url: { url: '(image)' } }
+    }) }
+    : message)
+  return rawTokenEstimate(JSON.stringify(textMessages) + (tools.length > 0 ? JSON.stringify(tools) : '')) + imageCount * 2048
 }
 
 // ---- Window ---------------------------------------------------------------------------------------------------
 
-export function toCompletionMessages(message: CodexChatMessageRecord): ChatCompletionMessage[] {
+const NO_BLOCKS: ReadonlySet<string> = new Set()
+
+/** `blockKeys`: display blocks whose fences are left out of replies (their values travel with the state instead). */
+export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys: ReadonlySet<string> = NO_BLOCKS): ChatCompletionMessage[] {
   if (message.role === 'user') {
-    return [{ role: 'user', content: chatContentWithAttachments(message.content, message.attachments) }]
+    return [{ role: 'user', content: chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments) }]
   }
 
   const calls = message.tool_calls.filter((call) => call.id && call.tool)
@@ -185,8 +205,9 @@ export function toCompletionMessages(message: CodexChatMessageRecord): ChatCompl
       result.push({ role: 'tool', tool_call_id: call.id, content: (call.output ?? call.summary ?? '').slice(0, REPLAYED_TOOL_OUTPUT_LENGTH) || '(no output)' })
     }
   }
-  if (message.content.trim()) {
-    result.push({ role: 'assistant', content: message.content })
+  const text = stripBlockFences(message.content, blockKeys)
+  if (text.trim()) {
+    result.push({ role: 'assistant', content: text })
   }
   return result
 }
@@ -196,7 +217,8 @@ export function toCompletionMessages(message: CodexChatMessageRecord): ChatCompl
  * turns as fit beside the fixed part (system prompt, summary, tool schemas) and the reply reserve. The newest turn is
  * always kept.
  */
-function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], config: LlmChatContextConfig, fixedTokens: number, maxTurns = config.contextTurns) {
+function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexChatMessageRecord[][], config: LlmChatContextConfig, fixedTokens: number, maxTurns = config.contextTurns) {
+  const blockKeys = usableBlockKeys(profile.style.blocks)
   const candidates = maxTurns > 0 ? turns.slice(-maxTurns) : []
   if (config.contextTokens === null) {
     return candidates
@@ -204,7 +226,7 @@ function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], conf
   let remaining = config.contextTokens - config.replyReserveTokens - fixedTokens
   const kept: CodexChatMessageRecord[][] = []
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
-    const cost = estimateMessagesTokens(profileId, candidates[index].flatMap(toCompletionMessages))
+    const cost = estimateMessagesTokens(profile.id, candidates[index].flatMap((message) => toCompletionMessages(message, blockKeys)))
     if (kept.length > 0 && cost > remaining) {
       break
     }
@@ -217,8 +239,8 @@ function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], conf
 /**
  * The profile's lore for one request. Without messages (a prompt preview) only the "always on" entries are chosen.
  */
-export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<{ content: string }>): SelectedLore {
-  return selectLoreEntries(profile, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile))
+export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<{ content: string }>, user?: ChatUserPersona | null): SelectedLore {
+  return selectLoreEntries(profile, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile, user))
 }
 
 /**
@@ -242,10 +264,10 @@ export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<{ 
  * the examples are not real lives in the system prompt rather than around them. `lore` defaults to the constant
  * entries alone (a preview).
  */
-export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<SelectedLore, 'constant'> = selectChatLore(profile)) {
-  const examples = buildExampleMessages(profile)
+export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<SelectedLore, 'constant'> = selectChatLore(profile), user: ChatUserPersona | null = null) {
+  const examples = buildExampleMessages(profile, user)
   const systemPrompt = [
-    buildPersonaPrompt(profile),
+    buildPersonaPrompt(profile, { user }),
     lore.constant ? `## 설정\n${lore.constant}` : '',
     examples.length > 0 ? EXAMPLE_NOTE : '',
     withTools ? TOOL_GUIDANCE : '',
@@ -258,6 +280,12 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     result.push({ role: 'system', content: `## 지금까지의 대화 요약\n${thread.summary.trim()}` })
   }
   return [...result, ...examples]
+}
+
+/** The display block state of a chat as the model reads it ('' without blocks). `speakerId`: a room member's own. */
+export function threadBlockStateText(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'block_edits'>, messages: ReadonlyArray<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>, speakerId?: number) {
+  const folded = foldBlockState(profile, messages, parseBlockEdits(thread.block_edits), speakerId)
+  return folded ? blockStateText(profile.style.blocks, folded.state) : ''
 }
 
 /** Keyword lore as the block that goes into the conversation (the same marks Codex gets), '' when there is none. */
@@ -277,9 +305,9 @@ export type AuthorNote = { text: string; depth: number }
  * The author's note a chat gets — its own, else the profile's default — with `{{char}}`/`{{user}}` filled, and the
  * depth it goes in at (the chat's, else the profile's lore depth). Empty text means none.
  */
-export function resolveAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | 'author_note_depth'> | null, profile: ChatProfile): AuthorNote {
+export function resolveAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | 'author_note_depth'> | null, profile: ChatProfile, user?: ChatUserPersona | null): AuthorNote {
   const text = thread?.author_note?.trim() || (profile.authorNote ?? '').trim()
-  return { text: text ? fillCharacterPlaceholders(text, profile) : '', depth: thread?.author_note_depth ?? profile.loreDepth }
+  return { text: text ? fillCharacterPlaceholders(text, profile, user) : '', depth: thread?.author_note_depth ?? profile.loreDepth }
 }
 
 export function authorNoteText(note: Pick<AuthorNote, 'text'>) {
@@ -288,10 +316,10 @@ export function authorNoteText(note: Pick<AuthorNote, 'text'>) {
 
 /**
  * The `[참고 설정]` blocks a request merges into its conversation: keyword lore at the profile's lore depth and the
- * author's note at its own — one block when both share a depth.
+ * author's note (with the display block state, `stateText`) at its own — one block when both share a depth.
  */
-export function depthBlocks(lore: Pick<SelectedLore, 'keyed'>, loreDepth: number, note: AuthorNote): Array<{ depth: number; block: string }> {
-  const noteText = authorNoteText(note)
+export function depthBlocks(lore: Pick<SelectedLore, 'keyed'>, loreDepth: number, note: AuthorNote, stateText = ''): Array<{ depth: number; block: string }> {
+  const noteText = [authorNoteText(note), stateText].filter(Boolean).join('\n\n')
   if (lore.keyed && noteText && note.depth !== loreDepth) {
     return [{ depth: loreDepth, block: referenceBlock([lore.keyed]) }, { depth: note.depth, block: referenceBlock([noteText]) }]
   }
@@ -364,9 +392,9 @@ export function anchoredWindowFor<T>(threadId: number, items: T[], fit: number, 
 }
 
 /** The chat flags of the message being answered (the latest user message) as one block; '' when none were on. */
-export function flagDirectiveFor(messages: CodexChatMessageRecord[], profile: ChatProfile) {
+export function flagDirectiveFor(messages: CodexChatMessageRecord[], profile: ChatProfile, user?: ChatUserPersona | null) {
   const latestUser = [...messages].reverse().find((message) => message.role === 'user')
-  return buildFlagDirective(latestUser?.flags ?? [], (text) => fillCharacterPlaceholders(text, profile))
+  return buildFlagDirective(latestUser?.flags ?? [], (text) => fillCharacterPlaceholders(text, profile, user))
 }
 
 /** Add `directive` after the last user turn (merged into it, so turns keep alternating). */
@@ -378,7 +406,32 @@ export function appendUserDirective(messages: ChatCompletionMessage[], directive
 }
 
 export function sendableMessages(messages: CodexChatMessageRecord[]) {
-  return messages.filter((message) => message.content.trim() || message.tool_calls.length > 0)
+  return messages.filter((message) => message.content.trim() || message.attachments?.length || message.mediaAttachments?.length || message.tool_calls.length > 0)
+}
+
+/** Shared by summary planning, the actual request and the profile preview. */
+function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'>, tools: ChatCompletionTool[]) {
+  const user = userPersonaForThread(thread)
+  const lore = selectChatLore(profile, messages, user)
+  const system = buildLeadingMessages(profile, thread, config, tools.length > 0, lore, user)
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages))
+  const directive = flagDirectiveFor(messages, profile, user)
+  const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks) + estimateTokens(profile.id, directive)
+  return { system, blocks, directive, fixedTokens }
+}
+
+export function buildChatPromptPreview(profile: ChatProfile, tools: ChatCompletionTool[]) {
+  const { system, blocks } = buildRequestContext(profile, null, [], { summaryEnabled: false }, tools)
+  return [...system, ...insertDepthBlocks([], blocks)]
+}
+
+/** Final guard also covers tool rounds and a latest message too large to fit by itself. */
+export function assertChatContextFits(profile: ChatProfile, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], maxTokens: number | null | undefined) {
+  if (profile.contextTokens === null) return
+  const needed = estimateMessagesTokens(profile.id, messages, tools) + (maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS)
+  if (needed > profile.contextTokens) {
+    throw new Error(`컨텍스트 한도를 넘었어 (예상 ${needed} / ${profile.contextTokens} 토큰). 메시지·도구 결과나 최대 출력 토큰을 줄이거나 컨텍스트 길이를 늘려줘.`)
+  }
 }
 
 /** With the summary on, only the messages after it go out verbatim; the summary stands in for the rest. */
@@ -401,23 +454,22 @@ export function buildChatMessages(params: {
   tools: ChatCompletionTool[]
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const lore = selectChatLore(profile, params.messages)
-  const system = buildLeadingMessages(profile, thread, config, tools.length > 0, lore)
-  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile))
-  const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks)
+  const { system, blocks, directive, fixedTokens } = buildRequestContext(profile, thread, params.messages, config, tools)
   const turns = splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config)))
-  const fit = selectWindow(profile.id, turns, config, fixedTokens).length
+  const fit = selectWindow(profile, turns, config, fixedTokens).length
   const window = anchoredWindowFor(thread.id, turns, fit, (turn) => turn[0].id)
-  const conversation = insertDepthBlocks(window.flat().flatMap(toCompletionMessages), blocks)
-  return appendUserDirective([...system, ...conversation], flagDirectiveFor(params.messages, profile))
+  const blockKeys = usableBlockKeys(profile.style.blocks)
+  const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys)), blocks)
+  return appendUserDirective([...system, ...conversation], directive)
 }
 
 // ---- Summary --------------------------------------------------------------------------------------------------
 
-function transcriptLine(message: CodexChatMessageRecord, profile: ChatProfile) {
-  const speaker = message.role === 'user' ? '사용자' : profile.name
+function transcriptLine(message: CodexChatMessageRecord, profile: ChatProfile, user: ChatUserPersona) {
+  const speaker = message.role === 'user' ? user.name : profile.name
   const tools = message.tool_calls.map((call) => `[도구 ${call.tool}: ${(call.summary ?? '').slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]`)
-  return [`${speaker}: ${message.content}`, ...tools].join('\n')
+  // Block fences are state, not conversation: the summary does without them.
+  return [`${speaker}: ${message.role === 'assistant' ? stripBlockFences(message.content, usableBlockKeys(profile.style.blocks)) : chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments)}`, ...tools].join('\n')
 }
 
 const SUMMARY_TIMEOUT_MS = 10 * 60 * 1000
@@ -442,26 +494,24 @@ export function turnsToFold(pending: number, fit: number, batch: number) {
  */
 type FoldMode = 'ahead' | 'overflow' | 'all'
 
-function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: LlmChatContextConfig, messages: CodexChatMessageRecord[], turns: CodexChatMessageRecord[][], mode: FoldMode) {
+function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: LlmChatContextConfig, messages: CodexChatMessageRecord[], turns: CodexChatMessageRecord[][], mode: FoldMode, tools: ChatCompletionTool[]) {
   if (mode === 'all' || turns.length === 0) {
     return turns.length
   }
   const ahead = mode === 'ahead'
-  const lore = selectChatLore(profile, messages)
-  const fixedTokens = estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled, lore))
-    + estimateDepthBlocks(profile.id, depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile)))
-    + (ahead ? estimateMessagesTokens(profile.id, turns[turns.length - 1].flatMap(toCompletionMessages)) : 0)
-  const fit = selectWindow(profile.id, turns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0)).length
+  const fixedTokens = buildRequestContext(profile, thread, messages, config, tools).fixedTokens
+    + (ahead ? estimateMessagesTokens(profile.id, turns[turns.length - 1].flatMap((message) => toCompletionMessages(message, usableBlockKeys(profile.style.blocks)))) : 0)
+  const fit = selectWindow(profile, turns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0)).length
   return turnsToFold(turns.length, fit, config.summaryTriggerTurns)
 }
 
 /** The oldest of `turns` whose transcript stays within one summary call (at least one turn). */
-function takeSummaryChunk(profile: ChatProfile, config: LlmChatContextConfig, turns: CodexChatMessageRecord[][]) {
+function takeSummaryChunk(profile: ChatProfile, config: LlmChatContextConfig, turns: CodexChatMessageRecord[][], user: ChatUserPersona) {
   const limit = config.contextTokens ? Math.max(2000, Math.floor(config.contextTokens / 2)) : DEFAULT_SUMMARY_CHUNK_TOKENS
   let used = 0
   let count = 0
   for (const turn of turns) {
-    used += estimateTokens(profile.id, turn.map((message) => transcriptLine(message, profile)).join('\n\n'))
+    used += estimateTokens(profile.id, turn.map((message) => transcriptLine(message, profile, user)).join('\n\n'))
     if (count > 0 && used > limit) {
       break
     }
@@ -470,12 +520,12 @@ function takeSummaryChunk(profile: ChatProfile, config: LlmChatContextConfig, tu
   return turns.slice(0, count).flat()
 }
 
-async function summarizeInto(profile: ChatProfile, config: LlmChatContextConfig, previous: string | null, messages: CodexChatMessageRecord[], signal?: AbortSignal) {
+async function summarizeInto(profile: ChatProfile, config: LlmChatContextConfig, previous: string | null, messages: CodexChatMessageRecord[], user: ChatUserPersona, signal?: AbortSignal) {
   const target = resolveChatCompletionTarget(profile.summaryProviderName || profile.providerName, {
     model: profile.summaryProviderName ? profile.summaryModel || null : profile.summaryModel || profile.model || null,
     generation: summaryGenerationOptions(profileGenerationOptions(profile)),
   })
-  const transcript = messages.map((message) => transcriptLine(message, profile)).join('\n\n')
+  const transcript = messages.map((message) => transcriptLine(message, profile, user)).join('\n\n')
   const timeout = AbortSignal.timeout(SUMMARY_TIMEOUT_MS)
   const summary = stripThinking(await completeChat(target, [
     { role: 'system', content: config.summaryPrompt },
@@ -488,7 +538,7 @@ async function summarizeInto(profile: ChatProfile, config: LlmChatContextConfig,
 }
 
 /** Fold the oldest unsummarized turns into the thread summary, pass by pass, until `mode` is satisfied. */
-async function foldIntoSummary(threadId: number, profile: ChatProfile, mode: FoldMode, options: { messages?: CodexChatMessageRecord[]; signal?: AbortSignal }) {
+async function foldIntoSummary(threadId: number, profile: ChatProfile, mode: FoldMode, options: { messages?: CodexChatMessageRecord[]; signal?: AbortSignal; tools?: ChatCompletionTool[] }) {
   let folded: string | null = null
   for (let pass = 0; pass < MAX_SUMMARY_PASSES; pass += 1) {
     const thread = CodexChatStore.findThreadById(threadId)
@@ -501,12 +551,13 @@ async function foldIntoSummary(threadId: number, profile: ChatProfile, mode: Fol
     }
     const messages = options.messages ?? CodexChatStore.listMessages(threadId)
     const turns = splitTurns(sendableMessages(unsummarizedMessages(messages, thread, { summaryEnabled: true })))
-    const count = planFold(profile, thread, config, messages, turns, mode)
+    const count = planFold(profile, thread, config, messages, turns, mode, options.tools ?? [])
     if (count === 0) {
       return folded
     }
-    const chunk = takeSummaryChunk(profile, config, turns.slice(0, count))
-    const summary = await summarizeInto(profile, config, thread.summary, chunk, options.signal)
+    const user = userPersonaForThread(thread)
+    const chunk = takeSummaryChunk(profile, config, turns.slice(0, count), user)
+    const summary = await summarizeInto(profile, config, thread.summary, chunk, user, options.signal)
     // A history edit while summarizing bumps the revision; the next request starts over from the new history.
     if (!CodexChatStore.setSummary(threadId, summary, chunk[chunk.length - 1].id, thread.context_revision)) {
       return folded
@@ -518,7 +569,7 @@ async function foldIntoSummary(threadId: number, profile: ChatProfile, mode: Fol
 
 const summaryRuns = new Map<number, Promise<string | null>>()
 
-function startFold(threadId: number, profile: ChatProfile, mode: FoldMode, options: { messages?: CodexChatMessageRecord[]; signal?: AbortSignal } = {}) {
+function startFold(threadId: number, profile: ChatProfile, mode: FoldMode, options: { messages?: CodexChatMessageRecord[]; signal?: AbortSignal; tools?: ChatCompletionTool[] } = {}) {
   const run: Promise<string | null> = foldIntoSummary(threadId, profile, mode, options).finally(() => {
     if (summaryRuns.get(threadId) === run) {
       summaryRuns.delete(threadId)
@@ -541,18 +592,18 @@ function untilAborted<T>(promise: Promise<T>, signal: AbortSignal) {
  * After a reply: once the unsummarized turns would no longer leave room for the next one (turn count or token
  * budget), fold the oldest `summaryTriggerTurns` of them in the background — before they would fall out of the window.
  */
-export function summarizeAhead(threadId: number, profile: ChatProfile) {
+export function summarizeAhead(threadId: number, profile: ChatProfile, tools: ChatCompletionTool[]) {
   if (summaryRuns.has(threadId)) {
     return Promise.resolve(null)
   }
-  return startFold(threadId, profile, 'ahead')
+  return startFold(threadId, profile, 'ahead', { tools })
 }
 
 /**
  * Before a request: wait for a summary still running, then fold whatever would still not fit, so no turn leaves the
  * window unsummarized. If summarizing fails, the request goes on and the oldest turns are dropped instead.
  */
-export async function fitThreadSummary(threadId: number, profile: ChatProfile, messages: CodexChatMessageRecord[], signal: AbortSignal) {
+export async function fitThreadSummary(threadId: number, profile: ChatProfile, messages: CodexChatMessageRecord[], signal: AbortSignal, tools: ChatCompletionTool[]) {
   const running = summaryRuns.get(threadId)
   if (running) {
     await untilAborted(running.catch(() => null), signal)
@@ -561,7 +612,7 @@ export async function fitThreadSummary(threadId: number, profile: ChatProfile, m
     return
   }
   try {
-    await startFold(threadId, profile, 'overflow', { messages, signal })
+    await startFold(threadId, profile, 'overflow', { messages, signal, tools })
   } catch (error) {
     if (signal.aborted) {
       throw error

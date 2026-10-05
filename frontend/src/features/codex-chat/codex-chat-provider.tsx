@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, readThreadFlagIds, streamCodexChatMessage, streamChatRewrite, type ChatFlag, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, pickSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
@@ -11,11 +11,13 @@ import { FILES_QUERY_KEY, uploadStoredFiles } from '@/lib/api-files'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   CodexChatContext,
+  CodexChatReferenceContext,
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
   type CodexChatApi,
   type CodexChatLiveReply,
   type CodexChatLiveTurn,
+  type CodexChatReferenceApi,
   type CodexChatView,
 } from './codex-chat-context'
 
@@ -31,7 +33,11 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [view, setView] = useState<CodexChatView>('chat')
   const [selectedThreadId, setSelectedThreadId] = useState<number | null | undefined>(undefined)
   const [draft, setDraft] = useState('')
+  const [picks, setPicks] = useState<string[]>([])
+  const picksRef = useRef(picks)
   const [draftAttachments, setDraftAttachments] = useState<StoredFileEntry[]>([])
+  const [draftMediaAttachments, setDraftMediaAttachments] = useState<ChatMediaAttachment[]>([])
+  const mediaAttachmentsRef = useRef(draftMediaAttachments)
   const [attachmentsUploading, setAttachmentsUploading] = useState(false)
   const attachmentsRef = useRef(draftAttachments)
   const uploadBusyRef = useRef(false)
@@ -46,10 +52,15 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
 
   draftRef.current = draft
   attachmentsRef.current = draftAttachments
+  mediaAttachmentsRef.current = draftMediaAttachments
+  picksRef.current = picks
+
+  const togglePick = useCallback((label: string) => setPicks((current) => (current.includes(label) ? current.filter((entry) => entry !== label) : [...current, label].slice(-12))), [])
+  const removePick = useCallback((label: string) => setPicks((current) => current.filter((entry) => entry !== label)), [])
 
   const addAttachments = useCallback((files: StoredFileEntry[]) => {
     const next = [...new Map([...attachmentsRef.current, ...files].map((file) => [file.id, file])).values()]
-    if (next.length > 20) {
+    if (next.length + mediaAttachmentsRef.current.length > 20) {
       showSnackbar({ tone: 'error', message: t({ ko: '첨부파일은 최대 20개까지 가능해.', en: 'Attach up to 20 files.' }) })
       return
     }
@@ -60,9 +71,27 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     attachmentsRef.current = attachmentsRef.current.filter((file) => file.id !== id)
     setDraftAttachments(attachmentsRef.current)
   }, [])
+  const setMediaAttachments = useCallback((items: ChatMediaAttachment[]) => {
+    const next = [...new Map(items.map((item) => [item.compositeHash, item])).values()]
+    if (next.length + attachmentsRef.current.length > 20) {
+      showSnackbar({ tone: 'error', message: t({ ko: '첨부파일은 최대 20개까지 가능해.', en: 'Attach up to 20 files.' }) })
+      return false
+    }
+    mediaAttachmentsRef.current = next
+    setDraftMediaAttachments(next)
+    return true
+  }, [showSnackbar, t])
+  const removeMediaAttachment = useCallback((hash: string) => {
+    mediaAttachmentsRef.current = mediaAttachmentsRef.current.filter((item) => item.compositeHash !== hash)
+    setDraftMediaAttachments(mediaAttachmentsRef.current)
+  }, [])
+  const toggleMediaAttachment = useCallback((item: ChatMediaAttachment) => {
+    if (mediaAttachmentsRef.current.some((existing) => existing.compositeHash === item.compositeHash)) removeMediaAttachment(item.compositeHash)
+    else setMediaAttachments([...mediaAttachmentsRef.current, item])
+  }, [removeMediaAttachment, setMediaAttachments])
   const uploadAttachments = useCallback(async (files: File[]) => {
     if (!files.length || uploadBusyRef.current) return
-    if (attachmentsRef.current.length + files.length > 20) {
+    if (attachmentsRef.current.length + mediaAttachmentsRef.current.length + files.length > 20) {
       showSnackbar({ tone: 'error', message: t({ ko: '첨부파일은 최대 20개까지 가능해.', en: 'Attach up to 20 files.' }) })
       return
     }
@@ -90,14 +119,17 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     attachmentEpoch.current += 1
     attachmentsRef.current = []
     setDraftAttachments([])
+    mediaAttachmentsRef.current = []
+    setDraftMediaAttachments([])
+    setPicks([])
     setSelectedThreadId(threadId)
     setView('chat')
   }, [])
 
-  const startChat = useCallback(async (profileId: number) => {
+  const startChat = useCallback(async (profileId: number, userProfileId?: number | null) => {
     setIsStartingChat(true)
     try {
-      const thread = await createCodexChatThread(profileId)
+      const thread = await createCodexChatThread(profileId, userProfileId)
       await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
       // The new chat starts from the default appearance slot, copied on the server.
       void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
@@ -105,6 +137,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       attachmentEpoch.current += 1
       attachmentsRef.current = []
       setDraftAttachments([])
+      mediaAttachmentsRef.current = []
+      setDraftMediaAttachments([])
       setView('chat')
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
@@ -114,15 +148,20 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [queryClient, showSnackbar, t])
 
   const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string }, literalText?: string) => {
-    const text = rewrite ? '' : (literalText ?? draftRef.current).trim()
+    const picked = rewrite ? [] : picksRef.current
+    // Picks alone make a message of their own labels, so a click can be sent as is.
+    const text = rewrite ? '' : (literalText ?? draftRef.current).trim() || picked.join(', ')
     const attachments = rewrite ? [] : attachmentsRef.current
-    if ((!rewrite && !text && attachments.length === 0) || uploadBusyRef.current) {
+    const mediaAttachments = rewrite ? [] : mediaAttachmentsRef.current
+    const sentAttachmentEpoch = attachmentEpoch.current
+    if ((!rewrite && !text && attachments.length === 0 && mediaAttachments.length === 0) || uploadBusyRef.current) {
       return false
     }
     const cachedThread = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId))?.thread
     const isGroup = cachedThread?.kind === 'group'
     // The chat's switched-on flags go with a new message (a rewrite replays the ones stored on the message).
     const flags = rewrite ? [] : (queryClient.getQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY) ?? []).filter((flag) => readThreadFlagIds(cachedThread).includes(flag.id))
+    const shownFlags = [...flags, ...picked.map(pickSnapshot)]
     if (streamAbortRef.current) {
       // In a group room the user may cut in: the server stops the room's reply when the new message arrives, so stop
       // reading the old stream and let it wind down first.
@@ -140,9 +179,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     if (!rewrite) {
       setDraft('')
       setDraftAttachments([])
+      mediaAttachmentsRef.current = []
+      setDraftMediaAttachments([])
       attachmentsRef.current = []
+      setPicks([])
+      picksRef.current = []
     }
-    setLiveTurn({ threadId: sentThreadId, userText: text, flags, attachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined })
+    setLiveTurn({ threadId: sentThreadId, userText: text, flags: shownFlags, attachments, mediaAttachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined })
     let accepted = false
 
     /** Group rooms: change one member's streaming reply (added if its first event comes before `speaker`). */
@@ -177,7 +220,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         if (isGroup && event.type === 'user') {
           accepted = true
           putMessage(event.message)
-          setLiveTurn((current) => current ? { ...current, userText: '', flags: [], attachments: [] } : current)
+          setLiveTurn((current) => current ? { ...current, userText: '', flags: [], attachments: [], mediaAttachments: [] } : current)
           void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
         } else if (event.type === 'speaker') {
           updateReply(event.profileId, () => ({ profileId: event.profileId, text: '', reasoning: '', toolCalls: new Map() }))
@@ -225,20 +268,24 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           } : current)
           setLiveTurn((current) => current ? { ...current, replacingMessageId: event.mode === 'regenerate' ? event.message.id : undefined } : current)
         } else if (event.type === 'done') {
-          setLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, userText: '', flags: [], attachments: [] } : current)
+          setLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, userText: '', flags: [], attachments: [], mediaAttachments: [] } : current)
         } else if (event.type === 'error') {
           // The full text stays on the failed message (its error chip); the toast only names the reason.
           showSnackbar({ message: summarizeChatError(event.message, t), tone: 'error' })
         }
       }
       if (rewrite) await streamChatRewrite(sentThreadId, rewrite.messageId, rewrite.content, onEvent, controller.signal)
-      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id))
+      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash))
     } catch (error) {
       if (!controller.signal.aborted) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
-        if (!accepted && !rewrite) {
-          setDraft((current) => current || text)
+        if (!accepted && !rewrite && attachmentEpoch.current === sentAttachmentEpoch) {
+          setDraft((current) => current || (picked.length ? '' : text))
           setDraftAttachments(attachments)
+          attachmentsRef.current = attachments
+          setDraftMediaAttachments(mediaAttachments)
+          mediaAttachmentsRef.current = mediaAttachments
+          setPicks(picked)
         }
       }
     } finally {
@@ -284,8 +331,15 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     isStartingChat,
     draft,
     setDraft,
+    picks,
+    togglePick,
+    removePick,
     liveTurn,
     draftAttachments,
+    draftMediaAttachments,
+    setMediaAttachments,
+    removeMediaAttachment,
+    toggleMediaAttachment,
     attachmentsUploading,
     addAttachments,
     removeAttachment,
@@ -297,7 +351,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [canUse, clearMessageFocus, closePanel, draft, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, selectThread, selectedThreadId, send, regenerate, editMessage, startChat, stop, view, draftAttachments, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [canUse, clearMessageFocus, closePanel, draft, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, selectedThreadId, send, regenerate, editMessage, startChat, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
-  return <CodexChatContext.Provider value={api}>{children}</CodexChatContext.Provider>
+  const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ draftMediaAttachments, toggleMediaAttachment, focusMessage }), [draftMediaAttachments, toggleMediaAttachment, focusMessage])
+
+  return (
+    <CodexChatContext.Provider value={api}>
+      <CodexChatReferenceContext.Provider value={referenceApi}>{children}</CodexChatReferenceContext.Provider>
+    </CodexChatContext.Provider>
+  )
 }

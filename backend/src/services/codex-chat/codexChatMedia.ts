@@ -1,3 +1,4 @@
+import { isCodexChatGenerationTool } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import type { CodexChatMessageRecord } from './codexChatStore'
@@ -14,22 +15,6 @@ export type CodexChatMediaItem = {
   width: number | null
   height: number | null
 }
-
-/**
- * Tools whose results are images the chat made: submitting/polling a job and reading its outputs.
- * Everything else (search, metadata, history listing, groups…) only looked images up.
- */
-const GENERATION_TOOLS = new Set([
-  'submit_generation_job',
-  'get_generation_job',
-  'wait_generation_job',
-  'get_generation_artifacts',
-  'generate_nai',
-  'generate_comfyui',
-  'generate_comfyui_all_servers',
-  'execute_graph_workflow',
-  'get_graph_workflow_execution',
-])
 
 /** Keep comfortably below SQLite's default 999 binding limit. */
 const LOOKUP_CHUNK_SIZE = 400
@@ -151,7 +136,7 @@ export function collectCodexChatMedia(messages: CodexChatMessageRecord[]): Codex
       const reference: MediaReference = {
         messageId: message.id,
         createdDate: message.created_date,
-        source: GENERATION_TOOLS.has(call.tool) ? 'generated' : 'found',
+        source: isCodexChatGenerationTool(call.tool) ? 'generated' : 'found',
       }
       const hashes = [
         ...(call.historyIds ?? []).map((historyId) => historyHashById.get(historyId)),

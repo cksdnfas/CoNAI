@@ -8,12 +8,14 @@ import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { ChatFlagEditorModal, ChatFlagRows, useChatFlags } from '@/features/codex-chat/chat-flags'
+import { ChatUserProfileEditorModal, ChatUserProfileRows, useChatUserProfiles } from '@/features/codex-chat/chat-user-profiles'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_ADMIN_SETTINGS_QUERY_KEY,
   CHAT_FLAG_LIMITS,
+  CHAT_USER_PROFILE_LIMITS,
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   CHAT_STATUS_QUERY_KEY,
@@ -26,6 +28,7 @@ import {
   updateChatAdminSettings,
   updateChatProfile,
   type ChatFlag,
+  type ChatUserProfile,
   type ChatLorebook,
   type ChatProfile,
   type ChatProfileInput,
@@ -54,11 +57,13 @@ export function ChatSettingsTab() {
   /** Set while a file is picked to refresh that book; null picks a new book. */
   const lorebookTargetRef = useRef<number | null>(null)
   const [flagEditor, setFlagEditor] = useState<{ flag: ChatFlag | null } | null>(null)
+  const [userProfileEditor, setUserProfileEditor] = useState<{ profile: ChatUserProfile | null } | null>(null)
 
   const settingsQuery = useQuery({ queryKey: CHAT_ADMIN_SETTINGS_QUERY_KEY, queryFn: getChatAdminSettings })
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks })
   const flagsQuery = useChatFlags()
+  const userProfilesQuery = useChatUserProfiles()
   const defaultsQuery = useQuery({ queryKey: ['codex-chat-profile-defaults'], queryFn: getChatProfileDefaults, staleTime: Infinity })
 
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
@@ -110,6 +115,7 @@ export function ChatSettingsTab() {
   const profiles = profilesQuery.data ?? []
   const lorebooks = lorebooksQuery.data ?? []
   const flags = flagsQuery.data ?? []
+  const userProfiles = userProfilesQuery.data ?? []
 
   return (
     <div className="space-y-8">
@@ -175,6 +181,20 @@ export function ChatSettingsTab() {
       </RowGroup>
 
       <RowGroup
+        heading={t({ ko: '사용자 프로필', en: 'User profiles' })}
+        actions={(
+          <IconButton size="icon-sm" variant="ghost" disabled={userProfiles.length >= CHAT_USER_PROFILE_LIMITS.perAccount} onClick={() => setUserProfileEditor({ profile: null })} label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}>
+            <Plus />
+          </IconButton>
+        )}
+      >
+        {userProfilesQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
+        {userProfilesQuery.isSuccess && userProfiles.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })}</SettingsEmptyRow> : null}
+        <ChatUserProfileRows profiles={userProfiles} onEdit={(profile) => setUserProfileEditor({ profile })} />
+        {userProfilesQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(userProfilesQuery.error, t({ ko: '사용자 프로필을 불러오지 못했어.', en: 'Could not load user profiles.' }))}</p> : null}
+      </RowGroup>
+
+      <RowGroup
         heading={t({ ko: '플래그', en: 'Flags' })}
         actions={(
           <IconButton size="icon-sm" variant="ghost" disabled={flags.length >= CHAT_FLAG_LIMITS.perAccount} onClick={() => setFlagEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}>
@@ -227,6 +247,7 @@ export function ChatSettingsTab() {
       </RowGroup>
 
       <ChatFlagEditorModal open={flagEditor !== null} flag={flagEditor?.flag ?? null} onClose={() => setFlagEditor(null)} />
+      <ChatUserProfileEditorModal open={userProfileEditor !== null} profile={userProfileEditor?.profile ?? null} onClose={() => setUserProfileEditor(null)} />
       <ChatLorebookEditorModal open={lorebookEditor !== null} lorebook={lorebookEditor?.lorebook ?? null} onClose={() => setLorebookEditor(null)} />
       <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} initialDraft={editor?.draft} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
     </div>

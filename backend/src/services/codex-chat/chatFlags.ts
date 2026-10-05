@@ -17,8 +17,21 @@ export type ChatFlag = {
   sortOrder: number
 }
 
-/** What a message keeps of a flag, so editing or deleting the flag later does not change past messages. */
-export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'>
+/**
+ * What a message keeps of a flag, so editing or deleting the flag later does not change past messages. `pick`: not a
+ * flag but an item the user chose in the status panel (`data-pick` in a block template), sent with this message.
+ */
+export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true }
+
+export const CHAT_PICK_LIMITS = { perMessage: 12, length: 120 }
+const PICK_ICON = 'lucide:target'
+
+/** Items picked in the status panel for this message, from a request body. */
+export function parsePicks(value: unknown): ChatFlagSnapshot[] {
+  if (!Array.isArray(value)) return []
+  const labels = [...new Set(value.map((item) => (typeof item === 'string' ? item.replace(/\s+/g, ' ').trim().slice(0, CHAT_PICK_LIMITS.length) : '')).filter(Boolean))]
+  return labels.slice(0, CHAT_PICK_LIMITS.perMessage).map((label) => ({ id: 0, icon: PICK_ICON, name: label, content: label, pick: true }))
+}
 
 type ChatFlagRow = { id: number; account_id: number | null; icon: string; name: string; content: string; sort_order: number }
 
@@ -63,8 +76,12 @@ export function parseFlagSnapshots(value: string | null | undefined): ChatFlagSn
  * Empty when no flag was on.
  */
 export function buildFlagDirective(flags: ChatFlagSnapshot[], fill: (text: string) => string = (text) => text) {
-  const lines = flags.map((flag) => fill(flag.content).trim()).filter(Boolean)
-  return lines.length > 0 ? `[사용자 지시: 이번 메시지에 적용]\n${lines.map((line) => `- ${line}`).join('\n')}` : ''
+  const lines = flags.filter((flag) => !flag.pick).map((flag) => fill(flag.content).trim()).filter(Boolean)
+  const picks = flags.filter((flag) => flag.pick).map((flag) => flag.content.trim()).filter(Boolean)
+  return [
+    lines.length > 0 ? `[사용자 지시: 이번 메시지에 적용]\n${lines.map((line) => `- ${line}`).join('\n')}` : '',
+    picks.length > 0 ? `[사용자 선택: 상태창에서 고른 항목]\n${picks.map((line) => `- ${line}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n')
 }
 
 export const ChatFlagStore = {

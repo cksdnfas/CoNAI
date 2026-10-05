@@ -494,6 +494,22 @@ export function createUserSettingsSchema(db: Database.Database): void {
   `);
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_flags_account ON chat_flags(account_id, sort_order, id)');
 
+  // Chat user profiles (personas): who the account is in a chat — name, description, avatar; one may be the default for new chats.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_user_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
+      name TEXT NOT NULL,
+      persona TEXT NOT NULL DEFAULT '',
+      avatar TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_user_profiles_account ON chat_user_profiles(account_id, sort_order, id)');
+
   // 19. Generic long-running runtime jobs (thumbnail regenerate / group rematch / folder scan ...)
   // 진행률·취소·재시작 복구의 정본. images.db 는 스캔이 두들기는 hot DB 라 하트비트 쓰기를 얹지 않는다.
   db.exec(`
@@ -560,8 +576,14 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // This chat's author's note (replaces the profile's default) and where it goes (turns before the end; null: the profile's lore depth).
     ['author_note', 'TEXT'],
     ['author_note_depth', 'INTEGER'],
+    // This chat's reply length cap in tokens (null: the profile's max tokens).
+    ['max_tokens', 'INTEGER'],
     // JSON ids of the chat flags switched on in this chat.
     ['flag_ids', 'TEXT'],
+    // JSON hand edits of the display block state (the state itself is folded from the messages).
+    ['block_edits', 'TEXT'],
+    // The account's user profile (persona) in this chat; null is the plain user.
+    ['user_profile_id', 'INTEGER'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {
@@ -575,10 +597,18 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['speaker_profile_id', 'INTEGER'],
     // User messages: JSON copy of the chat flags that were on when it was sent (replayed on regenerate).
     ['flags', 'TEXT'],
+    // Assistant messages (LLM): the provider's finish_reason of the last round ('length' = cut by the token cap).
+    ['finish_reason', 'TEXT'],
+    // User messages: validated references to existing library media (no file copies).
+    ['media_attachments', 'TEXT'],
   ]) {
     if (!hasColumn('codex_chat_messages', columnName)) {
       db.exec(`ALTER TABLE codex_chat_messages ADD COLUMN ${columnName} ${definition}`);
     }
+  }
+  // Group members: this member's reply token cap in the room (null: the room's cap, then the profile's).
+  if (!hasColumn('chat_group_members', 'max_tokens')) {
+    db.exec('ALTER TABLE chat_group_members ADD COLUMN max_tokens INTEGER');
   }
   const chatProfileColumns: Array<[string, string]> = [
     ['tagline', "TEXT NOT NULL DEFAULT ''"],

@@ -1,6 +1,7 @@
 import sharp from 'sharp'
 import { buildOllamaGenerationFields, buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions } from './llmGenerationOptions'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
+import { withLlmRequestSlot } from './llmRequestScheduler'
 import { normalizeOptionalString } from '../utils/valueNormalization'
 import type { ProviderType } from '../types/externalApi'
 import { LlmRequestError, retryLlmRequest } from './llmRequestRetry'
@@ -692,10 +693,11 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
   const imageDataUrl = await normalizeVisionImageDataUrl(request.image)
   const generation: LlmGenerationOptions = request.generation ?? {}
   const timeoutMs = resolveLlmRequestTimeoutMs(provider.additional_config)
+  const inSlot = <T>(run: () => Promise<T>) => withLlmRequestSlot(providerName, readLlmConnectionConfig(provider.additional_config).maxConcurrentRequests, request.signal, run)
 
   let result: Awaited<ReturnType<typeof executeOpenAiCompatibleRequest>> | Awaited<ReturnType<typeof executeOllamaRequest>>
   if (provider.provider_type === 'llm_ollama') {
-    result = await retryLlmRequest(() => executeOllamaRequest({
+    result = await retryLlmRequest(() => inSlot(() => executeOllamaRequest({
       baseUrl,
       model,
       prompt,
@@ -707,9 +709,9 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       structuredOutputJson,
       timeoutMs,
       signal: request.signal,
-    }), { signal: request.signal })
+    })), { signal: request.signal })
   } else if (provider.provider_type === 'llm_openai_compatible') {
-    result = await retryLlmRequest(() => executeOpenAiCompatibleRequest({
+    result = await retryLlmRequest(() => inSlot(() => executeOpenAiCompatibleRequest({
       baseUrl,
       apiKey,
       model,
@@ -722,7 +724,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       structuredOutputJson,
       timeoutMs,
       signal: request.signal,
-    }), { signal: request.signal })
+    })), { signal: request.signal })
   } else {
     throw new Error(`이 연결은 LLM 실행용 타입이 아니야: ${provider.display_name}`)
   }

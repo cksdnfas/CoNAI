@@ -1,6 +1,6 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
-import type { CodexReasoningEffort, StoredFileEntry } from '@conai/shared'
+import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize'
 export type ChatEngine = 'llm' | 'codex'
@@ -24,6 +24,18 @@ export interface CodexChatStatus {
 
 export type ChatTypeface = 'sans' | 'serif' | 'mono'
 
+/** A rule the server holds a block field to when the model writes it (hand edits are free). */
+export interface ChatBlockField {
+  name: string
+  min: number | null
+  max: number | null
+  /** Largest change per reply (numbers). */
+  step: number | null
+  /** Allowed values; empty: any. */
+  values: string[]
+  readonly: boolean
+}
+
 /** A designed card: the model writes ```key + JSON values, the chat fills `template` ({{field}} slots) styled by `css`. */
 export interface ChatDisplayBlock {
   id: string
@@ -34,7 +46,27 @@ export interface ChatDisplayBlock {
   example: string
   template: string
   css: string
+  /** How the values move; the model reads it with the current values. */
+  rules: string
+  /** One-line template of the folded status strip (`{{place}} · HP {{hp}}`); empty picks the first scalar fields. */
+  summary: string
+  /** Rules the server enforces on the model's updates, by field. */
+  fields: ChatBlockField[]
   enabled: boolean
+}
+
+/** One field a reply or a hand edit changed; `from` / `to` are absent when the field was added / removed. */
+export interface ChatBlockChange {
+  field: string
+  from?: unknown
+  to?: unknown
+}
+
+/** The display block state of a chat: current values per block and what each message changed. */
+export interface ChatBlocksState {
+  state: Record<string, Record<string, unknown>>
+  changes: Record<number, Record<string, ChatBlockChange[]>>
+  edits: Record<string, Record<string, ChatBlockChange[]>>
 }
 
 /** Another character the profile voices; the model switches to them with a `[Name]` line. */
@@ -92,6 +124,9 @@ export interface ChatProfileSummary {
   /** Context defaults a chat can override (LLM profiles). */
   contextTurns: number
   summaryEnabled: boolean
+  /** LLM profiles: reply token cap (null: the server's default) and reasoning budget, both counted in the cap. */
+  maxTokens: number | null
+  reasoningBudgetTokens: number | null
   /** Where keyword lore and the author's note go (turns before the end), and the default note a chat falls back to. */
   loreDepth: number
   authorNote: string
@@ -214,18 +249,8 @@ export interface ChatProfileDefaults {
   style: ChatStyle
 }
 
-export interface CodexChatToolCall {
-  id: string
-  tool: string
-  status: 'running' | 'completed' | 'failed'
-  arguments: unknown
-  summary: string | null
-  historyIds: number[]
-  compositeHashes: string[]
-  jobIds?: number[]
-  /** Set by the server: jobs still queued with no result yet. */
-  pendingJobIds?: number[]
-}
+export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
+import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 
 export interface CodexChatThread {
   id: number
@@ -236,6 +261,7 @@ export interface CodexChatThread {
   /** Overrides of the profile (null follows it). */
   context_turns: number | null
   summary_enabled: 0 | 1 | null
+  max_tokens: number | null
   summary: string | null
   summary_until_message_id: number | null
   summary_updated_date: string | null
@@ -257,14 +283,17 @@ export interface CodexChatThread {
   member_profile_ids?: number[]
   /** JSON ids of the chat flags switched on in this chat (read with readThreadFlagIds). */
   flag_ids?: string | null
+  /** The account's user profile (persona) in this chat; null is the plain user. */
+  user_profile_id?: number | null
   created_date: string
   updated_date: string
 }
 
 export interface CodexChatMessage {
-  alternatives: Array<{ content: string; tool_calls: CodexChatToolCall[]; created_at: string; status: 'completed' | 'failed' | 'interrupted'; error: string | null }>
+  alternatives: Array<{ content: string; tool_calls: CodexChatToolCall[]; created_at: string; status: 'completed' | 'failed' | 'interrupted'; error: string | null; finish_reason?: string | null }>
   active_alternative: number
   attachments?: StoredFileEntry[]
+  mediaAttachments?: ChatMediaAttachment[]
   id: number
   thread_id: number
   role: 'user' | 'assistant'
@@ -274,6 +303,8 @@ export interface CodexChatMessage {
   tool_calls: CodexChatToolCall[]
   status: 'completed' | 'failed' | 'interrupted'
   error: string | null
+  /** LLM replies: the provider's finish_reason; 'length' means the token cap cut the reply short. */
+  finish_reason?: string | null
   /** User messages: the chat flags that were on when it was sent. */
   flags?: ChatFlagSnapshot[]
   created_date: string
@@ -292,6 +323,10 @@ export interface CodexChatThreadDetail {
   media: Record<string, CodexChatMediaInfo>
   /** Generation jobs this chat started that are still running (results attach as they land). */
   pendingJobs: number
+  /** Direct chats with display blocks: their state (null otherwise). */
+  blocks?: ChatBlocksState | null
+  /** Group rooms: each member's own block state, by profile id (null when no member has blocks). */
+  memberBlocks?: Record<number, ChatBlocksState> | null
   /** Partial reply of a turn still running on the server (after a reload); group rooms add who answers and who is next. */
   running: {
     text: string
@@ -322,6 +357,9 @@ export interface ChatGroupInfo {
   /** Messages handed to a woken member. */
   windowLimit: number
   limits: { chain: { default: number; min: number; max: number }; window: { default: number; min: number; max: number } }
+  /** Reply token cap of the room (null: each profile's own) and each member's override of it, by profile id. */
+  maxTokens: number | null
+  memberMaxTokens: Record<string, number | null>
 }
 
 /** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */
@@ -336,19 +374,7 @@ export interface CodexChatMediaItem {
   height: number | null
 }
 
-export type CodexChatStreamEvent =
-  | { type: 'user'; message: CodexChatMessage }
-  | { type: 'rewind'; mode: 'regenerate' | 'edit'; message: CodexChatMessage }
-  /** `profileId`: group rooms, the member whose reply this is (several may answer at once). */
-  | { type: 'delta'; text: string; profileId?: number }
-  | { type: 'reasoning'; text: string; profileId?: number }
-  | { type: 'tool'; call: CodexChatToolCall; profileId?: number }
-  | { type: 'done'; message: CodexChatMessage }
-  | { type: 'error'; message: string }
-  /** Group rooms: this member starts answering; `speakers` is everyone answering now, `queue` who answers after. */
-  | { type: 'speaker'; profileId: number; speakers: number[]; queue: number[] }
-  | { type: 'queue'; speakers: number[]; queue: number[] }
-  | { type: 'notice'; message: string }
+export type CodexChatStreamEvent = ChatStreamEvent<CodexChatMessage>
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
@@ -410,6 +436,42 @@ export function deleteChatLorebook(lorebookId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'DELETE' })
 }
 
+export const CHAT_USER_PROFILES_QUERY_KEY = ['codex-chat-user-profiles'] as const
+export const CHAT_USER_PROFILE_LIMITS = { perAccount: 20, name: 30, persona: 4000 }
+
+/** Who the account is in a chat: the name the models use for the user, a description for them, an avatar. */
+export interface ChatUserProfile {
+  id: number
+  name: string
+  persona: string
+  avatar: string | null
+  /** New chats take this profile without asking. */
+  isDefault: boolean
+  sortOrder: number
+}
+
+export type ChatUserProfileInput = Pick<ChatUserProfile, 'name' | 'persona' | 'avatar' | 'isDefault'>
+
+export function listChatUserProfiles() {
+  return requestApiData<ChatUserProfile[]>('/api/codex-chat/user-profiles')
+}
+
+export function createChatUserProfile(input: ChatUserProfileInput) {
+  return requestApiData<ChatUserProfile>('/api/codex-chat/user-profiles', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function updateChatUserProfile(userProfileId: number, input: ChatUserProfileInput) {
+  return requestApiData<ChatUserProfile>(`/api/codex-chat/user-profiles/${userProfileId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function deleteChatUserProfile(userProfileId: number) {
+  return requestApiData<unknown>(`/api/codex-chat/user-profiles/${userProfileId}`, { method: 'DELETE' })
+}
+
+export function reorderChatUserProfiles(ids: number[]) {
+  return requestApiData<ChatUserProfile[]>('/api/codex-chat/user-profiles/order', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ids }) })
+}
+
 export const CHAT_FLAGS_QUERY_KEY = ['codex-chat-flags'] as const
 export const CHAT_FLAG_LIMITS = { perAccount: 20, name: 30, content: 2000 }
 
@@ -424,7 +486,13 @@ export interface ChatFlag {
 }
 
 export type ChatFlagInput = Pick<ChatFlag, 'icon' | 'name' | 'content'>
-export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'>
+/** `pick`: not a flag but an item chosen in the status panel, sent with that message. */
+export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true }
+
+/** The snapshot a status panel pick becomes (what the server stores on the message). */
+export function pickSnapshot(label: string): ChatFlagSnapshot {
+  return { id: 0, icon: 'lucide:target', name: label, content: label, pick: true }
+}
 
 export function listChatFlags() {
   return requestApiData<ChatFlag[]>('/api/codex-chat/flags')
@@ -524,7 +592,14 @@ export function listChatConnectionModels(providerName: string) {
   return requestApiData<{ models: string[]; defaultModel: string | null }>(`/api/codex-chat/admin/models?providerName=${encodeURIComponent(providerName)}`, { cache: 'no-store' })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null }) {
+/** Set a display block's values by hand (the whole object), or `null` to put back its starting values. Rooms name the member. */
+export function editChatBlock(threadId: number, key: string, data: Record<string, unknown> | null, profileId?: number) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/blocks/${encodeURIComponent(key)}`, {
+    method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ ...(data === null ? { reset: true } : { data }), ...(profileId === undefined ? {} : { profileId }) }),
+  })
+}
+
+export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -556,17 +631,23 @@ export function listCodexChatThreads() {
   return requestApiData<CodexChatThread[]>('/api/codex-chat/threads', { cache: 'no-store' })
 }
 
-export function createCodexChatThread(profileId: number) {
-  return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId }) })
+/** `userProfileId` left out: the server picks the default user profile; null: the plain user. */
+export function createCodexChatThread(profileId: number, userProfileId?: number | null) {
+  return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId, ...(userProfileId === undefined ? {} : { userProfileId }) }) })
 }
 
-export function createGroupChat(input: { profileIds: number[]; representativeId: number; title?: string }) {
+export function createGroupChat(input: { profileIds: number[]; representativeId: number; title?: string; userProfileId?: number | null }) {
   return requestApiData<CodexChatThread>('/api/codex-chat/threads/group', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
-/** `null` limits restore the defaults. */
-export function updateGroupChat(threadId: number, patch: { representativeId?: number; title?: string; chainLimit?: number | null; windowLimit?: number | null }) {
+/** `null` limits restore the defaults; a `null` maxTokens lets each profile's own cap apply. */
+export function updateGroupChat(threadId: number, patch: { representativeId?: number; title?: string; chainLimit?: number | null; windowLimit?: number | null; maxTokens?: number | null }) {
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/group`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+/** One member's reply token cap in the room (null follows the room's cap, then the profile's). */
+export function updateGroupChatMember(threadId: number, profileId: number, patch: { maxTokens?: number | null }) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members/${profileId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 export function addGroupChatMembers(threadId: number, profileIds: number[]) {
@@ -579,6 +660,10 @@ export function removeGroupChatMember(threadId: number, profileId: number) {
 
 export function getCodexChatThread(threadId: number) {
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}`, { cache: 'no-store' })
+}
+
+export function getCodexChatRunning(threadId: number) {
+  return requestApiData<{ running: CodexChatThreadDetail['running']; latestMessageId: number | null }>(`/api/codex-chat/threads/${threadId}/running`, { cache: 'no-store' })
 }
 
 export function getCodexChatThreadMedia(threadId: number) {
@@ -597,8 +682,8 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = []) {
-  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds }, onEvent, signal)
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = []) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes }, onEvent, signal)
 }
 
 export function streamChatRewrite(threadId: number, messageId: number, content: string | undefined, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {
@@ -639,3 +724,6 @@ async function streamChatOperation(path: string, method: 'POST' | 'PATCH', body:
     }
   }
 }
+
+/** Existing app media attached by reference. */
+export type ChatMediaAttachment = { compositeHash: string; name: string; mimeType: string | null }

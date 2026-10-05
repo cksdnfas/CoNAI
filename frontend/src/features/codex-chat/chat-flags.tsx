@@ -193,8 +193,8 @@ export function ChatMessageFlags({ flags }: { flags?: ChatFlagSnapshot[] }) {
   if (!flags?.length) return null
   return (
     <div className="mt-1 flex flex-wrap justify-end gap-1">
-      {flags.map((flag) => (
-        <Tip key={flag.id} content={<span className="whitespace-pre-wrap">{flag.content}</span>}>
+      {flags.map((flag, index) => (
+        <Tip key={`${flag.id}-${index}`} content={<span className="whitespace-pre-wrap">{flag.content}</span>}>
           <span tabIndex={0} className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 text-2xs leading-[18px] text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
             <ChatFlagIcon icon={flag.icon} name={flag.name} className="size-3 text-xs" />
             {flag.name}

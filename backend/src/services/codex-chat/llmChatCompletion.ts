@@ -1,4 +1,5 @@
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
+import { acquireLlmRequestSlot } from '../llmRequestScheduler'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
 import { LlmRequestError } from '../llmRequestRetry'
@@ -22,6 +23,9 @@ export type ChatCompletionTarget = {
   endpoint: string
   apiKey: string | null
   model: string
+  /** Explicit connection limit for the whole request, including any cache-mark fallback and response body. */
+  timeoutMs?: number | null
+  maxConcurrentRequests?: number
   /** What the request asks for; unset options are not sent. */
   generation: LlmGenerationOptions
   /** Put `cache_control` breakpoints on the stable parts of the request (Anthropic through LiteLLM; off by default). */
@@ -94,7 +98,8 @@ function resolveConnection(providerName: string) {
  */
 export function resolveChatCompletionTarget(providerName: string, overrides: { model?: string | null; generation?: LlmGenerationOptions } = {}): ChatCompletionTarget {
   const { provider, config, apiBase, apiKey } = resolveConnection(providerName)
-  const model = normalizeOptionalString(overrides.model) ?? readLlmConnectionConfig(config).defaultModel
+  const connectionConfig = readLlmConnectionConfig(config)
+  const model = normalizeOptionalString(overrides.model) ?? connectionConfig.defaultModel
   if (!model) {
     throw new Error(`LLM 모델이 정해지지 않았어: ${provider.display_name}`)
   }
@@ -105,8 +110,10 @@ export function resolveChatCompletionTarget(providerName: string, overrides: { m
     endpoint: `${apiBase}/chat/completions`,
     apiKey,
     model,
+    timeoutMs: connectionConfig.timeoutMs,
+    maxConcurrentRequests: connectionConfig.maxConcurrentRequests,
     generation: overrides.generation ?? {},
-    promptCacheMarks: readLlmConnectionConfig(config).promptCacheMarks,
+    promptCacheMarks: connectionConfig.promptCacheMarks,
   }
 }
 
@@ -231,20 +238,28 @@ export async function streamChatCompletion(params: {
   onContent?: (text: string) => void
   onReasoning?: (text: string) => void
 }): Promise<ChatCompletionResult> {
-  const idle = new AbortController()
+  const release = await acquireLlmRequestSlot(params.target.providerName, params.target.maxConcurrentRequests ?? 1, params.signal)
+  const controller = new AbortController()
+  const signal = controller.signal
+  const abort = () => controller.abort(params.signal.reason)
+  if (params.signal.aborted) abort()
+  else params.signal.addEventListener('abort', abort, { once: true })
   let idleTimer: NodeJS.Timeout | null = null
+  let requestTimer: NodeJS.Timeout | null = null
   const touch = () => {
     if (idleTimer) clearTimeout(idleTimer)
-    idleTimer = setTimeout(() => idle.abort(new Error('LLM 응답이 너무 오래 멈춰 있어.')), STREAM_IDLE_TIMEOUT_MS)
+    idleTimer = setTimeout(() => controller.abort(new Error('LLM 응답이 너무 오래 멈춰 있어.')), STREAM_IDLE_TIMEOUT_MS)
   }
-  const signal = AbortSignal.any([params.signal, idle.signal])
+  if (params.target.timeoutMs != null) {
+    requestTimer = setTimeout(() => controller.abort(new DOMException(`LLM 요청 제한 시간을 초과했어 (${params.target.timeoutMs}ms).`, 'TimeoutError')), params.target.timeoutMs)
+  }
   touch()
 
   try {
-    const response = await fetch(params.target.endpoint, {
+    const request = (target: ChatCompletionTarget) => fetch(target.endpoint, {
       method: 'POST',
-      headers: buildHeaders(params.target),
-      body: JSON.stringify(buildBody(params.target, params.messages, params.tools ?? [], true)),
+      headers: buildHeaders(target),
+      body: JSON.stringify(buildBody(target, params.messages, params.tools ?? [], true)),
       signal,
     }).catch((error: unknown) => {
       if (signal.aborted) throw error
@@ -252,17 +267,29 @@ export async function streamChatCompletion(params: {
       const cause = (error as { cause?: { code?: string; message?: string } })?.cause
       throw new LlmRequestError(`LLM 서버에 연결하지 못했어: ${params.target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`, undefined, { cause: error })
     })
-    if (!response.ok) {
+    let target = params.target
+    let response: Response
+    for (;;) {
+      signal.throwIfAborted()
+      response = await request(target)
+      if (response.ok) break
       const errorText = await response.text().catch(() => '')
+      signal.throwIfAborted()
       // A server that does not know cache_control rejects the whole request; the marks are an optimization, so retry without them.
-      if (response.status === 400 && params.target.promptCacheMarks && !signal.aborted) {
+      if (response.status === 400 && target.promptCacheMarks) {
         console.warn(`[llm-chat] ${params.target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
-        return streamChatCompletion({ ...params, target: { ...params.target, promptCacheMarks: false } })
+        target = { ...target, promptCacheMarks: false }
+        touch()
+        continue
       }
       throw new LlmRequestError(`LLM 요청 실패 (${response.status}): ${errorText.slice(0, 500) || response.statusText}`, response.status)
     }
     if (!response.body || !(response.headers.get('content-type') ?? '').includes('text/event-stream')) {
-      return readJsonCompletion(await response.json())
+      const result = readJsonCompletion(await response.json())
+      signal.throwIfAborted()
+      if (result.content) params.onContent?.(result.content)
+      if (result.reasoning) params.onReasoning?.(result.reasoning)
+      return result
     }
 
     let content = ''
@@ -339,12 +366,13 @@ export async function streamChatCompletion(params: {
 
     return { content, reasoning, toolCalls: finalizeToolCalls(drafts), finishReason, promptTokens }
   } catch (error) {
-    if (idle.signal.aborted && !params.signal.aborted) {
-      throw idle.signal.reason instanceof Error ? idle.signal.reason : new Error('LLM 응답이 너무 오래 멈춰 있어.')
-    }
+    signal.throwIfAborted()
     throw error
   } finally {
     if (idleTimer) clearTimeout(idleTimer)
+    if (requestTimer) clearTimeout(requestTimer)
+    params.signal.removeEventListener('abort', abort)
+    release()
   }
 }
 

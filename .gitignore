@@ -44,6 +44,11 @@ vitest.config.ts
 frontend/vitest.config.ts
 frontend/.playwright-dev.log
 
+# Keep the permanent chat cancellation, context and protocol regressions.
+!backend/test/
+backend/test/*
+!backend/test/chat-regressions.test.ts
+
 # Uploaded images
 uploads/
 RecycleBin/

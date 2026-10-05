@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
+import { userPersonaForThread } from '../../services/codex-chat/chatUserProfiles';
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import { requestGroupWake } from '../../services/codex-chat/groupWakeRegistry';
 import type { McpRequestContext } from '../context';
@@ -26,8 +27,8 @@ function requireRoom(context: McpRequestContext, roomId: number) {
   return thread;
 }
 
-function speakerName(row: RoomMessageRow, names: Map<number, string>) {
-  if (row.role === 'user') return '사용자';
+function speakerName(row: RoomMessageRow, names: Map<number, string>, userName: string) {
+  if (row.role === 'user') return userName;
   if (row.speaker_profile_id === null) return '어시스턴트';
   if (!names.has(row.speaker_profile_id)) names.set(row.speaker_profile_id, ChatProfileStore.find(row.speaker_profile_id)?.name ?? '(삭제된 프로필)');
   return names.get(row.speaker_profile_id) as string;
@@ -69,14 +70,14 @@ export function registerChatRoomTools(server: McpServer, context: McpRequestCont
     },
     async ({ room_id, query, limit }) => {
       try {
-        requireRoom(context, room_id);
+        const userName = userPersonaForThread(requireRoom(context, room_id)).name;
         const rows = getUserSettingsDb().prepare(`
           SELECT id, role, speaker_profile_id, created_date,
           substr(content, MAX(1, instr(lower(content), lower(?)) - 80), ${EXCERPT_LENGTH}) AS content
           FROM codex_chat_messages WHERE thread_id = ? AND instr(lower(content), lower(?)) > 0 ORDER BY id DESC LIMIT ?
         `).all(query, room_id, query, limit ?? 10) as RoomMessageRow[];
         const names = new Map<number, string>();
-        return textResult(rows.map((row) => ({ id: row.id, speaker: speakerName(row, names), at: row.created_date, excerpt: row.content })));
+        return textResult(rows.map((row) => ({ id: row.id, speaker: speakerName(row, names, userName), at: row.created_date, excerpt: row.content })));
       } catch (error) {
         return errorResult(error);
       }
@@ -94,7 +95,7 @@ export function registerChatRoomTools(server: McpServer, context: McpRequestCont
     },
     async ({ room_id, message_id, before, after }) => {
       try {
-        requireRoom(context, room_id);
+        const userName = userPersonaForThread(requireRoom(context, room_id)).name;
         const db = getUserSettingsDb();
         const older = db.prepare('SELECT id, role, speaker_profile_id, content, created_date FROM codex_chat_messages WHERE thread_id = ? AND id <= ? ORDER BY id DESC LIMIT ?')
           .all(room_id, message_id, (before ?? 10) + 1) as RoomMessageRow[];
@@ -103,7 +104,7 @@ export function registerChatRoomTools(server: McpServer, context: McpRequestCont
         const names = new Map<number, string>();
         return textResult([...older.reverse(), ...newer].map((row) => ({
           id: row.id,
-          speaker: speakerName(row, names),
+          speaker: speakerName(row, names, userName),
           at: row.created_date,
           text: row.content.length > MESSAGE_TEXT_LIMIT ? `${row.content.slice(0, MESSAGE_TEXT_LIMIT)}…` : row.content,
         })));

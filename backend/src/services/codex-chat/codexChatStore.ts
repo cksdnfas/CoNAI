@@ -1,26 +1,12 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { StoredFileEntry } from '@conai/shared'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
+import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
+import { parseChatMediaAttachments, type ChatMediaAttachment } from './chatMediaAttachments'
 
-export type CodexChatToolCall = {
-  id: string
-  tool: string
-  status: 'running' | 'completed' | 'failed'
-  arguments: unknown
-  /** Short text of the tool result or error, for display. */
-  summary: string | null
-  /** Generation history rows the call created or referenced (rendered as thumbnails). */
-  historyIds: number[]
-  /** Library images the call returned. */
-  compositeHashes: string[]
-  /** LLM chats only: the tool result text (truncated) replayed to the model in later turns. */
-  output?: string
-  /** Generation queue jobs the call submitted or read; their results are attached when the thread is read. */
-  jobIds?: number[]
-  /** Read-only, set when the thread is read: jobs still running that have no history row yet (shown as placeholders). */
-  pendingJobIds?: number[]
-}
+export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
+import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 
 export type ChatEngine = 'codex' | 'llm'
 
@@ -56,8 +42,14 @@ export type CodexChatThreadRecord = {
   /** This chat's author's note (null: the profile's default) and its depth in turns before the end (null: the profile's lore depth). */
   author_note: string | null
   author_note_depth: number | null
+  /** This chat's reply length cap in tokens (null: the profile's max tokens). */
+  max_tokens: number | null
   /** JSON ids of the chat flags switched on in this chat. */
   flag_ids: string | null
+  /** JSON hand edits of the display block state (see chatBlockState). */
+  block_edits: string | null
+  /** The account's user profile (persona) in this chat; null is the plain user. */
+  user_profile_id: number | null
   created_date: string
   updated_date: string
 }
@@ -66,6 +58,7 @@ export type CodexChatMessageRecord = {
   alternatives: ChatMessageAlternative[]
   active_alternative: number
   attachments?: StoredFileEntry[]
+  mediaAttachments?: ChatMediaAttachment[]
   id: number
   thread_id: number
   role: 'user' | 'assistant'
@@ -75,6 +68,8 @@ export type CodexChatMessageRecord = {
   tool_calls: CodexChatToolCall[]
   status: 'completed' | 'failed' | 'interrupted'
   error: string | null
+  /** LLM replies: the provider's finish_reason of the last round; 'length' means the token cap cut the reply. */
+  finish_reason: string | null
   /** User messages: the chat flags that were on when it was sent. */
   flags?: ChatFlagSnapshot[]
   created_date: string
@@ -86,9 +81,10 @@ export type ChatMessageAlternative = {
   created_at: string
   status: CodexChatMessageRecord['status']
   error: string | null
+  finish_reason?: string | null
 }
 
-type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags'> & { tool_calls: string | null; alternatives: string | null; flags: string | null }
+type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags'> & { tool_calls: string | null; alternatives: string | null; flags: string | null; media_attachments: string | null }
 
 const TITLE_MAX_LENGTH = 60
 
@@ -131,6 +127,12 @@ function removeMessagesAfter(threadId: number, messageId: number) {
   const db = getUserSettingsDb()
   db.prepare('DELETE FROM chat_file_attachments WHERE message_id IN (SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id > ?)').run(threadId, messageId)
   db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ? AND id > ?').run(threadId, messageId)
+  // Block state edits made after a removed message go with it.
+  const row = db.prepare('SELECT block_edits FROM codex_chat_threads WHERE id = ?').get(threadId) as { block_edits: string | null } | undefined
+  if (row?.block_edits) {
+    const kept = parseBlockEdits(row.block_edits).filter((edit) => edit.afterMessageId <= messageId)
+    db.prepare('UPDATE codex_chat_threads SET block_edits = ? WHERE id = ?').run(kept.length > 0 ? JSON.stringify(kept) : null, threadId)
+  }
 }
 
 export const CodexChatStore = {
@@ -165,10 +167,13 @@ export const CodexChatStore = {
     return Number(result.lastInsertRowid)
   },
 
-  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null }) {
+  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null }) {
     const db = getUserSettingsDb()
     if (patch.contextTurns !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET context_turns = ? WHERE id = ?').run(patch.contextTurns, threadId)
+    }
+    if (patch.maxTokens !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET max_tokens = ? WHERE id = ?').run(patch.maxTokens, threadId)
     }
     if (patch.summaryEnabled !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET summary_enabled = ? WHERE id = ?').run(patch.summaryEnabled === null ? null : patch.summaryEnabled ? 1 : 0, threadId)
@@ -179,6 +184,10 @@ export const CodexChatStore = {
     if (patch.authorNoteDepth !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET author_note_depth = ? WHERE id = ?').run(patch.authorNoteDepth, threadId)
     }
+  },
+
+  setBlockEdits(threadId: number, edits: BlockEdit[]) {
+    getUserSettingsDb().prepare('UPDATE codex_chat_threads SET block_edits = ? WHERE id = ?').run(edits.length > 0 ? JSON.stringify(edits) : null, threadId)
   },
 
   setSummary(threadId: number, summary: string | null, untilMessageId: number | null, expectedRevision?: number) {
@@ -241,7 +250,12 @@ export const CodexChatStore = {
     const rows = getUserSettingsDb().prepare(`
       SELECT * FROM codex_chat_messages WHERE thread_id = ? ORDER BY id
     `).all(threadId) as StoredMessageRow[]
-    return rows.map((row) => ({ ...row, tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives), flags: parseFlagSnapshots(row.flags), attachments: attachments.get(row.id) ?? [] }))
+    return rows.map(({ media_attachments, ...row }) => ({ ...row, mediaAttachments: parseChatMediaAttachments(media_attachments), tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives), flags: parseFlagSnapshots(row.flags), attachments: attachments.get(row.id) ?? [] }))
+  },
+
+  latestMessageId(threadId: number) {
+    const row = getUserSettingsDb().prepare('SELECT id FROM codex_chat_messages WHERE thread_id = ? ORDER BY id DESC LIMIT 1').get(threadId) as { id: number } | undefined
+    return row?.id ?? null
   },
 
   truncateAfter(threadId: number, messageId: number) {
@@ -271,7 +285,7 @@ export const CodexChatStore = {
     const db = getUserSettingsDb()
     db.transaction(() => {
       removeMessagesAfter(threadId, 0)
-      db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL,
+      db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL, block_edits = NULL,
         codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
       if (greeting) CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: greeting, tool_calls: [], status: 'completed', error: null })
     }).immediate()
@@ -283,10 +297,10 @@ export const CodexChatStore = {
       const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
       if (!row) throw new Error('Assistant message not found')
       const alternatives = parseAlternatives(row.alternatives)
-      if (!alternatives.length) alternatives.push({ content: row.content, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error })
+      if (!alternatives.length) alternatives.push({ content: row.content, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error, finish_reason: row.finish_reason ?? null })
       alternatives.push(alternative)
-      db.prepare(`UPDATE codex_chat_messages SET alternatives = ?, active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ? WHERE id = ?`)
-        .run(JSON.stringify(alternatives), alternatives.length - 1, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, messageId)
+      db.prepare(`UPDATE codex_chat_messages SET alternatives = ?, active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?`)
+        .run(JSON.stringify(alternatives), alternatives.length - 1, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
       invalidateContext(threadId, messageId)
     }).immediate()
   },
@@ -297,20 +311,20 @@ export const CodexChatStore = {
       const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
       const alternative = row ? parseAlternatives(row.alternatives)[index] : undefined
       if (!alternative) throw new Error('Alternative not found')
-      db.prepare('UPDATE codex_chat_messages SET active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ? WHERE id = ?')
-        .run(index, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, messageId)
+      db.prepare('UPDATE codex_chat_messages SET active_alternative = ?, content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?')
+        .run(index, alternative.content, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
       invalidateContext(threadId, messageId)
     }).immediate()
   },
 
-  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error' | 'flags'> & { speaker_profile_id?: number | null }, fileIds: string[] = []) {
+  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = []) {
     const db = getUserSettingsDb()
     return db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
       if (!thread) throw new Error('Chat thread not found')
       const attachments = FileStoreService.validateAttachments(fileOwnerKey(thread.account_id), fileIds)
       const result = db.prepare(`
-        INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error, speaker_profile_id, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error, speaker_profile_id, flags, finish_reason, media_attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         message.thread_id,
         message.role,
@@ -320,6 +334,8 @@ export const CodexChatStore = {
         message.error,
         message.speaker_profile_id ?? null,
         message.flags?.length ? JSON.stringify(message.flags) : null,
+        message.finish_reason ?? null,
+        message.mediaAttachments?.length ? JSON.stringify(message.mediaAttachments) : null,
       )
       for (const file of attachments) db.prepare('INSERT INTO chat_file_attachments (message_id, file_id) VALUES (?, ?)').run(result.lastInsertRowid, file.id)
       CodexChatStore.touchThread(message.thread_id)

@@ -7,12 +7,16 @@ import type { CodexChatMediaInfo, CodexChatMessage } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import type { ChatAppearance } from './chat-appearance'
 import { ChatFileLinks } from './chat-attachments'
+import { ChatReferenceChips } from './chat-reference'
 import { ChatMessageFlags } from './chat-flags'
 import type { CodexChatLiveTurn } from './codex-chat-context'
-import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker } from './codex-chat-message'
+import { ChatMessageIdContext } from './chat-display-block'
+import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker, type ChatUserSpeaker } from './codex-chat-message'
 
 type MessageLook = {
   speaker: ChatSpeaker | null
+  /** The chat's user profile, shown on the user's own messages (null: no name or picture). */
+  userSpeaker?: ChatUserSpeaker | null
   /** The reader's chat appearance (sizes, bubbles, names, time…). */
   appearance: ChatAppearance
   /** Group rooms: who wrote a reply (its speaker), instead of the chat's one speaker. */
@@ -37,7 +41,7 @@ function ChatMessageEditor({ message, busy, onSave, onCancel }: {
 }) {
   const { t } = useI18n()
   const [content, setContent] = useState(message.content)
-  const save = () => { if (!busy && (content.trim() || message.attachments?.length)) void onSave(message.id, content).then((accepted) => { if (accepted) onCancel() }) }
+  const save = () => { if (!busy && (content.trim() || message.attachments?.length || message.mediaAttachments?.length)) void onSave(message.id, content).then((accepted) => { if (accepted) onCancel() }) }
   return <div className="ml-auto w-full max-w-[85%] space-y-1">
     <Textarea autoFocus value={content} disabled={busy} rows={4} aria-label={t({ ko: '메시지 수정', en: 'Edit message' })} onChange={(event) => setContent(event.target.value)} onKeyDown={(event) => {
       if (event.nativeEvent.isComposing) return
@@ -46,12 +50,12 @@ function ChatMessageEditor({ message, busy, onSave, onCancel }: {
     }} />
     <div className="flex justify-end gap-1">
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '취소', en: 'Cancel' })} disabled={busy} onClick={onCancel}><X /></IconButton>
-      <IconButton size="icon-xs" variant="ghost" label={t({ ko: '저장하고 다시 생성', en: 'Save and regenerate' })} disabled={busy || (!content.trim() && !message.attachments?.length)} onClick={save}><Check /></IconButton>
+      <IconButton size="icon-xs" variant="ghost" label={t({ ko: '저장하고 다시 생성', en: 'Save and regenerate' })} disabled={busy || (!content.trim() && !message.attachments?.length && !message.mediaAttachments?.length)} onClick={save}><Check /></IconButton>
     </div>
   </div>
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, actions, speakerOf, mentions, ...look }: MessageLook & {
+const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, actions, speakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
   message: CodexChatMessage; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
 }) {
   const { t } = useI18n()
@@ -63,8 +67,8 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : message.content && <CodexChatUserMessage content={message.content} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} />}<ChatFileLinks files={message.attachments} /><ChatMessageFlags flags={message.flags} /></>
-      : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} />}
+        : message.content && <CodexChatUserMessage content={message.content} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
+      : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
     {actions.canRewrite && (isUser || lastReply) && actions.editingId !== message.id ? (
       <div className={cn('mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
         {isUser
@@ -101,10 +105,11 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, fla
   </>
 })
 
-export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, mentions, ...look }: MessageLook & { turn: CodexChatLiveTurn }) {
+export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, mentions, userSpeaker = null, ...look }: MessageLook & { turn: CodexChatLiveTurn }) {
   return <>
-    {turn.userText && <CodexChatUserMessage content={turn.userText} mentions={mentions} appearance={look.appearance} />}
+    {turn.userText && <CodexChatUserMessage content={turn.userText} mentions={mentions} appearance={look.appearance} speaker={userSpeaker} />}
     <ChatFileLinks files={turn.attachments} />
+    <ChatReferenceChips items={turn.mediaAttachments} threadId={turn.threadId} />
     <ChatMessageFlags flags={turn.flags} />
     {/* Group rooms: one bubble per member answering now; none between members. */}
     {turn.replies

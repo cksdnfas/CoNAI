@@ -8,7 +8,7 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { chatAssetUrl, chatEmoticonUrl, type ChatDisplayBlock } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
-import { ChatDisplayBlockView, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
+import { BlockChangeChips, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 
 const PREVIEWABLE_LANGUAGES = new Set(['html', 'htm', 'svg', 'xml'])
 
@@ -73,11 +73,11 @@ function CodeBlock({ language, code }: { language: string | null; code: string }
   )
 }
 
-/** A fenced block: the profile's display block when its name matches and the values parse, else plain code. */
+/** A fenced block: the chips of a display block update when its name matches and the values parse, else plain code. */
 function FencedBlock({ language, code }: { language: string | null; code: string }) {
   const block = useChatDisplayBlock(language)
   const data = block ? parseBlockPayload(code) : null
-  return block && data ? <ChatDisplayBlockView block={block} data={data} /> : <CodeBlock language={language} code={code} />
+  return block && data ? <BlockChangeChips blockKey={block.key} data={data} /> : <CodeBlock language={language} code={code} />
 }
 
 /** The profile's emoticons for this reply: keyword (lower case) → image, and whose emoticon route serves them. */

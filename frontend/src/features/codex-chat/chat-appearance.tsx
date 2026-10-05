@@ -673,9 +673,9 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
                       choices={[{ value: 'sm', label: small }, { value: 'md', label: medium }, { value: 'lg', label: large }]} />
                   </AppearanceRow>
                 </AppearanceGroup>
-                <AppearanceGroup title={t({ ko: '답변 이미지', en: 'Reply images' })}>
+                <AppearanceGroup title={t({ ko: '생성 이미지', en: 'Generated images' })}>
                   <AppearanceRow label={t({ ko: '크기', en: 'Size' })}>
-                    <CompactChoice label={t({ ko: '답변 이미지 크기', en: 'Reply image size' })} value={appearance.imageSize} onChange={(imageSize) => update({ imageSize })}
+                    <CompactChoice label={t({ ko: '생성 이미지 크기', en: 'Generated image size' })} value={appearance.imageSize} onChange={(imageSize) => update({ imageSize })}
                       choices={[{ value: 'sm', label: small }, { value: 'md', label: medium }, { value: 'full', label: t({ ko: '채팅 너비', en: 'Full width' }) }]} />
                   </AppearanceRow>
                   <AppearanceRow label={t({ ko: '여러 장', en: 'Several' })}>

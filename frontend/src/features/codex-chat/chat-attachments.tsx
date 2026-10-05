@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { EyeOff, File, FolderOpen, Paperclip, Upload, X } from 'lucide-react'
+import { EyeOff, File, FolderOpen, Images, Paperclip, Upload, X } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -11,48 +11,51 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { formatFileSize, storedFileDownloadUrl } from '@/lib/api-files'
 import type { CodexChatApi } from './codex-chat-context'
+import { ChatMediaAttachments, ChatMediaPicker } from './chat-media-picker'
 
-/** Paperclip in the composer: upload new files (with `files.manage`) or pick from the file store. */
+/** Paperclip in the composer: upload, private stored files, or references to app media. */
 export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disabled: boolean }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
   const input = useRef<HTMLInputElement>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
   const permissions = auth.data?.permissionKeys ?? []
-  if (!permissions.includes('page.files.view')) return null
-  const canUpload = permissions.includes('files.manage')
+  const canPickFiles = permissions.includes('page.files.view')
+  const canPickMedia = permissions.includes('page.home.view') || permissions.includes('page.image-detail.view')
+  if (!canPickFiles && !canPickMedia) return null
+  const canUpload = canPickFiles && permissions.includes('files.manage')
   const label = t({ ko: '파일 첨부', en: 'Attach files' })
   const isDisabled = disabled || chat.attachmentsUploading
 
   return (
     <>
       <input ref={input} type="file" multiple className="hidden" onChange={(event) => { void chat.uploadAttachments(Array.from(event.target.files ?? [])); event.target.value = '' }} />
-      {canUpload ? (
-        <DropdownMenu>
-          <Tip content={label}>
-            <DropdownMenuTrigger asChild>
-              <IconButton variant="ghost" size="icon-sm" className="rounded-full" disabled={isDisabled} label={label} tooltip={false}>
-                <Paperclip />
-              </IconButton>
-            </DropdownMenuTrigger>
-          </Tip>
-          <DropdownMenuContent align="start" side="top">
-            <DropdownMenuItem onSelect={() => input.current?.click()}>
-              <Upload />
-              {t({ ko: '새 파일 올리기', en: 'Upload new files' })}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setPickerOpen(true)}>
-              <FolderOpen />
-              {t({ ko: '보관함에서 고르기', en: 'Choose from files' })}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <IconButton variant="ghost" size="icon-sm" className="rounded-full" disabled={isDisabled} label={label} onClick={() => setPickerOpen(true)}>
-          <Paperclip />
-        </IconButton>
-      )}
+      <DropdownMenu>
+        <Tip content={label}>
+          <DropdownMenuTrigger asChild>
+            <IconButton variant="ghost" size="icon-sm" className="rounded-full" disabled={isDisabled} label={label} tooltip={false}>
+              <Paperclip />
+            </IconButton>
+          </DropdownMenuTrigger>
+        </Tip>
+        <DropdownMenuContent align="start" side="top">
+          {canUpload ? <DropdownMenuItem onSelect={() => input.current?.click()}>
+            <Upload />
+            {t({ ko: '새 파일 올리기', en: 'Upload new files' })}
+          </DropdownMenuItem> : null}
+          {canPickFiles ? <DropdownMenuItem onSelect={() => setPickerOpen(true)}>
+            <FolderOpen />
+            {t({ ko: '보관함에서 고르기', en: 'Choose from files' })}
+          </DropdownMenuItem> : null}
+          {canPickMedia ? <DropdownMenuItem onSelect={() => setMediaPickerOpen(true)}>
+            <Images />
+            {t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })}
+          </DropdownMenuItem> : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {pickerOpen ? <FilePicker onClose={() => setPickerOpen(false)} onPick={(entries) => { chat.addAttachments(entries); setPickerOpen(false) }} /> : null}
+      {mediaPickerOpen ? <ChatMediaPicker initial={chat.draftMediaAttachments} maxCount={20 - chat.draftAttachments.length} onClose={() => setMediaPickerOpen(false)} onPick={(items) => { if (chat.setMediaAttachments(items)) setMediaPickerOpen(false) }} /> : null}
     </>
   )
 }
@@ -60,28 +63,31 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
 /** Files attached to the message being written; shown only while there are some (or an upload runs). */
 export function ChatDraftAttachments({ chat, disabled, canReadText }: { chat: CodexChatApi; disabled: boolean; canReadText: boolean }) {
   const { t } = useI18n()
-  if (chat.draftAttachments.length === 0 && !chat.attachmentsUploading) return null
+  if (chat.draftAttachments.length === 0 && chat.draftMediaAttachments.length === 0 && !chat.attachmentsUploading) return null
 
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-1.5">
-      {chat.draftAttachments.map((file) => (
-        <span key={file.id} className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-sm bg-surface-high pl-2 text-xs">
-          <File className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="max-w-48 truncate" title={file.name}>{file.name}</span>
-          <IconButton variant="ghost" size="icon-xs" disabled={disabled} label={t({ ko: '첨부 빼기', en: 'Remove' })} onClick={() => chat.removeAttachment(file.id)}>
-            <X />
-          </IconButton>
-        </span>
-      ))}
-      {chat.attachmentsUploading ? <Spinner size="sm" label={t({ ko: '업로드 중', en: 'Uploading' })} /> : null}
-      {!canReadText && chat.draftAttachments.length > 0 ? (
-        <Tip content={t({ ko: '이 프로필은 첨부 파일 내용을 읽지 못해', en: 'This profile cannot read attached files' })}>
-          <span className="inline-flex size-7 items-center justify-center text-muted-foreground" aria-label={t({ ko: '이 프로필은 첨부 파일 내용을 읽지 못해', en: 'This profile cannot read attached files' })}>
-            <EyeOff className="size-3.5" />
+    <>
+      <ChatMediaAttachments items={chat.draftMediaAttachments} onRemove={chat.removeMediaAttachment} disabled={disabled} />
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        {chat.draftAttachments.map((file) => (
+          <span key={file.id} className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-sm bg-surface-high pl-2 text-xs">
+            <File className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="max-w-48 truncate" title={file.name}>{file.name}</span>
+            <IconButton variant="ghost" size="icon-xs" disabled={disabled} label={t({ ko: '첨부 빼기', en: 'Remove' })} onClick={() => chat.removeAttachment(file.id)}>
+              <X />
+            </IconButton>
           </span>
-        </Tip>
-      ) : null}
-    </div>
+        ))}
+        {chat.attachmentsUploading ? <Spinner size="sm" label={t({ ko: '업로드 중', en: 'Uploading' })} /> : null}
+        {!canReadText && chat.draftAttachments.length > 0 ? (
+          <Tip content={t({ ko: '이 프로필은 첨부 파일 내용을 읽지 못해', en: 'This profile cannot read attached files' })}>
+            <span className="inline-flex size-7 items-center justify-center text-muted-foreground" aria-label={t({ ko: '이 프로필은 첨부 파일 내용을 읽지 못해', en: 'This profile cannot read attached files' })}>
+              <EyeOff className="size-3.5" />
+            </span>
+          </Tip>
+        ) : null}
+      </div>
+    </>
   )
 }
 

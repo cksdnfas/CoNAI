@@ -27,11 +27,12 @@ export async function openChatMcpBridge(requester: McpRequester, scopes: ChatSco
 
   return {
     tools: chatTools,
-    async call(name: string, args: Record<string, unknown>): Promise<ChatMcpToolResult> {
+    async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ChatMcpToolResult> {
+      signal?.throwIfAborted()
       if (!toolNames.has(name)) {
         return { isError: true, content: [{ type: 'text', text: `Unknown or not permitted tool: ${name}` }] }
       }
-      return await client.callTool({ name, arguments: args }) as ChatMcpToolResult
+      return await client.callTool({ name, arguments: args }, undefined, { signal }) as ChatMcpToolResult
     },
     async close() {
       await client.close().catch(() => undefined)

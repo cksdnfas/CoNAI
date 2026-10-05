@@ -21,11 +21,13 @@ import {
   updateGroupChat,
   type ChatGroupInfo,
   type ChatProfileSummary,
+  type ChatUserProfile,
   type CodexChatThreadDetail,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { ChatUserProfileSelect } from './chat-user-profiles'
 import { EVERYONE_MENTION } from './chat-mentions'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
 
@@ -139,10 +141,12 @@ export type GroupInviteMode = { kind: 'create'; baseProfileId: number } | { kind
  * Pick profiles for a group room. From a direct chat (`create`), that chat's profile stays checked as the
  * representative and a new room is made; in a room (`add`) the picked profiles join it.
  */
-export function GroupInviteDialog({ open, mode, profiles, onClose, onCreated }: {
+export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onClose, onCreated }: {
   open: boolean
   mode: GroupInviteMode | null
   profiles: ChatProfileSummary[]
+  /** The account's user profiles; with two or more, a new room asks which one the user is (the default preselected). */
+  userProfiles?: ChatUserProfile[]
   onClose: () => void
   onCreated: (threadId: number) => void
 }) {
@@ -152,14 +156,16 @@ export function GroupInviteDialog({ open, mode, profiles, onClose, onCreated }: 
   const [picked, setPicked] = useState<number[]>([])
   const [title, setTitle] = useState('')
   const [titleEdited, setTitleEdited] = useState(false)
+  const [userProfileId, setUserProfileId] = useState<number | null>(null)
 
   useEffect(() => {
     if (open) {
       setPicked([])
       setTitle('')
       setTitleEdited(false)
+      setUserProfileId(userProfiles.find((profile) => profile.isDefault)?.id ?? (userProfiles.length === 1 ? userProfiles[0].id : null))
     }
-  }, [open, mode])
+  }, [open, mode, userProfiles])
 
   const fixedIds = mode?.kind === 'create' ? [mode.baseProfileId] : mode?.memberIds ?? []
   const base = mode?.kind === 'create' ? profiles.find((profile) => profile.id === mode.baseProfileId) ?? null : null
@@ -171,7 +177,7 @@ export function GroupInviteDialog({ open, mode, profiles, onClose, onCreated }: 
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (mode?.kind === 'create') return (await createGroupChat({ profileIds: [mode.baseProfileId, ...picked], representativeId: mode.baseProfileId, title: (titleEdited ? title : defaultTitle).trim() || undefined })).id
+      if (mode?.kind === 'create') return (await createGroupChat({ profileIds: [mode.baseProfileId, ...picked], representativeId: mode.baseProfileId, title: (titleEdited ? title : defaultTitle).trim() || undefined, userProfileId })).id
       if (mode?.kind === 'add') {
         queryClient.setQueryData(codexChatThreadQueryKey(mode.threadId), await addGroupChatMembers(mode.threadId, picked))
         return mode.threadId
@@ -219,6 +225,11 @@ export function GroupInviteDialog({ open, mode, profiles, onClose, onCreated }: 
         {mode?.kind === 'create' ? (
           <Field label={t({ ko: '방 이름', en: 'Room name' })}>
             <Input variant="settings" maxLength={60} value={titleEdited ? title : defaultTitle} onChange={(event) => { setTitle(event.target.value); setTitleEdited(true) }} />
+          </Field>
+        ) : null}
+        {mode?.kind === 'create' && userProfiles.length >= 2 ? (
+          <Field label={t({ ko: '사용자 프로필', en: 'User profile' })}>
+            <ChatUserProfileSelect value={userProfileId} profiles={userProfiles} onChange={setUserProfileId} ariaLabel={t({ ko: '사용자 프로필', en: 'User profile' })} />
           </Field>
         ) : null}
       </ModalBody>

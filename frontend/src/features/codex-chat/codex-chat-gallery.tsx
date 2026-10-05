@@ -14,6 +14,7 @@ import { getCodexChatThreadMedia, type CodexChatMediaItem } from '@/lib/api-code
 import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
+import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { codexChatMediaQueryKey, useCodexChat } from './codex-chat-context'
 
 type GalleryFilter = 'all' | 'generated' | 'found'
@@ -46,12 +47,12 @@ function GalleryTile({ entry, showFoundMark, onOpen }: { entry: GalleryEntry; sh
   const aspectRatio = media.width && media.height ? `${media.width} / ${media.height}` : undefined
 
   return (
-    <>
+    <ChatThumbOverlay className="mb-1 break-inside-avoid" actions={<ChatReferenceButton compositeHash={media.compositeHash} mimeType={media.mimeType} size="icon-xs" />}>
       {/* eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control; Button padding/height would crop it */}
       <button
         type="button"
         aria-label={t({ ko: '크게 보기', en: 'View larger' })}
-        className="relative mb-1 block w-full cursor-zoom-in break-inside-avoid overflow-hidden rounded-sm bg-surface-high outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className="relative block w-full cursor-zoom-in overflow-hidden rounded-sm bg-surface-high outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
         style={{ aspectRatio }}
         onClick={onOpen}
         {...hoverPreview.triggerProps}
@@ -68,7 +69,7 @@ function GalleryTile({ entry, showFoundMark, onOpen }: { entry: GalleryEntry; sh
         ) : null}
       </button>
       {hoverPreview.preview}
-    </>
+    </ChatThumbOverlay>
   )
 }
 
@@ -169,20 +170,25 @@ export function CodexChatGallery({ threadId, columns }: { threadId: number; colu
         index={lightboxIndex}
         onIndexChange={setLightboxIndex}
         onClose={() => setLightboxIndex(null)}
-        renderActions={(_item, index) => {
+        renderActions={(item, index) => {
           const messageId = entries[index]?.media.messageId
-          return messageId !== undefined && chat ? (
-            <IconButton
-              variant="overlay"
-              label={t({ ko: '메시지로 이동', en: 'Go to message' })}
-              onClick={() => {
-                setLightboxIndex(null)
-                chat.focusMessage(messageId)
-              }}
-            >
-              <CornerDownLeft />
-            </IconButton>
-          ) : null
+          return (
+            <>
+              <ChatReferenceButton compositeHash={item.composite_hash} mimeType={item.mime_type ?? null} />
+              {messageId !== undefined && chat ? (
+                <IconButton
+                  variant="overlay"
+                  label={t({ ko: '메시지로 이동', en: 'Go to message' })}
+                  onClick={() => {
+                    setLightboxIndex(null)
+                    chat.focusMessage(messageId)
+                  }}
+                >
+                  <CornerDownLeft />
+                </IconButton>
+              ) : null}
+            </>
+          )
         }}
       />
     </div>

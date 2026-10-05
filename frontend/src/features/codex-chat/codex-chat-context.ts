@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { ChatFlagSnapshot, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatFlagSnapshot, ChatMediaAttachment, CodexChatToolCall } from '@/lib/api-codex-chat'
 import type { StoredFileEntry } from '@conai/shared'
 
 export const CODEX_CHAT_ROUTE = '/chat'
@@ -27,6 +27,7 @@ export type CodexChatLiveReply = {
 export type CodexChatLiveTurn = {
   replacingMessageId?: number
   attachments: StoredFileEntry[]
+  mediaAttachments: ChatMediaAttachment[]
   threadId: number
   userText: string
   /** The chat flags on for the message being sent (shown under it until it is stored). */
@@ -54,12 +55,22 @@ export interface CodexChatApi {
   selectedThreadId: number | null | undefined
   selectThread: (threadId: number | null | undefined) => void
   /** Create a chat with a profile (its greeting arrives as the first message) and open it. */
-  startChat: (profileId: number) => Promise<void>
+  /** `userProfileId` left out: the default user profile; null: the plain user. */
+  startChat: (profileId: number, userProfileId?: number | null) => Promise<void>
   isStartingChat: boolean
   draft: string
   setDraft: (draft: string | ((current: string) => string)) => void
+  /** Items chosen in the status panel (`data-pick`), sent with the next message. */
+  picks: string[]
+  togglePick: (label: string) => void
+  removePick: (label: string) => void
   liveTurn: CodexChatLiveTurn | null
   draftAttachments: StoredFileEntry[]
+  draftMediaAttachments: ChatMediaAttachment[]
+  setMediaAttachments: (items: ChatMediaAttachment[]) => boolean
+  removeMediaAttachment: (hash: string) => void
+  /** "참조" on an image in the transcript: attach it to the next message, or detach it when it already is. */
+  toggleMediaAttachment: (item: ChatMediaAttachment) => void
   attachmentsUploading: boolean
   addAttachments: (files: StoredFileEntry[]) => void
   removeAttachment: (id: string) => void
@@ -77,6 +88,22 @@ export interface CodexChatApi {
 }
 
 export const CodexChatContext = createContext<CodexChatApi | null>(null)
+
+/**
+ * The slice the transcript's thumbnails and reference chips need. Separate from `CodexChatApi` so they do not
+ * re-render on every composer keystroke (the full API changes with `draft`).
+ */
+export type CodexChatReferenceApi = {
+  draftMediaAttachments: ChatMediaAttachment[]
+  toggleMediaAttachment: (item: ChatMediaAttachment) => void
+  focusMessage: (messageId: number) => void
+}
+
+export const CodexChatReferenceContext = createContext<CodexChatReferenceApi | null>(null)
+
+export function useCodexChatReference() {
+  return useContext(CodexChatReferenceContext)
+}
 
 export function useCodexChat() {
   return useContext(CodexChatContext)
