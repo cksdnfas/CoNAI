@@ -41,7 +41,7 @@ export function ChatProfileToolsAdvanced({ open, scopes, allowlist, isLlm, maxTo
 
   return (
     <CollapsibleRow
-      title={t({ ko: '고급 설정', en: 'Advanced' })}
+      title={t({ ko: '고급', en: 'Advanced' })}
       meta={allowlist !== null ? t({ ko: '도구 {count}개 선택', en: '{count} tools picked' }, { count: selected.length }) : null}
     >
       <div className="flex min-h-10 items-center justify-between gap-3 text-sm">
