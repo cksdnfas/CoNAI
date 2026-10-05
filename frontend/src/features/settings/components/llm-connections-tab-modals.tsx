@@ -201,6 +201,14 @@ function LlmConnectionFormFields({
         />
       </Field>
 
+      {draft.providerType === 'llm_openai_compatible' ? (
+        <SettingsSwitchRow
+          className="md:col-span-2"
+          checked={draft.promptCacheMarks}
+          onCheckedChange={(checked) => onChange({ promptCacheMarks: checked })}
+          label={t({ ko: '프롬프트 캐시 표시 (Anthropic 경유)', en: 'Prompt cache marks (Anthropic via proxy)' })}
+        />
+      ) : null}
       <SettingsSwitchRow
         className="md:col-span-2"
         checked={draft.isEnabled}

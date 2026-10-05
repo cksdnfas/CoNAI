@@ -24,7 +24,12 @@ export type ChatCompletionTarget = {
   model: string
   /** What the request asks for; unset options are not sent. */
   generation: LlmGenerationOptions
+  /** Put `cache_control` breakpoints on the stable parts of the request (Anthropic through LiteLLM; off by default). */
+  promptCacheMarks: boolean
 }
+
+/** How conversation-time reference material (keyword lore, author's note) starts, in both engines' inputs. */
+export const REFERENCE_BLOCK_START = '[참고 설정]'
 
 export type ChatCompletionResult = {
   content: string
@@ -101,6 +106,7 @@ export function resolveChatCompletionTarget(providerName: string, overrides: { m
     apiKey,
     model,
     generation: overrides.generation ?? {},
+    promptCacheMarks: readLlmConnectionConfig(config).promptCacheMarks,
   }
 }
 
@@ -128,8 +134,48 @@ function buildHeaders(target: ChatCompletionTarget) {
   return headers
 }
 
+function textOf(content: ChatCompletionMessage['content']) {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) return content.find((part): part is Extract<ChatContentPart, { type: 'text' }> => part.type === 'text')?.text ?? ''
+  return ''
+}
+
+/** The index of the nearest system or user message at or before `index` (Anthropic takes cache marks on those), or -1. */
+function markableAtOrBefore(messages: ChatCompletionMessage[], index: number) {
+  for (let cursor = Math.min(index, messages.length - 1); cursor >= 0; cursor -= 1) {
+    const role = messages[cursor].role
+    if (role === 'system' || role === 'user') return cursor
+  }
+  return -1
+}
+
+/**
+ * Anthropic caches nothing by itself: a request names up to four breakpoints and the longest already-seen prefix
+ * ending at one of them is read from cache. Marked here: the system prompt, the message before the one carrying the
+ * reference block (everything up to there survives the block moving), and the message before the latest user message
+ * (so the tool-call rounds of one reply reuse each other). Marked content becomes text parts carrying `cache_control`.
+ */
+export function markCacheBreakpoints(messages: ChatCompletionMessage[]): unknown[] {
+  const wanted = new Set<number>()
+  const system = messages.findIndex((message) => message.role === 'system')
+  if (system >= 0) wanted.add(system)
+  const reference = messages.findIndex((message) => message.role === 'user' && textOf(message.content).startsWith(REFERENCE_BLOCK_START))
+  if (reference > 0) wanted.add(markableAtOrBefore(messages, reference - 1))
+  const lastUser = messages.map((message) => message.role).lastIndexOf('user')
+  if (lastUser > 0) wanted.add(markableAtOrBefore(messages, lastUser - 1))
+  wanted.delete(-1)
+  return messages.map((message, index) => {
+    if (!wanted.has(index) || (message.role !== 'system' && message.role !== 'user')) return message
+    const parts: unknown[] = typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : [...message.content]
+    const last = parts[parts.length - 1] as Record<string, unknown> | undefined
+    if (!last || last.type !== 'text') return message
+    parts[parts.length - 1] = { ...last, cache_control: { type: 'ephemeral' } }
+    return { ...message, content: parts }
+  })
+}
+
 function buildBody(target: ChatCompletionTarget, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], stream: boolean) {
-  const body: Record<string, unknown> = { ...buildOpenAiGenerationFields(target.generation), model: target.model, messages, stream }
+  const body: Record<string, unknown> = { ...buildOpenAiGenerationFields(target.generation), model: target.model, messages: target.promptCacheMarks ? markCacheBreakpoints(messages) : messages, stream }
   if (tools.length > 0) {
     body.tools = tools
   }
@@ -208,6 +254,11 @@ export async function streamChatCompletion(params: {
     })
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
+      // A server that does not know cache_control rejects the whole request; the marks are an optimization, so retry without them.
+      if (response.status === 400 && params.target.promptCacheMarks && !signal.aborted) {
+        console.warn(`[llm-chat] ${params.target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
+        return streamChatCompletion({ ...params, target: { ...params.target, promptCacheMarks: false } })
+      }
       throw new LlmRequestError(`LLM 요청 실패 (${response.status}): ${errorText.slice(0, 500) || response.statusText}`, response.status)
     }
     if (!response.body || !(response.headers.get('content-type') ?? '').includes('text/event-stream')) {

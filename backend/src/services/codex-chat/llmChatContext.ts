@@ -6,7 +6,7 @@ import { chatContentWithAttachments } from './chatAttachments'
 import { selectLoreEntries, type SelectedLore } from './chatLorebook'
 import { buildFlagDirective } from './chatFlags'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
-import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
+import { completeChat, REFERENCE_BLOCK_START, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
 
 /** Tool output replayed to the model for turns still in the window. */
 const REPLAYED_TOOL_OUTPUT_LENGTH = 4000
@@ -268,7 +268,7 @@ export function loreBlock(lore: Pick<SelectedLore, 'keyed'>) {
 /** Conversation-time reference material (`[참고 설정]`), the same marks for both engines. */
 export function referenceBlock(parts: string[]) {
   const body = parts.map((part) => part.trim()).filter(Boolean).join('\n\n')
-  return body ? `[참고 설정]\n${body}\n[/참고 설정]` : ''
+  return body ? `${REFERENCE_BLOCK_START}\n${body}\n[/참고 설정]` : ''
 }
 
 export type AuthorNote = { text: string; depth: number }

@@ -14,6 +14,8 @@ export type LlmConnectionDraft = {
   /** Requests the server answers at once; group rooms let that many members on this connection answer together. */
   concurrentRequests: string
   apiKey: string
+  /** Put cache_control breakpoints on requests (Anthropic models behind LiteLLM); other servers ignore or reject them. */
+  promptCacheMarks: boolean
   isEnabled: boolean
 }
 
@@ -125,6 +127,7 @@ export function buildEmptyDraft(): LlmConnectionDraft {
     timeoutSeconds: '',
     concurrentRequests: '1',
     apiKey: '',
+    promptCacheMarks: false,
     isEnabled: true,
   }
 }
@@ -139,6 +142,7 @@ export function buildProviderDraft(provider: ExternalApiProviderRecord): LlmConn
     timeoutSeconds: readTimeoutSeconds(provider),
     concurrentRequests: readConcurrentRequests(provider),
     apiKey: '',
+    promptCacheMarks: provider.additional_config?.prompt_cache_marks === true,
     isEnabled: provider.is_enabled,
   }
 }
@@ -189,6 +193,7 @@ export function buildAdditionalConfig(draft: LlmConnectionDraft, baseConfig?: Re
     default_model: draft.defaultModel || undefined,
     request_timeout_ms: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : undefined,
     max_concurrent_requests: Number.isFinite(concurrent) && concurrent > 1 ? concurrent : undefined,
+    prompt_cache_marks: draft.promptCacheMarks || undefined,
   }
 }
 

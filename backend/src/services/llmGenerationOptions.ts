@@ -62,6 +62,8 @@ export function readLlmConnectionConfig(additionalConfig: unknown) {
     timeoutMs: timeoutMs === null ? null : Math.floor(timeoutMs),
     /** Requests the server answers at once (a proxy over several servers takes more); group rooms run that many members together. */
     maxConcurrentRequests: concurrent === null ? 1 : Math.min(Math.floor(concurrent), LLM_MAX_CONCURRENT_REQUESTS),
+    /** Mark cache breakpoints (`cache_control`) on the stable parts of each request — for Anthropic models behind a proxy such as LiteLLM. */
+    promptCacheMarks: config.prompt_cache_marks === true,
   }
 }
 
