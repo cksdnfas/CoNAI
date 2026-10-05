@@ -114,6 +114,8 @@ function toPublicProfile(profile: ChatProfile) {
     contextTurns: profile.contextTurns,
     summaryEnabled: profile.summaryEnabled,
     style: profile.style,
+    loreDepth: profile.loreDepth,
+    authorNote: profile.authorNote,
     backgroundVersion: backgroundVersionOf(profile),
   }
 }

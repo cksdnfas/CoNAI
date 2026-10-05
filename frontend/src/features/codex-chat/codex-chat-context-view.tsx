@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
@@ -18,11 +18,92 @@ function parseServerDate(value: string) {
   return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`)
 }
 
-/** One LLM chat's context: its turn window and summary switch (both can follow the profile), and the summary itself. */
-export function CodexChatContextView({ thread, profileTurns, profileSummaryEnabled }: {
+const NOTE_SAVE_DELAY_MS = 600
+
+/** What a chat's note falls back to: the profile's default note and depth. Group rooms have none (each member has its own). */
+export type AuthorNoteDefaults = { note: string; depth: number | null }
+
+/**
+ * The chat's author's note: scene direction the model gets on every request, merged into the conversation `depth`
+ * turns before the end. Empty text falls back to the profile's default note, an empty depth to the profile's lore
+ * depth. The text saves by itself shortly after typing stops.
+ */
+export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread; defaults: AuthorNoteDefaults }) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const stored = thread.author_note ?? ''
+  const [draft, setDraft] = useState(stored)
+  const latest = useRef({ draft: stored, stored })
+  latest.current = { draft, stored }
+
+  useEffect(() => {
+    setDraft(stored)
+  }, [stored])
+
+  const mutation = useMutation({
+    mutationFn: (patch: { authorNote?: string | null; authorNoteDepth?: number | null }) => updateCodexChatThreadContext(thread.id, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+  const { mutate } = mutation
+
+  useEffect(() => {
+    if (draft.trim() === stored.trim()) return
+    const timer = window.setTimeout(() => mutate({ authorNote: draft.trim() || null }), NOTE_SAVE_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [draft, stored, mutate])
+
+  // Leaving the view before the delay still saves what was typed.
+  useEffect(() => () => {
+    const { draft: text, stored: saved } = latest.current
+    if (text.trim() !== saved.trim()) mutate({ authorNote: text.trim() || null })
+  }, [mutate])
+
+  const profileLabel = t({ ko: '프로필', en: 'Profile' })
+  return (
+    <div className="flex flex-col gap-2 border-b border-line py-2.5">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <label htmlFor={`author-note-${thread.id}`} className="text-sm">{t({ ko: '작가 노트', en: "Author's note" })}</label>
+        <NumberStepperInput
+          allowEmpty
+          step={1}
+          min={0}
+          max={20}
+          className="w-44"
+          value={thread.author_note_depth ?? null}
+          placeholder={defaults.depth !== null ? t({ ko: '{label} ({depth}턴 앞)', en: '{label} ({depth} turns back)' }, { label: profileLabel, depth: defaults.depth }) : profileLabel}
+          onValueCommit={(value) => mutate({ authorNoteDepth: value.trim() === '' ? null : Number(value) })}
+          aria-label={t({ ko: '작가 노트 위치 (끝에서 몇 턴 앞)', en: "Author's note depth (turns from the end)" })}
+        />
+      </div>
+      <Textarea
+        id={`author-note-${thread.id}`}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        rows={3}
+        className="text-sm leading-relaxed"
+        placeholder={defaults.note || t({ ko: '작가 노트', en: "Author's note" })}
+      />
+    </div>
+  )
+}
+
+/** A group room's context: only the room's author's note (members keep their own windows and memories). */
+export function GroupContextView({ thread }: { thread: CodexChatThread }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+      <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
+    </div>
+  )
+}
+
+/** One LLM chat's context: its author's note, turn window and summary switch (both can follow the profile), and the summary itself. */
+export function CodexChatContextView({ thread, profileTurns, profileSummaryEnabled, noteDefaults }: {
   thread: CodexChatThread
   profileTurns: number | null
   profileSummaryEnabled: boolean | null
+  noteDefaults: AuthorNoteDefaults
 }) {
   const { t, formatDateTime } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -52,6 +133,7 @@ export function CodexChatContextView({ thread, profileTurns, profileSummaryEnabl
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+      <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>
         <NumberStepperInput
           allowEmpty
@@ -104,8 +186,8 @@ export function CodexChatContextView({ thread, profileTurns, profileSummaryEnabl
   )
 }
 
-/** One Codex chat's memory as Codex reports it: how full it is, what it has used, and folding it now. */
-export function CodexEngineContextView({ thread, compactTokens }: { thread: CodexChatThread; compactTokens: number | null }) {
+/** One Codex chat's context: its author's note, then its memory as Codex reports it (how full, what it used) and folding it now. */
+export function CodexEngineContextView({ thread, compactTokens, noteDefaults }: { thread: CodexChatThread; compactTokens: number | null; noteDefaults: AuthorNoteDefaults }) {
   const { t, formatNumber, formatDateTime } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -119,6 +201,7 @@ export function CodexEngineContextView({ thread, compactTokens }: { thread: Code
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+      <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
         <span className="text-sm tabular-nums">{tokens(thread.codex_context_tokens)} / {tokens(compactTokens)}</span>
       </SettingRow>

@@ -92,6 +92,9 @@ export interface ChatProfileSummary {
   /** Context defaults a chat can override (LLM profiles). */
   contextTurns: number
   summaryEnabled: boolean
+  /** Where keyword lore and the author's note go (turns before the end), and the default note a chat falls back to. */
+  loreDepth: number
+  authorNote: string
   style: ChatStyle
   /** Null: no background image. Otherwise part of the image URL, so it changes with the image. */
   backgroundVersion: string | null

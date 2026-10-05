@@ -6,6 +6,7 @@ export const CHAT_COMMANDS = [
   { name: 'new', label: { ko: '새 채팅', en: 'New chat' }, argument: true },
   { name: 'clear', label: { ko: '대화 비우기', en: 'Clear chat' } },
   { name: 'compact', label: { ko: '대화 압축', en: 'Compact chat' } },
+  { name: 'note', label: { ko: '작가 노트 바꾸기 (비우면 지움)', en: "Set author's note (empty clears)" }, argument: true },
   { name: 'retry', label: { ko: '마지막 답변 다시 생성', en: 'Regenerate last answer' } },
   { name: 'edit', label: { ko: '마지막 내 메시지 수정', en: 'Edit last message' } },
   { name: 'export', label: { ko: '대화 내보내기', en: 'Export chat' } },

@@ -57,6 +57,12 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
     </>
   )
 
+  const noteField = (
+    <Field label={t({ ko: '기본 작가 노트', en: "Default author's note" })}>
+      <Textarea variant="settings" rows={3} value={draft.authorNote} onChange={(event) => patch({ authorNote: event.target.value })} />
+    </Field>
+  )
+
   return (
     <div className="space-y-4">
       <EditorGroup>
@@ -146,6 +152,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
               </Field>
               {loreFields}
             </div>
+            {noteField}
             <SwitchLine label={t({ ko: '대화 요약', en: 'Conversation summary' })} checked={draft.summaryEnabled} onCheckedChange={(summaryEnabled) => patch({ summaryEnabled })} />
             {draft.summaryEnabled ? (
               <>
@@ -176,6 +183,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
             ) : null}
           </>
         ) : (
+          <>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={t({ ko: '압축 기준 (토큰)', en: 'Compact at (tokens)' })}>
               <NumberStepperInput
@@ -190,6 +198,8 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
             </Field>
             {loreFields}
           </div>
+          {noteField}
+          </>
         )}
       </EditorGroup>
     </div>

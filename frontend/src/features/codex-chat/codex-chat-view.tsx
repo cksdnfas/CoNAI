@@ -57,6 +57,7 @@ import type { ChatEmoticonMap } from './chat-markdown'
 
 const CodexChatContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexChatContextView }))
 const CodexEngineContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexEngineContextView }))
+const GroupContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).GroupContextView }))
 const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
 
 const RUNNING_POLL_MS = 2000
@@ -435,6 +436,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           setEditingMessageId(null)
           await queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(activeThreadId) })
           await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+        } else if (name === 'note') {
+          await updateCodexChatThreadContext(activeThreadId, { authorNote: argument || null })
+          await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(activeThreadId) })
+          showSnackbar({ message: argument ? t({ ko: '작가 노트를 바꿨어.', en: "Author's note updated." }) : t({ ko: '작가 노트를 지웠어.', en: "Author's note cleared." }) })
         } else {
           if (isCodexThread && name !== 'compact') throw new Error(t({ ko: 'API LLM 채팅에서만 쓸 수 있어.', en: 'Available in API LLM chats only.' }))
           if (isGroup && name === 'compact') throw new Error(t({ ko: '그룹 방에서는 쓸 수 없어.', en: 'Not available in group rooms.' }))
@@ -537,7 +542,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger></Tip>
     <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={(event) => { if (appearanceOpenRef.current) { event.preventDefault(); appearanceOpenRef.current = false } }}>
-      {isGroup ? null : <DropdownMenuItem onSelect={() => setView('context')}><SlidersHorizontal />{t({ ko: '컨텍스트', en: 'Context' })}</DropdownMenuItem>}
+      <DropdownMenuItem onSelect={() => setView('context')}><SlidersHorizontal />{t({ ko: '컨텍스트', en: 'Context' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setView('gallery')}><LayoutGrid />{t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
@@ -657,9 +662,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   } else if (activeView === 'gallery') {
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {
-    body = <Suspense fallback={null}>{isCodexThread
-      ? <CodexEngineContextView thread={thread} compactTokens={threadQuery.data?.codexCompactTokens ?? null} />
-      : <CodexChatContextView thread={thread} profileTurns={profile?.contextTurns ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} />}</Suspense>
+    const noteDefaults = { note: profile?.authorNote ?? '', depth: profile?.loreDepth ?? null }
+    body = <Suspense fallback={null}>{isGroup
+      ? <GroupContextView thread={thread} />
+      : isCodexThread
+        ? <CodexEngineContextView thread={thread} compactTokens={threadQuery.data?.codexCompactTokens ?? null} noteDefaults={noteDefaults} />
+        : <CodexChatContextView thread={thread} profileTurns={profile?.contextTurns ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
   } else {
     body = backgroundUrl && profile ? (
       <div className="relative flex min-h-0 flex-1 flex-col">
