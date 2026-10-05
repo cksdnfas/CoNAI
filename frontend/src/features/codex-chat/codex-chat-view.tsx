@@ -34,7 +34,7 @@ import {
 import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
-import { CHAT_APPEARANCE_ICON as AppearanceIcon, ChatAppearancePopover, chatTranscriptStyle, useChatAppearance } from './chat-appearance'
+import { CHAT_APPEARANCE_ICON as AppearanceIcon, CHAT_MESSAGE_GAP_PX, CHAT_WIDTH_CLASS, ChatAppearancePopover, chatBackgroundLook, chatTranscriptStyle, useChatAppearance, type ChatBackgroundFit } from './chat-appearance'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
@@ -87,12 +87,15 @@ export function CodexChatView(props: CodexChatViewProps) {
   return chat ? <CodexChatViewContent chat={chat} {...props} /> : null
 }
 
+/** How the picture fills the frame: covering it, fitting inside, or repeated at a fixed width. */
+const BACKGROUND_FIT_CLASS: Record<ChatBackgroundFit, string> = { cover: 'bg-cover bg-no-repeat', contain: 'bg-contain bg-no-repeat', tile: 'bg-repeat bg-[length:320px_auto]' }
+
 /** The profile's picture behind the transcript, dimmed (and optionally blurred) so the text stays readable. */
-function ChatBackground({ url, dim, blur }: { url: string; dim: number; blur: number }) {
+function ChatBackground({ url, dim, blur, fit }: { url: string; dim: number; blur: number; fit: ChatBackgroundFit }) {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
       <div
-        className="absolute inset-0 bg-cover bg-center"
+        className={cn('absolute inset-0 bg-center', BACKGROUND_FIT_CLASS[fit])}
         // Scaled a little when blurred, so the soft edge stays outside the frame.
         style={{ backgroundImage: `url("${url}")`, filter: blur > 0 ? `blur(${blur}px)` : undefined, transform: blur > 0 ? 'scale(1.06)' : undefined }}
       />
@@ -195,7 +198,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const thread = threadQuery.data?.thread ?? activeThread
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : null
   const isCodexThread = thread?.engine !== 'llm'
-  const { appearance } = useChatAppearance()
+  const { appearance } = useChatAppearance(activeThreadId, chat.canUse)
   // Chat flags: the account's own; which are on is kept per chat (on the thread).
   const flagsQuery = useChatFlags(chat.canUse)
   const flags = useMemo(() => flagsQuery.data ?? [], [flagsQuery.data])
@@ -537,7 +540,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   // "+" opens the profile picker, which lists the most recently used profiles first.
   const newChatButton = <IconButton variant="ghost" size="icon-sm" disabled={isBusy || isStartingChat} onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
-  const chatMenu = <ChatAppearancePopover open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
+  const chatMenu = <ChatAppearancePopover threadId={activeThreadId} style={profile?.style} layout={layout} open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
     <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger></Tip>
@@ -582,16 +585,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       followBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
       if (node.scrollTop < 80) showEarlierMessages()
     }}>
-      <div className={cn('mx-auto flex flex-col gap-6 pb-6', layout === 'page' ? 'max-w-3xl px-4 pt-2 sm:px-6' : 'px-4 pt-3')} style={chatTranscriptStyle(appearance, profile?.style)}>
+      <div className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-4 pt-2 sm:px-6') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
         {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
-        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} imageSize={appearance.imageSize} speaker={speaker} avatarSize={appearance.avatarSize} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
+        <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         {liveTurn && liveTurn.threadId === activeThreadId ? (
-          <ChatLiveMessage turn={liveTurn} imageSize={appearance.imageSize} speaker={speaker} avatarSize={appearance.avatarSize} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
+          <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         ) : null}
-        {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming imageSize={appearance.imageSize} speaker={speaker} avatarSize={appearance.avatarSize} /> : null}
+        {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
         {serverReplies.map((reply) => {
           const replySpeaker = speakerOf(reply.profileId)
-          return replySpeaker ? <CodexChatAssistantMessage key={reply.profileId} content={reply.text} toolCalls={reply.toolCalls} streaming imageSize={appearance.imageSize} speaker={replySpeaker} avatarSize={appearance.avatarSize} /> : null
+          return replySpeaker ? <CodexChatAssistantMessage key={reply.profileId} content={reply.text} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null
         })}
       </div>
     </div>
@@ -606,7 +609,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       : null
 
   const composer = (
-    <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? 'mx-auto max-w-3xl px-4 sm:px-6' : 'px-3')}>
+    <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? cn('mx-auto px-4 sm:px-6', CHAT_WIDTH_CLASS[appearance.width]) : 'px-3')}>
       {showCommands ? <ChatCommandList id={commandListId} commands={matchingCommands} selected={selectedCommand} onSelect={pickCommand} /> : null}
       {showMentions ? <MentionList id={mentionListId} options={mentionMatches} selected={selectedMention} onSelect={pickMention} /> : null}
       {turnStatus}
@@ -671,7 +674,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   } else {
     body = backgroundUrl && profile ? (
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <ChatBackground url={backgroundUrl} dim={profile.style.backgroundDim} blur={profile.style.backgroundBlur} />
+        <ChatBackground url={backgroundUrl} {...chatBackgroundLook(appearance, profile.style)} />
         {transcript}
         {composer}
       </div>

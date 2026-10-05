@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
+  CHAT_APPEARANCE_QUERY_KEY,
   addGroupChatMembers,
   createGroupChat,
   removeGroupChatMember,
@@ -179,6 +180,7 @@ export function GroupInviteDialog({ open, mode, profiles, onClose, onCreated }: 
     },
     onSuccess: async (threadId) => {
       await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      if (mode?.kind === 'create') void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
       onClose()
       if (threadId !== null && mode?.kind === 'create') onCreated(threadId)
     },

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { CHAT_FLAGS_QUERY_KEY, createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, readThreadFlagIds, streamCodexChatMessage, streamChatRewrite, type ChatFlag, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, readThreadFlagIds, streamCodexChatMessage, streamChatRewrite, type ChatFlag, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
@@ -99,6 +99,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     try {
       const thread = await createCodexChatThread(profileId)
       await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      // The new chat starts from the default appearance slot, copied on the server.
+      void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
       setSelectedThreadId(thread.id)
       attachmentEpoch.current += 1
       attachmentsRef.current = []

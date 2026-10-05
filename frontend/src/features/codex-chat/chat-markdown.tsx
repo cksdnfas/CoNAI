@@ -146,7 +146,8 @@ function MarkdownImage({ src, alt }: ComponentProps<'img'>) {
 
 const MARKDOWN_COMPONENTS: Components = {
   img: MarkdownImage,
-  p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
+  // Paragraph spacing follows the reader's chat appearance (a variable on the transcript); 0.5rem elsewhere.
+  p: ({ children }) => <p className="my-(--chat-paragraph-gap,0.5rem) first:mt-0 last:mb-0">{children}</p>,
   a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>,
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5">{children}</ol>,

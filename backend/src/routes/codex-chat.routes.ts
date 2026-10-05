@@ -31,6 +31,7 @@ import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
 import { chatAssetFile, localizeImages, rewriteImageLinks, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
 import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
+import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -73,7 +74,7 @@ function sendChatError(res: Response, error: unknown) {
     res.status(400).json({ success: false, error: error.message })
     return
   }
-  if (error instanceof ChatFlagError) {
+  if (error instanceof ChatFlagError || error instanceof ChatAppearanceError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -219,7 +220,9 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
 router.post('/threads/group', requireChatAccess, (req: Request, res: Response) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
-    res.status(201).json({ success: true, data: GroupChatService.create(requesterFrom(req), { profileIds: body.profileIds, representativeId: body.representativeId, title: body.title }) })
+    const created = GroupChatService.create(requesterFrom(req), { profileIds: body.profileIds, representativeId: body.representativeId, title: body.title })
+    ChatAppearanceStore.threadCreated(getRequesterAccountId(req), created.id)
+    res.status(201).json({ success: true, data: created })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -267,7 +270,9 @@ router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
     return
   }
   try {
-    res.status(201).json({ success: true, data: CodexChatService.createThread(requesterFrom(req), profileId) })
+    const created = CodexChatService.createThread(requesterFrom(req), profileId)
+    ChatAppearanceStore.threadCreated(getRequesterAccountId(req), created.id)
+    res.status(201).json({ success: true, data: created })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -637,6 +642,7 @@ router.delete('/threads/:threadId', requireChatAccess, asyncHandler(async (req: 
   try {
     if (isGroupThread(req, threadId)) await GroupChatService.deleteThread(requesterFrom(req), threadId)
     else await CodexChatService.deleteThread(requesterFrom(req), threadId)
+    ChatAppearanceStore.threadDeleted(getRequesterAccountId(req), threadId)
     res.json({ success: true })
   } catch (error) {
     sendChatError(res, error)
@@ -786,6 +792,30 @@ router.put('/threads/:threadId/flags', requireChatAccess, (req: Request, res: Re
   const flags = ChatFlagStore.resolve(getRequesterAccountId(req), parseFlagIds(req.body?.flagIds))
   ChatFlagStore.setThreadFlags(threadId, flags.map((flag) => flag.id))
   res.json({ success: true, data: { flagIds: flags.map((flag) => flag.id) } })
+})
+
+/** GET /api/codex-chat/appearance — the reader's chat appearance: slots, the default slot, and each chat's values. */
+router.get('/appearance', requireChatAccess, (req: Request, res: Response) => {
+  const accountId = getRequesterAccountId(req)
+  res.json({ success: true, data: ChatAppearanceStore.read(accountId, CodexChatStore.listThreads(accountId).map((thread) => thread.id)) })
+})
+
+/** PUT /api/codex-chat/appearance/slots — `{ defaultSlotId, slots }`: the whole slot list; a slot without an id is new. */
+router.put('/appearance/slots', requireChatAccess, (req: Request, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    res.json({ success: true, data: ChatAppearanceStore.saveSlots(getRequesterAccountId(req), { defaultSlotId: body.defaultSlotId, slots: body.slots }) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** PUT /api/codex-chat/threads/:threadId/appearance — `{ appearance }`: this chat's values, or null for the defaults. */
+router.put('/threads/:threadId/appearance', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) { res.status(404).json({ success: false, error: '채팅을 찾을 수 없어.' }); return }
+  try {
+    res.json({ success: true, data: { appearance: ChatAppearanceStore.setThread(getRequesterAccountId(req), threadId, req.body?.appearance) } })
+  } catch (error) { sendChatError(res, error) }
 })
 
 export default router

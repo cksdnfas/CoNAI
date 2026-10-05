@@ -14,7 +14,7 @@ import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import type { ImageRecord } from '@/types/image'
-import type { ChatAvatarSize } from './chat-appearance'
+import { DEFAULT_CHAT_APPEARANCE, type ChatAppearance, type ChatImageLayout } from './chat-appearance'
 import { ChatErrorChip } from './chat-error-chip'
 import { ChatMarkdown, type ChatEmoticonMap } from './chat-markdown'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -265,8 +265,8 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
   )
 }
 
-/** Images and videos the reply's tools produced or found. */
-function CodexChatToolMedia({ calls, size = 'md', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; media?: Record<string, CodexChatMediaInfo> }) {
+/** Images and videos the reply's tools produced or found. `layout`: several side by side (grid) or one under another. */
+function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; layout?: ChatImageLayout; media?: Record<string, CodexChatMediaInfo> }) {
   const { t } = useI18n()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const historyIds = [...new Set(calls.flatMap((call) => call.historyIds))]
@@ -289,13 +289,17 @@ function CodexChatToolMedia({ calls, size = 'md', media }: { calls: CodexChatToo
     setLightboxIndex(index >= 0 ? index : null)
   }
 
-  if (historyIds.length === 0 && compositeHashes.length === 0 && pendingJobIds.length === 0) {
+  const count = historyIds.length + compositeHashes.length + pendingJobIds.length
+  if (count === 0) {
     return null
   }
 
   return (
     <>
-      <div className="flex flex-wrap gap-2">
+      <div className={cn(
+        'gap-2',
+        layout === 'column' ? 'flex flex-col items-start' : size === 'full' && count > 1 ? 'grid grid-cols-2' : 'flex flex-wrap',
+      )}>
         {pendingJobIds.map((jobId) => (
           <div key={`j${jobId}`} className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-sm bg-surface-high text-xs text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
             <Spinner size="md" />
@@ -310,13 +314,52 @@ function CodexChatToolMedia({ calls, size = 'md', media }: { calls: CodexChatToo
   )
 }
 
-/** `mentions`: group room member names, highlighted where the message addresses them. */
-export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content, mentions }: { content: string; mentions?: readonly string[] }) {
+/** SQLite `CURRENT_TIMESTAMP` is UTC without a zone marker. */
+function parseServerDate(value: string) {
+  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`)
+}
+
+/** When a message was sent, by the reader's choice: never, on hover (the row is `group/message`), or always. */
+function MessageTime({ at, appearance, className }: { at: string | undefined; appearance: ChatAppearance; className?: string }) {
+  const { formatDateTime } = useI18n()
+  if (!at || appearance.timeStamps === 'off') return null
+  const date = parseServerDate(at)
+  if (Number.isNaN(date.getTime())) return null
   return (
-    <div className="flex justify-end">
-      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground">
-        {mentions?.length ? splitMentions(content, mentions).map((part, index) => part.mention ? <span key={index} className={MENTION_CLASS}>{part.text}</span> : part.text) : content}
+    <time dateTime={date.toISOString()} className={cn('shrink-0 text-2xs tabular-nums text-muted-foreground', appearance.timeStamps === 'hover' && 'opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', className)}>
+      {formatDateTime(date, { hour: '2-digit', minute: '2-digit' })}
+    </time>
+  )
+}
+
+/**
+ * `mentions`: group room member names, highlighted where the message addresses them. Placed by the reader's choice:
+ * a bubble on the right or left, or plain text under a name line like the replies.
+ */
+export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content, mentions, appearance = DEFAULT_CHAT_APPEARANCE, createdAt }: {
+  content: string; mentions?: readonly string[]; appearance?: ChatAppearance; createdAt?: string
+}) {
+  const { t } = useI18n()
+  const text = mentions?.length ? splitMentions(content, mentions).map((part, index) => part.mention ? <span key={index} className={MENTION_CLASS}>{part.text}</span> : part.text) : content
+  if (appearance.userPlacement === 'flat') {
+    return (
+      <div className="space-y-2">
+        {appearance.showNames || appearance.timeStamps !== 'off' ? (
+          <div className="flex min-h-6 items-center gap-1.5">
+            {appearance.showNames ? <span className="text-xs font-semibold text-muted-foreground">{t({ ko: '나', en: 'Me' })}</span> : null}
+            <MessageTime at={createdAt} appearance={appearance} />
+          </div>
+        ) : null}
+        <div className="whitespace-pre-wrap break-words text-foreground">{text}</div>
       </div>
+    )
+  }
+  const right = appearance.userPlacement === 'right'
+  return (
+    <div className={cn('flex items-end gap-2', right ? 'justify-end' : 'justify-start')}>
+      {right ? <MessageTime at={createdAt} appearance={appearance} className="mb-1" /> : null}
+      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground">{text}</div>
+      {right ? null : <MessageTime at={createdAt} appearance={appearance} className="mb-1" />}
     </div>
   )
 })
@@ -395,8 +438,11 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
 
 /** Appearance setting → avatar size; small keeps the name line compact, larger sizes sit in a column beside the reply. */
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
+/** Status lines under a cast reply line up with the text column beside the avatar. */
+const AVATAR_COLUMN_PAD = { md: 'pl-13', lg: 'pl-17' } as const
+const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, imageSize = 'full', speaker = null, media, avatarSize = 'md' }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content, toolCalls, status, error, reasoning, streaming = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt }: {
   content: string
   toolCalls: CodexChatToolCall[]
   status?: CodexChatMessage['status']
@@ -404,34 +450,43 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   /** Live reasoning text of a streaming LLM reply. */
   reasoning?: string
   streaming?: boolean
-  /** The reader's image size (chat appearance). */
-  imageSize?: ThumbSize
   speaker?: ChatSpeaker | null
   /** Media kind of the images the thread references (videos play inline). */
   media?: Record<string, CodexChatMediaInfo>
-  avatarSize?: ChatAvatarSize
+  /** The reader's chat appearance: avatar and image sizes, bubble or plain, names, time, chips. */
+  appearance?: ChatAppearance
+  createdAt?: string
 }) {
   const { t } = useI18n()
-  const avatarBeside = speaker !== null && avatarSize !== 'sm'
-  const toolBadge = toolCalls.length > 0 ? <ToolCallsBadge calls={toolCalls} /> : null
+  const { avatarSize } = appearance
+  const avatarBeside = speaker !== null && (avatarSize === 'md' || avatarSize === 'lg')
+  const toolBadge = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
   const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} mentions={speaker?.mentions} />
-  const avatarOf = (who: { name: string; avatar: string | null }, engine: ChatEngine) => (
+  const avatarOf = (who: { name: string; avatar: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
     <ChatProfileAvatar name={who.name} avatar={who.avatar} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
   )
+  const bubble = (children: ReactNode) => children && appearance.replyShape === 'bubble' ? <div className={BUBBLE_CLASS}>{children}</div> : children
 
-  /** One speaker's part: avatar beside (or inline with) the name, then the content. */
-  const row = (key: string, who: { name: string; avatar: string | null; color?: string } | null, engine: ChatEngine, extra: ReactNode, children: ReactNode) => {
+  /**
+   * One speaker's part: avatar beside (or inline with) the name line, the content (in a bubble, by choice), then
+   * `after` (status lines, outside the bubble).
+   */
+  const row = (key: string, who: { name: string; avatar: string | null; color?: string } | null, engine: ChatEngine, extra: ReactNode, children: ReactNode, after?: ReactNode) => {
     const avatar = who ? avatarOf(who, engine) : null
+    const time = <MessageTime at={createdAt} appearance={appearance} />
+    const nameLine = (who && (appearance.showNames || (!avatarBeside && avatar))) || extra || (appearance.timeStamps !== 'off' && createdAt)
     const body = (
-      <div className="min-w-0 flex-1 space-y-2">
-        {who || extra ? (
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        {nameLine ? (
           <div className="flex min-h-6 items-center gap-1.5">
             {avatarBeside ? null : avatar}
-            {who ? <span className="truncate text-xs font-semibold text-muted-foreground" style={who.color ? { color: who.color } : undefined}>{who.name}</span> : null}
+            {who && appearance.showNames ? <span className="truncate text-xs font-semibold text-muted-foreground" style={who.color ? { color: who.color } : undefined}>{who.name}</span> : null}
+            {time}
             {extra}
           </div>
         ) : null}
-        {children}
+        {bubble(children)}
+        {after}
       </div>
     )
     return avatarBeside ? <div key={key} className="flex items-start gap-3">{avatar}{body}</div> : <div key={key}>{body}</div>
@@ -442,32 +497,33 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   // Without cast lines the whole reply is the profile's; with them, only the leading part (if any) is.
   const ownText = hasCast ? (segments?.[0]?.speaker === null ? segments[0].text : '') : content
   const castSegments = hasCast ? (segments ?? []).filter((segment, index) => !(index === 0 && segment.speaker === null)) : []
-  const ownParts = (
-    <>
-      {reasoning ? <ReasoningBlock text={reasoning} active={streaming && !content} /> : null}
-      <CodexChatToolMedia calls={toolCalls} size={imageSize} media={media} />
+  const showReasoning = Boolean(reasoning) && appearance.showReasoning
+  // A failed or empty reply has no body: nothing to draw a bubble around.
+  const ownParts = !ownText && !showReasoning && toolCalls.length === 0 ? null : (
+    <div className="space-y-2">
+      {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
+      <CodexChatToolMedia calls={toolCalls} size={appearance.imageSize} layout={appearance.imageLayout} media={media} />
       {ownText ? markdown(ownText) : null}
-    </>
+    </div>
   )
-  const showOwnRow = !hasCast || Boolean(ownText || reasoning || toolCalls.length > 0)
-  const footer = (
-    <>
+  const showOwnRow = !hasCast || Boolean(ownText || showReasoning || toolCalls.length > 0)
+  const footer = streaming || status === 'interrupted' || status === 'failed' ? (
+    <div className="space-y-2">
       {streaming ? <ActivityLine toolCalls={toolCalls} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}
-    </>
-  )
+    </div>
+  ) : null
 
   if (!hasCast) {
-    return row('own', speaker, speaker?.engine ?? 'llm', toolBadge, <>{ownParts}{footer}</>)
+    return row('own', speaker, speaker?.engine ?? 'llm', toolBadge, ownParts, footer)
   }
 
   return (
     <div className="space-y-5">
       {showOwnRow ? row('own', speaker, speaker?.engine ?? 'llm', toolBadge, ownParts) : null}
       {castSegments.map((segment, index) => row(`cast-${index}`, segment.speaker ?? speaker, segment.speaker ? 'llm' : speaker?.engine ?? 'llm', null, markdown(segment.text)))}
-      {/* Status lines line up with the text column. */}
-      <div className={cn('space-y-2', avatarBeside && (avatarSize === 'lg' ? 'pl-17' : 'pl-13'))}>{footer}</div>
+      {footer ? <div className={cn(avatarBeside && AVATAR_COLUMN_PAD[avatarSize as 'md' | 'lg'])}>{footer}</div> : null}
     </div>
   )
 })

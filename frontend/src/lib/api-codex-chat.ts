@@ -450,6 +450,35 @@ export function setChatThreadFlags(threadId: number, flagIds: number[]) {
   return requestApiData<{ flagIds: number[] }>(`/api/codex-chat/threads/${threadId}/flags`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ flagIds }) })
 }
 
+export const CHAT_APPEARANCE_QUERY_KEY = ['codex-chat-appearance'] as const
+export const CHAT_APPEARANCE_LIMITS = { slots: 12, name: 20 }
+
+/** A reader's chat appearance values, opaque to the server (flat scalars; the chat feature gives them meaning). */
+export type ChatAppearanceValue = Record<string, string | number | boolean | null>
+export interface ChatAppearanceSlot {
+  id: number
+  name: string
+  appearance: ChatAppearanceValue
+}
+/** One account's appearance file: slots to apply quickly, the slot new chats start from, and each chat's own values. */
+export interface ChatAppearanceFile {
+  defaultSlotId: number | null
+  slots: ChatAppearanceSlot[]
+  threads: Record<string, ChatAppearanceValue>
+}
+
+export function getChatAppearance() {
+  return requestApiData<ChatAppearanceFile>('/api/codex-chat/appearance')
+}
+
+export function saveChatAppearanceSlots(input: { defaultSlotId: number | null; slots: ChatAppearanceSlot[] }) {
+  return requestApiData<{ defaultSlotId: number | null; slots: ChatAppearanceSlot[] }>('/api/codex-chat/appearance/slots', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function setChatThreadAppearance(threadId: number, appearance: ChatAppearanceValue | null) {
+  return requestApiData<{ appearance: ChatAppearanceValue | null }>(`/api/codex-chat/threads/${threadId}/appearance`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ appearance }) })
+}
+
 /** The flag ids switched on in a chat (stored as JSON on the thread). */
 export function readThreadFlagIds(thread: Pick<CodexChatThread, 'flag_ids'> | null | undefined): number[] {
   if (!thread?.flag_ids) return []

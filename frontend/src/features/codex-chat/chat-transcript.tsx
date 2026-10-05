@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { CodexChatMediaInfo, CodexChatMessage } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
-import type { ChatAvatarSize, ChatImageSize } from './chat-appearance'
+import type { ChatAppearance } from './chat-appearance'
 import { ChatFileLinks } from './chat-attachments'
 import { ChatMessageFlags } from './chat-flags'
 import type { CodexChatLiveTurn } from './codex-chat-context'
@@ -13,8 +13,8 @@ import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker } fro
 
 type MessageLook = {
   speaker: ChatSpeaker | null
-  avatarSize: ChatAvatarSize
-  imageSize: ChatImageSize
+  /** The reader's chat appearance (sizes, bubbles, names, time…). */
+  appearance: ChatAppearance
   /** Group rooms: who wrote a reply (its speaker), instead of the chat's one speaker. */
   speakerOf?: (profileId: number | null) => ChatSpeaker | null
   /** Group rooms: member names, so `@name` mentions are highlighted. */
@@ -63,8 +63,8 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : message.content && <CodexChatUserMessage content={message.content} mentions={mentions} />}<ChatFileLinks files={message.attachments} /><ChatMessageFlags flags={message.flags} /></>
-      : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} media={media} {...look} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} />}
+        : message.content && <CodexChatUserMessage content={message.content} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} />}<ChatFileLinks files={message.attachments} /><ChatMessageFlags flags={message.flags} /></>
+      : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} />}
     {actions.canRewrite && (isUser || lastReply) && actions.editingId !== message.id ? (
       <div className={cn('mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
         {isUser
@@ -103,7 +103,7 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, fla
 
 export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, mentions, ...look }: MessageLook & { turn: CodexChatLiveTurn }) {
   return <>
-    {turn.userText && <CodexChatUserMessage content={turn.userText} mentions={mentions} />}
+    {turn.userText && <CodexChatUserMessage content={turn.userText} mentions={mentions} appearance={look.appearance} />}
     <ChatFileLinks files={turn.attachments} />
     <ChatMessageFlags flags={turn.flags} />
     {/* Group rooms: one bubble per member answering now; none between members. */}
