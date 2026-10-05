@@ -2,7 +2,7 @@ import type { ChatProfile } from './chatProfiles'
 import { chatContentWithAttachments } from './chatAttachments'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionMessage } from './llmChatCompletion'
-import { buildLeadingMessages, sendableMessages, toCompletionMessages } from './llmChatContext'
+import { appendUserDirective, buildLeadingMessages, flagDirectiveFor, sendableMessages, toCompletionMessages } from './llmChatContext'
 
 export const USER_SPEAKER_NAME = '사용자'
 const EVERYONE_WORDS = ['모두', 'all', 'everyone']
@@ -128,7 +128,8 @@ export function buildGroupLlmMessages(params: {
     if (previous?.role === 'user' && typeof previous.content === 'string') previous.content = `${previous.content}\n\n${line}`
     else conversation.push({ role: 'user', content: line })
   }
-  return [...system, ...conversation]
+  // The flags the user had on for the message this run answers reach every member answering it.
+  return appendUserDirective([...system, ...conversation], flagDirectiveFor(params.messages, profile))
 }
 
 /**
@@ -143,8 +144,10 @@ export function buildGroupCodexInput(params: {
   lastSeenMessageId: number | null
   windowLimit: number
   lore: string
+  /** The user's chat flags for the message this run answers (already filled for this member). */
+  directive: string
 }) {
-  const { thread, members, self, lastSeenMessageId, windowLimit, lore } = params
+  const { thread, members, self, lastSeenMessageId, windowLimit, lore, directive } = params
   const names = new Map(members.map((member) => [member.id, member.name]))
   const missed = sendableMessages(params.messages).filter((message) => message.id > (lastSeenMessageId ?? 0)
     && !(lastSeenMessageId !== null && message.role === 'assistant' && message.speaker_profile_id === self.id))
@@ -153,6 +156,7 @@ export function buildGroupCodexInput(params: {
     buildGroupHeader({ thread, members, self, hiddenCount: missed.length - shown.length }),
     lore ? `[참고 설정]\n${lore}\n[/참고 설정]` : '',
     `[${lastSeenMessageId === null ? '지금까지의 대화' : '네가 마지막으로 말한 뒤의 대화'}]\n${shown.map((message) => transcriptLine(message, names)).join('\n\n')}`,
+    directive,
     `이제 ${self.name}로서 답해.`,
   ].filter(Boolean).join('\n\n')
 }

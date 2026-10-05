@@ -4,6 +4,7 @@ import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
 import { buildLorebookText } from './chatLorebook'
+import { buildFlagDirective } from './chatFlags'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 
@@ -236,6 +237,20 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
   return [...result, ...examples]
 }
 
+/** The chat flags of the message being answered (the latest user message) as one block; '' when none were on. */
+export function flagDirectiveFor(messages: CodexChatMessageRecord[], profile: ChatProfile) {
+  const latestUser = [...messages].reverse().find((message) => message.role === 'user')
+  return buildFlagDirective(latestUser?.flags ?? [], (text) => fillCharacterPlaceholders(text, profile))
+}
+
+/** Add `directive` after the last user turn (merged into it, so turns keep alternating). */
+export function appendUserDirective(messages: ChatCompletionMessage[], directive: string): ChatCompletionMessage[] {
+  if (!directive) return messages
+  const last = messages[messages.length - 1]
+  if (last?.role === 'user' && typeof last.content === 'string') return [...messages.slice(0, -1), { ...last, content: `${last.content}\n\n${directive}` }]
+  return [...messages, { role: 'user', content: directive }]
+}
+
 export function sendableMessages(messages: CodexChatMessageRecord[]) {
   return messages.filter((message) => message.content.trim() || message.tool_calls.length > 0)
 }
@@ -254,7 +269,7 @@ export function buildChatMessages(params: {
   const { profile, thread, config, tools } = params
   const system = buildLeadingMessages(profile, thread, config, tools.length > 0, params.messages)
   const window = selectWindow(profile.id, splitTurns(sendableMessages(params.messages)), config, estimateMessagesTokens(profile.id, system, tools))
-  return [...system, ...window.flat().flatMap(toCompletionMessages)]
+  return appendUserDirective([...system, ...window.flat().flatMap(toCompletionMessages)], flagDirectiveFor(params.messages, profile))
 }
 
 // ---- Summary --------------------------------------------------------------------------------------------------

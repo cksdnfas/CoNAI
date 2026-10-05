@@ -1,6 +1,7 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { StoredFileEntry } from '@conai/shared'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
+import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
 
 export type CodexChatToolCall = {
   id: string
@@ -52,6 +53,8 @@ export type CodexChatThreadRecord = {
   /** Group rooms: bot-to-bot wakes per user message and messages handed to a woken member (null: defaults). */
   group_chain_limit: number | null
   group_window_limit: number | null
+  /** JSON ids of the chat flags switched on in this chat. */
+  flag_ids: string | null
   created_date: string
   updated_date: string
 }
@@ -69,6 +72,8 @@ export type CodexChatMessageRecord = {
   tool_calls: CodexChatToolCall[]
   status: 'completed' | 'failed' | 'interrupted'
   error: string | null
+  /** User messages: the chat flags that were on when it was sent. */
+  flags?: ChatFlagSnapshot[]
   created_date: string
 }
 
@@ -80,7 +85,7 @@ export type ChatMessageAlternative = {
   error: string | null
 }
 
-type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives'> & { tool_calls: string | null; alternatives: string | null }
+type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags'> & { tool_calls: string | null; alternatives: string | null; flags: string | null }
 
 const TITLE_MAX_LENGTH = 60
 
@@ -227,7 +232,7 @@ export const CodexChatStore = {
     const rows = getUserSettingsDb().prepare(`
       SELECT * FROM codex_chat_messages WHERE thread_id = ? ORDER BY id
     `).all(threadId) as StoredMessageRow[]
-    return rows.map((row) => ({ ...row, tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives), attachments: attachments.get(row.id) ?? [] }))
+    return rows.map((row) => ({ ...row, tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives), flags: parseFlagSnapshots(row.flags), attachments: attachments.get(row.id) ?? [] }))
   },
 
   truncateAfter(threadId: number, messageId: number) {
@@ -289,14 +294,14 @@ export const CodexChatStore = {
     }).immediate()
   },
 
-  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error'> & { speaker_profile_id?: number | null }, fileIds: string[] = []) {
+  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'tool_calls' | 'status' | 'error' | 'flags'> & { speaker_profile_id?: number | null }, fileIds: string[] = []) {
     const db = getUserSettingsDb()
     return db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
       if (!thread) throw new Error('Chat thread not found')
       const attachments = FileStoreService.validateAttachments(fileOwnerKey(thread.account_id), fileIds)
       const result = db.prepare(`
-        INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error, speaker_profile_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO codex_chat_messages (thread_id, role, content, tool_calls, status, error, speaker_profile_id, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         message.thread_id,
         message.role,
@@ -305,6 +310,7 @@ export const CodexChatStore = {
         message.status,
         message.error,
         message.speaker_profile_id ?? null,
+        message.flags?.length ? JSON.stringify(message.flags) : null,
       )
       for (const file of attachments) db.prepare('INSERT INTO chat_file_attachments (message_id, file_id) VALUES (?, ?)').run(result.lastInsertRowid, file.id)
       CodexChatStore.touchThread(message.thread_id)

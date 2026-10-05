@@ -479,6 +479,21 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Chat flags: an account's own instructions, switched on per chat and added to the messages sent while on.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_flags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
+      icon TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_flags_account ON chat_flags(account_id, sort_order, id)');
+
   // 19. Generic long-running runtime jobs (thumbnail regenerate / group rematch / folder scan ...)
   // 진행률·취소·재시작 복구의 정본. images.db 는 스캔이 두들기는 hot DB 라 하트비트 쓰기를 얹지 않는다.
   db.exec(`
@@ -542,6 +557,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['kind', "TEXT NOT NULL DEFAULT 'direct'"],
     ['group_chain_limit', 'INTEGER'],
     ['group_window_limit', 'INTEGER'],
+    // JSON ids of the chat flags switched on in this chat.
+    ['flag_ids', 'TEXT'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {
@@ -553,6 +570,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['active_alternative', 'INTEGER NOT NULL DEFAULT 0'],
     // Group rooms: the profile that wrote an assistant message (null in direct chats and for the user).
     ['speaker_profile_id', 'INTEGER'],
+    // User messages: JSON copy of the chat flags that were on when it was sent (replayed on regenerate).
+    ['flags', 'TEXT'],
   ]) {
     if (!hasColumn('codex_chat_messages', columnName)) {
       db.exec(`ALTER TABLE codex_chat_messages ADD COLUMN ${columnName} ${definition}`);

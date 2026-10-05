@@ -26,7 +26,11 @@ export type ChatAppearance = {
   stickerSize: ChatStickerSize
   /** Images and videos replies bring: small / medium thumbnails, or the chat's width at their own ratio. */
   imageSize: ChatImageSize
+  /** Chat flags in the composer's tray: round icons (name on hover) or icon and name. */
+  flagStyle: ChatFlagStyle
 }
+
+export type ChatFlagStyle = 'icon' | 'label'
 
 export type ChatImageSize = 'sm' | 'md' | 'full'
 
@@ -39,7 +43,7 @@ const STICKER_SIZE_PX: Record<ChatStickerSize, number> = { sm: 96, md: 128, lg: 
 const STORAGE_KEY = 'conai.chat.appearance'
 const CHANGED_EVENT = 'conai:chat-appearance-changed'
 
-export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = { avatarSize: 'md', fontSize: 'md', lineHeight: 'normal', showBackground: true, emoticonSize: 'md', stickerSize: 'md', imageSize: 'full' }
+export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = { avatarSize: 'md', fontSize: 'md', lineHeight: 'normal', showBackground: true, emoticonSize: 'md', stickerSize: 'md', imageSize: 'full', flagStyle: 'icon' }
 
 const FONT_SIZE_PX: Record<ChatFontSize, number> = { sm: 13, md: 14, lg: 16, xl: 18 }
 const LINE_HEIGHT: Record<ChatLineHeight, number> = { tight: 1.5, normal: 1.7, relaxed: 1.9 }
@@ -63,6 +67,7 @@ function normalize(value: unknown): ChatAppearance {
     emoticonSize: pick(raw.emoticonSize, ['sm', 'md', 'lg', 'xl'], DEFAULT_CHAT_APPEARANCE.emoticonSize),
     stickerSize: pick(raw.stickerSize, ['sm', 'md', 'lg'], DEFAULT_CHAT_APPEARANCE.stickerSize),
     imageSize: pick(raw.imageSize, ['sm', 'md', 'full'], DEFAULT_CHAT_APPEARANCE.imageSize),
+    flagStyle: pick(raw.flagStyle, ['icon', 'label'], DEFAULT_CHAT_APPEARANCE.flagStyle),
   }
 }
 
@@ -254,6 +259,12 @@ export function ChatAppearancePopover({ open, onOpenChange, children }: { open: 
           </AppearanceRow>
           <AppearanceRow label={t({ ko: '배경 이미지', en: 'Background image' })} htmlFor={backgroundId}>
             <Switch id={backgroundId} checked={appearance.showBackground} onCheckedChange={(showBackground) => update({ showBackground })} />
+          </AppearanceRow>
+        </AppearanceGroup>
+        <AppearanceGroup title={t({ ko: '입력창', en: 'Composer' })}>
+          <AppearanceRow label={t({ ko: '플래그 모양', en: 'Flags' })}>
+            <CompactChoice label={t({ ko: '플래그 모양', en: 'Flags' })} value={appearance.flagStyle} onChange={(flagStyle) => update({ flagStyle })}
+              choices={[{ value: 'icon', label: t({ ko: '아이콘', en: 'Icon' }) }, { value: 'label', label: t({ ko: '아이콘+이름', en: 'Icon + name' }) }]} />
           </AppearanceRow>
         </AppearanceGroup>
       </PopoverContent>

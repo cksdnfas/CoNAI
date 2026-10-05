@@ -19,6 +19,7 @@ import { buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, REPLY_FO
 import { selectLoreEntries } from './chatLorebook'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
+import { buildFlagDirective, ChatFlagStore, parseFlagIds } from './chatFlags'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
 import { logger } from '../../utils/logger'
@@ -817,13 +818,14 @@ export const CodexChatService = {
    * Send one user message and stream the turn to `listener`. Resolves with the stored assistant message.
    * The turn keeps running (and is stored) when the listener goes away, e.g. the browser closes the stream.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown) {
     const thread = requireThread(requester, threadId)
     if (thread.engine === 'llm') {
-      return LlmChatService.sendMessage(requester, thread, text, listener, fileIds)
+      return LlmChatService.sendMessage(requester, thread, text, listener, fileIds, flagIds)
     }
     assertChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
+    const flags = ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds))
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0) {
       throw new CodexChatError('메시지를 입력해줘.')
@@ -857,7 +859,8 @@ export const CodexChatService = {
         finished,
         resolveFinished,
       }
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags }, attachments.map((file) => file.id))
+      ChatFlagStore.setThreadFlags(threadId, flags.map((flag) => flag.id))
       turn.userMessageId = userMessageId
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
@@ -872,7 +875,8 @@ export const CodexChatService = {
         // same content) is not given again. Read after ensureCodexThread: a new Codex thread starts with none.
         const sent = readLoreSent(CodexChatStore.findThreadById(threadId)?.codex_lore_sent ?? null)
         const lore = selectLoreEntries(profile, CodexChatStore.listMessages(threadId), (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile), { skip: (key) => sent.has(key) })
-        const input = chatContentWithAttachments(trimmed, attachments)
+        const directive = buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile))
+        const input = [chatContentWithAttachments(trimmed, attachments), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,

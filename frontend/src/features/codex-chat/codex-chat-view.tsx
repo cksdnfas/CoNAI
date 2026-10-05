@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { ArrowLeft, ArrowUp, Archive, ChevronDown, Download, Eraser, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Archive, ChevronDown, Download, Eraser, Flag, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -22,11 +22,14 @@ import {
   clearCodexChatThread,
   summarizeCodexChatThread,
   updateCodexChatThreadContext,
+  readThreadFlagIds,
+  setChatThreadFlags,
   type ChatEmoticon,
   type ChatSearchResult,
   type ChatProfileSummary,
   type CodexChatMessage,
   type CodexChatThread,
+  type CodexChatThreadDetail,
 } from '@/lib/api-codex-chat'
 import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
@@ -35,6 +38,7 @@ import { CHAT_APPEARANCE_ICON as AppearanceIcon, ChatAppearancePopover, chatTran
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
+import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   codexChatMediaQueryKey,
@@ -151,6 +155,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [commandIndex, setCommandIndex] = useState(0)
   const [dismissedCommand, setDismissedCommand] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
+  const [flagTrayOpen, setFlagTrayOpen] = useState(false)
+  const [flagManagerOpen, setFlagManagerOpen] = useState(false)
+  const flagButtonRef = useRef<HTMLButtonElement | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [invite, setInvite] = useState<GroupInviteMode | null>(null)
@@ -188,6 +195,24 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : null
   const isCodexThread = thread?.engine !== 'llm'
   const { appearance } = useChatAppearance()
+  // Chat flags: the account's own; which are on is kept per chat (on the thread).
+  const flagsQuery = useChatFlags(chat.canUse)
+  const flags = useMemo(() => flagsQuery.data ?? [], [flagsQuery.data])
+  const activeFlagIds = useMemo(() => readThreadFlagIds(thread).filter((id) => flags.some((flag) => flag.id === id)), [flags, thread])
+  const toggleFlag = useCallback((flagId: number) => {
+    if (activeThreadId === null) return
+    const on = new Set(activeFlagIds)
+    if (on.has(flagId)) on.delete(flagId)
+    else on.add(flagId)
+    const next = flags.filter((flag) => on.has(flag.id)).map((flag) => flag.id)
+    queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(activeThreadId), (current) => current ? { ...current, thread: { ...current.thread, flag_ids: next.length ? JSON.stringify(next) : null } } : current)
+    setChatThreadFlags(activeThreadId, next).catch((error: unknown) => {
+      void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(activeThreadId) })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '플래그를 바꾸지 못했어.', en: 'Could not change the flag.' })), tone: 'error' })
+    })
+  }, [activeFlagIds, activeThreadId, flags, queryClient, showSnackbar, t])
+  const closeFlagTray = useCallback(() => setFlagTrayOpen(false), [])
+  useEffect(() => setFlagTrayOpen(false), [activeThreadId])
   // Group rooms: `profile` is the representative (the room's look); every member speaks with its own face and emoticons.
   const isGroup = thread?.kind === 'group'
   const group = isGroup ? threadQuery.data?.group ?? null : null
@@ -515,6 +540,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {isGroup ? null : <DropdownMenuItem onSelect={() => setView('context')}><SlidersHorizontal />{t({ ko: '컨텍스트', en: 'Context' })}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => setView('gallery')}><LayoutGrid />{t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem>
       {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><Archive />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>}
@@ -581,8 +607,22 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {turnStatus}
       {warning ? <p className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : null}
       <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
+      <div className="relative">
+      {flags.length > 0 ? (
+        <ChatFlagTray
+          flags={flags}
+          activeIds={activeFlagIds}
+          open={flagTrayOpen && activeThreadId !== null}
+          flagStyle={appearance.flagStyle}
+          buttonRef={flagButtonRef}
+          onToggle={toggleFlag}
+          onManage={() => setFlagManagerOpen(true)}
+          onClose={closeFlagTray}
+        />
+      ) : null}
       <div className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm')}>
         <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
+        {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={activeThreadId === null} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
         <textarea
           ref={composerRef}
           value={draft}
@@ -606,6 +646,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             <ArrowUp />
           </IconButton>
         )}
+      </div>
       </div>
     </div>
   )
@@ -637,6 +678,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const dialogs = <>
     <ChatExportDialog threadId={activeThreadId} open={exportOpen} onClose={() => setExportOpen(false)} />
+    <ChatFlagManagerModal open={flagManagerOpen} onClose={() => setFlagManagerOpen(false)} />
     <GroupInviteDialog open={invite !== null} mode={invite} profiles={profiles} onClose={() => setInvite(null)} onCreated={(threadId) => selectThread(threadId)} />
     <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={t({ ko: '채팅 검색', en: 'Search chats' })} widthClassName="max-w-lg">
       <ModalBody><ChatSearchInput value={searchText} onChange={setSearchText} /><ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} /></ModalBody>

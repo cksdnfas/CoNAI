@@ -1,5 +1,6 @@
 import type { McpRequester } from '../../mcp/context'
 import { validateChatAttachments } from './chatAttachments'
+import { ChatFlagStore, parseFlagIds } from './chatFlags'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { loadChatSettings } from './chatSettings'
@@ -9,7 +10,7 @@ import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord
 import { buildGroupCodexInput, buildGroupLlmMessages, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
 import { registerGroupWake } from './groupWakeRegistry'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
-import { sendableMessages } from './llmChatContext'
+import { flagDirectiveFor, sendableMessages } from './llmChatContext'
 import { generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
@@ -147,7 +148,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         threadId: run.threadId,
         profile,
         messages,
-        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore }),
+        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: flagDirectiveFor(messages, profile) }),
         signal: controller.signal,
         emit: forward,
         persist,
@@ -329,16 +330,18 @@ export const GroupChatService = {
    * A user message: stops whatever the room is still saying (the user cut in), then the addressed members answer
    * (together as far as their connections allow) — or the representative when no one is addressed.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown) {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
+    const flags = ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds))
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
     await GroupChatService.stop(threadId)
 
     await startRun(threadId, listener, async (run) => {
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: trimmed, tool_calls: [], status: 'completed', error: null, flags }, attachments.map((file) => file.id))
+      ChatFlagStore.setThreadFlags(threadId, flags.map((flag) => flag.id))
       emit(run, { type: 'user', message: findMessage(threadId, userMessageId) })
       const mentioned = parseMentions(trimmed, memberProfiles(threadId))
       run.queue = mentioned.length > 0 ? mentioned : thread.profile_id ? [thread.profile_id] : []

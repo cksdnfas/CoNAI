@@ -244,6 +244,8 @@ export interface CodexChatThread {
   group_window_limit: number | null
   /** Group rooms in chat lists: member profiles in room order. */
   member_profile_ids?: number[]
+  /** JSON ids of the chat flags switched on in this chat (read with readThreadFlagIds). */
+  flag_ids?: string | null
   created_date: string
   updated_date: string
 }
@@ -261,6 +263,8 @@ export interface CodexChatMessage {
   tool_calls: CodexChatToolCall[]
   status: 'completed' | 'failed' | 'interrupted'
   error: string | null
+  /** User messages: the chat flags that were on when it was sent. */
+  flags?: ChatFlagSnapshot[]
   created_date: string
 }
 
@@ -395,6 +399,57 @@ export function deleteChatLorebook(lorebookId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'DELETE' })
 }
 
+export const CHAT_FLAGS_QUERY_KEY = ['codex-chat-flags'] as const
+export const CHAT_FLAG_LIMITS = { perAccount: 20, name: 30, content: 2000 }
+
+/** One of the account's own instructions, switched on per chat and added to the messages sent while on. */
+export interface ChatFlag {
+  id: number
+  /** `lucide:<name>` for a built-in icon, otherwise an emoji; empty shows the name's first letter. */
+  icon: string
+  name: string
+  content: string
+  sortOrder: number
+}
+
+export type ChatFlagInput = Pick<ChatFlag, 'icon' | 'name' | 'content'>
+export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'>
+
+export function listChatFlags() {
+  return requestApiData<ChatFlag[]>('/api/codex-chat/flags')
+}
+
+export function createChatFlag(input: ChatFlagInput) {
+  return requestApiData<ChatFlag>('/api/codex-chat/flags', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function updateChatFlag(flagId: number, input: ChatFlagInput) {
+  return requestApiData<ChatFlag>(`/api/codex-chat/flags/${flagId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function deleteChatFlag(flagId: number) {
+  return requestApiData<unknown>(`/api/codex-chat/flags/${flagId}`, { method: 'DELETE' })
+}
+
+export function reorderChatFlags(ids: number[]) {
+  return requestApiData<ChatFlag[]>('/api/codex-chat/flags/order', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ids }) })
+}
+
+export function setChatThreadFlags(threadId: number, flagIds: number[]) {
+  return requestApiData<{ flagIds: number[] }>(`/api/codex-chat/threads/${threadId}/flags`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ flagIds }) })
+}
+
+/** The flag ids switched on in a chat (stored as JSON on the thread). */
+export function readThreadFlagIds(thread: Pick<CodexChatThread, 'flag_ids'> | null | undefined): number[] {
+  if (!thread?.flag_ids) return []
+  try {
+    const parsed: unknown = JSON.parse(thread.flag_ids)
+    return Array.isArray(parsed) ? parsed.filter((id): id is number => Number.isSafeInteger(id)) : []
+  } catch {
+    return []
+  }
+}
+
 export function updateChatProfile(profileId: number, patch: ChatProfileInput) {
   return requestApiData<ChatProfile>(`/api/codex-chat/admin/profiles/${profileId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
@@ -502,8 +557,8 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = []) {
-  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds }, onEvent, signal)
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = []) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds }, onEvent, signal)
 }
 
 export function streamChatRewrite(threadId: number, messageId: number, content: string | undefined, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {

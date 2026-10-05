@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatFlagSnapshot, CodexChatToolCall } from '@/lib/api-codex-chat'
 import type { StoredFileEntry } from '@conai/shared'
 
 export const CODEX_CHAT_ROUTE = '/chat'
@@ -29,6 +29,8 @@ export type CodexChatLiveTurn = {
   attachments: StoredFileEntry[]
   threadId: number
   userText: string
+  /** The chat flags on for the message being sent (shown under it until it is stored). */
+  flags?: ChatFlagSnapshot[]
   /** Direct chats: the reply so far (group rooms stream into `replies`). */
   text: string
   /** LLM chats: the model's reasoning so far (shown folded, never stored). */

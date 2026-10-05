@@ -30,6 +30,7 @@ import { CHAT_CARD_MAX_BYTES, importChatCard, readLorebookFile } from '../servic
 import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
 import { chatAssetFile, localizeImages, rewriteImageLinks, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
+import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -70,6 +71,10 @@ function sendChatError(res: Response, error: unknown) {
   }
   if (error instanceof ChatProfileError) {
     res.status(400).json({ success: false, error: error.message })
+    return
+  }
+  if (error instanceof ChatFlagError) {
+    res.status(error.status).json({ success: false, error: error.message })
     return
   }
   res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Chat failed' })
@@ -715,8 +720,52 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
   }
 
   await streamChatReply(res, (write) => isGroupThread(req, threadId)
-    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds)
-    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds))
+    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds)
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds))
 }))
+
+// ---- Chat flags: each account's own instructions, switched on per chat ----------------------------------------
+
+router.get('/flags', requireChatAccess, (req: Request, res: Response) => {
+  res.json({ success: true, data: ChatFlagStore.list(getRequesterAccountId(req)) })
+})
+
+router.post('/flags', requireChatAccess, (req: Request, res: Response) => {
+  try {
+    res.status(201).json({ success: true, data: ChatFlagStore.create(getRequesterAccountId(req), (req.body ?? {}) as Record<string, unknown>) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** PUT /api/codex-chat/flags/order — `{ ids }`: the account's flags in this order (the order of the chat's flag tray). */
+router.put('/flags/order', requireChatAccess, (req: Request, res: Response) => {
+  res.json({ success: true, data: ChatFlagStore.reorder(getRequesterAccountId(req), parseFlagIds(req.body?.ids)) })
+})
+
+router.put('/flags/:flagId', requireChatAccess, (req: Request, res: Response) => {
+  const flagId = parseId(req.params.flagId)
+  if (flagId === null) { sendRouteBadRequest(res, 'Invalid flag id'); return }
+  try {
+    res.json({ success: true, data: ChatFlagStore.update(getRequesterAccountId(req), flagId, (req.body ?? {}) as Record<string, unknown>) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.delete('/flags/:flagId', requireChatAccess, (req: Request, res: Response) => {
+  const flagId = parseId(req.params.flagId)
+  if (flagId === null) { sendRouteBadRequest(res, 'Invalid flag id'); return }
+  try {
+    ChatFlagStore.delete(getRequesterAccountId(req), flagId)
+    res.json({ success: true })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** PUT /api/codex-chat/threads/:threadId/flags — `{ flagIds }`: the flags switched on in this chat. */
+router.put('/threads/:threadId/flags', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) { res.status(404).json({ success: false, error: '채팅을 찾을 수 없어.' }); return }
+  const flags = ChatFlagStore.resolve(getRequesterAccountId(req), parseFlagIds(req.body?.flagIds))
+  ChatFlagStore.setThreadFlags(threadId, flags.map((flag) => flag.id))
+  res.json({ success: true, data: { flagIds: flags.map((flag) => flag.id) } })
+})
 
 export default router

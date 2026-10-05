@@ -7,6 +7,7 @@ import type { CodexChatMediaInfo, CodexChatMessage } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import type { ChatAvatarSize, ChatImageSize } from './chat-appearance'
 import { ChatFileLinks } from './chat-attachments'
+import { ChatMessageFlags } from './chat-flags'
 import type { CodexChatLiveTurn } from './codex-chat-context'
 import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker } from './codex-chat-message'
 
@@ -62,7 +63,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : message.content && <CodexChatUserMessage content={message.content} mentions={mentions} />}<ChatFileLinks files={message.attachments} /></>
+        : message.content && <CodexChatUserMessage content={message.content} mentions={mentions} />}<ChatFileLinks files={message.attachments} /><ChatMessageFlags flags={message.flags} /></>
       : <CodexChatAssistantMessage content={message.content} toolCalls={message.tool_calls} status={message.status} error={message.error} media={media} {...look} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} />}
     {actions.canRewrite && (isUser || lastReply) && actions.editingId !== message.id ? (
       <div className={cn('mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
@@ -104,6 +105,7 @@ export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, 
   return <>
     {turn.userText && <CodexChatUserMessage content={turn.userText} mentions={mentions} />}
     <ChatFileLinks files={turn.attachments} />
+    <ChatMessageFlags flags={turn.flags} />
     {/* Group rooms: one bubble per member answering now; none between members. */}
     {turn.replies
       ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.profileId} content={reply.text} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
