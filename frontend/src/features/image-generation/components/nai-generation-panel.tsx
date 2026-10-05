@@ -113,6 +113,7 @@ export function NaiGenerationPanel({
     queryKey: ['image-generation-nai-user'],
     queryFn: getNaiUserData,
     retry: false,
+    refetchInterval: (query) => query.state.data?.connected ? 60_000 : false,
   })
 
   const appSettingsQuery = useQuery({
@@ -407,6 +408,7 @@ export function NaiGenerationPanel({
         connected={connected}
         tierName={naiUserQuery.data?.subscription.tierName}
         anlasBalance={naiUserQuery.data?.anlasBalance}
+        opusRemainingPercent={naiUserQuery.data?.opusRemainingPercent}
         onOpenAuth={handleOpenNaiAuthModal}
         compact
       />
@@ -422,6 +424,7 @@ export function NaiGenerationPanel({
               connected={connected}
               tierName={naiUserQuery.data?.subscription.tierName}
               anlasBalance={naiUserQuery.data?.anlasBalance}
+              opusRemainingPercent={naiUserQuery.data?.opusRemainingPercent}
               onOpenAuth={handleOpenNaiAuthModal}
             />,
             statusPortalTarget,
@@ -439,6 +442,7 @@ export function NaiGenerationPanel({
               connected={connected}
               tierName={naiUserQuery.data?.subscription.tierName}
               anlasBalance={naiUserQuery.data?.anlasBalance}
+              opusRemainingPercent={naiUserQuery.data?.opusRemainingPercent}
               onOpenAuth={handleOpenNaiAuthModal}
             />
           )}

@@ -300,6 +300,7 @@ export interface NAIUserData {
     tierName: string
   }
   anlasBalance: number
+  opusRemainingPercent: number | null
 }
 
 export interface NAICostEstimate {

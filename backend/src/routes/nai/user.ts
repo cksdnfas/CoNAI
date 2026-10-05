@@ -5,7 +5,7 @@ const router = Router();
 
 /**
  * GET /api/nai/user/data
- * NovelAI 사용자 정보 조회 (Anlas 잔액, 구독 정보)
+ * NovelAI 사용자 정보 조회 (Anlas 잔액, Opus 잔여량, 구독 정보)
  */
 router.get('/data', async (req: Request, res: Response) => {
   try {
@@ -69,6 +69,7 @@ router.get('/data', async (req: Request, res: Response) => {
       });
 
       let anlasBalance = 0;
+      let opusRemainingPercent: number | null = null;
       if (anlasResponse.ok) {
         const subscriptionData: any = await anlasResponse.json();
         // Anlas 잔액 = 구독 지급분(fixedTrainingStepsLeft) + 구매분(purchasedTrainingSteps).
@@ -76,6 +77,10 @@ router.get('/data', async (req: Request, res: Response) => {
         const trainingSteps = subscriptionData.trainingStepsLeft ?? {};
         anlasBalance = (Number(trainingSteps.fixedTrainingStepsLeft) || 0)
           + (Number(trainingSteps.purchasedTrainingSteps) || 0);
+        const usage = subscriptionData.usage;
+        if (typeof usage?.percent === 'number' && Number.isFinite(usage.percent)) {
+          opusRemainingPercent = usage.isNegative === true ? 0 : Math.max(0, usage.percent);
+        }
       }
 
       // 구독 정보 추출
@@ -90,6 +95,7 @@ router.get('/data', async (req: Request, res: Response) => {
           tierName: getTierName(tierValue),
         },
         anlasBalance,
+        opusRemainingPercent,
       });
 
     } catch (error) {
@@ -116,6 +122,7 @@ function createDisconnectedUserData(reason: 'missing_token' | 'invalid_token') {
       tierName: getTierName(0),
     },
     anlasBalance: 0,
+    opusRemainingPercent: null,
   };
 }
 
