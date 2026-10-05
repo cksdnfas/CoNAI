@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ImageIcon, Reply } from 'lucide-react'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
@@ -46,15 +46,99 @@ export function ChatReferenceButton({ compositeHash, mimeType, size = 'icon-sm',
   )
 }
 
+const LONG_PRESS_DELAY_MS = 450
+const LONG_PRESS_MOVE_TOLERANCE_PX = 10
+/** The click a browser fires after lifting a long-pressed finger must not also open the lightbox. */
+const LONG_PRESS_CLICK_SUPPRESS_MS = 450
+
 /**
  * Hover (or keyboard focus) on a thumbnail slides its actions in over the image's corner; nothing shows at rest so
- * the picture stays clean. Touch has no hover: the same actions sit in the lightbox toolbar.
+ * the picture stays clean. Touch has no hover: a still finger held on the thumbnail pins the actions in place (same
+ * rules as long-press selection in the image list) until a tap elsewhere or a scroll; the lightbox toolbar has them too.
  */
 export function ChatThumbOverlay({ children, actions, className }: { children: ReactNode; actions: ReactNode; className?: string }) {
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const [pinned, setPinned] = useState(false)
+  const pressRef = useRef<{ pointerId: number; x: number; y: number; timer: number } | null>(null)
+  const suppressClickUntilRef = useRef(0)
+
+  const cancelPress = useCallback(() => {
+    if (pressRef.current) {
+      window.clearTimeout(pressRef.current.timer)
+      pressRef.current = null
+    }
+  }, [])
+
+  const pin = useCallback(() => {
+    cancelPress()
+    suppressClickUntilRef.current = Number.POSITIVE_INFINITY
+    navigator.vibrate?.(12)
+    setPinned(true)
+  }, [cancelPress])
+
+  useEffect(() => cancelPress, [cancelPress])
+
+  useEffect(() => {
+    if (!pinned) return
+    const unpin = () => setPinned(false)
+    const onPointerDown = (event: PointerEvent) => {
+      const root = rootRef.current
+      if (root && event.target instanceof Node && root.contains(event.target)) return
+      unpin()
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('scroll', unpin, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('scroll', unpin, true)
+    }
+  }, [pinned])
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    cancelPress()
+    if (event.pointerType !== 'touch' || !event.isPrimary) return
+    pressRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, timer: window.setTimeout(pin, LONG_PRESS_DELAY_MS) }
+  }
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const press = pressRef.current
+    if (press && press.pointerId === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > LONG_PRESS_MOVE_TOLERANCE_PX) {
+      cancelPress()
+    }
+  }
+  // Lifting (or the browser taking the gesture for a scroll) ends the press; after a fired one the ghost click is eaten.
+  const onPointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (pressRef.current?.pointerId === event.pointerId) cancelPress()
+    if (suppressClickUntilRef.current === Number.POSITIVE_INFINITY) suppressClickUntilRef.current = performance.now() + LONG_PRESS_CLICK_SUPPRESS_MS
+  }
+  // Android raises the context menu around the same delay; treat it as the long-press itself.
+  const onContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!pressRef.current && !pinned) return
+    event.preventDefault()
+    if (pressRef.current) pin()
+  }
+  const onClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (performance.now() >= suppressClickUntilRef.current) return
+    suppressClickUntilRef.current = 0
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
   return (
-    <div className={cn('group/thumb relative', className)}>
+    <div
+      ref={rootRef}
+      className={cn('group/thumb relative select-none [-webkit-touch-callout:none]', className)}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+      onContextMenu={onContextMenu}
+      onClickCapture={onClickCapture}
+    >
       {children}
-      <div className="pointer-events-none absolute right-1 top-1 flex translate-y-1 scale-95 gap-1 opacity-0 transition-[opacity,transform] duration-200 ease-out group-hover/thumb:pointer-events-auto group-hover/thumb:translate-y-0 group-hover/thumb:scale-100 group-hover/thumb:opacity-100 group-focus-within/thumb:pointer-events-auto group-focus-within/thumb:translate-y-0 group-focus-within/thumb:scale-100 group-focus-within/thumb:opacity-100 motion-reduce:transition-none">
+      <div className={cn(
+        'pointer-events-none absolute right-1 top-1 flex translate-y-1 scale-95 gap-1 opacity-0 transition-[opacity,transform] duration-200 ease-out group-hover/thumb:pointer-events-auto group-hover/thumb:translate-y-0 group-hover/thumb:scale-100 group-hover/thumb:opacity-100 group-focus-within/thumb:pointer-events-auto group-focus-within/thumb:translate-y-0 group-focus-within/thumb:scale-100 group-focus-within/thumb:opacity-100 motion-reduce:transition-none',
+        pinned && 'pointer-events-auto translate-y-0 scale-100 opacity-100',
+      )}>
         {actions}
       </div>
     </div>

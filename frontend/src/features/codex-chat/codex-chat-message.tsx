@@ -97,10 +97,12 @@ function useRetriedThumbnail(url: string) {
 function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: ThumbSize; onOpen: () => void }) {
   const { t } = useI18n()
   const thumbnailUrl = image.thumbnail_url ?? ''
-  const retried = useRetriedThumbnail(size === 'full' ? image.image_url ?? thumbnailUrl : thumbnailUrl)
   const isVideo = image.mime_type?.startsWith('video/') === true
+  const retried = useRetriedThumbnail(size === 'full' && !isVideo ? image.image_url ?? thumbnailUrl : thumbnailUrl)
   const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
-  const drawn = isVideo || retried.loaded
+  // A video waits for its poster too: the thumbnail is served only once the file is post-processed, which is also
+  // when the reference action can be accepted on send.
+  const drawn = retried.loaded
   const placeholder = thumbPlaceholder(size, image.width, image.height)
 
   return (
@@ -120,8 +122,12 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
         {...(drawn ? hoverPreview.triggerProps : {})}
       >
         {isVideo ? (
-          // Videos play muted and looped in place, like the library grid.
-          <ImagePreviewMedia image={image} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
+          <>
+            {/* The poster probes the thumbnail route (a hidden <img> still loads); the video mounts once it answers. */}
+            {!drawn && <img src={retried.src} alt="" className="hidden" onError={retried.onError} onLoad={retried.onLoad} />}
+            {/* Videos play muted and looped in place, like the library grid. */}
+            {drawn && <ImagePreviewMedia image={image} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />}
+          </>
         ) : (
           <img
             src={retried.src}
