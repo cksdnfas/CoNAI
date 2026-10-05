@@ -192,11 +192,12 @@ export function toCompletionMessages(message: CodexChatMessageRecord): ChatCompl
 }
 
 /**
- * The turns that fit: at most `contextTurns`, and — with a token budget — only as many recent turns as fit beside the
- * fixed part (system prompt, summary, tool schemas) and the reply reserve. The newest turn is always kept.
+ * The turns that fit: at most `maxTurns` (the context turn count), and — with a token budget — only as many recent
+ * turns as fit beside the fixed part (system prompt, summary, tool schemas) and the reply reserve. The newest turn is
+ * always kept.
  */
-function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], config: LlmChatContextConfig, fixedTokens: number) {
-  const candidates = turns.slice(-config.contextTurns)
+function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], config: LlmChatContextConfig, fixedTokens: number, maxTurns = config.contextTurns) {
+  const candidates = maxTurns > 0 ? turns.slice(-maxTurns) : []
   if (config.contextTokens === null) {
     return candidates
   }
@@ -255,9 +256,16 @@ export function sendableMessages(messages: CodexChatMessageRecord[]) {
   return messages.filter((message) => message.content.trim() || message.tool_calls.length > 0)
 }
 
+/** With the summary on, only the messages after it go out verbatim; the summary stands in for the rest. */
+function unsummarizedMessages(messages: CodexChatMessageRecord[], thread: Pick<CodexChatThreadRecord, 'summary_until_message_id'>, config: Pick<LlmChatContextConfig, 'summaryEnabled'>) {
+  const until = config.summaryEnabled ? thread.summary_until_message_id ?? 0 : 0
+  return until > 0 ? messages.filter((message) => message.id > until) : messages
+}
+
 /**
  * The request for one reply: the profile's system prompt (stable, so servers can reuse the cached prefix), the
- * rolling summary when enabled, then the recent turns that fit — ending with the user message just stored.
+ * rolling summary when enabled, then the recent unsummarized turns that fit — ending with the user message just
+ * stored. Turns are only dropped here when the summary could not keep up (off, failed or interrupted).
  */
 export function buildChatMessages(params: {
   profile: ChatProfile
@@ -268,7 +276,7 @@ export function buildChatMessages(params: {
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
   const system = buildLeadingMessages(profile, thread, config, tools.length > 0, params.messages)
-  const window = selectWindow(profile.id, splitTurns(sendableMessages(params.messages)), config, estimateMessagesTokens(profile.id, system, tools))
+  const window = selectWindow(profile.id, splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config))), config, estimateMessagesTokens(profile.id, system, tools))
   return appendUserDirective([...system, ...window.flat().flatMap(toCompletionMessages)], flagDirectiveFor(params.messages, profile))
 }
 
@@ -280,51 +288,158 @@ function transcriptLine(message: CodexChatMessageRecord, profile: ChatProfile) {
   return [`${speaker}: ${message.content}`, ...tools].join('\n')
 }
 
-const summarizing = new Set<number>()
+const SUMMARY_TIMEOUT_MS = 10 * 60 * 1000
+/** Transcript per summary call, so a long backlog (summary just turned on, or wiped by an edit) goes in passes. */
+const DEFAULT_SUMMARY_CHUNK_TOKENS = 16000
+const MAX_SUMMARY_PASSES = 50
 
 /**
- * Fold turns that left the window (turn count or token budget) into the thread summary. Automatic runs wait until
- * `summaryTriggerTurns` turns have dropped out; `force` folds in everything not yet summarized.
+ * How many of the oldest unsummarized turns to fold: none while they all fit, otherwise everything that overflows and
+ * at least `batch` turns, so folding happens every few turns rather than every turn. The newest turn stays verbatim.
  */
-export async function updateThreadSummary(threadId: number, profile: ChatProfile, options: { force?: boolean; signal?: AbortSignal } = {}) {
-  if (summarizing.has(threadId)) {
-    return null
+export function turnsToFold(pending: number, fit: number, batch: number) {
+  if (fit >= pending) {
+    return 0
   }
-  const thread = CodexChatStore.findThreadById(threadId)
-  if (!thread) {
-    return null
-  }
-  const config = resolveContextConfig(thread, profile)
-  if (!options.force && !config.summaryEnabled) {
-    return null
-  }
+  return Math.max(0, Math.min(pending - 1, Math.max(pending - fit, batch)))
+}
 
-  const messages = CodexChatStore.listMessages(threadId)
-  const turns = splitTurns(sendableMessages(messages))
-  const windowSize = selectWindow(profile.id, turns, config, estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled, messages))).length
-  const candidates = (options.force ? turns : turns.slice(0, Math.max(0, turns.length - windowSize))).flat()
-  const pending = candidates.filter((message) => message.id > (thread.summary_until_message_id ?? 0))
-  const pendingTurns = pending.filter((message) => message.role === 'user').length
-  if (pending.length === 0 || (!options.force && pendingTurns < config.summaryTriggerTurns)) {
-    return null
-  }
+/**
+ * `ahead` (after a reply) also leaves room for one more turn like the last, so the next request finds everything in
+ * place; `overflow` (before a request) folds only what would not fit; `all` folds everything not yet summarized.
+ */
+type FoldMode = 'ahead' | 'overflow' | 'all'
 
-  summarizing.add(threadId)
-  try {
-    const target = resolveChatCompletionTarget(profile.summaryProviderName || profile.providerName, {
-      model: profile.summaryProviderName ? profile.summaryModel || null : profile.summaryModel || profile.model || null,
-      generation: summaryGenerationOptions(profileGenerationOptions(profile)),
-    })
-    const transcript = pending.map((message) => transcriptLine(message, profile)).join('\n\n')
-    const summary = stripThinking(await completeChat(target, [
-      { role: 'system', content: config.summaryPrompt },
-      { role: 'user', content: `## 이전 요약\n${thread.summary?.trim() || '(없음)'}\n\n## 이어진 대화\n${transcript}` },
-    ], options.signal ?? AbortSignal.timeout(10 * 60 * 1000))).trim()
-    if (!summary) {
-      throw new Error('요약 결과가 비어 있어.')
+function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: LlmChatContextConfig, messages: CodexChatMessageRecord[], turns: CodexChatMessageRecord[][], mode: FoldMode) {
+  if (mode === 'all' || turns.length === 0) {
+    return turns.length
+  }
+  const ahead = mode === 'ahead'
+  const fixedTokens = estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled, messages))
+    + (ahead ? estimateMessagesTokens(profile.id, turns[turns.length - 1].flatMap(toCompletionMessages)) : 0)
+  const fit = selectWindow(profile.id, turns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0)).length
+  return turnsToFold(turns.length, fit, config.summaryTriggerTurns)
+}
+
+/** The oldest of `turns` whose transcript stays within one summary call (at least one turn). */
+function takeSummaryChunk(profile: ChatProfile, config: LlmChatContextConfig, turns: CodexChatMessageRecord[][]) {
+  const limit = config.contextTokens ? Math.max(2000, Math.floor(config.contextTokens / 2)) : DEFAULT_SUMMARY_CHUNK_TOKENS
+  let used = 0
+  let count = 0
+  for (const turn of turns) {
+    used += estimateTokens(profile.id, turn.map((message) => transcriptLine(message, profile)).join('\n\n'))
+    if (count > 0 && used > limit) {
+      break
     }
-    return CodexChatStore.setSummary(threadId, summary, pending[pending.length - 1].id, thread.context_revision) ? summary : null
-  } finally {
-    summarizing.delete(threadId)
+    count += 1
   }
+  return turns.slice(0, count).flat()
+}
+
+async function summarizeInto(profile: ChatProfile, config: LlmChatContextConfig, previous: string | null, messages: CodexChatMessageRecord[], signal?: AbortSignal) {
+  const target = resolveChatCompletionTarget(profile.summaryProviderName || profile.providerName, {
+    model: profile.summaryProviderName ? profile.summaryModel || null : profile.summaryModel || profile.model || null,
+    generation: summaryGenerationOptions(profileGenerationOptions(profile)),
+  })
+  const transcript = messages.map((message) => transcriptLine(message, profile)).join('\n\n')
+  const timeout = AbortSignal.timeout(SUMMARY_TIMEOUT_MS)
+  const summary = stripThinking(await completeChat(target, [
+    { role: 'system', content: config.summaryPrompt },
+    { role: 'user', content: `## 이전 요약\n${previous?.trim() || '(없음)'}\n\n## 이어진 대화\n${transcript}` },
+  ], signal ? AbortSignal.any([signal, timeout]) : timeout)).trim()
+  if (!summary) {
+    throw new Error('요약 결과가 비어 있어.')
+  }
+  return summary
+}
+
+/** Fold the oldest unsummarized turns into the thread summary, pass by pass, until `mode` is satisfied. */
+async function foldIntoSummary(threadId: number, profile: ChatProfile, mode: FoldMode, options: { messages?: CodexChatMessageRecord[]; signal?: AbortSignal }) {
+  let folded: string | null = null
+  for (let pass = 0; pass < MAX_SUMMARY_PASSES; pass += 1) {
+    const thread = CodexChatStore.findThreadById(threadId)
+    if (!thread) {
+      return folded
+    }
+    const config = resolveContextConfig(thread, profile)
+    if (mode !== 'all' && !config.summaryEnabled) {
+      return folded
+    }
+    const messages = options.messages ?? CodexChatStore.listMessages(threadId)
+    const turns = splitTurns(sendableMessages(unsummarizedMessages(messages, thread, { summaryEnabled: true })))
+    const count = planFold(profile, thread, config, messages, turns, mode)
+    if (count === 0) {
+      return folded
+    }
+    const chunk = takeSummaryChunk(profile, config, turns.slice(0, count))
+    const summary = await summarizeInto(profile, config, thread.summary, chunk, options.signal)
+    // A history edit while summarizing bumps the revision; the next request starts over from the new history.
+    if (!CodexChatStore.setSummary(threadId, summary, chunk[chunk.length - 1].id, thread.context_revision)) {
+      return folded
+    }
+    folded = summary
+  }
+  return folded
+}
+
+const summaryRuns = new Map<number, Promise<string | null>>()
+
+function startFold(threadId: number, profile: ChatProfile, mode: FoldMode, options: { messages?: CodexChatMessageRecord[]; signal?: AbortSignal } = {}) {
+  const run: Promise<string | null> = foldIntoSummary(threadId, profile, mode, options).finally(() => {
+    if (summaryRuns.get(threadId) === run) {
+      summaryRuns.delete(threadId)
+    }
+  })
+  summaryRuns.set(threadId, run)
+  return run
+}
+
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal) {
+  signal.throwIfAborted()
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
+}
+
+/**
+ * After a reply: once the unsummarized turns would no longer leave room for the next one (turn count or token
+ * budget), fold the oldest `summaryTriggerTurns` of them in the background — before they would fall out of the window.
+ */
+export function summarizeAhead(threadId: number, profile: ChatProfile) {
+  if (summaryRuns.has(threadId)) {
+    return Promise.resolve(null)
+  }
+  return startFold(threadId, profile, 'ahead')
+}
+
+/**
+ * Before a request: wait for a summary still running, then fold whatever would still not fit, so no turn leaves the
+ * window unsummarized. If summarizing fails, the request goes on and the oldest turns are dropped instead.
+ */
+export async function fitThreadSummary(threadId: number, profile: ChatProfile, messages: CodexChatMessageRecord[], signal: AbortSignal) {
+  const running = summaryRuns.get(threadId)
+  if (running) {
+    await untilAborted(running.catch(() => null), signal)
+  }
+  if (summaryRuns.has(threadId)) {
+    return
+  }
+  try {
+    await startFold(threadId, profile, 'overflow', { messages, signal })
+  } catch (error) {
+    if (signal.aborted) {
+      throw error
+    }
+    console.warn('[llm-chat] summary before reply failed:', error instanceof Error ? error.message : error)
+  }
+}
+
+/** Fold everything not summarized yet (the summarize button). Null when there is nothing new or a summary is running. */
+export function summarizeAll(threadId: number, profile: ChatProfile) {
+  if (summaryRuns.has(threadId)) {
+    return Promise.resolve(null)
+  }
+  return startFold(threadId, profile, 'all')
 }

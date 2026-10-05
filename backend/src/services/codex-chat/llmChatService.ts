@@ -11,7 +11,7 @@ import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
-import { buildChatMessages, fillCharacterPlaceholders, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, updateThreadSummary } from './llmChatContext'
+import { buildChatMessages, fillCharacterPlaceholders, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
 const STORED_TOOL_OUTPUT_LENGTH = 4000
@@ -127,13 +127,18 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   return (output.length > outputLimit ? `${output.slice(0, outputLimit)}\n…(truncated)` : output) || '(no output)'
 }
 
-/** A direct chat's reply: the profile's prompt and the thread's context window. */
-function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
+/** A direct chat's reply: the profile's prompt and the thread's context window (summarized first if it overflows). */
+async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
+  const listMessages = () => CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId)
+  if (resolveContextConfig(thread, profile).summaryEnabled) {
+    await fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal)
+  }
+  const current = CodexChatStore.findThreadById(thread.id) ?? thread
   return streamReply(turn, requester, profile, (tools) => buildChatMessages({
     profile,
-    thread,
-    messages: CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId),
-    config: resolveContextConfig(thread, profile),
+    thread: current,
+    messages: listMessages(),
+    config: resolveContextConfig(current, profile),
     tools,
   }))
 }
@@ -248,7 +253,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
       resolveFinished(finishTurn(turn, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error)))
     })
     .finally(() => {
-      updateThreadSummary(thread.id, profile).catch((error: unknown) => {
+      summarizeAhead(thread.id, profile).catch((error: unknown) => {
         console.warn('[llm-chat] summary update failed:', error instanceof Error ? error.message : error)
       })
     })
@@ -375,7 +380,7 @@ export const LlmChatService = {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
-    const summary = await updateThreadSummary(thread.id, profile, { force: true })
+    const summary = await summarizeAll(thread.id, profile)
     if (summary === null) {
       throw new LlmChatError('요약할 새 대화가 없거나 이미 요약 중이야.', 409)
     }

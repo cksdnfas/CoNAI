@@ -145,7 +145,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
             {draft.summaryEnabled ? (
               <>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <Field label={t({ ko: '요약 시작 (창 밖으로 밀려난 턴 수)', en: 'Summarize after (turns out of the window)' })}>
+                  <Field label={t({ ko: '한 번에 요약할 턴 수', en: 'Turns per summary' })}>
                     <NumberStepperInput variant="settings" step={1} min={1} max={200} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />
                   </Field>
                   <Field label={t({ ko: '요약 연결', en: 'Summary connection' })}>
