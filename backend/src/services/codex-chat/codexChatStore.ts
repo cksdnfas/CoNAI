@@ -53,6 +53,9 @@ export type CodexChatThreadRecord = {
   /** Group rooms: bot-to-bot wakes per user message and messages handed to a woken member (null: defaults). */
   group_chain_limit: number | null
   group_window_limit: number | null
+  /** This chat's author's note (null: the profile's default) and its depth in turns before the end (null: the profile's lore depth). */
+  author_note: string | null
+  author_note_depth: number | null
   /** JSON ids of the chat flags switched on in this chat. */
   flag_ids: string | null
   created_date: string
@@ -162,13 +165,19 @@ export const CodexChatStore = {
     return Number(result.lastInsertRowid)
   },
 
-  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null }) {
+  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null }) {
     const db = getUserSettingsDb()
     if (patch.contextTurns !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET context_turns = ? WHERE id = ?').run(patch.contextTurns, threadId)
     }
     if (patch.summaryEnabled !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET summary_enabled = ? WHERE id = ?').run(patch.summaryEnabled === null ? null : patch.summaryEnabled ? 1 : 0, threadId)
+    }
+    if (patch.authorNote !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET author_note = ? WHERE id = ?').run(patch.authorNote?.trim() || null, threadId)
+    }
+    if (patch.authorNoteDepth !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET author_note_depth = ? WHERE id = ?').run(patch.authorNoteDepth, threadId)
     }
   },
 

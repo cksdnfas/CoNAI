@@ -5,7 +5,7 @@ import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import type { McpRequester } from '../mcp/context'
-import { CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
+import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
 import { CHAT_SCOPES, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
 import { listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
@@ -279,7 +279,25 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
   try {
     const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
-    if (thread.engine !== 'llm' || thread.kind === 'group') {
+    // The author's note applies to every kind of chat; the window and summary settings only to direct LLM chats.
+    if (body.authorNote !== undefined && body.authorNote !== null && typeof body.authorNote !== 'string') {
+      sendRouteBadRequest(res, 'authorNote must be a string or null')
+      return
+    }
+    let authorNoteDepth: number | null | undefined
+    if (body.authorNoteDepth !== undefined) {
+      authorNoteDepth = body.authorNoteDepth === null ? null : Number(body.authorNoteDepth)
+      if (authorNoteDepth !== null && (!Number.isSafeInteger(authorNoteDepth) || authorNoteDepth < 0 || authorNoteDepth > 20)) {
+        sendRouteBadRequest(res, 'authorNoteDepth must be 0-20 or null')
+        return
+      }
+    }
+    CodexChatStore.updateThreadContext(threadId, {
+      authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
+      authorNoteDepth,
+    })
+    const windowKeys = ['contextTurns', 'summaryEnabled', 'summary'] as const
+    if ((thread.engine !== 'llm' || thread.kind === 'group') && windowKeys.some((key) => body[key] !== undefined)) {
       sendRouteBadRequest(res, 'Only LLM chats have context settings')
       return
     }

@@ -4,7 +4,7 @@ import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { DEFAULT_CHAT_STYLE } from '../src/services/codex-chat/chatStyle'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 import type { ChatCompletionMessage } from '../src/services/codex-chat/llmChatCompletion'
-import { anchoredSuffix, buildChatMessages, insertAtDepth, WINDOW_KEEP_RATIO } from '../src/services/codex-chat/llmChatContext'
+import { anchoredSuffix, buildChatMessages, depthBlocks, insertAtDepth, resolveAuthorNote, WINDOW_KEEP_RATIO } from '../src/services/codex-chat/llmChatContext'
 
 const BLOCK = '[참고 설정]\n카이는 왼손잡이다.\n[/참고 설정]'
 
@@ -109,6 +109,7 @@ const profile = {
   loreScanDepth: 4,
   loreTokenBudget: 1024,
   loreDepth: 4,
+  authorNote: '',
   contextTurns: 20,
   contextTokens: null,
   maxTokens: null,
@@ -134,4 +135,34 @@ test('a request is: system prompt, summary, examples, the unsummarized turns, fl
   assert.deepEqual([result[2].content, result[3].content], ['안녕', '반가워'])
   assert.deepEqual([result[4].content, result[5].content], ['오늘 뭐 해?', '산책'], 'turns up to the summary are left out')
   assert.equal(result[6].content, '같이 갈까?\n\n[사용자 지시: 이번 메시지에 적용]\n- 짧게 답해')
+})
+
+// ---- Author's note ---------------------------------------------------------------------------------------------
+
+const noteProfile = { ...profile, authorNote: '{{char}}는 오늘 들떠 있다.' } as unknown as ChatProfile
+
+test("a chat's own note replaces the profile's default; the depth falls back to the lore depth", () => {
+  assert.deepEqual(resolveAuthorNote(null, noteProfile), { text: '카이는 오늘 들떠 있다.', depth: 4 })
+  assert.deepEqual(resolveAuthorNote({ author_note: '  ', author_note_depth: null }, noteProfile), { text: '카이는 오늘 들떠 있다.', depth: 4 })
+  assert.deepEqual(resolveAuthorNote({ author_note: '비가 온다.', author_note_depth: 1 }, noteProfile), { text: '비가 온다.', depth: 1 })
+  assert.deepEqual(resolveAuthorNote(null, profile), { text: '', depth: 4 })
+})
+
+test('lore and note share one block at the same depth, two blocks otherwise', () => {
+  const lore = { keyed: '카이는 왼손잡이다.' }
+  assert.deepEqual(depthBlocks(lore, 4, { text: '비가 온다.', depth: 4 }), [{ depth: 4, block: '[참고 설정]\n카이는 왼손잡이다.\n\n## 작가 노트\n비가 온다.\n[/참고 설정]' }])
+  assert.deepEqual(depthBlocks(lore, 4, { text: '비가 온다.', depth: 0 }), [
+    { depth: 4, block: '[참고 설정]\n카이는 왼손잡이다.\n[/참고 설정]' },
+    { depth: 0, block: '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]' },
+  ])
+  assert.deepEqual(depthBlocks({ keyed: '' }, 4, { text: '비가 온다.', depth: 2 }), [{ depth: 2, block: '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]' }])
+  assert.deepEqual(depthBlocks({ keyed: '' }, 4, { text: '', depth: 2 }), [])
+})
+
+test("the chat's note lands in the conversation at its depth", () => {
+  const thread = { id: 8, summary: null, summary_until_message_id: null, context_turns: null, summary_enabled: null, author_note: '비가 온다.', author_note_depth: 1 } as unknown as CodexChatThreadRecord
+  const messages = [record(1, 'user', '처음'), record(2, 'assistant', '응'), record(3, 'user', '오늘 뭐 해?'), record(4, 'assistant', '산책'), record(5, 'user', '같이 갈까?')]
+  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
+  const result = buildChatMessages({ profile: noteProfile, thread, messages, config, tools: [] })
+  assert.deepEqual(userContents(result.slice(3)), ['처음', '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]\n\n오늘 뭐 해?', '같이 갈까?'])
 })

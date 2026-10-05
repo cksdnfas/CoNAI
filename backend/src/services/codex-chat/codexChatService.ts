@@ -1,4 +1,5 @@
 import fs from 'fs'
+import { createHash } from 'crypto'
 import { chatContentWithAttachments, validateChatAttachments } from './chatAttachments'
 import path from 'path'
 import { spawn } from 'child_process'
@@ -15,13 +16,13 @@ import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeC
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
-import { buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
+import { authorNoteText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE } from './llmChatContext'
 import { selectLoreEntries } from './chatLorebook'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds } from './chatFlags'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
+import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { logger } from '../../utils/logger'
 
 const SESSION_IDLE_MS = 15 * 60 * 1000
@@ -576,6 +577,17 @@ function readLoreSent(value: string | null) {
 }
 
 /**
+ * The author's note to put in this turn's input: Codex keeps every input in its memory, so the note goes in once and
+ * again only when its text changes (or after a compaction clears the sent keys) — tracked like lore, as `note:<hash>`.
+ */
+function pendingAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | 'author_note_depth'> | null, profile: ChatProfile, sent: Set<string>) {
+  const text = authorNoteText(resolveAuthorNote(thread, profile))
+  if (!text) return { text: '', keys: [] as string[] }
+  const key = `note:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
+  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
+}
+
+/**
  * Remove a Codex thread's rollout (its memory on disk) once the chat no longer uses it. Best effort and in the
  * background: any chat process can delete it (they share CODEX_HOME), and one is started only when none is running.
  */
@@ -657,14 +669,16 @@ export async function runCodexGroupReply(params: {
         // Read after ensureCodexThread: a new Codex thread starts with no lore in its memory.
         const sent = readLoreSent(ChatGroupStore.member(threadId, profile.id)?.codex_lore_sent ?? null)
         const lore = selectLoreEntries(profile, params.messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile), { skip: (key) => sent.has(key) })
+        const note = pendingAuthorNote(CodexChatStore.findThreadById(threadId) ?? null, profile, sent)
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: params.buildInput(lore.text), text_elements: [] }],
+          input: [{ type: 'text', text: params.buildInput([lore.text, note.text].filter(Boolean).join('\n\n')), text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        if (lore.keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, [...sent, ...lore.keys].slice(-LORE_SENT_MAX_KEYS))
+        const keys = [...lore.keys, ...note.keys]
+        if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
         if (params.signal.aborted) interrupt()
       } catch (error) {
         finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
@@ -873,18 +887,22 @@ export const CodexChatService = {
       try {
         // Codex keeps every turn's input in its memory, so lore already given since the last compaction (same entry,
         // same content) is not given again. Read after ensureCodexThread: a new Codex thread starts with none.
-        const sent = readLoreSent(CodexChatStore.findThreadById(threadId)?.codex_lore_sent ?? null)
+        const current = CodexChatStore.findThreadById(threadId) ?? null
+        const sent = readLoreSent(current?.codex_lore_sent ?? null)
         const lore = selectLoreEntries(profile, CodexChatStore.listMessages(threadId), (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile), { skip: (key) => sent.has(key) })
+        const note = pendingAuthorNote(current, profile, sent)
         const directive = buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile))
-        const input = [chatContentWithAttachments(trimmed, attachments), directive].filter(Boolean).join('\n\n')
+        const reference = referenceBlock([lore.text, note.text])
+        const input = [reference, chatContentWithAttachments(trimmed, attachments), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: lore.text ? `[참고 설정]\n${lore.text}\n[/참고 설정]\n\n${input}` : input, text_elements: [] }],
+          input: [{ type: 'text', text: input, text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        if (lore.keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, [...sent, ...lore.keys].slice(-LORE_SENT_MAX_KEYS))
+        const keys = [...lore.keys, ...note.keys]
+        if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
       } catch (error) {
         finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
       }

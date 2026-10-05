@@ -262,7 +262,50 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
 
 /** Keyword lore as the block that goes into the conversation (the same marks Codex gets), '' when there is none. */
 export function loreBlock(lore: Pick<SelectedLore, 'keyed'>) {
-  return lore.keyed ? `[참고 설정]\n${lore.keyed}\n[/참고 설정]` : ''
+  return lore.keyed ? referenceBlock([lore.keyed]) : ''
+}
+
+/** Conversation-time reference material (`[참고 설정]`), the same marks for both engines. */
+export function referenceBlock(parts: string[]) {
+  const body = parts.map((part) => part.trim()).filter(Boolean).join('\n\n')
+  return body ? `[참고 설정]\n${body}\n[/참고 설정]` : ''
+}
+
+export type AuthorNote = { text: string; depth: number }
+
+/**
+ * The author's note a chat gets — its own, else the profile's default — with `{{char}}`/`{{user}}` filled, and the
+ * depth it goes in at (the chat's, else the profile's lore depth). Empty text means none.
+ */
+export function resolveAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | 'author_note_depth'> | null, profile: ChatProfile): AuthorNote {
+  const text = thread?.author_note?.trim() || (profile.authorNote ?? '').trim()
+  return { text: text ? fillCharacterPlaceholders(text, profile) : '', depth: thread?.author_note_depth ?? profile.loreDepth }
+}
+
+export function authorNoteText(note: Pick<AuthorNote, 'text'>) {
+  return note.text ? `## 작가 노트\n${note.text}` : ''
+}
+
+/**
+ * The `[참고 설정]` blocks a request merges into its conversation: keyword lore at the profile's lore depth and the
+ * author's note at its own — one block when both share a depth.
+ */
+export function depthBlocks(lore: Pick<SelectedLore, 'keyed'>, loreDepth: number, note: AuthorNote): Array<{ depth: number; block: string }> {
+  const noteText = authorNoteText(note)
+  if (lore.keyed && noteText && note.depth !== loreDepth) {
+    return [{ depth: loreDepth, block: referenceBlock([lore.keyed]) }, { depth: note.depth, block: referenceBlock([noteText]) }]
+  }
+  const block = referenceBlock([lore.keyed, noteText])
+  return block ? [{ depth: lore.keyed ? loreDepth : note.depth, block }] : []
+}
+
+/** `insertAtDepth` for every block; each only prefixes one user message, so the others' positions are unaffected. */
+export function insertDepthBlocks(messages: ChatCompletionMessage[], blocks: Array<{ depth: number; block: string }>) {
+  return blocks.reduce((result, { depth, block }) => insertAtDepth(result, depth, block), messages)
+}
+
+export function estimateDepthBlocks(profileId: number, blocks: Array<{ block: string }>) {
+  return blocks.reduce((total, { block }) => total + estimateTokens(profileId, block), 0)
 }
 
 function prefixUserContent(content: string | ChatContentPart[], block: string): string | ChatContentPart[] {
@@ -360,12 +403,12 @@ export function buildChatMessages(params: {
   const { profile, thread, config, tools } = params
   const lore = selectChatLore(profile, params.messages)
   const system = buildLeadingMessages(profile, thread, config, tools.length > 0, lore)
-  const block = loreBlock(lore)
-  const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + (block ? estimateTokens(profile.id, block) : 0)
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile))
+  const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks)
   const turns = splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config)))
   const fit = selectWindow(profile.id, turns, config, fixedTokens).length
   const window = anchoredWindowFor(thread.id, turns, fit, (turn) => turn[0].id)
-  const conversation = insertAtDepth(window.flat().flatMap(toCompletionMessages), profile.loreDepth, block)
+  const conversation = insertDepthBlocks(window.flat().flatMap(toCompletionMessages), blocks)
   return appendUserDirective([...system, ...conversation], flagDirectiveFor(params.messages, profile))
 }
 
@@ -405,9 +448,8 @@ function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: L
   }
   const ahead = mode === 'ahead'
   const lore = selectChatLore(profile, messages)
-  const block = loreBlock(lore)
   const fixedTokens = estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled, lore))
-    + (block ? estimateTokens(profile.id, block) : 0)
+    + estimateDepthBlocks(profile.id, depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile)))
     + (ahead ? estimateMessagesTokens(profile.id, turns[turns.length - 1].flatMap(toCompletionMessages)) : 0)
   const fit = selectWindow(profile.id, turns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0)).length
   return turnsToFold(turns.length, fit, config.summaryTriggerTurns)

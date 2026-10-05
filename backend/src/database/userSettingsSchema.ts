@@ -557,6 +557,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['kind', "TEXT NOT NULL DEFAULT 'direct'"],
     ['group_chain_limit', 'INTEGER'],
     ['group_window_limit', 'INTEGER'],
+    // This chat's author's note (replaces the profile's default) and where it goes (turns before the end; null: the profile's lore depth).
+    ['author_note', 'TEXT'],
+    ['author_note_depth', 'INTEGER'],
     // JSON ids of the chat flags switched on in this chat.
     ['flag_ids', 'TEXT'],
   ];
@@ -584,6 +587,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['lore_scan_depth', 'INTEGER NOT NULL DEFAULT 4'],
     ['lore_token_budget', 'INTEGER NOT NULL DEFAULT 1024'],
     ['lore_depth', 'INTEGER NOT NULL DEFAULT 4'],
+    // Default author's note (scene direction merged into the conversation at lore_depth); chats can override it.
+    ['author_note', 'TEXT'],
     ['engine', "TEXT NOT NULL DEFAULT 'llm'"],
     ['reasoning_effort', 'TEXT'],
     ['context_tokens', 'INTEGER'],

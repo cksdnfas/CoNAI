@@ -2,7 +2,7 @@ import type { ChatProfile } from './chatProfiles'
 import { chatContentWithAttachments } from './chatAttachments'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionMessage } from './llmChatCompletion'
-import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, flagDirectiveFor, insertAtDepth, loreBlock, selectChatLore, sendableMessages, toCompletionMessages } from './llmChatContext'
+import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, resolveAuthorNote, selectChatLore, sendableMessages, toCompletionMessages } from './llmChatContext'
 
 export const USER_SPEAKER_NAME = '사용자'
 const EVERYONE_WORDS = ['모두', 'all', 'everyone']
@@ -100,7 +100,8 @@ export function buildGroupHeader(params: { thread: CodexChatThreadRecord; member
  * An API LLM member's request: its own persona (with its always-on lore) and examples, the room header, then the
  * room's recent messages from its point of view — its own replies as `assistant`, everyone else's as `[name] text`
  * user turns (merged when consecutive, since chat templates expect user/assistant to alternate). The window start is
- * anchored like a direct chat's, and the member's keyword lore is merged in `loreDepth` user turns before the end.
+ * anchored like a direct chat's, and the member's keyword lore and the room's author's note are merged in `loreDepth`
+ * user turns before the end.
  */
 export function buildGroupLlmMessages(params: {
   profile: ChatProfile
@@ -131,7 +132,8 @@ export function buildGroupLlmMessages(params: {
     else conversation.push({ role: 'user', content: line })
   }
   // The flags the user had on for the message this run answers reach every member answering it.
-  return appendUserDirective([...system, ...insertAtDepth(conversation, profile.loreDepth, loreBlock(lore))], flagDirectiveFor(params.messages, profile))
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile))
+  return appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], flagDirectiveFor(params.messages, profile))
 }
 
 /**

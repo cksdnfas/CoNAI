@@ -31,6 +31,7 @@ export const CHAT_PROFILE_DEFAULTS = {
   toolOutputLimit: 12_000,
 } as const
 
+export const AUTHOR_NOTE_MAX_LENGTH = 4000
 const MAX_PROMPT_SECTIONS = 30
 const SECTION_TITLE_MAX_LENGTH = 80
 
@@ -66,6 +67,8 @@ export type ChatProfile = {
   loreTokenBudget: number
   /** API LLM: keyword lore goes this many turns before the end of the conversation. */
   loreDepth: number
+  /** Default author's note: scene direction every chat of this profile gets at `loreDepth` unless the chat sets its own. */
+  authorNote: string
   /** Small data URL (resized in the browser). */
   avatar: string | null
   engine: ChatProfileEngine
@@ -127,6 +130,7 @@ type ProfileRow = {
   lore_scan_depth: number
   lore_token_budget: number
   lore_depth: number | null
+  author_note: string | null
   avatar: string | null
   engine: string | null
   provider_name: string
@@ -234,6 +238,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     loreScanDepth: row.lore_scan_depth ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
     loreTokenBudget: row.lore_token_budget ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     loreDepth: row.lore_depth ?? CHAT_PROFILE_DEFAULTS.loreDepth,
+    authorNote: row.author_note ?? '',
     avatar: row.avatar,
     engine: row.engine === 'codex' ? 'codex' : 'llm',
     providerName: row.provider_name,
@@ -346,6 +351,7 @@ function toColumns(input: ChatProfileInput) {
     lore_scan_depth: optionalNumber(input.loreScanDepth, { min: 1, max: 100 }, true) ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
     lore_token_budget: optionalNumber(input.loreTokenBudget, { min: 0, max: 32768 }, true) ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     lore_depth: optionalNumber(input.loreDepth, { min: 0, max: 20 }, true) ?? CHAT_PROFILE_DEFAULTS.loreDepth,
+    author_note: text(input.authorNote, AUTHOR_NOTE_MAX_LENGTH) || null,
     avatar,
     engine,
     provider_name: providerName,

@@ -149,6 +149,8 @@ export interface ChatProfile {
   loreTokenBudget: number
   /** API LLM: keyword lore is merged in this many turns before the end (0: the latest message). */
   loreDepth: number
+  /** Default author's note for the profile's chats (a chat can set its own). */
+  authorNote: string
   tagline: string
   id: number
   name: string
@@ -245,6 +247,9 @@ export interface CodexChatThread {
   kind: 'direct' | 'group'
   group_chain_limit: number | null
   group_window_limit: number | null
+  /** This chat's author's note (null: the profile's default) and its depth in turns before the end (null: the profile's lore depth). */
+  author_note?: string | null
+  author_note_depth?: number | null
   /** Group rooms in chat lists: member profiles in room order. */
   member_profile_ids?: number[]
   /** JSON ids of the chat flags switched on in this chat (read with readThreadFlagIds). */
@@ -487,7 +492,7 @@ export function listChatConnectionModels(providerName: string) {
   return requestApiData<{ models: string[]; defaultModel: string | null }>(`/api/codex-chat/admin/models?providerName=${encodeURIComponent(providerName)}`, { cache: 'no-store' })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; summary?: string | null }) {
+export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
