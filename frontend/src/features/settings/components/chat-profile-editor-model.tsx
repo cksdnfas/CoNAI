@@ -49,6 +49,11 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
       <Field label={t({ ko: '로어북 · 토큰 상한', en: 'Lorebook · token budget' })}>
         <NumberStepperInput variant="settings" min={0} max={32768} step={128} value={draft.loreTokenBudget} onValueCommit={(value) => patch({ loreTokenBudget: numberOrNull(value) ?? 1024 })} />
       </Field>
+      {isLlm ? (
+        <Field label={t({ ko: '로어북 · 삽입 위치 (끝에서 몇 턴 앞)', en: 'Lorebook · insert depth (turns from the end)' })}>
+          <NumberStepperInput variant="settings" min={0} max={20} value={draft.loreDepth} onValueCommit={(value) => patch({ loreDepth: numberOrNull(value) ?? 4 })} />
+        </Field>
+      ) : null}
     </>
   )
 

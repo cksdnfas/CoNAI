@@ -22,6 +22,8 @@ export const CHAT_PROFILE_LIMITS = {
 export const CHAT_PROFILE_DEFAULTS = {
   loreScanDepth: 4,
   loreTokenBudget: 1024,
+  /** Turns before the end where keyword lore is merged in (0: the latest user message). */
+  loreDepth: 4,
   contextTurns: 20,
   summaryTriggerTurns: 6,
   maxToolRounds: 8,
@@ -62,6 +64,8 @@ export type ChatProfile = {
   lorebookIds: number[]
   loreScanDepth: number
   loreTokenBudget: number
+  /** API LLM: keyword lore goes this many turns before the end of the conversation. */
+  loreDepth: number
   /** Small data URL (resized in the browser). */
   avatar: string | null
   engine: ChatProfileEngine
@@ -122,6 +126,7 @@ type ProfileRow = {
   lorebook_ids: string | null
   lore_scan_depth: number
   lore_token_budget: number
+  lore_depth: number | null
   avatar: string | null
   engine: string | null
   provider_name: string
@@ -228,6 +233,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     lorebookIds: normalizeLorebookIds(row.lorebook_ids),
     loreScanDepth: row.lore_scan_depth ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
     loreTokenBudget: row.lore_token_budget ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
+    loreDepth: row.lore_depth ?? CHAT_PROFILE_DEFAULTS.loreDepth,
     avatar: row.avatar,
     engine: row.engine === 'codex' ? 'codex' : 'llm',
     providerName: row.provider_name,
@@ -339,6 +345,7 @@ function toColumns(input: ChatProfileInput) {
     lorebook_ids: JSON.stringify(ChatLorebookStore.existing(normalizeLorebookIds(input.lorebookIds))),
     lore_scan_depth: optionalNumber(input.loreScanDepth, { min: 1, max: 100 }, true) ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
     lore_token_budget: optionalNumber(input.loreTokenBudget, { min: 0, max: 32768 }, true) ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
+    lore_depth: optionalNumber(input.loreDepth, { min: 0, max: 20 }, true) ?? CHAT_PROFILE_DEFAULTS.loreDepth,
     avatar,
     engine,
     provider_name: providerName,

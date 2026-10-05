@@ -44,7 +44,7 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
             <p className="text-xs text-muted-foreground">
               {preview.engine === 'codex'
                 ? t({ ko: 'Codex에는 이 지시문이 넘어가고, 대화 기억은 Codex가 직접 관리해. 토큰 수는 추정치야.', en: 'Codex receives these instructions and manages the conversation itself. Token counts are estimates.' })
-                : t({ ko: '실제 요청에서는 이 뒤에 요약(켜져 있으면)과 최근 대화가 붙어. 토큰 수는 추정치이고, 대화를 하면 서버가 알려준 사용량으로 보정돼.', en: 'Real requests add the summary (when on) and recent turns after this. Counts are estimates, calibrated from real usage once you chat.' })}
+                : t({ ko: '실제 요청에서는 이 뒤에 요약(켜져 있으면)과 최근 대화가 붙고, 키워드로 걸린 로어는 끝에서 {depth}턴 앞의 메시지에 들어가. 토큰 수는 추정치이고, 대화를 하면 서버가 알려준 사용량으로 보정돼.', en: 'Real requests add the summary (when on) and recent turns after this; keyword lore goes into the message {depth} turns before the end. Counts are estimates, calibrated from real usage once you chat.' }, { depth: draft.loreDepth ?? 4 })}
             </p>
             <div className="space-y-3">
               {preview.messages.map((message, index) => (

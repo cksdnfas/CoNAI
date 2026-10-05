@@ -3,10 +3,10 @@ import { profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
-import { buildLorebookText } from './chatLorebook'
+import { selectLoreEntries, type SelectedLore } from './chatLorebook'
 import { buildFlagDirective } from './chatFlags'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
-import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
+import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
 
 /** Tool output replayed to the model for turns still in the window. */
 const REPLAYED_TOOL_OUTPUT_LENGTH = 4000
@@ -215,14 +215,38 @@ function selectWindow(profileId: number, turns: CodexChatMessageRecord[][], conf
 }
 
 /**
+ * The profile's lore for one request. Without messages (a prompt preview) only the "always on" entries are chosen.
+ */
+export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<{ content: string }>): SelectedLore {
+  return selectLoreEntries(profile, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile))
+}
+
+/**
+ * Request layout, front to back, so that what a server has already seen stays byte-identical for as long as possible
+ * (OpenAI caches a repeated prefix by itself; llama.cpp, LM Studio, vLLM and Ollama reuse their KV cache the same way):
+ *
+ *   1. system prompt — persona, "always on" lore, guidance: fixed until the profile is saved
+ *   2. rolling summary — changes only when turns are folded in
+ *   3. example dialogue — fixed
+ *   4. older turns
+ *   5. keyword lore (`[참고 설정]`) merged into the user message `loreDepth` turns before the end — the part that
+ *      changes with the conversation, so only the turns after it are re-read when it changes
+ *   6. the latest user message, with the chat flags appended
+ *
+ * Anything that varies between requests (lore matches, future time macros or state) belongs in 5 or 6, never in 1–3.
+ */
+
+/**
  * Everything before the real conversation: the system prompt (stable, so servers can reuse the cached prefix), the
  * rolling summary, then example turns. Chat templates often allow system messages only at the start, so the note that
- * the examples are not real lives in the system prompt rather than around them.
+ * the examples are not real lives in the system prompt rather than around them. `lore` defaults to the constant
+ * entries alone (a preview).
  */
-export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, messages?: ReadonlyArray<{ content: string }>) {
+export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<SelectedLore, 'constant'> = selectChatLore(profile)) {
   const examples = buildExampleMessages(profile)
   const systemPrompt = [
     buildPersonaPrompt(profile),
+    lore.constant ? `## 설정\n${lore.constant}` : '',
     examples.length > 0 ? EXAMPLE_NOTE : '',
     withTools ? TOOL_GUIDANCE : '',
     REPLY_FORMAT_GUIDANCE,
@@ -233,9 +257,67 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
   if (config.summaryEnabled && thread?.summary?.trim()) {
     result.push({ role: 'system', content: `## 지금까지의 대화 요약\n${thread.summary.trim()}` })
   }
-  const lore = buildLorebookText(profile, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile))
-  if (lore) result.push({ role: 'system', content: `## 관련 설정\n${lore}` })
   return [...result, ...examples]
+}
+
+/** Keyword lore as the block that goes into the conversation (the same marks Codex gets), '' when there is none. */
+export function loreBlock(lore: Pick<SelectedLore, 'keyed'>) {
+  return lore.keyed ? `[참고 설정]\n${lore.keyed}\n[/참고 설정]` : ''
+}
+
+function prefixUserContent(content: string | ChatContentPart[], block: string): string | ChatContentPart[] {
+  if (typeof content === 'string') return content ? `${block}\n\n${content}` : block
+  return [{ type: 'text', text: block }, ...content]
+}
+
+/**
+ * Put `block` in front of the user message `depth` turns before the end: 0 is the latest user message, 1 the one
+ * before, and a depth beyond the conversation lands on its oldest user message. Merged into a user message rather
+ * than sent as a system message in the middle, which many chat templates reject. Without any user message the block
+ * becomes one.
+ */
+export function insertAtDepth(messages: ChatCompletionMessage[], depth: number, block: string): ChatCompletionMessage[] {
+  if (!block) return messages
+  const userIndices = messages.flatMap((message, index) => (message.role === 'user' ? [index] : []))
+  if (userIndices.length === 0) return [...messages, { role: 'user', content: block }]
+  const target = userIndices[Math.max(0, userIndices.length - 1 - Math.max(0, Math.floor(depth)))]
+  return messages.map((message, index) => (index === target && message.role === 'user' ? { ...message, content: prefixUserContent(message.content, block) } : message))
+}
+
+// ---- Window start ---------------------------------------------------------------------------------------------
+
+/** Share of what fits that is kept when the window start has to move, so it then holds for several turns. */
+export const WINDOW_KEEP_RATIO = 0.75
+
+/** Id of the first item each chat last sent, so the window start only moves when it has to. */
+const windowAnchors = new Map<number, number>()
+
+/**
+ * The suffix of `items` to send given that at most `fit` of them fit. While everything fits, all of them. Once they
+ * do not, the window does not slide by one item per request (which changes the request prefix every time) but jumps
+ * forward to `WINDOW_KEEP_RATIO` of what fits and keeps that start — `anchorId` — until that no longer fits either.
+ * A remembered start that would send fewer than that share (the limit was raised, items were removed) is dropped.
+ */
+export function anchoredSuffix<T>(items: T[], fit: number, idOf: (item: T) => number, anchorId: number | undefined): { window: T[]; anchorId: number | undefined } {
+  if (items.length === 0) return { window: [], anchorId: undefined }
+  const limit = Math.max(1, Math.min(items.length, Math.floor(fit)))
+  if (items.length <= limit) return { window: items, anchorId: idOf(items[0]) }
+  const floor = Math.max(1, Math.floor(limit * WINDOW_KEEP_RATIO))
+  const anchorIndex = anchorId === undefined ? -1 : items.findIndex((item) => idOf(item) === anchorId)
+  if (anchorIndex >= 0) {
+    const length = items.length - anchorIndex
+    if (length <= limit && length >= floor) return { window: items.slice(anchorIndex), anchorId }
+  }
+  const window = items.slice(-floor)
+  return { window, anchorId: idOf(window[0]) }
+}
+
+/** `anchoredSuffix` with the start remembered per chat (in memory: a restart only costs one cache miss). */
+export function anchoredWindowFor<T>(threadId: number, items: T[], fit: number, idOf: (item: T) => number) {
+  const result = anchoredSuffix(items, fit, idOf, windowAnchors.get(threadId))
+  if (result.anchorId === undefined) windowAnchors.delete(threadId)
+  else windowAnchors.set(threadId, result.anchorId)
+  return result.window
 }
 
 /** The chat flags of the message being answered (the latest user message) as one block; '' when none were on. */
@@ -263,9 +345,10 @@ function unsummarizedMessages(messages: CodexChatMessageRecord[], thread: Pick<C
 }
 
 /**
- * The request for one reply: the profile's system prompt (stable, so servers can reuse the cached prefix), the
- * rolling summary when enabled, then the recent unsummarized turns that fit — ending with the user message just
- * stored. Turns are only dropped here when the summary could not keep up (off, failed or interrupted).
+ * The request for one reply, laid out as described above `buildLeadingMessages`: the leading messages, the recent
+ * unsummarized turns that fit (start anchored, see `anchoredSuffix`) with the keyword lore merged in `loreDepth`
+ * turns before the end, ending with the user message just stored plus its flags. Turns are only dropped here when
+ * the summary could not keep up (off, failed or interrupted).
  */
 export function buildChatMessages(params: {
   profile: ChatProfile
@@ -275,9 +358,15 @@ export function buildChatMessages(params: {
   tools: ChatCompletionTool[]
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const system = buildLeadingMessages(profile, thread, config, tools.length > 0, params.messages)
-  const window = selectWindow(profile.id, splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config))), config, estimateMessagesTokens(profile.id, system, tools))
-  return appendUserDirective([...system, ...window.flat().flatMap(toCompletionMessages)], flagDirectiveFor(params.messages, profile))
+  const lore = selectChatLore(profile, params.messages)
+  const system = buildLeadingMessages(profile, thread, config, tools.length > 0, lore)
+  const block = loreBlock(lore)
+  const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + (block ? estimateTokens(profile.id, block) : 0)
+  const turns = splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config)))
+  const fit = selectWindow(profile.id, turns, config, fixedTokens).length
+  const window = anchoredWindowFor(thread.id, turns, fit, (turn) => turn[0].id)
+  const conversation = insertAtDepth(window.flat().flatMap(toCompletionMessages), profile.loreDepth, block)
+  return appendUserDirective([...system, ...conversation], flagDirectiveFor(params.messages, profile))
 }
 
 // ---- Summary --------------------------------------------------------------------------------------------------
@@ -315,7 +404,10 @@ function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: L
     return turns.length
   }
   const ahead = mode === 'ahead'
-  const fixedTokens = estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled, messages))
+  const lore = selectChatLore(profile, messages)
+  const block = loreBlock(lore)
+  const fixedTokens = estimateMessagesTokens(profile.id, buildLeadingMessages(profile, thread, config, profile.mcpEnabled, lore))
+    + (block ? estimateTokens(profile.id, block) : 0)
     + (ahead ? estimateMessagesTokens(profile.id, turns[turns.length - 1].flatMap(toCompletionMessages)) : 0)
   const fit = selectWindow(profile.id, turns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0)).length
   return turnsToFold(turns.length, fit, config.summaryTriggerTurns)

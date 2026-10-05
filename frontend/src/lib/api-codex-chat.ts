@@ -147,6 +147,8 @@ export interface ChatProfile {
   lorebookIds: number[]
   loreScanDepth: number
   loreTokenBudget: number
+  /** API LLM: keyword lore is merged in this many turns before the end (0: the latest message). */
+  loreDepth: number
   tagline: string
   id: number
   name: string
@@ -195,6 +197,7 @@ export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 
 export interface ChatProfileDefaults {
   loreScanDepth: number
   loreTokenBudget: number
+  loreDepth: number
   contextTurns: number
   summaryTriggerTurns: number
   maxToolRounds: number

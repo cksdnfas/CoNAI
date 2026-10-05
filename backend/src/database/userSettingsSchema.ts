@@ -583,6 +583,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['alternate_greetings', 'TEXT'],
     ['lore_scan_depth', 'INTEGER NOT NULL DEFAULT 4'],
     ['lore_token_budget', 'INTEGER NOT NULL DEFAULT 1024'],
+    ['lore_depth', 'INTEGER NOT NULL DEFAULT 4'],
     ['engine', "TEXT NOT NULL DEFAULT 'llm'"],
     ['reasoning_effort', 'TEXT'],
     ['context_tokens', 'INTEGER'],

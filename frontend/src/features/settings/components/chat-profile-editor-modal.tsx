@@ -45,6 +45,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     lorebookIds: profile?.lorebookIds ?? [],
     loreScanDepth: profile?.loreScanDepth ?? defaults?.loreScanDepth ?? 4,
     loreTokenBudget: profile?.loreTokenBudget ?? defaults?.loreTokenBudget ?? 1024,
+    loreDepth: profile?.loreDepth ?? defaults?.loreDepth ?? 4,
     avatar: profile?.avatar ?? null,
     engine: profile?.engine ?? 'llm',
     providerName: profile?.providerName ?? '',

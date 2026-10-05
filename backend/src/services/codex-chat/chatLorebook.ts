@@ -149,27 +149,42 @@ export const ChatLorebookStore = {
 
 type LoreProfile = { lorebookIds: number[]; loreScanDepth: number; loreTokenBudget: number }
 
+export type SelectedLore = {
+  /** Every chosen entry in order (what Codex gets in one block). */
+  text: string
+  /** "Always on" entries: fixed for the profile, so they belong with the stable system prompt. */
+  constant: string
+  /** Entries matched by keyword: change with the conversation, so they go near its end. */
+  keyed: string
+  keys: string[]
+}
+
 /**
  * The entries a reply gets, each with a stable key (`book:entry:content hash`) so a caller that keeps context
  * (Codex) can skip what it already sent. Books are read at send time so edits apply at once. No messages means a
- * prompt preview: constant entries only. Matching never evaluates regex or code.
+ * prompt preview: constant entries only. Matching never evaluates regex or code. One token budget covers constant
+ * and keyed entries together, lowest order first.
  */
-export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean } = {}) {
+export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean } = {}): SelectedLore {
   const lorebook = ChatLorebookStore.keyedEntriesOf(profile.lorebookIds)
-  if (lorebook.length === 0) return { text: '', keys: [] as string[] }
+  if (lorebook.length === 0) return { text: '', constant: '', keyed: '', keys: [] }
   const recent = messages?.slice(-profile.loreScanDepth).map((message) => message.content).join('\n') ?? ''
   const folded = recent.toLowerCase()
   const entries = lorebook.filter(({ key, entry }) => !options.skip?.(key) && entry.enabled && entry.content.trim() && (entry.constant || (messages !== undefined && entry.keys.some((word) => word && (entry.caseSensitive ? recent.includes(word) : folded.includes(word.toLowerCase())))))).sort((a, b) => a.entry.order - b.entry.order)
   let text = ''
+  const constant: string[] = []
+  const keyed: string[] = []
   const keys: string[] = []
   for (const { key, entry } of entries) {
-    const candidate = [text, render(entry.content)].filter(Boolean).join('\n\n')
+    const rendered = render(entry.content)
+    const candidate = [text, rendered].filter(Boolean).join('\n\n')
     if (estimate(candidate) <= profile.loreTokenBudget) {
       text = candidate
       keys.push(key)
+      ;(entry.constant ? constant : keyed).push(rendered)
     }
   }
-  return { text, keys }
+  return { text, constant: constant.join('\n\n'), keyed: keyed.join('\n\n'), keys }
 }
 
 export function buildLorebookText(profile: LoreProfile, messages: ReadonlyArray<{ content: string }> | undefined, estimate: (text: string) => number, render: (text: string) => string) {
