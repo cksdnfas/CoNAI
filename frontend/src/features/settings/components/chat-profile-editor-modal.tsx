@@ -124,23 +124,23 @@ function SwitchLine({ label, checked, onCheckedChange }: { label: string; checke
   )
 }
 
-/** A model of a connection: its listed models, or free text when the server lists none. Empty uses the default. */
+/**
+ * A model of a connection: its listed models, or free text when the server lists none. `emptyLabel` offers an empty
+ * choice with that meaning; without it the field always holds a real model.
+ */
 function ConnectionModelSelect({ value, models, defaultModel, emptyLabel, onChange }: {
   value: string
   models: string[]
   defaultModel: string | null
-  /** What an empty value means; defaults to the connection's default model. */
   emptyLabel?: string
   onChange: (value: string) => void
 }) {
-  const { t } = useI18n()
-  const fallback = emptyLabel ?? (defaultModel ? t({ ko: '연결 기본 모델 ({model})', en: 'Connection default ({model})' }, { model: defaultModel }) : t({ ko: '연결 기본 모델', en: 'Connection default' }))
   if (models.length === 0) {
-    return <Input variant="settings" value={value} placeholder={fallback} onChange={(event) => onChange(event.target.value)} />
+    return <Input variant="settings" value={value} placeholder={emptyLabel ?? defaultModel ?? undefined} onChange={(event) => onChange(event.target.value)} />
   }
   return (
     <Select variant="settings" value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">{fallback}</option>
+      {emptyLabel ? <option value="">{emptyLabel}</option> : null}
       {models.map((model) => <option key={model} value={model}>{model}</option>)}
       {value && !models.includes(value) ? <option value={value}>{value}</option> : null}
     </Select>
@@ -190,6 +190,26 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   })
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: open })
   const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && !isLlm })
+
+  // Fields start on real values, not on a "choose" or "connection default" entry: the first connection, then the
+  // connection's default model (or its first listed one). Declared after the draft reset so they apply on top of it.
+  const firstProviderName = llmProviders[0]?.provider_name ?? ''
+  useEffect(() => {
+    if (!open || !firstProviderName) return
+    setDraft((current) => (current.engine === 'llm' && !current.providerName ? { ...current, providerName: firstProviderName } : current))
+  }, [open, firstProviderName, draft.engine])
+  useEffect(() => {
+    const data = modelsQuery.data
+    const fill = data?.defaultModel || data?.models[0]
+    if (!open || !fill) return
+    setDraft((current) => (current.engine !== 'llm' || current.model ? current : { ...current, model: fill }))
+  }, [open, modelsQuery.data, draft.engine])
+  useEffect(() => {
+    const data = summaryModelsQuery.data
+    const fill = data?.defaultModel || data?.models[0]
+    if (!open || !fill) return
+    setDraft((current) => (!current.summaryProviderName || current.summaryModel ? current : { ...current, summaryModel: fill }))
+  }, [open, summaryModelsQuery.data])
 
   const refresh = async () => {
     await Promise.all([
@@ -324,8 +344,11 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             <>
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label={t({ ko: 'LLM 연결', en: 'LLM connection' })}>
-                  <Select variant="settings" value={draft.providerName} onChange={(event) => patch({ providerName: event.target.value, model: '' })}>
-                    <option value="">{t({ ko: '골라줘', en: 'Choose' })}</option>
+                  <Select variant="settings" value={draft.providerName} disabled={llmProviders.length === 0} onChange={(event) => patch({ providerName: event.target.value, model: '' })}>
+                    {llmProviders.length === 0 && providersQuery.isSuccess ? <option value="">{t({ ko: 'LLM 연결 없음', en: 'No LLM connections' })}</option> : null}
+                    {draft.providerName && !llmProviders.some((provider) => provider.provider_name === draft.providerName) && providersQuery.isSuccess
+                      ? <option value={draft.providerName}>{draft.providerName}</option>
+                      : null}
                     {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
                   </Select>
                 </Field>
@@ -504,7 +527,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
                 </Field>
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label={t({ ko: '요약 연결', en: 'Summary connection' })}>
-                    <Select variant="settings" value={draft.summaryProviderName ?? ''} onChange={(event) => patch({ summaryProviderName: event.target.value || null })}>
+                    <Select variant="settings" value={draft.summaryProviderName ?? ''} onChange={(event) => patch({ summaryProviderName: event.target.value || null, summaryModel: '' })}>
                       <option value="">{t({ ko: '대화 모델 그대로', en: 'Same as chat' })}</option>
                       {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
                     </Select>
