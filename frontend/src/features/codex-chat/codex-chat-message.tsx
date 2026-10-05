@@ -41,32 +41,53 @@ export function buildChatImageRecord(compositeHash: string, record?: GenerationH
   }
 }
 
+/**
+ * The box a thumbnail occupies before it is drawn. With the image's dimensions known it is the exact size the image
+ * will take (same height/width rules as the image itself), so nothing moves when the image appears.
+ */
+function thumbPlaceholder(size: ThumbSize, width: number | null | undefined, height: number | null | undefined) {
+  if (width && height) {
+    return { className: size === 'full' ? 'w-full' : THUMB_SIZE_CLASS[size], style: { aspectRatio: `${width} / ${height}` } }
+  }
+  return { className: THUMB_PLACEHOLDER_CLASS[size], style: undefined }
+}
+
 /** Retries of a thumbnail that is not served yet; the waits add up to about a minute. */
 const THUMB_RETRY_DELAYS_MS = [1000, 2000, 3000, 5000, 8000, 10000, 15000, 15000]
 
 /**
+ * Thumbnails that already loaded this session, by their canonical URL → the URL that worked. A thumbnail mounted again
+ * (the streamed reply is replaced by the stored message, the thread refetches) starts drawn, with no spinner or fade.
+ */
+const settledThumbnails = new Map<string, string>()
+
+/**
  * A new result is marked completed slightly before its file finishes post-processing, and until then the image routes
- * answer 404. Load the thumbnail again a few times (new URL each time) instead of leaving a blank until reload.
+ * answer 404. The `<img>` stays mounted and hidden while it retries (new URL each time) and shows once it has loaded,
+ * so the placeholder never flashes in and out.
  */
 function useRetriedThumbnail(url: string) {
+  const settled = settledThumbnails.get(url)
   const [attempt, setAttempt] = useState(0)
   const [failed, setFailed] = useState(false)
-  const [waiting, setWaiting] = useState(false)
+  const [loaded, setLoaded] = useState(settled !== undefined)
   const timerRef = useRef<number | null>(null)
   useEffect(() => () => { if (timerRef.current !== null) window.clearTimeout(timerRef.current) }, [])
+  const src = settled ?? (attempt === 0 || !url ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`)
   const onError = () => {
+    if (loaded) return
     if (attempt >= THUMB_RETRY_DELAYS_MS.length) {
       setFailed(true)
       return
     }
-    setWaiting(true)
-    timerRef.current = window.setTimeout(() => {
-      setAttempt((current) => current + 1)
-      setWaiting(false)
-    }, THUMB_RETRY_DELAYS_MS[attempt])
+    timerRef.current = window.setTimeout(() => setAttempt((current) => current + 1), THUMB_RETRY_DELAYS_MS[attempt])
   }
-  const src = attempt === 0 || !url ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`
-  return { src, waiting, failed, onError }
+  const onLoad = () => {
+    if (url) settledThumbnails.set(url, src)
+    setLoaded(true)
+    setFailed(false)
+  }
+  return { src, loaded, failed, onError, onLoad }
 }
 
 /** Click opens the lightbox; on PC a short hover shows a larger preview beside it. */
@@ -76,14 +97,8 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
   const retried = useRetriedThumbnail(size === 'full' ? image.image_url ?? thumbnailUrl : thumbnailUrl)
   const isVideo = image.mime_type?.startsWith('video/') === true
   const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
-
-  if (!isVideo && (retried.waiting || retried.failed)) {
-    return (
-      <div className={cn('flex shrink-0 items-center justify-center rounded-sm bg-surface-high text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
-        {retried.failed ? <ImageOff className="size-5" /> : <Spinner size="md" />}
-      </div>
-    )
-  }
+  const drawn = isVideo || retried.loaded
+  const placeholder = thumbPlaceholder(size, image.width, image.height)
 
   return (
     <>
@@ -91,15 +106,37 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
       <button
         type="button"
         aria-label={t({ ko: '크게 보기', en: 'View larger' })}
-        className={cn('shrink-0 cursor-zoom-in rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40', size === 'full' && 'w-full')}
-        onClick={onOpen}
-        {...hoverPreview.triggerProps}
+        // Until the image is drawn the button is the placeholder box: same footprint, spinner on top.
+        className={cn(
+          'relative shrink-0 overflow-hidden rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+          size === 'full' && 'w-full',
+          drawn ? 'cursor-zoom-in' : cn('cursor-default bg-surface-high text-muted-foreground', placeholder.className),
+        )}
+        style={drawn ? undefined : placeholder.style}
+        onClick={drawn ? onOpen : undefined}
+        {...(drawn ? hoverPreview.triggerProps : {})}
       >
         {isVideo ? (
           // Videos play muted and looped in place, like the library grid.
           <ImagePreviewMedia image={image} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
         ) : (
-          <img src={retried.src} alt="" loading="lazy" draggable={false} onError={retried.onError} className={cn(THUMB_CLASS, THUMB_SIZE_CLASS[size])} />
+          <img
+            src={retried.src}
+            alt=""
+            loading="lazy"
+            draggable={false}
+            onError={retried.onError}
+            onLoad={retried.onLoad}
+            className={cn(
+              THUMB_CLASS, THUMB_SIZE_CLASS[size], 'transition-opacity duration-300 ease-out',
+              drawn ? 'opacity-100' : 'absolute inset-0 h-full w-full opacity-0',
+            )}
+          />
+        )}
+        {!drawn && (
+          <span className="absolute inset-0 flex items-center justify-center">
+            {retried.failed ? <ImageOff className="size-5" /> : <Spinner size="md" />}
+          </span>
         )}
       </button>
       {hoverPreview.preview}
@@ -133,8 +170,10 @@ function HistoryThumb({ historyId, size, media, onOpen }: { historyId: number; s
     return <ChatImageThumb image={buildChatImageRecord(compositeHash, record, media?.[compositeHash])} size={size} onOpen={() => onOpen(compositeHash)} />
   }
 
+  // The requested size is known before the image is: the box already has the image's shape.
+  const placeholder = thumbPlaceholder(size, record?.width, record?.height)
   return (
-    <div className={cn('flex shrink-0 items-center justify-center rounded-sm bg-surface-high text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
+    <div className={cn('flex shrink-0 items-center justify-center rounded-sm bg-surface-high text-muted-foreground', placeholder.className)} style={placeholder.style}>
       {historyQuery.isError || record?.generation_status === 'failed' ? <ImageOff className="size-5" /> : <Spinner size="md" />}
     </div>
   )
