@@ -45,10 +45,6 @@ export function GroupAvatarStack({ profiles, size = 'sm', ringClassName = 'ring-
   )
 }
 
-function modelLine(profile: ChatProfileSummary) {
-  return profile.engine === 'codex' ? `Codex${profile.model ? ` · ${profile.model}` : ''}` : profile.model
-}
-
 function LimitRow({ label, value, range, disabled, onCommit }: { label: string; value: number; range: { min: number; max: number }; disabled: boolean; onCommit: (value: number) => void }) {
   const id = useId()
   return (
@@ -112,7 +108,7 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
                   <span className="truncate">{profile.name}</span>
                   {representative ? <Crown aria-label={t({ ko: '대표', en: 'Representative' })} className="size-3.5 shrink-0 text-secondary-text" /> : null}
                 </div>
-                {modelLine(profile) ? <div className="truncate font-mono text-2xs text-muted-foreground">{modelLine(profile)}</div> : null}
+                {profile.tagline ? <div className="truncate text-xs text-muted-foreground">{profile.tagline}</div> : null}
               </div>
               {representative ? null : (
                 <div className="flex opacity-0 transition-opacity focus-within:opacity-100 group-hover/member:opacity-100">

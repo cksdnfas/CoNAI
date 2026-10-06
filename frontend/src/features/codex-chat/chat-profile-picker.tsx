@@ -115,13 +115,10 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
                   >
                     <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="lg" />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-baseline gap-2">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="truncate font-semibold">{profile.name}</span>
-                          {/* Who stands for the room: the first one ticked. */}
-                          {pickedIndex === 0 ? <Crown aria-label={t({ ko: '대표', en: 'Representative' })} className="size-3.5 shrink-0 text-secondary-text" /> : null}
-                        </span>
-                        <span className="ml-auto shrink-0 text-2xs text-muted-foreground">{profile.engine === 'codex' ? 'Codex' : 'API LLM'} · {profile.model || t({ ko: '기본 모델', en: 'Default model' })}</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate font-semibold">{profile.name}</span>
+                        {/* Who stands for the room: the first one ticked. */}
+                        {pickedIndex === 0 ? <Crown aria-label={t({ ko: '대표', en: 'Representative' })} className="size-3.5 shrink-0 text-secondary-text" /> : null}
                       </span>
                       {profile.tagline ? <span className="block truncate text-xs text-muted-foreground">{profile.tagline}</span> : null}
                     </span>

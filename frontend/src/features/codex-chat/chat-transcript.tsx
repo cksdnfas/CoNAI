@@ -1,5 +1,5 @@
 import { Fragment, memo, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, GitBranch, Languages, Pencil, Reply, RotateCcw, StepForward, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Languages, Pencil, Reply, RotateCcw, StepForward, X } from 'lucide-react'
 import type { ChatMessageRouting } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
@@ -82,23 +82,28 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
   const alternatives = message.alternatives ?? []
   const contextMeta = parseContextMeta(message.context_meta)
   const editableReply = !isUser && actions.canEditReply(message)
-  const recipientLabel = message.routing?.recipients.map((id) => typeof id === 'number' ? (speakerOf?.(id)?.name ?? look.speaker?.name ?? '') : id === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : t({ ko: '방 전체', en: 'Room' })).filter(Boolean).join(', ')
+  // Reply and the original text stay in view; the rest folds behind one "more" toggle.
+  const [moreOpen, setMoreOpen] = useState(false)
+  const showRewriteTools = actions.canRewrite && (isUser || lastReply || editableReply || alternatives.length > 1) && actions.editingId !== message.id
+  const hasMore = (!isUser && Boolean(contextMeta)) || actions.canBranch || showRewriteTools
+  // 1:1 chats show only a quote the user picked; addressing and the reply's automatic quote are room-only.
+  const routing = speakerOf ? message.routing : isUser && message.routing?.replyTo ? { ...message.routing, recipients: [] } : null
+  const recipientLabel = routing?.recipients.map((id) => typeof id === 'number' ? (speakerOf?.(id)?.name ?? look.speaker?.name ?? '') : id === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : t({ ko: '방 전체', en: 'Room' })).filter(Boolean).join(', ')
   return <div data-message-id={message.id} onPointerDown={(event) => { if (event.pointerType !== 'mouse') setTapped(true) }} className={cn('group/message -mx-2 rounded-md px-2 transition-colors duration-500', flash && 'bg-primary/10')}>
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : (content || message.routing?.replyTo) && <CodexChatUserMessage content={content} routing={message.routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
+        : (content || message.routing?.replyTo) && <CodexChatUserMessage content={content} routing={routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
       : actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEditReply} onCancel={() => actions.onEditingChange(null)} reply />
-        : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={message.routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
-    <div className={cn('mt-1 flex opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
+        : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
+    <div className={cn('mt-1 flex flex-wrap items-center gap-x-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', (tapped || moreOpen) && 'opacity-100')}>
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
       {translated ? <IconButton size="icon-xs" variant="ghost" aria-pressed={showOriginal} className={cn(showOriginal && 'text-primary')} label={showOriginal ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })} onClick={() => setShowOriginal((current) => !current)}><Languages /></IconButton> : null}
-      {!isUser && contextMeta ? <ChatContextInfo meta={contextMeta} /> : null}
-      {actions.canBranch ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '여기까지로 새 채팅 분기', en: 'Branch a new chat up to here' })} onClick={() => actions.onBranch(message.id)}><GitBranch /></IconButton> : null}
-    </div>
-    {actions.canRewrite && (isUser || lastReply || editableReply || alternatives.length > 1) && actions.editingId !== message.id ? (
-      <div className={cn('mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', tapped && 'opacity-100')}>
+      {hasMore ? <IconButton size="icon-xs" variant="ghost" aria-expanded={moreOpen} className={cn(moreOpen && 'text-primary')} label={moreOpen ? t({ ko: '접기', en: 'Less' }) : t({ ko: '더 보기', en: 'More' })} onClick={() => setMoreOpen((current) => !current)}><Ellipsis /></IconButton> : null}
+      {moreOpen && !isUser && contextMeta ? <ChatContextInfo meta={contextMeta} /> : null}
+      {moreOpen && actions.canBranch ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '여기까지로 새 채팅 분기', en: 'Branch a new chat up to here' })} onClick={() => actions.onBranch(message.id)}><GitBranch /></IconButton> : null}
+      {moreOpen && showRewriteTools ? <>
         {isUser
           ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '메시지 수정', en: 'Edit message' })} onClick={() => actions.onEditingChange(message.id)}><Pencil /></IconButton>
           : <>
@@ -111,8 +116,8 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
               <IconButton size="icon-xs" variant="ghost" disabled={actions.busy || message.active_alternative >= alternatives.length - 1} label={t({ ko: '다음 답변', en: 'Next answer' })} onClick={() => actions.onAlternative(message.id, message.active_alternative + 1)}><ChevronRight /></IconButton>
             </> : null}
           </>}
-      </div>
-    ) : null}
+      </> : null}
+    </div>
   </div>
 })
 
@@ -146,6 +151,6 @@ export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, 
     {/* Group rooms: one bubble per member answering now; none between members. */}
     {turn.replies
       ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} recipientLabel={recipients(reply.routing)} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming translating={reply.translating} {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
-      : <CodexChatAssistantMessage content={turn.text} routing={turn.routing} recipientLabel={recipients(turn.routing)} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming translating={turn.translating} {...look} />}
+      : <CodexChatAssistantMessage content={turn.text} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming translating={turn.translating} {...look} />}
   </>
 })
