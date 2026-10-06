@@ -1,0 +1,63 @@
+{
+  "conai_display_block": 1,
+  "name": "기본 상태",
+  "block": {
+    "key": "vitals",
+    "instruction": "장면에서 {{char}}의 상태가 바뀔 때 갱신해. 다치거나 회복하면 hp, 시간이 흐르거나 먹고 마시고 쉬면 thirst·hunger·fatigue, 대화 분위기와 사건은 mood, 신체 접촉이나 자극은 sensitivity. 아무것도 안 바뀐 턴에는 쓰지 마.",
+    "example": "{\n  \"hp\": 100,\n  \"thirst\": 10,\n  \"hunger\": 10,\n  \"mood\": 70,\n  \"fatigue\": 10,\n  \"sensitivity\": 30\n}",
+    "rules": "모든 값은 0~100 정수. hp·mood는 높을수록 좋고, thirst·hunger·fatigue는 높을수록 나쁘다(목마르고, 배고프고, 지친다). sensitivity는 높을수록 자극에 민감하다. 시간이 지나면 thirst·hunger·fatigue가 조금씩 오르고 먹고 마시고 자면 내려간다. 한 턴에 급격히 바꾸지 말고 장면에 맞게 조금씩 움직여.",
+    "summary": "HP {{hp}} · 기분 {{mood}} · 피로 {{fatigue}}",
+    "fields": [
+      {
+        "name": "hp",
+        "min": 0,
+        "max": 100,
+        "step": 25,
+        "values": [],
+        "readonly": false
+      },
+      {
+        "name": "thirst",
+        "min": 0,
+        "max": 100,
+        "step": 20,
+        "values": [],
+        "readonly": false
+      },
+      {
+        "name": "hunger",
+        "min": 0,
+        "max": 100,
+        "step": 20,
+        "values": [],
+        "readonly": false
+      },
+      {
+        "name": "mood",
+        "min": 0,
+        "max": 100,
+        "step": 25,
+        "values": [],
+        "readonly": false
+      },
+      {
+        "name": "fatigue",
+        "min": 0,
+        "max": 100,
+        "step": 20,
+        "values": [],
+        "readonly": false
+      },
+      {
+        "name": "sensitivity",
+        "min": 0,
+        "max": 100,
+        "step": 15,
+        "values": [],
+        "readonly": false
+      }
+    ],
+    "template": "<div class=\"vitals\">\n  <div class=\"stat hp{{#if hp <= 25}} warn{{/if}}\">\n    <div class=\"row\"><span class=\"label\">체력</span><span class=\"value\">{{clamp(hp, 0, 100)}}</span></div>\n    <div class=\"track\"><div class=\"fill\" style=\"width:{{clamp(hp, 0, 100)}}%\"></div></div>\n  </div>\n  <div class=\"stat thirst{{#if thirst >= 75}} warn{{/if}}\">\n    <div class=\"row\"><span class=\"label\">목마름</span><span class=\"value\">{{clamp(thirst, 0, 100)}}</span></div>\n    <div class=\"track\"><div class=\"fill\" style=\"width:{{clamp(thirst, 0, 100)}}%\"></div></div>\n  </div>\n  <div class=\"stat hunger{{#if hunger >= 75}} warn{{/if}}\">\n    <div class=\"row\"><span class=\"label\">배고픔</span><span class=\"value\">{{clamp(hunger, 0, 100)}}</span></div>\n    <div class=\"track\"><div class=\"fill\" style=\"width:{{clamp(hunger, 0, 100)}}%\"></div></div>\n  </div>\n  <div class=\"stat mood{{#if mood <= 25}} warn{{/if}}\">\n    <div class=\"row\"><span class=\"label\">기분</span><span class=\"value\">{{clamp(mood, 0, 100)}}</span></div>\n    <div class=\"track\"><div class=\"fill\" style=\"width:{{clamp(mood, 0, 100)}}%\"></div></div>\n  </div>\n  <div class=\"stat fatigue{{#if fatigue >= 75}} warn{{/if}}\">\n    <div class=\"row\"><span class=\"label\">피로도</span><span class=\"value\">{{clamp(fatigue, 0, 100)}}</span></div>\n    <div class=\"track\"><div class=\"fill\" style=\"width:{{clamp(fatigue, 0, 100)}}%\"></div></div>\n  </div>\n  <div class=\"stat sensitivity\">\n    <div class=\"row\"><span class=\"label\">감도</span><span class=\"value\">{{clamp(sensitivity, 0, 100)}}</span></div>\n    <div class=\"track\"><div class=\"fill\" style=\"width:{{clamp(sensitivity, 0, 100)}}%\"></div></div>\n  </div>\n</div>",
+    "css": ".vitals{display:flex;flex-direction:column;gap:12px;padding:2px 0 4px;font-size:12px;line-height:1;color:var(--foreground,#e5e2e1)}\n.stat{display:flex;flex-direction:column;gap:6px}\n.row{display:flex;align-items:baseline;justify-content:space-between}\n.label{letter-spacing:.02em;opacity:.62}\n.value{font-variant-numeric:tabular-nums;font-weight:500;color:var(--c)}\n.value::after{content:\"%\";margin-left:1px;font-size:10px;font-weight:400;opacity:.5}\n.track{height:5px;border-radius:999px;background:color-mix(in srgb,var(--foreground,#e5e2e1) 9%,transparent);overflow:hidden}\n.fill{height:100%;border-radius:999px;background:linear-gradient(90deg,color-mix(in srgb,var(--c) 70%,transparent),var(--c));transition:width .6s cubic-bezier(.2,.8,.2,1)}\n.hp{--c:#ef5350}\n.thirst{--c:#42a5f5}\n.hunger{--c:#ffb300}\n.mood{--c:#ab47bc}\n.fatigue{--c:#26a69a}\n.sensitivity{--c:#ec407a}\n.warn .fill{animation:vitals-pulse 1.6s ease-in-out infinite}\n.warn .label{opacity:.9;color:var(--c)}\n@keyframes vitals-pulse{0%,100%{opacity:1}50%{opacity:.45}}"
+  }
+}
