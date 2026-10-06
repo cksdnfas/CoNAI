@@ -32,13 +32,14 @@ function AuxModelRow({ label, select, children }: { label: string; select: React
 }
 
 /** The engine and its knobs: model slots per role, sampling, reasoning; then how much of the chat and the lore it is sent. */
-export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, slots, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
+export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, slots, slotsReady, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
   llmProviders: ExternalApiProviderRecord[]
   providersLoaded: boolean
   slots: ModelSlot[]
+  slotsReady: boolean
   connectionModels: ConnectionModels | undefined
   summaryModels: ConnectionModels | undefined
   translationModels: ConnectionModels | undefined
@@ -50,7 +51,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   const serverDefault = t({ ko: '서버 기본값', en: 'Server default' })
   const firstProvider = llmProviders[0]?.provider_name ?? ''
   const modelsByRole: Record<ModelRole, ConnectionModels | undefined> = { chat: connectionModels, summary: summaryModels, translation: translationModels, suggest: suggestModels }
-  const summaryChoice = roleChoice(draft, 'summary', slots, isLlm)
+  const summaryChoice = roleChoice(draft, 'summary', slots, isLlm, slotsReady)
   const summaryOn = summaryChoice !== 'off'
   const extraParamsError = (() => {
     if (!isLlm || !draft.extraParams.trim()) return null
@@ -66,8 +67,9 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   const roleSelect = (role: ModelRole, ariaLabel: string) => (
     <ModelRoleSelect
       role={role}
-      value={roleChoice(draft, role, slots, isLlm)}
+      value={roleChoice(draft, role, slots, isLlm, slotsReady)}
       slots={slots}
+      slotsReady={slotsReady}
       canInherit={isLlm}
       ariaLabel={ariaLabel}
       onChange={(choice) => patch(applyRoleChoice(draft, role, choice, firstProvider))}
@@ -76,12 +78,12 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
 
   /** A role's own connection + model, shown only while that role is "direct". */
   const directFields = (role: ModelRole, indent: boolean) => {
-    if (roleChoice(draft, role, slots, isLlm) !== 'direct') return null
+    if (!slotsReady || roleChoice(draft, role, slots, isLlm, slotsReady) !== 'direct') return null
     const direct = roleDirect(draft, role)
     const models = modelsByRole[role]
     return (
       <div className={cn('grid gap-3 md:grid-cols-2', indent && 'md:pl-4')}>
-        <Field label={t({ ko: '연결', en: 'Connection' })}>
+        <Field label={role === 'chat' ? t({ ko: 'LLM 연결', en: 'LLM connection' }) : t({ ko: '연결', en: 'Connection' })}>
           <Select variant="settings" value={direct.provider} disabled={llmProviders.length === 0} onChange={(event) => patch(roleProviderPatch(role, event.target.value))}>
             {llmProviders.length === 0 && providersLoaded ? <option value="">{t({ ko: 'LLM 연결 없음', en: 'No LLM connections' })}</option> : null}
             {!direct.provider && llmProviders.length > 0 ? <option value="">{t({ ko: '연결 고르기', en: 'Choose a connection' })}</option> : null}

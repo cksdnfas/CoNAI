@@ -144,6 +144,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   const llmProviders = (providersQuery.data ?? []).filter((provider) => provider.provider_type === 'llm_openai_compatible' || provider.provider_type === 'llm_ollama')
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: open })
   const slots = slotsQuery.data ?? []
+  const slotsSettled = slotsQuery.isSuccess || slotsQuery.isError
   // A role lists connection models only while it is "direct" with a connection of its own.
   const chatDirect = roleDirect(draft, 'chat')
   const summaryDirect = roleDirect(draft, 'summary')
@@ -152,28 +153,28 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   const modelsQuery = useQuery({
     queryKey: ['codex-chat-connection-models', chatDirect.provider],
     queryFn: () => listChatConnectionModels(chatDirect.provider),
-    enabled: open && isLlm && roleChoice(draft, 'chat', slots, true) === 'direct' && Boolean(chatDirect.provider),
+    enabled: open && isLlm && roleChoice(draft, 'chat', slots, true, slotsSettled) === 'direct' && Boolean(chatDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
   const summaryModelsQuery = useQuery({
     queryKey: ['codex-chat-connection-models', summaryDirect.provider],
     queryFn: () => listChatConnectionModels(summaryDirect.provider),
-    enabled: open && isLlm && roleChoice(draft, 'summary', slots, true) === 'direct' && Boolean(summaryDirect.provider),
+    enabled: open && isLlm && roleChoice(draft, 'summary', slots, true, slotsSettled) === 'direct' && Boolean(summaryDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
   const translationModelsQuery = useQuery({
     queryKey: ['codex-chat-connection-models', translationDirect.provider],
     queryFn: () => listChatConnectionModels(translationDirect.provider),
-    enabled: open && roleChoice(draft, 'translation', slots, isLlm) === 'direct' && Boolean(translationDirect.provider),
+    enabled: open && roleChoice(draft, 'translation', slots, isLlm, slotsSettled) === 'direct' && Boolean(translationDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
   const suggestModelsQuery = useQuery({
     queryKey: ['codex-chat-connection-models', suggestDirect.provider],
     queryFn: () => listChatConnectionModels(suggestDirect.provider),
-    enabled: open && roleChoice(draft, 'suggest', slots, isLlm) === 'direct' && Boolean(suggestDirect.provider),
+    enabled: open && roleChoice(draft, 'suggest', slots, isLlm, slotsSettled) === 'direct' && Boolean(suggestDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
@@ -188,7 +189,6 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   // is not picked in the meantime. Existing profiles never get a slot; they only get the first connection if empty.
   const firstProviderName = llmProviders[0]?.provider_name ?? ''
   const defaultSlotId = slots.find((slot) => slot.isDefault)?.id ?? null
-  const slotsSettled = slotsQuery.isSuccess || slotsQuery.isError
   useEffect(() => {
     if (!open || !slotsSettled) return
     setDraft((current) => {
@@ -323,6 +323,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             llmProviders={llmProviders}
             providersLoaded={providersQuery.isSuccess}
             slots={slots}
+            slotsReady={slotsSettled}
             connectionModels={modelsQuery.data}
             summaryModels={summaryModelsQuery.data}
             translationModels={translationModelsQuery.data}

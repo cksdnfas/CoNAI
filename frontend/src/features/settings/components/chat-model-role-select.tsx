@@ -67,12 +67,13 @@ function roleEnabledPatch(role: ModelRole, enabled: boolean): Partial<Draft> {
 /**
  * Draft -> select value. Off first; then an existing slot; then a direct connection; with neither, `inherit` (summary /
  * suggestions on an API LLM profile) or `direct` with empty fields (chat, or a Codex profile that cannot inherit).
- * A slot id whose slot was deleted counts as unset, so it shows as direct / inherit and the next save clears it.
+ * A slot id whose slot was deleted (list loaded, id absent) counts as unset, so it shows as direct / inherit and the next save clears it.
  */
-export function roleChoice(draft: Draft, role: ModelRole, slots: ModelSlot[], canInherit: boolean): RoleChoice {
+export function roleChoice(draft: Draft, role: ModelRole, slots: ModelSlot[], canInherit: boolean, slotsReady: boolean): RoleChoice {
   const view = roleView(draft, role)
   if (!view.enabled) return 'off'
-  if (view.slotId !== null && slots.some((slot) => slot.id === view.slotId)) return `slot:${view.slotId}`
+  // Until the slot list has loaded, a set slot id is trusted as is; only a known list can show it as stale.
+  if (view.slotId !== null && (!slotsReady || slots.some((slot) => slot.id === view.slotId))) return `slot:${view.slotId}`
   if (view.provider) return 'direct'
   if (role === 'translation') return 'off'
   return role === 'chat' || !canInherit ? 'direct' : 'inherit'
@@ -91,17 +92,19 @@ export function applyRoleChoice(draft: Draft, role: ModelRole, choice: RoleChoic
 }
 
 /** One select that picks where a role's model comes from. */
-export function ModelRoleSelect({ role, value, slots, canInherit, onChange, ariaLabel }: {
+export function ModelRoleSelect({ role, value, slots, slotsReady, canInherit, onChange, ariaLabel }: {
   role: ModelRole
   value: RoleChoice
   slots: ModelSlot[]
+  /** False until the slot list has loaded; the select is disabled so a click cannot overwrite a slot it cannot show yet. */
+  slotsReady: boolean
   canInherit: boolean
   onChange: (choice: RoleChoice) => void
   ariaLabel: string
 }) {
   const { t } = useI18n()
   return (
-    <Select variant="settings" value={value} aria-label={ariaLabel} onChange={(event) => onChange(event.target.value as RoleChoice)}>
+    <Select variant="settings" value={value} aria-label={ariaLabel} disabled={!slotsReady} onChange={(event) => onChange(event.target.value as RoleChoice)}>
       {role === 'translation' ? <option value="off">{t({ ko: '안 함', en: 'None' })}</option> : null}
       {role === 'summary' || role === 'suggest' ? <option value="off">{t({ ko: '끔', en: 'Off' })}</option> : null}
       {(role === 'summary' || role === 'suggest') && canInherit ? <option value="inherit">{t({ ko: '대화 모델 그대로', en: 'Same as chat' })}</option> : null}
@@ -110,6 +113,9 @@ export function ModelRoleSelect({ role, value, slots, canInherit, onChange, aria
           {slots.map((slot) => <option key={slot.id} value={`slot:${slot.id}`}>{`${slot.isDefault ? '★ ' : ''}${slot.name} · ${slot.model}`}</option>)}
         </optgroup>
       ) : null}
+      {value.startsWith('slot:') && !slots.some((slot) => value === `slot:${slot.id}`)
+        ? <option value={value} disabled>{t({ ko: '모델 #{id}', en: 'Model #{id}' }, { id: value.slice(5) })}</option>
+        : null}
       <option value="direct">{t({ ko: '직접 지정…', en: 'Custom…' })}</option>
     </Select>
   )
